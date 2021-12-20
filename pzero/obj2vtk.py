@@ -1,0 +1,21 @@
+"""obj2vtk.py
+PZero© Andrea Bistacchi"""
+
+import vtk
+from .entities_factory import TriSurf, DEM
+
+
+def vtk2obj(self=None, out_dir_name=None):
+    """Exports all triangulated surfaces to a collection of OBJ surfaces.
+    IN THE FUTURE extendo to other entity classes such as DEM, polyline, etc."""
+    """Create STL writer."""
+    obj_writer = vtk.vtkOBJWriter()
+    """Loop for each entity."""
+    for uid in self.geol_coll.df['uid']:
+        if isinstance(self.geol_coll.get_uid_vtk_obj(uid), TriSurf):
+            out_file_name = (str(out_dir_name) + "/" + uid + "_" + self.geol_coll.df.loc[self.geol_coll.df['uid'] == uid, 'name'].values[0] + ".obj")
+            vtk_entity = self.geol_coll.get_uid_vtk_obj(uid)
+            obj_writer.SetFileName(out_file_name)
+            obj_writer.SetInputData(vtk_entity)
+            obj_writer.Write()
+    print("All TSurfs saved.")
