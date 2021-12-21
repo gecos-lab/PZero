@@ -20,7 +20,7 @@ The name of ***PZero*** was inspired by the zeroth element in Emile Argand's 3D 
 
 &nbsp;
 
-<div style="text-align:center"><img src="images/ArgandStereo.jpg" width="60%" height="60%"></div>
+<div style="text-align:center"><img src="images/ArgandStereo.jpg" width="60%" height="60%" /></div>
 
 &nbsp;
 &nbsp;
