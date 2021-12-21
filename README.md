@@ -57,7 +57,8 @@ conda activate pzero
 conda config --add channels conda-forge
 conda config --env --set channel_priority strict
 # install required libraries (whith conda if available, with pip otherwise):
-conda install -c conda-forge numpy matplotlib pandas xarray pyvista pyvistaqt vtk shapely ezdxf rasterio colorcet cmocean vedo geopandas
+y
+conda install -c conda-forge xarray dask netCDF4 bottleneck numpy matplotlib pandas xarray pyvista pyvistaqt vtk shapely ezdxf rasterio colorcet cmocean vedo geopandas
 pip install LoopStructural
 ```
 
@@ -66,9 +67,8 @@ To periodically update the **Conda** environment use (in ```conda terminal```):
 ```
 conda activate pzero
 conda update python
-conda update -c conda-forge xarray pyvista pyvistaqt shapely ezdxf rasterio colorcet cmocean geopandas
-python -m pip install --upgrade LoopStructural
-python -m pip install --upgrade git+https://github.com/marcomusy/vedo.git
+
+conda update -c conda-forge xarray pyvista pyvistaqt shapely ezdxf rasterio colorcet cmocean geopandas loop3d loopstructural vedo
 ```
 
 To save the **Conda** environment in the ```environment.yml``` file (in ```conda terminal```):
@@ -76,6 +76,13 @@ To save the **Conda** environment in the ```environment.yml``` file (in ```conda
 ```
 conda activate pzero
 conda env export > environment.yml
+```
+
+In case you need to remove the pzero **Conda** environment, e.g. to build a clean new one (in ```conda terminal```):
+
+```
+conda deactivate  # (in case pzero was activated)
+conda remove -n pzero --all
 ```
 
 To develop ***PZero*** we use the **[PyCharm IDE](https://www.jetbrains.com/pycharm/)**, but also **[Visual Studio Code](https://code.visualstudio.com/)** has been tested successfully.
