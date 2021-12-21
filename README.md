@@ -29,7 +29,7 @@ The name of ***PZero*** was inspired by the zeroth element in Emile Argand's 3D 
 
 &nbsp;
 
-***PZero*** runs on **Linux**, **macOS** and **Windows**, provided that a suitable **Python 3.x** and **[required libraries](requirements.txt)** are available.
+***PZero*** runs on **Linux**, **macOS** and **Windows**, provided that a suitable **Python 3.8** and **[required libraries](requirements.txt)** are available.
 
 At the moment the easiest way to run and develop new code for ***PZero*** is to have a suitable **[Anaconda](https://www.anaconda.com/)** environment.
 
@@ -56,19 +56,19 @@ conda activate pzero
 # add conda-forge channels
 conda config --add channels conda-forge
 conda config --env --set channel_priority strict
-# install required libraries (whith conda if available, with pip otherwise):
-y
-conda install -c conda-forge xarray dask netCDF4 bottleneck numpy matplotlib pandas xarray pyvista pyvistaqt vtk shapely ezdxf rasterio colorcet cmocean vedo geopandas
-pip install LoopStructural
+# install required libraries:
+conda install -c conda-forge xarray numpy matplotlib pandas xarray pyvista pyvistaqt vtk shapely ezdxf rasterio colorcet cmocean vedo geopandas vedo
+conda install -c loop3d loopstructural
 ```
 
 To periodically update the **Conda** environment use (in ```conda terminal```):
 
 ```
+conda update conda
 conda activate pzero
 conda update python
-
-conda update -c conda-forge xarray pyvista pyvistaqt shapely ezdxf rasterio colorcet cmocean geopandas loop3d loopstructural vedo
+conda update -c conda-forge xarray numpy matplotlib pandas xarray pyvista pyvistaqt vtk shapely ezdxf rasterio colorcet cmocean vedo geopandas vedo
+conda update -c loop3d loopstructural
 ```
 
 To save the **Conda** environment in the ```environment.yml``` file (in ```conda terminal```):
