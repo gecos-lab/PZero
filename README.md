@@ -14,7 +14,7 @@ The ***PZero*** developers are:
 * Andrea Bistacchi (since the beginning)
 * Gloria Arienti (since December 2020)
 
-***PZero*** is publicly released under the [GNU AGPLv3 license](LICENSE.txt).
+***PZero*** © 2020 by Andrea Bistacchi, released under [GNU AGPLv3 license](LICENSE.txt).
 
 The name of ***PZero*** was inspired by the zeroth element in Emile Argand's 3D model of the Pennine Alps nappe stack - possibly the first quantitative 3D geological model in the history of geological sciences (*Argand E., 1911. Les Nappes de recouvrement des Alpes pennines et leurs prolongements structuraux. Mat. Carte géol. Suisse, 31, 1-26*).
 
