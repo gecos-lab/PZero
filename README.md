@@ -70,4 +70,11 @@ python -m pip install --upgrade LoopStructural
 python -m pip install --upgrade git+https://github.com/marcomusy/vedo.git
 ```
 
+To save the **Conda** environment in the ```environment.yml``` file (in ```conda terminal```):
+
+```
+conda activate pzero
+conda env export > environment.yml
+```
+
 To develop ***PZero*** we use the **[PyCharm IDE](https://www.jetbrains.com/pycharm/)**, but also **[Visual Studio Code](https://code.visualstudio.com/)** has been tested successfully.
