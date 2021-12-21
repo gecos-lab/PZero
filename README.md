@@ -87,4 +87,11 @@ conda deactivate  # (in case pzero was activated)
 conda remove -n pzero --all
 ```
 
+In case you need to cleanly uninstall or completely reset **Anaconda**, follow the instructions on [Uninstalling Anaconda](https://docs.anaconda.com/anaconda/install/uninstall/) (in ```conda terminal```), then uninstall:
+
+```
+conda install anaconda-clean
+anaconda-clean --yes
+```
+
 To develop ***PZero*** we use the **[PyCharm IDE](https://www.jetbrains.com/pycharm/)**, but also **[Visual Studio Code](https://code.visualstudio.com/)** has been tested successfully.
