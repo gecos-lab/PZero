@@ -55,6 +55,7 @@ conda create -n pzero python=3.8
 conda activate pzero
 # add conda-forge channels
 conda config --add channels conda-forge
+conda config --env --set channel_priority strict
 # install required libraries (whith conda if available, with pip otherwise):
 conda install -c conda-forge numpy matplotlib pandas xarray pyvista pyvistaqt vtk shapely ezdxf rasterio colorcet cmocean vedo geopandas
 pip install LoopStructural
