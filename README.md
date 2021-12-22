@@ -6,11 +6,9 @@ To build ***PZero*** we use several open-source libraries. **[VTK](https://vtk.o
 
 All the developers of these libraries are warmly thanked!
 
-
 The ***PZero*** project started in spring 2020 thanks to a research project funded by **Pro Iter Tunnelling & Geotechnical Department** and lead by **Andrea Bistacchi**.
 
 The ***PZero*** developers are:
-
 * Andrea Bistacchi (since the beginning)
 * Gloria Arienti (since December 2020)
 
@@ -19,19 +17,17 @@ The ***PZero*** developers are:
 The name of ***PZero*** was inspired by the zeroth element in Emile Argand's 3D model of the Pennine Alps nappe stack - possibly the first quantitative 3D geological model in the history of geological sciences (*Argand E., 1911. Les Nappes de recouvrement des Alpes pennines et leurs prolongements structuraux. Mat. Carte géol. Suisse, 31, 1-26*).
 
 &nbsp;
-
 <p align="center">
    <img src="images/ArgandStereo.jpg" width="60%" height="60%"/>
 </p>
-
 &nbsp;
 &nbsp;
 
-# Installing and running PZero #
-
-&nbsp;
+## Installing and running PZero ##
 
 ***PZero*** runs on **Linux**, **macOS** and **Windows**, provided that a suitable **Python 3.8** and **[required libraries](requirements.txt)** are available.
+
+### Quick and easy installation with Anaconda ###
 
 At the moment the easiest way to run and develop new code for ***PZero*** is to have a suitable **[Anaconda](https://www.anaconda.com/)** environment.
 
@@ -47,6 +43,8 @@ Then you can start PZero with:
 ```
 python pzero_run.py
 ```
+
+### Advanced users/developers installation with Anaconda ###
 
 You can also create the **Conda** environment manually with (in ```conda terminal```):
 
