@@ -6,7 +6,7 @@ To build ***PZero*** we use several open-source libraries. **[VTK](https://vtk.o
 
 All the developers of these libraries are warmly thanked!
 
-The ***PZero*** project started in spring 2020 thanks to a research project funded by **Pro Iter Tunnelling & Geotechnical Department** and lead by **Andrea Bistacchi**.
+The ***PZero*** project started in spring 2020 thanks to a research project funded by **[Pro Iter Tunnelling & Geotechnical Department](https://www.proiter.it/)** and lead by **Andrea Bistacchi** and **Luca Soldo**.
 
 The ***PZero*** developers are:
 * Andrea Bistacchi (since the beginning)
