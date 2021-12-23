@@ -80,6 +80,11 @@ class ImageCollection(QAbstractTableModel):
 
     def remove_entity(self, uid=None):
         """Remove entity from collection. Remove row from dataframe and reset data model."""
+        """First remove textures, if defined."""
+        for dom_uid in self.parent.dom_coll.get_uids():
+            if uid in self.parent.dom_coll.get_uid_texture_uids(dom_uid):
+                self.parent.dom_coll.remove_map_texture_from_dom(dom_uid=dom_uid, map_image_uid=uid)
+        """Then remove image"""
         self.df.drop(self.df[self.df['uid'] == uid].index, inplace=True)
         self.modelReset.emit()  # is this really necessary?
         """When done, send a signal over to the views."""

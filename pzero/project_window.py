@@ -207,7 +207,14 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 selected_uids.append(self.dom_coll.data(index=idx, role=Qt.DisplayRole))
             return selected_uids
         elif self.shown_table == "tabImages":
-            pass
+            selected_idxs_proxy = self.ImagesTableView.selectionModel().selectedRows()
+            selected_idxs = []
+            for idx_proxy in selected_idxs_proxy:
+                selected_idxs.append(self.proxy_image_coll.mapToSource(idx_proxy))
+            selected_uids = []
+            for idx in selected_idxs:
+                selected_uids.append(self.image_coll.data(index=idx, role=Qt.DisplayRole))
+            return selected_uids
         elif self.shown_table == "tabLegend":
             pass
         elif self.shown_table == "tabProperties":
