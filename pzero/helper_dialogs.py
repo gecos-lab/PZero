@@ -1,7 +1,7 @@
 """helper_dialogs.py
 PZero© Andrea Bistacchi"""
 
-from PyQt5.QtWidgets import QMessageBox, QInputDialog, QLineEdit, QPushButton, QFileDialog, QWidget
+from PyQt5.QtWidgets import QMessageBox, QInputDialog, QLineEdit, QPushButton, QFileDialog, QWidget, QProgressDialog
 from PyQt5 import QtWidgets, QtCore
 
 
@@ -389,3 +389,27 @@ def toc():
         print("...Toc: Elapsed time [s]: " + str(time.time() - startTime_for_tictoc))
     else:
         print("Tic-Toc start time not set")
+
+
+class progress_dialog(QProgressDialog):
+    def __init__(self, max_value=None, title_txt=None, label_txt=None, cancel_txt=None, parent=None, *args, **kwargs):
+        super(QProgressDialog, self).__init__(*args, **kwargs)
+        self.parent = parent
+        self.setWindowModality(QtCore.Qt.WindowModal)
+        self.setAutoReset(True)
+        self.setAutoClose(True)
+        self.setMinimumDuration(0)
+        self.setMinimum(0)
+        self.setRange(0, max_value)
+        self.setWindowTitle(title_txt)
+        self.setLabelText(label_txt)
+        self.setCancelButtonText(cancel_txt)
+        self.setMinimumWidth(600)
+        self.forceShow()
+
+    def add_one(self):
+        self.setValue(self.value()+1)
+
+    @property
+    def was_canceled(self):
+        return self.wasCanceled()

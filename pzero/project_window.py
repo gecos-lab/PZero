@@ -6,7 +6,7 @@ from copy import deepcopy
 from datetime import datetime
 from shutil import copy2
 
-from PyQt5.QtWidgets import QMainWindow, QMessageBox
+from PyQt5.QtWidgets import QMainWindow, QMessageBox, QProgressDialog
 from PyQt5.QtCore import Qt, pyqtSignal, QSortFilterProxyModel
 import vtk
 import pandas as pd
@@ -29,7 +29,7 @@ from .segy2vtk import segy2vtk
 from .windows_factory import View3D
 from .windows_factory import ViewMap
 from .windows_factory import ViewXsection
-from .helper_dialogs import options_dialog, save_file_dialog, open_file_dialog, input_combo_dialog, message_dialog, multiple_input_dialog, input_one_value_dialog, input_text_dialog
+from .helper_dialogs import options_dialog, save_file_dialog, open_file_dialog, input_combo_dialog, message_dialog, multiple_input_dialog, input_one_value_dialog, input_text_dialog, progress_dialog
 from .image2vtk import geo_image2vtk
 from .stl2vtk import vtk2stl, vtk2stl_dilation
 from .obj2vtk import vtk2obj
@@ -627,6 +627,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 self.geol_coll.df = new_geol_coll_df
         else:
             self.geol_coll.df = pd.read_csv(in_dir_name + '/geological_table.csv', encoding='utf-8', dtype=GeologicalCollection.geological_entity_type_dict, keep_default_na=False)
+        prgs_bar = progress_dialog(max_value=self.geol_coll.df.shape[0], title_txt="Open geology", label_txt="Opening geological objects...", cancel_txt=None, parent=self)
         for uid in self.geol_coll.df['uid'].to_list():
             """IN THE FUTURE check this - for some reason, if we open with standard VTK, then casting
             from vtkPolyData to VertexSet, PolyLine or TriSurf yields an error. However using PyVista might introduce
@@ -651,6 +652,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             vtk_object.ShallowCopy(pd_reader.GetOutput())
             vtk_object.Modified()
             self.geol_coll.set_uid_vtk_obj(uid=uid, vtk_obj=vtk_object)
+            prgs_bar.add_one()
         self.geol_coll.endResetModel()
         """Read DEM collection and files"""
         self.dom_coll.beginResetModel()
@@ -660,6 +662,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 self.dom_coll.df = new_dom_coll_df
         else:
             self.dom_coll.df = pd.read_csv(in_dir_name + '/dom_table.csv', encoding='utf-8', dtype=DomCollection.dom_entity_type_dict, keep_default_na=False)
+        prgs_bar = progress_dialog(max_value=self.dom_coll.df.shape[0], title_txt="Open DOM", label_txt="Opening DOM objects...", cancel_txt=None, parent=self)
         for uid in self.dom_coll.df['uid'].to_list():
             if self.dom_coll.get_uid_dom_type(uid) == "DEM":
                 if not os.path.isfile((in_dir_name + "/" + uid + ".vts")):
@@ -678,6 +681,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 """Add code to read TSDOM here__________"""
                 vtk_object = PCDom()
             self.dom_coll.set_uid_vtk_obj(uid=uid, vtk_obj=vtk_object)
+            prgs_bar.add_one()
         self.dom_coll.endResetModel()
         """Read image collection and files"""
         self.image_coll.beginResetModel()
@@ -687,6 +691,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 self.image_coll.df = new_image_coll_df
         else:
             self.image_coll.df = pd.read_csv(in_dir_name + '/image_table.csv', encoding='utf-8', dtype=ImageCollection.image_entity_type_dict, keep_default_na=False)
+        prgs_bar = progress_dialog(max_value=self.image_coll.df.shape[0], title_txt="Open image", label_txt="Opening image objects...", cancel_txt=None, parent=self)
         for uid in self.image_coll.df['uid'].to_list():
             if self.image_coll.df.loc[self.image_coll.df['uid'] == uid, 'image_type'].values[0] in ["MapImage", "XsImage", "TSDomImage"]:
                 if not os.path.isfile((in_dir_name + "/" + uid + ".vti")):
@@ -699,6 +704,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 vtk_object.ShallowCopy(im_reader.GetOutput())
                 vtk_object.Modified()
             self.image_coll.set_uid_vtk_obj(uid=uid, vtk_obj=vtk_object)
+            prgs_bar.add_one()
         self.image_coll.endResetModel()
         """Read mesh3d collection and files"""
         self.mesh3d_coll.beginResetModel()
@@ -708,6 +714,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 self.mesh3d_coll.df = new_mesh3d_coll_df
         else:
             self.mesh3d_coll.df = pd.read_csv(in_dir_name + '/mesh3d_table.csv', encoding='utf-8', dtype=Mesh3DCollection.mesh3d_entity_type_dict, keep_default_na=False)
+        prgs_bar = progress_dialog(max_value=self.mesh3d_coll.df.shape[0], title_txt="Open 3D mesh", label_txt="Opening 3D mesh objects...", cancel_txt=None, parent=self)
         for uid in self.mesh3d_coll.df['uid'].to_list():
             if self.mesh3d_coll.df.loc[self.mesh3d_coll.df['uid'] == uid, 'mesh3d_type'].values[0] in ["Voxet"]:
                 if not os.path.isfile((in_dir_name + "/" + uid + ".vti")):
@@ -739,6 +746,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 sg_reader.Update()
                 vtk_object.ShallowCopy(sg_reader.GetOutput())
                 vtk_object.Modified()
+                prgs_bar.add_one()
             self.mesh3d_coll.set_uid_vtk_obj(uid=uid, vtk_obj=vtk_object)
         self.mesh3d_coll.endResetModel()
         """TEMP_________________________________________________________________"""
