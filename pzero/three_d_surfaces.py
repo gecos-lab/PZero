@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 from .geological_collection import GeologicalCollection
 from .mesh3d_collection import Mesh3DCollection
-from .helper_dialogs import multiple_input_dialog, input_one_value_dialog, input_text_dialog, input_combo_dialog, input_checkbox_dialog, tic, toc
+from .helper_dialogs import multiple_input_dialog, input_one_value_dialog, input_text_dialog, input_combo_dialog, input_checkbox_dialog, tic, toc, progress_dialog
 from .entities_factory import TriSurf, XsPolyLine, PolyLine, VertexSet, Voxet, XsVoxet, XsTSurf, XsVertexSet, MapImage, DEM
 
 """LoopStructural import(s)"""
@@ -196,6 +196,7 @@ def implicit_model_loop_structural(self):
     tic()
     all_input_data_df = pd.DataFrame(columns=list(loop_input_dict.keys()))
     """For every selected item extract interesting data: XYZ, feature_name, val, etc."""
+    prgs_bar = progress_dialog(max_value=len(input_uids), title_txt="Input dataframe", label_txt="Adding geological objects to input dataframe...", cancel_txt=None, parent=self)
     for uid in input_uids:
         """Create empty dataframe to collect input data for this object."""
         entity_input_data_df = pd.DataFrame(columns=list(loop_input_dict.keys()))
@@ -216,6 +217,7 @@ def implicit_model_loop_structural(self):
         """gx, gy and gz: TO BE IMPLEMENTED"""
         """Append dataframe for this input entity to the general input dataframe."""
         all_input_data_df = all_input_data_df.append(entity_input_data_df, ignore_index=True)
+        prgs_bar.add_one()
     toc()
     """Drop columns with no valid value (i.e. all NaNs)."""
     print("-> drop empty columns...")
@@ -496,7 +498,10 @@ def linear_extrusion(self):
             return
     """Create deepcopy of the geological entity dictionary."""
     surf_dict = deepcopy(self.geol_coll.geological_entity_dict)
-    input_dict = {'name': ['TriSurf name: ', self.geol_coll.get_uid_name(input_uids[0]) + '_extruded'], 'geological_type': ['Geological type: ', GeologicalCollection.valid_geological_types], 'geological_feature': ['Geological feature: ', self.geol_coll.get_uid_geological_feature(input_uids[0])], 'scenario': ['Scenario: ', self.geol_coll.get_uid_scenario(input_uids[0])]}
+    input_dict = {'name': ['TriSurf name: ', self.geol_coll.get_uid_name(input_uids[0]) + '_extruded'],
+                  'geological_type': ['Geological type: ', GeologicalCollection.valid_geological_types],
+                  'geological_feature': ['Geological feature: ', self.geol_coll.get_uid_geological_feature(input_uids[0])],
+                  'scenario': ['Scenario: ', self.geol_coll.get_uid_scenario(input_uids[0])]}
     surf_dict_updt = multiple_input_dialog(title='Linear Extrusion', input_dict=input_dict)
     """Check if the output of the widget is empty or not. If the Cancel button was clicked, the tool quits"""
     if surf_dict_updt is None:

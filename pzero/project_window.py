@@ -492,38 +492,45 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         out_cols = list(self.geol_coll.df.columns)
         out_cols.remove('vtk_obj')
         self.geol_coll.df[out_cols].to_json(out_dir_name + '/geological_table.json', orient='index')
+        prgs_bar = progress_dialog(max_value=self.geol_coll.df.shape[0], title_txt="Save geology", label_txt="Saving geological objects...", cancel_txt=None, parent=self)
         for uid in self.geol_coll.df['uid'].to_list():
             pd_writer = vtk.vtkXMLPolyDataWriter()
             pd_writer.SetFileName(out_dir_name + "/" + uid + ".vtp")
             pd_writer.SetInputData(self.geol_coll.get_uid_vtk_obj(uid))
             pd_writer.Write()
+            prgs_bar.add_one()
         """Save DOM collection table to JSON file and entities as VTK."""
         # self.dom_coll.df.to_csv(out_dir_name + '/dom_table.csv', encoding='utf-8', index=False)
         out_cols = list(self.dom_coll.df.columns)
         out_cols.remove('vtk_obj')
         self.dom_coll.df[out_cols].to_json(out_dir_name + '/dom_table.json', orient='index')
+        prgs_bar = progress_dialog(max_value=self.dom_coll.df.shape[0], title_txt="Save DOM", label_txt="Saving DOM objects...", cancel_txt=None, parent=self)
         for uid in self.dom_coll.df['uid'].to_list():
             if self.dom_coll.df.loc[self.dom_coll.df['uid'] == uid, 'dom_type'].values[0] == "DEM":
                 sg_writer = vtk.vtkXMLStructuredGridWriter()
                 sg_writer.SetFileName(out_dir_name + "/" + uid + ".vts")
                 sg_writer.SetInputData(self.dom_coll.get_uid_vtk_obj(uid))
                 sg_writer.Write()
+                prgs_bar.add_one()
         """Save image collection table to JSON file and entities as VTK."""
         # self.image_coll.df.to_csv(out_dir_name + '/image_table.csv', encoding='utf-8', index=False)
         out_cols = list(self.image_coll.df.columns)
         out_cols.remove('vtk_obj')
         self.image_coll.df[out_cols].to_json(out_dir_name + '/image_table.json', orient='index')
+        prgs_bar = progress_dialog(max_value=self.image_coll.df.shape[0], title_txt="Save image", label_txt="Saving image objects...", cancel_txt=None, parent=self)
         for uid in self.image_coll.df['uid'].to_list():
             if self.image_coll.df.loc[self.image_coll.df['uid'] == uid, 'image_type'].values[0] in ["MapImage", "XsImage", "TSDomImage"]:
                 im_writer = vtk.vtkXMLImageDataWriter()
                 im_writer.SetFileName(out_dir_name + "/" + uid + ".vti")
                 im_writer.SetInputData(self.image_coll.get_uid_vtk_obj(uid))
                 im_writer.Write()
+                prgs_bar.add_one()
         """Save mesh3d collection table to JSON file and entities as VTK."""
         # self.mesh3d_coll.df.to_csv(out_dir_name + '/mesh3d_table.csv', encoding='utf-8', index=False)
         out_cols = list(self.mesh3d_coll.df.columns)
         out_cols.remove('vtk_obj')
         self.mesh3d_coll.df[out_cols].to_json(out_dir_name + '/mesh3d_table.json', orient='index')
+        prgs_bar = progress_dialog(max_value=self.mesh3d_coll.df.shape[0], title_txt="Save 3D mesh", label_txt="Saving 3D mesh objects...", cancel_txt=None, parent=self)
         for uid in self.mesh3d_coll.df['uid'].to_list():
             if self.mesh3d_coll.df.loc[self.mesh3d_coll.df['uid'] == uid, 'mesh3d_type'].values[0] in ["Voxet", "XsVoxet"]:
                 im_writer = vtk.vtkXMLImageDataWriter()
@@ -535,6 +542,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 sg_writer.SetFileName(out_dir_name + "/" + uid + ".vts")
                 sg_writer.SetInputData(self.mesh3d_coll.get_uid_vtk_obj(uid))
                 sg_writer.Write()
+            prgs_bar.add_one()
 
     def new_project(self):
         """Creates a new empty project, after having cleared all variables."""
