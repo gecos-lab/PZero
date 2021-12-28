@@ -2458,16 +2458,12 @@ class ViewXsection(View2D):
 
     def __init__(self, parent=None, *args, **kwargs):
         """Set the Xsection"""
-        # if parent.xsect_coll.get_uids():
         if parent.xsect_coll.get_names():
-            # self.this_x_section_uid = input_combo_dialog(parent=None, title="Xsection", label="Choose Xsection", choice_list=parent.xsect_coll.get_uids())
             self.this_x_section_name = input_combo_dialog(parent=None, title="Xsection", label="Choose Xsection", choice_list=parent.xsect_coll.get_names())
         else:
             message_dialog(title="Xsection", message="No Xsection in project")
             return
-        # if self.this_x_section_uid:
         if self.this_x_section_name:
-            # self.this_x_section_name = parent.xsect_coll.df.loc[parent.xsect_coll.df['uid'] == self.this_x_section_uid, 'name'].values[0]
             self.this_x_section_uid = parent.xsect_coll.df.loc[parent.xsect_coll.df['name'] == self.this_x_section_name, 'uid'].values[0]
         else:
             return

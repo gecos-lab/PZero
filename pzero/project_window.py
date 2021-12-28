@@ -147,7 +147,8 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         """View actions -> slots"""
         self.actionView3D.triggered.connect(lambda: View3D(parent=self))
         self.actionViewMap.triggered.connect(lambda: ViewMap(parent=self))
-        self.actionViewPlaneXsection.triggered.connect(lambda: ViewXsection(parent=self))  # self.actionViewStereoplot.triggered.connect(lambda: ViewStereoplot(parent=self))
+        self.actionViewPlaneXsection.triggered.connect(lambda: ViewXsection(parent=self))
+        # self.actionViewStereoplot.triggered.connect(lambda: ViewStereoplot(parent=self))
 
     def closeEvent(self, event):
         """Re-implement the standard closeEvent method of QWidget and ask (1) to save project, and (2) for confirmation to quit."""
@@ -784,11 +785,13 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             self.TextTerminal.appendPlainText('in_file_name: ' + in_file_name)
             """Select the Xsection"""
             if self.xsect_coll.get_uids():
-                x_section = input_combo_dialog(parent=None, title="Xsection", label="Choose Xsection", choice_list=self.xsect_coll.get_uids())
+                x_section_name = input_combo_dialog(parent=None, title="Xsection", label="Choose Xsection", choice_list=self.xsect_coll.get_names())
             else:
                 message_dialog(title="Xsection", message="No Xsection in project")
                 return
-            gocad2vtk_section(self=self, in_file_name=in_file_name, uid_from_name=False, x_section=x_section)
+            if x_section_name:
+                x_section_uid = self.xsect_coll.df.loc[self.xsect_coll.df['name'] == x_section_name, 'uid'].values[0]
+                gocad2vtk_section(self=self, in_file_name=in_file_name, uid_from_name=False, x_section=x_section_uid)
 
     def import_SHP(self):
         """Import SHP file and update geological collection."""
