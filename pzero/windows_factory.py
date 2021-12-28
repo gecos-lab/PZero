@@ -1794,7 +1794,7 @@ class View2D(BaseView):
 
     def initialize_menu_tools(self):
         """Imports for this view."""
-        from .two_d_lines import draw_line, edit_line, move_line, rotate_line, extend_line, split_line_line, split_line_existing_point, merge_lines, snap_line, resample_line_distance, resample_line_number_points, simplify_line, copy_parallel, copy_kink, copy_similar, measure_distance
+        from .two_d_lines import draw_line, edit_line, sort_line_nodes, move_line, rotate_line, extend_line, split_line_line, split_line_existing_point, merge_lines, snap_line, resample_line_distance, resample_line_number_points, simplify_line, copy_parallel, copy_kink, copy_similar, measure_distance
         """Customize menus and tools for this view"""
         self.menuBaseView.setTitle("Edit")
         self.actionBase_Tool.setText("Edit")
@@ -1823,6 +1823,11 @@ class View2D(BaseView):
         self.editLineButton.triggered.connect(lambda: edit_line(self))  # connect action to function
         self.menuBaseView.addAction(self.editLineButton)  # add action to menu
         self.toolBarBase.addAction(self.editLineButton)  # add action to toolbar
+
+        self.sortLineButton = QAction('Sort line nodes', self)  # create action
+        self.sortLineButton.triggered.connect(lambda: sort_line_nodes(self))  # connect action to function
+        self.menuBaseView.addAction(self.sortLineButton)  # add action to menu
+        self.toolBarBase.addAction(self.sortLineButton)  # add action to toolbar
 
         self.moveLineButton = QAction('Move line', self)  # create action
         self.moveLineButton.triggered.connect(lambda: move_line(self))  # connect action to function

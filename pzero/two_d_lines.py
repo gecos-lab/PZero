@@ -201,6 +201,31 @@ def edit_line(self):
         action.setEnabled(True)
 
 
+def sort_line_nodes(self):
+    """Sort line nodes."""
+    print("Sort line nodes according to cell order.")
+    # """Terminate running event loops"""
+    # self.stop_event_loops()
+    """Check if a line is selected"""
+    if not self.selected_uids:
+        print(" -- No input data selected -- ")
+        return
+    # """Freeze QT interface"""
+    # for action in self.findChildren(QAction):
+    #     if isinstance(action.parentWidget(), NavigationToolbar) is False:
+    #         action.setDisabled(True)
+    """If more than one line is selected, keep the first."""
+    current_uid = self.selected_uids[0]
+    """For some reason in the following the [:] is needed."""
+    self.parent.geol_coll.get_uid_vtk_obj(current_uid).sort_nodes()
+    """Deselect input line."""
+    self.selected_uids = []
+    self.parent.geology_geom_modified_signal.emit([current_uid])  # emit uid as list to force redraw()
+    # """Un-Freeze QT interface"""
+    # for action in self.findChildren(QAction):
+    #     action.setEnabled(True)
+
+
 def move_line(self):
     """Move the whole line by rigid-body translation."""
     print("Move Line. Move the whole line by rigid-body translation.")

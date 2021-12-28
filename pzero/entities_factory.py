@@ -469,18 +469,13 @@ class PolyLine(PolyData):
     def auto_cells(self):
         """Set cells automatically assuming that the vertexes are in the correct order,
         from first to last, and that the polyline is a single part."""
-        # print("self.points_number: ", self.points_number)
         if self.GetNumberOfCells() != 0:
-            # print("number != 0")
             """Remove all cells. This is obtained calling DeleteCells without any
             argument and in this case RemoveDeletedCells() is not necessary."""
             self.DeleteCells()
-            # print("deletecell just done")
             self.GetLines().Modified()
-            # print("getlines.modified just done")
         pline_cells = vtk.vtkCellArray()
         for point in range(self.points_number-1):
-            # print("point: ", point)
             line = vtk.vtkLine()
             line.GetPointIds().SetId(0, point)
             line.GetPointIds().SetId(1, point+1)
@@ -488,7 +483,38 @@ class PolyLine(PolyData):
         self.SetLines(pline_cells)
         self.BuildLinks()
         self.GetLines().Modified()
-        # print("auto_cell() self:\n", self)
+
+    def sort_nodes(self):
+        """Sort nodes from the first node in the first cell to the last node in the last cell."""
+        if self.GetNumberOfCells() != 0:
+            """First ensure cells are simple two-point-lines with poly2lines."""
+            self.poly2lines()
+            """Then do the sorting. This works defining an empty list of point ids,
+            that is filled for every line, and then only the first point is used,
+            except for the last step, after the end of the for loop."""
+            new_points = vtk.vtkPoints()
+            for line_id in range(self.cells_number):
+                line_points_list = vtk.vtkIdList()
+                self.GetCellPoints(line_id, line_points_list)
+                point_0_id = line_points_list.GetId(0)
+                point_0 = self.GetPoint(point_0_id)
+                new_points.InsertNextPoint(point_0)
+            point_1_id = line_points_list.GetId(1)
+            point_1 = self.GetPoint(point_1_id)
+            new_points.InsertNextPoint(point_1)
+            self.SetPoints(new_points)
+            self.auto_cells()
+
+    def poly2lines(self):
+        """Split polyline cells into single two-points lines
+        with vtk.vtkTriangleFilter() that always outputs simplicial cells."""
+        trgl_filter = vtk.vtkTriangleFilter()
+        trgl_filter.SetInputData(self)
+        trgl_filter.PassLinesOn()
+        trgl_filter.Update()
+        self.SetLines(trgl_filter.GetOutput().GetLines())
+        self.BuildLinks()
+        self.Modified()
 
 
 class TriSurf(PolyData):
