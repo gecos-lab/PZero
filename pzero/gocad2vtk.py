@@ -7,6 +7,7 @@ import vtk
 import uuid
 from .entities_factory import VertexSet, PolyLine, TriSurf, TetraSolid, XsVertexSet, XsPolyLine
 from .geological_collection import GeologicalCollection
+from .helper_dialogs import input_text_dialog, input_combo_dialog, options_dialog, message_dialog
 
 """We import only come Gocad object attributes.
 Other Gocad ASCII properties/fields/keys not implemented in PZero are:
@@ -72,14 +73,24 @@ def gocad2vtk(self=None, in_file_name=None, uid_from_name=None):
     pointset, polyline, triangulated surfaces as VTK polydata entities.
     <self> is the calling ProjectWindow() instance.
     """
+    """Define import options."""
+    scenario_default = input_text_dialog(parent=None, title="Scenario", label="Default scenario", default_text="undef")
+    if not scenario_default:
+        scenario_default = "undef"
+    geological_type_default = input_combo_dialog(parent=None, title="Geological type", label="Default geological type", choice_list=GeologicalCollection.valid_geological_types)
+    if not geological_type_default:
+        geological_type_default = "undef"
+    geological_feature_from_name = options_dialog(title="Feature from name", message="Get geological feature from object name if not defined in file", yes_role="Yes", no_role="No", reject_role=None)
+    if geological_feature_from_name == 0:
+        geological_feature_from_name = True
+    else:
+        geological_feature_from_name = False
+    """Open input file"""
     fin = open(in_file_name, 'rt')
-
     """Number of entities before importing________________________________"""
     n_entities_before = self.geol_coll.get_number_of_entities()
-
     """Initialize entity_counter"""
     entity_counter = 0
-
     """Parse fin file"""
     for line in fin:
         """Read one line from file."""
@@ -92,6 +103,7 @@ def gocad2vtk(self=None, in_file_name=None, uid_from_name=None):
             then we will fill its components in the next lines. Use deepcopy otherwise the
             original dictionary would be altered."""
             curr_obj_dict = deepcopy(GeologicalCollection.geological_entity_dict)
+            curr_obj_dict['scenario'] = scenario_default
 
             """Store uid and topological type of new entity."""
             curr_obj_dict['uid'] = str(uuid.uuid4())
@@ -100,12 +112,15 @@ def gocad2vtk(self=None, in_file_name=None, uid_from_name=None):
             if clean_line[1] == 'VSet':
                 curr_obj_dict['topological_type'] = 'VertexSet'
                 curr_obj_dict['vtk_obj'] = VertexSet()
+                curr_obj_dict['geological_type'] = geological_type_default
             elif clean_line[1] == 'PLine':
                 curr_obj_dict['topological_type'] = 'PolyLine'
                 curr_obj_dict['vtk_obj'] = PolyLine()
+                curr_obj_dict['geological_type'] = geological_type_default
             elif clean_line[1] == 'TSurf':
                 curr_obj_dict['topological_type'] = 'TriSurf'
                 curr_obj_dict['vtk_obj'] = TriSurf()
+                curr_obj_dict['geological_type'] = geological_type_default
             else:
                 self.TextTerminal.appendPlainText("gocad2vtk - entity type not recognized ERROR.")  # THIS WILL CAUSE ERRORS - KEEP THIS MESSAGE JUST FOR DEBUGGING
 
@@ -119,10 +134,14 @@ def gocad2vtk(self=None, in_file_name=None, uid_from_name=None):
             if clean_line[0] == 'name:':
                 """standard import"""
                 curr_obj_dict['name'] = ("_".join(clean_line[1:]))  # see if a suffix must be added to split multipart
+                if geological_feature_from_name:
+                    curr_obj_dict['geological_feature'] = curr_obj_dict['name']
             else:
                 """solves a bug in Move that does not add a space after name: """
                 curr_obj_dict['name'] = ("_".join(clean_line[:]))
                 curr_obj_dict['name'] = curr_obj_dict['name'][5:]  # this removes 'name:'
+                if geological_feature_from_name:
+                    curr_obj_dict['geological_feature'] = curr_obj_dict['name']
             if uid_from_name:
                 curr_obj_dict['uid'] = curr_obj_dict['name']
 
@@ -299,14 +318,24 @@ def gocad2vtk_section(self=None, in_file_name=None, uid_from_name=None, x_sectio
     This is the specific implementation for objects belonging to a cross section.
     <self> is the calling ProjectWindow() instance.
     """
+    """Define import options."""
+    scenario_default = input_text_dialog(parent=None, title="Scenario", label="Default scenario", default_text="undef")
+    if not scenario_default:
+        scenario_default = "undef"
+    geological_type_default = input_combo_dialog(parent=None, title="Geological type", label="Default geological type", choice_list=GeologicalCollection.valid_geological_types)
+    if not geological_type_default:
+        geological_type_default = "undef"
+    geological_feature_from_name = options_dialog(title="Feature from name", message="Get geological feature from object name if not defined in file", yes_role="Yes", no_role="No", reject_role=None)
+    if geological_feature_from_name == 0:
+        geological_feature_from_name = True
+    else:
+        geological_feature_from_name = False
+    """Open input file"""
     fin = open(in_file_name, 'rt')
-
     """Number of entities before importing________________________________"""
     n_entities_before = self.geol_coll.get_number_of_entities()
-
     """Initialize entity_counter"""
     entity_counter = 0
-
     """Parse fin file"""
     for line in fin:
         """Read one line from file."""
@@ -319,18 +348,21 @@ def gocad2vtk_section(self=None, in_file_name=None, uid_from_name=None, x_sectio
             then we will fill its components in the next lines. Use deepcopy otherwise the
             original dictionary would be altered."""
             curr_obj_dict = deepcopy(GeologicalCollection.geological_entity_dict)
+            curr_obj_dict['x_section'] = x_section
+            curr_obj_dict['scenario'] = scenario_default
 
             """Store uid and topological type of new entity."""
             curr_obj_dict['uid'] = str(uuid.uuid4())
-            curr_obj_dict['x_section'] = x_section
 
             """Create the empty vtk object with class = topological_type."""
             if clean_line[1] == 'VSet':
-                curr_obj_dict['vtk_obj'] = XsVertexSet()
+                curr_obj_dict['vtk_obj'] = XsVertexSet(x_section_uid=x_section, parent=self)
                 curr_obj_dict['topological_type'] = 'XsVertexSet'
+                curr_obj_dict['geological_type'] = geological_type_default
             elif clean_line[1] == 'PLine':
-                curr_obj_dict['vtk_obj'] = XsPolyLine()
+                curr_obj_dict['vtk_obj'] = XsPolyLine(x_section_uid=x_section, parent=self)
                 curr_obj_dict['topological_type'] = 'XsPolyLine'
+                curr_obj_dict['geological_type'] = geological_type_default
             else:
                 self.TextTerminal.appendPlainText("gocad2vtk - entity type not recognized ERROR.")  # THIS WILL CAUSE ERRORS - KEEP THIS MESSAGE JUST FOR DEBUGGING
 
@@ -344,10 +376,14 @@ def gocad2vtk_section(self=None, in_file_name=None, uid_from_name=None, x_sectio
             if clean_line[0] == 'name:':
                 """standard import"""
                 curr_obj_dict['name'] = ("_".join(clean_line[1:]))  # see if a suffix must be added to split multipart
+                if geological_feature_from_name:
+                    curr_obj_dict['geological_feature'] = curr_obj_dict['name']
             else:
                 """solves a bug in Move that does not add a space after name: """
                 curr_obj_dict['name'] = ("_".join(clean_line[:]))
                 curr_obj_dict['name'] = curr_obj_dict['name'][5:]  # this removes 'name:'
+                if geological_feature_from_name:
+                    curr_obj_dict['geological_feature'] = curr_obj_dict['name']
             if uid_from_name:
                 curr_obj_dict['uid'] = curr_obj_dict['name']
 

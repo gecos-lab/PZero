@@ -7,13 +7,15 @@ from PyQt5 import QtWidgets, QtCore
 
 def options_dialog(title=None, message=None, yes_role=None, no_role=None, reject_role=None):
     """Generic message box with title, message, and three buttons.
-    Returns 0, 1, or 2 (int) for the 1st, 2nd and 3rd button."""
+    Returns 0, 1, or 2 (int) for the 1st, 2nd and 3rd button.
+    If reject_role is None, the third button is not visualized."""
     msg_box = QMessageBox()
     msg_box.setWindowTitle(title)
     msg_box.setText(message)
     msg_box.addButton(QPushButton(yes_role), QMessageBox.YesRole)
     msg_box.addButton(QPushButton(no_role), QMessageBox.NoRole)
-    msg_box.addButton(QPushButton(reject_role), QMessageBox.RejectRole)
+    if reject_role:
+        msg_box.addButton(QPushButton(reject_role), QMessageBox.RejectRole)
     output = msg_box.exec()
     return output
 

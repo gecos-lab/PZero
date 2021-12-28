@@ -2040,7 +2040,7 @@ class View2D(BaseView):
             if redraw:
                 """IN THE FUTURE check if there is a way to redraw just the actor that has just been removed."""
                 self.figure.canvas.draw()
-                print("redraw all")
+                print("redraw all - a more efficient alternative should be found")
 
     def show_actor_with_property(self, uid=None, collection=None, show_property=None, visible=None):
         """placeholder to be superseded by specific method in subclass"""
