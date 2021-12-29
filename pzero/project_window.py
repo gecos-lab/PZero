@@ -562,7 +562,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
 
     def open_project(self):
         """Opens a project previously saved to disk."""
-        """Create empty containers."""
+        """Create empty containers. This also allows for missing tables below."""
         self.create_empty()
         """Select and open project file."""
         in_file_name = open_file_dialog(parent=self, caption="Open PZero project", filter=("PZero (*.p0)"))
@@ -580,185 +580,185 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         if not os.path.isdir(in_dir_name):
             print("error: missing folder")
             return
-        if not (os.path.isfile((in_dir_name + '/geol_legend_table.csv')) or os.path.isfile((in_dir_name + '/geol_legend_table.json'))):
-            print("error: missing geological legend file")
-            return
-        if not (os.path.isfile((in_dir_name + '/others_legend_table.csv')) or os.path.isfile((in_dir_name + '/others_legend_table.json'))):
-            print("error: missing others legend file")
-            return
-        if not (os.path.isfile((in_dir_name + '/xsection_table.csv')) or os.path.isfile((in_dir_name + '/xsection_table.json'))):
-            print("error: missing x_section file")
-            return
-        if not (os.path.isfile((in_dir_name + '/dom_table.csv')) or os.path.isfile((in_dir_name + '/dom_table.json'))):
-            print("error: missing DOM file")
-            return
-        if not (os.path.isfile((in_dir_name + '/geological_table.csv')) or os.path.isfile((in_dir_name + '/geological_table.json'))):
-            print("error: missing geological_table file")
-            return
-        """When reading Pandas dataframes from JSON, dtype specifies the type of each column."""
-        """Read geological and others legend tables."""
-        if os.path.isfile((in_dir_name + '/geol_legend_table.json')):
-            new_geol_legend_df = pd.read_json(in_dir_name + '/geol_legend_table.json', orient='index', dtype=Legend.legend_type_dict)
-            if not new_geol_legend_df.empty:
-                self.geol_legend_df = new_geol_legend_df
-                self.geol_legend_df.sort_values(by='geological_time', ascending=True, inplace=True)
-        else:
-            self.geol_legend_df = pd.read_csv(in_dir_name + '/geol_legend_table.csv', encoding='utf-8', dtype=Legend.legend_type_dict, keep_default_na=False)
-        if os.path.isfile((in_dir_name + '/others_legend_table.json')):
-            new_others_legend_df = pd.read_json(in_dir_name + '/others_legend_table.json', orient='index', dtype=Legend.legend_type_dict)
-            if not new_others_legend_df.empty:
-                self.others_legend_df = new_others_legend_df
-        else:
-            self.others_legend_df = pd.read_csv(in_dir_name + '/others_legend_table.csv', encoding='utf-8', dtype=Legend.legend_type_dict, keep_default_na=False)
-        if os.path.isfile((in_dir_name + '/prop_legend_df.json')):
-            new_prop_legend_df = pd.read_json(in_dir_name + '/prop_legend_df.json', orient='index', dtype=PropertiesCMaps.prop_cmap_type_dict)
-            if not new_prop_legend_df.empty:
-                self.prop_legend_df = new_prop_legend_df
-        else:
-            self.prop_legend.update_widget(parent=self)
+        """In the following it is still possible to open old projects with metadata stored
+         as CSV tables, however JSON is used now because it leads to less probelms and errors
+         for numeric and list fields. In fact, reading Pandas dataframes from JSON, dtype
+         from the class definitions specifies the type of each column."""
+        """First read geological and others legend tables."""
+        if os.path.isfile((in_dir_name + '/geol_legend_table.csv')) or os.path.isfile((in_dir_name + '/geol_legend_table.json')):
+            if os.path.isfile((in_dir_name + '/geol_legend_table.json')):
+                new_geol_legend_df = pd.read_json(in_dir_name + '/geol_legend_table.json', orient='index', dtype=Legend.legend_type_dict)
+                if not new_geol_legend_df.empty:
+                    self.geol_legend_df = new_geol_legend_df
+                    self.geol_legend_df.sort_values(by='geological_time', ascending=True, inplace=True)
+            else:
+                self.geol_legend_df = pd.read_csv(in_dir_name + '/geol_legend_table.csv', encoding='utf-8', dtype=Legend.legend_type_dict, keep_default_na=False)
+        if os.path.isfile((in_dir_name + '/others_legend_table.csv')) or os.path.isfile((in_dir_name + '/others_legend_table.json')):
+            if os.path.isfile((in_dir_name + '/others_legend_table.json')):
+                new_others_legend_df = pd.read_json(in_dir_name + '/others_legend_table.json', orient='index', dtype=Legend.legend_type_dict)
+                if not new_others_legend_df.empty:
+                    self.others_legend_df = new_others_legend_df
+            else:
+                self.others_legend_df = pd.read_csv(in_dir_name + '/others_legend_table.csv', encoding='utf-8', dtype=Legend.legend_type_dict, keep_default_na=False)
+        if os.path.isfile((in_dir_name + '/prop_legend_df.csv')) or os.path.isfile((in_dir_name + '/prop_legend_df.json')):
+            if os.path.isfile((in_dir_name + '/prop_legend_df.json')):
+                new_prop_legend_df = pd.read_json(in_dir_name + '/prop_legend_df.json', orient='index', dtype=PropertiesCMaps.prop_cmap_type_dict)
+                if not new_prop_legend_df.empty:
+                    self.prop_legend_df = new_prop_legend_df
+            else:
+                self.prop_legend.update_widget(parent=self)
+        """Update all legends."""
         self.legend.update_widget(parent=self)
         """Read x_section table and build cross-sections. Note beginResetModel() and endResetModel()."""
-        self.xsect_coll.beginResetModel()
-        if os.path.isfile((in_dir_name + '/xsection_table.json')):
-            new_xsect_coll_df = pd.read_json(in_dir_name + '/xsection_table.json', orient='index', dtype=XSectionCollection.section_type_dict)
-            if not new_xsect_coll_df.empty:
-                self.xsect_coll.df = new_xsect_coll_df
-        else:
-            self.xsect_coll.df = pd.read_csv(in_dir_name + '/xsection_table.csv', encoding='utf-8', dtype=XSectionCollection.section_type_dict, keep_default_na=False)
-        for uid in self.xsect_coll.df["uid"].tolist():
-            self.xsect_coll.set_geometry(uid=uid)
-        self.xsect_coll.endResetModel()
-        """Read geological table and files. Note beginResetModel() and endResetModel()."""
-        self.geol_coll.beginResetModel()
-        if os.path.isfile((in_dir_name + '/geological_table.json')):
-            new_geol_coll_df = pd.read_json(in_dir_name + '/geological_table.json', orient='index', dtype=GeologicalCollection.geological_entity_type_dict)
-            if not new_geol_coll_df.empty:
-                self.geol_coll.df = new_geol_coll_df
-        else:
-            self.geol_coll.df = pd.read_csv(in_dir_name + '/geological_table.csv', encoding='utf-8', dtype=GeologicalCollection.geological_entity_type_dict, keep_default_na=False)
-        prgs_bar = progress_dialog(max_value=self.geol_coll.df.shape[0], title_txt="Open geology", label_txt="Opening geological objects...", cancel_txt=None, parent=self)
-        for uid in self.geol_coll.df['uid'].to_list():
-            """IN THE FUTURE check this - for some reason, if we open with standard VTK, then casting
-            from vtkPolyData to VertexSet, PolyLine or TriSurf yields an error. However using PyVista might introduce
-            other problems and compatibility issues. It would be better to find a safe way to convert from
-            vtkPolyData directly."""
-            if not os.path.isfile((in_dir_name + "/" + uid + ".vtp")):
-                print("error: missing VTK file")
-                return
-            if self.geol_coll.get_uid_topological_type(uid) == 'VertexSet':
-                vtk_object = VertexSet()
-            elif self.geol_coll.get_uid_topological_type(uid) == 'PolyLine':
-                vtk_object = PolyLine()
-            elif self.geol_coll.get_uid_topological_type(uid) == 'TriSurf':
-                vtk_object = TriSurf()
-            elif self.geol_coll.get_uid_topological_type(uid) == 'XsVertexSet':
-                vtk_object = XsVertexSet(self.geol_coll.get_uid_x_section(uid), parent=self)
-            elif self.geol_coll.get_uid_topological_type(uid) == 'XsPolyLine':
-                vtk_object = XsPolyLine(self.geol_coll.get_uid_x_section(uid), parent=self)
-            pd_reader = vtk.vtkXMLPolyDataReader()
-            pd_reader.SetFileName(in_dir_name + "/" + uid + ".vtp")
-            pd_reader.Update()
-            vtk_object.ShallowCopy(pd_reader.GetOutput())
-            vtk_object.Modified()
-            self.geol_coll.set_uid_vtk_obj(uid=uid, vtk_obj=vtk_object)
-            prgs_bar.add_one()
-        self.geol_coll.endResetModel()
-        """Read DEM collection and files"""
-        self.dom_coll.beginResetModel()
-        if os.path.isfile((in_dir_name + '/dom_table.json')):
-            new_dom_coll_df = pd.read_json(in_dir_name + '/dom_table.json', orient='index', dtype=DomCollection.dom_entity_type_dict)
-            if not new_dom_coll_df.empty:
-                self.dom_coll.df = new_dom_coll_df
-        else:
-            self.dom_coll.df = pd.read_csv(in_dir_name + '/dom_table.csv', encoding='utf-8', dtype=DomCollection.dom_entity_type_dict, keep_default_na=False)
-        prgs_bar = progress_dialog(max_value=self.dom_coll.df.shape[0], title_txt="Open DOM", label_txt="Opening DOM objects...", cancel_txt=None, parent=self)
-        for uid in self.dom_coll.df['uid'].to_list():
-            if self.dom_coll.get_uid_dom_type(uid) == "DEM":
-                if not os.path.isfile((in_dir_name + "/" + uid + ".vts")):
-                    print("error: missing VTK file")
-                    return
-                vtk_object = DEM()
-                sg_reader = vtk.vtkXMLStructuredGridReader()
-                sg_reader.SetFileName(in_dir_name + "/" + uid + ".vts")
-                sg_reader.Update()
-                vtk_object.ShallowCopy(sg_reader.GetOutput())
-                vtk_object.Modified()
-            elif self.dom_coll.df.loc[self.dom_coll.df['uid'] == uid, 'dom_type'].values[0] == 'TSDom':
-                """Add code to read TSDOM here__________"""
-                vtk_object = TSDom()
-            elif self.dom_coll.df.loc[self.dom_coll.df['uid'] == uid, 'dom_type'].values[0] == 'PCDom':
-                """Add code to read TSDOM here__________"""
-                vtk_object = PCDom()
-            self.dom_coll.set_uid_vtk_obj(uid=uid, vtk_obj=vtk_object)
-            prgs_bar.add_one()
-        self.dom_coll.endResetModel()
-        """Read image collection and files"""
-        self.image_coll.beginResetModel()
-        if os.path.isfile((in_dir_name + '/image_table.json')):
-            new_image_coll_df = pd.read_json(in_dir_name + '/image_table.json', orient='index', dtype=ImageCollection.image_entity_type_dict)
-            if not new_image_coll_df.empty:
-                self.image_coll.df = new_image_coll_df
-        else:
-            self.image_coll.df = pd.read_csv(in_dir_name + '/image_table.csv', encoding='utf-8', dtype=ImageCollection.image_entity_type_dict, keep_default_na=False)
-        prgs_bar = progress_dialog(max_value=self.image_coll.df.shape[0], title_txt="Open image", label_txt="Opening image objects...", cancel_txt=None, parent=self)
-        for uid in self.image_coll.df['uid'].to_list():
-            if self.image_coll.df.loc[self.image_coll.df['uid'] == uid, 'image_type'].values[0] in ["MapImage", "XsImage", "TSDomImage"]:
-                if not os.path.isfile((in_dir_name + "/" + uid + ".vti")):
-                    print("error: missing image file")
-                    return
-                vtk_object = MapImage()
-                im_reader = vtk.vtkXMLImageDataReader()
-                im_reader.SetFileName(in_dir_name + "/" + uid + ".vti")
-                im_reader.Update()
-                vtk_object.ShallowCopy(im_reader.GetOutput())
-                vtk_object.Modified()
-            self.image_coll.set_uid_vtk_obj(uid=uid, vtk_obj=vtk_object)
-            prgs_bar.add_one()
-        self.image_coll.endResetModel()
-        """Read mesh3d collection and files"""
-        self.mesh3d_coll.beginResetModel()
-        if os.path.isfile((in_dir_name + '/mesh3d_table.json')):
-            new_mesh3d_coll_df = pd.read_json(in_dir_name + '/mesh3d_table.json', orient='index', dtype=Mesh3DCollection.mesh3d_entity_type_dict)
-            if not new_mesh3d_coll_df.empty:
-                self.mesh3d_coll.df = new_mesh3d_coll_df
-        else:
-            self.mesh3d_coll.df = pd.read_csv(in_dir_name + '/mesh3d_table.csv', encoding='utf-8', dtype=Mesh3DCollection.mesh3d_entity_type_dict, keep_default_na=False)
-        prgs_bar = progress_dialog(max_value=self.mesh3d_coll.df.shape[0], title_txt="Open 3D mesh", label_txt="Opening 3D mesh objects...", cancel_txt=None, parent=self)
-        for uid in self.mesh3d_coll.df['uid'].to_list():
-            if self.mesh3d_coll.df.loc[self.mesh3d_coll.df['uid'] == uid, 'mesh3d_type'].values[0] in ["Voxet"]:
-                if not os.path.isfile((in_dir_name + "/" + uid + ".vti")):
-                    print("error: missing .mesh3d file")
-                    return
-                vtk_object = Voxet()
-                im_reader = vtk.vtkXMLImageDataReader()
-                im_reader.SetFileName(in_dir_name + "/" + uid + ".vti")
-                im_reader.Update()
-                vtk_object.ShallowCopy(im_reader.GetOutput())
-                vtk_object.Modified()
-            elif self.mesh3d_coll.df.loc[self.mesh3d_coll.df['uid'] == uid, 'mesh3d_type'].values[0] in ["XsVoxet"]:
-                if not os.path.isfile((in_dir_name + "/" + uid + ".vti")):
-                    print("error: missing .mesh3d file")
-                    return
-                vtk_object = XsVoxet(x_section_uid=self.mesh3d_coll.df.loc[self.mesh3d_coll.df['uid'] == uid, 'x_section'].values[0], parent=self)
-                im_reader = vtk.vtkXMLImageDataReader()
-                im_reader.SetFileName(in_dir_name + "/" + uid + ".vti")
-                im_reader.Update()
-                vtk_object.ShallowCopy(im_reader.GetOutput())
-                vtk_object.Modified()
-            elif self.mesh3d_coll.df.loc[self.mesh3d_coll.df['uid'] == uid, 'mesh3d_type'].values[0] in ["Seismics"]:
-                if not os.path.isfile((in_dir_name + "/" + uid + ".vts")):
-                    print("error: missing VTK file")
-                    return
-                vtk_object = Seismics()
-                sg_reader = vtk.vtkXMLStructuredGridReader()
-                sg_reader.SetFileName(in_dir_name + "/" + uid + ".vts")
-                sg_reader.Update()
-                vtk_object.ShallowCopy(sg_reader.GetOutput())
-                vtk_object.Modified()
+        if os.path.isfile((in_dir_name + '/xsection_table.csv')) or os.path.isfile((in_dir_name + '/xsection_table.json')):
+            self.xsect_coll.beginResetModel()
+            if os.path.isfile((in_dir_name + '/xsection_table.json')):
+                new_xsect_coll_df = pd.read_json(in_dir_name + '/xsection_table.json', orient='index', dtype=XSectionCollection.section_type_dict)
+                if not new_xsect_coll_df.empty:
+                    self.xsect_coll.df = new_xsect_coll_df
+            else:
+                self.xsect_coll.df = pd.read_csv(in_dir_name + '/xsection_table.csv', encoding='utf-8', dtype=XSectionCollection.section_type_dict, keep_default_na=False)
+            for uid in self.xsect_coll.df["uid"].tolist():
+                self.xsect_coll.set_geometry(uid=uid)
+            self.xsect_coll.endResetModel()
+        """Read DOM table and files. Note beginResetModel() and endResetModel()."""
+        if os.path.isfile((in_dir_name + '/dom_table.csv')) or os.path.isfile((in_dir_name + '/dom_table.json')):
+            self.dom_coll.beginResetModel()
+            if os.path.isfile((in_dir_name + '/dom_table.json')):
+                new_dom_coll_df = pd.read_json(in_dir_name + '/dom_table.json', orient='index', dtype=DomCollection.dom_entity_type_dict)
+                if not new_dom_coll_df.empty:
+                    self.dom_coll.df = new_dom_coll_df
+            else:
+                self.dom_coll.df = pd.read_csv(in_dir_name + '/dom_table.csv', encoding='utf-8', dtype=DomCollection.dom_entity_type_dict, keep_default_na=False)
+            prgs_bar = progress_dialog(max_value=self.dom_coll.df.shape[0], title_txt="Open DOM", label_txt="Opening DOM objects...", cancel_txt=None, parent=self)
+            for uid in self.dom_coll.df['uid'].to_list():
+                if self.dom_coll.get_uid_dom_type(uid) == "DEM":
+                    if not os.path.isfile((in_dir_name + "/" + uid + ".vts")):
+                        print("error: missing VTK file")
+                        return
+                    vtk_object = DEM()
+                    sg_reader = vtk.vtkXMLStructuredGridReader()
+                    sg_reader.SetFileName(in_dir_name + "/" + uid + ".vts")
+                    sg_reader.Update()
+                    vtk_object.ShallowCopy(sg_reader.GetOutput())
+                    vtk_object.Modified()
+                elif self.dom_coll.df.loc[self.dom_coll.df['uid'] == uid, 'dom_type'].values[0] == 'TSDom':
+                    """Add code to read TSDOM here__________"""
+                    vtk_object = TSDom()
+                elif self.dom_coll.df.loc[self.dom_coll.df['uid'] == uid, 'dom_type'].values[0] == 'PCDom':
+                    """Add code to read TSDOM here__________"""
+                    vtk_object = PCDom()
+                self.dom_coll.set_uid_vtk_obj(uid=uid, vtk_obj=vtk_object)
                 prgs_bar.add_one()
-            self.mesh3d_coll.set_uid_vtk_obj(uid=uid, vtk_obj=vtk_object)
-        self.mesh3d_coll.endResetModel()
-        """TEMP_________________________________________________________________"""
+            self.dom_coll.endResetModel()
+        """Read image collection and files"""
+        if os.path.isfile((in_dir_name + '/image_table.csv')) or os.path.isfile((in_dir_name + '/image_table.json')):
+            self.image_coll.beginResetModel()
+            if os.path.isfile((in_dir_name + '/image_table.json')):
+                new_image_coll_df = pd.read_json(in_dir_name + '/image_table.json', orient='index', dtype=ImageCollection.image_entity_type_dict)
+                if not new_image_coll_df.empty:
+                    self.image_coll.df = new_image_coll_df
+            else:
+                self.image_coll.df = pd.read_csv(in_dir_name + '/image_table.csv', encoding='utf-8', dtype=ImageCollection.image_entity_type_dict, keep_default_na=False)
+            prgs_bar = progress_dialog(max_value=self.image_coll.df.shape[0], title_txt="Open image", label_txt="Opening image objects...", cancel_txt=None, parent=self)
+            for uid in self.image_coll.df['uid'].to_list():
+                if self.image_coll.df.loc[self.image_coll.df['uid'] == uid, 'image_type'].values[0] in ["MapImage", "XsImage", "TSDomImage"]:
+                    if not os.path.isfile((in_dir_name + "/" + uid + ".vti")):
+                        print("error: missing image file")
+                        return
+                    vtk_object = MapImage()
+                    im_reader = vtk.vtkXMLImageDataReader()
+                    im_reader.SetFileName(in_dir_name + "/" + uid + ".vti")
+                    im_reader.Update()
+                    vtk_object.ShallowCopy(im_reader.GetOutput())
+                    vtk_object.Modified()
+                self.image_coll.set_uid_vtk_obj(uid=uid, vtk_obj=vtk_object)
+                prgs_bar.add_one()
+            self.image_coll.endResetModel()
+        """Read mesh3d collection and files"""
+        if os.path.isfile((in_dir_name + '/mesh3d_table.csv')) or os.path.isfile((in_dir_name + '/mesh3d_table.json')):
+            self.mesh3d_coll.beginResetModel()
+            if os.path.isfile((in_dir_name + '/mesh3d_table.json')):
+                new_mesh3d_coll_df = pd.read_json(in_dir_name + '/mesh3d_table.json', orient='index', dtype=Mesh3DCollection.mesh3d_entity_type_dict)
+                if not new_mesh3d_coll_df.empty:
+                    self.mesh3d_coll.df = new_mesh3d_coll_df
+            else:
+                self.mesh3d_coll.df = pd.read_csv(in_dir_name + '/mesh3d_table.csv', encoding='utf-8', dtype=Mesh3DCollection.mesh3d_entity_type_dict, keep_default_na=False)
+            prgs_bar = progress_dialog(max_value=self.mesh3d_coll.df.shape[0], title_txt="Open 3D mesh", label_txt="Opening 3D mesh objects...", cancel_txt=None, parent=self)
+            for uid in self.mesh3d_coll.df['uid'].to_list():
+                if self.mesh3d_coll.df.loc[self.mesh3d_coll.df['uid'] == uid, 'mesh3d_type'].values[0] in ["Voxet"]:
+                    if not os.path.isfile((in_dir_name + "/" + uid + ".vti")):
+                        print("error: missing .mesh3d file")
+                        return
+                    vtk_object = Voxet()
+                    im_reader = vtk.vtkXMLImageDataReader()
+                    im_reader.SetFileName(in_dir_name + "/" + uid + ".vti")
+                    im_reader.Update()
+                    vtk_object.ShallowCopy(im_reader.GetOutput())
+                    vtk_object.Modified()
+                elif self.mesh3d_coll.df.loc[self.mesh3d_coll.df['uid'] == uid, 'mesh3d_type'].values[0] in ["XsVoxet"]:
+                    if not os.path.isfile((in_dir_name + "/" + uid + ".vti")):
+                        print("error: missing .mesh3d file")
+                        return
+                    vtk_object = XsVoxet(x_section_uid=self.mesh3d_coll.df.loc[self.mesh3d_coll.df['uid'] == uid, 'x_section'].values[0], parent=self)
+                    im_reader = vtk.vtkXMLImageDataReader()
+                    im_reader.SetFileName(in_dir_name + "/" + uid + ".vti")
+                    im_reader.Update()
+                    vtk_object.ShallowCopy(im_reader.GetOutput())
+                    vtk_object.Modified()
+                elif self.mesh3d_coll.df.loc[self.mesh3d_coll.df['uid'] == uid, 'mesh3d_type'].values[0] in ["Seismics"]:
+                    if not os.path.isfile((in_dir_name + "/" + uid + ".vts")):
+                        print("error: missing VTK file")
+                        return
+                    vtk_object = Seismics()
+                    sg_reader = vtk.vtkXMLStructuredGridReader()
+                    sg_reader.SetFileName(in_dir_name + "/" + uid + ".vts")
+                    sg_reader.Update()
+                    vtk_object.ShallowCopy(sg_reader.GetOutput())
+                    vtk_object.Modified()
+                    prgs_bar.add_one()
+                self.mesh3d_coll.set_uid_vtk_obj(uid=uid, vtk_obj=vtk_object)
+            self.mesh3d_coll.endResetModel()
+        """Read boundaries collection and files"""
+        if os.path.isfile((in_dir_name + '/boundary_table.csv')) or os.path.isfile((in_dir_name + '/boundary_table.json')):
+            pass
+        """Read geological table and files. Note beginResetModel() and endResetModel()."""
+        if os.path.isfile((in_dir_name + '/geological_table.csv')) or os.path.isfile((in_dir_name + '/geological_table.json')):
+            self.geol_coll.beginResetModel()
+            if os.path.isfile((in_dir_name + '/geological_table.json')):
+                new_geol_coll_df = pd.read_json(in_dir_name + '/geological_table.json', orient='index', dtype=GeologicalCollection.geological_entity_type_dict)
+                if not new_geol_coll_df.empty:
+                    self.geol_coll.df = new_geol_coll_df
+            else:
+                self.geol_coll.df = pd.read_csv(in_dir_name + '/geological_table.csv', encoding='utf-8', dtype=GeologicalCollection.geological_entity_type_dict, keep_default_na=False)
+            prgs_bar = progress_dialog(max_value=self.geol_coll.df.shape[0], title_txt="Open geology", label_txt="Opening geological objects...", cancel_txt=None, parent=self)
+            for uid in self.geol_coll.df['uid'].to_list():
+                """IN THE FUTURE check this - for some reason, if we open with standard VTK, then casting
+                from vtkPolyData to VertexSet, PolyLine or TriSurf yields an error. However using PyVista might introduce
+                other problems and compatibility issues. It would be better to find a safe way to convert from
+                vtkPolyData directly."""
+                if not os.path.isfile((in_dir_name + "/" + uid + ".vtp")):
+                    print("error: missing VTK file")
+                    return
+                if self.geol_coll.get_uid_topological_type(uid) == 'VertexSet':
+                    vtk_object = VertexSet()
+                elif self.geol_coll.get_uid_topological_type(uid) == 'PolyLine':
+                    vtk_object = PolyLine()
+                elif self.geol_coll.get_uid_topological_type(uid) == 'TriSurf':
+                    vtk_object = TriSurf()
+                elif self.geol_coll.get_uid_topological_type(uid) == 'XsVertexSet':
+                    vtk_object = XsVertexSet(self.geol_coll.get_uid_x_section(uid), parent=self)
+                elif self.geol_coll.get_uid_topological_type(uid) == 'XsPolyLine':
+                    vtk_object = XsPolyLine(self.geol_coll.get_uid_x_section(uid), parent=self)
+                pd_reader = vtk.vtkXMLPolyDataReader()
+                pd_reader.SetFileName(in_dir_name + "/" + uid + ".vtp")
+                pd_reader.Update()
+                vtk_object.ShallowCopy(pd_reader.GetOutput())
+                vtk_object.Modified()
+                self.geol_coll.set_uid_vtk_obj(uid=uid, vtk_obj=vtk_object)
+                prgs_bar.add_one()
+            self.geol_coll.endResetModel()
+        """Update legend."""
         self.prop_legend.update_widget(parent=self)
 
     """Methods used to import entities from other file formats."""
