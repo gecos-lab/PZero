@@ -2,13 +2,11 @@
 
 # Form implementation generated from reading ui file 'project_window.ui'
 #
-# Created by: PyQt5 UI code generator 5.12.3
+# Created by: PyQt5 UI code generator 5.9.2
 #
 # WARNING! All changes made in this file will be lost!
 
-
 from PyQt5 import QtCore, QtGui, QtWidgets
-
 
 class Ui_ProjectWindow(object):
     def setupUi(self, ProjectWindow):
@@ -32,10 +30,10 @@ class Ui_ProjectWindow(object):
         self.centralwidget.setBaseSize(QtCore.QSize(1280, 470))
         self.centralwidget.setStyleSheet("")
         self.centralwidget.setObjectName("centralwidget")
-        self.verticalLayout = QtWidgets.QVBoxLayout(self.centralwidget)
-        self.verticalLayout.setContentsMargins(4, 4, 4, 4)
-        self.verticalLayout.setSpacing(8)
-        self.verticalLayout.setObjectName("verticalLayout")
+        self.horizontalLayout = QtWidgets.QHBoxLayout(self.centralwidget)
+        self.horizontalLayout.setContentsMargins(4, 4, 4, 4)
+        self.horizontalLayout.setSpacing(8)
+        self.horizontalLayout.setObjectName("horizontalLayout")
         self.tabCentral = QtWidgets.QTabWidget(self.centralwidget)
         sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.MinimumExpanding, QtWidgets.QSizePolicy.MinimumExpanding)
         sizePolicy.setHorizontalStretch(1)
@@ -104,6 +102,15 @@ class Ui_ProjectWindow(object):
         self.ImagesTableView.setObjectName("ImagesTableView")
         self.verticalLayout_9.addWidget(self.ImagesTableView)
         self.tabCentral.addTab(self.tabImages, "")
+        self.tabBoundaries = QtWidgets.QWidget()
+        self.tabBoundaries.setObjectName("tabBoundaries")
+        self.verticalLayout = QtWidgets.QVBoxLayout(self.tabBoundaries)
+        self.verticalLayout.setObjectName("verticalLayout")
+        self.BoundariesTableView = QtWidgets.QTableView(self.tabBoundaries)
+        self.BoundariesTableView.setSortingEnabled(True)
+        self.BoundariesTableView.setObjectName("BoundariesTableView")
+        self.verticalLayout.addWidget(self.BoundariesTableView)
+        self.tabCentral.addTab(self.tabBoundaries, "")
         self.tabLegend = QtWidgets.QWidget()
         sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.MinimumExpanding, QtWidgets.QSizePolicy.MinimumExpanding)
         sizePolicy.setHorizontalStretch(1)
@@ -175,7 +182,7 @@ class Ui_ProjectWindow(object):
         self.TextTerminal.setObjectName("TextTerminal")
         self.verticalLayout_5.addWidget(self.TextTerminal)
         self.tabCentral.addTab(self.tabTerminal, "")
-        self.verticalLayout.addWidget(self.tabCentral)
+        self.horizontalLayout.addWidget(self.tabCentral)
         ProjectWindow.setCentralWidget(self.centralwidget)
         self.menubar = QtWidgets.QMenuBar(ProjectWindow)
         self.menubar.setGeometry(QtCore.QRect(0, 0, 1564, 30))
@@ -476,6 +483,7 @@ class Ui_ProjectWindow(object):
         self.tabCentral.setTabToolTip(self.tabCentral.indexOf(self.tabDOMs), _translate("ProjectWindow", "DEMs and DOMs"))
         self.tabCentral.setTabText(self.tabCentral.indexOf(self.tabImages), _translate("ProjectWindow", "Images"))
         self.tabCentral.setTabToolTip(self.tabCentral.indexOf(self.tabImages), _translate("ProjectWindow", "Images"))
+        self.tabCentral.setTabText(self.tabCentral.indexOf(self.tabBoundaries), _translate("ProjectWindow", "Boundaries"))
         self.tabLegend.setToolTip(_translate("ProjectWindow", "Legend"))
         self.tabLegend.setAccessibleName(_translate("ProjectWindow", "Legend"))
         self.LegendTreeWidget.setToolTip(_translate("ProjectWindow", "Legend"))
@@ -551,3 +559,4 @@ class Ui_ProjectWindow(object):
         self.actionRemoveProperty.setText(_translate("ProjectWindow", "Remove property"))
         self.actionProject2XSection.setText(_translate("ProjectWindow", "Project to XSection"))
         self.actionImportSHP.setText(_translate("ProjectWindow", "Import SHP"))
+
