@@ -1336,18 +1336,6 @@ class Seismics(vtk.vtkStructuredGrid):
         return frame
 
 
-class PointCloud(vtk.vtkPointSet):
-    """TO BE IMPLEMENTED
-    See discussion at https://discourse.vtk.org/t/proposal-adding-a-vtkpointcloud-data-structure/3872/3"""
-
-    def deep_copy(self):
-        pcloud_copy = PointCloud()
-        pcloud_copy.DeepCopy(self)
-        return pcloud_copy
-
-    pass
-
-
 class DEM(vtk.vtkStructuredGrid):
     """DEM is a Digital Elevation Model derived from vtk.vtkStructuredGrid,
     saved in the project folder as .vts. Many methods are similar to PolyData."""
@@ -1507,6 +1495,25 @@ class DEM(vtk.vtkStructuredGrid):
 
     def set_active_texture(self, map_image_uid=None):
         self.GetPointData().SetActiveTCoords(map_image_uid)
+
+
+class PCDom(vtk.vtkPointSet):
+    """Point Cloud DOM - TO BE IMPLEMENTED
+    See discussion at https://discourse.vtk.org/t/proposal-adding-a-vtkpointcloud-data-structure/3872/3"""
+
+    def deep_copy(self):
+        pcdom_copy = PCDom()
+        pcdom_copy.DeepCopy(self)
+        return pcdom_copy
+
+
+class TSDom(vtk.vtkPointSet):
+    """Textured Surface DOM - TO BE IMPLEMENTED"""
+
+    def deep_copy(self):
+        tsdom_copy = TSDom()
+        tsdom_copy.DeepCopy(self)
+        return tsdom_copy
 
 
 class MapImage(vtk.vtkImageData):

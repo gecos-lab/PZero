@@ -11,15 +11,16 @@ from PyQt5.QtCore import Qt, pyqtSignal, QSortFilterProxyModel
 import vtk
 import pandas as pd
 from .project_window_ui import Ui_ProjectWindow
-from .entities_factory import Plane, VertexSet, PolyLine, TriSurf, XsVertexSet, XsPolyLine, DEM, MapImage, Voxet, Seismics, XsVoxet
+from .entities_factory import Plane, VertexSet, PolyLine, TriSurf, XsVertexSet, XsPolyLine, DEM, MapImage, Voxet, Seismics, XsVoxet, TetraSolid, PCDom, TSDom
 from .geological_collection import GeologicalCollection
 from .xsection_collection import XSectionCollection
 from .dom_collection import DomCollection
 from .image_collection import ImageCollection
 from .mesh3d_collection import Mesh3DCollection
+from .boundary_collection import BoundaryCollection
 from .legend_manager import Legend
 from .properties_manager import PropertiesCMaps
-from .gocad2vtk import gocad2vtk, vtk2gocad, gocad2vtk_section
+from .gocad2vtk import gocad2vtk, vtk2gocad, gocad2vtk_section, gocad2vtk_boundary
 from .pyvista2vtk import pyvista2vtk
 from .vedo2vtk import vedo2vtk
 from .shp2vtk import shp2vtk
@@ -59,6 +60,21 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
     xsect_legend_color_modified_signal = pyqtSignal(list)
     xsect_legend_thick_modified_signal = pyqtSignal(list)
 
+    boundary_added_signal = pyqtSignal(list)
+    boundary_removed_signal = pyqtSignal(list)
+    boundary_geom_modified_signal = pyqtSignal(list)  # this includes topology modified
+    boundary_metadata_modified_signal = pyqtSignal(list)
+    boundary_legend_color_modified_signal = pyqtSignal(list)
+    boundary_legend_thick_modified_signal = pyqtSignal(list)
+
+    mesh3d_added_signal = pyqtSignal(list)
+    mesh3d_removed_signal = pyqtSignal(list)
+    mesh3d_data_keys_removed_signal = pyqtSignal(list)
+    mesh3d_data_val_modified_signal = pyqtSignal(list)
+    mesh3d_metadata_modified_signal = pyqtSignal(list)
+    mesh3d_legend_color_modified_signal = pyqtSignal(list)
+    mesh3d_legend_thick_modified_signal = pyqtSignal(list)
+
     dom_added_signal = pyqtSignal(list)
     dom_removed_signal = pyqtSignal(list)
     dom_data_keys_removed_signal = pyqtSignal(list)
@@ -70,14 +86,6 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
     image_added_signal = pyqtSignal(list)
     image_removed_signal = pyqtSignal(list)
     image_metadata_modified_signal = pyqtSignal(list)
-
-    mesh3d_added_signal = pyqtSignal(list)
-    mesh3d_removed_signal = pyqtSignal(list)
-    mesh3d_data_keys_removed_signal = pyqtSignal(list)
-    mesh3d_data_val_modified_signal = pyqtSignal(list)
-    mesh3d_metadata_modified_signal = pyqtSignal(list)
-    mesh3d_legend_color_modified_signal = pyqtSignal(list)
-    mesh3d_legend_thick_modified_signal = pyqtSignal(list)
 
     prop_legend_cmap_modified_signal = pyqtSignal(str)
 
@@ -111,6 +119,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         """File>Import actions -> slots"""
         self.actionImportGocad.triggered.connect(self.import_gocad)
         self.actionImportGocadXsection.triggered.connect(self.import_gocad_section)
+        self.actionImportGocadBoundary.triggered.connect(self.import_gocad_boundary)  #_______________________________________
         self.actionImportPyvista.triggered.connect(lambda: pyvista2vtk(self=self))
         self.actionImportVedo.triggered.connect(lambda: vedo2vtk(self=self))
         self.actionImportSHP.triggered.connect(self.import_SHP)
@@ -216,6 +225,15 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             for idx in selected_idxs:
                 selected_uids.append(self.image_coll.data(index=idx, role=Qt.DisplayRole))
             return selected_uids
+        elif self.shown_table == "tabBoundaries":  #_________________________________________________
+            selected_idxs_proxy = self.BoundariesTableView.selectionModel().selectedRows()  #_________________________________________________
+            selected_idxs = []
+            for idx_proxy in selected_idxs_proxy:
+                selected_idxs.append(self.proxy_boundary_coll.mapToSource(idx_proxy))  #_________________________________________________
+            selected_uids = []
+            for idx in selected_idxs:
+                selected_uids.append(self.boundary_coll.data(index=idx, role=Qt.DisplayRole))  #_________________________________________________
+            return selected_uids
         elif self.shown_table == "tabLegend":
             pass
         elif self.shown_table == "tabProperties":
@@ -243,15 +261,21 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 self.dom_coll.remove_entity(uid=uid)
             elif self.shown_table == "tabImages":
                 self.image_coll.remove_entity(uid=uid)
+            elif self.shown_table == "tabBoundaries":
+                self.boundary_coll.remove_entity(uid=uid)  #_________________________________________________
 
-    def entities_merge(self):
+    def entities_merge(self):  # ____________________________________________________________________MOVE THIS TO GEOLOGICAL COLL & MAKE ANOTHER FOR BOUNDARY COLL
         """Merge entities of the same type - VertexSet, PolyLine, TriSurf, ..."""
         """Check if some vtkPolyData is selected"""
         if not self.selected_uids:
             return
         """Create deepcopy of the geological entity dictionary."""
         new_dict = deepcopy(self.geol_coll.geological_entity_dict)
-        input_dict = {'topological_type': ['Topological type', ['VertexSet', 'PolyLine', 'TriSurf', 'TetraSolid', 'XsVertexSet', 'XsPolyLine', 'Voxet']], 'name': ['New name: ', self.geol_coll.get_uid_name(self.selected_uids[0])], 'geological_feature': ['Geological feature: ', self.geol_coll.get_uid_geological_feature(self.selected_uids[0])], 'scenario': ['Scenario: ', self.geol_coll.get_uid_scenario(self.selected_uids[0])], 'geological_type': ['Geological type: ', GeologicalCollection.valid_geological_types]}
+        input_dict = {'topological_type': ['Topological type', ['VertexSet', 'PolyLine', 'TriSurf', 'XsVertexSet', 'XsPolyLine']],
+                      'name': ['New name: ', self.geol_coll.get_uid_name(self.selected_uids[0])],
+                      'geological_feature': ['Geological feature: ', self.geol_coll.get_uid_geological_feature(self.selected_uids[0])],
+                      'scenario': ['Scenario: ', self.geol_coll.get_uid_scenario(self.selected_uids[0])],
+                      'geological_type': ['Geological type: ', GeologicalCollection.valid_geological_types]}
         updt_dict = multiple_input_dialog(title='Merge entities', input_dict=input_dict)
         """Check if the output of the widget is empty or not. If the Cancel button was clicked, the tool quits"""
         if updt_dict is None:
@@ -265,14 +289,10 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             new_dict['vtk_obj'] = PolyLine()
         elif new_dict['topological_type'] == 'TriSurf':
             new_dict['vtk_obj'] = TriSurf()
-        elif new_dict['topological_type'] == 'TetraSolid':
-            new_dict['vtk_obj'] = TetraSolid()
         elif new_dict['topological_type'] == 'XsVertexSet':
             new_dict['vtk_obj'] = XsVertexSet()
         elif new_dict['topological_type'] == 'XsPolyLine':
             new_dict['vtk_obj'] = XsPolyLine()
-        elif new_dict['topological_type'] == 'Voxet':
-            new_dict['vtk_obj'] = Voxet()
         else:
             return
         """Create a vtkAppenPolyData filter to merge all input vtk objects"""
@@ -322,7 +342,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             self.dom_coll.remove_map_texture_from_dom(dom_uid=dom_uid, map_image_uid=map_image_uid)
 
     def property_add(self):
-        """Add empty property on geological """
+        """Add empty property on geological entity"""
         if not self.shown_table in ["tabGeology", "tabMeshes3D", "tabDOMs"]:
             return
         if not self.selected_uids:
@@ -437,6 +457,14 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.proxy_mesh3d_coll.setSourceModel(self.mesh3d_coll)
         self.Meshes3DTableView.setModel(self.proxy_mesh3d_coll)
 
+        """Create the boundary_coll BoundaryCollection (a Qt QAbstractTableModel with a Pandas dataframe as attribute)
+        and connect the model to BoundaryTableView (a Qt QTableView created with QTDesigner and provided by
+        Ui_ProjectWindow). Setting the model also updates the view."""
+        self.boundary_coll = BoundaryCollection(parent=self)  #_________________________________________________
+        self.proxy_boundary_coll = QSortFilterProxyModel(self)
+        self.proxy_boundary_coll.setSourceModel(self.boundary_coll)
+        self.BoundariesTableView.setModel(self.proxy_boundary_coll)
+
         """Create the geol_legend_df legend table (a Pandas dataframe), create the corresponding QT
         Legend self.legend (a Qt QTreeWidget that is internally connected to its data source),
         and update the widget."""
@@ -458,7 +486,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         now = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
         """Select and open output file and folder. Saving always performs a complete backup since the output folder
         is named with the present date and time "rev_<now>"."""
-        self.out_file_name = save_file_dialog(parent=self, caption="Save project.", filter=("PZero (*.p0)"))
+        self.out_file_name = save_file_dialog(parent=self, caption="Save project.", filter="PZero (*.p0)")
         if not self.out_file_name:
             return
         out_dir_name = self.out_file_name[:-3] + '_p0/rev_' + now
@@ -483,15 +511,15 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         # self.prop_legend_df.to_csv(out_dir_name + '/prop_legend_df.csv', encoding='utf-8', index=False)
         self.prop_legend_df.to_json(out_dir_name + '/prop_legend_df.json', orient='index')
         """Save x_section table to JSON file."""
-        # self.xsect_coll.df.to_csv(out_dir_name + '/xsection_table.csv', encoding='utf-8', index=False)
         out_cols = list(self.xsect_coll.df.columns)
         out_cols.remove('vtk_plane')
         out_cols.remove('vtk_frame')
+        # self.xsect_coll.df[out_cols].to_csv(out_dir_name + '/xsection_table.csv', encoding='utf-8', index=False)
         self.xsect_coll.df[out_cols].to_json(out_dir_name + '/xsection_table.json', orient='index')
         """Save geological collection table to JSON file and entities as VTK."""
-        # self.geol_coll.df.to_csv(out_dir_name + '/geological_table.csv', encoding='utf-8', index=False)
         out_cols = list(self.geol_coll.df.columns)
         out_cols.remove('vtk_obj')
+        # self.geol_coll.df[out_cols].to_csv(out_dir_name + '/geological_table.csv', encoding='utf-8', index=False)
         self.geol_coll.df[out_cols].to_json(out_dir_name + '/geological_table.json', orient='index')
         prgs_bar = progress_dialog(max_value=self.geol_coll.df.shape[0], title_txt="Save geology", label_txt="Saving geological objects...", cancel_txt=None, parent=self)
         for uid in self.geol_coll.df['uid'].to_list():
@@ -501,9 +529,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             pd_writer.Write()
             prgs_bar.add_one()
         """Save DOM collection table to JSON file and entities as VTK."""
-        # self.dom_coll.df.to_csv(out_dir_name + '/dom_table.csv', encoding='utf-8', index=False)
         out_cols = list(self.dom_coll.df.columns)
         out_cols.remove('vtk_obj')
+        # self.dom_coll.df[out_cols].to_csv(out_dir_name + '/dom_table.csv', encoding='utf-8', index=False)
         self.dom_coll.df[out_cols].to_json(out_dir_name + '/dom_table.json', orient='index')
         prgs_bar = progress_dialog(max_value=self.dom_coll.df.shape[0], title_txt="Save DOM", label_txt="Saving DOM objects...", cancel_txt=None, parent=self)
         for uid in self.dom_coll.df['uid'].to_list():
@@ -514,9 +542,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 sg_writer.Write()
                 prgs_bar.add_one()
         """Save image collection table to JSON file and entities as VTK."""
-        # self.image_coll.df.to_csv(out_dir_name + '/image_table.csv', encoding='utf-8', index=False)
         out_cols = list(self.image_coll.df.columns)
         out_cols.remove('vtk_obj')
+        # self.image_coll.df[out_cols].to_csv(out_dir_name + '/image_table.csv', encoding='utf-8', index=False)
         self.image_coll.df[out_cols].to_json(out_dir_name + '/image_table.json', orient='index')
         prgs_bar = progress_dialog(max_value=self.image_coll.df.shape[0], title_txt="Save image", label_txt="Saving image objects...", cancel_txt=None, parent=self)
         for uid in self.image_coll.df['uid'].to_list():
@@ -527,9 +555,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 im_writer.Write()
                 prgs_bar.add_one()
         """Save mesh3d collection table to JSON file and entities as VTK."""
-        # self.mesh3d_coll.df.to_csv(out_dir_name + '/mesh3d_table.csv', encoding='utf-8', index=False)
         out_cols = list(self.mesh3d_coll.df.columns)
         out_cols.remove('vtk_obj')
+        # self.mesh3d_coll.df[out_cols].to_csv(out_dir_name + '/mesh3d_table.csv', encoding='utf-8', index=False)
         self.mesh3d_coll.df[out_cols].to_json(out_dir_name + '/mesh3d_table.json', orient='index')
         prgs_bar = progress_dialog(max_value=self.mesh3d_coll.df.shape[0], title_txt="Save 3D mesh", label_txt="Saving 3D mesh objects...", cancel_txt=None, parent=self)
         for uid in self.mesh3d_coll.df['uid'].to_list():
@@ -543,6 +571,18 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 sg_writer.SetFileName(out_dir_name + "/" + uid + ".vts")
                 sg_writer.SetInputData(self.mesh3d_coll.get_uid_vtk_obj(uid))
                 sg_writer.Write()
+            prgs_bar.add_one()
+        """Save boundaries collection table to JSON file and entities as VTK."""  #_________________________________________________
+        out_cols = list(self.boundary_coll.df.columns)
+        out_cols.remove('vtk_obj')
+        # self.boundary_coll.df[out_cols].to_csv(out_dir_name + '/boundary_table.csv', encoding='utf-8', index=False)
+        self.boundary_coll.df[out_cols].to_json(out_dir_name + '/boundary_table.json', orient='index')
+        prgs_bar = progress_dialog(max_value=self.boundary_coll.df.shape[0], title_txt="Save boundary", label_txt="Saving boundary objects...", cancel_txt=None, parent=self)
+        for uid in self.boundary_coll.df['uid'].to_list():
+            pd_writer = vtk.vtkXMLPolyDataWriter()
+            pd_writer.SetFileName(out_dir_name + "/" + uid + ".vtp")
+            pd_writer.SetInputData(self.boundary_coll.get_uid_vtk_obj(uid))
+            pd_writer.Write()
             prgs_bar.add_one()
 
     def new_project(self):
@@ -588,18 +628,21 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         if os.path.isfile((in_dir_name + '/geol_legend_table.csv')) or os.path.isfile((in_dir_name + '/geol_legend_table.json')):
             if os.path.isfile((in_dir_name + '/geol_legend_table.json')):
                 new_geol_legend_df = pd.read_json(in_dir_name + '/geol_legend_table.json', orient='index', dtype=Legend.legend_type_dict)
-                if not new_geol_legend_df.empty:
-                    self.geol_legend_df = new_geol_legend_df
-                    self.geol_legend_df.sort_values(by='geological_time', ascending=True, inplace=True)
             else:
-                self.geol_legend_df = pd.read_csv(in_dir_name + '/geol_legend_table.csv', encoding='utf-8', dtype=Legend.legend_type_dict, keep_default_na=False)
+                new_geol_legend_df = pd.read_csv(in_dir_name + '/geol_legend_table.csv', encoding='utf-8', dtype=Legend.legend_type_dict, keep_default_na=False)
+            if not new_geol_legend_df.empty:
+                self.geol_legend_df = new_geol_legend_df
+            self.geol_legend_df.sort_values(by='geological_time', ascending=True, inplace=True)
         if os.path.isfile((in_dir_name + '/others_legend_table.csv')) or os.path.isfile((in_dir_name + '/others_legend_table.json')):
             if os.path.isfile((in_dir_name + '/others_legend_table.json')):
                 new_others_legend_df = pd.read_json(in_dir_name + '/others_legend_table.json', orient='index', dtype=Legend.legend_type_dict)
-                if not new_others_legend_df.empty:
-                    self.others_legend_df = new_others_legend_df
             else:
-                self.others_legend_df = pd.read_csv(in_dir_name + '/others_legend_table.csv', encoding='utf-8', dtype=Legend.legend_type_dict, keep_default_na=False)
+                new_others_legend_df = pd.read_csv(in_dir_name + '/others_legend_table.csv', encoding='utf-8', dtype=Legend.legend_type_dict, keep_default_na=False)
+            if not new_others_legend_df.empty:
+                # self.others_legend_df = new_others_legend_df
+                for type in self.others_legend_df['other_type'].values:
+                    if type in new_others_legend_df['other_type'].values:
+                        self.others_legend_df[self.others_legend_df['other_type'] == type] = new_others_legend_df[new_others_legend_df['other_type'] == type].values
         if os.path.isfile((in_dir_name + '/prop_legend_df.csv')) or os.path.isfile((in_dir_name + '/prop_legend_df.json')):
             if os.path.isfile((in_dir_name + '/prop_legend_df.json')):
                 new_prop_legend_df = pd.read_json(in_dir_name + '/prop_legend_df.json', orient='index', dtype=PropertiesCMaps.prop_cmap_type_dict)
@@ -719,9 +762,32 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     prgs_bar.add_one()
                 self.mesh3d_coll.set_uid_vtk_obj(uid=uid, vtk_obj=vtk_object)
             self.mesh3d_coll.endResetModel()
-        """Read boundaries collection and files"""
+        """Read boundaries collection and files"""  #_________________________________________________
         if os.path.isfile((in_dir_name + '/boundary_table.csv')) or os.path.isfile((in_dir_name + '/boundary_table.json')):
-            pass
+            self.boundary_coll.beginResetModel()
+            if os.path.isfile((in_dir_name + '/boundary_table.json')):
+                new_boundary_coll_df = pd.read_json(in_dir_name + '/boundary_table.json', orient='index', dtype=BoundaryCollection.boundary_entity_type_dict)
+                if not new_boundary_coll_df.empty:
+                    self.boundary_coll.df = new_boundary_coll_df
+            else:
+                self.boundary_coll.df = pd.read_csv(in_dir_name + '/boundary_table.csv', encoding='utf-8', dtype=BoundaryCollection.boundary_entity_type_dict, keep_default_na=False)
+            prgs_bar = progress_dialog(max_value=self.boundary_coll.df.shape[0], title_txt="Open boundary", label_txt="Opening boundary objects...", cancel_txt=None, parent=self)
+            for uid in self.boundary_coll.df['uid'].to_list():
+                if not os.path.isfile((in_dir_name + "/" + uid + ".vtp")):
+                    print("error: missing VTK file")
+                    return
+                if self.boundary_coll.get_uid_topological_type(uid) == 'PolyLine':
+                    vtk_object = PolyLine()
+                elif self.boundary_coll.get_uid_topological_type(uid) == 'TriSurf':
+                    vtk_object = TriSurf()
+                pd_reader = vtk.vtkXMLPolyDataReader()
+                pd_reader.SetFileName(in_dir_name + "/" + uid + ".vtp")
+                pd_reader.Update()
+                vtk_object.ShallowCopy(pd_reader.GetOutput())
+                vtk_object.Modified()
+                self.boundary_coll.set_uid_vtk_obj(uid=uid, vtk_obj=vtk_object)
+                prgs_bar.add_one()
+            self.boundary_coll.endResetModel()
         """Read geological table and files. Note beginResetModel() and endResetModel()."""
         if os.path.isfile((in_dir_name + '/geological_table.csv')) or os.path.isfile((in_dir_name + '/geological_table.json')):
             self.geol_coll.beginResetModel()
@@ -733,10 +799,6 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 self.geol_coll.df = pd.read_csv(in_dir_name + '/geological_table.csv', encoding='utf-8', dtype=GeologicalCollection.geological_entity_type_dict, keep_default_na=False)
             prgs_bar = progress_dialog(max_value=self.geol_coll.df.shape[0], title_txt="Open geology", label_txt="Opening geological objects...", cancel_txt=None, parent=self)
             for uid in self.geol_coll.df['uid'].to_list():
-                """IN THE FUTURE check this - for some reason, if we open with standard VTK, then casting
-                from vtkPolyData to VertexSet, PolyLine or TriSurf yields an error. However using PyVista might introduce
-                other problems and compatibility issues. It would be better to find a safe way to convert from
-                vtkPolyData directly."""
                 if not os.path.isfile((in_dir_name + "/" + uid + ".vtp")):
                     print("error: missing VTK file")
                     return
@@ -772,8 +834,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         if in_file_name:
             self.TextTerminal.appendPlainText('in_file_name: ' + in_file_name)
             gocad2vtk(self=self, in_file_name=in_file_name, uid_from_name=False)
-        """TEMP_________________________________________________________________"""
-        self.prop_legend.update_widget(parent=self)
+            self.prop_legend.update_widget(parent=self)
 
     def import_gocad_section(self):
         """Import Gocad ASCII file and update geological collection."""
@@ -792,8 +853,19 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             if x_section_name:
                 x_section_uid = self.xsect_coll.df.loc[self.xsect_coll.df['name'] == x_section_name, 'uid'].values[0]
                 gocad2vtk_section(self=self, in_file_name=in_file_name, uid_from_name=False, x_section=x_section_uid)
+                self.prop_legend.update_widget(parent=self)
 
-    def import_SHP(self):
+    def import_gocad_boundary(self):  #_________________________________________________
+        """Import Gocad ASCII file and update boundary collection."""
+        self.TextTerminal.appendPlainText("Importing Gocad ASCII format as boundary")
+        self.TextTerminal.appendPlainText("Properties are discarded - only mesh imported.")
+        """Select and open input file"""
+        in_file_name = open_file_dialog(parent=self, caption='Import entities from Gocad ASCII file', filter="Gocad ASCII (*.*)")
+        if in_file_name:
+            self.TextTerminal.appendPlainText('in_file_name: ' + in_file_name)
+            gocad2vtk_boundary(self=self, in_file_name=in_file_name, uid_from_name=False)
+
+    def import_SHP(self):  # _______________ MAKE IMPORT SHP BOUNDARY
         """Import SHP file and update geological collection."""
         self.TextTerminal.appendPlainText("Importing SHP file")
         """Select and open input file"""
@@ -866,26 +938,36 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.others_legend_df.to_csv(out_dir_name + '/others_legend_table.csv', encoding='utf-8', index=False)
         self.others_legend_df.to_json(out_dir_name + '/others_legend_table.json', orient='index')
         """Save x_section table to CSV and JSON files."""
-        self.xsect_coll.df.to_csv(out_dir_name + '/xsection_table.csv', encoding='utf-8', index=False)
         out_cols = list(self.xsect_coll.df.columns)
         out_cols.remove('vtk_plane')
         out_cols.remove('vtk_frame')
+        self.xsect_coll.df[out_cols].to_csv(out_dir_name + '/xsection_table.csv', encoding='utf-8', index=False)
         self.xsect_coll.df[out_cols].to_json(out_dir_name + '/xsection_table.json', orient='index')
         """Save geological collection table to CSV and JSON files."""
-        self.geol_coll.df.to_csv(out_dir_name + '/geological_table.csv', encoding='utf-8', index=False)
         out_cols = list(self.geol_coll.df.columns)
         out_cols.remove('vtk_obj')
+        self.geol_coll.df[out_cols].to_csv(out_dir_name + '/geological_table.csv', encoding='utf-8', index=False)
         self.geol_coll.df[out_cols].to_json(out_dir_name + '/geological_table.json', orient='index')
         """Save DOM collection table to CSV and JSON files."""
-        self.dom_coll.df.to_csv(out_dir_name + '/dom_table.csv', encoding='utf-8', index=False)
         out_cols = list(self.dom_coll.df.columns)
         out_cols.remove('vtk_obj')
+        self.dom_coll.df[out_cols].to_csv(out_dir_name + '/dom_table.csv', encoding='utf-8', index=False)
         self.dom_coll.df[out_cols].to_json(out_dir_name + '/dom_table.json', orient='index')
         """Save image collection table to CSV and JSON files."""
-        self.image_coll.df.to_csv(out_dir_name + '/image_table.csv', encoding='utf-8', index=False)
         out_cols = list(self.image_coll.df.columns)
         out_cols.remove('vtk_obj')
+        self.image_coll.df[out_cols].to_csv(out_dir_name + '/image_table.csv', encoding='utf-8', index=False)
         self.image_coll.df[out_cols].to_json(out_dir_name + '/image_table.json', orient='index')
+        """Save mesh3d collection table to CSV and JSON files."""
+        out_cols = list(self.mesh3d_coll.df.columns)
+        out_cols.remove('vtk_obj')
+        self.mesh3d_coll.df[out_cols].to_csv(out_dir_name + '/mesh3d_table.csv', encoding='utf-8', index=False)
+        self.mesh3d_coll.df[out_cols].to_json(out_dir_name + '/mesh3d_table.json', orient='index')
+        """Save boundary collection table to CSV and JSON files."""
+        out_cols = list(self.boundary_coll.df.columns)
+        out_cols.remove('vtk_obj')
+        self.boundary_coll.df[out_cols].to_csv(out_dir_name + '/boundary_table.csv', encoding='utf-8', index=False)
+        self.boundary_coll.df[out_cols].to_json(out_dir_name + '/boundary_table.json', orient='index')
         print("All files saved.")
 
     def export_gocad(self):

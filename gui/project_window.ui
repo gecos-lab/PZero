@@ -6,7 +6,7 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>1564</width>
+    <width>1280</width>
     <height>800</height>
    </rect>
   </property>
@@ -130,21 +130,21 @@
         <item>
          <widget class="QTableView" name="GeologyTableView">
           <property name="sizePolicy">
-           <sizepolicy hsizetype="MinimumExpanding" vsizetype="MinimumExpanding">
-            <horstretch>1</horstretch>
-            <verstretch>1</verstretch>
+           <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+            <horstretch>0</horstretch>
+            <verstretch>0</verstretch>
            </sizepolicy>
           </property>
           <property name="minimumSize">
            <size>
-            <width>1254</width>
-            <height>439</height>
+            <width>0</width>
+            <height>0</height>
            </size>
           </property>
           <property name="baseSize">
            <size>
-            <width>1254</width>
-            <height>439</height>
+            <width>0</width>
+            <height>0</height>
            </size>
           </property>
           <property name="toolTip">
@@ -173,6 +173,20 @@
        <layout class="QVBoxLayout" name="verticalLayout_6">
         <item>
          <widget class="QTableView" name="XSectionsTableView">
+          <property name="sortingEnabled">
+           <bool>true</bool>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </widget>
+      <widget class="QWidget" name="tabBoundaries">
+       <attribute name="title">
+        <string>Boundaries</string>
+       </attribute>
+       <layout class="QVBoxLayout" name="verticalLayout">
+        <item>
+         <widget class="QTableView" name="BoundariesTableView">
           <property name="sortingEnabled">
            <bool>true</bool>
           </property>
@@ -240,20 +254,6 @@
         </item>
        </layout>
       </widget>
-      <widget class="QWidget" name="tabBoundaries">
-       <attribute name="title">
-        <string>Boundaries</string>
-       </attribute>
-       <layout class="QVBoxLayout" name="verticalLayout">
-        <item>
-         <widget class="QTableView" name="BoundariesTableView">
-          <property name="sortingEnabled">
-           <bool>true</bool>
-          </property>
-         </widget>
-        </item>
-       </layout>
-      </widget>
       <widget class="QWidget" name="tabLegend">
        <property name="sizePolicy">
         <sizepolicy hsizetype="MinimumExpanding" vsizetype="MinimumExpanding">
@@ -286,21 +286,21 @@
         <item>
          <widget class="QTreeWidget" name="LegendTreeWidget">
           <property name="sizePolicy">
-           <sizepolicy hsizetype="MinimumExpanding" vsizetype="MinimumExpanding">
-            <horstretch>1</horstretch>
-            <verstretch>1</verstretch>
+           <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+            <horstretch>0</horstretch>
+            <verstretch>0</verstretch>
            </sizepolicy>
           </property>
           <property name="minimumSize">
            <size>
-            <width>1254</width>
-            <height>439</height>
+            <width>0</width>
+            <height>0</height>
            </size>
           </property>
           <property name="baseSize">
            <size>
-            <width>1254</width>
-            <height>439</height>
+            <width>0</width>
+            <height>0</height>
            </size>
           </property>
           <property name="toolTip">
@@ -353,21 +353,21 @@
         <item>
          <widget class="QTableWidget" name="PropertiesTableWidget">
           <property name="sizePolicy">
-           <sizepolicy hsizetype="MinimumExpanding" vsizetype="MinimumExpanding">
-            <horstretch>1</horstretch>
-            <verstretch>1</verstretch>
+           <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+            <horstretch>0</horstretch>
+            <verstretch>0</verstretch>
            </sizepolicy>
           </property>
           <property name="minimumSize">
            <size>
-            <width>1254</width>
-            <height>439</height>
+            <width>0</width>
+            <height>0</height>
            </size>
           </property>
           <property name="baseSize">
            <size>
-            <width>1254</width>
-            <height>439</height>
+            <width>0</width>
+            <height>0</height>
            </size>
           </property>
           <property name="toolTip">
@@ -418,21 +418,21 @@
         <item>
          <widget class="QPlainTextEdit" name="TextTerminal">
           <property name="sizePolicy">
-           <sizepolicy hsizetype="MinimumExpanding" vsizetype="MinimumExpanding">
-            <horstretch>1</horstretch>
-            <verstretch>1</verstretch>
+           <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+            <horstretch>0</horstretch>
+            <verstretch>0</verstretch>
            </sizepolicy>
           </property>
           <property name="minimumSize">
            <size>
-            <width>1254</width>
-            <height>439</height>
+            <width>0</width>
+            <height>0</height>
            </size>
           </property>
           <property name="baseSize">
            <size>
-            <width>1254</width>
-            <height>439</height>
+            <width>0</width>
+            <height>0</height>
            </size>
           </property>
           <property name="toolTip">
@@ -457,7 +457,7 @@
     <rect>
      <x>0</x>
      <y>0</y>
-     <width>1564</width>
+     <width>1280</width>
      <height>30</height>
     </rect>
    </property>
@@ -506,6 +506,7 @@
     <addaction name="separator"/>
     <addaction name="actionImportGocad"/>
     <addaction name="actionImportGocadXsection"/>
+    <addaction name="actionImportGocadBoundary"/>
     <addaction name="actionImportPyvista"/>
     <addaction name="actionImportVedo"/>
     <addaction name="actionImportSHP"/>
@@ -633,6 +634,7 @@
    <addaction name="separator"/>
    <addaction name="actionImportGocad"/>
    <addaction name="actionImportGocadXsection"/>
+   <addaction name="actionImportGocadBoundary"/>
    <addaction name="actionImportPyvista"/>
    <addaction name="actionImportVedo"/>
    <addaction name="actionImportSHP"/>
@@ -1014,6 +1016,11 @@
   <action name="actionImportSHP">
    <property name="text">
     <string>Import SHP</string>
+   </property>
+  </action>
+  <action name="actionImportGocadBoundary">
+   <property name="text">
+    <string>Import Gocad Boundary</string>
    </property>
   </action>
  </widget>

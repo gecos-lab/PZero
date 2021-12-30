@@ -1336,6 +1336,7 @@ def copy_similar(self):
     for action in self.findChildren(QAction):
         action.setEnabled(True)
 
+
 def measure_distance(self):
     """Tool to measure distance between two points. Draw a vector_by_mouse and obtain length and azimuth"""
     print("Measure Distance between two points by drawing a vector by mouse")
@@ -1351,3 +1352,26 @@ def measure_distance(self):
     """Un-Freeze QT interface"""
     for action in self.findChildren(QAction):
         action.setEnabled(True)
+
+"""Helper and shared functions"""
+
+
+def flip_line(self, uid=None):
+    """Ensures lines are oriented left-to-right and bottom-to-top"""
+    self.parent.geol_coll.get_uid_vtk_obj(uid).points = np.flip(self.parent.geol_coll.get_uid_vtk_obj(uid).points, 0)
+
+
+def left_right(self, uid=None):
+    """Ensures lines are oriented left-to-right and bottom-to-top in map or cross-section"""
+    if isinstance(self, ViewMap):
+        U_line = self.parent.geol_coll.get_uid_vtk_obj(uid).points_X
+        V_line = self.parent.geol_coll.get_uid_vtk_obj(uid).points_Y
+    elif isinstance(self, ViewXsection):
+        U_line = self.parent.geol_coll.get_uid_vtk_obj(uid).points_W
+        V_line = self.parent.geol_coll.get_uid_vtk_obj(uid).points_Z
+    else:
+        return
+    if U_line[0] > U_line[-1]:  # reverse if right-to-left
+        self.flip_line(uid=uid)
+    elif U_line[0] == U_line[-1] and V_line[0] > V_line[-1]:  # reverse if vertical up-to-down
+        self.flip_line(uid=uid)

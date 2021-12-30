@@ -11,6 +11,7 @@ import numpy as np
 import geopandas as gpd
 import pandas as pd
 from .geological_collection import GeologicalCollection
+from .two_d_lines import left_right
 from shapely import affinity
 from shapely.geometry import asLineString, LineString, Point, asPoint, MultiLineString
 from shapely.ops import split, snap

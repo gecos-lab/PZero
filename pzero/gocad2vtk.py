@@ -7,6 +7,7 @@ import vtk
 import uuid
 from .entities_factory import VertexSet, PolyLine, TriSurf, TetraSolid, XsVertexSet, XsPolyLine
 from .geological_collection import GeologicalCollection
+from .boundary_collection import BoundaryCollection
 from .helper_dialogs import input_text_dialog, input_combo_dialog, options_dialog, message_dialog
 
 """We import only come Gocad object attributes.
@@ -122,7 +123,11 @@ def gocad2vtk(self=None, in_file_name=None, uid_from_name=None):
                 curr_obj_dict['vtk_obj'] = TriSurf()
                 curr_obj_dict['geological_type'] = geological_type_default
             else:
-                self.TextTerminal.appendPlainText("gocad2vtk - entity type not recognized ERROR.")  # THIS WILL CAUSE ERRORS - KEEP THIS MESSAGE JUST FOR DEBUGGING
+                """Here topological types different from the allowed ones are handled.
+                At the moment THIS WILL CAUSE ERRORS - KEEP THIS MESSAGE JUST FOR DEBUGGING.
+                This must be reimplementende in sucha way that, is non-valid objects are found,
+                the file reader jumps to the next line starting with the 'GOCAD' keyword (if any)."""
+                self.TextTerminal.appendPlainText("gocad2vtk - entity type not recognized ERROR.")
 
             """Create empty arrays for coordinates and topology and a counter for properties."""
             curr_obj_points = vtk.vtkPoints()
@@ -364,7 +369,11 @@ def gocad2vtk_section(self=None, in_file_name=None, uid_from_name=None, x_sectio
                 curr_obj_dict['topological_type'] = 'XsPolyLine'
                 curr_obj_dict['geological_type'] = geological_type_default
             else:
-                self.TextTerminal.appendPlainText("gocad2vtk - entity type not recognized ERROR.")  # THIS WILL CAUSE ERRORS - KEEP THIS MESSAGE JUST FOR DEBUGGING
+                """Here topological types different from the allowed ones are handled.
+                At the moment THIS WILL CAUSE ERRORS - KEEP THIS MESSAGE JUST FOR DEBUGGING.
+                This must be reimplementende in sucha way that, is non-valid objects are found,
+                the file reader jumps to the next line starting with the 'GOCAD' keyword (if any)."""
+                self.TextTerminal.appendPlainText("gocad2vtk - entity type not recognized ERROR.")
 
             """Create empty arrays for coordinates and topology and a counter for properties."""
             curr_obj_points = vtk.vtkPoints()
@@ -532,6 +541,255 @@ def gocad2vtk_section(self=None, in_file_name=None, uid_from_name=None, x_sectio
             self.TextTerminal.appendPlainText("Object n. " + str(entity_counter) + " saved")
 
     n_entities_after = self.geol_coll.get_number_of_entities()
+    self.TextTerminal.appendPlainText("Entities before importing: " + str(n_entities_before))
+    self.TextTerminal.appendPlainText("Entities after importing: " + str(n_entities_after))
+    self.TextTerminal.appendPlainText("Entities imported: " + str(entity_counter))
+
+
+def gocad2vtk_boundary(self=None, in_file_name=None, uid_from_name=None):
+    """
+    Read a GOCAD ASCII file and add, to the boundary_coll BoundaryCollection(), all the
+    polyline and triangulated surfaces as VTK polydata entities.
+    <self> is the calling ProjectWindow() instance.
+    """
+    # """Define import options."""
+    # scenario_default = input_text_dialog(parent=None, title="Scenario", label="Default scenario", default_text="undef")
+    # if not scenario_default:
+    #     scenario_default = "undef"
+    # geological_type_default = input_combo_dialog(parent=None, title="Geological type", label="Default geological type", choice_list=GeologicalCollection.valid_geological_types)
+    # if not geological_type_default:
+    #     geological_type_default = "undef"
+    # geological_feature_from_name = options_dialog(title="Feature from name", message="Get geological feature from object name if not defined in file", yes_role="Yes", no_role="No", reject_role=None)
+    # if geological_feature_from_name == 0:
+    #     geological_feature_from_name = True
+    # else:
+    #     geological_feature_from_name = False
+    """Open input file"""
+    fin = open(in_file_name, 'rt')
+    """Number of entities before importing________________________________"""
+    n_entities_before = self.boundary_coll.get_number_of_entities()
+    """Initialize entity_counter"""
+    entity_counter = 0
+    """Parse fin file"""
+    for line in fin:
+        """Read one line from file."""
+        clean_line = line.strip().split()
+
+        """The effect of the following if/elif cascade is to loop for every single object marked by
+        the GOCAD keyword, reading the lines that we want to import and skipping the others."""
+        if clean_line[0] == 'GOCAD':
+            """A new entity starts here in a GOCAD file, so here we create a new empty dictionary,
+            then we will fill its components in the next lines. Use deepcopy otherwise the
+            original dictionary would be altered."""
+            curr_obj_dict = deepcopy(BoundaryCollection.boundary_entity_dict)
+            # curr_obj_dict['scenario'] = scenario_default
+
+            """Store uid and topological type of new entity."""
+            curr_obj_dict['uid'] = str(uuid.uuid4())
+
+            """Create the empty vtk object with class = topological_type."""
+            # if clean_line[1] == 'VSet':
+            #     curr_obj_dict['topological_type'] = 'VertexSet'
+            #     curr_obj_dict['vtk_obj'] = VertexSet()
+            #     curr_obj_dict['geological_type'] = geological_type_default
+            if clean_line[1] == 'PLine':
+                curr_obj_dict['topological_type'] = 'PolyLine'
+                curr_obj_dict['vtk_obj'] = PolyLine()
+                # curr_obj_dict['geological_type'] = geological_type_default
+            elif clean_line[1] == 'TSurf':
+                curr_obj_dict['topological_type'] = 'TriSurf'
+                curr_obj_dict['vtk_obj'] = TriSurf()
+                # curr_obj_dict['geological_type'] = geological_type_default
+            else:
+                """Here topological types different from the allowed ones are handled.
+                At the moment THIS WILL CAUSE ERRORS - KEEP THIS MESSAGE JUST FOR DEBUGGING.
+                This must be reimplementende in sucha way that, is non-valid objects are found,
+                the file reader jumps to the next line starting with the 'GOCAD' keyword (if any)."""
+                self.TextTerminal.appendPlainText("gocad2vtk - entity type not recognized ERROR.")
+
+            """Create empty arrays for coordinates and topology and a counter for properties."""
+            curr_obj_points = vtk.vtkPoints()
+            curr_obj_cells = vtk.vtkCellArray()
+            # curr_obj_properties_collection = vtk.vtkDataArrayCollection()
+            # properties_number = 0
+
+        elif 'name:' in clean_line[0]:
+            if clean_line[0] == 'name:':
+                """standard import"""
+                curr_obj_dict['name'] = ("_".join(clean_line[1:]))  # see if a suffix must be added to split multipart
+                # if geological_feature_from_name:
+                #     curr_obj_dict['geological_feature'] = curr_obj_dict['name']
+            else:
+                """solves a bug in Move that does not add a space after name: """
+                curr_obj_dict['name'] = ("_".join(clean_line[:]))
+                curr_obj_dict['name'] = curr_obj_dict['name'][5:]  # this removes 'name:'
+                # if geological_feature_from_name:
+                #     curr_obj_dict['geological_feature'] = curr_obj_dict['name']
+            if uid_from_name:
+                curr_obj_dict['uid'] = curr_obj_dict['name']
+
+        # elif clean_line[0] == 'GEOLOGICAL_TYPE':
+        #     curr_obj_dict['geological_type'] = ("_".join(clean_line[1:])).lower()
+        #     if curr_obj_dict['geological_type'] not in GeologicalCollection.valid_geological_types:
+        #         if "Fault" in curr_obj_dict['geological_type']:
+        #             curr_obj_dict['geological_type'] = "fault"
+        #         elif "fault" in curr_obj_dict['geological_type']:
+        #             curr_obj_dict['geological_type'] = "fault"
+        #         elif  "Horizon" in curr_obj_dict['geological_type']:
+        #             curr_obj_dict['geological_type'] = "top"
+        #         else:
+        #             curr_obj_dict['geological_type'] = "undef"
+        #
+        # elif clean_line[0] == 'GEOLOGICAL_FEATURE':
+        #     curr_obj_dict['geological_feature'] = ("_".join(clean_line[1:]))
+        #
+        # elif clean_line[0] == 'PROPERTIES':
+        #     """Populate the list of property names, the properties number, and initialize the VTK arrays."""
+        #     for prop in clean_line[1:]:
+        #         curr_obj_dict['properties_names'].append(prop)
+        #     properties_number = len(curr_obj_dict['properties_names'])
+        #     for i in range(properties_number):
+        #         new_prop = vtk.vtkFloatArray()
+        #         curr_obj_properties_collection.AddItem(new_prop)
+        #         curr_obj_properties_collection.GetItem(i).SetName(curr_obj_dict['properties_names'][i])
+        #
+        # elif clean_line[0] == 'ESIZES':
+        #     ESZ_str = clean_line[1:]
+        #     for i in range(len(ESZ_str)):
+        #         curr_obj_dict['properties_components'].append(int(ESZ_str[i]))
+        #         curr_obj_properties_collection.GetItem(i).SetNumberOfComponents(int(ESZ_str[i]))
+
+        elif clean_line[0] == 'SUBVSET':  # see if and how to start a new SUBVSET part here
+            pass
+
+        elif clean_line[0] == 'ILINE':  # see if and how to start a new ILINE part here
+            pass
+
+        elif clean_line[0] == 'TFACE':  # see if and how to start a new TFACE part here
+            pass
+
+        elif (clean_line[0] == 'VRTX') or (clean_line[0] == 'PVRTX'):
+            """VRTX or PVRTX is the same here since properties are not imported."""
+            curr_obj_points.InsertPoint(int(clean_line[1]) - 1, float(clean_line[2]), float(clean_line[3]), float(clean_line[4]))  # vtkPoint with ID, X, Y Z, "-1" since first vertex has index 0 in VTK
+
+        # elif clean_line[0] == 'PVRTX':
+        #     curr_obj_points.InsertPoint(int(clean_line[1]) - 1, float(clean_line[2]), float(clean_line[3]), float(clean_line[4]))  # vtkPoint with ID, X, Y Z, "-1" since first vertex has index 0 in VTK
+        #     if properties_number > 0:
+        #         """Now we set values in the properties float arrays"""
+        #         """_____________Check if all is OK here with vector properties_________________________________________________"""
+        #         i = 5  # i = 5 since the first five elements have already been read: PVRTX, id, X, Y, Z
+        #         for j in range(properties_number):
+        #             this_prop = curr_obj_properties_collection.GetItem(j)
+        #             if curr_obj_dict['properties_components'][j] == 1:
+        #                 this_prop.InsertTuple1(int(clean_line[1]) - 1,
+        #                                        float(clean_line[i]))
+        #                 i = i + 1
+        #             elif curr_obj_dict['properties_components'][j] == 2:
+        #                 this_prop.InsertTuple2(int(clean_line[1]) - 1,
+        #                                        float(clean_line[i]),
+        #                                        float(clean_line[i + 1]))
+        #                 i = i + 2
+        #             elif curr_obj_dict['properties_components'][j] == 3:
+        #                 this_prop.InsertTuple3(int(clean_line[1]) - 1,
+        #                                        float(clean_line[i]),
+        #                                        float(clean_line[i + 1]),
+        #                                        float(clean_line[i + 2]))
+        #                 i = i + 3
+        #             elif curr_obj_dict['properties_components'][j] == 4:
+        #                 this_prop.InsertTuple4(int(clean_line[1]) - 1,
+        #                                        float(clean_line[i]),
+        #                                        float(clean_line[i + 1]),
+        #                                        float(clean_line[i + 2]),
+        #                                        float(clean_line[i + 3]))
+        #                 i = i + 4
+        #             elif curr_obj_dict['properties_components'][j] == 6:
+        #                 this_prop.InsertTuple4(int(clean_line[1]) - 1,
+        #                                        float(clean_line[i]),
+        #                                        float(clean_line[i + 1]),
+        #                                        float(clean_line[i + 2]),
+        #                                        float(clean_line[i + 3]),
+        #                                        float(clean_line[i + 4]),
+        #                                        float(clean_line[i + 5]))
+        #                 i = i + 6
+        #             elif curr_obj_dict['properties_components'][j] == 9:
+        #                 this_prop.InsertTuple4(int(clean_line[1]) - 1,
+        #                                        float(clean_line[i]),
+        #                                        float(clean_line[i + 1]),
+        #                                        float(clean_line[i + 2]),
+        #                                        float(clean_line[i + 3]),
+        #                                        float(clean_line[i + 4]),
+        #                                        float(clean_line[i + 5]),
+        #                                        float(clean_line[i + 6]),
+        #                                        float(clean_line[i + 7]),
+        #                                        float(clean_line[i + 8]))
+        #                 i = i + 9
+        #             else:
+        #                 """Discard property if it is not 1D, 2D, 3D, 4D, 6D or 9D"""
+        #                 i = i + curr_obj_dict['properties_components'][j]
+        #                 curr_obj_dict['properties_names'] = curr_obj_dict['properties_names'].remove(j)
+        #                 properties_number = properties_number - 1
+        #                 curr_obj_dict['properties_components'].remove(j)
+        #                 curr_obj_properties_collection.RemoveItem(j)
+
+        elif clean_line[0] == 'ATOM':
+            """NOT YET IMPLEMENTED"""
+            # atom_id = int(clean_line[1]) - 1
+            # vrtx_id = int(clean_line[2]) - 1
+            pass
+
+        elif clean_line[0] == 'SEG':
+            line = vtk.vtkLine()
+            line.GetPointIds().SetId(0, int(clean_line[1]) - 1)  # "-1" since first vertex has index 0 in VTK
+            line.GetPointIds().SetId(1, int(clean_line[2]) - 1)
+            curr_obj_cells.InsertNextCell(line)
+
+        elif clean_line[0] == 'TRGL':
+            triangle = vtk.vtkTriangle()
+            triangle.GetPointIds().SetId(0, int(clean_line[1]) - 1)  # "-1" since first vertex has index 0 in VTK
+            triangle.GetPointIds().SetId(1, int(clean_line[2]) - 1)
+            triangle.GetPointIds().SetId(2, int(clean_line[3]) - 1)
+            curr_obj_cells.InsertNextCell(triangle)
+
+        elif clean_line[0] == 'END':
+            """When END reached, process the arrays and write the VTK entity with properties to the project geol_coll"""
+            entity_counter += 1  # update entity counter
+
+            """Write points and cells TO VTK OBJECT"""
+            # if curr_obj_dict['topological_type'] == 'VertexSet':
+            #     self.TextTerminal.appendPlainText("Importing Gocad VSet (VertexSet) as a PolyData 0D in VTK with name: " + curr_obj_dict['name'])
+            #     curr_obj_dict['vtk_obj'].SetPoints(curr_obj_points)
+            #     """Vertex cells, one for each point, are added here."""
+            #     for pid in range(curr_obj_dict['vtk_obj'].GetNumberOfPoints()):
+            #         vertex = vtk.vtkVertex()
+            #         vertex.GetPointIds().SetId(0, pid)
+            #         curr_obj_cells.InsertNextCell(vertex)
+            #     curr_obj_dict['vtk_obj'].SetVerts(curr_obj_cells)
+            #
+            if curr_obj_dict['topological_type'] == 'PolyLine':
+                self.TextTerminal.appendPlainText("Importing GOCAD PLine (PolyLine) as a PolyData 1D in VTK with name: " + curr_obj_dict['name'])
+                curr_obj_dict['vtk_obj'].SetPoints(curr_obj_points)
+                curr_obj_dict['vtk_obj'].SetLines(curr_obj_cells)
+
+            elif curr_obj_dict['topological_type'] == 'TriSurf':
+                self.TextTerminal.appendPlainText("Importing GOCAD TSurf (TriSurf) as a PolyData 2D in VTK with name: " + curr_obj_dict['name'])
+                curr_obj_dict['vtk_obj'].SetPoints(curr_obj_points)
+                curr_obj_dict['vtk_obj'].SetPolys(curr_obj_cells)
+
+            # if properties_number > 0:
+            #     for i in range(properties_number):
+            #         curr_obj_dict['vtk_obj'].GetPointData().AddArray(curr_obj_properties_collection.GetItem(i))
+
+            """Add current_entity to entities collection"""
+            self.boundary_coll.add_entity_from_dict(entity_dict=curr_obj_dict)
+            del curr_obj_points
+            del curr_obj_cells
+            # del curr_obj_properties_collection
+            del curr_obj_dict
+
+            """Closing message"""
+            self.TextTerminal.appendPlainText("Object n. " + str(entity_counter) + " saved")
+
+    n_entities_after = self.boundary_coll.get_number_of_entities()
     self.TextTerminal.appendPlainText("Entities before importing: " + str(n_entities_before))
     self.TextTerminal.appendPlainText("Entities after importing: " + str(n_entities_after))
     self.TextTerminal.appendPlainText("Entities imported: " + str(entity_counter))

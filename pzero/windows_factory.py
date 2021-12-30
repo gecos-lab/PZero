@@ -68,6 +68,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
     def __init__(self, parent=None, *args, **kwargs):
         super(BaseView, self).__init__(parent, *args, **kwargs)
         self.setupUi(self)
+        # _____________________________________________________________________________
         # THE FOLLOWING ACTUALLY DELETES ANY REFERENCE TO CLOSED WINDOWS, HENCE FREEING
         # MEMORY, BUT CREATES PROBLEMS WITH SIGNALS THAT ARE STILL ACTIVE
         # SEE DISCUSSIONS ON QPointer AND WA_DeleteOnClose ON THE INTERNET
@@ -97,9 +98,10 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.create_geology_tree()
         self.create_topology_tree()
         self.create_xsections_tree()
+        self.create_boundary_list()
+        self.create_mesh3d_list()
         self.create_dom_list()
         self.create_image_list()
-        self.create_mesh3d_list()
 
         """Build and show other widgets, icons, tools - TO BE DONE_________________________________"""
 
@@ -121,6 +123,21 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.parent.xsect_legend_color_modified_signal.connect(lambda updated_list: self.xsect_legend_color_modified_update_views(updated_list=updated_list))
         self.parent.xsect_legend_thick_modified_signal.connect(lambda updated_list: self.xsect_legend_thick_modified_update_views(updated_list=updated_list))
 
+        self.parent.boundary_added_signal.connect(lambda updated_list: self.boundary_added_update_views(updated_list=updated_list))
+        self.parent.boundary_removed_signal.connect(lambda updated_list: self.boundary_removed_update_views(updated_list=updated_list))
+        self.parent.boundary_geom_modified_signal.connect(lambda updated_list: self.boundary_geom_modified_update_views(updated_list=updated_list))
+        self.parent.boundary_metadata_modified_signal.connect(lambda updated_list: self.boundary_metadata_modified_update_views(updated_list=updated_list))
+        self.parent.boundary_legend_color_modified_signal.connect(lambda updated_list: self.boundary_legend_color_modified_update_views(updated_list=updated_list))
+        self.parent.boundary_legend_thick_modified_signal.connect(lambda updated_list: self.boundary_legend_thick_modified_update_views(updated_list=updated_list))
+
+        self.parent.mesh3d_added_signal.connect(lambda updated_list: self.mesh3d_added_update_views(updated_list=updated_list))
+        self.parent.mesh3d_removed_signal.connect(lambda updated_list: self.mesh3d_removed_update_views(updated_list=updated_list))
+        self.parent.mesh3d_data_keys_removed_signal.connect(lambda updated_list: self.mesh3d_data_keys_modified_update_views(updated_list=updated_list))
+        self.parent.mesh3d_data_val_modified_signal.connect(lambda updated_list: self.mesh3d_data_val_modified_update_views(updated_list=updated_list))
+        self.parent.mesh3d_metadata_modified_signal.connect(lambda updated_list: self.mesh3d_metadata_modified_update_views(updated_list=updated_list))
+        self.parent.mesh3d_legend_color_modified_signal.connect(lambda updated_list: self.mesh3d_legend_color_modified_update_views(updated_list=updated_list))
+        self.parent.mesh3d_legend_thick_modified_signal.connect(lambda updated_list: self.mesh3d_legend_thick_modified_update_views(updated_list=updated_list))
+
         self.parent.dom_added_signal.connect(lambda updated_list: self.dom_added_update_views(updated_list=updated_list))
         self.parent.dom_removed_signal.connect(lambda updated_list: self.dom_removed_update_views(updated_list=updated_list))
         self.parent.dom_data_keys_removed_signal.connect(lambda updated_list: self.dom_data_keys_modified_update_views(updated_list=updated_list))
@@ -132,14 +149,6 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.parent.image_added_signal.connect(lambda updated_list: self.image_added_update_views(updated_list=updated_list))
         self.parent.image_removed_signal.connect(lambda updated_list: self.image_removed_update_views(updated_list=updated_list))
         self.parent.image_metadata_modified_signal.connect(lambda updated_list: self.image_metadata_modified_update_views(updated_list=updated_list))
-
-        self.parent.mesh3d_added_signal.connect(lambda updated_list: self.mesh3d_added_update_views(updated_list=updated_list))
-        self.parent.mesh3d_removed_signal.connect(lambda updated_list: self.mesh3d_removed_update_views(updated_list=updated_list))
-        self.parent.mesh3d_data_keys_removed_signal.connect(lambda updated_list: self.mesh3d_data_keys_modified_update_views(updated_list=updated_list))
-        self.parent.mesh3d_data_val_modified_signal.connect(lambda updated_list: self.mesh3d_data_val_modified_update_views(updated_list=updated_list))
-        self.parent.mesh3d_metadata_modified_signal.connect(lambda updated_list: self.mesh3d_metadata_modified_update_views(updated_list=updated_list))
-        self.parent.mesh3d_legend_color_modified_signal.connect(lambda updated_list: self.mesh3d_legend_color_modified_update_views(updated_list=updated_list))
-        self.parent.mesh3d_legend_thick_modified_signal.connect(lambda updated_list: self.mesh3d_legend_thick_modified_update_views(updated_list=updated_list))
 
         self.parent.prop_legend_cmap_modified_signal.connect(lambda this_property: self.prop_legend_cmap_modified_update_views(this_property=this_property))
 
@@ -627,6 +636,192 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             self.update_xsection_checkboxes(uid=uid, uid_checkState=uid_checkState)
             self.XSectionTreeWidget.itemChanged.connect(self.toggle_xsection_visibility)
 
+    """Methods used to build and update the Boundary table."""
+
+    def create_boundary_list(self):
+        """Create boundaries list with checkboxes."""
+        self.BoundariesTableWidget.clear()
+        self.BoundariesTableWidget.setColumnCount(2)
+        self.BoundariesTableWidget.setRowCount(0)
+        self.BoundariesTableWidget.setHorizontalHeaderLabels(['Name', 'uid'])
+        self.BoundariesTableWidget.hideColumn(1)  # hide the uid column
+        row = 0
+        for uid in self.parent.boundary_coll.df['uid'].to_list():
+            name = self.parent.boundary_coll.df.loc[self.parent.boundary_coll.df['uid'] == uid, 'name'].values[0]
+            name_item = QTableWidgetItem(name)
+            name_item.setFlags(name_item.flags() | Qt.ItemIsUserCheckable)
+            name_item.setFlags(name_item.flags() & ~Qt.ItemIsEditable)
+            uid_item = QTableWidgetItem(uid)
+            self.BoundariesTableWidget.insertRow(row)
+            self.BoundariesTableWidget.setItem(row, 0, name_item)
+            self.BoundariesTableWidget.setItem(row, 1, uid_item)
+            if self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]:
+                name_item.setCheckState(Qt.Checked)
+            elif not self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]:
+                name_item.setCheckState(Qt.Unchecked)
+            row += 1
+        """Send message with argument = the cell being checked/unchecked."""
+        self.BoundariesTableWidget.itemChanged.connect(self.toggle_boundary_visibility)
+
+    def update_boundary_list_added(self, new_list=None):
+        """Update boundaries list without creating a new model"""
+        row = self.BoundariesTableWidget.rowCount()
+        for uid in new_list['uid']:
+            name = self.parent.boundary_coll.df.loc[self.parent.boundary_coll.df['uid'] == uid, 'name'].values[0]
+            name_item = QTableWidgetItem(name)
+            name_item.setFlags(name_item.flags() | Qt.ItemIsUserCheckable)
+            name_item.setFlags(name_item.flags() & ~Qt.ItemIsEditable)
+            uid_item = QTableWidgetItem(uid)
+            self.BoundariesTableWidget.insertRow(row)
+            self.BoundariesTableWidget.setItem(row, 0, name_item)
+            self.BoundariesTableWidget.setItem(row, 1, uid_item)
+            if self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]:
+                name_item.setCheckState(Qt.Checked)
+            elif not self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]:
+                name_item.setCheckState(Qt.Unchecked)
+            row += 1
+        """Send message with argument = the cell being checked/unchecked."""
+        self.BoundariesTableWidget.itemChanged.connect(self.toggle_boundary_visibility)
+
+    def update_boundary_list_removed(self, removed_list=None):
+        """Update boundary list without creating a new model"""
+        for uid in removed_list:
+            for row in range(self.BoundariesTableWidget.rowCount()):
+                """Iterate through each row of the QTableWidget to find the row with the corresponding entity"""
+                if self.BoundariesTableWidget.item(row, 1).text() == uid:
+                    """Row found: delete row"""
+                    self.BoundariesTableWidget.removeRow(row)
+                    row -= 1
+                    break
+        """Send message with argument = the cell being checked/unchecked."""
+        self.BoundariesTableWidget.itemChanged.connect(self.toggle_boundary_visibility)
+
+    def toggle_boundary_visibility(self, cell):
+        """Called by self.BoundariesTableWidget.itemChanged.connect(self.toggle_boundary_visibility)."""
+        check_state = self.BoundariesTableWidget.item(cell.row(), 0).checkState()  # this is the check state of cell "name"
+        uid = self.BoundariesTableWidget.item(cell.row(), 1).text()  # this is the text of cell "uid"
+        if check_state == Qt.Checked:
+            if not self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]:
+                self.actors_df.loc[self.actors_df['uid'] == uid, 'show'] = True
+                self.set_actor_visible(uid=uid, visible=True)
+        elif check_state == Qt.Unchecked:
+            if self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]:
+                self.actors_df.loc[self.actors_df['uid'] == uid, 'show'] = False
+                self.set_actor_visible(uid=uid, visible=False)
+
+    """Methods used to build and update the Mesh3D table."""
+
+    def create_mesh3d_list(self):
+        """Create mesh3D list with checkboxes."""
+        self.Mesh3DTableWidget.clear()
+        self.Mesh3DTableWidget.setColumnCount(3)
+        self.Mesh3DTableWidget.setRowCount(0)
+        self.Mesh3DTableWidget.setHorizontalHeaderLabels(['Name', 'uid'])
+        self.Mesh3DTableWidget.hideColumn(1)  # hide the uid column
+        row = 0
+        for uid in self.parent.mesh3d_coll.df['uid'].to_list():
+            name = self.parent.mesh3d_coll.df.loc[self.parent.mesh3d_coll.df['uid'] == uid, 'name'].values[0]
+            mesh3d_type = self.parent.mesh3d_coll.df.loc[self.parent.mesh3d_coll.df['uid'] == uid, 'mesh3d_type'].values[0]
+            name_item = QTableWidgetItem(name)
+            name_item.setFlags(name_item.flags() | Qt.ItemIsUserCheckable)
+            name_item.setFlags(name_item.flags() & ~Qt.ItemIsEditable)
+            uid_item = QTableWidgetItem(uid)
+            property_combo = QComboBox()
+            property_combo.uid = uid
+            property_combo.addItem("none")
+            property_combo.texture_uid_list = ["none", "X", "Y", "Z"]
+            if mesh3d_type != "Voxet" and mesh3d_type != "XsVoxet":
+                property_combo.addItem("X")
+                property_combo.addItem("Y")
+                property_combo.addItem("Z")
+            for prop in self.parent.mesh3d_coll.get_uid_properties_names(uid):
+                property_combo.addItem(prop)
+            self.Mesh3DTableWidget.insertRow(row)
+            self.Mesh3DTableWidget.setItem(row, 0, name_item)
+            self.Mesh3DTableWidget.setItem(row, 1, uid_item)
+            self.Mesh3DTableWidget.setCellWidget(row, 2, property_combo)
+            property_combo.currentIndexChanged.connect(lambda: self.toggle_property_mesh3d())
+            if self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]:
+                name_item.setCheckState(Qt.Checked)
+            elif not self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]:
+                name_item.setCheckState(Qt.Unchecked)
+            row += 1
+        """Send message with argument = the cell being checked/unchecked."""
+        self.Mesh3DTableWidget.itemChanged.connect(self.toggle_mesh3d_visibility)
+
+    def update_mesh3d_list_added(self, new_list=None):
+        """Update Mesh3D list without creating a new model"""
+        row = self.Mesh3DTableWidget.rowCount()
+        for uid in new_list['uid']:
+            name = self.parent.mesh3d_coll.df.loc[self.parent.mesh3d_coll.df['uid'] == uid, 'name'].values[0]
+            mesh3d_type = self.parent.mesh3d_coll.df.loc[self.parent.mesh3d_coll.df['uid'] == uid, 'mesh3d_type'].values[0]
+            name_item = QTableWidgetItem(name)
+            name_item.setFlags(name_item.flags() | Qt.ItemIsUserCheckable)
+            name_item.setFlags(name_item.flags() & ~Qt.ItemIsEditable)
+            uid_item = QTableWidgetItem(uid)
+            property_combo = QComboBox()
+            property_combo.uid = uid
+            property_combo.addItem("none")
+            property_combo.texture_uid_list = ["none", "X", "Y", "Z"]
+            if mesh3d_type != "Voxet" and mesh3d_type != "XsVoxet":
+                property_combo.addItem("X")
+                property_combo.addItem("Y")
+                property_combo.addItem("Z")
+            for prop in self.parent.mesh3d_coll.get_uid_properties_names(uid):
+                property_combo.addItem(prop)
+            self.Mesh3DTableWidget.insertRow(row)
+            self.Mesh3DTableWidget.setItem(row, 0, name_item)
+            self.Mesh3DTableWidget.setItem(row, 1, uid_item)
+            self.Mesh3DTableWidget.setCellWidget(row, 2, property_combo)
+            property_combo.currentIndexChanged.connect(lambda: self.toggle_property_mesh3d())
+            if self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]:
+                name_item.setCheckState(Qt.Checked)
+            elif not self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]:
+                name_item.setCheckState(Qt.Unchecked)
+            row += 1
+        """Send message with argument = the cell being checked/unchecked."""
+        self.Mesh3DTableWidget.itemChanged.connect(self.toggle_mesh3d_visibility)
+
+    def update_mesh3d_list_removed(self, removed_list=None):
+        """Update Mesh3D list without creating a new model"""
+        for uid in removed_list:
+            for row in range(self.Mesh3DTableWidget.rowCount()):
+                """Iterate through each row of the QTableWidget to find the row with the corresponding entity"""
+                if self.Mesh3DTableWidget.item(row, 1).text() == uid:
+                    """Row found: delete row"""
+                    self.Mesh3DTableWidget.removeRow(row)
+                    row -= 1
+                    break
+        """Send message with argument = the cell being checked/unchecked."""
+        self.Mesh3DTableWidget.itemChanged.connect(self.toggle_dom_visibility)
+
+    def toggle_mesh3d_visibility(self, cell):
+        """Called by self.Mesh3DTableWidget.itemChanged.connect(self.toggle_mesh3d_visibility)."""
+        check_state = self.Mesh3DTableWidget.item(cell.row(), 0).checkState()  # this is the check state of cell "name"
+        uid = self.Mesh3DTableWidget.item(cell.row(), 1).text()  # this is the text of cell "uid"
+        if check_state == Qt.Checked:
+            if not self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]:
+                self.actors_df.loc[self.actors_df['uid'] == uid, 'show'] = True
+                self.set_actor_visible(uid=uid, visible=True)
+        elif check_state == Qt.Unchecked:
+            if self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]:
+                self.actors_df.loc[self.actors_df['uid'] == uid, 'show'] = False
+                self.set_actor_visible(uid=uid, visible=False)
+
+    def toggle_property_mesh3d(self):
+        """Method to toggle the texture shown by a Mesh3D that is already present in the view."""
+        """Collect values from combo box."""
+        combo = self.sender()
+        show_property = combo.currentText()
+        uid = combo.uid
+        show = self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]
+        collection = self.actors_df.loc[self.actors_df['uid'] == uid, 'collection'].values[0]
+        """This removes the previous copy of the actor with the same uid, then calls the viewer-specific function that shows an actor with a property.
+        IN THE FUTURE see if it is possible and more efficient to keep the actor and just change the property shown."""
+        self.remove_actor_in_view(uid=uid)
+        this_actor = self.show_actor_with_property(uid=uid, collection=collection, show_property=show_property, visible=show)
+        self.actors_df = self.actors_df.append({'uid': uid, 'actor': this_actor, 'show': show, 'collection': collection, 'show_prop': show_property}, ignore_index=True)  # self.set_actor_visible(uid=uid, visible=show)
+
     """Methods used to build and update the DOM table."""
 
     def create_dom_list(self):
@@ -827,119 +1022,6 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                 self.actors_df.loc[self.actors_df['uid'] == uid, 'show'] = False
                 self.set_actor_visible(uid=uid, visible=False)
 
-    """Methods used to build and update the Mesh3D table."""
-
-    def create_mesh3d_list(self):
-        """Create mesh3D list with checkboxes."""
-        self.Mesh3DTableWidget.clear()
-        self.Mesh3DTableWidget.setColumnCount(3)
-        self.Mesh3DTableWidget.setRowCount(0)
-        self.Mesh3DTableWidget.setHorizontalHeaderLabels(['Name', 'uid'])
-        self.Mesh3DTableWidget.hideColumn(1)  # hide the uid column
-        row = 0
-        for uid in self.parent.mesh3d_coll.df['uid'].to_list():
-            name = self.parent.mesh3d_coll.df.loc[self.parent.mesh3d_coll.df['uid'] == uid, 'name'].values[0]
-            mesh3d_type = self.parent.mesh3d_coll.df.loc[self.parent.mesh3d_coll.df['uid'] == uid, 'mesh3d_type'].values[0]
-            name_item = QTableWidgetItem(name)
-            name_item.setFlags(name_item.flags() | Qt.ItemIsUserCheckable)
-            name_item.setFlags(name_item.flags() & ~Qt.ItemIsEditable)
-            uid_item = QTableWidgetItem(uid)
-            property_combo = QComboBox()
-            property_combo.uid = uid
-            property_combo.addItem("none")
-            property_combo.texture_uid_list = ["none", "X", "Y", "Z"]
-            if mesh3d_type != "Voxet" and mesh3d_type != "XsVoxet":
-                property_combo.addItem("X")
-                property_combo.addItem("Y")
-                property_combo.addItem("Z")
-            for prop in self.parent.mesh3d_coll.get_uid_properties_names(uid):
-                property_combo.addItem(prop)
-            self.Mesh3DTableWidget.insertRow(row)
-            self.Mesh3DTableWidget.setItem(row, 0, name_item)
-            self.Mesh3DTableWidget.setItem(row, 1, uid_item)
-            self.Mesh3DTableWidget.setCellWidget(row, 2, property_combo)
-            property_combo.currentIndexChanged.connect(lambda: self.toggle_property_mesh3d())
-            if self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]:
-                name_item.setCheckState(Qt.Checked)
-            elif not self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]:
-                name_item.setCheckState(Qt.Unchecked)
-            row += 1
-        """Send message with argument = the cell being checked/unchecked."""
-        self.Mesh3DTableWidget.itemChanged.connect(self.toggle_mesh3d_visibility)
-
-    def update_mesh3d_list_added(self, new_list=None):
-        """Update Mesh3D list without creating a new model"""
-        row = self.Mesh3DTableWidget.rowCount()
-        for uid in new_list['uid']:
-            name = self.parent.mesh3d_coll.df.loc[self.parent.mesh3d_coll.df['uid'] == uid, 'name'].values[0]
-            mesh3d_type = self.parent.mesh3d_coll.df.loc[self.parent.mesh3d_coll.df['uid'] == uid, 'mesh3d_type'].values[0]
-            name_item = QTableWidgetItem(name)
-            name_item.setFlags(name_item.flags() | Qt.ItemIsUserCheckable)
-            name_item.setFlags(name_item.flags() & ~Qt.ItemIsEditable)
-            uid_item = QTableWidgetItem(uid)
-            property_combo = QComboBox()
-            property_combo.uid = uid
-            property_combo.addItem("none")
-            property_combo.texture_uid_list = ["none", "X", "Y", "Z"]
-            if mesh3d_type != "Voxet" and mesh3d_type != "XsVoxet":
-                property_combo.addItem("X")
-                property_combo.addItem("Y")
-                property_combo.addItem("Z")
-            for prop in self.parent.mesh3d_coll.get_uid_properties_names(uid):
-                property_combo.addItem(prop)
-            self.Mesh3DTableWidget.insertRow(row)
-            self.Mesh3DTableWidget.setItem(row, 0, name_item)
-            self.Mesh3DTableWidget.setItem(row, 1, uid_item)
-            self.Mesh3DTableWidget.setCellWidget(row, 2, property_combo)
-            property_combo.currentIndexChanged.connect(lambda: self.toggle_property_mesh3d())
-            if self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]:
-                name_item.setCheckState(Qt.Checked)
-            elif not self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]:
-                name_item.setCheckState(Qt.Unchecked)
-            row += 1
-        """Send message with argument = the cell being checked/unchecked."""
-        self.Mesh3DTableWidget.itemChanged.connect(self.toggle_mesh3d_visibility)
-
-    def update_mesh3d_list_removed(self, removed_list=None):
-        """Update Mesh3D list without creating a new model"""
-        for uid in removed_list:
-            for row in range(self.Mesh3DTableWidget.rowCount()):
-                """Iterate through each row of the QTableWidget to find the row with the corresponding entity"""
-                if self.Mesh3DTableWidget.item(row, 1).text() == uid:
-                    """Row found: delete row"""
-                    self.Mesh3DTableWidget.removeRow(row)
-                    row -= 1
-                    break
-        """Send message with argument = the cell being checked/unchecked."""
-        self.Mesh3DTableWidget.itemChanged.connect(self.toggle_dom_visibility)
-
-    def toggle_mesh3d_visibility(self, cell):
-        """Called by self.Mesh3DTableWidget.itemChanged.connect(self.toggle_mesh3d_visibility)."""
-        check_state = self.Mesh3DTableWidget.item(cell.row(), 0).checkState()  # this is the check state of cell "name"
-        uid = self.Mesh3DTableWidget.item(cell.row(), 1).text()  # this is the text of cell "uid"
-        if check_state == Qt.Checked:
-            if not self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]:
-                self.actors_df.loc[self.actors_df['uid'] == uid, 'show'] = True
-                self.set_actor_visible(uid=uid, visible=True)
-        elif check_state == Qt.Unchecked:
-            if self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]:
-                self.actors_df.loc[self.actors_df['uid'] == uid, 'show'] = False
-                self.set_actor_visible(uid=uid, visible=False)
-
-    def toggle_property_mesh3d(self):
-        """Method to toggle the texture shown by a Mesh3D that is already present in the view."""
-        """Collect values from combo box."""
-        combo = self.sender()
-        show_property = combo.currentText()
-        uid = combo.uid
-        show = self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]
-        collection = self.actors_df.loc[self.actors_df['uid'] == uid, 'collection'].values[0]
-        """This removes the previous copy of the actor with the same uid, then calls the viewer-specific function that shows an actor with a property.
-        IN THE FUTURE see if it is possible and more efficient to keep the actor and just change the property shown."""
-        self.remove_actor_in_view(uid=uid)
-        this_actor = self.show_actor_with_property(uid=uid, collection=collection, show_property=show_property, visible=show)
-        self.actors_df = self.actors_df.append({'uid': uid, 'actor': this_actor, 'show': show, 'collection': collection, 'show_prop': show_property}, ignore_index=True)  # self.set_actor_visible(uid=uid, visible=show)
-
     """Methods used to add, remove, and update actors from the geological collection."""
 
     def geology_added_update_views(self, updated_list=None):
@@ -1138,6 +1220,168 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         """Re-connect signals."""
         self.XSectionTreeWidget.itemChanged.connect(self.toggle_xsection_visibility)
 
+    """Methods used to add, remove, and update actors from the Boundary collection."""
+
+    def boundary_added_update_views(self, updated_list=None):
+        """This is called when a boundary is added to the boundary collection.
+        Disconnect signals to boundary list, if they are set, then they are
+        reconnected when the list is rebuilt"""
+        self.BoundariesTableWidget.itemChanged.disconnect()
+        self.actors_df_new = pd.DataFrame(columns=['uid', 'actor', 'show', 'collection', 'show_prop'])
+        for uid in updated_list:
+            this_actor = self.show_actor_with_property(uid=uid, collection='boundary_coll', show_property=None, visible=False)
+            self.actors_df = self.actors_df.append({'uid': uid, 'actor': this_actor, 'show': False, 'collection': 'boundary_coll', 'show_prop': None}, ignore_index=True)
+            self.actors_df_new = self.actors_df_new.append({'uid': uid, 'actor': this_actor, 'show': False, 'collection': 'boundary_coll', 'show_prop': None}, ignore_index=True)
+            self.update_boundary_list_added(self.actors_df_new)
+        """Re-connect signals."""
+        self.BoundariesTableWidget.itemChanged.connect(self.toggle_boundary_visibility)
+
+    def boundary_removed_update_views(self, updated_list=None):
+        """This is called when a boundary is removed from the boundary collection.
+        Disconnect signals to boundary list, if they are set, then they are
+        reconnected when the list is rebuilt"""
+        self.BoundariesTableWidget.itemChanged.disconnect()
+        for uid in updated_list:
+            self.remove_actor_in_view(uid=uid)
+            self.update_boundary_list_removed(removed_list=updated_list)
+        """Re-connect signals."""
+        self.BoundariesTableWidget.itemChanged.connect(self.toggle_boundary_visibility)
+
+    def boundary_geom_modified_update_views(self, updated_list=None):
+        """This is called when an entity geometry or topology is modified (i.e. the vtk object is modified).
+        Disconnect signals to boundary list, if they are set, then they are
+        reconnected when the list is rebuilt"""
+        self.BoundariesTableWidget.itemChanged.disconnect()
+        for uid in updated_list:
+            """This calls the viewer-specific function that shows an actor with property = None."""
+            self.remove_actor_in_view(uid=uid)
+            this_actor = self.show_actor_with_property(uid=uid, collection='boundary_coll', show_property=None, visible=True)
+            self.actors_df = self.actors_df.append({'uid': uid, 'actor': this_actor, 'show': True, 'collection': 'boundary_coll', 'show_prop': None}, ignore_index=True)  # self.actors_df.loc[self.actors_df["uid"] == uid, 'actor'] = this_actor
+        """Re-connect signals."""
+        self.BoundariesTableWidget.itemChanged.connect(self.toggle_boundary_visibility)
+
+    def boundary_metadata_modified_update_views(self, updated_list=None):
+        """This is called when the boundary metadata are modified.
+        Disconnect signals to boundary list, if they are set, then they are
+        reconnected when the list is rebuilt"""
+        self.BoundariesTableWidget.itemChanged.disconnect()
+        for uid in updated_list:
+            """Case for entities modified"""
+            self.change_actor_color(uid=uid, collection='boundary_coll')
+            self.change_actor_line_thick(uid=uid, collection='boundary_coll')
+            self.create_boundary_list()
+        """Re-connect signals."""
+        self.BoundariesTableWidget.itemChanged.connect(self.toggle_boundary_visibility)
+
+    def boundary_legend_color_modified_update_views(self, updated_list=None):
+        """This is called when the color in the boundary legend is modified.
+        Disconnect signals to boundary list, if they are set, then they are
+        reconnected when the list is rebuilt"""
+        self.BoundariesTableWidget.itemChanged.disconnect()
+        for uid in updated_list:
+            """Case for color changed"""
+            self.change_actor_color(uid=uid, collection='boundary_coll')
+        """Re-connect signals."""
+        self.BoundariesTableWidget.itemChanged.connect(self.toggle_boundary_visibility)
+
+    def boundary_legend_thick_modified_update_views(self, updated_list=None):
+        """This is called when the line thickness in the boundary legend is modified.
+        Disconnect signals to boundary list, if they are set, then they are
+        reconnected when the list is rebuilt"""
+        self.BoundariesTableWidget.itemChanged.disconnect()
+        for uid in updated_list:
+            """Case for line_thick changed"""
+            self.change_actor_line_thick(uid=uid, collection='boundary_coll')
+        """Re-connect signals."""
+        self.BoundariesTableWidget.itemChanged.connect(self.toggle_boundary_visibility)
+
+    """Methods used to add, remove, and update actors from the Mesh3D collection."""
+
+    def mesh3d_added_update_views(self, updated_list=None):
+        """This is called when a mesh3d is added to the mesh3d collection.
+        Disconnect signals to mesh3d list, if they are set, then they are
+        reconnected when the list is rebuilt"""
+        self.Mesh3DTableWidget.itemChanged.disconnect()
+        self.actors_df_new = pd.DataFrame(columns=['uid', 'actor', 'show', 'collection', 'show_prop'])
+        for uid in updated_list:
+            this_actor = self.show_actor_with_property(uid=uid, collection='mesh3d_coll', show_property=None, visible=False)
+            self.actors_df = self.actors_df.append({'uid': uid, 'actor': this_actor, 'show': False, 'collection': 'mesh3d_coll', 'show_prop': None}, ignore_index=True)
+            self.actors_df_new = self.actors_df_new.append({'uid': uid, 'actor': this_actor, 'show': False, 'collection': 'mesh3d_coll', 'show_prop': None}, ignore_index=True)
+            self.update_mesh3d_list_added(self.actors_df_new)
+        """Re-connect signals."""
+        self.Mesh3DTableWidget.itemChanged.connect(self.toggle_mesh3d_visibility)
+
+    def mesh3d_removed_update_views(self, updated_list=None):
+        """This is called when a mesh3d is removed from the mesh3d collection.
+        Disconnect signals to mesh3d list, if they are set, then they are
+        reconnected when the list is rebuilt"""
+        self.Mesh3DTableWidget.itemChanged.disconnect()
+        for uid in updated_list:
+            self.remove_actor_in_view(uid=uid)
+            self.update_mesh3d_list_removed(removed_list=updated_list)
+        """Re-connect signals."""
+        self.Mesh3DTableWidget.itemChanged.connect(self.toggle_mesh3d_visibility)
+
+    def mesh3d_data_keys_modified_update_views(self, updated_list=None):
+        """This is called when entity point or cell data are modified.
+        Disconnect signals to geology and topology tree, if they are set, to avoid a nasty loop
+        that disrupts the trees, then they are reconnected when the trees are rebuilt"""
+        self.Mesh3DTableWidget.itemChanged.disconnect()
+        for uid in updated_list:
+            if not self.actors_df.loc[self.actors_df['uid'] == uid, 'show_prop'].to_list() == []:
+                if not self.actors_df.loc[self.actors_df['uid'] == uid, 'show_prop'].values[0] in self.parent.mesh3d_coll.get_uid_properties_names(uid):
+                    show = self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].to_list()[0]
+                    self.remove_actor_in_view(uid=uid)
+                    this_actor = self.show_actor_with_property(uid=uid, collection='mesh3d_coll', show_property=None, visible=show)
+                    self.actors_df = self.actors_df.append({'uid': uid, 'actor': this_actor, 'show': show, 'collection': 'mesh3d_coll', 'show_prop': None}, ignore_index=True)  # self.actors_df.loc[self.actors_df["uid"] == uid, 'actor'] = this_actor
+                    self.create_mesh3d_list()
+        """Re-connect signals."""
+        self.Mesh3DTableWidget.itemChanged.connect(self.toggle_dom_visibility)
+
+    def mesh3d_data_val_modified_update_views(self, updated_list=None):
+        """This is called when entity point or cell data are modified.
+        Disconnect signals to geology and topology tree, if they are set, to avoid a nasty loop
+        that disrupts the trees, then they are reconnected when the trees are rebuilt"""
+        self.Mesh3DTableWidget.itemChanged.disconnect()
+        """IN THE FUTURE - generally just update the properties list - more complicate if we modify or delete the property that is shown_____________________"""
+        """Re-connect signals."""
+        self.Mesh3DTableWidget.itemChanged.connect(self.toggle_dom_visibility)
+
+    def mesh3d_metadata_modified_update_views(self, updated_list=None):
+        """This is called when the mesh3d metadata are modified.
+        Disconnect signals to mesh3d list, if they are set, then they are
+        reconnected when the list is rebuilt"""
+        self.Mesh3DTableWidget.itemChanged.disconnect()
+        for uid in updated_list:
+            """Case for entities modified"""
+            self.change_actor_color(uid=uid, collection='mesh3d_coll')
+            self.change_actor_line_thick(uid=uid, collection='mesh3d_coll')
+            self.create_mesh3d_list()
+        """Re-connect signals."""
+        self.Mesh3DTableWidget.itemChanged.connect(self.toggle_mesh3d_visibility)
+
+    def mesh3d_legend_color_modified_update_views(self, updated_list=None):
+        """This is called when the color in the cross-section legend is modified.
+        Disconnect signals to mesh3d list, if they are set, then they are
+        reconnected when the list is rebuilt"""
+        self.Mesh3DTableWidget.itemChanged.disconnect()
+        for uid in updated_list:
+            """Case for color changed"""
+            self.change_actor_color(uid=uid, collection='mesh3d_coll')
+        """Re-connect signals."""
+        self.Mesh3DTableWidget.itemChanged.connect(self.toggle_mesh3d_visibility)
+
+    def mesh3d_legend_thick_modified_update_views(self, updated_list=None):
+        """This is called when the line thickness in the cross-section legend is modified.
+        Disconnect signals to mesh3d list, if they are set, then they are
+        reconnected when the list is rebuilt"""
+        self.Mesh3DTableWidget.itemChanged.disconnect()
+        for uid in updated_list:
+            """Case for line_thick changed"""
+            self.change_actor_line_thick(uid=uid, collection='mesh3d_coll')
+        """Re-connect signals."""
+        self.Mesh3DTableWidget.itemChanged.connect(self.toggle_mesh3d_visibility)
+
     """Methods used to add, remove, and update actors from the DOM collection."""
 
     def dom_added_update_views(self, updated_list=None):
@@ -1263,93 +1507,6 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         """Re-connect signals."""
         self.ImagesTableWidget.itemChanged.connect(self.toggle_image_visibility)
 
-    """Methods used to add, remove, and update actors from the Mesh3D collection."""
-
-    def mesh3d_added_update_views(self, updated_list=None):
-        """This is called when a mesh3d is added to the mesh3d collection.
-        Disconnect signals to mesh3d list, if they are set, then they are
-        reconnected when the list is rebuilt"""
-        self.Mesh3DTableWidget.itemChanged.disconnect()
-        self.actors_df_new = pd.DataFrame(columns=['uid', 'actor', 'show', 'collection', 'show_prop'])
-        for uid in updated_list:
-            this_actor = self.show_actor_with_property(uid=uid, collection='mesh3d_coll', show_property=None, visible=False)
-            self.actors_df = self.actors_df.append({'uid': uid, 'actor': this_actor, 'show': False, 'collection': 'mesh3d_coll', 'show_prop': None}, ignore_index=True)
-            self.actors_df_new = self.actors_df_new.append({'uid': uid, 'actor': this_actor, 'show': False, 'collection': 'mesh3d_coll', 'show_prop': None}, ignore_index=True)
-            self.update_mesh3d_list_added(self.actors_df_new)
-        """Re-connect signals."""
-        self.Mesh3DTableWidget.itemChanged.connect(self.toggle_mesh3d_visibility)
-
-    def mesh3d_removed_update_views(self, updated_list=None):
-        """This is called when a mesh3d is removed from the mesh3d collection.
-        Disconnect signals to mesh3d list, if they are set, then they are
-        reconnected when the list is rebuilt"""
-        self.Mesh3DTableWidget.itemChanged.disconnect()
-        for uid in updated_list:
-            self.remove_actor_in_view(uid=uid)
-            self.update_mesh3d_list_removed(removed_list=updated_list)
-        """Re-connect signals."""
-        self.Mesh3DTableWidget.itemChanged.connect(self.toggle_mesh3d_visibility)
-
-    def mesh3d_data_keys_modified_update_views(self, updated_list=None):
-        """This is called when entity point or cell data are modified.
-        Disconnect signals to geology and topology tree, if they are set, to avoid a nasty loop
-        that disrupts the trees, then they are reconnected when the trees are rebuilt"""
-        self.Mesh3DTableWidget.itemChanged.disconnect()
-        for uid in updated_list:
-            if not self.actors_df.loc[self.actors_df['uid'] == uid, 'show_prop'].to_list() == []:
-                if not self.actors_df.loc[self.actors_df['uid'] == uid, 'show_prop'].values[0] in self.parent.mesh3d_coll.get_uid_properties_names(uid):
-                    show = self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].to_list()[0]
-                    self.remove_actor_in_view(uid=uid)
-                    this_actor = self.show_actor_with_property(uid=uid, collection='mesh3d_coll', show_property=None, visible=show)
-                    self.actors_df = self.actors_df.append({'uid': uid, 'actor': this_actor, 'show': show, 'collection': 'mesh3d_coll', 'show_prop': None}, ignore_index=True)  # self.actors_df.loc[self.actors_df["uid"] == uid, 'actor'] = this_actor
-                    self.create_mesh3d_list()
-        """Re-connect signals."""
-        self.Mesh3DTableWidget.itemChanged.connect(self.toggle_dom_visibility)
-
-    def mesh3d_data_val_modified_update_views(self, updated_list=None):
-        """This is called when entity point or cell data are modified.
-        Disconnect signals to geology and topology tree, if they are set, to avoid a nasty loop
-        that disrupts the trees, then they are reconnected when the trees are rebuilt"""
-        self.Mesh3DTableWidget.itemChanged.disconnect()
-        """IN THE FUTURE - generally just update the properties list - more complicate if we modify or delete the property that is shown_____________________"""
-        """Re-connect signals."""
-        self.Mesh3DTableWidget.itemChanged.connect(self.toggle_dom_visibility)
-
-    def mesh3d_metadata_modified_update_views(self, updated_list=None):
-        """This is called when the mesh3d metadata are modified.
-        Disconnect signals to mesh3d list, if they are set, then they are
-        reconnected when the list is rebuilt"""
-        self.Mesh3DTableWidget.itemChanged.disconnect()
-        for uid in updated_list:
-            """Case for entities modified"""
-            self.change_actor_color(uid=uid, collection='mesh3d_coll')
-            self.change_actor_line_thick(uid=uid, collection='mesh3d_coll')
-            self.create_mesh3d_list()
-        """Re-connect signals."""
-        self.Mesh3DTableWidget.itemChanged.connect(self.toggle_mesh3d_visibility)
-
-    def mesh3d_legend_color_modified_update_views(self, updated_list=None):
-        """This is called when the color in the cross-section legend is modified.
-        Disconnect signals to mesh3d list, if they are set, then they are
-        reconnected when the list is rebuilt"""
-        self.Mesh3DTableWidget.itemChanged.disconnect()
-        for uid in updated_list:
-            """Case for color changed"""
-            self.change_actor_color(uid=uid, collection='mesh3d_coll')
-        """Re-connect signals."""
-        self.Mesh3DTableWidget.itemChanged.connect(self.toggle_mesh3d_visibility)
-
-    def mesh3d_legend_thick_modified_update_views(self, updated_list=None):
-        """This is called when the line thickness in the cross-section legend is modified.
-        Disconnect signals to mesh3d list, if they are set, then they are
-        reconnected when the list is rebuilt"""
-        self.Mesh3DTableWidget.itemChanged.disconnect()
-        for uid in updated_list:
-            """Case for line_thick changed"""
-            self.change_actor_line_thick(uid=uid, collection='mesh3d_coll')
-        """Re-connect signals."""
-        self.Mesh3DTableWidget.itemChanged.connect(self.toggle_mesh3d_visibility)
-
     """General methods shared by all views."""
 
     def add_all_entities(self):
@@ -1361,16 +1518,18 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         for uid in self.parent.xsect_coll.df['uid'].tolist():
             this_actor = self.show_actor_with_property(uid=uid, collection='xsect_coll', show_property=None, visible=True)
             self.actors_df = self.actors_df.append({'uid': uid, 'actor': this_actor, 'show': True, 'collection': 'xsect_coll', 'show_prop': None}, ignore_index=True)
+        for uid in self.parent.boundary_coll.df['uid'].tolist():
+            this_actor = self.show_actor_with_property(uid=uid, collection='boundary_coll', show_property=None, visible=False)
+            self.actors_df = self.actors_df.append({'uid': uid, 'actor': this_actor, 'show': False, 'collection': 'boundary_coll', 'show_prop': None}, ignore_index=True)
+        for uid in self.parent.mesh3d_coll.df['uid'].tolist():
+            this_actor = self.show_actor_with_property(uid=uid, collection='mesh3d_coll', show_property=None, visible=False)
+            self.actors_df = self.actors_df.append({'uid': uid, 'actor': this_actor, 'show': False, 'collection': 'mesh3d_coll', 'show_prop': None}, ignore_index=True)
         for uid in self.parent.dom_coll.df['uid'].tolist():
             this_actor = self.show_actor_with_property(uid=uid, collection='dom_coll', show_property=None, visible=False)
             self.actors_df = self.actors_df.append({'uid': uid, 'actor': this_actor, 'show': False, 'collection': 'dom_coll', 'show_prop': None}, ignore_index=True)
         for uid in self.parent.image_coll.df['uid'].tolist():
             this_actor = self.show_actor_with_property(uid=uid, collection='image_coll', show_property=None, visible=False)
             self.actors_df = self.actors_df.append({'uid': uid, 'actor': this_actor, 'show': False, 'collection': 'image_coll', 'show_prop': None}, ignore_index=True)
-        for uid in self.parent.mesh3d_coll.df['uid'].tolist():
-            this_actor = self.show_actor_with_property(uid=uid, collection='mesh3d_coll', show_property=None, visible=False)
-            self.actors_df = self.actors_df.append({'uid': uid, 'actor': this_actor, 'show': False, 'collection': 'mesh3d_coll', 'show_prop': None}, ignore_index=True)
-        """IN THE FUTURE add other collections.___________________"""
 
     def prop_legend_cmap_modified_update_views(self, this_property=None):
         """Redraw all actors that are currently shown with a property whose colormap has been changed."""
@@ -1433,6 +1592,8 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                 self.parent.geol_coll.remove_entity(uid=uid)
             elif self.actors_df.loc[self.actors_df['uid'] == uid, 'collection'].values[0] == 'xsect_coll':
                 self.parent.xsect_coll.remove_entity(uid=uid)
+            elif self.actors_df.loc[self.actors_df['uid'] == uid, 'collection'].values[0] == 'boundary_coll':
+                self.parent.boundary_coll.remove_entity(uid=uid)
             elif self.actors_df.loc[self.actors_df['uid'] == uid, 'collection'].values[0] == 'mesh3d_coll':
                 self.parent.mesh3d_coll.remove_entity(uid=uid)
             elif self.actors_df.loc[self.actors_df['uid'] == uid, 'collection'].values[0] == 'dom_coll':
@@ -1477,7 +1638,6 @@ class View3D(BaseView):
         self.plotter.show_axes_all()
 
     def change_actor_color(self, uid=None, collection=None):
-        """Update color for actor uid"""
         if collection == 'geol_coll':
             color_R = self.parent.geol_coll.get_uid_legend(uid=uid)['color_R']
             color_G = self.parent.geol_coll.get_uid_legend(uid=uid)['color_G']
@@ -1486,14 +1646,20 @@ class View3D(BaseView):
             color_R = self.parent.xsect_coll.get_legend()['color_R']
             color_G = self.parent.xsect_coll.get_legend()['color_G']
             color_B = self.parent.xsect_coll.get_legend()['color_B']
-        elif collection == 'dom_coll':
-            color_R = self.parent.dom_coll.get_legend()['color_R']
-            color_G = self.parent.dom_coll.get_legend()['color_G']
-            color_B = self.parent.dom_coll.get_legend()['color_B']
+        elif collection == 'boundary_coll':
+            color_R = self.parent.boundary_coll.get_legend()['color_R']
+            color_G = self.parent.boundary_coll.get_legend()['color_G']
+            color_B = self.parent.boundary_coll.get_legend()['color_B']
         elif collection == 'mesh3d_coll':
             color_R = self.parent.mesh3d_coll.get_legend()['color_R']
             color_G = self.parent.mesh3d_coll.get_legend()['color_G']
             color_B = self.parent.mesh3d_coll.get_legend()['color_B']
+        elif collection == 'dom_coll':
+            color_R = self.parent.dom_coll.get_legend()['color_R']
+            color_G = self.parent.dom_coll.get_legend()['color_G']
+            color_B = self.parent.dom_coll.get_legend()['color_B']
+        """Note: no legend for image."""
+        """Update color for actor uid"""
         color_RGB = [color_R / 255, color_G / 255, color_B / 255]
         self.actors_df.loc[self.actors_df['uid'] == uid, 'actor'].values[0].GetProperty().SetColor(color_RGB)
 
@@ -1503,10 +1669,13 @@ class View3D(BaseView):
             line_thick = self.parent.geol_coll.get_uid_legend(uid=uid)['line_thick']
         elif collection == 'xsect_coll':
             line_thick = self.parent.xsect_coll.get_legend()['line_thick']
-        elif collection == 'dom_coll':
-            line_thick = self.parent.dom_coll.get_legend()['line_thick']
+        elif collection == 'boundary_coll':
+            line_thick = self.parent.boundary_coll.get_legend()['line_thick']
         elif collection == 'mesh3d_coll':
             line_thick = self.parent.mesh3d_coll.get_legend()['line_thick']
+        elif collection == 'dom_coll':
+            line_thick = self.parent.dom_coll.get_legend()['line_thick']
+        """Note: no legend for image."""
         self.actors_df.loc[self.actors_df['uid'] == uid, 'actor'].values[0].GetProperty().SetLineWidth(line_thick)
 
     def set_actor_visible(self, uid=None, visible=None):
@@ -1541,8 +1710,21 @@ class View3D(BaseView):
             color_B = self.parent.xsect_coll.get_legend()['color_B']
             color_RGB = [color_R / 255, color_G / 255, color_B / 255]
             line_thick = self.parent.xsect_coll.get_legend()['line_thick']
-            """IN THE FUTURE we can use a trace PolyLine, with just a segment connecting base to end points?"""
             plot_entity = self.parent.xsect_coll.get_uid_vtk_frame(uid)
+        elif collection == 'boundary_coll':
+            color_R = self.parent.boundary_coll.get_legend()['color_R']
+            color_G = self.parent.boundary_coll.get_legend()['color_G']
+            color_B = self.parent.boundary_coll.get_legend()['color_B']
+            color_RGB = [color_R / 255, color_G / 255, color_B / 255]
+            line_thick = self.parent.boundary_coll.get_legend()['line_thick']
+            plot_entity = self.parent.boundary_coll.get_uid_vtk_obj(uid)
+        elif collection == 'mesh3d_coll':
+            color_R = self.parent.mesh3d_coll.get_legend()['color_R']
+            color_G = self.parent.mesh3d_coll.get_legend()['color_G']
+            color_B = self.parent.mesh3d_coll.get_legend()['color_B']
+            color_RGB = [color_R / 255, color_G / 255, color_B / 255]
+            line_thick = self.parent.mesh3d_coll.get_legend()['line_thick']
+            plot_entity = self.parent.mesh3d_coll.get_uid_vtk_obj(uid)
         elif collection == 'dom_coll':
             color_R = self.parent.dom_coll.get_legend()['color_R']
             color_G = self.parent.dom_coll.get_legend()['color_G']
@@ -1551,13 +1733,10 @@ class View3D(BaseView):
             line_thick = self.parent.dom_coll.get_legend()['line_thick']
             plot_entity = self.parent.dom_coll.get_uid_vtk_obj(uid)
         elif collection == 'image_coll':
+            """Note: no legend for image."""
             color_RGB = [255, 255, 255]
             line_thick = 5.0
             plot_entity = self.parent.image_coll.get_uid_vtk_obj(uid)
-        elif collection == 'mesh3d_coll':
-            color_RGB = [255, 255, 255]
-            line_thick = 5.0
-            plot_entity = self.parent.mesh3d_coll.get_uid_vtk_obj(uid)
         else:
             print("no collection")
             this_actor = None
@@ -1964,10 +2143,19 @@ class View2D(BaseView):
             color_R = self.parent.xsect_coll.get_legend()['color_R']
             color_G = self.parent.xsect_coll.get_legend()['color_G']
             color_B = self.parent.xsect_coll.get_legend()['color_B']
+        elif collection == 'boundary_coll':
+            color_R = self.parent.boundary_coll.get_legend()['color_R']
+            color_G = self.parent.boundary_coll.get_legend()['color_G']
+            color_B = self.parent.boundary_coll.get_legend()['color_B']
+        elif collection == 'mesh3d_coll':
+            color_R = self.parent.mesh3d_coll.get_legend()['color_R']
+            color_G = self.parent.mesh3d_coll.get_legend()['color_G']
+            color_B = self.parent.mesh3d_coll.get_legend()['color_B']
         elif collection == 'dom_coll':
             color_R = self.parent.dom_coll.get_legend()['color_R']
             color_G = self.parent.dom_coll.get_legend()['color_G']
             color_B = self.parent.dom_coll.get_legend()['color_B']
+        """Note: no legend for image."""
         color_RGB = [color_R / 255, color_G / 255, color_B / 255]
         if isinstance(self.actors_df.loc[self.actors_df['uid'] == uid, 'actor'].values[0], Line2D):
             "Case for Line2D"
@@ -1989,6 +2177,13 @@ class View2D(BaseView):
             line_thick = self.parent.geol_coll.get_uid_legend(uid=uid)['line_thick']
         elif collection == 'xsect_coll':
             line_thick = self.parent.xsect_coll.get_legend()['line_thick']
+        elif collection == 'boundary_coll':
+            line_thick = self.parent.boundary_coll.get_legend()['line_thick']
+        elif collection == 'mesh3d_coll':
+            line_thick = self.parent.mesh3d_coll.get_legend()['line_thick']
+        elif collection == 'dom_coll':
+            line_thick = self.parent.dom_coll.get_legend()['line_thick']
+        """Note: no legend for image."""
         if isinstance(self.actors_df.loc[self.actors_df['uid'] == uid, 'actor'].values[0], Line2D):
             "Case for Line2D"
             self.actors_df.loc[self.actors_df['uid'] == uid, 'actor'].values[0].set_linewidth(line_thick)
@@ -2045,27 +2240,6 @@ class View2D(BaseView):
     def show_actor_with_property(self, uid=None, collection=None, show_property=None, visible=None):
         """placeholder to be superseded by specific method in subclass"""
         pass
-
-    """Helper and shared functions"""
-
-    def flip_line(self, uid=None):
-        """Ensures lines are oriented left-to-right and bottom-to-top"""
-        self.parent.geol_coll.get_uid_vtk_obj(uid).points = np.flip(self.parent.geol_coll.get_uid_vtk_obj(uid).points, 0)
-
-    def left_right(self, uid=None):
-        """Ensures lines are oriented left-to-right and bottom-to-top in map or cross-section"""
-        if isinstance(self, ViewMap):
-            U_line = self.parent.geol_coll.get_uid_vtk_obj(uid).points_X
-            V_line = self.parent.geol_coll.get_uid_vtk_obj(uid).points_Y
-        elif isinstance(self, ViewXsection):
-            U_line = self.parent.geol_coll.get_uid_vtk_obj(uid).points_W
-            V_line = self.parent.geol_coll.get_uid_vtk_obj(uid).points_Z
-        else:
-            return
-        if U_line[0] > U_line[-1]:  # reverse if right-to-left
-            self.flip_line(uid=uid)
-        elif U_line[0] == U_line[-1] and V_line[0] > V_line[-1]:  # reverse if vertical up-to-down
-            self.flip_line(uid=uid)
 
     """Graphic inputs and interactions."""
 
@@ -2285,6 +2459,8 @@ class ViewMap(View2D):
         super().initialize_menu_tools()
         """Tools specific to map view"""
         from .xsection_collection import section_from_azimuth, section_from_points
+        from .boundary_collection import boundary_from_points
+
         self.sectionFromAzimuthButton = QAction('Section from Azimuth', self)  # create action
         self.sectionFromAzimuthButton.triggered.connect(lambda: section_from_azimuth(self))  # connect action to function with additional argument parent
         self.menuBaseView.addAction(self.sectionFromAzimuthButton)  # add action to menu
@@ -2294,6 +2470,11 @@ class ViewMap(View2D):
         self.sectionFromPointsButton.triggered.connect(lambda: section_from_points(self))  # connect action to function with additional argument parent
         self.menuBaseView.addAction(self.sectionFromPointsButton)  # add action to menu
         self.toolBarBase.addAction(self.sectionFromPointsButton)  # add action to toolbar
+
+        self.boundaryFromPointsButton = QAction('Boundary from 2 points', self)  # create action
+        self.boundaryFromPointsButton.triggered.connect(lambda: boundary_from_points(self))  # connect action to function with additional argument parent
+        self.menuBaseView.addAction(self.boundaryFromPointsButton)  # add action to menu
+        self.toolBarBase.addAction(self.boundaryFromPointsButton)  # add action to toolbar
 
     def show_actor_with_property(self, uid=None, collection=None, show_property=None, visible=None):
         """Show actor with scalar property (default None)
@@ -2313,6 +2494,20 @@ class ViewMap(View2D):
             color_RGB = [color_R / 255, color_G / 255, color_B / 255]
             line_thick = self.parent.xsect_coll.get_legend()['line_thick']
             plot_entity = self.parent.xsect_coll.get_uid_vtk_frame(uid)
+        elif collection == 'boundary_coll':
+            color_R = self.parent.boundary_coll.get_legend()['color_R']
+            color_G = self.parent.boundary_coll.get_legend()['color_G']
+            color_B = self.parent.boundary_coll.get_legend()['color_B']
+            color_RGB = [color_R / 255, color_G / 255, color_B / 255]
+            line_thick = self.parent.boundary_coll.get_legend()['line_thick']
+            plot_entity = self.parent.boundary_coll.get_uid_vtk_obj(uid)
+        elif collection == 'mesh3d_coll':
+            color_R = self.parent.mesh3d_coll.get_legend()['color_R']
+            color_G = self.parent.mesh3d_coll.get_legend()['color_G']
+            color_B = self.parent.mesh3d_coll.get_legend()['color_B']
+            color_RGB = [color_R / 255, color_G / 255, color_B / 255]
+            line_thick = self.parent.mesh3d_coll.get_legend()['line_thick']
+            plot_entity = self.parent.mesh3d_coll.get_uid_vtk_obj(uid)
         elif collection == 'dom_coll':
             color_R = self.parent.dom_coll.get_legend()['color_R']
             color_G = self.parent.dom_coll.get_legend()['color_G']
@@ -2322,13 +2517,6 @@ class ViewMap(View2D):
             plot_entity = self.parent.dom_coll.get_uid_vtk_obj(uid)
         elif collection == 'image_coll':
             plot_entity = self.parent.image_coll.get_uid_vtk_obj(uid)
-        elif collection == 'mesh3d_coll':
-            color_R = self.parent.mesh3d_coll.get_legend()['color_R']
-            color_G = self.parent.mesh3d_coll.get_legend()['color_G']
-            color_B = self.parent.mesh3d_coll.get_legend()['color_B']
-            color_RGB = [color_R / 255, color_G / 255, color_B / 255]
-            line_thick = self.parent.mesh3d_coll.get_legend()['line_thick']
-            plot_entity = self.parent.mesh3d_coll.get_uid_vtk_obj(uid)
         """Then plot."""
         if isinstance(plot_entity, (VertexSet, PolyLine, XsVertexSet, XsPolyLine)):
             if isinstance(plot_entity.points, np.ndarray):
@@ -2368,7 +2556,29 @@ class ViewMap(View2D):
                     this_actor = None
             else:
                 this_actor = None
-        elif isinstance(plot_entity, (DEM)):
+        elif isinstance(plot_entity, TriSurf):
+            if isinstance(plot_entity.points, np.ndarray):
+                if plot_entity.points_number > 0:
+                    """This  check is needed to avoid errors when trying to plot an empty 
+                    PolyData, just created at the beginning of a digitizing session.
+                    Check if both these conditions are necessary_________________"""
+                    if collection == 'geol_coll':
+                        surf_boundary = plot_entity.get_clean_boundary()
+                        for cell in range(surf_boundary.GetNumberOfCells()):
+                            border_points = numpy_support.vtk_to_numpy(surf_boundary.GetCell(cell).GetPoints().GetData())
+                        X = border_points[:, 0]
+                        Y = border_points[:, 1]
+                    elif collection == 'boundary_coll':
+                        bounds = plot_entity.bounds
+                        X = [bounds[0], bounds[1], bounds[1], bounds[0], bounds[0]]
+                        Y = [bounds[2], bounds[2], bounds[3], bounds[3], bounds[2]]
+                    this_actor, = self.ax.plot(X, Y, color=color_RGB, linewidth=line_thick, label=uid, picker=True)
+                    this_actor.set_visible(visible)
+                else:
+                    this_actor = None
+            else:
+                this_actor = None
+        elif isinstance(plot_entity, DEM):
             if isinstance(plot_entity.points, np.ndarray):
                 if plot_entity.points_number > 0:
                     """This  check is needed to avoid errors when trying to plot an empty
@@ -2377,23 +2587,6 @@ class ViewMap(View2D):
                     bounds = plot_entity.bounds
                     X = [bounds[0], bounds[1], bounds[1], bounds[0], bounds[0]]
                     Y = [bounds[2], bounds[2], bounds[3], bounds[3], bounds[2]]
-                    this_actor, = self.ax.plot(X, Y, color=color_RGB, linewidth=line_thick, label=uid, picker=True)
-                    this_actor.set_visible(visible)
-                else:
-                    this_actor = None
-            else:
-                this_actor = None
-        elif isinstance(plot_entity, TriSurf):
-            if isinstance(plot_entity.points, np.ndarray):
-                if plot_entity.points_number > 0:
-                    """This  check is needed to avoid errors when trying to plot an empty 
-                    PolyData, just created at the beginning of a digitizing session.
-                    Check if both these conditions are necessary_________________"""
-                    surf_boundary = plot_entity.get_clean_boundary()
-                    for cell in range(surf_boundary.GetNumberOfCells()):
-                        border_points = numpy_support.vtk_to_numpy(surf_boundary.GetCell(cell).GetPoints().GetData())
-                    X = border_points[:, 0]
-                    Y = border_points[:, 1]
                     this_actor, = self.ax.plot(X, Y, color=color_RGB, linewidth=line_thick, label=uid, picker=True)
                     this_actor.set_visible(visible)
                 else:
@@ -2435,7 +2628,7 @@ class ViewMap(View2D):
         elif isinstance(plot_entity, Voxet):
             if plot_entity.bounds:
                 if (plot_entity.bounds[0] != plot_entity.bounds[1]) and (plot_entity.bounds[2] != plot_entity.bounds[3]):
-                    """This check is needed to avoid plotting empty or non-georeferenced images.
+                    """This check is needed to avoid plotting empty or non-georeferenced voxets.
                     Check if both these conditions are necessary_________________"""
                     bounds = plot_entity.bounds
                     X = [bounds[0], bounds[1], bounds[1], bounds[0], bounds[0]]
@@ -2516,6 +2709,30 @@ class ViewXsection(View2D):
             else:
                 # print(uid, " Other x_sections cannot be plot in this x_section.")
                 plot_entity = None
+        elif collection == 'boundary_coll':
+            if (self.parent.boundary_coll.get_uid_topological_type(uid) == "XsPolyLine" and
+                self.parent.boundary_coll.get_uid_x_section(uid) == self.this_x_section_uid):
+                    color_R = self.parent.boundary_coll.get_legend()['color_R']
+                    color_G = self.parent.boundary_coll.get_legend()['color_G']
+                    color_B = self.parent.boundary_coll.get_legend()['color_B']
+                    color_RGB = [color_R / 255, color_G / 255, color_B / 255]
+                    line_thick = self.parent.boundary_coll.get_legend()['line_thick']
+                    plot_entity = self.parent.boundary_coll.get_uid_vtk_obj(uid)
+            else:
+                # print(uid, " Entities belonging to other x_sections and XsVoxet class cannot be plot in this x_section.")
+                plot_entity = None
+        elif collection == 'mesh3d_coll':
+            if (self.parent.mesh3d_coll.get_uid_mesh3d_type(uid) == "XsVoxet" and
+                self.parent.mesh3d_coll.get_uid_x_section(uid) == self.this_x_section_uid):
+                    color_R = self.parent.mesh3d_coll.get_legend()['color_R']
+                    color_G = self.parent.mesh3d_coll.get_legend()['color_G']
+                    color_B = self.parent.mesh3d_coll.get_legend()['color_B']
+                    color_RGB = [color_R / 255, color_G / 255, color_B / 255]
+                    line_thick = self.parent.mesh3d_coll.get_legend()['line_thick']
+                    plot_entity = self.parent.mesh3d_coll.get_uid_vtk_obj(uid)
+            else:
+                # print(uid, " Entities belonging to other x_sections and XsVoxet class cannot be plot in this x_section.")
+                plot_entity = None
         elif collection == 'dom_coll':
             if (self.parent.dom_coll.get_uid_dom_type(uid) == "DomXs" and
                 self.parent.dom_coll.get_uid_x_section(uid) == self.this_x_section_uid):
@@ -2532,18 +2749,6 @@ class ViewXsection(View2D):
             """To be updated in future for Xsection images______________________"""
             # print(uid, " Images still not supported in x_section.")
             plot_entity = None
-        elif collection == 'mesh3d_coll':
-            if (self.parent.mesh3d_coll.get_uid_mesh3d_type(uid) == "XsVoxet" and
-                self.parent.mesh3d_coll.get_uid_x_section(uid) == self.this_x_section_uid):
-                    color_R = self.parent.mesh3d_coll.get_legend()['color_R']
-                    color_G = self.parent.mesh3d_coll.get_legend()['color_G']
-                    color_B = self.parent.mesh3d_coll.get_legend()['color_B']
-                    color_RGB = [color_R / 255, color_G / 255, color_B / 255]
-                    line_thick = self.parent.mesh3d_coll.get_legend()['line_thick']
-                    plot_entity = self.parent.mesh3d_coll.get_uid_vtk_obj(uid)
-            else:
-                # print(uid, " Entities belonging to other x_sections and XsVoxet class cannot be plot in this x_section.")
-                plot_entity = None
         if plot_entity:
             if isinstance(plot_entity, XsVoxet):
                 if plot_entity.bounds:

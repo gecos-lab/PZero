@@ -20,6 +20,15 @@ def vtk2stl(self=None, out_dir_name=None):
             stl_writer.SetInputData(vtk_entity)
             stl_writer.SetHeader(header)
             stl_writer.Write()
+    for uid in self.boundary_coll.df['uid']:
+        if isinstance(self.boundary_coll.get_uid_vtk_obj(uid), TriSurf):
+            header = (uid + "_" + self.boundary_coll.df.loc[self.boundary_coll.df['uid'] == uid, 'name'].values[0])
+            out_file_name = (str(out_dir_name) + "/" + uid + "_" + self.boundary_coll.df.loc[self.boundary_coll.df['uid'] == uid, 'name'].values[0] + ".stl")
+            stl_writer.SetFileName(out_file_name)
+            vtk_entity = self.boundary_coll.get_uid_vtk_obj(uid)
+            stl_writer.SetInputData(vtk_entity)
+            stl_writer.SetHeader(header)
+            stl_writer.Write()
     print("All TSurfs saved.")
 
 

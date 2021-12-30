@@ -64,6 +64,9 @@ class GeologicalCollection(QAbstractTableModel):
                               "axial_surface",
                               "fold_axis"]
 
+    """List of valid data types."""
+    valid_topological_type = ["VertexSet", "PolyLine", "TriSurf", "XsPolyLine"]
+
     """Initialize GeologicalCollection table. Column headers are taken from
     GeologicalCollection.geological_entity_dict.keys(), and parent is supposed to be the project_window."""
     """IN THE FUTURE the edit dialog should be able to edit metadata of multiple entities (and selecting "None" will not change them)."""

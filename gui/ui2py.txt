@@ -1,4 +1,4 @@
-In Anaconda prompt, type:
+In Anaconda or Command terminal, type:
 
 pyuic5 project_window.ui -o ..\pzero\project_window_ui.py
 

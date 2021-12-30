@@ -49,6 +49,21 @@ def vtk2dxf(self=None, out_dir_name=None):
             #         dxf_model.add_polyline3d((vtk_entity.GetCell(i).GetPoints().GetPoint(0),
             #                                   vtk_entity.GetCell(i).GetPoints().GetPoint(1)))
 
+    for uid in self.boundary_coll.df['uid']:
+        if isinstance(self.boundary_coll.get_uid_vtk_obj(uid), TriSurf):
+            layer = uid + "_" + self.boundary_coll.df.loc[self.boundary_coll.df['uid'] == uid, 'name'].values[0]
+            vtk_entity = self.boundary_coll.get_uid_vtk_obj(uid)
+            """3D faces"""
+            for i in range(vtk_entity.GetNumberOfCells()):
+                face_points = numpy_support.vtk_to_numpy(vtk_entity.GetCell(i).GetPoints().GetData())
+                dxf_model.add_3dface(face_points, dxfattribs={'layer': layer})
+            # """border -> https://lorensen.github.io/VTKExamples/site/Python/Meshes/BoundaryEdges/"""
+            # vtk_border = vtk_entity.get_clean_boundary()
+            # for cell in range(vtk_border.GetNumberOfCells()):
+            #     border_points = numpy_support.vtk_to_numpy(vtk_border.GetCell(cell).GetPoints().GetData())
+            #     dxf_model.add_polyline3d(border_points, dxfattribs={'layer': layer})
+            print("entity exported\n")
+
     """Save DXF file."""
     # out_file_name = (str(out_dir_name) + "/3dface_border.dxf")
     out_file_name = (str(out_dir_name) + "/3dface_border_attributes.dxf")

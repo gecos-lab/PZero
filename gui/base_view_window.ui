@@ -57,21 +57,21 @@
     <item>
      <widget class="QSplitter" name="splitter">
       <property name="sizePolicy">
-       <sizepolicy hsizetype="MinimumExpanding" vsizetype="MinimumExpanding">
+       <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
         <horstretch>1</horstretch>
         <verstretch>1</verstretch>
        </sizepolicy>
       </property>
       <property name="minimumSize">
        <size>
-        <width>1272</width>
-        <height>726</height>
+        <width>0</width>
+        <height>0</height>
        </size>
       </property>
       <property name="baseSize">
        <size>
-        <width>1272</width>
-        <height>726</height>
+        <width>0</width>
+        <height>0</height>
        </size>
       </property>
       <property name="lineWidth">
@@ -82,21 +82,21 @@
       </property>
       <widget class="QToolBox" name="toolBox">
        <property name="sizePolicy">
-        <sizepolicy hsizetype="MinimumExpanding" vsizetype="MinimumExpanding">
+        <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
          <horstretch>0</horstretch>
-         <verstretch>1</verstretch>
+         <verstretch>0</verstretch>
         </sizepolicy>
        </property>
        <property name="minimumSize">
         <size>
-         <width>256</width>
-         <height>708</height>
+         <width>0</width>
+         <height>0</height>
         </size>
        </property>
        <property name="baseSize">
         <size>
-         <width>256</width>
-         <height>708</height>
+         <width>0</width>
+         <height>0</height>
         </size>
        </property>
        <property name="frameShadow">
@@ -110,26 +110,26 @@
          <rect>
           <x>0</x>
           <y>0</y>
-          <width>268</width>
-          <height>594</height>
+          <width>282</width>
+          <height>448</height>
          </rect>
         </property>
         <property name="sizePolicy">
-         <sizepolicy hsizetype="MinimumExpanding" vsizetype="MinimumExpanding">
+         <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
           <horstretch>1</horstretch>
           <verstretch>1</verstretch>
          </sizepolicy>
         </property>
         <property name="minimumSize">
          <size>
-          <width>256</width>
-          <height>564</height>
+          <width>0</width>
+          <height>0</height>
          </size>
         </property>
         <property name="baseSize">
          <size>
-          <width>256</width>
-          <height>564</height>
+          <width>0</width>
+          <height>0</height>
          </size>
         </property>
         <attribute name="label">
@@ -139,15 +139,15 @@
          <item>
           <widget class="QTreeWidget" name="GeologyTreeWidget">
            <property name="sizePolicy">
-            <sizepolicy hsizetype="MinimumExpanding" vsizetype="MinimumExpanding">
+            <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
              <horstretch>1</horstretch>
              <verstretch>1</verstretch>
             </sizepolicy>
            </property>
            <property name="minimumSize">
             <size>
-             <width>240</width>
-             <height>548</height>
+             <width>0</width>
+             <height>0</height>
             </size>
            </property>
            <property name="maximumSize">
@@ -158,8 +158,8 @@
            </property>
            <property name="baseSize">
             <size>
-             <width>240</width>
-             <height>548</height>
+             <width>0</width>
+             <height>0</height>
             </size>
            </property>
            <column>
@@ -176,26 +176,26 @@
          <rect>
           <x>0</x>
           <y>0</y>
-          <width>256</width>
-          <height>564</height>
+          <width>282</width>
+          <height>448</height>
          </rect>
         </property>
         <property name="sizePolicy">
-         <sizepolicy hsizetype="MinimumExpanding" vsizetype="MinimumExpanding">
+         <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
           <horstretch>1</horstretch>
           <verstretch>1</verstretch>
          </sizepolicy>
         </property>
         <property name="minimumSize">
          <size>
-          <width>256</width>
-          <height>564</height>
+          <width>0</width>
+          <height>0</height>
          </size>
         </property>
         <property name="baseSize">
          <size>
-          <width>256</width>
-          <height>564</height>
+          <width>0</width>
+          <height>0</height>
          </size>
         </property>
         <attribute name="label">
@@ -205,21 +205,21 @@
          <item>
           <widget class="QTreeWidget" name="TopologyTreeWidget">
            <property name="sizePolicy">
-            <sizepolicy hsizetype="MinimumExpanding" vsizetype="MinimumExpanding">
+            <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
              <horstretch>1</horstretch>
              <verstretch>1</verstretch>
             </sizepolicy>
            </property>
            <property name="minimumSize">
             <size>
-             <width>240</width>
-             <height>548</height>
+             <width>0</width>
+             <height>0</height>
             </size>
            </property>
            <property name="baseSize">
             <size>
-             <width>240</width>
-             <height>548</height>
+             <width>0</width>
+             <height>0</height>
             </size>
            </property>
            <column>
@@ -236,26 +236,26 @@
          <rect>
           <x>0</x>
           <y>0</y>
-          <width>256</width>
-          <height>564</height>
+          <width>282</width>
+          <height>448</height>
          </rect>
         </property>
         <property name="sizePolicy">
-         <sizepolicy hsizetype="MinimumExpanding" vsizetype="MinimumExpanding">
+         <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
           <horstretch>1</horstretch>
           <verstretch>1</verstretch>
          </sizepolicy>
         </property>
         <property name="minimumSize">
          <size>
-          <width>256</width>
-          <height>564</height>
+          <width>0</width>
+          <height>0</height>
          </size>
         </property>
         <property name="baseSize">
          <size>
-          <width>256</width>
-          <height>564</height>
+          <width>0</width>
+          <height>0</height>
          </size>
         </property>
         <attribute name="label">
@@ -264,16 +264,22 @@
         <layout class="QVBoxLayout" name="verticalLayout_5">
          <item>
           <widget class="QTreeWidget" name="XSectionTreeWidget">
+           <property name="sizePolicy">
+            <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+             <horstretch>1</horstretch>
+             <verstretch>1</verstretch>
+            </sizepolicy>
+           </property>
            <property name="minimumSize">
             <size>
-             <width>240</width>
-             <height>548</height>
+             <width>0</width>
+             <height>0</height>
             </size>
            </property>
            <property name="baseSize">
             <size>
-             <width>240</width>
-             <height>548</height>
+             <width>0</width>
+             <height>0</height>
             </size>
            </property>
            <property name="tabKeyNavigation">
@@ -300,31 +306,66 @@
          </item>
         </layout>
        </widget>
+       <widget class="QWidget" name="BoundariesPage">
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+          <horstretch>0</horstretch>
+          <verstretch>0</verstretch>
+         </sizepolicy>
+        </property>
+        <attribute name="label">
+         <string>Boundaries</string>
+        </attribute>
+        <layout class="QVBoxLayout" name="verticalLayout_8">
+         <item>
+          <widget class="QTableWidget" name="BoundariesTableWidget">
+           <property name="sizePolicy">
+            <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+             <horstretch>1</horstretch>
+             <verstretch>1</verstretch>
+            </sizepolicy>
+           </property>
+           <property name="minimumSize">
+            <size>
+             <width>0</width>
+             <height>0</height>
+            </size>
+           </property>
+           <property name="baseSize">
+            <size>
+             <width>0</width>
+             <height>0</height>
+            </size>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </widget>
        <widget class="QWidget" name="Mesh3DPage">
         <property name="geometry">
          <rect>
           <x>0</x>
           <y>0</y>
-          <width>256</width>
-          <height>564</height>
+          <width>282</width>
+          <height>448</height>
          </rect>
         </property>
         <property name="sizePolicy">
-         <sizepolicy hsizetype="MinimumExpanding" vsizetype="MinimumExpanding">
+         <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
           <horstretch>1</horstretch>
           <verstretch>1</verstretch>
          </sizepolicy>
         </property>
         <property name="minimumSize">
          <size>
-          <width>256</width>
-          <height>564</height>
+          <width>0</width>
+          <height>0</height>
          </size>
         </property>
         <property name="baseSize">
          <size>
-          <width>256</width>
-          <height>564</height>
+          <width>0</width>
+          <height>0</height>
          </size>
         </property>
         <attribute name="label">
@@ -334,21 +375,21 @@
          <item>
           <widget class="QTableWidget" name="Mesh3DTableWidget">
            <property name="sizePolicy">
-            <sizepolicy hsizetype="MinimumExpanding" vsizetype="MinimumExpanding">
+            <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
              <horstretch>1</horstretch>
              <verstretch>1</verstretch>
             </sizepolicy>
            </property>
            <property name="minimumSize">
             <size>
-             <width>240</width>
-             <height>548</height>
+             <width>0</width>
+             <height>0</height>
             </size>
            </property>
            <property name="baseSize">
             <size>
-             <width>240</width>
-             <height>548</height>
+             <width>0</width>
+             <height>0</height>
             </size>
            </property>
           </widget>
@@ -360,26 +401,26 @@
          <rect>
           <x>0</x>
           <y>0</y>
-          <width>256</width>
-          <height>564</height>
+          <width>282</width>
+          <height>448</height>
          </rect>
         </property>
         <property name="sizePolicy">
-         <sizepolicy hsizetype="MinimumExpanding" vsizetype="MinimumExpanding">
+         <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
           <horstretch>1</horstretch>
           <verstretch>1</verstretch>
          </sizepolicy>
         </property>
         <property name="minimumSize">
          <size>
-          <width>256</width>
-          <height>564</height>
+          <width>0</width>
+          <height>0</height>
          </size>
         </property>
         <property name="baseSize">
          <size>
-          <width>256</width>
-          <height>564</height>
+          <width>0</width>
+          <height>0</height>
          </size>
         </property>
         <attribute name="label">
@@ -389,21 +430,21 @@
          <item>
           <widget class="QTableWidget" name="DOMsTableWidget">
            <property name="sizePolicy">
-            <sizepolicy hsizetype="MinimumExpanding" vsizetype="MinimumExpanding">
+            <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
              <horstretch>1</horstretch>
              <verstretch>1</verstretch>
             </sizepolicy>
            </property>
            <property name="minimumSize">
             <size>
-             <width>240</width>
-             <height>548</height>
+             <width>0</width>
+             <height>0</height>
             </size>
            </property>
            <property name="baseSize">
             <size>
-             <width>240</width>
-             <height>548</height>
+             <width>0</width>
+             <height>0</height>
             </size>
            </property>
           </widget>
@@ -415,26 +456,26 @@
          <rect>
           <x>0</x>
           <y>0</y>
-          <width>256</width>
-          <height>564</height>
+          <width>282</width>
+          <height>448</height>
          </rect>
         </property>
         <property name="sizePolicy">
-         <sizepolicy hsizetype="MinimumExpanding" vsizetype="MinimumExpanding">
+         <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
           <horstretch>1</horstretch>
           <verstretch>1</verstretch>
          </sizepolicy>
         </property>
         <property name="minimumSize">
          <size>
-          <width>256</width>
-          <height>564</height>
+          <width>0</width>
+          <height>0</height>
          </size>
         </property>
         <property name="baseSize">
          <size>
-          <width>256</width>
-          <height>564</height>
+          <width>0</width>
+          <height>0</height>
          </size>
         </property>
         <attribute name="label">
@@ -444,21 +485,21 @@
          <item>
           <widget class="QTableWidget" name="ImagesTableWidget">
            <property name="sizePolicy">
-            <sizepolicy hsizetype="MinimumExpanding" vsizetype="MinimumExpanding">
+            <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
              <horstretch>1</horstretch>
              <verstretch>1</verstretch>
             </sizepolicy>
            </property>
            <property name="minimumSize">
             <size>
-             <width>240</width>
-             <height>548</height>
+             <width>0</width>
+             <height>0</height>
             </size>
            </property>
            <property name="baseSize">
             <size>
-             <width>240</width>
-             <height>548</height>
+             <width>0</width>
+             <height>0</height>
             </size>
            </property>
           </widget>
@@ -471,21 +512,21 @@
         <bool>true</bool>
        </property>
        <property name="sizePolicy">
-        <sizepolicy hsizetype="MinimumExpanding" vsizetype="MinimumExpanding">
+        <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
          <horstretch>1</horstretch>
-         <verstretch>1</verstretch>
+         <verstretch>0</verstretch>
         </sizepolicy>
        </property>
        <property name="minimumSize">
         <size>
-         <width>105</width>
-         <height>710</height>
+         <width>0</width>
+         <height>0</height>
         </size>
        </property>
        <property name="baseSize">
         <size>
-         <width>105</width>
-         <height>710</height>
+         <width>0</width>
+         <height>0</height>
         </size>
        </property>
        <property name="frameShape">

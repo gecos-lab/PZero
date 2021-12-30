@@ -14,7 +14,11 @@ class Legend(QObject):
 
     legend_type_dict = {'geological_type': str, 'geological_feature': str, 'geological_age': str, 'geological_time': float, 'geological_sequence': str, 'scenario': str, 'color_R': int, 'color_G': int, 'color_B': int, 'line_thick': float}
 
-    others_legend_dict = {'other_type': ["XSection", "DOM", "Mesh3D"], 'color_R': [255, 255, 255], 'color_G': [255, 255, 255], 'color_B': [255, 255, 255], 'line_thick': [2.0, 2.0, 2.0]}
+    others_legend_dict = {'other_type': ["XSection", "Boundary", "Mesh3D", "DOM"],
+                          'color_R': [255, 255, 255, 255],
+                          'color_G': [255, 255, 255, 255],
+                          'color_B': [255, 255, 255, 255],
+                          'line_thick': [2.0, 2.0, 2.0, 2.0]}
 
     def __init__(self, parent=None, *args, **kwargs):
         QObject.__init__(self, parent)
@@ -205,7 +209,6 @@ class Legend(QObject):
         old_color_B = parent.others_legend_df.loc[(parent.others_legend_df['other_type'] == other_type), "color_B"].values[0]
         color_in = QColor(old_color_R, old_color_G, old_color_B)  # https://doc.qt.io/qtforpython/PySide2/QtGui/QColor.html#PySide2.QtGui.QColor
         color_out = QColorDialog.getColor(initial=color_in, title="Select color")  # https://doc.qt.io/qtforpython/PySide2/QtWidgets/QColorDialog.html#PySide2.QtWidgets.PySide2.QtWidgets.QColorDialog.getColor
-        print("color_out: ", color_out)
         if not color_out.isValid():
             color_out = color_in
         new_color_R = color_out.red()
