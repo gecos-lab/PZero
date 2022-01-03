@@ -44,6 +44,35 @@ Then you can start PZero with:
 python pzero_run.py
 ```
 
+### Installing PZero with PiPY using pip
+
+It is strongly suggested to create a dedicated virtual environment, for example using [virtualenvwrapper](https://virtualenvwrapper.readthedocs.io/).
+
+For example, we create a virtualenv called pzero, with python version 3.8: 
+
+```
+mkvirtualenv --python=3.8 pzero
+```
+
+once created, we are in our new evnironment, indicated between the two bracket at the start of the command line:
+
+```
+(pzero) hopi:PZero alf$
+```
+
+now we can install the python modules required by PZero using the pip3.8 command:
+
+```
+pip3.8 install -r requirements.txt
+```
+
+after installing the module, we should be able to fire PZero and load the data:
+
+```
+python3.8 pzero_run.py
+```
+
+
 ## Test data ##
 
 We have uploaded some test project on public repositories:
