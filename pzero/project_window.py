@@ -322,7 +322,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         map_image_uid = input_combo_dialog(parent=None, title="Add texture to DEM", label="Choose Map Image", choice_list=map_image_uids)
         """Add textures."""
         dom_uids = self.selected_uids
-        if not map_image_uids:
+        if not map_image_uid in self.image_coll.get_uids():
             return
         for dom_uid in dom_uids:
             if isinstance(self.dom_coll.get_uid_vtk_obj(dom_uid), DEM):
@@ -337,9 +337,10 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         map_image_uids = self.image_coll.df.loc[self.image_coll.df['image_type'] == "MapImage", 'uid'].to_list()
         map_image_uid = input_combo_dialog(parent=None, title="Add texture to DEM", label="Choose Map Image", choice_list=map_image_uids)
         """Remove textures."""
-        dom_uids = self.selected_uids
-        for dom_uid in dom_uids:
-            self.dom_coll.remove_map_texture_from_dom(dom_uid=dom_uid, map_image_uid=map_image_uid)
+        if map_image_uid in self.image_coll.get_uids():
+            dom_uids = self.selected_uids
+            for dom_uid in dom_uids:
+                self.dom_coll.remove_map_texture_from_dom(dom_uid=dom_uid, map_image_uid=map_image_uid)
 
     def property_add(self):
         """Add empty property on geological entity"""
