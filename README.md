@@ -44,7 +44,15 @@ Then you can start PZero with:
 python pzero_run.py
 ```
 
-### Advanced users/developers installation with Anaconda ###
+## Test data ##
+
+We have uploaded some test project on public repositories:
+
+[PZero-test Simple-synthetic](https://github.com/andrea-bistacchi/PZero-test-Simple-synthetic)
+
+[PZero-test Llyn-Padarn](https://github.com/andrea-bistacchi/PZero-test-Llyn-Padarn)
+
+## Advanced users/developers installation with Anaconda ##
 
 You can also create the **Conda** environment manually with (in ```conda terminal```):
 
