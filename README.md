@@ -72,6 +72,18 @@ after installing the module, we should be able to fire PZero and load the data:
 python3.8 pzero_run.py
 ```
 
+after using pzero, we can exit the pzero environment with:
+
+```
+deactivate
+```
+
+and come back to 3d geologic modeling with:
+
+```
+workon pzero
+```
+
 
 ## Test data ##
 
