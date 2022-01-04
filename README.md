@@ -56,13 +56,7 @@ conda remove -n pzero --all
 
 It is also possible to install ***PZero*** without **[Anaconda](https://www.anaconda.com/)**. For this you just need **[Python](https://www.python.org/downloads/)** and, in order not to alter your base **Python** environment, we strongly suggest to create a dedicated virtual environment using **[virtualenvwrapper](https://virtualenvwrapper.readthedocs.io/)**. All the following commands must be entered in your system terminal (*Command Prompt* in **Windows**, *Terminal* in **Linux** and **macOS**).
 
-First install ```virtualenvwrapper``` with ```pip``` in your base **Python** environment:
-
-```
-pip install virtualenvwrapper
-```
-
-Then create a virtual environment called ```pzero```, with **Python 3.8**:
+If you do not already have it, install ```virtualenvwrapper``` with ```pip``` following [these instructions](https://virtualenvwrapper.readthedocs.io/en/latest/install.html), then create a virtual environment called ```pzero```, with **Python 3.8**:
 
 ```
 mkvirtualenv --python=3.8 pzero
@@ -77,14 +71,12 @@ Once created, the new environment will be immediately active as indicated in the
 Now we can install the **Python** modules required by ***PZero*** using ```pip``` from the ***PZero*** directory downloaded from **GitHub** (you can skip the lines above in case you are not creating a virtual environment or you are using a different virtual environment manager):
 
 ```
-pip3.8 install -r requirements.txt  # why 3.8?
 pip install -r requirements.txt
 ```
 
 and run ***PZero*** with:
 
 ```
-python3.8 pzero_run.py  # why 3.8?
 python pzero_run.py
 ```
 
