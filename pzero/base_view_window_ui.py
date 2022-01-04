@@ -6,7 +6,7 @@
 #
 # WARNING! All changes made in this file will be lost!
 
-from qtpy import QtCore, QtGui, QtWidgets
+from PyQt5 import QtCore, QtGui, QtWidgets
 
 class Ui_BaseViewWindow(object):
     def setupUi(self, BaseViewWindow):

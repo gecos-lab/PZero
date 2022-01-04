@@ -1,9 +1,9 @@
 """legend_manager.py
 PZero© Andrea Bistacchi"""
 
-from qtpy.QtWidgets import QTreeWidgetItem, QColorDialog, QPushButton, QSpinBox, QDoubleSpinBox, QComboBox
-from qtpy.QtGui import QColor
-from qtpy.QtCore import QObject, Qt
+from PyQt5.QtWidgets import QTreeWidgetItem, QColorDialog, QPushButton, QSpinBox, QDoubleSpinBox, QComboBox
+from PyQt5.QtGui import QColor
+from PyQt5.QtCore import QObject, Qt
 import pandas as pd
 
 

@@ -7,7 +7,7 @@ from .entities_factory import PolyLine, XsPolyLine
 from shapely import affinity
 from shapely.geometry import asLineString, LineString, Point, asPoint, MultiLineString
 from shapely.ops import split, snap
-from qtpy.QtWidgets import QAction
+from PyQt5.QtWidgets import QAction
 
 """Implementation of functions specific to this view (e.g. particular editing or visualization functions)"""
 

@@ -5,9 +5,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 import colorcet as cc
 import cmocean as cmo
-from qtpy.QtWidgets import QTreeWidgetItem, QTableWidgetItem, QLabel, QComboBox, QColorDialog, QPushButton, QSpinBox, QDoubleSpinBox
-from qtpy.QtGui import QColor, QImage, QPixmap
-from qtpy.QtCore import QObject
+from PyQt5.QtWidgets import QTreeWidgetItem, QTableWidgetItem, QLabel, QComboBox, QColorDialog, QPushButton, QSpinBox, QDoubleSpinBox
+from PyQt5.QtGui import QColor, QImage, QPixmap
+from PyQt5.QtCore import QObject
 import pandas as pd
 import pyvista as pv
 

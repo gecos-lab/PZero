@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 import uuid
 from copy import deepcopy
-from qtpy.QtCore import QAbstractTableModel, Qt, QVariant
+from PyQt5.QtCore import QAbstractTableModel, Qt, QVariant
 
 """Options to print Pandas dataframes in console when testing."""
 pd_desired_width = 800

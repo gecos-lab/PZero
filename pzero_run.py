@@ -1,5 +1,5 @@
 import sys
-from qtpy.QtWidgets import QApplication
+from PyQt5.QtWidgets import QApplication
 
 from pzero.project_window import ProjectWindow
 

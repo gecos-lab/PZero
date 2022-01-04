@@ -175,7 +175,7 @@ dependencies:
   - pywavelets=1.2.0=py38h6f4d8f0_1
   - pyyaml=6.0=py38h294d835_3
   - qt=5.12.9=h5909a2a_4
-  - qtpy=1.11.3=pyhd8ed1ab_0
+  - PyQt5=1.11.3=pyhd8ed1ab_0
   - rasterio=1.2.10=py38h48edd3a_3
   - requests=2.26.0=pyhd8ed1ab_1
   - rtree=0.9.7=py38h8b54edf_3
