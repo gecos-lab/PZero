@@ -74,7 +74,7 @@ Once created, the new environment will be immediately active as indicated in the
 (pzero) <your_machine>:<current_directory> <your_user>$
 ```
 
-Now we can install the **Python** modules required by ***PZero*** using ```pip``` (you can skip the lines above in case you are not creating a virtual environment or you are using a different virtual environment manager):
+Now we can install the **Python** modules required by ***PZero*** using ```pip``` from the ***PZero*** directory downloaded from **GitHub** (you can skip the lines above in case you are not creating a virtual environment or you are using a different virtual environment manager):
 
 ```
 pip3.8 install -r requirements.txt  # why 3.8?
