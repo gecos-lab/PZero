@@ -49,7 +49,7 @@ To activate and deactivate the pzero environment, and in case you want to remove
 ```
 conda activate pzero
 conda deactivate
-conda remove pzero
+conda remove -n pzero --all
 ```
 
 ### Almost quick and easy installation with PiPY using pip
