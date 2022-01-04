@@ -77,14 +77,14 @@ Once created, the new environment will be immediately active as indicated in the
 Now we can install the **Python** modules required by ***PZero*** using ```pip``` (you can skip the lines above in case you are not creating a virtual environment or you are using a different virtual environment manager):
 
 ```
-pip3.8 install -r requirements.txt
+pip3.8 install -r requirements.txt  # why 3.8?
 pip install -r requirements.txt
 ```
 
 and run ***PZero*** with:
 
 ```
-python3.8 pzero_run.py
+python3.8 pzero_run.py  # why 3.8?
 python pzero_run.py
 ```
 
