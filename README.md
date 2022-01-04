@@ -54,9 +54,9 @@ conda remove -n pzero --all
 
 ### Almost quick and easy installation on **macOS** with PiPY using pip
 
-It is also possible to install ***PZero*** in **macOS** without **[Anaconda](https://www.anaconda.com/)**. For this you just need **[Homebrew](https://brew.sh)** and, in order not to alter your base **Python** environment, we strongly suggest to create a dedicated virtual environment using **[virtualenvwrapper](https://virtualenvwrapper.readthedocs.io/)**. All the following commands must be entered in your system terminal.
+It is also possible to install ***PZero*** on **macOS** without **[Anaconda](https://www.anaconda.com/)**. For this **[Homebrew](https://brew.sh)** is needed and, in order not to alter the base **Python** environment, we strongly suggest to create a dedicated virtual environment using **[virtualenvwrapper](https://virtualenvwrapper.readthedocs.io/)**.
 
-Open a terminal and install **Homebrew**, **Python 3** (needed because the dfault Python on macOS is Python 2) and **virtualenvwrapper**:
+All the following commands must be entered in the **macOS Terminal**. First **Homebrew**, **Python 3** (needed because the default Python on macOS is Python 2) and **virtualenvwrapper** are installed:
 
 ```
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
@@ -64,13 +64,13 @@ brew install python3
 brew install virtualenvwrapper
 ```
 
-Then to be able to use virtualenvwrapper you need to add some lines to the options file of the zsh shell:
+Then to be able to use **virtualenvwrapper**, some lines must be added to the options file of the **zsh shell** (the shell that runs in the **macOS Terminal**). The options file can be opened with:
 
 ```
 nano ~/.zshrc
 ```
 
-Paste the lines:
+Then the following lines must be pasted and the file saved with control+X.
 
 ```
 # lines needed by virtualenvwrapper
@@ -79,31 +79,17 @@ export PROJECT_HOME=$HOME/Devel
 source /usr/local/bin/virtualenvwrapper.sh
 ```
 
-Then save with control+X and restart the Terminal.
-
-You can now create a virtual environment called ```pzero```, with **Python 3.8** and activate it:
+After restarting the Terminal, a virtual environment called ```pzero``` based on **Python 3.8** can be created and activated:
 
 ```
 mkvirtualenv --python=3.8 pzero
 workon pzero
 ```
 
-When the pzero environment is active, you will see it within brackets at the command prompt, as in:
+When the ```pzero``` environment is active, it will be highlighted within brackets at the command prompt, as in:
 
 ```
 (pzero) <user>@<machine> <directory> %
-```
-
-Now you can install the **Python** modules required by ***PZero*** using ```pip3``` (do not use ```pip``` that will point to Python 2) from the ***PZero*** directory downloaded from **GitHub** (you can skip the lines above in case you are not creating a virtual environment or you are using a different virtual environment manager):
-
-```
-pip3 install -r requirements.txt
-```
-
-and run ***PZero*** with:
-
-```
-python3 pzero_run.py
 ```
 
 To activate and deactivate the ```pzero``` environment, and in case you want to remove it completely, use respectively:
@@ -112,6 +98,20 @@ To activate and deactivate the ```pzero``` environment, and in case you want to 
 workon pzero
 deactivate
 rmvirtualenv pzero
+```
+
+All the lines above, from ```brew install virtualenvwrapper``` can be skipped in case a virtual environment is not being created, or created using a different virtual environment manager.
+
+Now the **Python** modules required by ***PZero*** can be automatically installed using ```pip3``` (not ```pip``` that will point to Python 2) within the ***PZero*** directory downloaded from **GitHub**.
+
+```
+pip3 install -r requirements.txt
+```
+
+And finally ***PZero*** can be run with:
+
+```
+python3 pzero_run.py
 ```
 
 ## Test data ##
