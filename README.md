@@ -44,7 +44,7 @@ Then you can start PZero with:
 python pzero_run.py
 ```
 
-To activate and deactivate pzero, and in case you want to remove it completely, use respectively (in ```conda terminal```):
+To activate and deactivate the pzero environment, and in case you want to remove it completely, use respectively (in ```conda terminal```):
 
 ```
 conda activate pzero
@@ -54,7 +54,7 @@ conda remove pzero
 
 ### Almost quick and easy installation with PiPY using pip
 
-It is also possible to install ***PZero*** without **[Anaconda](https://www.anaconda.com/)**. For this you just need **[Python](https://www.python.org/downloads/)** and, in order not to alter your base **Python** environment, we strongly suggest to create a dedicated virtual environment using **[virtualenvwrapper](https://virtualenvwrapper.readthedocs.io/)**. All the following commands must be entered in your system terminal (Command Prompt in **Windows**, Terminal in **Linux** and **MacOs**).
+It is also possible to install ***PZero*** without **[Anaconda](https://www.anaconda.com/)**. For this you just need **[Python](https://www.python.org/downloads/)** and, in order not to alter your base **Python** environment, we strongly suggest to create a dedicated virtual environment using **[virtualenvwrapper](https://virtualenvwrapper.readthedocs.io/)**. All the following commands must be entered in your system terminal (*Command Prompt* in **Windows**, *Terminal* in **Linux** and **MacOs**).
 
 First install ```virtualenvwrapper``` with ```pip``` in your base **Python** environment:
 
@@ -88,21 +88,11 @@ python3.8 pzero_run.py
 python pzero_run.py
 ```
 
-After having used ***PZero***, you can exit the ```pzero``` environment with:
-
-```
-deactivate
-```
-
-and come back to it with:
+To activate and deactivate the ```pzero``` environment, and in case you want to remove it completely, use respectively:
 
 ```
 workon pzero
-```
-
-If you need to completely remove the ```pzero``` virtual environment, use:
-
-```
+deactivate
 rmvirtualenv pzero
 ```
 
