@@ -70,7 +70,7 @@ Then to be able to use **virtualenvwrapper**, some lines must be added to the op
 nano ~/.zshrc
 ```
 
-Then the following lines must be pasted and the file saved with control+X.
+Then the following lines must be pasted and the file saved with *control+X*.
 
 ```
 # lines needed by virtualenvwrapper
@@ -100,7 +100,7 @@ deactivate
 rmvirtualenv pzero
 ```
 
-All the lines above, from ```brew install virtualenvwrapper``` can be skipped in case a virtual environment is not being created, or created using a different virtual environment manager.
+All the lines above, from ```brew install virtualenvwrapper```, can be skipped in case a virtual environment is not being created, or created using a different virtual environment manager.
 
 Now the **Python** modules required by ***PZero*** can be automatically installed using ```pip3``` (not ```pip``` that will point to Python 2) within the ***PZero*** directory downloaded from **GitHub**.
 
