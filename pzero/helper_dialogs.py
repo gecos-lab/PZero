@@ -1,8 +1,8 @@
 """helper_dialogs.py
 PZero© Andrea Bistacchi"""
 
-from PyQt5.QtWidgets import QMessageBox, QInputDialog, QLineEdit, QPushButton, QFileDialog, QWidget, QProgressDialog
-from PyQt5 import QtWidgets, QtCore
+from qtpy.QtWidgets import QMessageBox, QInputDialog, QLineEdit, QPushButton, QFileDialog, QWidget, QProgressDialog
+from qtpy import QtWidgets, QtCore
 
 
 def options_dialog(title=None, message=None, yes_role=None, no_role=None, reject_role=None):

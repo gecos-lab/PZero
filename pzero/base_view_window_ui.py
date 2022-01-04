@@ -6,7 +6,7 @@
 #
 # WARNING! All changes made in this file will be lost!
 
-from PyQt5 import QtCore, QtGui, QtWidgets
+from qtpy import QtCore, QtGui, QtWidgets
 
 class Ui_BaseViewWindow(object):
     def setupUi(self, BaseViewWindow):
@@ -323,4 +323,3 @@ class Ui_BaseViewWindow(object):
         self.toolBarBase.setWindowTitle(_translate("BaseViewWindow", "toolBar"))
         self.actionClose.setText(_translate("BaseViewWindow", "Close Window"))
         self.actionBase_Tool.setText(_translate("BaseViewWindow", "Base Tool"))
-

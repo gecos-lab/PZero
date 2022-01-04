@@ -1,7 +1,7 @@
 """pyvista2vtk.py
 PZero© Andrea Bistacchi"""
 
-from PyQt5.QtWidgets import QFileDialog
+from qtpy.QtWidgets import QFileDialog
 import uuid
 from .entities_factory import VertexSet, PolyLine, TriSurf, TetraSolid, PolyData
 import pyvista as pv

@@ -2,8 +2,8 @@
 PZero© Andrea Bistacchi"""
 
 """QT imports"""
-from PyQt5.QtWidgets import *
-from PyQt5.QtCore import Qt
+from qtpy.QtWidgets import *
+from qtpy.QtCore import Qt
 
 """PZero imports"""
 from .base_view_window_ui import Ui_BaseViewWindow

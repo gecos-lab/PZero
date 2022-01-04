@@ -8,12 +8,12 @@ from copy import deepcopy
 import uuid
 import numpy as np
 import pandas as pd
-from PyQt5.QtCore import QAbstractTableModel, Qt, pyqtSignal, QObject, QVariant, QAbstractItemModel
+from qtpy.QtCore import QAbstractTableModel, Qt, Signal, QObject, QVariant, QAbstractItemModel
 # from PyQt5.QtGui import QStandardItem, QImage
 from .entities_factory import PolyData, Plane, VertexSet, PolyLine, TriSurf, TetraSolid, XsVertexSet, XsPolyLine, DEM, MapImage, Voxet
 from .helper_dialogs import multiple_input_dialog, general_input_dialog
 from .windows_factory import NavigationToolbar
-from PyQt5.QtWidgets import QAction
+from qtpy.QtWidgets import QAction
 
 """Options to print Pandas dataframes in console"""
 pd_desired_width = 800

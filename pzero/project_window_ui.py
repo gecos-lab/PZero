@@ -6,7 +6,7 @@
 #
 # WARNING! All changes made in this file will be lost!
 
-from PyQt5 import QtCore, QtGui, QtWidgets
+from qtpy import QtCore, QtGui, QtWidgets
 
 class Ui_ProjectWindow(object):
     def setupUi(self, ProjectWindow):
@@ -564,4 +564,3 @@ class Ui_ProjectWindow(object):
         self.actionProject2XSection.setText(_translate("ProjectWindow", "Project to XSection"))
         self.actionImportSHP.setText(_translate("ProjectWindow", "Import SHP"))
         self.actionImportGocadBoundary.setText(_translate("ProjectWindow", "Import Gocad Boundary"))
-

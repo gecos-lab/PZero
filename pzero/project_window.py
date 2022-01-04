@@ -6,8 +6,8 @@ from copy import deepcopy
 from datetime import datetime
 from shutil import copy2
 
-from PyQt5.QtWidgets import QMainWindow, QMessageBox, QProgressDialog
-from PyQt5.QtCore import Qt, pyqtSignal, QSortFilterProxyModel
+from qtpy.QtWidgets import QMainWindow, QMessageBox, QProgressDialog
+from qtpy.QtCore import Qt, QSortFilterProxyModel, Signal
 import vtk
 import pandas as pd
 from .project_window_ui import Ui_ProjectWindow
@@ -44,50 +44,50 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
 
     """Signals defined here are meant to be broadcast TO ALL views. This is why we use signals
     instead of functions that will act within a single view only. They all pass a list of uid's."""
-    geology_added_signal = pyqtSignal(list)
-    geology_removed_signal = pyqtSignal(list)
-    geology_geom_modified_signal = pyqtSignal(list)  # this includes topology modified
-    geology_data_keys_removed_signal = pyqtSignal(list)
-    geology_data_val_modified_signal = pyqtSignal(list)
-    geology_metadata_modified_signal = pyqtSignal(list)
-    geology_legend_color_modified_signal = pyqtSignal(list)
-    geology_legend_thick_modified_signal = pyqtSignal(list)
+    geology_added_signal = Signal(list)
+    geology_removed_signal = Signal(list)
+    geology_geom_modified_signal = Signal(list)  # this includes topology modified
+    geology_data_keys_removed_signal = Signal(list)
+    geology_data_val_modified_signal = Signal(list)
+    geology_metadata_modified_signal = Signal(list)
+    geology_legend_color_modified_signal = Signal(list)
+    geology_legend_thick_modified_signal = Signal(list)
 
-    xsect_added_signal = pyqtSignal(list)
-    xsect_removed_signal = pyqtSignal(list)
-    xsect_geom_modified_signal = pyqtSignal(list)  # this includes topology modified
-    xsect_metadata_modified_signal = pyqtSignal(list)
-    xsect_legend_color_modified_signal = pyqtSignal(list)
-    xsect_legend_thick_modified_signal = pyqtSignal(list)
+    xsect_added_signal = Signal(list)
+    xsect_removed_signal = Signal(list)
+    xsect_geom_modified_signal = Signal(list)  # this includes topology modified
+    xsect_metadata_modified_signal = Signal(list)
+    xsect_legend_color_modified_signal = Signal(list)
+    xsect_legend_thick_modified_signal = Signal(list)
 
-    boundary_added_signal = pyqtSignal(list)
-    boundary_removed_signal = pyqtSignal(list)
-    boundary_geom_modified_signal = pyqtSignal(list)  # this includes topology modified
-    boundary_metadata_modified_signal = pyqtSignal(list)
-    boundary_legend_color_modified_signal = pyqtSignal(list)
-    boundary_legend_thick_modified_signal = pyqtSignal(list)
+    boundary_added_signal = Signal(list)
+    boundary_removed_signal = Signal(list)
+    boundary_geom_modified_signal = Signal(list)  # this includes topology modified
+    boundary_metadata_modified_signal = Signal(list)
+    boundary_legend_color_modified_signal = Signal(list)
+    boundary_legend_thick_modified_signal = Signal(list)
 
-    mesh3d_added_signal = pyqtSignal(list)
-    mesh3d_removed_signal = pyqtSignal(list)
-    mesh3d_data_keys_removed_signal = pyqtSignal(list)
-    mesh3d_data_val_modified_signal = pyqtSignal(list)
-    mesh3d_metadata_modified_signal = pyqtSignal(list)
-    mesh3d_legend_color_modified_signal = pyqtSignal(list)
-    mesh3d_legend_thick_modified_signal = pyqtSignal(list)
+    mesh3d_added_signal = Signal(list)
+    mesh3d_removed_signal = Signal(list)
+    mesh3d_data_keys_removed_signal = Signal(list)
+    mesh3d_data_val_modified_signal = Signal(list)
+    mesh3d_metadata_modified_signal = Signal(list)
+    mesh3d_legend_color_modified_signal = Signal(list)
+    mesh3d_legend_thick_modified_signal = Signal(list)
 
-    dom_added_signal = pyqtSignal(list)
-    dom_removed_signal = pyqtSignal(list)
-    dom_data_keys_removed_signal = pyqtSignal(list)
-    dom_data_val_modified_signal = pyqtSignal(list)
-    dom_metadata_modified_signal = pyqtSignal(list)
-    dom_legend_color_modified_signal = pyqtSignal(list)
-    dom_legend_thick_modified_signal = pyqtSignal(list)
+    dom_added_signal = Signal(list)
+    dom_removed_signal = Signal(list)
+    dom_data_keys_removed_signal = Signal(list)
+    dom_data_val_modified_signal = Signal(list)
+    dom_metadata_modified_signal = Signal(list)
+    dom_legend_color_modified_signal = Signal(list)
+    dom_legend_thick_modified_signal = Signal(list)
 
-    image_added_signal = pyqtSignal(list)
-    image_removed_signal = pyqtSignal(list)
-    image_metadata_modified_signal = pyqtSignal(list)
+    image_added_signal = Signal(list)
+    image_removed_signal = Signal(list)
+    image_metadata_modified_signal = Signal(list)
 
-    prop_legend_cmap_modified_signal = pyqtSignal(str)
+    prop_legend_cmap_modified_signal = Signal(str)
 
     """IN THE FUTURE add signals for other collections here___________________________"""
 
