@@ -18,3 +18,5 @@ vedo<=2021.0.6
 geopandas>=0.10.2
 
 scipy>=1.7.3
+
+PyQt5
