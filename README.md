@@ -59,6 +59,15 @@ It is also possible to install ***PZero*** without **[Anaconda](https://www.anac
 If you do not already have it, install ```virtualenvwrapper``` with ```pip``` following [these instructions](https://virtualenvwrapper.readthedocs.io/en/latest/install.html), then create a virtual environment called ```pzero```, with **Python 3.8**:
 
 ```
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+
+brew install python3
+
+brew install virtualenvwrapper
+
+workon pzero
+
+
 mkvirtualenv --python=3.8 pzero
 ```
 
