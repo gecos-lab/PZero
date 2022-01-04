@@ -44,6 +44,14 @@ Then you can start PZero with:
 python pzero_run.py
 ```
 
+To activate and deactivate pzero, and in case you want to remove it completely, use respectively (in ```conda terminal```):
+
+```
+conda activate pzero
+conda deactivate
+conda remove pzero
+```
+
 ### Almost quick and easy installation with PiPY using pip
 
 It is also possible to install ***PZero*** without **[Anaconda](https://www.anaconda.com/)**. For this you just need **[Python](https://www.python.org/downloads/)** and, in order not to alter your base **Python** environment, we strongly suggest to create a dedicated virtual environment using **[virtualenvwrapper](https://virtualenvwrapper.readthedocs.io/)**. All the following commands must be entered in your system terminal (Command Prompt in **Windows**, Terminal in **Linux** and **MacOs**).
