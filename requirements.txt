@@ -14,7 +14,7 @@ colorcet>=3.0.0
 cmocean>=2.0
 loopstructural>=v1.4.1
 
-vedo>=2021.0.7
+vedo<=2021.0.6
 geopandas>=0.10.2
 
 scipy>=1.7.3
