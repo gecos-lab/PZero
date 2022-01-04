@@ -101,7 +101,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         """Welcome message"""
         self.TextTerminal.appendPlainText("Welcome to PZero!\n3D modelling application by Andrea Bistacchi, started June 3rd 2020.")
 
-        startup_option = options_dialog(title='PZero', message='Do you want to create a new project or open an old one?', yes_role='New Project', no_role='Old Project', reject_role='Close')
+        startup_option = options_dialog(title='PZero', message='Do you want to create a new project or open an old one?', yes_role='New Project', no_role='Existing Project', reject_role='Close')
         if startup_option == 0:
             self.TextTerminal.appendPlainText("Creating a new empty project.")
             self.new_project()
