@@ -52,7 +52,7 @@ conda deactivate
 conda remove -n pzero --all
 ```
 
-### Almost quick and easy installation on **macOS** with PiPY using pip
+### Almost quick and easy installation on **macOS** with PyPI using pip
 
 It is also possible to install ***PZero*** on **macOS** without **[Anaconda](https://www.anaconda.com/)**. For this **[Homebrew](https://brew.sh)** is needed and, in order not to alter the base **Python** environment, we strongly suggest to create a dedicated virtual environment using **[virtualenvwrapper](https://virtualenvwrapper.readthedocs.io/)**.
 
