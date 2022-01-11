@@ -69,9 +69,6 @@ def section_from_azimuth(self):
     section_dict['normal_z'] = 0.0
     uid = self.parent.xsect_coll.add_entity_from_dict(entity_dict=section_dict)
     """Once the original XSection has been drawn, ask if a set of XSections is needed."""
-    # section_dict_in_set = {'activate': ['Multiple XSections', 'To draw a set of XSections fill in the fields. Else, exit the dialog.', 'QLabel'],
-    #                        'spacing': ['Spacing', 1000.0, 'QLineEdit'],
-    #                        'num_xs': ['Number of XSections', 5, 'QLineEdit']}
     section_dict_in_set = {'activate': ['Multiple XSections', 'Draw a set of parallel XSections', 'QCheckBox'],
                            'spacing': ['Spacing', 1000.0, 'QLineEdit'],
                            'num_xs': ['Number of XSections', 5, 'QLineEdit']}

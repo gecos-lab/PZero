@@ -227,6 +227,8 @@ class Legend(QObject):
             parent.dom_legend_color_modified_signal.emit(parent.dom_coll.df['uid'].tolist())
         elif other_type == "Mesh3D":
             parent.mesh3d_legend_color_modified_signal.emit(parent.dom_coll.df['uid'].tolist())
+        elif other_type == "Boundary":
+            parent.boundary_legend_color_modified_signal.emit(parent.boundary_coll.df['uid'].tolist())
 
     def change_other_feature_line_thick(self, parent=None):
         other_type = self.sender().other_type
@@ -240,3 +242,5 @@ class Legend(QObject):
             parent.dom_legend_thick_modified_signal.emit(parent.dom_coll.df['uid'].tolist())
         elif other_type == "Mesh3D":
             parent.mesh3d_legend_thick_modified_signal.emit(parent.dom_coll.df['uid'].tolist())
+        elif other_type == "Boundary":
+            parent.boundary_legend_thick_modified_signal.emit(parent.boundary_coll.df['uid'].tolist())

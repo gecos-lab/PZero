@@ -117,7 +117,7 @@ def draw_line(self):
                 print("error - empty object")
                 pass
             else:
-                self.left_right(uid)
+                left_right(uid)
                 break
     """When finished digitizing, deselect line."""
     self.selected_uids = []
@@ -192,7 +192,7 @@ def edit_line(self):
             draggable_vertex.set_visible(False)
             draggable_vertex.figure.canvas.draw()
             draggable_vertex.remove()
-    self.left_right(current_uid)
+    left_right(current_uid)
     """Deselect input line."""
     self.selected_uids = []
     self.parent.geology_geom_modified_signal.emit([current_uid])  # emit uid as list to force redraw()
@@ -306,7 +306,7 @@ def rotate_line(self):
         self.parent.geol_coll.get_uid_vtk_obj(current_uid).points_X[:] = outX
         self.parent.geol_coll.get_uid_vtk_obj(current_uid).points_Y[:] = outY
         self.parent.geol_coll.get_uid_vtk_obj(current_uid).points_Z[:] = outV
-    self.left_right(current_uid)
+    left_right(current_uid)
     """Deselect input line."""
     self.selected_uids = []
     self.parent.geology_geom_modified_signal.emit([current_uid])  # emit uid as list to force redraw()
@@ -415,7 +415,7 @@ def extend_line(self):
                 print("error - empty object")
                 pass
             else:
-                self.left_right(current_uid)
+                left_right(current_uid)
                 end_to_extend.set_visible(False)
                 end_to_extend.figure.canvas.draw()  # end_to_extend.remove() # gives error if implemented
             break
@@ -423,7 +423,7 @@ def extend_line(self):
             end_to_extend.set_visible(False)
             end_to_extend.figure.canvas.draw()
             # end_to_extend.remove() # gives error if implemented
-            self.flip_line(current_uid)
+            flip_line(self=self, uid=current_uid)
             """Color of red the end of the line that will be extended"""
             current_line = self.actors_df.loc[self.actors_df['uid'] == current_uid, 'actor'].values[0]
             current_line_U_true, current_line_V_true = current_line.get_data()
@@ -456,33 +456,17 @@ def split_line_line(self):
     """Select cut-by line (scissors)."""
     self.select_actor_with_mouse()
     current_uid_scissors = self.selected_uids[0]
-    """Create empty dictionary for the output lines."""
-    new_line_1 = deepcopy(self.parent.geol_coll.geological_entity_dict)
-    new_line_2 = deepcopy(self.parent.geol_coll.geological_entity_dict)
-    new_line_2['name'] = self.parent.geol_coll.df.loc[self.parent.geol_coll.df['uid'] == current_uid_paper, 'name'].values[0] + '_split'
-    new_line_2['topological_type'] = self.parent.geol_coll.df.loc[self.parent.geol_coll.df['uid'] == current_uid_paper, 'topological_type'].values[0]
-    new_line_2['geological_type'] = self.parent.geol_coll.df.loc[self.parent.geol_coll.df['uid'] == current_uid_paper, 'geological_type'].values[0]
-    new_line_2['geological_feature'] = self.parent.geol_coll.df.loc[self.parent.geol_coll.df['uid'] == current_uid_paper, 'geological_feature'].values[0]
-    new_line_2['scenario'] = self.parent.geol_coll.df.loc[self.parent.geol_coll.df['uid'] == current_uid_paper, 'scenario'].values[0]
     """Create deepcopies of the selected entities. Split U- and V-coordinates."""
     if isinstance(self, ViewMap):
         inU_paper = deepcopy(self.parent.geol_coll.get_uid_vtk_obj(current_uid_paper).points[:, 0])
         inV_paper = deepcopy(self.parent.geol_coll.get_uid_vtk_obj(current_uid_paper).points[:, 1])
-        new_line_1['x_section'] = None
-        new_line_1['vtk_obj'] = PolyLine()
         inU_scissors = deepcopy(self.parent.geol_coll.get_uid_vtk_obj(current_uid_scissors).points[:, 0])
         inV_scissors = deepcopy(self.parent.geol_coll.get_uid_vtk_obj(current_uid_scissors).points[:, 1])
-        new_line_2['x_section'] = None
-        new_line_2['vtk_obj'] = PolyLine()
     elif isinstance(self, ViewXsection):
         inU_paper = deepcopy(self.parent.geol_coll.get_uid_vtk_obj(current_uid_paper).points_W)
         inV_paper = deepcopy(self.parent.geol_coll.get_uid_vtk_obj(current_uid_paper).points_Z)
-        new_line_1['x_section'] = self.this_x_section_uid
-        new_line_1['vtk_obj'] = XsPolyLine(self.this_x_section_uid, parent=self.parent)
         inU_scissors = deepcopy(self.parent.geol_coll.get_uid_vtk_obj(current_uid_scissors).points_W)
         inV_scissors = deepcopy(self.parent.geol_coll.get_uid_vtk_obj(current_uid_scissors).points_Z)
-        new_line_2['x_section'] = self.this_x_section_uid
-        new_line_2['vtk_obj'] = XsPolyLine(self.this_x_section_uid, parent=self.parent)
     """Stack coordinates in two-columns matrix"""
     inUV_paper = np.column_stack((inU_paper, inV_paper))
     inUV_scissors = np.column_stack((inU_scissors, inV_scissors))
@@ -492,54 +476,61 @@ def split_line_line(self):
     """Check if the two lineal geometries have shared path with dimension 1 (= they share a line-type object)"""
     if shp_line_in_paper.crosses(shp_line_in_scissors) == True:
         """Run the split shapely function."""
-        line1, line2 = split(shp_line_in_paper, shp_line_in_scissors)
+        lines = split(shp_line_in_paper, shp_line_in_scissors)
     else:  # handles the case when the LineString share a linear path and, for the moment, exists the tool
         """Un-Freeze QT interface"""
         for action in self.findChildren(QAction):
             action.setEnabled(True)
         return
-    outUV_1 = deepcopy(np.array(line1))
-    outUV_2 = deepcopy(np.array(line2))
-    """Un-stack output coordinates and write them to the empty dictionary."""
-    outU_1 = outUV_1[:, 0]
-    outV_1 = outUV_1[:, 1]
-    outU_2 = outUV_2[:, 0]
-    outV_2 = outUV_2[:, 1]
-    """Convert local coordinates to XYZ ones."""
-    if isinstance(self, ViewMap):
-        outX_1 = outU_1
-        outY_1 = outV_1
-        outZ_1 = np.zeros(np.shape(outX_1))
-        outX_2 = outU_2
-        outY_2 = outV_2
-        outZ_2 = np.zeros(np.shape(outX_2))
-    elif isinstance(self, ViewXsection):
-        outX_1, outY_1 = self.parent.xsect_coll.get_XY_from_W(section_uid=self.this_x_section_uid, W=outU_1)
-        outZ_1 = outV_1
-        outX_2, outY_2 = self.parent.xsect_coll.get_XY_from_W(section_uid=self.this_x_section_uid, W=outU_2)
-        outZ_2 = outV_2
-    """Create new vtk objects"""
-    new_points_1 = np.column_stack((outX_1, outY_1, outZ_1))
-    new_points_2 = np.column_stack((outX_2, outY_2, outZ_2))
-    new_line_1['vtk_obj'].points = new_points_1
-    new_line_1['vtk_obj'].auto_cells()
-    new_line_2['vtk_obj'].points = new_points_2
-    new_line_2['vtk_obj'].auto_cells()
-    """Replace VTK object"""
-    if new_line_1['vtk_obj'].points_number > 0:
-        self.parent.geol_coll.replace_vtk(uid=current_uid_paper, vtk_object=new_line_1['vtk_obj'])
-        del new_line_1
-    else:
-        print("Empty object")
-    """Create entity from the dictionary"""
-    if new_line_2['vtk_obj'].points_number > 0:
-        self.parent.geol_coll.add_entity_from_dict(new_line_2)
-        del new_line_2
-    else:
-        print("Empty object")
+    replace = 1 # replace = 1 for the first line to operate replace_vtk
+    uids = [current_uid_scissors]
+    for line in lines:
+        """Create empty dictionary for the output lines."""
+        new_line = deepcopy(self.parent.geol_coll.geological_entity_dict)
+        new_line['name'] = self.parent.geol_coll.df.loc[self.parent.geol_coll.df['uid'] == current_uid_paper, 'name'].values[0] + '_split'
+        new_line['topological_type'] = self.parent.geol_coll.df.loc[self.parent.geol_coll.df['uid'] == current_uid_paper, 'topological_type'].values[0]
+        new_line['geological_type'] = self.parent.geol_coll.df.loc[self.parent.geol_coll.df['uid'] == current_uid_paper, 'geological_type'].values[0]
+        new_line['geological_feature'] = self.parent.geol_coll.df.loc[self.parent.geol_coll.df['uid'] == current_uid_paper, 'geological_feature'].values[0]
+        new_line['scenario'] = self.parent.geol_coll.df.loc[self.parent.geol_coll.df['uid'] == current_uid_paper, 'scenario'].values[0]
+        if isinstance(self, ViewMap):
+            new_line['x_section'] = None
+            new_line['vtk_obj'] = PolyLine()
+        elif isinstance(self, ViewXsection):
+            new_line['x_section'] = self.this_x_section_uid
+            new_line['vtk_obj'] = XsPolyLine(self.this_x_section_uid, parent=self.parent)
+        outUV = deepcopy(np.array(line))
+        """Un-stack output coordinates and write them to the empty dictionary."""
+        outU = outUV[:, 0]
+        outV = outUV[:, 1]
+        """Convert local coordinates to XYZ ones."""
+        if isinstance(self, ViewMap):
+            outX = outU
+            outY = outV
+            outZ = np.zeros(np.shape(outX))
+        elif isinstance(self, ViewXsection):
+            outX, outY = self.parent.xsect_coll.get_XY_from_W(section_uid=self.this_x_section_uid, W=outU)
+            outZ = outV
+        """Create new vtk objects"""
+        new_points = np.column_stack((outX, outY, outZ))
+        new_line['vtk_obj'].points = new_points
+        new_line['vtk_obj'].auto_cells()
+        if new_line['vtk_obj'].points_number > 0:
+            """Replace VTK object"""
+            if replace == 1:
+                self.parent.geol_coll.replace_vtk(uid=current_uid_paper, vtk_object=new_line['vtk_obj'])
+                self.parent.geology_geom_modified_signal.emit([current_uid_paper])  # emit uid as list to force redraw()
+                replace = 0
+                uids.append(current_uid_paper)
+            else:
+                """Create entity from the dictionary"""
+                uid = self.parent.geol_coll.add_entity_from_dict(new_line)
+                uids.append(uid)
+            del new_line['vtk_obj']
+        else:
+            print("Empty object")
     """Deselect input line and force redraw"""
     self.selected_uids = []
-    self.parent.geology_geom_modified_signal.emit([current_uid_paper, current_uid_scissors])  # emit uid as list to force redraw()
+    self.parent.geology_geom_modified_signal.emit(uids)  # emit uid as list to force redraw()
     """Un-Freeze QT interface"""
     for action in self.findChildren(QAction):
         action.setEnabled(True)
@@ -1169,7 +1160,7 @@ def copy_parallel(self):
     """Create entity from the dictionary and run left_right."""
     if line_dict['vtk_obj'].points_number > 0:
         output_uid = self.parent.geol_coll.add_entity_from_dict(line_dict)
-        self.left_right(output_uid)
+        left_right(output_uid)
     else:
         print("Empty object")
     """Un-Freeze QT interface"""
@@ -1260,7 +1251,7 @@ def copy_kink(self):
     """Create entity from the dictionary and run left_right."""
     if line_dict['vtk_obj'].points_number > 0:
         output_uid = self.parent.geol_coll.add_entity_from_dict(line_dict)
-        self.left_right(output_uid)
+        left_right(output_uid)
     else:
         print("Empty object")
     """Un-Freeze QT interface"""
@@ -1325,7 +1316,7 @@ def copy_similar(self):
     line_dict['name'] = out_line_name
     """Create entity from the dictionary and run left_right."""
     output_uid = self.parent.geol_coll.add_entity_from_dict(line_dict)
-    self.left_right(output_uid)
+    left_right(output_uid)
     """Deselect input line."""
     if line_dict['vtk_obj'].points_number > 0:
         self.selected_uids = []
@@ -1358,6 +1349,7 @@ def measure_distance(self):
 
 def flip_line(self, uid=None):
     """Ensures lines are oriented left-to-right and bottom-to-top"""
+    # self.parent.geol_coll.get_uid_vtk_obj(uid).points = np.flip(self.parent.geol_coll.get_uid_vtk_obj(uid).points, 0)
     self.parent.geol_coll.get_uid_vtk_obj(uid).points = np.flip(self.parent.geol_coll.get_uid_vtk_obj(uid).points, 0)
 
 
@@ -1372,6 +1364,6 @@ def left_right(self, uid=None):
     else:
         return
     if U_line[0] > U_line[-1]:  # reverse if right-to-left
-        self.flip_line(uid=uid)
+        flip_line(uid=uid)
     elif U_line[0] == U_line[-1] and V_line[0] > V_line[-1]:  # reverse if vertical up-to-down
-        self.flip_line(uid=uid)
+        flip_line(uid=uid)
