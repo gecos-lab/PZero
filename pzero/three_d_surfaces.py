@@ -225,41 +225,33 @@ def implicit_model_loop_structural(self):
     all_input_data_df.dropna(axis=1, how='all', inplace=True)
     toc()
     print("all_input_data_df:\n", all_input_data_df)
-    """Get bounding box of input data to be used as input for the implicit model domain."""
-    origin_x = all_input_data_df['X'].min()
-    origin_y = all_input_data_df['Y'].min()
-    origin_z = all_input_data_df['Z'].min()
-    maximum_x = all_input_data_df['X'].max()
-    maximum_y = all_input_data_df['Y'].max()
-    maximum_z = all_input_data_df['Z'].max()
+    """Ask for bounding box for the model"""
+    input_dict = {'boundary': ['Boundary: ', self.boundary_coll.get_names()], 'maximum_z': ['Maximum Z: ', 1000.0], 'origin_z': ['Minimum Z: ', -1000.0], 'method': ['Interpolation method: ', ['PLI', 'FDI', 'surfe']]}
+    options_dict = multiple_input_dialog(title='Implicit Modelling - LoopStructural algorithms', input_dict=input_dict)
+    if options_dict is None:
+        options_dict['boundary'] = self.boundary_coll.get_names()[0]
+        options_dict['origin_z'] = -1000.0
+        options_dict['maximum_z'] = 1000.0
+        options_dict['method'] = 'PLI'
+    boundary_uid = self.boundary_coll.df.loc[self.boundary_coll.df['name'] == options_dict['boundary'], 'uid'].values[0]
+    origin_x = self.boundary_coll.get_uid_vtk_obj(boundary_uid).GetBounds()[0]
+    origin_y = self.boundary_coll.get_uid_vtk_obj(boundary_uid).GetBounds()[2]
+    origin_z = options_dict['origin_z']
+    maximum_x = self.boundary_coll.get_uid_vtk_obj(boundary_uid).GetBounds()[1]
+    maximum_y = self.boundary_coll.get_uid_vtk_obj(boundary_uid).GetBounds()[3]
+    maximum_z = options_dict['maximum_z']
     edge_x = maximum_x - origin_x
     edge_y = maximum_y - origin_y
     edge_z = maximum_z - origin_z
-    """Apply scale factor"""
-    input_dict = {'scale_factor_x': ['Scale factor X: ', 0.6], 'scale_factor_y': ['Scale factor Y: ', 0.6], 'scale_factor_z': ['Scale factor Z: ', 0.9], 'method': ['Interpolation method: ', ['PLI', 'FDI', 'surfe']]}
-    options_dict = multiple_input_dialog(title='Implicit Modelling - LoopStructural algorithms', input_dict=input_dict)
-    if options_dict is None:
-        options_dict['scale_factor_x'] = 0.6
-        options_dict['scale_factor_y'] = 0.6
-        options_dict['scale_factor_z'] = 0.9
-        options_dict['method'] = 'PLI'
-    delta_x = edge_x * (1.0 - options_dict['scale_factor_x']) / 2
-    delta_y = edge_y * (1.0 - options_dict['scale_factor_y']) / 2
-    delta_z = edge_z * (1.0 - options_dict['scale_factor_z']) / 2
-    origin_x += delta_x
-    origin_y += delta_y
-    origin_z += delta_z
-    maximum_x -= delta_x
-    maximum_y -= delta_y
-    maximum_z -= delta_z
-    edge_x -= delta_x * 2
-    edge_y -= delta_y * 2
-    edge_z -= delta_z * 2
     """Define origin and maximum extension of modelling domain"""
     origin = [origin_x, origin_y, origin_z]
     maximum = [maximum_x, maximum_y, maximum_z]
     print("origin: ", origin)
     print("maximum: ", maximum)
+    """Check if Input Data and Bounding Box overlaps. If so, gives warning and exists the tool."""
+    if (all_input_data_df['X'].min() > maximum_x) or (all_input_data_df['X'].max() < origin_x) or (all_input_data_df['Y'].min() > maximum_y) or (all_input_data_df['Y'].max() < origin_y) or (all_input_data_df['Z'].min() > maximum_z) or (all_input_data_df['Z'].max() < origin_z):
+        print("Exit tool: Bounding Box does not intersect input data")
+        return
     default_spacing = np.cbrt(edge_x * edge_y * edge_z / (50 * 50 * 25))  # default dimension in Loop is 50 x 50 x 25
     target_spacing = input_one_value_dialog(title='Implicit Modelling - LoopStructural algorithms', label='Grid target spacing in model units\n (yields a 62500 cells model)', default_value=default_spacing)
     if target_spacing is None or target_spacing <= 0:

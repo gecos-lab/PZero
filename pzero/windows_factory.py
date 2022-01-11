@@ -2263,6 +2263,8 @@ class View2D(BaseView):
                             self.parent.geology_geom_modified_signal.emit([uid])  # emit uid as list to force redraw
                         elif self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0] == False:
                             return
+                    else:
+                        return
             event.canvas.mpl_disconnect(self.cid_select)
             self.figure.canvas.stop_event_loop()
 

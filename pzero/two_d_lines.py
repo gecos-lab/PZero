@@ -139,6 +139,9 @@ def edit_line(self):
     if not self.selected_uids:
         print(" -- No input data selected -- ")
         return
+    if (self.parent.geol_coll.get_uid_topological_type(self.selected_uids[0]) != "PolyLine") and (self.parent.geol_coll.get_uid_topological_type(self.selected_uids[0]) != "XsPolyLine"):
+        print(" -- Selected data is not a line -- ")
+        return
     """Freeze QT interface"""
     for action in self.findChildren(QAction):
         if isinstance(action.parentWidget(), NavigationToolbar) is False:
@@ -235,6 +238,9 @@ def move_line(self):
     if not self.selected_uids:
         print(" -- No input data selected -- ")
         return
+    if (self.parent.geol_coll.get_uid_topological_type(self.selected_uids[0]) != "PolyLine") and (self.parent.geol_coll.get_uid_topological_type(self.selected_uids[0]) != "XsPolyLine"):
+        print(" -- Selected data is not a line -- ")
+        return
     """Freeze QT interface"""
     for action in self.findChildren(QAction):
         if isinstance(action.parentWidget(), NavigationToolbar) is False:
@@ -268,6 +274,9 @@ def rotate_line(self):
     """Check if a line is selected"""
     if not self.selected_uids:
         print(" -- No input data selected -- ")
+        return
+    if (self.parent.geol_coll.get_uid_topological_type(self.selected_uids[0]) != "PolyLine") and (self.parent.geol_coll.get_uid_topological_type(self.selected_uids[0]) != "XsPolyLine"):
+        print(" -- Selected data is not a line -- ")
         return
     """Freeze QT interface"""
     for action in self.findChildren(QAction):
@@ -323,6 +332,9 @@ def extend_line(self):
     """Check if a line is selected"""
     if not self.selected_uids:
         print(" -- No input data selected -- ")
+        return
+    if (self.parent.geol_coll.get_uid_topological_type(self.selected_uids[0]) != "PolyLine") and (self.parent.geol_coll.get_uid_topological_type(self.selected_uids[0]) != "XsPolyLine"):
+        print(" -- Selected data is not a line -- ")
         return
     """Freeze QT interface"""
     for action in self.findChildren(QAction):
@@ -447,6 +459,9 @@ def split_line_line(self):
     if not self.selected_uids:
         print(" -- No input data selected -- ")
         return
+    if (self.parent.geol_coll.get_uid_topological_type(self.selected_uids[0]) != "PolyLine") and (self.parent.geol_coll.get_uid_topological_type(self.selected_uids[0]) != "XsPolyLine"):
+        print(" -- Selected data is not a line -- ")
+        return
     """Freeze QT interface"""
     for action in self.findChildren(QAction):
         if isinstance(action.parentWidget(), NavigationToolbar) is False:
@@ -544,6 +559,9 @@ def split_line_existing_point(self):
     """Check if a line is selected"""
     if not self.selected_uids:
         print(" -- No input data selected -- ")
+        return
+    if (self.parent.geol_coll.get_uid_topological_type(self.selected_uids[0]) != "PolyLine") and (self.parent.geol_coll.get_uid_topological_type(self.selected_uids[0]) != "XsPolyLine"):
+        print(" -- Selected data is not a line -- ")
         return
     """Freeze QT interface"""
     for action in self.findChildren(QAction):
@@ -669,6 +687,9 @@ def merge_lines(self):
     if not self.selected_uids:
         print(" -- No input data selected -- ")
         return
+    if (self.parent.geol_coll.get_uid_topological_type(self.selected_uids[0]) != "PolyLine") and (self.parent.geol_coll.get_uid_topological_type(self.selected_uids[0]) != "XsPolyLine"):
+        print(" -- Selected data is not a line -- ")
+        return
     """Freeze QT interface"""
     for action in self.findChildren(QAction):
         if isinstance(action.parentWidget(), NavigationToolbar) is False:
@@ -767,6 +788,9 @@ def snap_line(self):
     if not self.selected_uids:
         print(" -- No input data selected -- ")
         return
+    if (self.parent.geol_coll.get_uid_topological_type(self.selected_uids[0]) != "PolyLine") and (self.parent.geol_coll.get_uid_topological_type(self.selected_uids[0]) != "XsPolyLine"):
+        print(" -- Selected data is not a line -- ")
+        return
     """Freeze QT interface"""
     for action in self.findChildren(QAction):
         if isinstance(action.parentWidget(), NavigationToolbar) is False:
@@ -850,6 +874,9 @@ def resample_line_distance(self):
     if not self.selected_uids:
         print(" -- No input data selected -- ")
         return
+    if (self.parent.geol_coll.get_uid_topological_type(self.selected_uids[0]) != "PolyLine") and (self.parent.geol_coll.get_uid_topological_type(self.selected_uids[0]) != "XsPolyLine"):
+        print(" -- Selected data is not a line -- ")
+        return
     """Freeze QT interface"""
     for action in self.findChildren(QAction):
         if isinstance(action.parentWidget(), NavigationToolbar) is False:
@@ -926,6 +953,9 @@ def resample_line_number_points(self):
     if not self.selected_uids:
         print(" -- No input data selected -- ")
         return
+    if (self.parent.geol_coll.get_uid_topological_type(self.selected_uids[0]) != "PolyLine") and (self.parent.geol_coll.get_uid_topological_type(self.selected_uids[0]) != "XsPolyLine"):
+        print(" -- Selected data is not a line -- ")
+        return
     """Freeze QT interface"""
     for action in self.findChildren(QAction):
         if isinstance(action.parentWidget(), NavigationToolbar) is False:
@@ -1001,6 +1031,9 @@ def simplify_line(self):
     if not self.selected_uids:
         print(" -- No input data selected -- ")
         return
+    if (self.parent.geol_coll.get_uid_topological_type(self.selected_uids[0]) != "PolyLine") and (self.parent.geol_coll.get_uid_topological_type(self.selected_uids[0]) != "XsPolyLine"):
+        print(" -- Selected data is not a line -- ")
+        return
     """Freeze QT interface"""
     for action in self.findChildren(QAction):
         if isinstance(action.parentWidget(), NavigationToolbar) is False:
@@ -1075,6 +1108,9 @@ def copy_parallel(self):
     """Check if a line is selected"""
     if not self.selected_uids:
         print(" -- No input data selected -- ")
+        return
+    if (self.parent.geol_coll.get_uid_topological_type(self.selected_uids[0]) != "PolyLine") and (self.parent.geol_coll.get_uid_topological_type(self.selected_uids[0]) != "XsPolyLine"):
+        print(" -- Selected data is not a line -- ")
         return
     """Freeze QT interface"""
     for action in self.findChildren(QAction):
@@ -1179,6 +1215,9 @@ def copy_kink(self):
     if not self.selected_uids:
         print(" -- No input data selected -- ")
         return
+    if (self.parent.geol_coll.get_uid_topological_type(self.selected_uids[0]) != "PolyLine") and (self.parent.geol_coll.get_uid_topological_type(self.selected_uids[0]) != "XsPolyLine"):
+        print(" -- Selected data is not a line -- ")
+        return
     """Freeze QT interface"""
     for action in self.findChildren(QAction):
         if isinstance(action.parentWidget(), NavigationToolbar) is False:
@@ -1267,6 +1306,9 @@ def copy_similar(self):
     """Check if a line is selected"""
     if not self.selected_uids:
         print(" -- No input data selected -- ")
+        return
+    if (self.parent.geol_coll.get_uid_topological_type(self.selected_uids[0]) != "PolyLine") and (self.parent.geol_coll.get_uid_topological_type(self.selected_uids[0]) != "XsPolyLine"):
+        print(" -- Selected data is not a line -- ")
         return
     """Freeze QT interface"""
     for action in self.findChildren(QAction):
