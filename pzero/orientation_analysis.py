@@ -4,7 +4,7 @@ PZero© Andrea Bistacchi"""
 import numpy as np
 import pandas as pd
 from .helper_dialogs import multiple_input_dialog, input_one_value_dialog, input_text_dialog, input_combo_dialog
-from .entities_factory import TriSurf, XsPolyLine, PolyLine, VertexSet, Voxet, XsTSurf, XsVertexSet
+from .entities_factory import TriSurf, XsPolyLine, PolyLine, VertexSet, Voxet, XsTriSurf, XsVertexSet
 
 """IN THE FUTURE add functions for ortientation analysis."""
 

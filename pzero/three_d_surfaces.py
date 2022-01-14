@@ -10,7 +10,7 @@ import pandas as pd
 from .geological_collection import GeologicalCollection
 from .mesh3d_collection import Mesh3DCollection
 from .helper_dialogs import multiple_input_dialog, input_one_value_dialog, input_text_dialog, input_combo_dialog, input_checkbox_dialog, tic, toc, progress_dialog
-from .entities_factory import TriSurf, XsPolyLine, PolyLine, VertexSet, Voxet, XsVoxet, XsTSurf, XsVertexSet, MapImage, DEM
+from .entities_factory import TriSurf, XsPolyLine, PolyLine, VertexSet, Voxet, XsVoxet, XsTriSurf, XsVertexSet, MapImage, DEM
 
 """LoopStructural import(s)"""
 import LoopStructural as loop3d  # which name?

@@ -760,13 +760,13 @@ class XsPolyLine(PolyLine, XSectionBaseEntity):
         return xpline_copy
 
 
-class XsTSurf(TriSurf, XSectionBaseEntity):
-    """XsTSurf is a triangulated surface belonging to a unique XSection, derived from XSectionBaseEntity and TriSurf"""
+class XsTriSurf(TriSurf, XSectionBaseEntity):
+    """XsTriSurf is a triangulated surface belonging to a unique XSection, derived from XSectionBaseEntity and TriSurf"""
     def __init__(self, *args, **kwargs):
-        super(XsTSurf, self).__init__(*args, **kwargs)
+        super(XsTriSurf, self).__init__(*args, **kwargs)
 
     def deep_copy(self):
-        xtsurf_copy = XsTSurf()
+        xtsurf_copy = XsTriSurf()
         xtsurf_copy.DeepCopy(self)
         return xtsurf_copy
 

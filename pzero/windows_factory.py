@@ -7,7 +7,7 @@ from PyQt5.QtCore import Qt
 
 """PZero imports"""
 from .base_view_window_ui import Ui_BaseViewWindow
-from .entities_factory import VertexSet, PolyLine, TriSurf, TetraSolid, XsVertexSet, XsPolyLine, DEM, MapImage, Voxet, XsVoxet, Plane, Seismics, XsTSurf
+from .entities_factory import VertexSet, PolyLine, TriSurf, TetraSolid, XsVertexSet, XsPolyLine, DEM, MapImage, Voxet, XsVoxet, Plane, Seismics, XsTriSurf
 from .helper_dialogs import input_one_value_dialog, input_text_dialog, input_combo_dialog, message_dialog, options_dialog, multiple_input_dialog, tic, toc
 # from .geological_collection import GeologicalCollection
 # from copy import deepcopy
