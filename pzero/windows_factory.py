@@ -1607,6 +1607,12 @@ class View3D(BaseView):
     """Create 3D view and import UI created with Qt Designer by subclassing base view"""
     """parent is the QT object that is launching this one, hence the ProjectWindow() instance in this case"""
 
+# [Gabriele] Set the default 3D view as x +ve. Maybe there is a better place to put this variable
+
+    default_view = [(554532.4159059974, 5063817.5, 0.0),
+ (548273.0, 5063817.5, 0.0),
+ (0.0, 0.0, 1.0)]
+
     def __init__(self, *args, **kwargs):
         super(View3D, self).__init__(*args, **kwargs)
 
@@ -1628,6 +1634,64 @@ class View3D(BaseView):
         """Customize menus and tools for this view"""
         self.menuBaseView.setTitle("Project")
         self.actionBase_Tool.setText("Project")
+
+        # [Gabriele] Default views menu
+
+        self.menuView = QMenu("Views",self)
+        self.menuWindow.addMenu(self.menuView)
+
+        # [Gabriele] Save current view
+        self.setView = QAction("Set view", self)
+        self.setView.triggered.connect(lambda: self.view_manager("save"))
+        self.menuView.addAction(self.setView)
+
+
+        self.menuView.addSeparator()
+
+        # [Gabriele] x,y,z +ve and -ve options
+        self.xposView = QAction("x +ve", self)
+        self.xposView.triggered.connect(lambda: self.plotter.view_yz())
+        self.menuView.addAction(self.xposView)
+
+
+        self.xnegView = QAction("x -ve", self)
+        self.xnegView.triggered.connect(lambda: self.plotter.view_yz(True))
+        self.menuView.addAction(self.xnegView)
+
+        self.yposView = QAction("y +ve", self)
+        self.yposView.triggered.connect(lambda: self.plotter.view_xz(True))
+        self.menuView.addAction(self.yposView)
+
+        self.ynegView = QAction("y -ve", self)
+        self.ynegView.triggered.connect(lambda: self.plotter.view_xz())
+        self.menuView.addAction(self.ynegView)
+
+        self.zposView = QAction("z +ve", self)
+        self.zposView.triggered.connect(lambda: self.plotter.view_xy())
+        self.menuView.addAction(self.zposView)
+
+        self.znegView = QAction("z -ve", self)
+        self.znegView.triggered.connect(lambda: self.plotter.view_xy(True))
+        self.menuView.addAction(self.znegView)
+
+        self.menuView.addSeparator()
+
+        # [Gabriele] Return to saved view
+        self.resetView = QAction("Reset view", self)
+        self.resetView.triggered.connect(lambda: self.view_manager("reset"))
+        self.menuView.addAction(self.resetView)
+
+    def view_manager(self,mode):
+        if mode == "save":
+                self.default_view = self.plotter.camera_position
+        elif mode == "reset":
+                self.plotter.camera_position = self.default_view
+        #
+        # self.setView = QAction(BaseViewWindow)
+        # self.setView.setObjectName("setview")
+        # self.menuViews.addAction("setview")
+
+
 
     def initialize_interactor(self):
         """Add the pyvista interactor object to self.ViewFrameLayout ->
@@ -2561,7 +2625,7 @@ class ViewMap(View2D):
         elif isinstance(plot_entity, TriSurf):
             if isinstance(plot_entity.points, np.ndarray):
                 if plot_entity.points_number > 0:
-                    """This  check is needed to avoid errors when trying to plot an empty 
+                    """This  check is needed to avoid errors when trying to plot an empty
                     PolyData, just created at the beginning of a digitizing session.
                     Check if both these conditions are necessary_________________"""
                     if collection == 'geol_coll':
