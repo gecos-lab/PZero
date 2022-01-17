@@ -22,6 +22,7 @@ from .legend_manager import Legend
 from .properties_manager import PropertiesCMaps
 from .gocad2vtk import gocad2vtk, vtk2gocad, gocad2vtk_section, gocad2vtk_boundary
 from .pyvista2vtk import pyvista2vtk
+from .pc2vtk import pc2vtk
 from .vedo2vtk import vedo2vtk
 from .shp2vtk import shp2vtk
 from .dem2vtk import dem2vtk
@@ -121,6 +122,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.actionImportGocadXsection.triggered.connect(self.import_gocad_section)
         self.actionImportGocadBoundary.triggered.connect(self.import_gocad_boundary)  #_______________________________________
         self.actionImportPyvista.triggered.connect(lambda: pyvista2vtk(self=self))
+        self.actionImportPC.triggered.connect(self.import_PC)
         self.actionImportVedo.triggered.connect(lambda: vedo2vtk(self=self))
         self.actionImportSHP.triggered.connect(self.import_SHP)
         self.actionImportDEM.triggered.connect(self.import_DEM)
@@ -856,6 +858,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 gocad2vtk_section(self=self, in_file_name=in_file_name, uid_from_name=False, x_section=x_section_uid)
                 self.prop_legend.update_widget(parent=self)
 
+
+
+
     def import_gocad_boundary(self):  #_________________________________________________
         """Import Gocad ASCII file and update boundary collection."""
         self.TextTerminal.appendPlainText("Importing Gocad ASCII format as boundary")
@@ -865,6 +870,16 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         if in_file_name:
             self.TextTerminal.appendPlainText('in_file_name: ' + in_file_name)
             gocad2vtk_boundary(self=self, in_file_name=in_file_name, uid_from_name=False)
+
+    def import_PC(self):
+        '''[Gabriele] Import point cloud data. File extension dependent (.txt, .xyz, .las) -> options to display where the data begins (similar to stereonet) when needed (e.g. .txt files)'''
+
+        self.TextTerminal.appendPlainText("Importing point cloud data")
+
+        in_file_name = open_file_dialog(parent=self,caption='Import point cloud data',filter="Text files (*.txt *.csv);;xyz files (*.xyz);;LAS files (*.LAS)")
+        if in_file_name:
+            self.TextTerminal.appendPlainText(f'in_file_name: {in_file_name}')
+            pc2vtk(self=self,in_file_name=in_file_name)
 
     def import_SHP(self):  # _______________ MAKE IMPORT SHP BOUNDARY
         """Import SHP file and update geological collection."""

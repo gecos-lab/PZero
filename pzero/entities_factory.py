@@ -17,9 +17,9 @@ in order to obtain the standard classes VertexSet, PolyLine, and TriSurf, and vt
 for 0D, 1D, 2D and 3D simplicial manifold objects respectively.
 
 We also expose as much as possible VTK attributes and methods as Numpy arrays and property methods to make
-the code more compact, readable and "Pythonic" (also thanks to vtk.numpy_interface.dataset_adapter = dsa). 
+the code more compact, readable and "Pythonic" (also thanks to vtk.numpy_interface.dataset_adapter = dsa).
 
-We do not use vtkFieldData since metadata for each entity are recorded in the Pandas dataframe of the 
+We do not use vtkFieldData since metadata for each entity are recorded in the Pandas dataframe of the
 collections for geological, cross-sections, DOMs, etc. entities. This is more flexible since field
 data cannot store strings, for instance.
 
@@ -45,7 +45,7 @@ Note that cell type in VTK is defined as follows:
    VTK_PYRAMID = 14,
    VTK_PENTAGONAL_PRISM = 15,
    VTK_HEXAGONAL_PRISM = 16,
-  
+
 // Quadratic, isoparametric cells
    VTK_QUADRATIC_EDGE = 21,
    VTK_QUADRATIC_TRIANGLE = 22,
@@ -62,16 +62,16 @@ Note that cell type in VTK is defined as follows:
    VTK_BIQUADRATIC_QUADRATIC_WEDGE = 32,
    VTK_BIQUADRATIC_QUADRATIC_HEXAHEDRON = 33,
    VTK_BIQUADRATIC_TRIANGLE = 34,
-  
+
 // Cubic, isoparametric cell
    VTK_CUBIC_LINE = 35,
-  
+
 // Special class of cells formed by convex group of points
    VTK_CONVEX_POINT_SET = 41,
-  
+
 // Polyhedron cell (consisting of polygonal faces)
    VTK_POLYHEDRON = 42,
-  
+
 // Higher order cells in parametric form
    VTK_PARAMETRIC_CURVE = 51,
    VTK_PARAMETRIC_SURFACE = 52,
@@ -79,7 +79,7 @@ Note that cell type in VTK is defined as follows:
    VTK_PARAMETRIC_QUAD_SURFACE = 54,
    VTK_PARAMETRIC_TETRA_REGION = 55,
    VTK_PARAMETRIC_HEX_REGION = 56,
-  
+
 // Higher order cells
    VTK_HIGHER_ORDER_EDGE = 60,
    VTK_HIGHER_ORDER_TRIANGLE = 61,
@@ -89,7 +89,7 @@ Note that cell type in VTK is defined as follows:
    VTK_HIGHER_ORDER_WEDGE = 65,
    VTK_HIGHER_ORDER_PYRAMID = 66,
    VTK_HIGHER_ORDER_HEXAHEDRON = 67,
-  
+
 // Arbitrary order Lagrange elements (formulated separated from generic higher order cells)
    VTK_LAGRANGE_CURVE = 68,
    VTK_LAGRANGE_TRIANGLE = 69,
@@ -98,7 +98,7 @@ Note that cell type in VTK is defined as follows:
    VTK_LAGRANGE_HEXAHEDRON = 72,
    VTK_LAGRANGE_WEDGE = 73,
    VTK_LAGRANGE_PYRAMID = 74,
-  
+
 // Arbitrary order Bezier elements (formulated separated from generic higher order cells)
    VTK_BEZIER_CURVE = 75,
    VTK_BEZIER_TRIANGLE = 76,
@@ -1500,12 +1500,66 @@ class DEM(vtk.vtkStructuredGrid):
 class PCDom(vtk.vtkPointSet):
     """Point Cloud DOM - TO BE IMPLEMENTED
     See discussion at https://discourse.vtk.org/t/proposal-adding-a-vtkpointcloud-data-structure/3872/3"""
+    def __init__(self, *args, **kwargs):
+        super(PCDom, self).__init__(*args, **kwargs)
 
     def deep_copy(self):
         pcdom_copy = PCDom()
         pcdom_copy.DeepCopy(self)
         return pcdom_copy
 
+    @property
+    def bounds(self):
+        """Returns a list with xmin, xmax, ymin, ymax, zmin, zmax"""
+        return self.GetBounds()
+
+    @property
+    def points_number(self):
+        """Returns the number of points"""
+        return dsa.WrapDataObject(self).GetNumberOfPoints()
+
+    @property
+    def points(self):
+        """Returns point coordinates as a Numpy array"""
+        return dsa.WrapDataObject(self).Points
+
+    @points.setter
+    def points(self, points_matrix=None):
+        """Sets point coordinates from a Numpy array (sets a completely new point array)"""
+        dsa.WrapDataObject(self).Points = points_matrix
+
+    @property
+    def points_X(self):
+        """Returns X point coordinates as Numpy array"""
+        return self.points[:, 0]
+
+    @property
+    def points_Y(self):
+        """Returns Y point coordinates as Numpy array"""
+        return self.points[:, 1]
+
+    @property
+    def points_Z(self):
+        """Returns Z point coordinates as Numpy array"""
+        return self.points[:, 2]
+
+    @property
+    def cells_number(self):
+        """Returns the number of points"""
+        return dsa.WrapDataObject(self).GetNumberOfCells()
+
+    @property
+    def cells(self):
+        """Returns cells as Numpy array. Reimplemented in subclasses."""
+        pass
+
+    @property
+    def point_data_keys(self):
+        """Lists point data keys"""
+        try:
+            return dsa.WrapDataObject(self).PointData.keys()
+        except:
+            return []
 
 class TSDom(vtk.vtkPointSet):
     """Textured Surface DOM - TO BE IMPLEMENTED"""
