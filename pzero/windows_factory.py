@@ -7,7 +7,7 @@ from PyQt5.QtCore import Qt
 
 """PZero imports"""
 from .base_view_window_ui import Ui_BaseViewWindow
-from .entities_factory import VertexSet, PolyLine, TriSurf, TetraSolid, XsVertexSet, XsPolyLine, DEM, MapImage, Voxet, XsVoxet, Plane, Seismics, XsTriSurf
+from .entities_factory import VertexSet, PolyLine, TriSurf, TetraSolid, XsVertexSet, XsPolyLine, DEM, PCDom, MapImage, Voxet, XsVoxet, Plane, Seismics, XsTriSurf
 from .helper_dialogs import input_one_value_dialog, input_text_dialog, input_combo_dialog, message_dialog, options_dialog, multiple_input_dialog, tic, toc
 # from .geological_collection import GeologicalCollection
 # from copy import deepcopy
@@ -920,9 +920,11 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         """Called by self.DOMsTableWidget.itemChanged.connect(self.toggle_dom_visibility)."""
         check_state = self.DOMsTableWidget.item(cell.row(), 0).checkState()  # this is the check state of cell "name"
         uid = self.DOMsTableWidget.item(cell.row(), 1).text()  # this is the text of cell "uid"
+        #print(uid)
         if check_state == Qt.Checked:
             if not self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]:
                 self.actors_df.loc[self.actors_df['uid'] == uid, 'show'] = True
+                #print(self.actors_df['actor'])
                 self.set_actor_visible(uid=uid, visible=True)
         elif check_state == Qt.Unchecked:
             if self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]:
@@ -1796,6 +1798,7 @@ class View3D(BaseView):
             color_RGB = [color_R / 255, color_G / 255, color_B / 255]
             line_thick = self.parent.dom_coll.get_legend()['line_thick']
             plot_entity = self.parent.dom_coll.get_uid_vtk_obj(uid)
+            #print(plot_entity)
         elif collection == 'image_coll':
             """Note: no legend for image."""
             color_RGB = [255, 255, 255]
@@ -1889,6 +1892,11 @@ class View3D(BaseView):
                 this_actor = self.plot_mesh_3D(uid=uid, plot_entity=plot_entity, color_RGB=color_RGB, show_property=show_property, show_scalar_bar=show_scalar_bar,
                                                color_bar_range=None, show_property_title=show_property_title, line_thick=line_thick,
                                                plot_texture_option=False, plot_rgb_option=plot_rgb_option, visible=visible)
+
+        elif isinstance(plot_entity, PCDom):
+            #print(f'{plot_entity} is PCDom')
+            this_actor = self.plot_PC_3D(uid=uid,plot_entity=plot_entity)
+
         elif isinstance(plot_entity, MapImage):
             """Texture options according to type."""
             if plot_entity.bands_n == 3:
@@ -1941,7 +1949,7 @@ class View3D(BaseView):
             else:
                 this_actor = None
         else:
-            print("no class")
+            print("[Windows factory]: actor with no class")
             this_actor = None
         return this_actor
 
@@ -2024,6 +2032,22 @@ class View3D(BaseView):
 
     """Implementation of functions specific to this view (e.g. particular editing or visualization functions)"""
     """NONE AT THE MOMENT"""
+    def plot_PC_3D(self,uid=None,plot_entity=None,visible=None):
+        if not self.actors_df.empty:
+            """This stores the camera position before redrawing the actor.
+            Added to avoid a bug that sometimes sends the scene to a very distant place.
+            Could be used as a basis to implement saved views widgets, synced 3D views, etc.
+            The is is needed to avoid sending the camera to the origin that is the
+            default position before any mesh is plotted."""
+            camera_position = self.plotter.camera_position
+        this_actor= self.plotter.add_points(plot_entity,name=uid,point_size=5.0,render_points_as_spheres=True)
+        if not visible:
+            this_actor.SetVisibility(False)
+        if not self.actors_df.empty:
+            """See above."""
+            self.plotter.camera_position = camera_position
+        return this_actor
+
 
 
 class View2D(BaseView):

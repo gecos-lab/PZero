@@ -1497,9 +1497,9 @@ class DEM(vtk.vtkStructuredGrid):
         self.GetPointData().SetActiveTCoords(map_image_uid)
 
 
-class PCDom(vtk.vtkPointSet):
+class PCDom(vtk.vtkPolyData):
     """Point Cloud DOM - TO BE IMPLEMENTED
-    See discussion at https://discourse.vtk.org/t/proposal-adding-a-vtkpointcloud-data-structure/3872/3"""
+    See discussion at https://discourse.vtk.org/t/proposal-adding-a-vtkpointcloud-data-structure/3872/3 """
     def __init__(self, *args, **kwargs):
         super(PCDom, self).__init__(*args, **kwargs)
 
