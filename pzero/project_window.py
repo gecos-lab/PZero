@@ -31,6 +31,7 @@ from .segy2vtk import segy2vtk
 from .windows_factory import View3D
 from .windows_factory import ViewMap
 from .windows_factory import ViewXsection
+from .windows_factory import ViewImport
 from .helper_dialogs import options_dialog, save_file_dialog, open_file_dialog, input_combo_dialog, message_dialog, multiple_input_dialog, input_one_value_dialog, input_text_dialog, progress_dialog
 from .image2vtk import geo_image2vtk
 from .stl2vtk import vtk2stl, vtk2stl_dilation
@@ -122,7 +123,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.actionImportGocadXsection.triggered.connect(self.import_gocad_section)
         self.actionImportGocadBoundary.triggered.connect(self.import_gocad_boundary)  #_______________________________________
         self.actionImportPyvista.triggered.connect(lambda: pyvista2vtk(self=self))
-        self.actionImportPC.triggered.connect(self.import_PC)
+        self.actionImportPC.triggered.connect(lambda: ViewImport(parent=self))
         self.actionImportVedo.triggered.connect(lambda: vedo2vtk(self=self))
         self.actionImportSHP.triggered.connect(self.import_SHP)
         self.actionImportDEM.triggered.connect(self.import_DEM)
@@ -872,14 +873,12 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             gocad2vtk_boundary(self=self, in_file_name=in_file_name, uid_from_name=False)
 
     def import_PC(self):
-        '''[Gabriele] Import point cloud data. File extension dependent (.txt, .xyz, .las) -> options to display where the data begins (similar to stereonet) when needed (e.g. .txt files)'''
+        '''[Gabriele] Import point cloud data. File extension dependent (.txt, .xyz, .las) -> Ui_ImportOptionsWindow ui to preview the data (similar to stereonet)'''
 
-        self.TextTerminal.appendPlainText("Importing point cloud data")
-
-        in_file_name = open_file_dialog(parent=self,caption='Import point cloud data',filter="Text files (*.txt *.csv);;xyz files (*.xyz);;LAS files (*.LAS)")
-        if in_file_name:
-            self.TextTerminal.appendPlainText(f'in_file_name: {in_file_name}')
-            pc2vtk(self=self,in_file_name=in_file_name)
+        self.window = QMainWindow()
+        self.ui = Ui_ImportOptionsWindow(self)
+        self.ui.setupUi(self.window)
+        self.window.show()
 
     def import_SHP(self):  # _______________ MAKE IMPORT SHP BOUNDARY
         """Import SHP file and update geological collection."""

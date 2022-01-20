@@ -1,0 +1,331 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>ImportOptionsWindow</class>
+ <widget class="QMainWindow" name="ImportOptionsWindow">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>901</width>
+    <height>844</height>
+   </rect>
+  </property>
+  <property name="sizePolicy">
+   <sizepolicy hsizetype="MinimumExpanding" vsizetype="MinimumExpanding">
+    <horstretch>0</horstretch>
+    <verstretch>0</verstretch>
+   </sizepolicy>
+  </property>
+  <property name="minimumSize">
+   <size>
+    <width>900</width>
+    <height>690</height>
+   </size>
+  </property>
+  <property name="maximumSize">
+   <size>
+    <width>16777215</width>
+    <height>16777215</height>
+   </size>
+  </property>
+  <property name="baseSize">
+   <size>
+    <width>900</width>
+    <height>600</height>
+   </size>
+  </property>
+  <property name="windowTitle">
+   <string>Import options</string>
+  </property>
+  <widget class="QWidget" name="centralwidget">
+   <property name="enabled">
+    <bool>true</bool>
+   </property>
+   <property name="sizePolicy">
+    <sizepolicy hsizetype="MinimumExpanding" vsizetype="MinimumExpanding">
+     <horstretch>0</horstretch>
+     <verstretch>0</verstretch>
+    </sizepolicy>
+   </property>
+   <property name="minimumSize">
+    <size>
+     <width>900</width>
+     <height>600</height>
+    </size>
+   </property>
+   <property name="maximumSize">
+    <size>
+     <width>16777215</width>
+     <height>16777215</height>
+    </size>
+   </property>
+   <property name="baseSize">
+    <size>
+     <width>900</width>
+     <height>600</height>
+    </size>
+   </property>
+   <property name="contextMenuPolicy">
+    <enum>Qt::DefaultContextMenu</enum>
+   </property>
+   <layout class="QHBoxLayout" name="horizontalLayout">
+    <item>
+     <widget class="QTableView" name="dataView"/>
+    </item>
+    <item>
+     <widget class="QWidget" name="OptionsWidget" native="true">
+      <property name="sizePolicy">
+       <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+        <horstretch>0</horstretch>
+        <verstretch>0</verstretch>
+       </sizepolicy>
+      </property>
+      <property name="baseSize">
+       <size>
+        <width>0</width>
+        <height>0</height>
+       </size>
+      </property>
+      <layout class="QVBoxLayout" name="OptionsLayout">
+       <item alignment="Qt::AlignHCenter">
+        <widget class="QLabel" name="OptionsLabel">
+         <property name="sizePolicy">
+          <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+           <horstretch>0</horstretch>
+           <verstretch>0</verstretch>
+          </sizepolicy>
+         </property>
+         <property name="text">
+          <string>Import options</string>
+         </property>
+        </widget>
+       </item>
+       <item alignment="Qt::AlignHCenter">
+        <widget class="QGroupBox" name="ImportGroupBox">
+         <property name="sizePolicy">
+          <sizepolicy hsizetype="Fixed" vsizetype="Expanding">
+           <horstretch>0</horstretch>
+           <verstretch>0</verstretch>
+          </sizepolicy>
+         </property>
+         <property name="flat">
+          <bool>false</bool>
+         </property>
+         <property name="checkable">
+          <bool>false</bool>
+         </property>
+         <layout class="QHBoxLayout" name="horizontalLayout_3">
+          <property name="spacing">
+           <number>8</number>
+          </property>
+          <item>
+           <widget class="QLineEdit" name="PathlineEdit">
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Maximum" vsizetype="Fixed">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+            <property name="maxLength">
+             <number>32767</number>
+            </property>
+            <property name="placeholderText">
+             <string>file path...</string>
+            </property>
+            <property name="clearButtonEnabled">
+             <bool>false</bool>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QToolButton" name="PathtoolButton">
+            <property name="text">
+             <string>...</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <layout class="QFormLayout" name="formLayout">
+         <property name="sizeConstraint">
+          <enum>QLayout::SetDefaultConstraint</enum>
+         </property>
+         <property name="horizontalSpacing">
+          <number>6</number>
+         </property>
+         <property name="verticalSpacing">
+          <number>30</number>
+         </property>
+         <property name="leftMargin">
+          <number>14</number>
+         </property>
+         <property name="rightMargin">
+          <number>21</number>
+         </property>
+         <property name="bottomMargin">
+          <number>6</number>
+         </property>
+         <item row="0" column="0">
+          <widget class="QLabel" name="StartColLabel">
+           <property name="text">
+            <string>Start from column</string>
+           </property>
+          </widget>
+         </item>
+         <item row="0" column="1">
+          <widget class="QSpinBox" name="StartColspinBox">
+           <property name="singleStep">
+            <number>1</number>
+           </property>
+           <property name="value">
+            <number>0</number>
+           </property>
+          </widget>
+         </item>
+         <item row="1" column="0">
+          <widget class="QLabel" name="EndColLabel">
+           <property name="text">
+            <string>End on column</string>
+           </property>
+          </widget>
+         </item>
+         <item row="1" column="1">
+          <widget class="QSpinBox" name="EndColspinBox">
+           <property name="value">
+            <number>3</number>
+           </property>
+          </widget>
+         </item>
+         <item row="2" column="0">
+          <widget class="QLabel" name="HeaderRowLabel">
+           <property name="text">
+            <string>Header line</string>
+           </property>
+          </widget>
+         </item>
+         <item row="2" column="1">
+          <widget class="QSpinBox" name="HeaderspinBox">
+           <property name="value">
+            <number>0</number>
+           </property>
+          </widget>
+         </item>
+         <item row="3" column="0">
+          <widget class="QLabel" name="StartOnLabel">
+           <property name="text">
+            <string>Start from line</string>
+           </property>
+          </widget>
+         </item>
+         <item row="3" column="1">
+          <widget class="QSpinBox" name="StartRowspinBox">
+           <property name="value">
+            <number>0</number>
+           </property>
+          </widget>
+         </item>
+         <item row="4" column="0">
+          <widget class="QLabel" name="EndOnLabel">
+           <property name="text">
+            <string>End on line</string>
+           </property>
+          </widget>
+         </item>
+         <item row="4" column="1">
+          <widget class="QSpinBox" name="EndRowspinBox">
+           <property name="minimum">
+            <number>-1</number>
+           </property>
+           <property name="maximum">
+            <number>1000</number>
+           </property>
+           <property name="value">
+            <number>100</number>
+           </property>
+          </widget>
+         </item>
+         <item row="5" column="0">
+          <widget class="QLabel" name="SeparatoLabel">
+           <property name="text">
+            <string>Separator</string>
+           </property>
+          </widget>
+         </item>
+         <item row="5" column="1">
+          <widget class="QComboBox" name="SeparatorcomboBox">
+           <property name="editable">
+            <bool>true</bool>
+           </property>
+           <property name="currentText">
+            <string>&lt;space&gt;</string>
+           </property>
+           <property name="placeholderText">
+            <string/>
+           </property>
+           <item>
+            <property name="text">
+             <string>&lt;space&gt;</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>&lt;comma&gt;</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>&lt;semi-col&gt;</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>&lt;tab&gt;</string>
+            </property>
+           </item>
+          </widget>
+         </item>
+        </layout>
+       </item>
+       <item>
+        <widget class="QPushButton" name="PreviewButton">
+         <property name="text">
+          <string>Preview</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QDialogButtonBox" name="ConfirmBox">
+         <property name="standardButtons">
+          <set>QDialogButtonBox::Close|QDialogButtonBox::Ok</set>
+         </property>
+         <property name="centerButtons">
+          <bool>true</bool>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+    </item>
+   </layout>
+  </widget>
+  <widget class="QMenuBar" name="menubar">
+   <property name="geometry">
+    <rect>
+     <x>0</x>
+     <y>0</y>
+     <width>901</width>
+     <height>22</height>
+    </rect>
+   </property>
+  </widget>
+  <action name="actionImport">
+   <property name="text">
+    <string>Import</string>
+   </property>
+  </action>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

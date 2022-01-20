@@ -39,12 +39,10 @@ import xarray as xr
 
 
 
-def pc2vtk(self, in_file_name, header_ind = 1, delimiter = ','):
+def pc2vtk(in_file_name,input_df,self=None):
 
-    self.TextTerminal.appendPlainText(f'Reading file {in_file_name}')
 
-    input_data = np.loadtxt(fname = in_file_name, delimiter = delimiter, skiprows = header_ind)
-    n_cells = len(input_data)
+    n_cells = input_df.shape[0] # [Gabriele] the number of cells is = to the number of rows of the df.
 
 
     """[Gabriele] Convert to PCDom() instance. Used https://docs.pyvista.org/examples/00-load/wrap-trimesh.html for reference"""
@@ -55,7 +53,7 @@ def pc2vtk(self, in_file_name, header_ind = 1, delimiter = ','):
     vertices.InsertNextCell(n_cells) #[Gabriele] set n cells with n= number of points in the dataset
 
  #[Gabriele] insert the datasets points and assign each point to a cell
-    for p in input_data:
+    for p in input_df.iloc[:].values:
         pid = points.InsertNextPoint(p)
         vertices.InsertCellPoint(pid)
     point_cloud.SetPoints(points) #[Gabriele] Assign the points to the point_cloud (vtkPolyData)
@@ -69,8 +67,8 @@ def pc2vtk(self, in_file_name, header_ind = 1, delimiter = ','):
     curr_obj_attributes['name'] = os.path.basename(in_file_name)
     curr_obj_attributes['dom_type'] = "PCDom"
     curr_obj_attributes['texture_uids'] = []
-    curr_obj_attributes['properties_names'] = ["elevation"]
-    curr_obj_attributes['properties_components'] = [1]
+    curr_obj_attributes['properties_names'] = []
+    curr_obj_attributes['properties_components'] = []
     curr_obj_attributes['vtk_obj'] = point_cloud
     self.TextTerminal.appendPlainText(f'vtk_obj: {curr_obj_attributes["vtk_obj"]}')
     """Add to entity collection."""

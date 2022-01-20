@@ -1561,6 +1561,8 @@ class PCDom(vtk.vtkPolyData):
         except:
             return []
 
+    # [Gabriele] needs the rest of the properties. The properties above are the bare minimum
+
 class TSDom(vtk.vtkPointSet):
     """Textured Surface DOM - TO BE IMPLEMENTED"""
 

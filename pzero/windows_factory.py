@@ -4,11 +4,15 @@ PZero© Andrea Bistacchi"""
 """QT imports"""
 from PyQt5.QtWidgets import *
 from PyQt5.QtCore import Qt
+from PyQt5.QtGui import QCloseEvent
 
 """PZero imports"""
 from .base_view_window_ui import Ui_BaseViewWindow
+from .import_window_ui import Ui_ImportOptionsWindow
 from .entities_factory import VertexSet, PolyLine, TriSurf, TetraSolid, XsVertexSet, XsPolyLine, DEM, PCDom, MapImage, Voxet, XsVoxet, Plane, Seismics, XsTriSurf
-from .helper_dialogs import input_one_value_dialog, input_text_dialog, input_combo_dialog, message_dialog, options_dialog, multiple_input_dialog, tic, toc
+from .helper_dialogs import input_one_value_dialog, input_text_dialog, input_combo_dialog, message_dialog, options_dialog, multiple_input_dialog, tic, toc,open_file_dialog
+from .dom_collection import PCDataModel
+from .pc2vtk import pc2vtk
 # from .geological_collection import GeologicalCollection
 # from copy import deepcopy
 
@@ -1894,8 +1898,27 @@ class View3D(BaseView):
                                                plot_texture_option=False, plot_rgb_option=plot_rgb_option, visible=visible)
 
         elif isinstance(plot_entity, PCDom):
-            #print(f'{plot_entity} is PCDom')
-            this_actor = self.plot_PC_3D(uid=uid,plot_entity=plot_entity)
+
+            plot_rgb_option = None
+            if isinstance(plot_entity.points, np.ndarray):
+                """This  check is needed to avoid errors when trying to plot an empty
+                PolyData, just created at the beginning of a digitizing session."""
+
+                # [Gabriele] Basic properties
+                if show_property is None:
+                    show_scalar_bar = False
+                    pass
+                elif show_property == 'none':
+                    show_scalar_bar = False
+                    show_property = None
+                elif show_property == 'X':
+                    show_property = plot_entity.points_X
+                elif show_property == 'Y':
+                    show_property = plot_entity.points_Y
+                elif show_property == 'Z':
+                    show_property = plot_entity.points_Z
+
+            this_actor = self.plot_PC_3D(uid=uid,plot_entity=plot_entity,color_RGB=color_RGB, show_property=show_property, show_scalar_bar=show_scalar_bar, color_bar_range=None, show_property_title=show_property_title, plot_rgb_option=plot_rgb_option,visible=visible)
 
         elif isinstance(plot_entity, MapImage):
             """Texture options according to type."""
@@ -2005,7 +2028,7 @@ class View3D(BaseView):
                                            use_transparency=False,  # _______________________ invert the opacity mapping as transparency mapping
                                            below_color=None,  # solid color for values below the scalars range in 'clim'
                                            above_color=None,  # solid color for values above the scalars range in 'clim'
-                                           annotations=None,  # dictionary of annotations for scale bar with keys = float values and values = string annotations
+                                           annotations=None,  # dictionary of annotations for scale bar witor 'points'h keys = float values and values = string annotations
                                            pickable=True,  # bool
                                            preference="point",
                                            log_scale=False)
@@ -2032,7 +2055,9 @@ class View3D(BaseView):
 
     """Implementation of functions specific to this view (e.g. particular editing or visualization functions)"""
     """NONE AT THE MOMENT"""
-    def plot_PC_3D(self,uid=None,plot_entity=None,visible=None):
+
+    def plot_PC_3D(self, uid=None, plot_entity=None,visible=None,color_RGB=None, show_property=None, show_scalar_bar=None, color_bar_range=None, show_property_title=None, plot_rgb_option=None, point_size=5.0, points_as_spheres=True):
+        '''[Gabriele]  Plot the point cloud'''
         if not self.actors_df.empty:
             """This stores the camera position before redrawing the actor.
             Added to avoid a bug that sometimes sends the scene to a very distant place.
@@ -2040,7 +2065,26 @@ class View3D(BaseView):
             The is is needed to avoid sending the camera to the origin that is the
             default position before any mesh is plotted."""
             camera_position = self.plotter.camera_position
-        this_actor= self.plotter.add_points(plot_entity,name=uid,point_size=5.0,render_points_as_spheres=True)
+
+        if show_property is not None:
+            show_property_cmap = self.parent.prop_legend_df.loc[self.parent.prop_legend_df['property_name'] == show_property_title, "colormap"].values[0]
+        else:
+            show_property_cmap = None
+
+        this_actor= self.plotter.add_points(plot_entity,name=uid,
+                                            point_size=point_size,
+                                            render_points_as_spheres=points_as_spheres,
+                                            color=color_RGB,
+                                            scalars=show_property,
+                                            n_colors=256,
+                                            clim=color_bar_range,
+                                            flip_scalars=False,
+                                            interpolate_before_map=True,
+                                            cmap=show_property_cmap,
+                                            scalar_bar_args={'title': show_property_title, 'title_font_size': 10, 'label_font_size': 8, 'shadow': True, 'interactive': True},
+                                            rgb=plot_rgb_option,
+                                            show_scalar_bar=show_scalar_bar)
+
         if not visible:
             this_actor.SetVisibility(False)
         if not self.actors_df.empty:
@@ -2909,3 +2953,121 @@ class ViewXsection(View2D):
 
     """Implementation of functions specific to this view (e.g. particular editing or visualization functions)"""
     """NONE AT THE MOMENT"""
+
+
+class ViewImport(QMainWindow, Ui_ImportOptionsWindow):
+    '''[Gabriele]  New window class used to display the point cloud import options and preview.'''
+
+    '''[Gabriele]  Different options that can be changed in the import menu:
+        + in_path -> input file path
+        + StartColspinBox -> Start import from column number
+        + EndColspinBox -> End import on column number
+        + HeaderspinBox -> Row index with header dataset
+        + StartRowspinBox -> Start import from row number
+        + EndRowspinBox -> End import on row number
+        + Separator -> Type of separtor in the data set'''
+
+
+    import_options_dict = {
+    'in_path':'',
+    'StartColspinBox':0,
+    'EndColspinBox':3,
+    'HeaderspinBox':0,
+    'StartRowspinBox':0,
+    'EndRowspinBox':100,
+    'SeparatorcomboBox':' '
+    }
+
+    '''[Gabriele]  Different types of separators.'''
+    sep_dict= {
+    '<space>': ' ',
+    '<comma>': ',',
+    '<semi-col>': ';',
+    '<tab>':'   '
+    }
+
+
+    def __init__(self, parent=None, *args, **kwargs):
+
+        super(ViewImport, self).__init__(parent, *args, **kwargs)
+        self.setupUi(self)
+        # _____________________________________________________________________________
+        # THE FOLLOWING ACTUALLY DELETES ANY REFERENCE TO CLOSED WINDOWS, HENCE FREEING
+        # MEMORY, BUT CREATES PROBLEMS WITH SIGNALS THAT ARE STILL ACTIVE
+        # SEE DISCUSSIONS ON QPointer AND WA_DeleteOnClose ON THE INTERNET
+        # self.setAttribute(Qt.WA_DeleteOnClose, True)
+        self.parent = parent
+        self.show_qt_canvas()
+
+        '''[Gabriele]  Different types of signals depending on the field in the import options'''
+        self.PathtoolButton.clicked.connect(self.read_file)
+
+        self.StartColspinBox.valueChanged.connect(lambda: self.import_options(self.StartColspinBox.objectName(),self.StartColspinBox.value()))
+
+        self.EndColspinBox.valueChanged.connect(lambda: self.import_options(self.EndColspinBox.objectName(),self.EndColspinBox.value()))
+
+        self.HeaderspinBox.valueChanged.connect(lambda: self.import_options(self.HeaderspinBox.objectName(),self.HeaderspinBox.value()))
+
+        self.StartRowspinBox.valueChanged.connect(lambda: self.import_options(self.StartRowspinBox.objectName(),self.StartRowspinBox.value()))
+
+        self.EndRowspinBox.valueChanged.connect(lambda: self.import_options(self.EndRowspinBox.objectName(),self.EndRowspinBox.value()))
+
+        self.SeparatorcomboBox.currentTextChanged.connect(lambda: self.import_options(self.SeparatorcomboBox.objectName(),self.sep_dict[self.SeparatorcomboBox.currentText()]))
+
+        self.PreviewButton.clicked.connect(self.preview_file)
+
+        self.ConfirmBox.accepted.connect(self.import_PC)
+        self.ConfirmBox.rejected.connect(self.close)
+
+    def closeEvent(self, event):
+
+        """Override the standard closeEvent method since self.plotter.close() is needed to cleanly close the vtk plotter."""
+        reply = QMessageBox.question(self, 'Closing window', 'Close this window?', QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+        if reply == QMessageBox.Yes:
+            #self.quit()  # needed to cleanly close the vtk plotter
+            event.accept()
+        else:
+            event.ignore()
+
+    '''[Gabriele]  Single function that manages all of the above signals.'''
+    def import_options(self,origin,value):
+        self.import_options_dict[origin] = value
+
+    def show_qt_canvas(self):
+        """Show the Qt Window"""
+        self.show()
+
+    def read_file(self):
+
+        self.import_options_dict['in_path'] = open_file_dialog(parent=self,caption='Import point cloud data',filter="Text files (*.txt *.csv);;xyz files (*.xyz);;LAS files (*.LAS)")
+        self.PathlineEdit.setText(self.import_options_dict['in_path'])
+
+    '''[Gabriele]  Function used to preview the data using the PCDataModel'''
+    def preview_file(self):
+
+        col_range = list(range(self.import_options_dict['StartColspinBox'], self.import_options_dict['EndColspinBox']))
+
+        start_row = self.import_options_dict['StartRowspinBox']
+        end_row = self.import_options_dict['EndRowspinBox']
+
+        '''[Gabriele]  When the endrow number is -1 -> use all rows (below the start row). Else use the range defined as start_row (skip_rows) and end_row - start_row (n_rows)'''
+
+        if end_row == -1:
+            self.input_data_df = pd.read_csv(self.import_options_dict['in_path'],
+                                        sep=self.import_options_dict['SeparatorcomboBox'],
+                                        header=self.import_options_dict['HeaderspinBox'],
+                                        usecols=col_range,skiprows=start_row)
+        else:
+            end_row -= start_row
+
+            self.input_data_df = pd.read_csv(self.import_options_dict['in_path'],
+                                        sep=self.import_options_dict['SeparatorcomboBox'],
+                                        header=self.import_options_dict['HeaderspinBox'],
+                                        usecols=col_range,skiprows=start_row,nrows=end_row)
+
+        model = PCDataModel(self.input_data_df)
+
+        self.dataView.setModel(model)
+
+    def import_PC(self):
+        pc2vtk(self.import_options_dict['in_path'],self.input_data_df,self=self.parent)
