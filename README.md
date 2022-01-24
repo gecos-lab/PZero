@@ -118,13 +118,13 @@ python3 pzero_run.py
 
 ### Pip installaton
 
-For debian based linux distros, pip can be installed using the apt package manager.
+For Debian based Linux distros pip can be installed using the apt package manager.
 
-1. **Check if packages and dependecies need to be upgraded (routine check):**
+1. **Check if packages and dependencies need to be upgraded (routine check):**
 
 ```bash
 sudo apt update
-sudo apt ugrade
+sudo apt upgrade
 ```
 
 2. **Install pip3:**
@@ -142,15 +142,18 @@ To install the required python3 modules we can just run:
 pip3 install -r /path/to/requirements.txt
 ```
 
-After the required packages are installed PZero can be run with:
+After the required packages are installed **PZero** can be run with:
 
 ```bash
-python3 path/to/pzero_run.py
+python3 pzero_run.py
 ```
 
 ### Conda installation (optional):
 
-Conda can also be installed on Linux by following **[this quick guide](https://docs.conda.io/projects/conda/en/latest/user-guide/install/linux.html)**. After installing conda, a pzero environment can be created and activated in the same way as in the other OSs. To install the required packages in a given environment follow the steps above after activating the environment.
+Conda can also be installed on Linux by following **[this quick guide](https://docs.conda.io/projects/conda/en/latest/user-guide/install/linux.html)**. After installing conda a *pzero* environment can be created and activated in the same way as in the other OSs. To install the required packages in a given environment follow the steps above after activating the environment.
+
+
+
 
 ---
 
