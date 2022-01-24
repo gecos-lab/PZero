@@ -121,7 +121,7 @@ class Ui_ImportOptionsWindow(object):
         self.formLayout.setWidget(4, QtWidgets.QFormLayout.LabelRole, self.EndOnLabel)
         self.EndRowspinBox = QtWidgets.QSpinBox(self.OptionsWidget)
         self.EndRowspinBox.setMinimum(-1)
-        self.EndRowspinBox.setMaximum(1000)
+        self.EndRowspinBox.setMaximum(100)
         self.EndRowspinBox.setProperty("value", 100)
         self.EndRowspinBox.setObjectName("EndRowspinBox")
         self.formLayout.setWidget(4, QtWidgets.QFormLayout.FieldRole, self.EndRowspinBox)

@@ -1497,9 +1497,10 @@ class DEM(vtk.vtkStructuredGrid):
         self.GetPointData().SetActiveTCoords(map_image_uid)
 
 
-class PCDom(vtk.vtkPolyData):
+class PCDom(PolyData):
     """Point Cloud DOM - TO BE IMPLEMENTED
     See discussion at https://discourse.vtk.org/t/proposal-adding-a-vtkpointcloud-data-structure/3872/3 """
+
     def __init__(self, *args, **kwargs):
         super(PCDom, self).__init__(*args, **kwargs)
 
@@ -1508,60 +1509,8 @@ class PCDom(vtk.vtkPolyData):
         pcdom_copy.DeepCopy(self)
         return pcdom_copy
 
-    @property
-    def bounds(self):
-        """Returns a list with xmin, xmax, ymin, ymax, zmin, zmax"""
-        return self.GetBounds()
 
-    @property
-    def points_number(self):
-        """Returns the number of points"""
-        return dsa.WrapDataObject(self).GetNumberOfPoints()
-
-    @property
-    def points(self):
-        """Returns point coordinates as a Numpy array"""
-        return dsa.WrapDataObject(self).Points
-
-    @points.setter
-    def points(self, points_matrix=None):
-        """Sets point coordinates from a Numpy array (sets a completely new point array)"""
-        dsa.WrapDataObject(self).Points = points_matrix
-
-    @property
-    def points_X(self):
-        """Returns X point coordinates as Numpy array"""
-        return self.points[:, 0]
-
-    @property
-    def points_Y(self):
-        """Returns Y point coordinates as Numpy array"""
-        return self.points[:, 1]
-
-    @property
-    def points_Z(self):
-        """Returns Z point coordinates as Numpy array"""
-        return self.points[:, 2]
-
-    @property
-    def cells_number(self):
-        """Returns the number of points"""
-        return dsa.WrapDataObject(self).GetNumberOfCells()
-
-    @property
-    def cells(self):
-        """Returns cells as Numpy array. Reimplemented in subclasses."""
-        pass
-
-    @property
-    def point_data_keys(self):
-        """Lists point data keys"""
-        try:
-            return dsa.WrapDataObject(self).PointData.keys()
-        except:
-            return []
-
-    # [Gabriele] needs the rest of the properties. The properties above are the bare minimum
+    # [Gabriele] The rest comes from the Polydata class.
 
 class TSDom(vtk.vtkPointSet):
     """Textured Surface DOM - TO BE IMPLEMENTED"""

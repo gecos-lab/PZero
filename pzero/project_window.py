@@ -31,8 +31,7 @@ from .segy2vtk import segy2vtk
 from .windows_factory import View3D
 from .windows_factory import ViewMap
 from .windows_factory import ViewXsection
-from .windows_factory import ViewImport
-from .helper_dialogs import options_dialog, save_file_dialog, open_file_dialog, input_combo_dialog, message_dialog, multiple_input_dialog, input_one_value_dialog, input_text_dialog, progress_dialog
+from .helper_dialogs import options_dialog, save_file_dialog, open_file_dialog, input_combo_dialog, message_dialog, multiple_input_dialog, input_one_value_dialog, input_text_dialog, progress_dialog, import_dialog
 from .image2vtk import geo_image2vtk
 from .stl2vtk import vtk2stl, vtk2stl_dilation
 from .obj2vtk import vtk2obj
@@ -123,7 +122,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.actionImportGocadXsection.triggered.connect(self.import_gocad_section)
         self.actionImportGocadBoundary.triggered.connect(self.import_gocad_boundary)  #_______________________________________
         self.actionImportPyvista.triggered.connect(lambda: pyvista2vtk(self=self))
-        self.actionImportPC.triggered.connect(lambda: ViewImport(parent=self))
+        self.actionImportPC.triggered.connect(lambda: import_dialog(parent=self))
         self.actionImportVedo.triggered.connect(lambda: vedo2vtk(self=self))
         self.actionImportSHP.triggered.connect(self.import_SHP)
         self.actionImportDEM.triggered.connect(self.import_DEM)
@@ -545,6 +544,15 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 sg_writer.SetInputData(self.dom_coll.get_uid_vtk_obj(uid))
                 sg_writer.Write()
                 prgs_bar.add_one()
+            elif self.dom_coll.df.loc[self.dom_coll.df['uid'] == uid, 'dom_type'].values[0] == "PCDom":
+                '''[Gabriele]  Save PCDOm collection entities as VTK'''
+                pd_writer = vtk.vtkXMLPolyDataWriter()
+                pd_writer.SetFileName(out_dir_name + "/" + uid + ".vtp")
+                pd_writer.SetInputData(self.dom_coll.get_uid_vtk_obj(uid))
+                pd_writer.Write()
+                prgs_bar.add_one()
+
+
         """Save image collection table to JSON file and entities as VTK."""
         out_cols = list(self.image_coll.df.columns)
         out_cols.remove('vtk_obj')
@@ -693,11 +701,17 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     """Add code to read TSDOM here__________"""
                     vtk_object = TSDom()
                 elif self.dom_coll.df.loc[self.dom_coll.df['uid'] == uid, 'dom_type'].values[0] == 'PCDom':
-                    """Add code to read TSDOM here__________"""
+                    '''[Gabriele]  Open saved PCDoms data'''
                     vtk_object = PCDom()
+                    pd_reader = vtk.vtkXMLPolyDataReader()
+                    pd_reader.SetFileName(in_dir_name + "/" + uid + ".vtp")
+                    pd_reader.Update()
+                    vtk_object.ShallowCopy(pd_reader.GetOutput())
+                    vtk_object.Modified()
                 self.dom_coll.set_uid_vtk_obj(uid=uid, vtk_obj=vtk_object)
                 prgs_bar.add_one()
             self.dom_coll.endResetModel()
+
         """Read image collection and files"""
         if os.path.isfile((in_dir_name + '/image_table.csv')) or os.path.isfile((in_dir_name + '/image_table.json')):
             self.image_coll.beginResetModel()

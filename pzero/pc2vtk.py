@@ -6,7 +6,7 @@ Convert point cloud data (txt, csv,xyz, las ...) in vtk objects.
 
 The process is as follows:
 
-            Import the data as a numpy array (read from file)
+            Import the data as a pandas df (read from file)
                                 |
                                 |
             Insert n cells with n = number of points in
@@ -18,12 +18,6 @@ The process is as follows:
                                 |
             Assign points and verts to a vtkPolyData object (PCDom)
 
-
-For now the import function is not very flexible. The input file must have:
-    1. The data start on the second line of the file
-    2. The delimiter for the columns set as , (comma)
-
-In the near feature
 """
 
 
@@ -45,7 +39,7 @@ def pc2vtk(in_file_name,input_df,self=None):
     n_cells = input_df.shape[0] # [Gabriele] the number of cells is = to the number of rows of the df.
 
 
-    """[Gabriele] Convert to PCDom() instance. Used https://docs.pyvista.org/examples/00-load/wrap-trimesh.html for reference"""
+    """[Gabriele] Convert to PCDom() instance. Used https://docs.pyvista.org/examples/00-load/wrap-trimesh.html as reference"""
 
     point_cloud = PCDom() #[Gabriele] vtkPolyData object
     points = vtkPoints() #[Gabriele] points object

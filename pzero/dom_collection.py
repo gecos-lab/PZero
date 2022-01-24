@@ -261,34 +261,3 @@ class DomCollection(QAbstractTableModel):
                 self.parent.dom_metadata_modified_signal.emit([uid])  # a list of uids is emitted, even if the entity is just one
                 return True
         return QVariant()
-
-
-class PCDataModel(QAbstractTableModel):
-    
-    '''[Gabriele]  Abstract table model that can be used to quickly display imported pc files data  from a pandas df. Taken from this stack overflow post https://stackoverflow.com/questions/31475965/fastest-way-to-populate-qtableview-from-pandas-data-frame
-    '''
-    def __init__(self, data, parent=None,*args, **kwargs):
-        super(PCDataModel,self).__init__(*args, **kwargs)
-        self.data = data # [Gabriele]define the data
-
-    def columnCount(self, parent=None): # [Gabriele] the n of columns is = to the number of columns of the input data set (.shape[1])
-        return self.data.shape[1]
-
-    def rowCount(self, parent=None): # [Gabriele] the n of rows is = to the number of rows of the input data set (.shape[0])
-        return self.data.shape[0]
-    '''[Gabriele]  Populate the table with data depending on how much of the table is shown. The model has different indexes with different roles, DisplayRole has index 0.'''
-
-    def data(self, index, role: Qt.DisplayRole):
-        if index.isValid():
-            if role == Qt.DisplayRole:
-                return str(self.data.iloc[index.row()][index.column()])
-        return None
-
-    '''[Gabriele] Set header and index If the "container" is horizontal (orientation index 1) and has a display role (index 0) (-> is the header of the table). If the "container" is vertical (orientation index 2) and has a display role (index 0) (-> is the index of the table).'''
-
-    def headerData(self, col, orientation, role):
-        if orientation == Qt.Horizontal and role == Qt.DisplayRole:
-            return self.data.columns[col] # [Gabriele] Set the header names
-        if orientation == Qt.Vertical and role == Qt.DisplayRole:
-            return self.data.index[col] # [Gabriele] Set the indexes
-        return None

@@ -1,8 +1,12 @@
 """helper_dialogs.py
 PZero© Andrea Bistacchi"""
 
-from PyQt5.QtWidgets import QMessageBox, QInputDialog, QLineEdit, QPushButton, QFileDialog, QWidget, QProgressDialog
-from PyQt5 import QtWidgets, QtCore
+from PyQt5.QtWidgets import QMessageBox, QInputDialog, QLineEdit, QPushButton, QFileDialog, QWidget, QProgressDialog, QMainWindow
+from PyQt5 import QtWidgets, QtCore, Qt
+
+from .import_window_ui import Ui_ImportOptionsWindow
+import pandas as pd
+from .pc2vtk import pc2vtk
 
 
 def options_dialog(title=None, message=None, yes_role=None, no_role=None, reject_role=None):
@@ -415,3 +419,177 @@ class progress_dialog(QProgressDialog):
     @property
     def was_canceled(self):
         return self.wasCanceled()
+
+class PCDataModel(QtCore.QAbstractTableModel):
+
+    '''[Gabriele]  Abstract table model that can be used to quickly display imported pc files data  from a pandas df. Taken from this stack overflow post https://stackoverflow.com/questions/31475965/fastest-way-to-populate-qtableview-from-pandas-data-frame
+    '''
+    def __init__(self, data, parent=None,*args, **kwargs):
+        super(PCDataModel,self).__init__(*args, **kwargs)
+        self.limit = 100
+        if data.shape[0] > self.limit:
+            self.data = data[:100] # [Gabriele] limit the preview data if the number of points are grater than 100
+            print(f'Number of points grater than {self.limit}, displaying the 100 rows below the start row')
+        else:
+            self.data = data
+
+    def columnCount(self, parent=None): # [Gabriele] the n of columns is = to the number of columns of the input data set (.shape[1])
+        return self.data.shape[1]
+
+    def rowCount(self, parent=None): # [Gabriele] the n of rows is = to the number of rows of the input data set (.shape[0])
+        return self.data.shape[0]
+    '''[Gabriele]  Populate the table with data depending on how much of the table is shown. The model has different indexes with different roles, DisplayRole has index 0.'''
+
+    def data(self, index, role: QtCore.Qt.DisplayRole):
+        if index.isValid():
+            if role == QtCore.Qt.DisplayRole:
+                return str(self.data.iloc[index.row()][index.column()])
+        return None
+
+    '''[Gabriele] Set header and index If the "container" is horizontal (orientation index 1) and has a display role (index 0) (-> is the header of the table). If the "container" is vertical (orientation index 2) and has a display role (index 0) (-> is the index of the table).'''
+
+    def headerData(self, col, orientation, role):
+        if orientation == QtCore.Qt.Horizontal and role == QtCore.Qt.DisplayRole:
+            return self.data.columns[col] # [Gabriele] Set the header names
+        if orientation == QtCore.Qt.Vertical and role == QtCore.Qt.DisplayRole:
+            return self.data.index[col] # [Gabriele] Set the indexes
+        return None
+
+
+class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
+
+    '''[Gabriele]  New window class used to display import options and data preview. To add a new import function (e.g. import_PC -> pc2vtk) append the function at the end of this class and add it to the import_func_dict with this template:
+        NameOfActionMenu: self.import_func()
+    '''
+
+    '''[Gabriele]  Different options that can be changed in the import menu:
+        + in_path -> input file path
+        + StartColspinBox -> Start import from column number
+        + EndColspinBox -> End import on column number
+        + HeaderspinBox -> Row index with header dataset
+        + StartRowspinBox -> Start import from row number
+        + EndRowspinBox -> End import on row number
+        + Separator -> Type of separtor in the data set'''
+
+
+    import_options_dict = {
+    'in_path':'',
+    'StartColspinBox':0,
+    'EndColspinBox':3,
+    'HeaderspinBox':0,
+    'StartRowspinBox':0,
+    'EndRowspinBox':100,
+    'SeparatorcomboBox':' '
+    }
+
+    '''[Gabriele]  Different types of separators.'''
+    sep_dict= {
+    '<space>': ' ',
+    '<comma>': ',',
+    '<semi-col>': ';',
+    '<tab>':'   '
+    }
+
+
+
+
+
+    def __init__(self, parent=None, *args, **kwargs):
+
+        super(import_dialog, self).__init__(parent, *args, **kwargs)
+        self.setupUi(self)
+        # _____________________________________________________________________________
+        # THE FOLLOWING ACTUALLY DELETES ANY REFERENCE TO CLOSED WINDOWS, HENCE FREEING
+        # MEMORY, BUT CREATES PROBLEMS WITH SIGNALS THAT ARE STILL ACTIVE
+        # SEE DISCUSSIONS ON QPointer AND WA_DeleteOnClose ON THE INTERNET
+        # self.setAttribute(Qt.WA_DeleteOnClose, True)
+
+        self.import_func_dict = {
+        'actionImportPC': self.import_PC
+        }
+
+        self.parent = parent
+        self.action = self.sender() # [Gabriele] Name of the actionmenu from which the import function was called.
+        self.show_qt_canvas()
+
+        '''[Gabriele]  Different types of signals depending on the field in the import options'''
+        self.PathtoolButton.clicked.connect(self.read_file)
+
+        self.StartColspinBox.valueChanged.connect(lambda: self.import_options(self.StartColspinBox.objectName(),self.StartColspinBox.value()))
+
+        self.EndColspinBox.valueChanged.connect(lambda: self.import_options(self.EndColspinBox.objectName(),self.EndColspinBox.value()))
+
+        self.HeaderspinBox.valueChanged.connect(lambda: self.import_options(self.HeaderspinBox.objectName(),self.HeaderspinBox.value()))
+
+        self.StartRowspinBox.valueChanged.connect(lambda: self.import_options(self.StartRowspinBox.objectName(),self.StartRowspinBox.value()))
+
+        self.EndRowspinBox.valueChanged.connect(lambda: self.import_options(self.EndRowspinBox.objectName(),self.EndRowspinBox.value()))
+
+        self.SeparatorcomboBox.currentTextChanged.connect(lambda: self.import_options(self.SeparatorcomboBox.objectName(),self.sep_dict[self.SeparatorcomboBox.currentText()]))
+
+        self.PreviewButton.clicked.connect(lambda: self.preview_file(True))
+
+        self.ConfirmBox.accepted.connect(self.import_func_dict[self.action.objectName()])
+        self.ConfirmBox.rejected.connect(self.close)
+
+    def closeEvent(self, event):
+
+        """Override the standard closeEvent method since self.plotter.close() is needed to cleanly close the vtk plotter."""
+        reply = QMessageBox.question(self, 'Closing window', 'Close this window?', QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+        if reply == QMessageBox.Yes:
+            #self.quit()  # needed to cleanly close the vtk plotter
+            event.accept()
+        else:
+            event.ignore()
+
+    '''[Gabriele]  Single function that manages all of the above signals.'''
+    def import_options(self,origin,value):
+        self.import_options_dict[origin] = value
+
+    def show_qt_canvas(self):
+        """Show the Qt Window"""
+        self.show()
+
+    def read_file(self):
+
+        self.import_options_dict['in_path'] = open_file_dialog(parent=self,caption='Import point cloud data',filter="Text files (*.txt *.csv *xyz);;PLY files (*.ply);;LAS files (*.LAS *.LAZ)")
+        self.PathlineEdit.setText(self.import_options_dict['in_path'])
+
+    '''[Gabriele]  Function used to preview the data using the PCDataModel'''
+    def preview_file(self,preview=True):
+
+        col_range = list(range(self.import_options_dict['StartColspinBox'], self.import_options_dict['EndColspinBox']))
+
+        start_row = self.import_options_dict['StartRowspinBox']
+        end_row = self.import_options_dict['EndRowspinBox']
+
+        '''[Gabriele]  When the endrow number is -1 -> use all rows (below the start row). Else use the range defined as start_row (skip_rows) and end_row - start_row (n_rows)'''
+
+        try:
+
+            if end_row == -1:
+                self.input_data_df = pd.read_csv(self.import_options_dict['in_path'],
+                                            sep=self.import_options_dict['SeparatorcomboBox'],
+                                            header=self.import_options_dict['HeaderspinBox'],
+                                            usecols=col_range,skiprows=range(1, start_row))
+
+            else:
+                end_row -= start_row
+
+                self.input_data_df = pd.read_csv(self.import_options_dict['in_path'],
+                                            sep=self.import_options_dict['SeparatorcomboBox'],
+                                            header=self.import_options_dict['HeaderspinBox'],
+                                            usecols=col_range,skiprows=range(1, start_row),nrows=end_row)
+            if preview:
+                model = PCDataModel(self.input_data_df)
+                self.dataView.setModel(model)
+
+        except ValueError:
+            print('Could not preview: invalid column, row or separator')
+        except FileNotFoundError:
+            print('Could not preview: invalid file name')
+
+
+    def import_PC(self):
+        self.preview_file(preview=False) # [Gabriele] import the data without the preview
+        pc2vtk(self.import_options_dict['in_path'],self.input_data_df,self=self.parent)
