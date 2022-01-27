@@ -11,6 +11,7 @@ The ***PZero*** project started in spring 2020 thanks to a research project fund
 The ***PZero*** developers are:
 * Andrea Bistacchi (since the beginning)
 * Gloria Arienti (since December 2020)
+* Gabriele Benedetti (since January 2022)
 
 ***PZero*** © 2020 by Andrea Bistacchi, released under [GNU AGPLv3 license](LICENSE.txt).
 
