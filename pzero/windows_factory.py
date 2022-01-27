@@ -20,7 +20,6 @@ import pandas as pd
 
 """"VTK imports"""
 # import vtk
-
 """"VTK Numpy interface imports"""
 # import vtk.numpy_interface.dataset_adapter as dsa
 from vtk.util import numpy_support
@@ -1638,6 +1637,21 @@ class View3D(BaseView):
         self.menuBaseView.setTitle("Project")
         self.actionBase_Tool.setText("Project")
 
+        # [Gabriele] Options menu
+
+        self.menuOptions = QMenu("Options",self)
+        self.menuWindow.addMenu(self.menuOptions)
+
+        self.useCube = QAction("Orientation cube", self)
+        box_args = {'color_box': True,
+                    'opacity':1}
+        self.useCube.triggered.connect(lambda: self.plotter.add_axes(box=True,box_args=box_args))
+        self.menuOptions.addAction(self.useCube)
+
+        self.useAxis = QAction("Orientation axis", self)
+        self.useAxis.triggered.connect(lambda: self.plotter.add_axes(box=False))
+        self.menuOptions.addAction(self.useAxis)
+
         # [Gabriele] Default views menu
 
         self.menuView = QMenu("Views",self)
@@ -1648,6 +1662,9 @@ class View3D(BaseView):
         self.setView.triggered.connect(lambda: self.view_manager("save"))
         self.menuView.addAction(self.setView)
 
+        self.setView = QAction("Set view to active", self) # [Gabriele] If two objects are active it centers the view on the barycenter.
+        self.setView.triggered.connect(lambda: self.plotter.reset_camera())
+        self.menuView.addAction(self.setView)
 
         self.menuView.addSeparator()
 

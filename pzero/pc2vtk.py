@@ -38,9 +38,16 @@ def pc2vtk(in_file_name,input_df,self=None):
 
     n_cells = input_df.shape[0] # [Gabriele] the number of cells is = to the number of rows of the df.
 
+    ''' [Gabriele] Correcting input data by subtracting an equal value approximated to the hundreds (53932.4325 -> 53932.4325 - 53900.0000 = 32.4325). For now there isn't any kind of interface and the correction is applied automatically when huge numbers are detected.'''
+
+    if len(str(input_df.iloc[0,0]).replace('.','')) > 12:
+        x_name,y_name,z_name = input_df.columns
+        input_df[x_name] -= input_df.iloc[0,0].round(-2)
+        input_df[y_name] -= input_df.iloc[0,1].round(-2)
+        #input_df.to_csv('out.csv')
+
 
     """[Gabriele] Convert to PCDom() instance. Used https://docs.pyvista.org/examples/00-load/wrap-trimesh.html as reference"""
-
     point_cloud = PCDom() #[Gabriele] vtkPolyData object
     points = vtkPoints() #[Gabriele] points object
     vertices = vtkCellArray() #[Gabriele] vertices (cells)
