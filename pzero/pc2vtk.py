@@ -22,7 +22,7 @@ The process is as follows:
 
 
 import numpy as np
-from vtk import vtkPointSet, vtkCellArray, vtkPoints, vtkPolyData
+from vtk import vtkCellArray, vtkPoints,vtkUnsignedCharArray
 import os
 from copy import deepcopy
 import uuid
@@ -41,27 +41,35 @@ def pc2vtk(in_file_name,input_df,self=None):
     ''' [Gabriele] Correcting input data by subtracting an equal value approximated to the hundreds (53932.4325 -> 53932.4325 - 53900.0000 = 32.4325). For now there isn't any kind of interface and the correction is applied automatically when huge numbers are detected.'''
 
     if len(str(input_df.iloc[0,0]).replace('.','')) > 12:
-        x_name,y_name,z_name = input_df.columns
+        x_name,y_name,z_name = input_df.iloc[:,:3].columns
         input_df[x_name] -= input_df.iloc[0,0].round(-2)
         input_df[y_name] -= input_df.iloc[0,1].round(-2)
-        #input_df.to_csv('out.csv')
+        '''[Gabriele] Extract RGB column values [TODO] make it dynamic (RGB values are not always after xyz values)'''
 
+        RGB = input_df.iloc[:,3:6].values
+    # scalars = input_df.iloc[:,6].values
+    # print(RGB)
 
     """[Gabriele] Convert to PCDom() instance. Used https://docs.pyvista.org/examples/00-load/wrap-trimesh.html as reference"""
     point_cloud = PCDom() #[Gabriele] vtkPolyData object
     points = vtkPoints() #[Gabriele] points object
     vertices = vtkCellArray() #[Gabriele] vertices (cells)
     vertices.InsertNextCell(n_cells) #[Gabriele] set n cells with n= number of points in the dataset
+    colors = vtkUnsignedCharArray() # [Gabriele] create colors as unsigned char array (int only)
+    colors.SetNumberOfComponents(3) # [Gabriele] Set numbers of components (RGB = 3)
+    colors.SetName("colors") # [Gabriele] give it a name
 
  #[Gabriele] insert the datasets points and assign each point to a cell
-    for p in input_df.iloc[:].values:
+    for p,c in zip(input_df.iloc[:,:3].values,RGB):
         pid = points.InsertNextPoint(p)
         vertices.InsertCellPoint(pid)
+        colors.InsertNextTuple3(c[0],c[1],c[2]) # [Gabriele] Insert color values
     point_cloud.SetPoints(points) #[Gabriele] Assign the points to the point_cloud (vtkPolyData)
     point_cloud.SetVerts(vertices) #[Gabriele] Assign the vertices to the point_cloud (vtkPolyData)
+    point_cloud.GetPointData().SetScalars(colors) # [Gabriele]Set color data
 
     point_cloud.Modified()
-
+    point_cloud.Update()
     """Create dictionary."""
     curr_obj_attributes = deepcopy(DomCollection.dom_entity_dict)
     curr_obj_attributes['uid'] = str(uuid.uuid4())

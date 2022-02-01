@@ -344,6 +344,9 @@ class PolyData(vtk.vtkPolyData):
             """For vector entities return a n-by-m-dimensional array where n is the
             number of points and m is the number of components of the attribute."""
             point_data = dsa.WrapDataObject(self).PointData[data_key].reshape((self.get_point_data_shape(data_key=data_key)[0], self.get_point_data_shape(data_key=data_key)[1]))
+        elif isinstance(self, PCDom):
+            '''[Gabriele]  For point entities we don't need to reshape''' 
+            point_data = dsa.WrapDataObject(self).PointData[data_key]
         """We use np.squeeze to remove axes with length 1, so a 1D array will be returned with shape (n, ) and not with shape (n, 1)."""
         return np.squeeze(point_data)
 
@@ -1509,7 +1512,10 @@ class PCDom(PolyData):
         pcdom_copy.DeepCopy(self)
         return pcdom_copy
 
-
+    @property
+    def colors(self):
+        """Returns colors as a Numpy array"""
+        return dsa.WrapDataObject(self).GetNumberOfCells()
     # [Gabriele] The rest comes from the Polydata class.
 
 class TSDom(vtk.vtkPointSet):

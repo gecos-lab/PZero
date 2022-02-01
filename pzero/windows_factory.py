@@ -829,7 +829,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.DOMsTableWidget.clear()
         self.DOMsTableWidget.setColumnCount(3)
         self.DOMsTableWidget.setRowCount(0)
-        self.DOMsTableWidget.setHorizontalHeaderLabels(['Name', 'uid'])
+        self.DOMsTableWidget.setHorizontalHeaderLabels(['Name', 'uid','Colors'])
         self.DOMsTableWidget.hideColumn(1)  # hide the uid column
         row = 0
         for uid in self.parent.dom_coll.df['uid'].to_list():
@@ -1931,6 +1931,12 @@ class View3D(BaseView):
                     show_property = plot_entity.points_Y
                 elif show_property == 'Z':
                     show_property = plot_entity.points_Z
+                elif show_property == 'RGB':
+                    show_scalar_bar = False
+                    show_property = plot_entity.get_point_data('colors') # [Gabriele] Get color data
+                    plot_rgb_option =True # [Gabriele] Use RGB
+
+
 
             this_actor = self.plot_PC_3D(uid=uid,plot_entity=plot_entity,color_RGB=color_RGB, show_property=show_property, show_scalar_bar=show_scalar_bar, color_bar_range=None, show_property_title=show_property_title, plot_rgb_option=plot_rgb_option,visible=visible)
 
