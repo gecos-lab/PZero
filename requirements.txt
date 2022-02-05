@@ -3,6 +3,7 @@ pyvista>=0.32.1
 pyvistaqt>=0.6.0
 numpy>=1.21.5
 vtk>=9.1.0
+laspy
 
 matplotlib>=3.5.1
 shapely>=1.8.0

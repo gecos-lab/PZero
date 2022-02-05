@@ -6,6 +6,9 @@ from PyQt5 import QtWidgets, QtCore, Qt
 
 from .import_window_ui import Ui_ImportOptionsWindow
 import pandas as pd
+import laspy as lp
+import os
+import numpy as np
 from .pc2vtk import pc2vtk
 
 
@@ -552,7 +555,7 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
 
     def read_file(self):
 
-        self.import_options_dict['in_path'] = open_file_dialog(parent=self,caption='Import point cloud data',filter="Text files (*.txt *.csv *xyz);;PLY files (*.ply);;LAS files (*.LAS *.LAZ)")
+        self.import_options_dict['in_path'] = open_file_dialog(parent=self,caption='Import point cloud data',filter="Text files (*.txt *.csv *xyz);;PLY files (*.ply);;LAS files (*.las *.laz)")
         self.PathlineEdit.setText(self.import_options_dict['in_path'])
 
     '''[Gabriele]  Function used to preview the data using the PCDataModel'''
@@ -566,20 +569,26 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
         '''[Gabriele]  When the endrow number is -1 -> use all rows (below the start row). Else use the range defined as start_row (skip_rows) and end_row - start_row (n_rows)'''
 
         try:
+            _,extension = os.path.splitext(self.import_options_dict['in_path'])
 
-            if end_row == -1:
-                self.input_data_df = pd.read_csv(self.import_options_dict['in_path'],
-                                            sep=self.import_options_dict['SeparatorcomboBox'],
-                                            header=self.import_options_dict['HeaderspinBox'],
-                                            usecols=col_range,skiprows=range(1, start_row))
+            if extension == '.las' or extension == '.laz':
+                self.input_data_df = self.las2df(self.import_options_dict['in_path'])
 
             else:
-                end_row -= start_row
 
-                self.input_data_df = pd.read_csv(self.import_options_dict['in_path'],
-                                            sep=self.import_options_dict['SeparatorcomboBox'],
-                                            header=self.import_options_dict['HeaderspinBox'],
-                                            usecols=col_range,skiprows=range(1, start_row),nrows=end_row)
+                if end_row == -1:
+                    self.input_data_df = pd.read_csv(self.import_options_dict['in_path'],
+                                                sep=self.import_options_dict['SeparatorcomboBox'],
+                                                header=self.import_options_dict['HeaderspinBox'],
+                                                usecols=col_range,skiprows=range(1, start_row))
+
+                else:
+                    end_row -= start_row
+
+                    self.input_data_df = pd.read_csv(self.import_options_dict['in_path'],
+                                                sep=self.import_options_dict['SeparatorcomboBox'],
+                                                header=self.import_options_dict['HeaderspinBox'],
+                                                usecols=col_range,skiprows=range(1, start_row),nrows=end_row)
             if preview:
                 model = PCDataModel(self.input_data_df)
                 self.dataView.setModel(model)
@@ -593,3 +602,20 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
     def import_PC(self):
         self.preview_file(preview=False) # [Gabriele] import the data without the preview
         pc2vtk(self.import_options_dict['in_path'],self.input_data_df,self=self.parent)
+
+    def las2df(self,in_path):
+        las_data = lp.read(in_path)
+        prop_dict = dict()
+        for format in las_data.point_format.dimensions:
+            if format.name == 'X' or format.name == 'Y' or format.name == 'Z':
+                attr = format.name.lower()
+                prop_dict[attr] = np.c_[getattr(las_data,attr)].flatten()
+            elif format.name == 'red' or format.name == 'green' or format.name == 'blue':
+                data = getattr(las_data,format.name)/255
+                data = data.astype(int)
+                prop_dict[format.name] = data
+
+            else:
+                prop_dict[format.name] = getattr(las_data,format.name)
+        df = pd.DataFrame.from_dict(prop_dict)
+        return df
