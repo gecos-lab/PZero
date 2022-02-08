@@ -4,4 +4,4 @@ pyuic5 project_window.ui -o ..\pzero\project_window_ui.py
 
 pyuic5 base_view_window.ui -o ..\pzero\base_view_window_ui.py
 
-
+pyuic5 import_window.ui -o ..\pzero\import_window_ui.py 

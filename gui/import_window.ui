@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>901</width>
-    <height>844</height>
+    <width>900</width>
+    <height>818</height>
    </rect>
   </property>
   <property name="sizePolicy">
@@ -289,10 +289,23 @@
         </layout>
        </item>
        <item>
-        <widget class="QPushButton" name="PreviewButton">
-         <property name="text">
-          <string>Preview</string>
-         </property>
+        <widget class="QWidget" name="DataGroup" native="true">
+         <layout class="QHBoxLayout" name="DataLayout">
+          <item>
+           <widget class="QPushButton" name="PreviewButton">
+            <property name="text">
+             <string>Preview</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="assignDataButton">
+            <property name="text">
+             <string>Assign data</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
         </widget>
        </item>
        <item>
@@ -315,7 +328,7 @@
     <rect>
      <x>0</x>
      <y>0</y>
-     <width>901</width>
+     <width>900</width>
      <height>22</height>
     </rect>
    </property>

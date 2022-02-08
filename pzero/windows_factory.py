@@ -841,10 +841,11 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             property_texture_combo = QComboBox()
             property_texture_combo.uid = uid
             property_texture_combo.addItem("none")
-            property_texture_combo.texture_uid_list = ["none", "X", "Y", "Z"]
+            property_texture_combo.texture_uid_list = ["none", "X", "Y", "Z","RGB"]
             property_texture_combo.addItem("X")
             property_texture_combo.addItem("Y")
             property_texture_combo.addItem("Z")
+            property_texture_combo.addItem("RGB")
             for prop in self.parent.dom_coll.get_uid_properties_names(uid):
                 if prop not in self.parent.dom_coll.df.loc[self.parent.dom_coll.df['uid'] == uid, "texture_uids"].values[0]:
                     property_texture_combo.addItem(prop)
@@ -878,10 +879,11 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             property_texture_combo = QComboBox()
             property_texture_combo.uid = uid
             property_texture_combo.addItem("none")
-            property_texture_combo.texture_uid_list = ["none", "X", "Y", "Z"]
+            property_texture_combo.texture_uid_list = ["none", "X", "Y", "Z","RGB"]
             property_texture_combo.addItem("X")
             property_texture_combo.addItem("Y")
             property_texture_combo.addItem("Z")
+            property_texture_combo.addItem("RGB")
             for prop in self.parent.dom_coll.get_uid_properties_names(uid):
                 if prop not in self.parent.dom_coll.df.loc[self.parent.dom_coll.df['uid'] == uid, "texture_uids"].values[0]:
                     property_texture_combo.addItem(prop)
@@ -1934,7 +1936,7 @@ class View3D(BaseView):
                 elif show_property == 'RGB':
                     show_scalar_bar = False
                     show_property = plot_entity.get_point_data('colors') # [Gabriele] Get color data
-                    plot_rgb_option =True # [Gabriele] Use RGB
+                    plot_rgb_option = True # [Gabriele] Use RGB
 
 
 
@@ -2078,6 +2080,7 @@ class View3D(BaseView):
 
     def plot_PC_3D(self, uid=None, plot_entity=None,visible=None,color_RGB=None, show_property=None, show_scalar_bar=None, color_bar_range=None, show_property_title=None, plot_rgb_option=None, point_size=5.0, points_as_spheres=True):
         '''[Gabriele]  Plot the point cloud'''
+
         if not self.actors_df.empty:
             """This stores the camera position before redrawing the actor.
             Added to avoid a bug that sometimes sends the scene to a very distant place.
@@ -2086,7 +2089,8 @@ class View3D(BaseView):
             default position before any mesh is plotted."""
             camera_position = self.plotter.camera_position
 
-        if show_property is not None:
+        # [Gabriele] if rgb options is true -> there is no need of cmap 
+        if show_property is not None and plot_rgb_option == False:
             show_property_cmap = self.parent.prop_legend_df.loc[self.parent.prop_legend_df['property_name'] == show_property_title, "colormap"].values[0]
         else:
             show_property_cmap = None

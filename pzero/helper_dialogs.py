@@ -1,10 +1,11 @@
 """helper_dialogs.py
 PZero© Andrea Bistacchi"""
 
-from PyQt5.QtWidgets import QMessageBox, QInputDialog, QLineEdit, QPushButton, QFileDialog, QWidget, QProgressDialog, QMainWindow
+from PyQt5.QtWidgets import QMessageBox, QInputDialog, QLineEdit, QPushButton, QFileDialog, QWidget, QProgressDialog, QMainWindow,QComboBox
 from PyQt5 import QtWidgets, QtCore, Qt
 
 from .import_window_ui import Ui_ImportOptionsWindow
+from .assign_ui import Ui_AssignWindow
 import pandas as pd
 import laspy as lp
 import os
@@ -427,14 +428,17 @@ class PCDataModel(QtCore.QAbstractTableModel):
 
     '''[Gabriele]  Abstract table model that can be used to quickly display imported pc files data  from a pandas df. Taken from this stack overflow post https://stackoverflow.com/questions/31475965/fastest-way-to-populate-qtableview-from-pandas-data-frame
     '''
-    def __init__(self, data, parent=None,*args, **kwargs):
+    def __init__(self, data, start_col,end_col,start_row,end_row, parent=None,*args, **kwargs):
         super(PCDataModel,self).__init__(*args, **kwargs)
+
+
         self.limit = 100
-        if data.shape[0] > self.limit:
-            self.data = data[:100] # [Gabriele] limit the preview data if the number of points are grater than 100
+
+        if end_row == -1:
+            self.data = data.iloc[start_row:start_row+100, start_col:end_col] # [Gabriele] limit the preview data if the number of points are grater than 100
             print(f'Number of points grater than {self.limit}, displaying the 100 rows below the start row')
         else:
-            self.data = data
+            self.data = data.iloc[start_row:end_row, start_col:end_col]
 
     def columnCount(self, parent=None): # [Gabriele] the n of columns is = to the number of columns of the input data set (.shape[1])
         return self.data.shape[1]
@@ -444,16 +448,17 @@ class PCDataModel(QtCore.QAbstractTableModel):
     '''[Gabriele]  Populate the table with data depending on how much of the table is shown. The model has different indexes with different roles, DisplayRole has index 0.'''
 
     def data(self, index, role: QtCore.Qt.DisplayRole):
+        # print(index.column())
         if index.isValid():
             if role == QtCore.Qt.DisplayRole:
-                return str(self.data.iloc[index.row()][index.column()])
+                return str(self.data.iloc[index.row(), index.column()])
         return None
 
     '''[Gabriele] Set header and index If the "container" is horizontal (orientation index 1) and has a display role (index 0) (-> is the header of the table). If the "container" is vertical (orientation index 2) and has a display role (index 0) (-> is the index of the table).'''
 
     def headerData(self, col, orientation, role):
         if orientation == QtCore.Qt.Horizontal and role == QtCore.Qt.DisplayRole:
-            return self.data.columns[col] # [Gabriele] Set the header names
+            return str(self.data.columns[col]) # [Gabriele] Set the header names
         if orientation == QtCore.Qt.Vertical and role == QtCore.Qt.DisplayRole:
             return self.data.index[col] # [Gabriele] Set the indexes
         return None
@@ -511,12 +516,15 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
         'actionImportPC': self.import_PC
         }
 
+
         self.parent = parent
         self.action = self.sender() # [Gabriele] Name of the actionmenu from which the import function was called.
+        self.assigned = False
         self.show_qt_canvas()
 
+
         '''[Gabriele]  Different types of signals depending on the field in the import options'''
-        self.PathtoolButton.clicked.connect(self.read_file)
+        self.PathtoolButton.clicked.connect(self.import_file)
 
         self.StartColspinBox.valueChanged.connect(lambda: self.import_options(self.StartColspinBox.objectName(),self.StartColspinBox.value()))
 
@@ -528,9 +536,13 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
 
         self.EndRowspinBox.valueChanged.connect(lambda: self.import_options(self.EndRowspinBox.objectName(),self.EndRowspinBox.value()))
 
+        ''' [Gabriele] The text separator value is confronted with the dict values and then assigned the correct symbol. <comma> --> ","'''
+
         self.SeparatorcomboBox.currentTextChanged.connect(lambda: self.import_options(self.SeparatorcomboBox.objectName(),self.sep_dict[self.SeparatorcomboBox.currentText()]))
 
-        self.PreviewButton.clicked.connect(lambda: self.preview_file(True))
+        self.PreviewButton.clicked.connect(lambda: self.preview_file(self.input_data_df))
+
+        self.assignDataButton.clicked.connect(lambda: assign_data(self))
 
         self.ConfirmBox.accepted.connect(self.import_func_dict[self.action.objectName()])
         self.ConfirmBox.rejected.connect(self.close)
@@ -553,22 +565,13 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
         """Show the Qt Window"""
         self.show()
 
-    def read_file(self):
+    def import_file(self):
 
-        self.import_options_dict['in_path'] = open_file_dialog(parent=self,caption='Import point cloud data',filter="Text files (*.txt *.csv *xyz);;PLY files (*.ply);;LAS files (*.las *.laz)")
+        self.import_options_dict['in_path'] = open_file_dialog(parent=self,caption='Import point cloud data',filter="All supported (*.txt *.csv *.xyz *.ply *.las *.laz);;Text files (*.txt *.csv *.xyz);;PLY files (*.ply);;LAS/LAZ files (*.las *.laz)")
         self.PathlineEdit.setText(self.import_options_dict['in_path'])
 
-    '''[Gabriele]  Function used to preview the data using the PCDataModel'''
-    def preview_file(self,preview=True):
-
-        col_range = list(range(self.import_options_dict['StartColspinBox'], self.import_options_dict['EndColspinBox']))
-
-        start_row = self.import_options_dict['StartRowspinBox']
-        end_row = self.import_options_dict['EndRowspinBox']
-
-        '''[Gabriele]  When the endrow number is -1 -> use all rows (below the start row). Else use the range defined as start_row (skip_rows) and end_row - start_row (n_rows)'''
-
         try:
+
             _,extension = os.path.splitext(self.import_options_dict['in_path'])
 
             if extension == '.las' or extension == '.laz':
@@ -576,22 +579,9 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
 
             else:
 
-                if end_row == -1:
-                    self.input_data_df = pd.read_csv(self.import_options_dict['in_path'],
-                                                sep=self.import_options_dict['SeparatorcomboBox'],
-                                                header=self.import_options_dict['HeaderspinBox'],
-                                                usecols=col_range,skiprows=range(1, start_row))
-
-                else:
-                    end_row -= start_row
-
-                    self.input_data_df = pd.read_csv(self.import_options_dict['in_path'],
-                                                sep=self.import_options_dict['SeparatorcomboBox'],
-                                                header=self.import_options_dict['HeaderspinBox'],
-                                                usecols=col_range,skiprows=range(1, start_row),nrows=end_row)
-            if preview:
-                model = PCDataModel(self.input_data_df)
-                self.dataView.setModel(model)
+                self.input_data_df = pd.read_csv(self.import_options_dict['in_path'],
+                                            sep=self.import_options_dict['SeparatorcomboBox'],
+                                            header=self.import_options_dict['HeaderspinBox'])
 
         except ValueError:
             print('Could not preview: invalid column, row or separator')
@@ -599,9 +589,31 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
             print('Could not preview: invalid file name')
 
 
+    '''[Gabriele]  Function used to preview the data using the PCDataModel'''
+
+    def preview_file(self,input_data_df):
+
+        start_col = self.import_options_dict['StartColspinBox']
+        end_col = self.import_options_dict['EndColspinBox']
+
+        start_row = self.import_options_dict['StartRowspinBox']
+        end_row = self.import_options_dict['EndRowspinBox']
+
+        self.model = PCDataModel(self.input_data_df,start_col,end_col,start_row,end_row)
+        self.dataView.setModel(self.model)
+
+        '''[Gabriele]  When the endrow number is -1 -> use all rows (below the start row). Else use the range defined as start_row (skip_rows) and end_row - start_row (n_rows)'''
+
+
     def import_PC(self):
-        self.preview_file(preview=False) # [Gabriele] import the data without the preview
-        pc2vtk(self.import_options_dict['in_path'],self.input_data_df,self=self.parent)
+         # [Gabriele] import the data without the preview
+        start_col = self.import_options_dict['StartColspinBox']
+        end_col = self.import_options_dict['EndColspinBox']
+
+        start_row = self.import_options_dict['StartRowspinBox']
+        end_row = self.import_options_dict['EndRowspinBox']
+        # print(self.input_data_df['r'])
+        pc2vtk(self.import_options_dict['in_path'],self.input_data_df,start_col,end_col,start_row,end_row,self=self.parent)
 
     def las2df(self,in_path):
         las_data = lp.read(in_path)
@@ -610,12 +622,65 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
             if format.name == 'X' or format.name == 'Y' or format.name == 'Z':
                 attr = format.name.lower()
                 prop_dict[attr] = np.c_[getattr(las_data,attr)].flatten()
-            elif format.name == 'red' or format.name == 'green' or format.name == 'blue':
-                data = getattr(las_data,format.name)/255
-                data = data.astype(int)
-                prop_dict[format.name] = data
-
             else:
-                prop_dict[format.name] = getattr(las_data,format.name)
+                prop_dict[format.name] = np.c_[getattr(las_data,format.name)].flatten()
         df = pd.DataFrame.from_dict(prop_dict)
         return df
+
+class assign_data(QMainWindow, Ui_AssignWindow):
+
+    def __init__(self, parent=None, *args, **kwargs):
+
+        super(assign_data, self).__init__(parent, *args, **kwargs)
+        self.setupUi(self)
+
+        self.parent = parent
+        self.rename_df = {} # [Gabriele] Dict used to rename the columns of the df
+        self.show_qt_canvas()
+        self.ConfirmButton.rejected.connect(self.close)
+
+        try:
+            self.df = self.parent.input_data_df
+            n_attr = self.parent.input_data_df.shape[1]
+            col_names = list(self.parent.input_data_df.columns)
+
+        except AttributeError:
+            print('No data to assign')
+            self.ConfirmButton.accepted.connect(self.close)
+        else:
+            self.AssignTable.setRowCount(n_attr)
+            self.AssignTable.setColumnCount(2)
+            self.AssignTable.setHorizontalHeaderLabels(['Column name','Attributes'])
+            self.ConfirmButton.accepted.connect(self.modify_df)
+
+            for i in range(n_attr):
+                self.AttrcomboBox = QtWidgets.QComboBox(self)
+                self.AttrcomboBox.setObjectName(f'AttrcomboBox{i}')
+                self.AttrcomboBox.setEditable(False)
+                self.AttrcomboBox.addItems(['N.A.','x','y','z','r','g','b'])
+                self.AttrcomboBox.SelectedIndex = 0
+                self.AttrcomboBox.currentTextChanged.connect(lambda: self.ass_value())
+                self.ColnameItem = QtWidgets.QTableWidgetItem()
+                self.ColnameItem.setText(str(col_names[i]))
+                self.AssignTable.setItem(i,0,self.ColnameItem)
+                self.AssignTable.setCellWidget(i,1,self.AttrcomboBox)
+
+
+    def ass_value(self):
+        '''[Gabriele] Get column and row of clicked widget in table '''
+        clicked = QtWidgets.QApplication.focusWidget().pos()
+        index = self.AssignTable.indexAt(clicked)
+        col = index.column()
+        row = index.row()
+        sel_combo = self.AssignTable.cellWidget(row,col) # [Gabriele] Combobox @ row and column
+        '''[Gabriele] Use a dict to rename the columns. The keys are the original column names while the values are the new names'''
+        self.rename_df[self.df.columns[row]] = sel_combo.currentText()
+        self.df = self.parent.input_data_df.rename(columns=self.rename_df)
+
+    def show_qt_canvas(self):
+        """Show the Qt Window"""
+        self.show()
+
+    def modify_df(self):
+        self.parent.input_data_df = self.df # [Gabriele] Update the data in memory
+        self.close()

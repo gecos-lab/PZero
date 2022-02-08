@@ -30,68 +30,93 @@ from .entities_factory import PCDom
 from .dom_collection import DomCollection
 import pyvista as pv
 import xarray as xr
+import pandas as pd
 
 
 
-def pc2vtk(in_file_name,input_df,self=None):
+def pc2vtk(in_file_name,raw_input_df,start_col,end_col,start_row,end_row,self=None):
 
     _,extension = os.path.splitext(in_file_name)
 
-
-
-    n_cells = input_df.shape[0] # [Gabriele] the number of cells is = to the number of rows of the df.
-
-    ''' [Gabriele] Correcting input data by subtracting an equal value approximated to the hundreds (53932.4325 -> 53932.4325 - 53900.0000 = 32.4325). Can be always applied since for numbers < 100 the approximation is always 0'''
-
-
-    # if len(str(input_df.iloc[0,0]).replace('.','')) > 12:
-    x_name,y_name,z_name = input_df.iloc[:,:3].columns
-    input_df[x_name] -= input_df.iloc[0,0].round(-2)
-    input_df[y_name] -= input_df.iloc[0,1].round(-2)
-
-    '''[Gabriele] Extract RGB column values [TODO] make it dynamic (RGB values are not always after xyz values)'''
-
-    if extension == '.las' or extension == '.laz':
-        RGB = input_df.loc[:,'red':'blue'].values
+    if end_row == -1:
+        input_df = raw_input_df.iloc[start_row:, start_col:end_col]
     else:
-        RGB = input_df.iloc[:,3:6].values
-        # scalars = input_df.iloc[:,6].values
-        # print(RGB)
+        input_df = raw_input_df.iloc[start_row:end_row, start_col:end_col]
 
-    """[Gabriele] Convert to PCDom() instance. Used https://docs.pyvista.org/examples/00-load/wrap-trimesh.html as reference"""
-    point_cloud = PCDom() #[Gabriele] vtkPolyData object
-    points = vtkPoints() #[Gabriele] points object
-    vertices = vtkCellArray() #[Gabriele] vertices (cells)
-    vertices.InsertNextCell(n_cells) #[Gabriele] set n cells with n= number of points in the dataset
-    colors = vtkUnsignedCharArray() # [Gabriele] create colors as unsigned char array (int only)
-    colors.SetNumberOfComponents(3) # [Gabriele] Set numbers of components (RGB = 3)
-    colors.SetName("colors") # [Gabriele] give it a name
+    '''[Gabriele] Check if there is invalid data (Text, NaN, etc)'''
+    val_check = input_df.apply(lambda c: pd.to_numeric(c, errors='coerce').notnull().all())
 
- #[Gabriele] insert the datasets points and assign each point to a cell
-    for p,c in zip(input_df.iloc[:,:3].values,RGB):
-        pid = points.InsertNextPoint(p)
-        vertices.InsertCellPoint(pid)
-        if c.dtype == 'float64': # [Gabriele] RGB must be in 0-255 range
-            c = np.round(c*255,0)
-        colors.InsertNextTuple3(c[0],c[1],c[2]) # [Gabriele] Insert color values
-    point_cloud.SetPoints(points) #[Gabriele] Assign the points to the point_cloud (vtkPolyData)
-    point_cloud.SetVerts(vertices) #[Gabriele] Assign the vertices to the point_cloud (vtkPolyData)
-    point_cloud.GetPointData().SetScalars(colors) # [Gabriele]Set color data
+    if not val_check.all():
+        print('Invalid values in data set, not importing.')
+    else:
+        input_df = input_df.astype(float)
+        ''' [Gabriele] Sort df by columns (this way the order of different catecories is always the same)'''
+        # input_df = input_df.reindex(sorted(input_df.columns),axis=1)
+        n_cells = input_df.shape[0] # [Gabriele] the number of cells is = to the number of rows of the df.
 
-    point_cloud.Modified()
-    """Create dictionary."""
-    curr_obj_attributes = deepcopy(DomCollection.dom_entity_dict)
-    curr_obj_attributes['uid'] = str(uuid.uuid4())
-    curr_obj_attributes['name'] = os.path.basename(in_file_name)
-    curr_obj_attributes['dom_type'] = "PCDom"
-    curr_obj_attributes['texture_uids'] = []
-    curr_obj_attributes['properties_names'] = ['RGB']
-    curr_obj_attributes['properties_components'] = []
-    curr_obj_attributes['vtk_obj'] = point_cloud
-    self.TextTerminal.appendPlainText(f'vtk_obj: {curr_obj_attributes["vtk_obj"]}')
-    """Add to entity collection."""
-    self.dom_coll.add_entity_from_dict(entity_dict=curr_obj_attributes)
-    self.TextTerminal.appendPlainText(f'Successfully imported {in_file_name}')
-    """Cleaning."""
-    del points
-    del point_cloud
+        ''' [Gabriele] Correcting input data by subtracting an equal value approximated to the hundreds (53932.4325 -> 53932.4325 - 53900.0000 = 32.4325). Can be always applied since for numbers < 100 the approximation is always 0. The value corresponds to the first data point (start_row) for x and y (the same quantity needs to be subtracted to all x or y points)'''
+
+
+        # if len(str(input_df.iloc[0,0]).replace('.','')) > 12:
+        input_df['x'] -= input_df['x'][start_row].round(-2)
+        input_df['y'] -= input_df['y'][start_row].round(-2)
+
+
+        '''[Gabriele] Extract XYZ and RGB column values'''
+
+
+        XYZ = np.array([input_df['x'].values,input_df['y'].values,input_df['z'].values]).T
+
+        try:
+            red = input_df['r'].values
+            green = input_df['g'].values
+            blue = input_df['b'].values
+
+            RGB = np.array([red,green,blue]).T
+
+        except KeyError:
+
+            RGB = np.ones_like(XYZ)
+            # [Gabriele] If r,g or b column are not present then use ones (white). 
+
+        """[Gabriele] Convert to PCDom() instance. Used https://docs.pyvista.org/examples/00-load/wrap-trimesh.html as reference"""
+
+        point_cloud = PCDom() #[Gabriele] vtkPolyData object
+        points = vtkPoints() #[Gabriele] points object
+        vertices = vtkCellArray() #[Gabriele] vertices (cells)
+        vertices.InsertNextCell(n_cells) #[Gabriele] set n cells with n= number of points in the dataset
+        colors = vtkUnsignedCharArray() # [Gabriele] create colors as unsigned char array (int only)
+        colors.SetNumberOfComponents(3) # [Gabriele] Set numbers of components (RGB = 3)
+        colors.SetName("colors") # [Gabriele] give it a name
+
+     #[Gabriele] insert the datasets points and assign each point to a cell
+        for p,c in zip(XYZ,RGB):
+            pid = points.InsertNextPoint(p)
+            vertices.InsertCellPoint(pid)
+            if all(i<=1 and i>0 for i in c): # [Gabriele] RGB must be in 0-255 range
+                c = np.round(c*255,0)
+            elif all(i>255 for i in c):
+                c = np.round(c/255,0)
+            colors.InsertNextTuple3(c[0],c[1],c[2]) # [Gabriele] Insert color values
+
+        point_cloud.SetPoints(points) #[Gabriele] Assign the points to the point_cloud (vtkPolyData)
+        point_cloud.SetVerts(vertices) #[Gabriele] Assign the vertices to the point_cloud (vtkPolyData)
+        point_cloud.GetPointData().SetScalars(colors) # [Gabriele] Set color data
+
+        point_cloud.Modified()
+        """Create dictionary."""
+        curr_obj_attributes = deepcopy(DomCollection.dom_entity_dict)
+        curr_obj_attributes['uid'] = str(uuid.uuid4())
+        curr_obj_attributes['name'] = os.path.basename(in_file_name)
+        curr_obj_attributes['dom_type'] = "PCDom"
+        curr_obj_attributes['texture_uids'] = []
+        curr_obj_attributes['properties_names'] = []
+        curr_obj_attributes['properties_components'] = []
+        curr_obj_attributes['vtk_obj'] = point_cloud
+        self.TextTerminal.appendPlainText(f'vtk_obj: {curr_obj_attributes["vtk_obj"]}')
+        """Add to entity collection."""
+        self.dom_coll.add_entity_from_dict(entity_dict=curr_obj_attributes)
+        self.TextTerminal.appendPlainText(f'Successfully imported {in_file_name}')
+        """Cleaning."""
+        del points
+        del point_cloud
