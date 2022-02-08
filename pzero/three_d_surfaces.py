@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 from .geological_collection import GeologicalCollection
 from .mesh3d_collection import Mesh3DCollection
-from .helper_dialogs import multiple_input_dialog, input_one_value_dialog, input_text_dialog, input_combo_dialog, input_checkbox_dialog, tic, toc, progress_dialog
+from .helper_dialogs import multiple_input_dialog, input_one_value_dialog, input_text_dialog, input_combo_dialog, input_checkbox_dialog, tic, toc, progress_dialog, general_input_dialog
 from .entities_factory import TriSurf, XsPolyLine, PolyLine, VertexSet, Voxet, XsVoxet, XsTriSurf, XsVertexSet, MapImage, DEM
 
 """LoopStructural import(s)"""
@@ -226,20 +226,40 @@ def implicit_model_loop_structural(self):
     toc()
     print("all_input_data_df:\n", all_input_data_df)
     """Ask for bounding box for the model"""
-    input_dict = {'boundary': ['Boundary: ', self.boundary_coll.get_names()], 'maximum_z': ['Maximum Z: ', 1000.0], 'origin_z': ['Minimum Z: ', -1000.0], 'method': ['Interpolation method: ', ['PLI', 'FDI', 'surfe']]}
+    input_dict = {'boundary': ['Boundary: ', self.boundary_coll.get_names()], 'method': ['Interpolation method: ', ['PLI', 'FDI', 'surfe']]}
     options_dict = multiple_input_dialog(title='Implicit Modelling - LoopStructural algorithms', input_dict=input_dict)
     if options_dict is None:
         options_dict['boundary'] = self.boundary_coll.get_names()[0]
-        options_dict['origin_z'] = -1000.0
-        options_dict['maximum_z'] = 1000.0
         options_dict['method'] = 'PLI'
     boundary_uid = self.boundary_coll.df.loc[self.boundary_coll.df['name'] == options_dict['boundary'], 'uid'].values[0]
     origin_x = self.boundary_coll.get_uid_vtk_obj(boundary_uid).GetBounds()[0]
     origin_y = self.boundary_coll.get_uid_vtk_obj(boundary_uid).GetBounds()[2]
-    origin_z = options_dict['origin_z']
     maximum_x = self.boundary_coll.get_uid_vtk_obj(boundary_uid).GetBounds()[1]
     maximum_y = self.boundary_coll.get_uid_vtk_obj(boundary_uid).GetBounds()[3]
-    maximum_z = options_dict['maximum_z']
+    if self.boundary_coll.get_uid_vtk_obj(boundary_uid).GetBounds()[4] == self.boundary_coll.get_uid_vtk_obj(boundary_uid).GetBounds()[5]:
+        """Boundary with no vertical dimension has been chosen. A dialog that asks for max and min Z is needed"""
+        vertical_extension_in = {'message': ['Model vertical extension', 'Define MAX and MIN vertical extension of the 3D implicit model.', 'QLabel'],
+                                'top': ['Insert top', 1000.0, 'QLineEdit'],
+                                'bottom': ['Insert bottom', -1000.0, 'QLineEdit']}
+        vertical_extension_updt = general_input_dialog(title='Implicit Modelling - LoopStructural algorithms', input_dict=vertical_extension_in)
+        if vertical_extension_updt['top'] is None:
+            vertical_extension_updt['top'] = 1000.0
+        if vertical_extension_updt['bottom'] is None:
+            vertical_extension_updt['bottom'] = -1000.0
+        if vertical_extension_updt['bottom'] > vertical_extension_updt['top']:
+            """Manages the case where mistakenly bottom > top"""
+            origin_z = vertical_extension_updt['top']
+            maximum_z = vertical_extension_updt['bottom']
+        elif vertical_extension_updt['bottom'] == vertical_extension_updt['top']:
+            origin_z = vertical_extension_updt['bottom'] - 25.0 # arbitrary value
+            maximum_z = vertical_extension_updt['bottom'] + 25.0 # arbitrary value
+        else:
+            origin_z = vertical_extension_updt['bottom']
+            maximum_z = vertical_extension_updt['top']
+    else:
+        """Collect information on the vertical extension of the model from the Boundary vtk obj"""
+        origin_z = self.boundary_coll.get_uid_vtk_obj(boundary_uid).GetBounds()[4]
+        maximum_z = self.boundary_coll.get_uid_vtk_obj(boundary_uid).GetBounds()[5]
     edge_x = maximum_x - origin_x
     edge_y = maximum_y - origin_y
     edge_z = maximum_z - origin_z
