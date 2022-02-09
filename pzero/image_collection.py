@@ -32,7 +32,8 @@ class ImageCollection(QAbstractTableModel):
                          'name': "undef",
                          'image_type': "undef",
                          'bands_n': int(0),
-                         'num_type': "",
+                         'bands_names': [],
+                         'bands_types': [],
                          'x_section': "",  # this is the uid of the cross section for "XsVertexSet", "XsPolyLine", and "XsImage", empty for all others
                          'vtk_obj': None}
 
@@ -40,12 +41,13 @@ class ImageCollection(QAbstractTableModel):
                               'name': str,
                               'image_type': str,
                               'bands_n': int,
-                              'num_type': str,
+                              'bands_names': list,
+                              'bands_types': list,
                               'x_section': str,
                               'vtk_obj': object}
 
     """List of valid data types."""
-    valid_image_types = ["MapImage", "XsImage", "TSDomImage"]
+    valid_image_types = ["MapImage", "XsImage", "TSDomImage", "Seismics"]
 
     """Initialize ImageCollection table. Column headers are taken from
     ImageCollection.image_entity_dict.keys(), and parent is supposed to be the project_window."""
@@ -136,13 +138,21 @@ class ImageCollection(QAbstractTableModel):
         """Set value(s) stored in dataframe (as pointer) from uid."""
         self.df.loc[self.df['uid'] == uid, 'bands_n'] = bands_n
 
-    def get_uid_num_type(self, uid=None):
-        """Get value(s) stored in dataframe (as pointer) from uid."""
-        return self.df.loc[self.df['uid'] == uid, 'num_type'].values[0]
+    def get_uid_bands_names(self, uid=None):
+        """Get value(s) stored in dataframe (as pointer) from uid.. This is a LIST even if we extract it with values[0]!"""
+        return self.df.loc[self.df['uid'] == uid, 'bands_names'].values[0]
 
-    def set_uid_num_type(self, uid=None, num_type=None):
+    def set_uid_bands_names(self, uid=None, bands_names=None):
         """Set value(s) stored in dataframe (as pointer) from uid."""
-        self.df.loc[self.df['uid'] == uid, 'num_type'] = num_type
+        self.df.loc[self.df['uid'] == uid, 'bands_names'] = bands_names
+
+    def get_uid_bands_types(self, uid=None):
+        """Get value(s) stored in dataframe (as pointer) from uid. This is a LIST even if we extract it with values[0]!"""
+        return self.get_uid_vtk_obj(uid).bands_types
+
+    def set_uid_bands_types(self, uid=None, bands_types=None):
+        """Set value(s) stored in dataframe (as pointer) from uid."""
+        self.df.loc[self.df['uid'] == uid, 'bands_types'] = bands_types
 
     def get_uid_x_section(self, uid=None):
         """Get value(s) stored in dataframe (as pointer) from uid."""

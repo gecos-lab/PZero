@@ -1021,7 +1021,7 @@ class Voxet(vtk.vtkImageData):
             dsa.WrapDataObject(self).PointData[data_key][point_id, col] = point_data_array[col]
 
     # @property
-    # def num_type(self):
+    # def bands_types(self):
     #     """Get the type of the different scalar components."""
     #     return self.GetScalarTypeAsString()
     #
@@ -1569,6 +1569,14 @@ class MapImage(vtk.vtkImageData):
         # image_data = point_data.reshape((self.rows_n, self.columns_n, self.bands_n))[::-1, ::-1, :]
         image_data = point_data.reshape((self.rows_n, self.columns_n, self.bands_n))
         return image_data
+
+    @property
+    def bands_types(self):
+        bands_types = []
+        for band in range(self.bands_n):
+            band_type = type(self.image_data[0, 0, band])
+            bands_types.append(band_type)
+        return bands_types
 
     @property
     def frame(self):

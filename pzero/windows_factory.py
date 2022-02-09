@@ -1834,7 +1834,7 @@ class View3D(BaseView):
             this_actor = self.plot_mesh_3D(uid=uid, plot_entity=plot_entity.frame, color_RGB=None, show_property=None, show_scalar_bar=None,
                                            color_bar_range=None, show_property_title=None, line_thick=None,
                                            plot_texture_option=plot_entity.texture, plot_rgb_option=plot_rgb_option, visible=visible)
-        elif isinstance(plot_entity, Seismics):
+        elif isinstance(plot_entity, Seismics):  #________________________________
             plot_rgb_option = None
             if isinstance(plot_entity.points, np.ndarray):
                 """This  check is needed to avoid errors when trying to plot an empty
@@ -2612,7 +2612,7 @@ class ViewMap(View2D):
                     this_actor = None
             else:
                 this_actor = None
-        elif isinstance(plot_entity, Seismics):
+        elif isinstance(plot_entity, Seismics):  #____________________________________________
             if isinstance(plot_entity.points, np.ndarray):
                 if plot_entity.points_number > 0:
                     """This  check is needed to avoid errors when trying to plot an empty

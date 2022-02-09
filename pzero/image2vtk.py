@@ -63,9 +63,10 @@ def geo_image2vtk(self=None, in_file_name=None):
         curr_obj_dict['image_type'] = "MapImage"
         if geo_image.count == 1:
             curr_obj_dict['bands_n'] = int(1)
+            curr_obj_dict['bands_types'] = [vtk_image.GetScalarType()]
         elif geo_image.count == 3:
             curr_obj_dict['bands_n'] = int(3)
-        curr_obj_dict['num_type'] = vtk_image.GetScalarType()
+            curr_obj_dict['bands_types'] = [vtk_image.GetScalarType(), vtk_image.GetScalarType(), vtk_image.GetScalarType()]
         curr_obj_dict['vtk_obj'] = vtk_image
         """Add to entity collection."""
         self.image_coll.add_entity_from_dict(entity_dict=curr_obj_dict)

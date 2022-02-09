@@ -45,7 +45,7 @@ class Mesh3DCollection(QAbstractTableModel):
                                'vtk_obj': object}
 
     """List of valid data types."""
-    valid_mesh3d_types = ["TetraSolid", "Voxet", "Seismics", "XsVoxet"]
+    valid_mesh3d_types = ["TetraSolid", "Voxet", "XsVoxet"]
 
     """Initialize Mesh3DCollection table. Column headers are taken from
     Mesh3DCollection.mesh3d_entity_dict.keys(), and parent is supposed to be the project_window."""

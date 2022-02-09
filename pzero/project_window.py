@@ -555,6 +555,11 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 im_writer.SetInputData(self.image_coll.get_uid_vtk_obj(uid))
                 im_writer.Write()
                 prgs_bar.add_one()
+            elif self.image_coll.df.loc[self.image_coll.df['uid'] == uid, 'mesh3d_type'].values[0] in ["Seismics"]:  #____________________________
+                sg_writer = vtk.vtkXMLStructuredGridWriter()
+                sg_writer.SetFileName(out_dir_name + "/" + uid + ".vts")
+                sg_writer.SetInputData(self.image_coll.get_uid_vtk_obj(uid))
+                sg_writer.Write()
         """Save mesh3d collection table to JSON file and entities as VTK."""
         out_cols = list(self.mesh3d_coll.df.columns)
         out_cols.remove('vtk_obj')
@@ -567,11 +572,6 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 im_writer.SetFileName(out_dir_name + "/" + uid + ".vti")
                 im_writer.SetInputData(self.mesh3d_coll.get_uid_vtk_obj(uid))
                 im_writer.Write()
-            elif self.mesh3d_coll.df.loc[self.mesh3d_coll.df['uid'] == uid, 'mesh3d_type'].values[0] in ["Seismics"]:
-                sg_writer = vtk.vtkXMLStructuredGridWriter()
-                sg_writer.SetFileName(out_dir_name + "/" + uid + ".vts")
-                sg_writer.SetInputData(self.mesh3d_coll.get_uid_vtk_obj(uid))
-                sg_writer.Write()
             prgs_bar.add_one()
         """Save boundaries collection table to JSON file and entities as VTK."""  #_________________________________________________
         out_cols = list(self.boundary_coll.df.columns)
@@ -750,11 +750,11 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     im_reader.Update()
                     vtk_object.ShallowCopy(im_reader.GetOutput())
                     vtk_object.Modified()
-                elif self.mesh3d_coll.df.loc[self.mesh3d_coll.df['uid'] == uid, 'mesh3d_type'].values[0] in ["Seismics"]:
+                elif self.mesh3d_coll.df.loc[self.mesh3d_coll.df['uid'] == uid, 'mesh3d_type'].values[0] in ["Seismics"]:  #__________________________
                     if not os.path.isfile((in_dir_name + "/" + uid + ".vts")):
                         print("error: missing VTK file")
                         return
-                    vtk_object = Seismics()
+                    vtk_object = Seismics()  #__________________________________________________
                     sg_reader = vtk.vtkXMLStructuredGridReader()
                     sg_reader.SetFileName(in_dir_name + "/" + uid + ".vts")
                     sg_reader.Update()
