@@ -46,12 +46,18 @@ def pc2vtk(in_file_name,raw_input_df,start_col,end_col,start_row,end_row,self=No
     '''[Gabriele] Check if there is invalid data (Text, NaN, etc)'''
     val_check = input_df.apply(lambda c: pd.to_numeric(c, errors='coerce').notnull().all())
 
+    '''[Gabriele] Filter the scalar values present in the input dataset. Put these entries in the properties name and components lists (columns and values)'''
+
+    scalar_df =  input_df.filter(regex='scalar')
+
+    scalar_names = list(scalar_df)
+    scalar_values = scalar_df.values.T
+
     if not val_check.all():
         print('Invalid values in data set, not importing.')
     else:
         input_df = input_df.astype(float)
-        ''' [Gabriele] Sort df by columns (this way the order of different catecories is always the same)'''
-        # input_df = input_df.reindex(sorted(input_df.columns),axis=1)
+
         n_cells = input_df.shape[0] # [Gabriele] the number of cells is = to the number of rows of the df.
 
         ''' [Gabriele] Correcting input data by subtracting an equal value approximated to the hundreds (53932.4325 -> 53932.4325 - 53900.0000 = 32.4325). Can be always applied since for numbers < 100 the approximation is always 0. The value corresponds to the first data point (start_row) for x and y (the same quantity needs to be subtracted to all x or y points)'''
@@ -62,7 +68,7 @@ def pc2vtk(in_file_name,raw_input_df,start_col,end_col,start_row,end_row,self=No
         input_df['y'] -= input_df['y'][start_row].round(-2)
 
 
-        '''[Gabriele] Extract XYZ and RGB column values'''
+        '''[Gabriele] Extract XYZ and RGB column values (if rgb present)'''
 
 
         XYZ = np.array([input_df['x'].values,input_df['y'].values,input_df['z'].values]).T
@@ -76,8 +82,8 @@ def pc2vtk(in_file_name,raw_input_df,start_col,end_col,start_row,end_row,self=No
 
         except KeyError:
 
+            # [Gabriele] If r,g or b columns are not present then use ones (white)
             RGB = np.ones_like(XYZ)
-            # [Gabriele] If r,g or b column are not present then use ones (white). 
 
         """[Gabriele] Convert to PCDom() instance. Used https://docs.pyvista.org/examples/00-load/wrap-trimesh.html as reference"""
 
@@ -93,7 +99,8 @@ def pc2vtk(in_file_name,raw_input_df,start_col,end_col,start_row,end_row,self=No
         for p,c in zip(XYZ,RGB):
             pid = points.InsertNextPoint(p)
             vertices.InsertCellPoint(pid)
-            if all(i<=1 and i>0 for i in c): # [Gabriele] RGB must be in 0-255 range
+             # [Gabriele] RGB must be in 0-255 range
+            if all(i<=1 and i>0 for i in c):
                 c = np.round(c*255,0)
             elif all(i>255 for i in c):
                 c = np.round(c/255,0)
@@ -110,8 +117,8 @@ def pc2vtk(in_file_name,raw_input_df,start_col,end_col,start_row,end_row,self=No
         curr_obj_attributes['name'] = os.path.basename(in_file_name)
         curr_obj_attributes['dom_type'] = "PCDom"
         curr_obj_attributes['texture_uids'] = []
-        curr_obj_attributes['properties_names'] = []
-        curr_obj_attributes['properties_components'] = []
+        curr_obj_attributes['properties_names'] = scalar_names
+        curr_obj_attributes['properties_components'] = scalar_values
         curr_obj_attributes['vtk_obj'] = point_cloud
         self.TextTerminal.appendPlainText(f'vtk_obj: {curr_obj_attributes["vtk_obj"]}')
         """Add to entity collection."""

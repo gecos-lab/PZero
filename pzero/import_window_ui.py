@@ -130,7 +130,7 @@ class Ui_ImportOptionsWindow(object):
         self.formLayout.setWidget(5, QtWidgets.QFormLayout.LabelRole, self.SeparatoLabel)
         self.SeparatorcomboBox = QtWidgets.QComboBox(self.OptionsWidget)
         self.SeparatorcomboBox.setEditable(True)
-        self.SeparatorcomboBox.setPlaceholderText("")
+        # self.SeparatorcomboBox.setPlaceholderText("")
         self.SeparatorcomboBox.setObjectName("SeparatorcomboBox")
         self.SeparatorcomboBox.addItem("")
         self.SeparatorcomboBox.addItem("")
@@ -186,4 +186,3 @@ class Ui_ImportOptionsWindow(object):
         self.PreviewButton.setText(_translate("ImportOptionsWindow", "Preview"))
         self.assignDataButton.setText(_translate("ImportOptionsWindow", "Assign data"))
         self.actionImport.setText(_translate("ImportOptionsWindow", "Import"))
-

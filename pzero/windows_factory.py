@@ -1906,6 +1906,9 @@ class View3D(BaseView):
                     show_property = plot_entity.points_Y
                 elif show_property == 'Z':
                     show_property = plot_entity.points_Z
+                elif show_property == 'RGB': #[Gabriele] For now this can do
+                    show_scalar_bar = False
+                    show_property = None
                 else:
                     if plot_entity.get_point_data_shape(show_property)[-1] == 3:
                         plot_rgb_option = True
@@ -1936,7 +1939,11 @@ class View3D(BaseView):
                 elif show_property == 'RGB':
                     show_scalar_bar = False
                     show_property = plot_entity.get_point_data('colors') # [Gabriele] Get color data
+
                     plot_rgb_option = True # [Gabriele] Use RGB
+                else:
+                    property_names_index = self.parent.dom_coll.df.loc[self.parent.dom_coll.df['uid'] == uid, "properties_names"].values[0].index(show_property)
+                    show_property = self.parent.dom_coll.df.loc[self.parent.dom_coll.df['uid'] == uid, "properties_components"].values[0][property_names_index]
 
 
 
@@ -2089,8 +2096,8 @@ class View3D(BaseView):
             default position before any mesh is plotted."""
             camera_position = self.plotter.camera_position
 
-        # [Gabriele] if rgb options is true -> there is no need of cmap 
-        if show_property is not None and plot_rgb_option == False:
+        # [Gabriele] if rgb options is true -> there is no need of cmap
+        if show_property is not None and plot_rgb_option == None:
             show_property_cmap = self.parent.prop_legend_df.loc[self.parent.prop_legend_df['property_name'] == show_property_title, "colormap"].values[0]
         else:
             show_property_cmap = None

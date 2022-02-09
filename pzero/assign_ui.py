@@ -11,7 +11,7 @@ from PyQt5 import QtCore, QtGui, QtWidgets
 class Ui_AssignWindow(object):
     def setupUi(self, AssignWindow):
         AssignWindow.setObjectName("AssignWindow")
-        AssignWindow.resize(250, 620)
+        AssignWindow.resize(450, 620)
         self.AssignLayout = QtWidgets.QWidget(AssignWindow)
         self.AssignLayout.setObjectName("AssignLayout")
         self.verticalLayout_2 = QtWidgets.QVBoxLayout(self.AssignLayout)

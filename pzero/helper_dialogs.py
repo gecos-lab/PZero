@@ -649,33 +649,76 @@ class assign_data(QMainWindow, Ui_AssignWindow):
             self.ConfirmButton.accepted.connect(self.close)
         else:
             self.AssignTable.setRowCount(n_attr)
-            self.AssignTable.setColumnCount(2)
-            self.AssignTable.setHorizontalHeaderLabels(['Column name','Attributes'])
+            self.AssignTable.setColumnCount(4)
+            self.AssignTable.setHorizontalHeaderLabels(['Column name','Attributes','Scalar value name','Scalar value state'])
             self.ConfirmButton.accepted.connect(self.modify_df)
-
+            width=0
             for i in range(n_attr):
                 self.AttrcomboBox = QtWidgets.QComboBox(self)
                 self.AttrcomboBox.setObjectName(f'AttrcomboBox{i}')
                 self.AttrcomboBox.setEditable(False)
-                self.AttrcomboBox.addItems(['N.A.','x','y','z','r','g','b'])
+                self.AttrcomboBox.addItems(['N.A.','x','y','z','r','g','b','SCALAR'])
                 self.AttrcomboBox.SelectedIndex = 0
                 self.AttrcomboBox.currentTextChanged.connect(lambda: self.ass_value())
                 self.ColnameItem = QtWidgets.QTableWidgetItem()
                 self.ColnameItem.setText(str(col_names[i]))
+                self.ScalarnameText = QtWidgets.QLineEdit()
+                self.ScalarnameText.setEnabled(False)
+                self.ScalarnameText.returnPressed.connect(lambda: self.ass_scalar())
+                self.ScalarnameText.textEdited.connect(lambda: self.update_label())
+                self.ScalarnameLabel = QtWidgets.QLabel()
+                self.ScalarnameLabel.setText('Absent')
+
+
                 self.AssignTable.setItem(i,0,self.ColnameItem)
                 self.AssignTable.setCellWidget(i,1,self.AttrcomboBox)
+                self.AssignTable.setCellWidget(i,2,self.ScalarnameText)
+                self.AssignTable.setCellWidget(i,3,self.ScalarnameLabel)
+                self.AssignTable.horizontalHeader().setSectionResizeMode(0,QtWidgets.QHeaderView.ResizeToContents)
+                self.AssignTable.setColumnWidth(2,150)
+                self.AssignTable.setColumnWidth(3,150)
 
+            self.resize(self.AssignTable.horizontalHeader().length()+self.AssignTable.verticalHeader().sizeHint().width()+self.AssignTable.frameWidth() * 2, 620) #[Gabriele] Set appropriate widow size
 
     def ass_value(self):
+
         '''[Gabriele] Get column and row of clicked widget in table '''
+
         clicked = QtWidgets.QApplication.focusWidget().pos()
         index = self.AssignTable.indexAt(clicked)
         col = index.column()
         row = index.row()
         sel_combo = self.AssignTable.cellWidget(row,col) # [Gabriele] Combobox @ row and column
-        '''[Gabriele] Use a dict to rename the columns. The keys are the original column names while the values are the new names'''
-        self.rename_df[self.df.columns[row]] = sel_combo.currentText()
+
+        '''[Gabriele] Use a dict to rename the columns. The keys are the original column names while the values are the new names.
+        [Problem]: If there are two values with the same name it renames without throwing any error but this breakes importing (two different columns with the same name in the same df-> no bueno). This needs fixin' '''
+
+        if sel_combo.currentText() == 'SCALAR':
+            self.AssignTable.cellWidget(row,2).setEnabled(True)
+        else:
+            self.AssignTable.cellWidget(row,2).clear()
+            self.AssignTable.cellWidget(row,2).setEnabled(False)
+            self.rename_df[self.df.columns[row]] = sel_combo.currentText()
+            self.df = self.parent.input_data_df.rename(columns=self.rename_df)
+
+    def ass_scalar(self):
+
+        clicked = QtWidgets.QApplication.focusWidget().pos()
+        index = self.AssignTable.indexAt(clicked)
+        col = index.column()
+        row = index.row()
+        sel_line = self.AssignTable.cellWidget(row,col) # [Gabriele] lineEdit @ row and column
+        scal_name = f'scalar_{sel_line.text()}'
+        self.rename_df[self.df.columns[row]] = scal_name
         self.df = self.parent.input_data_df.rename(columns=self.rename_df)
+        self.AssignTable.cellWidget(row,3).setText('Set')
+
+    def update_label(self):
+        clicked = QtWidgets.QApplication.focusWidget().pos()
+        index = self.AssignTable.indexAt(clicked)
+        col = index.column()
+        row = index.row()
+        self.AssignTable.cellWidget(row,3).setText('Modified')
 
     def show_qt_canvas(self):
         """Show the Qt Window"""
