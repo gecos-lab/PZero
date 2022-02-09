@@ -47,7 +47,7 @@ class ImageCollection(QAbstractTableModel):
                               'vtk_obj': object}
 
     """List of valid data types."""
-    valid_image_types = ["MapImage", "XsImage", "TSDomImage", "Seismics"]
+    valid_image_types = ["MapImage", "XsImage", "TSDomImage", "Seismics", "Image3D"]
 
     """Initialize ImageCollection table. Column headers are taken from
     ImageCollection.image_entity_dict.keys(), and parent is supposed to be the project_window."""

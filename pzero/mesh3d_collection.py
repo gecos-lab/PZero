@@ -33,7 +33,7 @@ class Mesh3DCollection(QAbstractTableModel):
                           'mesh3d_type': "undef",
                           'properties_names': [],
                           'properties_components': [],
-                          'x_section': "",  # this is the uid of the cross section for "XsVertexSet", "XsPolyLine", and "XsImage", empty for all others
+                          'x_section': "",  # this is the uid of the cross section for "XsVoxet", empty for all others
                           'vtk_obj': None}
 
     mesh3d_entity_type_dict = {'uid': str,

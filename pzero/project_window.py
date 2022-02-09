@@ -555,7 +555,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 im_writer.SetInputData(self.image_coll.get_uid_vtk_obj(uid))
                 im_writer.Write()
                 prgs_bar.add_one()
-            elif self.image_coll.df.loc[self.image_coll.df['uid'] == uid, 'mesh3d_type'].values[0] in ["Seismics"]:  #____________________________
+            elif self.image_coll.df.loc[self.image_coll.df['uid'] == uid, 'image_type'].values[0] in ["Seismics"]:
                 sg_writer = vtk.vtkXMLStructuredGridWriter()
                 sg_writer.SetFileName(out_dir_name + "/" + uid + ".vts")
                 sg_writer.SetInputData(self.image_coll.get_uid_vtk_obj(uid))
@@ -716,6 +716,16 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     im_reader.Update()
                     vtk_object.ShallowCopy(im_reader.GetOutput())
                     vtk_object.Modified()
+                elif self.image_coll.df.loc[self.image_coll.df['uid'] == uid, 'image_type'].values[0] in ["Seismics"]:
+                    if not os.path.isfile((in_dir_name + "/" + uid + ".vts")):
+                        print("error: missing VTK file")
+                        return
+                    vtk_object = Seismics()
+                    sg_reader = vtk.vtkXMLStructuredGridReader()
+                    sg_reader.SetFileName(in_dir_name + "/" + uid + ".vts")
+                    sg_reader.Update()
+                    vtk_object.ShallowCopy(sg_reader.GetOutput())
+                    vtk_object.Modified()
                 self.image_coll.set_uid_vtk_obj(uid=uid, vtk_obj=vtk_object)
                 prgs_bar.add_one()
             self.image_coll.endResetModel()
@@ -750,18 +760,8 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     im_reader.Update()
                     vtk_object.ShallowCopy(im_reader.GetOutput())
                     vtk_object.Modified()
-                elif self.mesh3d_coll.df.loc[self.mesh3d_coll.df['uid'] == uid, 'mesh3d_type'].values[0] in ["Seismics"]:  #__________________________
-                    if not os.path.isfile((in_dir_name + "/" + uid + ".vts")):
-                        print("error: missing VTK file")
-                        return
-                    vtk_object = Seismics()  #__________________________________________________
-                    sg_reader = vtk.vtkXMLStructuredGridReader()
-                    sg_reader.SetFileName(in_dir_name + "/" + uid + ".vts")
-                    sg_reader.Update()
-                    vtk_object.ShallowCopy(sg_reader.GetOutput())
-                    vtk_object.Modified()
-                    prgs_bar.add_one()
                 self.mesh3d_coll.set_uid_vtk_obj(uid=uid, vtk_obj=vtk_object)
+                prgs_bar.add_one()
             self.mesh3d_coll.endResetModel()
         """Read boundaries collection and files"""  #_________________________________________________
         if os.path.isfile((in_dir_name + '/boundary_table.csv')) or os.path.isfile((in_dir_name + '/boundary_table.json')):

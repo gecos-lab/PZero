@@ -1676,3 +1676,70 @@ class XsImage(vtk.vtkImageData):
     @property
     def texture(self):
         return pv.image_to_texture(self)
+
+
+class Image3D(vtk.vtkImageData):
+    """Image3D is a georeferenced (possibly multi-band) 3D image, derived from
+    vtk.vtkImageData() that is saved in the project folder as .vti"""
+    def __init__(self, *args, **kwargs):
+        super(Image3D, self).__init__(*args, **kwargs)
+
+    def deep_copy(self):
+        image_copy = Image3D()
+        image_copy.DeepCopy(self)
+        return image_copy
+
+    @property
+    def origin(self):
+        return self.GetOrigin()
+
+    @origin.setter
+    def origin(self, vector=None):
+        self.SetOrigin(vector)
+
+    @property
+    def bands_n(self):
+        return self.GetNumberOfScalarComponents()
+
+    @property
+    def spacing(self):
+        return self.GetSpacing()
+
+    @property
+    def dimensions(self):
+        return self.GetDimensions()
+
+    @property
+    def U_n(self):
+        return self.GetDimensions()[0]
+
+    @property
+    def V_n(self):
+        return self.GetDimensions()[1]
+
+    @property
+    def W_n(self):
+        return self.GetDimensions()[1]
+
+    @property
+    def bounds(self):
+        """Returns a list with xmin, xmax, ymin, ymax, zmin, zmax"""
+        return self.GetBounds()
+
+    @property
+    def image_data(self):
+        """Returns a U_n x V_n x W_n x bands_n numpy array with image data.
+        Inspired by vtkimagedata_to_array in vtkplotlib:
+        https://github.com/bwoodsend/vtkplotlib/blob/master/vtkplotlib/_image_io.py"""
+        point_data = numpy_support.vtk_to_numpy(self.GetPointData().GetScalars())
+        # image_data = point_data.reshape((self.U_n, self.V_n, self.W_n, self.bands_n))[::-1, ::-1, :]
+        image_data = point_data.reshape((self.U_n, self.V_n, self.W_n, self.bands_n))
+        return image_data
+
+    @property
+    def bands_types(self):
+        bands_types = []
+        for band in range(self.bands_n):
+            band_type = type(self.image_data[0, 0, 0, band])
+            bands_types.append(band_type)
+        return bands_types
