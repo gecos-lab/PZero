@@ -300,6 +300,8 @@ def gocad2vtk(self=None, in_file_name=None, uid_from_name=None):
                 for i in range(properties_number):
                     curr_obj_dict['vtk_obj'].GetPointData().AddArray(curr_obj_properties_collection.GetItem(i))
 
+            print( curr_obj_dict['vtk_obj'])
+
             """Add current_entity to entities collection"""
             self.geol_coll.add_entity_from_dict(entity_dict=curr_obj_dict)
             del curr_obj_points
