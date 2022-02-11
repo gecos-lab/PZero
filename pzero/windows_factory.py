@@ -25,7 +25,7 @@ import pandas as pd
 from vtk.util import numpy_support
 
 """3D plotting imports"""
-# import pyvista as pv
+import pyvista as pv
 from pyvistaqt import QtInteractor as pvQtInteractor
 
 """2D plotting imports"""
@@ -936,6 +936,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
     def toggle_property_texture(self):
         """Method to toggle the texture shown by a DEM that is already present in the view."""
         """Collect values from combo box."""
+
         combo = self.sender()
         uid = combo.uid
         property_texture_id = combo.currentIndex()  # 0 means "none"
@@ -949,7 +950,17 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         collection = self.actors_df.loc[self.actors_df['uid'] == uid, 'collection'].values[0]
         """This removes the previous copy of the actor with the same uid, then calls the viewer-specific function that shows an actor with a property.
         IN THE FUTURE see if it is possible and more efficient to keep the actor and just change the property shown."""
+
+        # [Gabriele] Remove the previous scalar bar if present
+        try:
+            self.plotter.remove_scalar_bar()
+        except IndexError:
+            pass
+
         self.remove_actor_in_view(uid=uid)
+
+        # self.plotter.remove_scalar_bar()
+
         this_actor = self.show_actor_with_property(uid=uid, collection=collection, show_property=property_texture_uid, visible=show)
         self.actors_df = self.actors_df.append({'uid': uid, 'actor': this_actor, 'show': show, 'collection': collection, 'show_prop': property_texture_uid}, ignore_index=True)  # self.set_actor_visible(uid=uid, visible=show)
 
@@ -1761,8 +1772,12 @@ class View3D(BaseView):
             line_thick = self.parent.mesh3d_coll.get_legend()['line_thick']
         elif collection == 'dom_coll':
             line_thick = self.parent.dom_coll.get_legend()['line_thick']
-        """Note: no legend for image."""
-        self.actors_df.loc[self.actors_df['uid'] == uid, 'actor'].values[0].GetProperty().SetLineWidth(line_thick)
+            """Note: no legend for image."""
+        if isinstance(self.parent.dom_coll.get_uid_vtk_obj(uid), PCDom):
+            # [Gabriele] If PCDom we need to set point size not line thickness
+            self.actors_df.loc[self.actors_df['uid'] == uid, 'actor'].values[0].GetProperty().SetPointSize(line_thick)
+        else:
+            self.actors_df.loc[self.actors_df['uid'] == uid, 'actor'].values[0].GetProperty().SetLineWidth(line_thick)
 
     def set_actor_visible(self, uid=None, visible=None):
         """Set actor uid visible or invisible (visible = True or False)"""
@@ -1919,9 +1934,11 @@ class View3D(BaseView):
         elif isinstance(plot_entity, PCDom):
 
             plot_rgb_option = None
+            file = self.parent.dom_coll.df.loc[self.parent.dom_coll.df['uid'] == uid, "name"].values[0]
             if isinstance(plot_entity.points, np.ndarray):
                 """This  check is needed to avoid errors when trying to plot an empty
                 PolyData, just created at the beginning of a digitizing session."""
+
 
                 # [Gabriele] Basic properties
                 if show_property is None:
@@ -1938,16 +1955,38 @@ class View3D(BaseView):
                     show_property = plot_entity.points_Z
                 elif show_property == 'RGB':
                     show_scalar_bar = False
-                    show_property = plot_entity.get_point_data('colors') # [Gabriele] Get color data
 
-                    plot_rgb_option = True # [Gabriele] Use RGB
+                    if plot_entity.get_point_data('Red').size > 1:
+                        R = plot_entity.get_point_data('Red')
+                        G = plot_entity.get_point_data('Green')
+                        B = plot_entity.get_point_data('Blue')
+                        if '.laz' in file or '.las' in file:
+                            ''' [Gabriele] Las and laz files save color data in uint16 format. To conver to RGB we can divide by 255. Since show property only works with 0-1 values we divide again by 255.'''
+                            R = (R/255**2)
+                            G = (G/255**2)
+                            B = (B/255**2)
+                        elif type(R[0]) is int:
+                            # [Gabriele] If is an integer divide by 255 to have it in the 0-1 range
+                            R = (R/255)
+                            G = (G/255)
+                            B = (B/255)
+                        show_property = np.array([R,G,B]).T # [Gabriele] Set color data as a 3xn matrix (w/o .T is a nx3 matrix)
+                        plot_rgb_option = True # [Gabriele] Use RGB
+
+                    else:
+                        print('No RGB values present')
+                        show_property = None
+
                 else:
-                    property_names_index = self.parent.dom_coll.df.loc[self.parent.dom_coll.df['uid'] == uid, "properties_names"].values[0].index(show_property)
-                    show_property = self.parent.dom_coll.df.loc[self.parent.dom_coll.df['uid'] == uid, "properties_components"].values[0][property_names_index]
+                    show_scalar_bar = True
+                    if '.laz' in file or '.las' in file:
+                        show_property = plot_entity.get_point_data(show_property)/255**2
+                    else:
+                        show_property = plot_entity.get_point_data(show_property)
 
 
 
-            this_actor = self.plot_PC_3D(uid=uid,plot_entity=plot_entity,color_RGB=color_RGB, show_property=show_property, show_scalar_bar=show_scalar_bar, color_bar_range=None, show_property_title=show_property_title, plot_rgb_option=plot_rgb_option,visible=visible)
+            this_actor = self.plot_PC_3D(uid=uid,plot_entity=plot_entity,color_RGB=color_RGB, show_property=show_property, show_scalar_bar=show_scalar_bar, color_bar_range=None, show_property_title=show_property_title, plot_rgb_option=plot_rgb_option,visible=visible,point_size=line_thick)
 
         elif isinstance(plot_entity, MapImage):
             """Texture options according to type."""
@@ -2101,7 +2140,6 @@ class View3D(BaseView):
             show_property_cmap = self.parent.prop_legend_df.loc[self.parent.prop_legend_df['property_name'] == show_property_title, "colormap"].values[0]
         else:
             show_property_cmap = None
-
         this_actor= self.plotter.add_points(plot_entity,name=uid,
                                             point_size=point_size,
                                             render_points_as_spheres=points_as_spheres,
@@ -2112,9 +2150,11 @@ class View3D(BaseView):
                                             flip_scalars=False,
                                             interpolate_before_map=True,
                                             cmap=show_property_cmap,
-                                            scalar_bar_args={'title': show_property_title, 'title_font_size': 10, 'label_font_size': 8, 'shadow': True, 'interactive': True},
+                                            scalar_bar_args={'title': show_property_title, 'title_font_size': 20, 'label_font_size': 16, 'shadow': True, 'interactive': True,'fmt':"%.1f"},
                                             rgb=plot_rgb_option,
                                             show_scalar_bar=show_scalar_bar)
+
+
 
         if not visible:
             this_actor.SetVisibility(False)
@@ -2335,6 +2375,7 @@ class View2D(BaseView):
             pass
 
     def change_actor_line_thick(self, uid=None, collection=None):
+
         """Update line thickness for actor uid"""
         if collection == 'geol_coll':
             line_thick = self.parent.geol_coll.get_uid_legend(uid=uid)['line_thick']

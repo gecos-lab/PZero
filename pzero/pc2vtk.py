@@ -33,7 +33,6 @@ import xarray as xr
 import pandas as pd
 
 
-
 def pc2vtk(in_file_name,raw_input_df,start_col,end_col,start_row,end_row,self=None):
 
     _,extension = os.path.splitext(in_file_name)
@@ -46,17 +45,11 @@ def pc2vtk(in_file_name,raw_input_df,start_col,end_col,start_row,end_row,self=No
     '''[Gabriele] Check if there is invalid data (Text, NaN, etc)'''
     val_check = input_df.apply(lambda c: pd.to_numeric(c, errors='coerce').notnull().all())
 
-    '''[Gabriele] Filter the scalar values present in the input dataset. Put these entries in the properties name and components lists (columns and values)'''
 
-    scalar_df =  input_df.filter(regex='scalar')
-
-    scalar_names = list(scalar_df)
-    scalar_values = scalar_df.values.T
 
     if not val_check.all():
         print('Invalid values in data set, not importing.')
     else:
-        input_df = input_df.astype(float)
 
         n_cells = input_df.shape[0] # [Gabriele] the number of cells is = to the number of rows of the df.
 
@@ -64,26 +57,16 @@ def pc2vtk(in_file_name,raw_input_df,start_col,end_col,start_row,end_row,self=No
 
 
         # if len(str(input_df.iloc[0,0]).replace('.','')) > 12:
-        input_df['x'] -= input_df['x'][start_row].round(-2)
-        input_df['y'] -= input_df['y'][start_row].round(-2)
+        input_df['X'] -= input_df['X'][start_row].round(-2)
+        input_df['Y'] -= input_df['Y'][start_row].round(-2)
 
 
         '''[Gabriele] Extract XYZ and RGB column values (if rgb present)'''
 
 
-        XYZ = np.array([input_df['x'].values,input_df['y'].values,input_df['z'].values]).T
+        XYZ = np.array([input_df['X'].values,input_df['Y'].values,input_df['Z'].values]).T
 
-        try:
-            red = input_df['r'].values
-            green = input_df['g'].values
-            blue = input_df['b'].values
 
-            RGB = np.array([red,green,blue]).T
-
-        except KeyError:
-
-            # [Gabriele] If r,g or b columns are not present then use ones (white)
-            RGB = np.ones_like(XYZ)
 
         """[Gabriele] Convert to PCDom() instance. Used https://docs.pyvista.org/examples/00-load/wrap-trimesh.html as reference"""
 
@@ -91,24 +74,36 @@ def pc2vtk(in_file_name,raw_input_df,start_col,end_col,start_row,end_row,self=No
         points = vtkPoints() #[Gabriele] points object
         vertices = vtkCellArray() #[Gabriele] vertices (cells)
         vertices.InsertNextCell(n_cells) #[Gabriele] set n cells with n= number of points in the dataset
-        colors = vtkUnsignedCharArray() # [Gabriele] create colors as unsigned char array (int only)
-        colors.SetNumberOfComponents(3) # [Gabriele] Set numbers of components (RGB = 3)
-        colors.SetName("colors") # [Gabriele] give it a name
 
      #[Gabriele] insert the datasets points and assign each point to a cell
-        for p,c in zip(XYZ,RGB):
+        for p in XYZ:
             pid = points.InsertNextPoint(p)
             vertices.InsertCellPoint(pid)
-             # [Gabriele] RGB must be in 0-255 range
-            if all(i<=1 and i>0 for i in c):
-                c = np.round(c*255,0)
-            elif all(i>255 for i in c):
-                c = np.round(c/255,0)
-            colors.InsertNextTuple3(c[0],c[1],c[2]) # [Gabriele] Insert color values
+
+
+
 
         point_cloud.SetPoints(points) #[Gabriele] Assign the points to the point_cloud (vtkPolyData)
         point_cloud.SetVerts(vertices) #[Gabriele] Assign the vertices to the point_cloud (vtkPolyData)
-        point_cloud.GetPointData().SetScalars(colors) # [Gabriele] Set color data
+
+        # [Gabriele] Pedefined scalars
+
+        properties_df = input_df.drop(['X','Y','Z'],axis=1)
+
+        if not properties_df.filter(regex='N.a.').empty:
+            properties_df = properties_df.drop(['N.a.'],axis=1)
+
+        scalar_components = []
+        if not properties_df.empty:
+            scalar_names = list(properties_df.columns)
+
+            for scalar in scalar_names:
+                scalar_value = properties_df[scalar].values
+                scalar_components.append(1)
+                point_cloud.set_point_data(scalar,scalar_value)
+        else:
+            scalar_names = []
+
 
         point_cloud.Modified()
         """Create dictionary."""
@@ -118,7 +113,7 @@ def pc2vtk(in_file_name,raw_input_df,start_col,end_col,start_row,end_row,self=No
         curr_obj_attributes['dom_type'] = "PCDom"
         curr_obj_attributes['texture_uids'] = []
         curr_obj_attributes['properties_names'] = scalar_names
-        curr_obj_attributes['properties_components'] = scalar_values
+        curr_obj_attributes['properties_components'] = scalar_components
         curr_obj_attributes['vtk_obj'] = point_cloud
         self.TextTerminal.appendPlainText(f'vtk_obj: {curr_obj_attributes["vtk_obj"]}')
         """Add to entity collection."""

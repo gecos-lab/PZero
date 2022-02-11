@@ -11,6 +11,7 @@ import laspy as lp
 import os
 import numpy as np
 from .pc2vtk import pc2vtk
+from Levenshtein import jaro_winkler as jw
 
 
 def options_dialog(title=None, message=None, yes_role=None, no_role=None, reject_role=None):
@@ -570,6 +571,8 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
         self.import_options_dict['in_path'] = open_file_dialog(parent=self,caption='Import point cloud data',filter="All supported (*.txt *.csv *.xyz *.ply *.las *.laz);;Text files (*.txt *.csv *.xyz);;PLY files (*.ply);;LAS/LAZ files (*.las *.laz)")
         self.PathlineEdit.setText(self.import_options_dict['in_path'])
 
+
+
         try:
 
             _,extension = os.path.splitext(self.import_options_dict['in_path'])
@@ -582,6 +585,33 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
                 self.input_data_df = pd.read_csv(self.import_options_dict['in_path'],
                                             sep=self.import_options_dict['SeparatorcomboBox'],
                                             header=self.import_options_dict['HeaderspinBox'])
+
+            self.default_attr_list = ['As is','X','Y','Z','Red','Green','Blue','Intensity','User defined','N.a.']
+
+            '''[Gabriele]  Auto-assign values using the jaro_winkler method. If there is no match then the column name is not changed. In this step the combo_index list is compiled. This list is later used in the assign window to fill the combo boxes with the correct attribute. For non matches the As is value is attribuited.'''
+
+            self.col_names = list(self.input_data_df.columns)
+            self.rename_df = {}
+            self.combo_index = []
+
+            remove_char_dict = {"/":"","\\":"","?":"","!":"","-":"","_":""}
+
+            for attr in self.col_names:
+
+                table = attr.maketrans(remove_char_dict)
+                matches = [jw(attr.translate(table).lower(),string.lower()) for string in self.default_attr_list]
+
+                match = max(matches)
+
+                if match > 0.8:
+                    index = matches.index(match)
+                    self.rename_df[attr] = self.default_attr_list[index]
+                    self.combo_index.append(index)
+                else:
+                    self.rename_df[attr] = attr
+                    self.combo_index.append(0)
+            self.input_data_df=self.input_data_df.rename(columns=self.rename_df)
+
 
         except ValueError:
             print('Could not preview: invalid column, row or separator')
@@ -635,14 +665,15 @@ class assign_data(QMainWindow, Ui_AssignWindow):
         self.setupUi(self)
 
         self.parent = parent
-        self.rename_df = {} # [Gabriele] Dict used to rename the columns of the df
         self.show_qt_canvas()
         self.ConfirmButton.rejected.connect(self.close)
 
         try:
             self.df = self.parent.input_data_df
             n_attr = self.parent.input_data_df.shape[1]
-            col_names = list(self.parent.input_data_df.columns)
+            self.col_names = list(self.df.columns)
+
+
 
         except AttributeError:
             print('No data to assign')
@@ -652,16 +683,15 @@ class assign_data(QMainWindow, Ui_AssignWindow):
             self.AssignTable.setColumnCount(4)
             self.AssignTable.setHorizontalHeaderLabels(['Column name','Attributes','Scalar value name','Scalar value state'])
             self.ConfirmButton.accepted.connect(self.modify_df)
-            width=0
+
             for i in range(n_attr):
                 self.AttrcomboBox = QtWidgets.QComboBox(self)
                 self.AttrcomboBox.setObjectName(f'AttrcomboBox{i}')
                 self.AttrcomboBox.setEditable(False)
-                self.AttrcomboBox.addItems(['N.A.','x','y','z','r','g','b','SCALAR'])
-                self.AttrcomboBox.SelectedIndex = 0
-                self.AttrcomboBox.currentTextChanged.connect(lambda: self.ass_value())
+                self.AttrcomboBox.addItems(self.parent.default_attr_list)
+                self.AttrcomboBox.activated.connect(lambda: self.ass_value())
                 self.ColnameItem = QtWidgets.QTableWidgetItem()
-                self.ColnameItem.setText(str(col_names[i]))
+                self.ColnameItem.setText(str(self.col_names[i]))
                 self.ScalarnameText = QtWidgets.QLineEdit()
                 self.ScalarnameText.setEnabled(False)
                 self.ScalarnameText.returnPressed.connect(lambda: self.ass_scalar())
@@ -672,6 +702,8 @@ class assign_data(QMainWindow, Ui_AssignWindow):
 
                 self.AssignTable.setItem(i,0,self.ColnameItem)
                 self.AssignTable.setCellWidget(i,1,self.AttrcomboBox)
+                combo_index = self.parent.combo_index[i]
+                self.AssignTable.cellWidget(i,1).setCurrentText(self.parent.default_attr_list[combo_index])
                 self.AssignTable.setCellWidget(i,2,self.ScalarnameText)
                 self.AssignTable.setCellWidget(i,3,self.ScalarnameLabel)
                 self.AssignTable.horizontalHeader().setSectionResizeMode(0,QtWidgets.QHeaderView.ResizeToContents)
@@ -693,13 +725,16 @@ class assign_data(QMainWindow, Ui_AssignWindow):
         '''[Gabriele] Use a dict to rename the columns. The keys are the original column names while the values are the new names.
         [Problem]: If there are two values with the same name it renames without throwing any error but this breakes importing (two different columns with the same name in the same df-> no bueno). This needs fixin' '''
 
-        if sel_combo.currentText() == 'SCALAR':
+        if sel_combo.currentText() == 'User defined':
             self.AssignTable.cellWidget(row,2).setEnabled(True)
+        elif sel_combo.currentText() == 'As is':
+            self.parent.rename_df[self.df.columns[row]] = self.df.columns[row]
+            self.df = self.parent.input_data_df.rename(columns=self.parent.rename_df)
         else:
             self.AssignTable.cellWidget(row,2).clear()
             self.AssignTable.cellWidget(row,2).setEnabled(False)
-            self.rename_df[self.df.columns[row]] = sel_combo.currentText()
-            self.df = self.parent.input_data_df.rename(columns=self.rename_df)
+            self.parent.rename_df[self.df.columns[row]] = sel_combo.currentText()
+            self.df = self.parent.input_data_df.rename(columns=self.parent.rename_df)
 
     def ass_scalar(self):
 
@@ -708,9 +743,9 @@ class assign_data(QMainWindow, Ui_AssignWindow):
         col = index.column()
         row = index.row()
         sel_line = self.AssignTable.cellWidget(row,col) # [Gabriele] lineEdit @ row and column
-        scal_name = f'scalar_{sel_line.text()}'
-        self.rename_df[self.df.columns[row]] = scal_name
-        self.df = self.parent.input_data_df.rename(columns=self.rename_df)
+        scal_name = f'user_{sel_line.text()}'
+        self.parent.rename_df[self.df.columns[row]] = scal_name
+        self.df = self.parent.input_data_df.rename(columns=self.parent.rename_df)
         self.AssignTable.cellWidget(row,3).setText('Set')
 
     def update_label(self):
