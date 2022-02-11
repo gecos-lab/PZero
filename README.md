@@ -15,14 +15,14 @@ The ***PZero*** developers are:
 
 ***PZero*** © 2020 by Andrea Bistacchi, released under [GNU AGPLv3 license](LICENSE.txt).
 
-The name of ***PZero*** was inspired by the zeroth element in Emile Argand's 3D model of the Pennine Alps nappe stack - possibly the first quantitative 3D geological model in the history of geological sciences (*Argand E., 1911. Les Nappes de recouvrement des Alpes pennines et leurs prolongements structuraux. Mat. Carte géol. Suisse, 31, 1-26*).
-
 &nbsp;
 <p align="center">
-   <img src="images/ArgandStereo.jpg" width="60%" height="60%"/>
+   <img src="images/mosaic.jpg" width="100%" height="100%"/>
 </p>
 &nbsp;
 &nbsp;
+
+The name of ***PZero*** was inspired by the zeroth element in Emile Argand's 3D model of the Pennine Alps nappe stack - possibly the first quantitative 3D geological model in the history of geological sciences (*Argand E., 1911. Les Nappes de recouvrement des Alpes pennines et leurs prolongements structuraux. Mat. Carte géol. Suisse, 31, 1-26*).
 
 ## Installing and running PZero ##
 
