@@ -65,13 +65,17 @@ class PropertiesCMaps(QObject):
         """"Update the prop_legend_df. X, Y Z are added to the list in order not to alter them."""
         all_props = ['X', 'Y', 'Z']
         """Make a list of all properties (unique values)."""
-        geol_coll_props = parent.geol_coll.df['properties_names'].to_list()
-        geol_coll_props = list(pd.core.common.flatten(geol_coll_props))
-        dom_coll_props = parent.dom_coll.df['properties_names'].to_list()
-        dom_coll_props = list(pd.core.common.flatten(dom_coll_props))
-        mesh3d_coll_props = parent.mesh3d_coll.df['properties_names'].to_list()
-        mesh3d_coll_props = list(pd.core.common.flatten(mesh3d_coll_props))
-        all_props = list(set(all_props + geol_coll_props + dom_coll_props + mesh3d_coll_props))  # a set is composed of unique values from a list
+        for collection in [parent.geol_coll, parent.dom_coll, parent.mesh3d_coll, parent.image_coll]:
+            coll_props = collection.df['properties_names'].to_list()
+            coll_props = list(pd.core.common.flatten(coll_props))
+            coll_prop_comps = collection.df['properties_components'].to_list()
+            coll_prop_comps = list(pd.core.common.flatten(coll_prop_comps))
+            coll_props_to_append = []
+            for i in range(len(coll_props)):
+                if coll_prop_comps[i] == 3:
+                    coll_props_to_append = coll_props_to_append + [coll_props[i] + "[0]"] + [coll_props[i] + "[1]"] + [coll_props[i] + "[2]"]
+            all_props = all_props + coll_props + coll_props_to_append
+        all_props = list(set(all_props))  # a set is composed of unique values from a list
         all_props = list(filter(None, all_props))  # eliminate empty elements
         """Add new properties to dataframe."""
         for prop in all_props:

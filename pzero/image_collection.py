@@ -6,6 +6,7 @@ import pandas as pd
 import uuid
 from copy import deepcopy
 from PyQt5.QtCore import QAbstractTableModel, Qt, QVariant
+from .entities_factory import MapImage, XsImage, Seismics, Image3D
 
 """Options to print Pandas dataframes in console for testing."""
 pd_desired_width = 800
@@ -31,23 +32,23 @@ class ImageCollection(QAbstractTableModel):
     image_entity_dict = {'uid': "",
                          'name': "undef",
                          'image_type': "undef",
-                         'bands_n': int(0),
-                         'bands_names': [],
-                         'bands_types': [],
+                         'properties_names': [],
+                         'properties_components': [],
+                         'properties_types': [],
                          'x_section': "",  # this is the uid of the cross section for "XsVertexSet", "XsPolyLine", and "XsImage", empty for all others
                          'vtk_obj': None}
 
     image_entity_type_dict = {'uid': str,
                               'name': str,
                               'image_type': str,
-                              'bands_n': int,
-                              'bands_names': list,
-                              'bands_types': list,
+                              'properties_names': list,
+                              'properties_components': list,
+                              'properties_types': list,
                               'x_section': str,
                               'vtk_obj': object}
 
     """List of valid data types."""
-    valid_image_types = ["MapImage", "XsImage", "TSDomImage", "Seismics", "Image3D"]
+    valid_image_types = ["MapImage", "XsImage", "Seismics", "Image3D"]  # "TSDomImage"???
 
     """Initialize ImageCollection table. Column headers are taken from
     ImageCollection.image_entity_dict.keys(), and parent is supposed to be the project_window."""
@@ -69,6 +70,7 @@ class ImageCollection(QAbstractTableModel):
     def add_entity_from_dict(self, entity_dict=None):
         """Add entity to collection from dictionary.
         Create a new uid if it is not included in the dictionary."""
+        """NOTE THAT HERE WE ASSUME THE ATTRIBUTES HAVE BEEN CAREFULLY DEFINED, OTHERWISE A CHECK AS IN REPLACE_VTK WOULD BE NECESSARY"""
         if not entity_dict['uid']:
             entity_dict['uid'] = str(uuid.uuid4())
         """"Append new row to dataframe. Note that the 'append()' method for Pandas dataframes DOES NOT
@@ -76,6 +78,13 @@ class ImageCollection(QAbstractTableModel):
         self.df = self.df.append(entity_dict, ignore_index=True)
         """Reset data model"""
         self.modelReset.emit()
+        """Update properties colormaps if needed"""
+        for i in range(len(entity_dict['properties_names'])):
+            if entity_dict['properties_components'][i] == 1:
+                property_name = entity_dict['properties_names'][i]
+                if self.parent.prop_legend_df.loc[self.parent.prop_legend_df['property_name'] == property_name].empty:
+                    self.parent.prop_legend_df = self.parent.prop_legend_df.append({'property_name': property_name, 'colormap': 'gray'}, ignore_index=True)
+                    self.parent.prop_legend.update_widget(self.parent)
         """Then emit signal to update the views."""
         self.parent.image_added_signal.emit([entity_dict['uid']])  # a list of uids is emitted, even if the entity is just one
         return entity_dict['uid']
@@ -89,6 +98,7 @@ class ImageCollection(QAbstractTableModel):
         """Then remove image"""
         self.df.drop(self.df[self.df['uid'] == uid].index, inplace=True)
         self.modelReset.emit()  # is this really necessary?
+        self.parent.prop_legend.update_widget(self.parent)
         """When done, send a signal over to the views."""
         self.parent.image_removed_signal.emit([uid])  # a list of uids is emitted, even if the entity is just one
         return uid
@@ -97,8 +107,25 @@ class ImageCollection(QAbstractTableModel):
         if isinstance(vtk_object, type(self.df.loc[self.df['uid'] == uid, 'vtk_obj'].values[0])):
             new_dict = deepcopy(self.df.loc[self.df['uid'] == uid, self.df.columns != 'vtk_obj'].to_dict('records')[0])
             new_dict['vtk_obj'] = vtk_object
+            """Check properties attributes"""
+            if isinstance(self, MapImage):  # "TSDomImage"???
+                new_dict['image_type'] = "MapImage"
+            elif isinstance(self,XsImage):
+                new_dict['image_type'] = "XsImage"
+            elif isinstance(self, Seismics):
+                new_dict['image_type'] = "Seismics"
+            elif isinstance(self, Image3D):
+                new_dict['image_type'] = "Image3D"
+            else:
+                print("ERROR - class not recognized.")
+            new_dict['properties_names'] = vtk_object.properties_names
+            new_dict['properties_components'] = vtk_object.properties_components
+            new_dict['properties_types'] = vtk_object.properties_types
+            """Remove and add"""
             self.remove_entity(uid)
             self.add_entity_from_dict(entity_dict=new_dict)
+            self.modelReset.emit()  # is this really necessary?
+            self.parent.prop_legend.update_widget(self.parent)
         else:
             print("ERROR - replace_vtk with vtk of a different type.")
 
@@ -109,6 +136,11 @@ class ImageCollection(QAbstractTableModel):
     def get_uids(self):
         """Get list of uids."""
         return self.df['uid'].to_list()
+
+    def get_legend(self):
+        """Get legend."""
+        legend_dict = self.parent.others_legend_df.loc[self.parent.others_legend_df['other_type'] == 'Image'].to_dict('records')
+        return legend_dict[0]
 
     def get_image_type_uids(self, image_type=None):
         """Get list of uids of a given image_type."""
@@ -130,29 +162,29 @@ class ImageCollection(QAbstractTableModel):
         """Set value(s) stored in dataframe (as pointer) from uid."""
         self.df.loc[self.df['uid'] == uid, 'image_type'] = image_type
 
-    def get_uid_bands_n(self, uid=None):
-        """Get value(s) stored in dataframe (as pointer) from uid."""
-        return self.df.loc[self.df['uid'] == uid, 'bands_n'].values[0]
-
-    def set_uid_bands_n(self, uid=None, bands_n=None):
-        """Set value(s) stored in dataframe (as pointer) from uid."""
-        self.df.loc[self.df['uid'] == uid, 'bands_n'] = bands_n
-
-    def get_uid_bands_names(self, uid=None):
+    def get_uid_properties_names(self, uid=None):
         """Get value(s) stored in dataframe (as pointer) from uid.. This is a LIST even if we extract it with values[0]!"""
-        return self.df.loc[self.df['uid'] == uid, 'bands_names'].values[0]
+        return self.df.loc[self.df['uid'] == uid, 'properties_names'].values[0]
 
-    def set_uid_bands_names(self, uid=None, bands_names=None):
+    def set_uid_properties_names(self, uid=None, properties_names=None):
         """Set value(s) stored in dataframe (as pointer) from uid."""
-        self.df.loc[self.df['uid'] == uid, 'bands_names'] = bands_names
+        self.df.loc[self.df['uid'] == uid, 'properties_names'] = properties_names
 
-    def get_uid_bands_types(self, uid=None):
+    def get_uid_properties_components(self, uid=None):
+        """Get value(s) stored in dataframe (as pointer) from uid.. This is a LIST even if we extract it with values[0]!"""
+        return self.df.loc[self.df['uid'] == uid, 'properties_components'].values[0]
+
+    def set_uid_properties_components(self, uid=None, properties_components=None):
+        """Set value(s) stored in dataframe (as pointer) from uid."""
+        self.df.loc[self.df['uid'] == uid, 'properties_components'] = properties_components
+
+    def get_uid_properties_types(self, uid=None):
         """Get value(s) stored in dataframe (as pointer) from uid. This is a LIST even if we extract it with values[0]!"""
-        return self.get_uid_vtk_obj(uid).bands_types
+        return self.get_uid_vtk_obj(uid).properties_types
 
-    def set_uid_bands_types(self, uid=None, bands_types=None):
+    def set_uid_properties_types(self, uid=None, properties_types=None):
         """Set value(s) stored in dataframe (as pointer) from uid."""
-        self.df.loc[self.df['uid'] == uid, 'bands_types'] = bands_types
+        self.df.loc[self.df['uid'] == uid, 'properties_types'] = properties_types
 
     def get_uid_x_section(self, uid=None):
         """Get value(s) stored in dataframe (as pointer) from uid."""

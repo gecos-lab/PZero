@@ -35,10 +35,10 @@ def geo_image2vtk(self=None, in_file_name=None):
             vtk_array = numpy_support.numpy_to_vtk(geo_image.read(1).ravel(), deep=True)
             vtk_array.SetName('greyscale')
         elif geo_image.count == 3:
-            vtk_r_band = geo_image.read(1)
-            vtk_g_band = geo_image.read(2)
-            vtk_b_band = geo_image.read(3)
-            numpy_array = np.dstack((vtk_r_band, vtk_g_band, vtk_b_band))
+            vtk_r_property = geo_image.read(1)
+            vtk_g_property = geo_image.read(2)
+            vtk_b_property = geo_image.read(3)
+            numpy_array = np.dstack((vtk_r_property, vtk_g_property, vtk_b_property))
             # vtk_array = numpy_support.numpy_to_vtk(np.flip(numpy_array.swapaxes(0, 1), axis=1).reshape((-1, 3), order='F'), deep=True)
             vtk_array = numpy_support.numpy_to_vtk(numpy_array.swapaxes(0, 1).reshape((-1, 3), order='F'), deep=True)
             vtk_array.SetName('RGB')
@@ -61,12 +61,12 @@ def geo_image2vtk(self=None, in_file_name=None):
         curr_obj_dict['uid'] = str(uuid.uuid4())
         curr_obj_dict['name'] = os.path.basename(in_file_name)
         curr_obj_dict['image_type'] = "MapImage"
+        curr_obj_dict['properties_components'] = vtk_image.properties_components
+        curr_obj_dict['properties_types'] = vtk_image.properties_types
         if geo_image.count == 1:
-            curr_obj_dict['bands_n'] = int(1)
-            curr_obj_dict['bands_types'] = [vtk_image.GetScalarType()]
+            curr_obj_dict['properties_names'] = ['greyscale']
         elif geo_image.count == 3:
-            curr_obj_dict['bands_n'] = int(3)
-            curr_obj_dict['bands_types'] = [vtk_image.GetScalarType(), vtk_image.GetScalarType(), vtk_image.GetScalarType()]
+            curr_obj_dict['properties_names'] = ['RGB']
         curr_obj_dict['vtk_obj'] = vtk_image
         """Add to entity collection."""
         self.image_coll.add_entity_from_dict(entity_dict=curr_obj_dict)

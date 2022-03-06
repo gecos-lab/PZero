@@ -98,6 +98,8 @@ class Mesh3DCollection(QAbstractTableModel):
             new_dict['vtk_obj'] = vtk_object
             self.remove_entity(uid)
             self.add_entity_from_dict(entity_dict=new_dict)
+            self.modelReset.emit()  # is this really necessary?
+            self.parent.prop_legend.update_widget(self.parent)
         else:
             print("ERROR - replace_vtk with vtk of a different type.")
 

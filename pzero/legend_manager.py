@@ -10,15 +10,33 @@ import pandas as pd
 class Legend(QObject):
     """Legend for geological and all other entities.
     Dictionaries used to define types of legend columns."""
-    geol_legend_dict = {'geological_type': "undef", 'geological_feature': "undef", 'geological_age': "undef", 'geological_time': 0.0, 'geological_sequence': "strati_0", 'scenario': "undef", 'color_R': int(255), 'color_G': int(255), 'color_B': int(255), 'line_thick': 2.0}
+    geol_legend_dict = {'geological_type': "undef",
+                        'geological_feature': "undef",
+                        'geological_age': "undef",
+                        'geological_time': 0.0,
+                        'geological_sequence': "strati_0",
+                        'scenario': "undef",
+                        'color_R': int(255),
+                        'color_G': int(255),
+                        'color_B': int(255),
+                        'line_thick': 2.0}
 
-    legend_type_dict = {'geological_type': str, 'geological_feature': str, 'geological_age': str, 'geological_time': float, 'geological_sequence': str, 'scenario': str, 'color_R': int, 'color_G': int, 'color_B': int, 'line_thick': float}
+    legend_type_dict = {'geological_type': str,
+                        'geological_feature': str,
+                        'geological_age': str,
+                        'geological_time': float,
+                        'geological_sequence': str,
+                        'scenario': str,
+                        'color_R': int,
+                        'color_G': int,
+                        'color_B': int,
+                        'line_thick': float}
 
-    others_legend_dict = {'other_type': ["XSection", "Boundary", "Mesh3D", "DOM"],
-                          'color_R': [255, 255, 255, 255],
-                          'color_G': [255, 255, 255, 255],
-                          'color_B': [255, 255, 255, 255],
-                          'line_thick': [2.0, 2.0, 2.0, 2.0]}
+    others_legend_dict = {'other_type': ["XSection", "Boundary", "Mesh3D", "DOM", "Image"],
+                          'color_R': [255, 255, 255, 255, 255],
+                          'color_G': [255, 255, 255, 255, 255],
+                          'color_B': [255, 255, 255, 255, 255],
+                          'line_thick': [2.0, 2.0, 2.0, 2.0, 2.0]}
 
     def __init__(self, parent=None, *args, **kwargs):
         QObject.__init__(self, parent)

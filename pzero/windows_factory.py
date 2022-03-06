@@ -721,7 +721,6 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         row = 0
         for uid in self.parent.mesh3d_coll.df['uid'].to_list():
             name = self.parent.mesh3d_coll.df.loc[self.parent.mesh3d_coll.df['uid'] == uid, 'name'].values[0]
-            mesh3d_type = self.parent.mesh3d_coll.df.loc[self.parent.mesh3d_coll.df['uid'] == uid, 'mesh3d_type'].values[0]
             name_item = QTableWidgetItem(name)
             name_item.setFlags(name_item.flags() | Qt.ItemIsUserCheckable)
             name_item.setFlags(name_item.flags() & ~Qt.ItemIsEditable)
@@ -730,10 +729,9 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             property_combo.uid = uid
             property_combo.addItem("none")
             property_combo.texture_uid_list = ["none", "X", "Y", "Z"]
-            if mesh3d_type != "Voxet" and mesh3d_type != "XsVoxet":
-                property_combo.addItem("X")
-                property_combo.addItem("Y")
-                property_combo.addItem("Z")
+            property_combo.addItem("X")
+            property_combo.addItem("Y")
+            property_combo.addItem("Z")
             for prop in self.parent.mesh3d_coll.get_uid_properties_names(uid):
                 property_combo.addItem(prop)
             self.Mesh3DTableWidget.insertRow(row)
@@ -754,7 +752,6 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         row = self.Mesh3DTableWidget.rowCount()
         for uid in new_list['uid']:
             name = self.parent.mesh3d_coll.df.loc[self.parent.mesh3d_coll.df['uid'] == uid, 'name'].values[0]
-            mesh3d_type = self.parent.mesh3d_coll.df.loc[self.parent.mesh3d_coll.df['uid'] == uid, 'mesh3d_type'].values[0]
             name_item = QTableWidgetItem(name)
             name_item.setFlags(name_item.flags() | Qt.ItemIsUserCheckable)
             name_item.setFlags(name_item.flags() & ~Qt.ItemIsEditable)
@@ -763,10 +760,9 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             property_combo.uid = uid
             property_combo.addItem("none")
             property_combo.texture_uid_list = ["none", "X", "Y", "Z"]
-            if mesh3d_type != "Voxet" and mesh3d_type != "XsVoxet":
-                property_combo.addItem("X")
-                property_combo.addItem("Y")
-                property_combo.addItem("Z")
+            property_combo.addItem("X")
+            property_combo.addItem("Y")
+            property_combo.addItem("Z")
             for prop in self.parent.mesh3d_coll.get_uid_properties_names(uid):
                 property_combo.addItem(prop)
             self.Mesh3DTableWidget.insertRow(row)
@@ -954,7 +950,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
     def create_image_list(self):
         """Create image list with checkboxes."""
         self.ImagesTableWidget.clear()
-        self.ImagesTableWidget.setColumnCount(2)
+        self.ImagesTableWidget.setColumnCount(3)
         self.ImagesTableWidget.setRowCount(0)
         self.ImagesTableWidget.setHorizontalHeaderLabels(['Name', 'uid'])
         self.ImagesTableWidget.hideColumn(1)  # hide the uid column
@@ -965,9 +961,21 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             name_item.setFlags(name_item.flags() | Qt.ItemIsUserCheckable)
             name_item.setFlags(name_item.flags() & ~Qt.ItemIsEditable)
             uid_item = QTableWidgetItem(uid)
+            property_combo = QComboBox()
+            property_combo.uid = uid
+            property_combo.addItem("none")
+            property_combo.texture_uid_list = ["none"]
+            # property_combo.texture_uid_list = ["none", "X", "Y", "Z"]
+            # property_combo.addItem("X")
+            # property_combo.addItem("Y")
+            # property_combo.addItem("Z")
+            for prop in self.parent.image_coll.get_uid_properties_names(uid):
+                property_combo.addItem(prop)
             self.ImagesTableWidget.insertRow(row)
             self.ImagesTableWidget.setItem(row, 0, name_item)
             self.ImagesTableWidget.setItem(row, 1, uid_item)
+            self.ImagesTableWidget.setCellWidget(row, 2, property_combo)
+            property_combo.currentIndexChanged.connect(lambda: self.toggle_property_image())  #___________
             if self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]:
                 name_item.setCheckState(Qt.Checked)
             elif not self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]:
@@ -985,9 +993,21 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             name_item.setFlags(name_item.flags() | Qt.ItemIsUserCheckable)
             name_item.setFlags(name_item.flags() & ~Qt.ItemIsEditable)
             uid_item = QTableWidgetItem(uid)
+            property_combo = QComboBox()
+            property_combo.uid = uid
+            property_combo.addItem("none")
+            property_combo.texture_uid_list = ["none"]
+            # property_combo.texture_uid_list = ["none", "X", "Y", "Z"]
+            # property_combo.addItem("X")
+            # property_combo.addItem("Y")
+            # property_combo.addItem("Z")
+            for prop in self.parent.image_coll.get_uid_properties_names(uid):
+                property_combo.addItem(prop)
             self.ImagesTableWidget.insertRow(row)
             self.ImagesTableWidget.setItem(row, 0, name_item)
             self.ImagesTableWidget.setItem(row, 1, uid_item)
+            self.ImagesTableWidget.setCellWidget(row, 2, property_combo)
+            property_combo.currentIndexChanged.connect(lambda: self.toggle_property_image())  #___________
             if self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]:
                 name_item.setCheckState(Qt.Checked)
             elif not self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]:
@@ -1021,6 +1041,20 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             if self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]:
                 self.actors_df.loc[self.actors_df['uid'] == uid, 'show'] = False
                 self.set_actor_visible(uid=uid, visible=False)
+
+    def toggle_property_image(self):
+        """Method to toggle the property shown by an image that is already present in the view."""
+        """Collect values from combo box."""
+        combo = self.sender()
+        show_property = combo.currentText()
+        uid = combo.uid
+        show = self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]
+        collection = self.actors_df.loc[self.actors_df['uid'] == uid, 'collection'].values[0]
+        """This removes the previous copy of the actor with the same uid, then calls the viewer-specific function that shows an actor with a property.
+        IN THE FUTURE see if it is possible and more efficient to keep the actor and just change the property shown."""
+        self.remove_actor_in_view(uid=uid)
+        this_actor = self.show_actor_with_property(uid=uid, collection=collection, show_property=show_property, visible=show)
+        self.actors_df = self.actors_df.append({'uid': uid, 'actor': this_actor, 'show': show, 'collection': collection, 'show_prop': show_property}, ignore_index=True)  # self.set_actor_visible(uid=uid, visible=show)
 
     """Methods used to add, remove, and update actors from the geological collection."""
 
@@ -1797,10 +1831,10 @@ class View3D(BaseView):
             if show_property in self.parent.dom_coll.df.loc[self.parent.dom_coll.df['uid'] == uid, "texture_uids"].values[0]:
                 active_image = self.parent.image_coll.df.loc[self.parent.image_coll.df['uid'] == show_property, "vtk_obj"].values[0]
                 active_image_texture = active_image.texture
-                active_image_bands_n = active_image.bands_n
-                if active_image_bands_n == 3:
+                active_image_properties_components = active_image.properties_components
+                if active_image_properties_components == 3:
                     plot_rgb_option = True
-                elif active_image_bands_n == 1:
+                elif active_image_properties_components == 1:
                     plot_rgb_option = False
                 this_actor = self.plot_mesh_3D(uid=uid, plot_entity=plot_entity, color_RGB=None, show_property=None, show_scalar_bar=None,
                                                color_bar_range=None, show_property_title=None, line_thick=None,
@@ -1826,15 +1860,29 @@ class View3D(BaseView):
                                                color_bar_range=None, show_property_title=show_property_title, line_thick=line_thick,
                                                plot_texture_option=False, plot_rgb_option=plot_rgb_option, visible=visible)
         elif isinstance(plot_entity, MapImage):
-            """Texture options according to type."""
-            if plot_entity.bands_n == 3:
-                plot_rgb_option = True
-            elif plot_entity.bands_n == 1:
+            """Do not plot directly image - it is much slower.
+            Texture options according to type."""
+            if show_property is None or show_property == 'none':
+                plot_texture_option = None
                 plot_rgb_option = False
-            this_actor = self.plot_mesh_3D(uid=uid, plot_entity=plot_entity.frame, color_RGB=None, show_property=None, show_scalar_bar=None,
-                                           color_bar_range=None, show_property_title=None, line_thick=None,
-                                           plot_texture_option=plot_entity.texture, plot_rgb_option=plot_rgb_option, visible=visible)
-        elif isinstance(plot_entity, Seismics):  #________________________________
+                show_property_title = None
+                show_scalar_bar = False
+            else:
+                plot_texture_option = plot_entity.texture
+                if plot_entity.get_property_components(show_property) == 3:
+                    plot_rgb_option = True
+                    show_property_title = None
+                    show_scalar_bar = False
+                else:
+                    plot_rgb_option = False
+                    # show_property_title = show_property
+                    # show_scalar_bar = True
+                    show_property_title = None
+                    show_scalar_bar = False
+            this_actor = self.plot_mesh_3D(uid=uid, plot_entity=plot_entity.frame, color_RGB=color_RGB, show_property=False, show_scalar_bar=show_scalar_bar,
+                                           color_bar_range=None, show_property_title=show_property_title, line_thick=line_thick,
+                                           plot_texture_option=plot_texture_option, plot_rgb_option=plot_rgb_option, visible=visible)
+        elif isinstance(plot_entity, Seismics):
             plot_rgb_option = None
             if isinstance(plot_entity.points, np.ndarray):
                 """This  check is needed to avoid errors when trying to plot an empty
@@ -1892,8 +1940,9 @@ class View3D(BaseView):
             The is is needed to avoid sending the camera to the origin that is the
             default position before any mesh is plotted."""
             camera_position = self.plotter.camera_position
-        if show_property is not None:
+        if show_property_title is not None:
             show_property_cmap = self.parent.prop_legend_df.loc[self.parent.prop_legend_df['property_name'] == show_property_title, "colormap"].values[0]
+            print(show_property_cmap)
         else:
             show_property_cmap = None
         this_actor = self.plotter.add_mesh(plot_entity,
@@ -2518,6 +2567,11 @@ class ViewMap(View2D):
             line_thick = self.parent.dom_coll.get_legend()['line_thick']
             plot_entity = self.parent.dom_coll.get_uid_vtk_obj(uid)
         elif collection == 'image_coll':
+            color_R = self.parent.image_coll.get_legend()['color_R']
+            color_G = self.parent.image_coll.get_legend()['color_G']
+            color_B = self.parent.image_coll.get_legend()['color_B']
+            color_RGB = [color_R / 255, color_G / 255, color_B / 255]
+            line_thick = self.parent.image_coll.get_legend()['line_thick']
             plot_entity = self.parent.image_coll.get_uid_vtk_obj(uid)
         """Then plot."""
         if isinstance(plot_entity, (VertexSet, PolyLine, XsVertexSet, XsPolyLine)):
@@ -2601,18 +2655,25 @@ class ViewMap(View2D):
                     """This check is needed to avoid plotting empty or non-georeferenced images.
                     Check if both these conditions are necessary_________________"""
                     xy_bounds = plot_entity.bounds[0:4]
-                    if plot_entity.bands_n == 3:
-                        """RGB for 3-bands images"""
-                        this_actor = self.ax.imshow(plot_entity.image_data, origin='upper', extent=xy_bounds, zorder=0)
-                    elif plot_entity.bands_n == 1:
-                        """Greyscale for single band images"""
-                        this_actor = self.ax.imshow(plot_entity.image_data, origin='upper', extent=xy_bounds, zorder=0, cmap='Greys_r')
+                    if show_property not in [None, 'none']:
+                        if plot_entity.get_property_components(show_property) == 3:
+                            """RGB for 3-component properties"""
+                            this_actor = self.ax.imshow(plot_entity.image_data(show_property), origin='upper', extent=xy_bounds, zorder=0)
+                        elif plot_entity.get_property_components(show_property) == 1:
+                            """Greyscale for single property images"""
+                            show_property_title = show_property
+                            show_property_cmap = self.parent.prop_legend_df.loc[self.parent.prop_legend_df['property_name'] == show_property_title, "colormap"].values[0]
+                            this_actor = self.ax.imshow(plot_entity.image_data(show_property), origin='upper', extent=xy_bounds, zorder=0, cmap=show_property_cmap)
+                    else:
+                        X = [xy_bounds[0], xy_bounds[1], xy_bounds[1], xy_bounds[0], xy_bounds[0]]
+                        Y = [xy_bounds[2], xy_bounds[2], xy_bounds[3], xy_bounds[3], xy_bounds[2]]
+                        this_actor, = self.ax.plot(X, Y, color=color_RGB, linewidth=line_thick, label=uid, picker=True)
                     this_actor.set_visible(visible)
                 else:
                     this_actor = None
             else:
                 this_actor = None
-        elif isinstance(plot_entity, Seismics):  #____________________________________________
+        elif isinstance(plot_entity, Seismics):
             if isinstance(plot_entity.points, np.ndarray):
                 if plot_entity.points_number > 0:
                     """This  check is needed to avoid errors when trying to plot an empty

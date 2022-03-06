@@ -27,10 +27,9 @@ def segy2vtk(self=None, in_file_name=None):
         curr_obj_attributes['uid'] = str(uuid.uuid4())
         curr_obj_attributes['name'] = os.path.basename(in_file_name)
         curr_obj_attributes['image_type'] = "Seismics"
-        curr_obj_attributes['bands_n'] = len(curr_object.point_data_keys)
-        curr_obj_attributes['bands_names'] = curr_object.point_data_keys
+        curr_obj_attributes['properties_names'] = curr_object.point_data_keys
         # curr_obj_attributes['properties_components'] = curr_object.point_data_components
-        curr_obj_attributes['bands_types'] = curr_object.bands_types
+        curr_obj_attributes['properties_types'] = curr_object.properties_types
         curr_obj_attributes['vtk_obj'] = curr_object
         """Add to entity collection."""
         self.image_coll.add_entity_from_dict(entity_dict=curr_obj_attributes)

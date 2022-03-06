@@ -1020,29 +1020,6 @@ class Voxet(vtk.vtkImageData):
         for col in range(np.size(point_data_array)):
             dsa.WrapDataObject(self).PointData[data_key][point_id, col] = point_data_array[col]
 
-    # @property
-    # def bands_types(self):
-    #     """Get the type of the different scalar components."""
-    #     return self.GetScalarTypeAsString()
-    #
-    # def get_voxet_data(self, data_key=None):
-    #     """Returns a U_n x V_n x W_n x scalars_n numpy array with image data.
-    #     Inspired by vtkimagedata_to_array in vtkplotlib:
-    #     https://github.com/bwoodsend/vtkplotlib/blob/master/vtkplotlib/_image_io.py"""
-    #     point_data = numpy_support.vtk_to_numpy(self.GetPointData().GetScalars(data_key))
-    #     # image_data = point_data.reshape((self.rows_n, self.columns_n, self.bands_n))[::-1]
-    #     three_d_array = point_data.reshape((self.U_n, self.V_n, self.W_n, self.scalars_n))
-    #     return three_d_array
-    #
-    # def set_voxet_data(self, data_key=None, three_d_array=None):
-    #     """Sets point data based on a U_n x V_n x W_n x scalars_n numpy array with image data.
-    #     Inspired by vtkimagedata_from_array in vtkplotlib:
-    #     https://github.com/bwoodsend/vtkplotlib/blob/master/vtkplotlib/_image_io.py"""
-    #     point_data = three_d_array.flatten()
-    #     # pd = self.GetPointData(data_key)
-    #     pd = self.GetPointData()
-    #     pd.SetScalars(numpy_support.numpy_to_vtk(point_data))
-
     def list_cell_data(self):
         """Lists cell attribute names.
         TO BE IMPLEMENTED"""
@@ -1151,7 +1128,7 @@ class XsVoxet(Voxet):
         return self.GetDimensions()[1]
 
     def image_data(self, show_property=None):
-        """Returns a rows_n x columns_n x bands_n numpy array with image data.
+        """Returns a rows_n x columns_n x properties_components numpy array with image data.  --------CHECK THIS -------------
         Inspired by vtkimagedata_to_array in vtkplotlib:
         https://github.com/bwoodsend/vtkplotlib/blob/master/vtkplotlib/_image_io.py"""
         self.GetPointData().SetActiveScalars(show_property)
@@ -1218,6 +1195,7 @@ class Seismics(vtk.vtkStructuredGrid):
 
     @property
     def point_data_keys(self):
+        """________________________________________________properties names_________________________"""
         """Lists point data keys"""
         try:
             return dsa.WrapDataObject(self).PointData.keys()
@@ -1226,6 +1204,7 @@ class Seismics(vtk.vtkStructuredGrid):
 
     @property
     def point_data_components(self):
+        """_________________________________________________properties components___________________________________"""
         """Lists point data components"""
         try:
             data_components = []
@@ -1516,16 +1495,12 @@ class TSDom(vtk.vtkPointSet):
         return tsdom_copy
 
 
-class MapImage(vtk.vtkImageData):
-    """MapImage is a georeferenced (possibly multi-band) 2D image, derived from
+class Image(vtk.vtkImageData):
+    """Image is an abstract class for image data, used as a base for subclasses, derived from
     vtk.vtkImageData() that is saved in the project folder as .vti"""
+    """_________________________________________________see if it is a good idea to use this also as a superclass to Voxet()________________________________________________"""
     def __init__(self, *args, **kwargs):
-        super(MapImage, self).__init__(*args, **kwargs)
-
-    def deep_copy(self):
-        image_copy = MapImage()
-        image_copy.DeepCopy(self)
-        return image_copy
+        super(Image, self).__init__(*args, **kwargs)
 
     @property
     def origin(self):
@@ -1536,8 +1511,43 @@ class MapImage(vtk.vtkImageData):
         self.SetOrigin(vector)
 
     @property
-    def bands_n(self):
-        return self.GetNumberOfScalarComponents()
+    def properties_n(self):
+        """This is not exposed in collection but used internally in the class."""
+        return self.GetPointData().GetNumberOfArrays()
+
+    @property
+    def properties_names(self):
+        properties_names = []
+        for prop in range(self.properties_n):
+            property_name = self.GetPointData().GetArray(prop).GetName()
+            properties_names.append(property_name)
+        return properties_names
+
+    @property
+    def properties_components(self):
+        properties_components = []
+        for prop in range(self.properties_n):
+            property_components = self.GetPointData().GetArray(prop).GetNumberOfComponents()
+            properties_components.append(property_components)
+        return properties_components
+
+    def get_property_components(self, property_name=None):
+        for i in range(len(self.properties_names)):
+            if self.properties_names[i] == property_name:
+                return self.properties_components[i]
+
+    @property
+    def properties_types(self):
+        properties_types = []
+        for prop in range(self.properties_n):
+            property_type = self.GetPointData().GetArray(prop).GetDataTypeAsString()
+            properties_types.append(property_type)
+        return properties_types
+
+    def get_property_type(self, property_name=None):
+        for i in range(len(self.properties_names)):
+            if self.properties_names[i] == property_name:
+                return self.properties_types[i]
 
     @property
     def spacing(self):
@@ -1548,35 +1558,70 @@ class MapImage(vtk.vtkImageData):
         return self.GetDimensions()
 
     @property
-    def columns_n(self):
+    def U_n(self):
         return self.GetDimensions()[0]
 
     @property
-    def rows_n(self):
+    def V_n(self):
         return self.GetDimensions()[1]
+
+    @property
+    def W_n(self):
+        return self.GetDimensions()[2]
 
     @property
     def bounds(self):
         """Returns a list with xmin, xmax, ymin, ymax, zmin, zmax"""
         return self.GetBounds()
 
-    @property
-    def image_data(self):
-        """Returns a rows_n x columns_n x bands_n numpy array with image data.
-        Inspired by vtkimagedata_to_array in vtkplotlib:
-        https://github.com/bwoodsend/vtkplotlib/blob/master/vtkplotlib/_image_io.py"""
-        point_data = numpy_support.vtk_to_numpy(self.GetPointData().GetScalars())
-        # image_data = point_data.reshape((self.rows_n, self.columns_n, self.bands_n))[::-1, ::-1, :]
-        image_data = point_data.reshape((self.rows_n, self.columns_n, self.bands_n))
-        return image_data
+    # def get_point_data(self, data_key=None):
+    #     """Returns a point data attribute as Numpy array. This cannot be converted to
+    #     a property method since the key of the attribute must be specified."""
+    #     """For 2D raster entities return a n-by-m-by-o-dimensional array where n-by-m
+    #     is the shape of the raster and o is the number of components of the attribute."""
+    #     point_data = dsa.WrapDataObject(self).PointData[data_key].reshape((self.get_point_data_shape(data_key=data_key)[1], self.get_point_data_shape(data_key=data_key)[0], self.get_point_data_shape(data_key=data_key)[2]))
+    #     """We use np.squeeze to remove axes with length 1, so a 1D array will be returned with shape (n, ) and not with shape (n, 1)."""
+    #     return np.squeeze(point_data)
+
+    def image_data(self, property_name=None):
+        """Returns image data stored as Numpy array. This cannot be converted to
+        a property method since the property_name of the attribute must be specified.
+        We use np.squeeze to remove axes with length 1, so a 1D array will be returned
+        with shape (n, ) and not with shape (n, 1), and 2D raster entities will return a
+        n-by-m-by-o-dimensional array where n-by-m is the shape of the raster and o is the
+        number of components of the attribute. 3D raster will result in n-by-m-by-p-by-o."""
+        image_data = dsa.WrapDataObject(self).PointData[property_name].reshape((self.V_n, self.U_n, self.W_n, self.get_property_components(property_name)))
+        return np.squeeze(image_data)
+
+
+class MapImage(Image):
+    """MapImage is a georeferenced (possibly multi-property) 2D image, derived from
+    vtk.vtkImageData() that is saved in the project folder as .vti"""
+    def __init__(self, *args, **kwargs):
+        super(MapImage, self).__init__(*args, **kwargs)
+
+    def deep_copy(self):
+        image_copy = MapImage()
+        image_copy.DeepCopy(self)
+        return image_copy
 
     @property
-    def bands_types(self):
-        bands_types = []
-        for band in range(self.bands_n):
-            band_type = type(self.image_data[0, 0, band])
-            bands_types.append(band_type)
-        return bands_types
+    def columns_n(self):
+        return self.U_n
+
+    @property
+    def rows_n(self):
+        return self.V_n
+
+    # @property
+    # def image_data(self):
+    #     """Returns a rows_n x columns_n x properties_components numpy array with image data.
+    #     Inspired by vtkimagedata_to_array in vtkplotlib:
+    #     https://github.com/bwoodsend/vtkplotlib/blob/master/vtkplotlib/_image_io.py"""
+    #     point_data = numpy_support.vtk_to_numpy(self.GetPointData().GetScalars())
+    #     # image_data = point_data.reshape((self.rows_n, self.columns_n, self.properties_components))[::-1, ::-1, :]
+    #     image_data = point_data.reshape((self.rows_n, self.columns_n, self.properties_components))
+    #     return image_data
 
     @property
     def frame(self):
@@ -1602,9 +1647,10 @@ class MapImage(vtk.vtkImageData):
 
 
 class XsImage(vtk.vtkImageData):
-    """XsImage is a (possibly multi-band) 2D image, vertically georeferenced in a cross-section,
+    """XsImage is a (possibly multi-property) 2D image, vertically georeferenced in a cross-section,
     derived from vtk.vtkImageData(), and is saved in the project folder as .vti
     TO BE IMPLEMENTED - JUST COPY AND PASTE BELOW"""
+    """___________________________________________________must be rotated and linked to Xsection_____________________"""
     def __init__(self, *args, **kwargs):
         super(XsImage, self).__init__(*args, **kwargs)
 
@@ -1614,50 +1660,25 @@ class XsImage(vtk.vtkImageData):
         return image_copy
 
     @property
-    def origin(self):
-        return self.GetOrigin()
-
-    @origin.setter
-    def origin(self, vector=None):
-        self.SetOrigin(vector)
-
-    @property
-    def bands_n(self):
-        return self.GetNumberOfScalarComponents()
-
-    @property
-    def spacing(self):
-        return self.GetSpacing()
-
-    @property
-    def dimensions(self):
-        return self.GetDimensions()
-
-    @property
     def columns_n(self):
-        return self.GetDimensions()[0]
+        return self.U_n
 
     @property
     def rows_n(self):
-        return self.GetDimensions()[1]
+        return self.V_n
 
-    @property
-    def bounds(self):
-        """Returns a list with xmin, xmax, ymin, ymax, zmin, zmax"""
-        return self.GetBounds()
-
-    @property
-    def image_data(self):
-        """Returns a rows_n x columns_n x bands_n numpy array with image data.
-        Inspired by vtkimagedata_to_array in vtkplotlib:
-        https://github.com/bwoodsend/vtkplotlib/blob/master/vtkplotlib/_image_io.py"""
-        point_data = numpy_support.vtk_to_numpy(self.GetPointData().GetScalars())
-        image_data = point_data.reshape((self.rows_n, self.columns_n, self.bands_n))
-        return image_data
+    # @property
+    # def image_data(self):
+    #     """Returns a rows_n x columns_n x properties_components numpy array with image data.
+    #     Inspired by vtkimagedata_to_array in vtkplotlib:
+    #     https://github.com/bwoodsend/vtkplotlib/blob/master/vtkplotlib/_image_io.py"""
+    #     point_data = numpy_support.vtk_to_numpy(self.GetPointData().GetScalars())
+    #     image_data = point_data.reshape((self.rows_n, self.columns_n, self.properties_components))
+    #     return image_data
 
     @property
     def frame(self):
-        """Create rectangular frame to be textured. _________________________________________MODIFY THIS
+        """Create rectangular frame to be textured. _________________________________________MODIFY THIS AS IN X-SECTION_____________
         .bounds is a list with xmin, xmax, ymin, ymax, zmin, zmax."""
         points = np.array([[self.bounds[0], self.bounds[3], self.bounds[4]],
                            [self.bounds[1], self.bounds[3], self.bounds[4]],
@@ -1679,7 +1700,7 @@ class XsImage(vtk.vtkImageData):
 
 
 class Image3D(vtk.vtkImageData):
-    """Image3D is a georeferenced (possibly multi-band) 3D image, derived from
+    """Image3D is a georeferenced (possibly multi-property) 3D image, derived from
     vtk.vtkImageData() that is saved in the project folder as .vti"""
     def __init__(self, *args, **kwargs):
         super(Image3D, self).__init__(*args, **kwargs)
@@ -1690,56 +1711,19 @@ class Image3D(vtk.vtkImageData):
         return image_copy
 
     @property
-    def origin(self):
-        return self.GetOrigin()
-
-    @origin.setter
-    def origin(self, vector=None):
-        self.SetOrigin(vector)
-
-    @property
-    def bands_n(self):
-        return self.GetNumberOfScalarComponents()
-
-    @property
-    def spacing(self):
-        return self.GetSpacing()
-
-    @property
-    def dimensions(self):
-        return self.GetDimensions()
-
-    @property
-    def U_n(self):
-        return self.GetDimensions()[0]
-
-    @property
-    def V_n(self):
-        return self.GetDimensions()[1]
-
-    @property
-    def W_n(self):
-        return self.GetDimensions()[1]
-
-    @property
-    def bounds(self):
-        """Returns a list with xmin, xmax, ymin, ymax, zmin, zmax"""
-        return self.GetBounds()
-
-    @property
-    def image_data(self):
-        """Returns a U_n x V_n x W_n x bands_n numpy array with image data.
-        Inspired by vtkimagedata_to_array in vtkplotlib:
-        https://github.com/bwoodsend/vtkplotlib/blob/master/vtkplotlib/_image_io.py"""
-        point_data = numpy_support.vtk_to_numpy(self.GetPointData().GetScalars())
-        # image_data = point_data.reshape((self.U_n, self.V_n, self.W_n, self.bands_n))[::-1, ::-1, :]
-        image_data = point_data.reshape((self.U_n, self.V_n, self.W_n, self.bands_n))
-        return image_data
-
-    @property
-    def bands_types(self):
-        bands_types = []
-        for band in range(self.bands_n):
-            band_type = type(self.image_data[0, 0, 0, band])
-            bands_types.append(band_type)
-        return bands_types
+    def frame(self):
+        """Create hexahedral frame to be textured. _________________________________________MODIFY THIS TO GET A HEXAHEDRAL BOX
+        .bounds is a list with xmin, xmax, ymin, ymax, zmin, zmax."""
+        points = np.array([[self.bounds[0], self.bounds[3], self.bounds[4]],
+                           [self.bounds[1], self.bounds[3], self.bounds[4]],
+                           [self.bounds[1], self.bounds[2], self.bounds[4]],
+                           [self.bounds[0], self.bounds[2], self.bounds[4]]])
+        """Rectangular face and frame."""
+        face = np.hstack([[4, 0, 1, 2, 3]])
+        frame = pv.PolyData(points, face)
+        """Apply texture coordinates."""
+        frame.t_coords = np.array([[0.0, 0.0],
+                                   [1.0, 0.0],
+                                   [1.0, 1.0],
+                                   [0.0, 1.0]])
+        return frame
