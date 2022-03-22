@@ -11,7 +11,7 @@ import pandas as pd
 from PyQt5.QtCore import QAbstractTableModel, Qt, pyqtSignal, QObject, QVariant, QAbstractItemModel
 # from PyQt5.QtGui import QStandardItem, QImage
 from .entities_factory import PolyData, Plane, VertexSet, PolyLine, TriSurf, TetraSolid, XsVertexSet, XsPolyLine, DEM, MapImage, Voxet
-from .helper_dialogs import multiple_input_dialog, general_input_dialog
+from .helper_dialogs import multiple_input_dialog, general_input_dialog, open_file_dialog, auto_sep
 from .windows_factory import NavigationToolbar
 from PyQt5.QtWidgets import QAction
 
@@ -37,7 +37,7 @@ def section_from_azimuth(self):
             action.setDisabled(True)
     self.text_msg.set_text("Draw a vector with mouse to represent the new XSection")
     section_dict = deepcopy(self.parent.xsect_coll.section_dict)
-    """multiple_input_dialog widget is built to check the default value associated to each feature in 
+    """multiple_input_dialog widget is built to check the default value associated to each feature in
     section_dict_in: this value defines the type (str-int-float) of the output that is passed to section_dict_updt.
     It is therefore necessary in section_dict_in to implement the right type for each variable."""
     while True:
@@ -101,35 +101,37 @@ def section_from_azimuth(self):
     for action in self.findChildren(QAction):
         action.setEnabled(True)
 
-def section_from_points(self):
+def section_from_points(self, drawn = True, section_dict_updt=None):
     """Create a new cross section from origin and azimuth"""
     section_dict = deepcopy(self.parent.xsect_coll.section_dict)
-    """multiple_input_dialog widget is built to check the default value associated to each feature in 
+    """multiple_input_dialog widget is built to check the default value associated to each feature in
     section_dict_in: this value defines the type (str-int-float) of the output that is passed to section_dict_updt.
     It is therefore necessary in section_dict_in to implement the right type for each variable."""
     """Freeze QT interface"""
     for action in self.findChildren(QAction):
         if isinstance(action.parentWidget(), NavigationToolbar) is False:
             action.setDisabled(True)
-    self.text_msg.set_text("Draw a vector with mouse to represent the new XSection")
-    while True:
-        self.vector_by_mouse(verbose=True)
-        section_dict_in = {'warning': ['XSection from points', 'Build new XSection from a user-drawn line.\nOnce drawn, values can be modified from keyboard\nor by drawing another vector.', 'QLabel'],
-                                   'name': ['Insert Xsection name', 'new_section', 'QLineEdit'],
-                                   'base_x': ['Insert origin X coord', self.vbm_U0, 'QLineEdit'],
-                                   'base_y': ['Insert origin Y coord', self.vbm_V0, 'QLineEdit'],
-                                   'end_x': ['Insert end-point X coord', self.vbm_Uf, 'QLineEdit'],
-                                   'end_y': ['Insert end-point Y coord', self.vbm_Vf, 'QLineEdit'],
-                                   'top': ['Insert top', 0.0, 'QLineEdit'],
-                                   'bottom': ['Insert bottom', 0.0, 'QLineEdit']}
-        section_dict_updt = general_input_dialog(title='New XSection from points', input_dict=section_dict_in)
-        if section_dict_updt is not None:
-            break
-    while True:
-        if section_dict_updt['name'] in self.parent.xsect_coll.get_names():
-            section_dict_updt['name'] = section_dict_updt['name'] + '_0'
-        else:
-            break
+    # [Gabriele] Added new drawn flag to know if the data is drawn on map or is imported 
+    if drawn:
+        self.text_msg.set_text("Draw a vector with mouse to represent the new XSection")
+        while True:
+            self.vector_by_mouse(verbose=True)
+            section_dict_in = {'warning': ['XSection from points', 'Build new XSection from a user-drawn line.\nOnce drawn, values can be modified from keyboard\nor by drawing another vector.', 'QLabel'],
+                                       'name': ['Insert Xsection name', 'new_section', 'QLineEdit'],
+                                       'base_x': ['Insert origin X coord', self.vbm_U0, 'QLineEdit'],
+                                       'base_y': ['Insert origin Y coord', self.vbm_V0, 'QLineEdit'],
+                                       'end_x': ['Insert end-point X coord', self.vbm_Uf, 'QLineEdit'],
+                                       'end_y': ['Insert end-point Y coord', self.vbm_Vf, 'QLineEdit'],
+                                       'top': ['Insert top', 0.0, 'QLineEdit'],
+                                       'bottom': ['Insert bottom', 0.0, 'QLineEdit']}
+            section_dict_updt = general_input_dialog(title='New XSection from points', input_dict=section_dict_in)
+            if section_dict_updt is not None:
+                break
+        while True:
+            if section_dict_updt['name'] in self.parent.xsect_coll.get_names():
+                section_dict_updt['name'] = section_dict_updt['name'] + '_0'
+            else:
+                break
     for key in section_dict_updt:
         section_dict[key] = section_dict_updt[key]
     section_dict['base_z'] = 0.0
@@ -142,40 +144,108 @@ def section_from_points(self):
     section_dict['normal_y'] = np.cos((section_dict['azimuth'] + 90) * np.pi / 180)
     section_dict['normal_z'] = 0.0
     uid = self.parent.xsect_coll.add_entity_from_dict(entity_dict=section_dict)
-    """Once the original XSection has been drawn, ask if a set of XSections is needed."""
-    section_dict_in_set = {'activate': ['Multiple XSections', 'Draw a set of parallel XSections', 'QCheckBox'],
-                           'spacing': ['Spacing', 1000.0, 'QLineEdit'],
-                           'num_xs': ['Number of XSections', 5, 'QLineEdit']}
-    section_dict_updt_set = general_input_dialog(title='XSection from Azimuth', input_dict=section_dict_in_set)
-    if section_dict_updt_set is None:
-        """Un-Freeze QT interface"""
-        for action in self.findChildren(QAction):
-            action.setEnabled(True)
-        return
-    if section_dict_updt_set['activate'] == "uncheck":
-        """Un-Freeze QT interface"""
-        for action in self.findChildren(QAction):
-            action.setEnabled(True)
-        return
-    name_original_xs = section_dict['name']
-    for xsect in range(section_dict_updt_set['num_xs'] - 1):
-        section_dict['name'] = name_original_xs + '_' + str(xsect)
-        while True:
-            if section_dict['name'] in self.parent.xsect_coll.get_names():
-                section_dict['name'] = section_dict['name'] + '_0'
-            else:
-                break
-        section_dict['base_x'] = section_dict['base_x'] - (section_dict_updt_set['spacing'] * np.cos(section_dict['azimuth'] * np.pi / 180))
-        section_dict['base_y'] = section_dict['base_y'] + (section_dict_updt_set['spacing'] * np.sin(section_dict['azimuth'] * np.pi / 180))
-        section_dict['end_x'] = section_dict['end_x'] - (section_dict_updt_set['spacing'] * np.cos(section_dict['azimuth'] * np.pi / 180))
-        section_dict['end_y'] = section_dict['end_y'] + (section_dict_updt_set['spacing'] * np.sin(section_dict['azimuth'] * np.pi / 180))
-        section_dict['normal_x'] = np.sin((section_dict['azimuth'] + 90) * np.pi / 180)
-        section_dict['normal_y'] = np.cos((section_dict['azimuth'] + 90) * np.pi / 180)
-        section_dict['uid'] = None
-        uid = self.parent.xsect_coll.add_entity_from_dict(entity_dict=section_dict)
+
+    if drawn:
+        """Once the original XSection has been drawn, ask if a set of XSections is needed."""
+        section_dict_in_set = {'activate': ['Multiple XSections', 'Draw a set of parallel XSections', 'QCheckBox'],
+                               'spacing': ['Spacing', 1000.0, 'QLineEdit'],
+                               'num_xs': ['Number of XSections', 5, 'QLineEdit']}
+        section_dict_updt_set = general_input_dialog(title='XSection from Azimuth', input_dict=section_dict_in_set)
+        if section_dict_updt_set is None:
+            """Un-Freeze QT interface"""
+            for action in self.findChildren(QAction):
+                action.setEnabled(True)
+            return
+        if section_dict_updt_set['activate'] == "uncheck":
+            """Un-Freeze QT interface"""
+            for action in self.findChildren(QAction):
+                action.setEnabled(True)
+            return
+        name_original_xs = section_dict['name']
+        for xsect in range(section_dict_updt_set['num_xs'] - 1):
+            section_dict['name'] = name_original_xs + '_' + str(xsect)
+            while True:
+                if section_dict['name'] in self.parent.xsect_coll.get_names():
+                    section_dict['name'] = section_dict['name'] + '_0'
+                else:
+                    break
+            section_dict['base_x'] = section_dict['base_x'] - (section_dict_updt_set['spacing'] * np.cos(section_dict['azimuth'] * np.pi / 180))
+            section_dict['base_y'] = section_dict['base_y'] + (section_dict_updt_set['spacing'] * np.sin(section_dict['azimuth'] * np.pi / 180))
+            section_dict['end_x'] = section_dict['end_x'] - (section_dict_updt_set['spacing'] * np.cos(section_dict['azimuth'] * np.pi / 180))
+            section_dict['end_y'] = section_dict['end_y'] + (section_dict_updt_set['spacing'] * np.sin(section_dict['azimuth'] * np.pi / 180))
+            section_dict['normal_x'] = np.sin((section_dict['azimuth'] + 90) * np.pi / 180)
+            section_dict['normal_y'] = np.cos((section_dict['azimuth'] + 90) * np.pi / 180)
+            section_dict['uid'] = None
+            uid = self.parent.xsect_coll.add_entity_from_dict(entity_dict=section_dict)
     """Un-Freeze QT interface"""
     for action in self.findChildren(QAction):
         action.setEnabled(True)
+
+def sections_from_file(self):
+    from os.path import splitext
+    '''[Gabriele]  Read GOCAD ASCII (.pl) or ASCII files (.dat) to extract the data necessary to create a section (or multiple sections). The necessary keys are defined in the section_dict_updt dict.
+
+    For GOCAD ASCII the file is parsed for every line searching for key words that define the line containing the data.
+
+    For normal ASCII files exported from MOVE the data is registered as a csv and so the pd.read_csv function can be used. The separator is automatically extracted using csv.Sniffer() (auto_sep helper function).
+
+    For both importing methods the user must define the top and bottom values of the section.
+    '''
+    section_dict_updt = {'name': '',
+                         'base_x': 0,
+                         'base_y': 0,
+                         'end_x': 0,
+                         'end_y': 0,
+                         'top': 0,
+                         'bottom': 0}
+    files = open_file_dialog(parent=self, caption="Import section traces", filter="GOCAD ASCII (*.pl);;ASCII (*.dat)", multiple = True)
+
+    name, extension = splitext(files[0]) # [Gabriele] This could be implemented automatically in open_file_dialog (return file and extensio list)
+
+    section_dict_in = {'warning': ['XSection from file', 'Build new XSection from a GOCAD ASCII or simple ASCII file.\nChoose the top and bottom limit of the sections to continue', 'QLabel'],
+                        'top': ['Insert top', 0.0, 'QLineEdit'],
+                        'bottom': ['Insert bottom', 0.0, 'QLineEdit']}
+    top_bottom = general_input_dialog(title='XSection from files', input_dict=section_dict_in)
+
+    # [Gabriele] Check if the file type is GOCADASCII
+    if extension == '.pl':
+        for file in files:
+            with open(file,'r') as IN:
+                for line in IN:
+                    if 'name:' in line:
+                        line_data = line.strip().split(':')
+                        section_dict_updt['name'] = line_data[1]
+                    elif 'VRTX 1' in line:
+                        line_data = line.strip().split()
+                        section_dict_updt['base_x'] = float(line_data[2])
+                        section_dict_updt['base_y'] = float(line_data[3])
+                    elif 'VRTX 2' in line:
+                        line_data = line.strip().split()
+                        section_dict_updt['end_x'] = float(line_data[2])
+                        section_dict_updt['end_y'] = float(line_data[3])
+                    elif line.strip() == 'END':
+                        # [Gabriele] When the END of the entry is reached create a section
+                        section_dict_updt['top'] = top_bottom['top']
+                        section_dict_updt['bottom'] = top_bottom['bottom']
+                        section_from_points(self,drawn = False,
+                                            section_dict_updt=section_dict_updt)
+    elif extension == '.dat':
+        for file in files:
+            sep = auto_sep(file)
+            pd_df = pd.read_csv(file,sep=sep)
+            unique_traces = pd.unique(pd_df['Name'])
+            for trace in unique_traces:
+                section_dict_updt['name'] = trace
+                section_dict_updt['base_x'] = pd_df.loc[(pd_df['Name'] == trace) & (pd_df['Vertex Index'] == 1)]['x'].values
+                section_dict_updt['base_y'] = pd_df.loc[(pd_df['Name'] == trace) & (pd_df['Vertex Index'] == 1)]['y'].values
+                section_dict_updt['base_z'] = pd_df.loc[(pd_df['Name'] == trace) & (pd_df['Vertex Index'] == 1)]['y'].values
+                section_dict_updt['end_x'] = pd_df.loc[(pd_df['Name'] == trace) & (pd_df['Vertex Index'] == 2)]['x'].values
+                section_dict_updt['end_y'] = pd_df.loc[(pd_df['Name'] == trace) & (pd_df['Vertex Index'] == 2)]['y'].values
+                section_dict_updt['top'] = top_bottom['top']
+                section_dict_updt['bottom'] = top_bottom['bottom']
+                section_from_points(self,drawn = False,
+                                    section_dict_updt=section_dict_updt)
+
 
 
 class XSectionCollection(QAbstractTableModel):

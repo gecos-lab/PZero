@@ -4,12 +4,13 @@ PZero© Andrea Bistacchi"""
 import numpy as np
 import pandas as pd
 import uuid
+import vtk
 from copy import deepcopy
 from PyQt5.QtCore import QAbstractTableModel, Qt, QVariant
 from .windows_factory import NavigationToolbar
 from PyQt5.QtWidgets import QAction
 from .helper_dialogs import general_input_dialog
-from .entities_factory import PolyLine
+from .entities_factory import PolyLine, TriSurf
 
 """Options to print Pandas dataframes in console for testing."""
 pd_desired_width = 800
@@ -40,13 +41,16 @@ def boundary_from_points(self):
     draw the vector multiple times if modifications are necessary"""
     while True:
         self.vector_by_mouse(verbose=True)
-        boundary_dict_in = {'warning': ['Boundary from points', 'Build new Boundary from a user-drawn line\nthat represents the diagonal of the Bounding box.\nOnce drawn, values can be modified from keyboard\nor by drawing another vector.', 'QLabel'],
+        boundary_dict_in = {'warning': ['Boundary from points', 'Build new Boundary from a user-drawn line that represents the horizontal diagonal\nof the Bounding box.\nOnce drawn, values can be modified from keyboard or by drawing another vector.', 'QLabel'],
                            'name': ['Insert Boundary name', 'new_boundary', 'QLineEdit'],
                            'origin_x': ['Insert origin X coord', self.vbm_U0, 'QLineEdit'],
                            'origin_y': ['Insert origin Y coord', self.vbm_V0, 'QLineEdit'],
                            'end_x': ['Insert end-point X coord', self.vbm_Uf, 'QLineEdit'],
-                           'end_y': ['Insert end-point Y coord', self.vbm_Vf, 'QLineEdit']}
-        boundary_dict_updt = general_input_dialog(title='New XSection from points', input_dict=boundary_dict_in)
+                           'end_y': ['Insert end-point Y coord', self.vbm_Vf, 'QLineEdit'],
+                           'top': ['Insert top', 1000.0, 'QLineEdit'],
+                           'bottom': ['Insert bottom', -1000.0, 'QLineEdit'],
+                           'activatevolume': ['volumeyn', 'Do not create volume. Create horizontal parallelogram at Z=0 meters', 'QCheckBox']}
+        boundary_dict_updt = general_input_dialog(title='New Boundary from points', input_dict=boundary_dict_in)
         if boundary_dict_updt is not None:
             break
     pass
@@ -56,12 +60,50 @@ def boundary_from_points(self):
             boundary_dict_updt['name'] = boundary_dict_updt['name'] + '_0'
         else:
             break
+    """Check if top and bottom fields are empty"""
+    if boundary_dict_updt['top'] is None:
+        boundary_dict_updt['top'] = 1000.0
+    if boundary_dict_updt['bottom'] is None:
+        boundary_dict_updt['bottom'] = -1000.0
+    if boundary_dict_updt['top'] == boundary_dict_updt['bottom']:
+        boundary_dict_updt['top'] = boundary_dict_updt['top'] + 1.0
     boundary_dict['name'] = boundary_dict_updt['name']
-    boundary_dict['topological_type'] = 'PolyLine'
-    """Build rectangular polyline at Z=0 meters"""
-    boundary_dict['vtk_obj'] = PolyLine()
-    boundary_dict['vtk_obj'].points = [(boundary_dict_updt['origin_x'], boundary_dict_updt['origin_y'], 0.0), (boundary_dict_updt['end_x'], boundary_dict_updt['origin_y'], 0.0), (boundary_dict_updt['end_x'], boundary_dict_updt['end_y'], 0.0), (boundary_dict_updt['origin_x'], boundary_dict_updt['end_y'], 0.0), (boundary_dict_updt['origin_x'], boundary_dict_updt['origin_y'], 0.0)]
-    boundary_dict['vtk_obj'].auto_cells()
+    if boundary_dict_updt['activatevolume'] == 'check':
+        """Build rectangular polyline at Z=0 meters"""
+        boundary_dict['topological_type'] = 'PolyLine'
+        boundary_dict['vtk_obj'] = PolyLine()
+        boundary_dict['vtk_obj'].points = [(boundary_dict_updt['origin_x'], boundary_dict_updt['origin_y'], 0.0),
+                                           (boundary_dict_updt['end_x'], boundary_dict_updt['origin_y'], 0.0),
+                                           (boundary_dict_updt['end_x'], boundary_dict_updt['end_y'], 0.0),
+                                           (boundary_dict_updt['origin_x'], boundary_dict_updt['end_y'], 0.0),
+                                           (boundary_dict_updt['origin_x'], boundary_dict_updt['origin_y'], 0.0)]
+        boundary_dict['vtk_obj'].auto_cells()
+    else:
+        """Build Boundary as volume"""
+        boundary_dict['topological_type'] = 'TriSurf'
+        boundary_dict['vtk_obj'] = TriSurf()
+        nodes = vtk.vtkPoints()
+        nodes.InsertPoint(0, boundary_dict_updt['origin_x'], boundary_dict_updt['origin_y'], boundary_dict_updt['bottom'])
+        nodes.InsertPoint(1, boundary_dict_updt['end_x'], boundary_dict_updt['origin_y'], boundary_dict_updt['bottom'])
+        nodes.InsertPoint(2, boundary_dict_updt['end_x'], boundary_dict_updt['end_y'], boundary_dict_updt['bottom'])
+        nodes.InsertPoint(3, boundary_dict_updt['origin_x'], boundary_dict_updt['end_y'], boundary_dict_updt['bottom'])
+        nodes.InsertPoint(4, boundary_dict_updt['origin_x'], boundary_dict_updt['origin_y'], boundary_dict_updt['top'])
+        nodes.InsertPoint(5, boundary_dict_updt['end_x'], boundary_dict_updt['origin_y'], boundary_dict_updt['top'])
+        nodes.InsertPoint(6, boundary_dict_updt['end_x'], boundary_dict_updt['end_y'], boundary_dict_updt['top'])
+        nodes.InsertPoint(7, boundary_dict_updt['origin_x'], boundary_dict_updt['end_y'], boundary_dict_updt['top'])
+        boundary_dict['vtk_obj'].SetPoints(nodes)
+        boundary_dict['vtk_obj'].append_cell(np.array([0, 1, 4]))
+        boundary_dict['vtk_obj'].append_cell(np.array([1, 4, 5]))
+        boundary_dict['vtk_obj'].append_cell(np.array([1, 2, 5]))
+        boundary_dict['vtk_obj'].append_cell(np.array([2, 5, 6]))
+        boundary_dict['vtk_obj'].append_cell(np.array([2, 3, 6]))
+        boundary_dict['vtk_obj'].append_cell(np.array([3, 6, 7]))
+        boundary_dict['vtk_obj'].append_cell(np.array([0, 4, 7]))
+        boundary_dict['vtk_obj'].append_cell(np.array([0, 3, 7]))
+        boundary_dict['vtk_obj'].append_cell(np.array([4, 6, 7]))
+        boundary_dict['vtk_obj'].append_cell(np.array([4, 5, 6]))
+        boundary_dict['vtk_obj'].append_cell(np.array([0, 1, 3]))
+        boundary_dict['vtk_obj'].append_cell(np.array([1, 2, 3]))
     uid = self.parent.boundary_coll.add_entity_from_dict(entity_dict=boundary_dict)
     """Un-Freeze QT interface"""
     for action in self.findChildren(QAction):

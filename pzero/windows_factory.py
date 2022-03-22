@@ -2664,7 +2664,7 @@ class ViewMap(View2D):
         """Inheritance of common tools"""
         super().initialize_menu_tools()
         """Tools specific to map view"""
-        from .xsection_collection import section_from_azimuth, section_from_points
+        from .xsection_collection import section_from_azimuth, section_from_points, sections_from_file
         from .boundary_collection import boundary_from_points
 
         self.sectionFromAzimuthButton = QAction('Section from Azimuth', self)  # create action
@@ -2676,6 +2676,13 @@ class ViewMap(View2D):
         self.sectionFromPointsButton.triggered.connect(lambda: section_from_points(self))  # connect action to function with additional argument parent
         self.menuBaseView.addAction(self.sectionFromPointsButton)  # add action to menu
         self.toolBarBase.addAction(self.sectionFromPointsButton)  # add action to toolbar
+
+        '''[Gabriele]  Import section from section traces file/files'''
+        self.sectionFromFileButton = QAction('Sections from file',self)
+        self.sectionFromFileButton.triggered.connect(lambda: sections_from_file(self))
+
+        self.menuBaseView.addAction(self.sectionFromFileButton)  # add action to menu
+        self.toolBarBase.addAction(self.sectionFromFileButton)  # add action to toolbar
 
         self.boundaryFromPointsButton = QAction('Boundary from 2 points', self)  # create action
         self.boundaryFromPointsButton.triggered.connect(lambda: boundary_from_points(self))  # connect action to function with additional argument parent
