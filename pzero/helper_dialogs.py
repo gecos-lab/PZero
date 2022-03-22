@@ -4,6 +4,8 @@ PZero© Andrea Bistacchi"""
 from PyQt5.QtWidgets import QMessageBox, QInputDialog, QLineEdit, QPushButton, QFileDialog, QWidget, QProgressDialog
 from PyQt5 import QtWidgets, QtCore
 
+from csv import Sniffer
+
 
 def options_dialog(title=None, message=None, yes_role=None, no_role=None, reject_role=None):
     """Generic message box with title, message, and three buttons.
@@ -53,11 +55,15 @@ def input_one_value_dialog(parent=None, title="title", label="label", default_va
         return
 
 
-def open_file_dialog(parent=None, caption=None, filter=None):
+def open_file_dialog(parent=None, caption=None, filter=None, multiple = False):
     """Open a dialog and input a file or folder name.
     If the dialog is closed without a valid file name, it returns None."""
-    in_file_name = QFileDialog.getOpenFileName(parent=parent, caption=caption, filter=filter)
-    in_file_name = in_file_name[0]
+    if multiple:
+        in_file_name = QFileDialog.getOpenFileNames(parent=parent,caption=caption,filter=filter)
+        in_file_name = in_file_name[0]
+    else:
+        in_file_name = QFileDialog.getOpenFileName(parent=parent, caption=caption, filter=filter)
+        in_file_name = in_file_name[0]
     return in_file_name
 
 
@@ -415,3 +421,8 @@ class progress_dialog(QProgressDialog):
     @property
     def was_canceled(self):
         return self.wasCanceled()
+
+def auto_sep(filename):
+    with open(filename,'r') as IN:
+        separator = Sniffer().sniff(IN.readline()).delimiter
+    return separator

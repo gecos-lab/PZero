@@ -2460,7 +2460,7 @@ class ViewMap(View2D):
         """Inheritance of common tools"""
         super().initialize_menu_tools()
         """Tools specific to map view"""
-        from .xsection_collection import section_from_azimuth, section_from_points
+        from .xsection_collection import section_from_azimuth, section_from_points, sections_from_file
         from .boundary_collection import boundary_from_points
 
         self.sectionFromAzimuthButton = QAction('Section from Azimuth', self)  # create action
@@ -2472,6 +2472,13 @@ class ViewMap(View2D):
         self.sectionFromPointsButton.triggered.connect(lambda: section_from_points(self))  # connect action to function with additional argument parent
         self.menuBaseView.addAction(self.sectionFromPointsButton)  # add action to menu
         self.toolBarBase.addAction(self.sectionFromPointsButton)  # add action to toolbar
+
+        '''[Gabriele]  Import section from section traces file/files'''
+        self.sectionFromFileButton = QAction('Sections from file',self)
+        self.sectionFromFileButton.triggered.connect(lambda: sections_from_file(self))
+
+        self.menuBaseView.addAction(self.sectionFromFileButton)  # add action to menu
+        self.toolBarBase.addAction(self.sectionFromFileButton)  # add action to toolbar
 
         self.boundaryFromPointsButton = QAction('Boundary from 2 points', self)  # create action
         self.boundaryFromPointsButton.triggered.connect(lambda: boundary_from_points(self))  # connect action to function with additional argument parent
@@ -2561,7 +2568,7 @@ class ViewMap(View2D):
         elif isinstance(plot_entity, TriSurf):
             if isinstance(plot_entity.points, np.ndarray):
                 if plot_entity.points_number > 0:
-                    """This  check is needed to avoid errors when trying to plot an empty 
+                    """This  check is needed to avoid errors when trying to plot an empty
                     PolyData, just created at the beginning of a digitizing session.
                     Check if both these conditions are necessary_________________"""
                     if collection == 'geol_coll':
