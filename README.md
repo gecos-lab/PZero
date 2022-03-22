@@ -156,9 +156,6 @@ Conda can also be installed on Linux by following **[this quick guide](https://d
 
 
 ---
-
-
-
 ## Test data ##
 
 We have uploaded some test project on public repositories:

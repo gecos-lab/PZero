@@ -4,6 +4,8 @@ PZero© Andrea Bistacchi"""
 from PyQt5.QtWidgets import QMessageBox, QInputDialog, QLineEdit, QPushButton, QFileDialog, QWidget, QProgressDialog, QMainWindow,QComboBox
 from PyQt5 import QtWidgets, QtCore, Qt
 
+from csv import Sniffer
+
 from .import_window_ui import Ui_ImportOptionsWindow
 from .assign_ui import Ui_AssignWindow
 import pandas as pd
@@ -424,6 +426,11 @@ class progress_dialog(QProgressDialog):
     @property
     def was_canceled(self):
         return self.wasCanceled()
+
+def auto_sep(filename):
+    with open(filename,'r') as IN:
+        separator = Sniffer().sniff(IN.readline()).delimiter
+    return separator
 
 class PCDataModel(QtCore.QAbstractTableModel):
 
