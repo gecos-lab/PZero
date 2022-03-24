@@ -22,7 +22,7 @@ The process is as follows:
 
 
 import numpy as np
-from vtk import vtkCellArray, vtkPoints,vtkUnsignedCharArray
+from vtk import vtkPoints,vtkUnsignedCharArray
 import os
 from copy import deepcopy
 import uuid
@@ -31,12 +31,11 @@ from .dom_collection import DomCollection
 import pyvista as pv
 import xarray as xr
 import pandas as pd
-
+import time
 
 def pc2vtk(in_file_name,raw_input_df,start_col,end_col,start_row,end_row,self=None):
 
-    _,extension = os.path.splitext(in_file_name)
-
+    start = time.time()
     if end_row == -1:
         input_df = raw_input_df.iloc[start_row:, start_col:end_col]
     else:
@@ -65,46 +64,62 @@ def pc2vtk(in_file_name,raw_input_df,start_col,end_col,start_row,end_row,self=No
 
 
         XYZ = np.array([input_df['X'].values,input_df['Y'].values,input_df['Z'].values]).T
+        end = time.time()
 
-
+        print(f'File reading\n{XYZ.shape}: {end-start}\n')
 
         """[Gabriele] Convert to PCDom() instance. Used https://docs.pyvista.org/examples/00-load/wrap-trimesh.html as reference"""
+        start = time.time()
+        point_cloud = PCDom() #[Gabriele] vtkpointSet object
+        # OLD METHOD
 
-        point_cloud = PCDom() #[Gabriele] vtkPolyData object
-        points = vtkPoints() #[Gabriele] points object
-        vertices = vtkCellArray() #[Gabriele] vertices (cells)
-        vertices.InsertNextCell(n_cells) #[Gabriele] set n cells with n= number of points in the dataset
+     #    points = vtkPoints() #[Gabriele] points object
+     #    vertices = vtkCellArray() #[Gabriele] vertices (cells)
+     #    vertices.InsertNextCell(n_cells) #[Gabriele] set n cells with n= number of points in the dataset
+     #
+     # #[Gabriele] insert the datasets points and assign each point to a cell
+     #    for p in XYZ:
+     #        pid = points.InsertNextPoint(p)
+     #        vertices.InsertCellPoint(pid)
+     #
+     #
+     #
+     #    point_cloud.SetPoints(points) #[Gabriele] Assign the points to the point_cloud (vtkPolyData)
+     #    point_cloud.SetVerts(vertices) #[Gabriele] Assign the vertices to the point_cloud (vtkPolyData)
 
-     #[Gabriele] insert the datasets points and assign each point to a cell
-        for p in XYZ:
-            pid = points.InsertNextPoint(p)
-            vertices.InsertCellPoint(pid)
+        # NEW METHOD
+        pv_PD = pv.PolyData(XYZ)
+        vtk_points = pv_PD.GetPoints()
+        vtk_cells = pv_PD.GetVerts()
+        point_cloud.SetPoints(vtk_points)
+        point_cloud.SetVerts(vtk_cells)
+
+        # points = pv.vtk_points(XYZ)
+        # pcdom.SetPoints(points)
+        # point_cloud = pcdom.cast_to_polydata()
+
+        # [Gabriele] Loading properties
 
 
+        properties_df = input_df.drop(['X','Y','Z'],axis=1) # [Gabriele] Drop XYZ
 
-
-        point_cloud.SetPoints(points) #[Gabriele] Assign the points to the point_cloud (vtkPolyData)
-        point_cloud.SetVerts(vertices) #[Gabriele] Assign the vertices to the point_cloud (vtkPolyData)
-
-        # [Gabriele] Pedefined scalars
-
-        properties_df = input_df.drop(['X','Y','Z'],axis=1)
-
-        if not properties_df.filter(regex='N.a.').empty:
+        if not properties_df.filter(regex='N.a.').empty: # [Gabriele] Exclude N.a. values
             properties_df = properties_df.drop(['N.a.'],axis=1)
 
-        scalar_components = []
+        properties_components= []
         if not properties_df.empty:
-            scalar_names = list(properties_df.columns)
+            properties_names = list(properties_df.columns)
 
-            for scalar in scalar_names:
-                scalar_value = properties_df[scalar].values
-                scalar_components.append(1)
-                point_cloud.set_point_data(scalar,scalar_value)
+            for property in properties_names:
+                properties_value = properties_df[property].values
+                component_length = np.array(properties_value[0]).flatten().size
+                properties_components.append(component_length)
+                point_cloud.set_point_data(property,properties_value)
         else:
-            scalar_names = []
+            properties_names = []
 
 
+        # cast_pc.Modified()
         point_cloud.Modified()
         """Create dictionary."""
         curr_obj_attributes = deepcopy(DomCollection.dom_entity_dict)
@@ -112,13 +127,20 @@ def pc2vtk(in_file_name,raw_input_df,start_col,end_col,start_row,end_row,self=No
         curr_obj_attributes['name'] = os.path.basename(in_file_name)
         curr_obj_attributes['dom_type'] = "PCDom"
         curr_obj_attributes['texture_uids'] = []
-        curr_obj_attributes['properties_names'] = scalar_names
-        curr_obj_attributes['properties_components'] = scalar_components
+        curr_obj_attributes['properties_names'] = properties_names
+        curr_obj_attributes['properties_components'] = properties_components
         curr_obj_attributes['vtk_obj'] = point_cloud
         self.TextTerminal.appendPlainText(f'vtk_obj: {curr_obj_attributes["vtk_obj"]}')
         """Add to entity collection."""
         self.dom_coll.add_entity_from_dict(entity_dict=curr_obj_attributes)
         self.TextTerminal.appendPlainText(f'Successfully imported {in_file_name}')
         """Cleaning."""
-        del points
+        del pv_PD
+        del vtk_points
+        del vtk_cells
         del point_cloud
+        # del points
+        # del point_cloud
+        # del pcdom
+        end = time.time()
+        print(f'Point importing\n{XYZ.shape}: {end-start}\n')

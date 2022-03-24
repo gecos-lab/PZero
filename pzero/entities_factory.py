@@ -344,7 +344,7 @@ class PolyData(vtk.vtkPolyData):
             """For vector entities return a n-by-m-dimensional array where n is the
             number of points and m is the number of components of the attribute."""
             point_data = dsa.WrapDataObject(self).PointData[data_key].reshape((self.get_point_data_shape(data_key=data_key)[0], self.get_point_data_shape(data_key=data_key)[1]))
-        elif isinstance(self, PCDom):
+        elif isinstance(self, PolyData):
             '''[Gabriele]  For point entities we don't need to reshape'''
             point_data = dsa.WrapDataObject(self).PointData[data_key]
         """We use np.squeeze to remove axes with length 1, so a 1D array will be returned with shape (n, ) and not with shape (n, 1)."""
@@ -1511,8 +1511,32 @@ class PCDom(PolyData):
         pcdom_copy = PCDom()
         pcdom_copy.DeepCopy(self)
         return pcdom_copy
+    # @property
+    # def points(self):
+    #     """Returns point coordinates as a Numpy array"""
+    #     return dsa.WrapDataObject(self).Points
+    #
+    # @points.setter
+    # def points(self, points_matrix=None):
+    #     """Sets point coordinates from a Numpy array (sets a completely new point array)"""
+    #     dsa.WrapDataObject(self).Points = points_matrix
+    #
+    #
+    # def cast_to_polydata(self):
+    #
+    #     # NEW METHOD
+    #     pv_PD = pv.PolyData(self.points)
+    #     vtk_points = pv_PD.GetPoints()
+    #     vtk_cells = pv_PD.GetVerts()
+    #     cast = PolyData()
+    #     cast.SetPoints(vtk_points)
+    #     cast.SetVerts(vtk_cells)
+    #     del pv_PD
+    #     del vtk_points
+    #     del vtk_cells
+    #
+    #     return cast
 
-    # [Gabriele] The rest comes from the Polydata class.
 
 class TSDom(vtk.vtkPointSet):
     """Textured Surface DOM - TO BE IMPLEMENTED"""
