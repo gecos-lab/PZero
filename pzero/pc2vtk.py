@@ -35,7 +35,6 @@ import time
 
 def pc2vtk(in_file_name,raw_input_df,start_col,end_col,start_row,end_row,self=None):
 
-    start = time.time()
     if end_row == -1:
         input_df = raw_input_df.iloc[start_row:, start_col:end_col]
     else:
@@ -64,9 +63,6 @@ def pc2vtk(in_file_name,raw_input_df,start_col,end_col,start_row,end_row,self=No
 
 
         XYZ = np.array([input_df['X'].values,input_df['Y'].values,input_df['Z'].values]).T
-        end = time.time()
-
-        print(f'File reading\n{XYZ.shape}: {end-start}\n')
 
         """[Gabriele] Convert to PCDom() instance. Used https://docs.pyvista.org/examples/00-load/wrap-trimesh.html as reference"""
         start = time.time()
@@ -89,11 +85,10 @@ def pc2vtk(in_file_name,raw_input_df,start_col,end_col,start_row,end_row,self=No
 
         # NEW METHOD
         pv_PD = pv.PolyData(XYZ)
-        vtk_points = pv_PD.GetPoints()
-        vtk_cells = pv_PD.GetVerts()
-        point_cloud.SetPoints(vtk_points)
-        point_cloud.SetVerts(vtk_cells)
-
+        point_cloud.ShallowCopy(pv_PD)
+        point_cloud.Modified()
+        end = time.time()
+        print(f'Point importing\n{XYZ.shape}: {end-start}\n')
         # points = pv.vtk_points(XYZ)
         # pcdom.SetPoints(points)
         # point_cloud = pcdom.cast_to_polydata()
@@ -136,11 +131,4 @@ def pc2vtk(in_file_name,raw_input_df,start_col,end_col,start_row,end_row,self=No
         self.TextTerminal.appendPlainText(f'Successfully imported {in_file_name}')
         """Cleaning."""
         del pv_PD
-        del vtk_points
-        del vtk_cells
         del point_cloud
-        # del points
-        # del point_cloud
-        # del pcdom
-        end = time.time()
-        print(f'Point importing\n{XYZ.shape}: {end-start}\n')

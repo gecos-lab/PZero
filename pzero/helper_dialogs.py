@@ -663,6 +663,7 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
         prop_dict = dict()
         for format in las_data.point_format.dimensions:
             if format.name == 'X' or format.name == 'Y' or format.name == 'Z':
+                print(getattr(las_data,format.name))
                 attr = format.name.lower()
                 prop_dict[attr] = np.c_[getattr(las_data,attr)].flatten()
             else:

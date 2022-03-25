@@ -2141,6 +2141,7 @@ class View3D(BaseView):
         else:
             show_property_cmap = None
         this_actor= self.plotter.add_points(plot_entity,name=uid,
+                                            style='points',
                                             point_size=point_size,
                                             render_points_as_spheres=points_as_spheres,
                                             color=color_RGB,
