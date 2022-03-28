@@ -13,7 +13,7 @@ import laspy as lp
 import os
 import numpy as np
 from .pc2vtk import pc2vtk
-from Levenshtein import jaro_winkler as jw
+import difflib as dl
 
 from csv import Sniffer
 
@@ -601,19 +601,17 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
 
             self.default_attr_list = ['As is','X','Y','Z','Red','Green','Blue','Intensity','User defined','N.a.']
 
-            '''[Gabriele]  Auto-assign values using the jaro_winkler method. If there is no match then the column name is not changed. In this step the combo_index list is compiled. This list is later used in the assign window to fill the combo boxes with the correct attribute. For non matches the As is value is attribuited.'''
+            '''[Gabriele]  Auto-assign values using the difflib library. If there is no match then the column name is not changed (As is). In this step the combo_index list is compiled. This list is later used in the assign window to fill the combo boxes with the correct attribute. For non matches the As is value is attribuited.'''
 
             self.col_names = list(self.input_data_df.columns)
             self.rename_df = {}
             self.combo_index = []
 
-            remove_char_dict = {"/":"","\\":"","?":"","!":"","-":"","_":""}
+            remove_char_dict = {"/":"","\\":"","?":"","!":"","-":"","_":""} # [Gabriele] Forbidden characters that are removed from the names using the translate function
 
             for attr in self.col_names:
-
                 table = attr.maketrans(remove_char_dict)
-                matches = [jw(attr.translate(table).lower(),string.lower()) for string in self.default_attr_list]
-
+                matches = [dl.SequenceMatcher(None,attr.translate(table).lower(),string.lower()).ratio() for string in self.default_attr_list]
                 match = max(matches)
 
                 if match > 0.8:
@@ -663,7 +661,6 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
         prop_dict = dict()
         for format in las_data.point_format.dimensions:
             if format.name == 'X' or format.name == 'Y' or format.name == 'Z':
-                print(getattr(las_data,format.name))
                 attr = format.name.lower()
                 prop_dict[attr] = np.c_[getattr(las_data,attr)].flatten()
             else:
