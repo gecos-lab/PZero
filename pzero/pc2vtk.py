@@ -22,14 +22,12 @@ The process is as follows:
 
 
 import numpy as np
-from vtk import vtkPoints,vtkUnsignedCharArray
 import os
 from copy import deepcopy
 import uuid
 from .entities_factory import PCDom
 from .dom_collection import DomCollection
-import pyvista as pv
-import xarray as xr
+from pyvista import PolyData as PlD
 import pandas as pd
 import time
 
@@ -84,7 +82,7 @@ def pc2vtk(in_file_name,raw_input_df,start_col,end_col,start_row,end_row,self=No
      #    point_cloud.SetVerts(vertices) #[Gabriele] Assign the vertices to the point_cloud (vtkPolyData)
 
         # NEW METHOD
-        pv_PD = pv.PolyData(XYZ)
+        pv_PD = PlD(XYZ)
         point_cloud.ShallowCopy(pv_PD)
         point_cloud.Modified()
         end = time.time()

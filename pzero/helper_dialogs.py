@@ -658,13 +658,14 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
 
     def las2df(self,in_path):
         las_data = lp.read(in_path)
+        dim_names = las_data.point_format.dimension_names
         prop_dict = dict()
-        for format in las_data.point_format.dimensions:
-            if format.name == 'X' or format.name == 'Y' or format.name == 'Z':
-                attr = format.name.lower()
-                prop_dict[attr] = np.c_[getattr(las_data,attr)].flatten()
+        for dim in dim_names:
+            if dim == 'X' or dim == 'Y' or dim == 'Z':
+                attr = dim.lower()
+                prop_dict[attr] = las_data[attr].array
             else:
-                prop_dict[format.name] = np.c_[getattr(las_data,format.name)].flatten()
+                prop_dict[dim] = las_data[dim]
         df = pd.DataFrame.from_dict(prop_dict)
         return df
 
