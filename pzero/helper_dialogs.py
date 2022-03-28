@@ -4,8 +4,6 @@ PZero© Andrea Bistacchi"""
 from PyQt5.QtWidgets import QMessageBox, QInputDialog, QLineEdit, QPushButton, QFileDialog, QWidget, QProgressDialog, QMainWindow,QComboBox
 from PyQt5 import QtWidgets, QtCore, Qt
 
-from csv import Sniffer
-
 from .import_window_ui import Ui_ImportOptionsWindow
 from .assign_ui import Ui_AssignWindow
 import pandas as pd
@@ -438,6 +436,40 @@ def auto_sep(filename):
         separator = Sniffer().sniff(IN.readline()).delimiter
     return separator
 
+def profiler(path,iter):
+    '''[Gabriele]  Function used to profile the time needed to run a given function. The output is a .csv file in which each row corresponds the mean run time and std of functions. As a secondary output the profiler saves the raw differences in a separate file.'''
+    import time
+    root,base = os.path.split(path)
+    diff_list = []
+    def secondary(func):
+        def inner(*args):
+            title = func.__name__
+            print(f'\n-------------------{title} PROFILING STARTED-------------------\n')
+            for i in range(iter):
+                print(f'{i+1} cycle of {iter}')
+                start = time.time()
+                res = func(*args)
+                end = time.time()
+                diff = end-start
+                diff_list.append(diff)
+                print(f'cycle {i+1} completed. It took {diff} seconds')
+            raw_time_diff = pd.DataFrame(diff_list,columns=['time diff [s]'])
+            raw_time_diff.to_csv(os.path.join(root,f'{title}_raw.csv'),sep=';')
+            mean = np.mean(diff_list)
+            std = np.std(diff_list)
+            if os.path.exists(path):
+                with open(path,'a') as f:
+                    f.write(f'{title};{mean};{std};{iter}\n')
+            else:
+                with open(path,'a') as f:
+                    f.write(f'function title [-];mean [s];std [-];n of iterations[-]\n')
+                    f.write(f'{title};{mean};{std};{iter}\n')
+            print(f'Profiling finished in ~{mean*iter}s! The results are saved in the specified {root} directory')
+            print(f'\n-------------------{title} PROFILING ENDED-------------------\n')
+            return res
+        return inner
+    return secondary
+
 class PCDataModel(QtCore.QAbstractTableModel):
 
     '''[Gabriele]  Abstract table model that can be used to quickly display imported pc files data  from a pandas df. Taken from this stack overflow post https://stackoverflow.com/questions/31475965/fastest-way-to-populate-qtableview-from-pandas-data-frame
@@ -594,10 +626,9 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
                 self.input_data_df = self.las2df(self.import_options_dict['in_path'])
 
             else:
-
-                self.input_data_df = pd.read_csv(self.import_options_dict['in_path'],
-                                            sep=self.import_options_dict['SeparatorcomboBox'],
-                                            header=self.import_options_dict['HeaderspinBox'])
+                self.input_data_df = self.csv2df(self.import_options_dict['in_path'],
+                                            self.import_options_dict['SeparatorcomboBox'],
+                                            self.import_options_dict['HeaderspinBox'])
 
             self.default_attr_list = ['As is','X','Y','Z','Red','Green','Blue','Intensity','User defined','N.a.']
 
@@ -655,7 +686,7 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
         end_row = self.import_options_dict['EndRowspinBox']
         # print(self.input_data_df['r'])
         pc2vtk(self.import_options_dict['in_path'],self.input_data_df,start_col,end_col,start_row,end_row,self=self.parent)
-
+    @profiler('../pz_pers/reports/readfile.csv',100)
     def las2df(self,in_path):
         las_data = lp.read(in_path)
         dim_names = las_data.point_format.dimension_names
@@ -663,11 +694,15 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
         for dim in dim_names:
             if dim == 'X' or dim == 'Y' or dim == 'Z':
                 attr = dim.lower()
-                prop_dict[attr] = las_data[attr].array
+                prop_dict[attr] = np.c_[las_data[attr]].flatten()
             else:
-                prop_dict[dim] = las_data[dim]
+                prop_dict[dim] = np.c_[las_data[dim]].flatten()
         df = pd.DataFrame.from_dict(prop_dict)
         return df
+
+    @profiler('../pz_pers/reports/readfile.csv',100)
+    def csv2df(self,path,sep,header):
+        return pd.read_csv(path,sep=sep,header=header)
 
 class assign_data(QMainWindow, Ui_AssignWindow):
 
@@ -722,7 +757,7 @@ class assign_data(QMainWindow, Ui_AssignWindow):
                 self.AssignTable.setColumnWidth(2,150)
                 self.AssignTable.setColumnWidth(3,150)
 
-            self.resize(self.AssignTable.horizontalHeader().length()+self.AssignTable.verticalHeader().sizeHint().width()+self.AssignTable.frameWidth() * 2, 620) #[Gabriele] Set appropriate widow size
+            self.resize(self.AssignTable.horizontalHeader().length()+self.AssignTable.verticalHeader().sizeHint().width()+self.AssignTable.frameWidth() * 2, 620) #[Gabriele] Set appropriate window size
 
     def ass_value(self):
 
@@ -735,7 +770,7 @@ class assign_data(QMainWindow, Ui_AssignWindow):
         sel_combo = self.AssignTable.cellWidget(row,col) # [Gabriele] Combobox @ row and column
 
         '''[Gabriele] Use a dict to rename the columns. The keys are the original column names while the values are the new names.
-        [Problem]: If there are two values with the same name it renames without throwing any error but this breakes importing (two different columns with the same name in the same df-> no bueno). This needs fixin' '''
+        [Problem]: If there are two values with the same name it renames both of them without throwing any errors and this breakes importing (two different columns with the same name in the same df-> no bueno). This needs fixin' '''
 
         if sel_combo.currentText() == 'User defined':
             self.AssignTable.cellWidget(row,2).setEnabled(True)
@@ -743,10 +778,14 @@ class assign_data(QMainWindow, Ui_AssignWindow):
             self.parent.rename_df[self.df.columns[row]] = self.df.columns[row]
             self.df = self.parent.input_data_df.rename(columns=self.parent.rename_df)
         else:
+            header = list(self.df.head())
             self.AssignTable.cellWidget(row,2).clear()
             self.AssignTable.cellWidget(row,2).setEnabled(False)
-            self.parent.rename_df[self.df.columns[row]] = sel_combo.currentText()
-            self.df = self.parent.input_data_df.rename(columns=self.parent.rename_df)
+            if sel_combo.currentText() in header:
+                print('Item already assigned')
+            else:
+                self.parent.rename_df[self.df.columns[row]] = sel_combo.currentText()
+                self.df = self.parent.input_data_df.rename(columns=self.parent.rename_df)
 
     def ass_scalar(self):
 

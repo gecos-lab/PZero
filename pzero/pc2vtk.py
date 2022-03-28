@@ -63,7 +63,6 @@ def pc2vtk(in_file_name,raw_input_df,start_col,end_col,start_row,end_row,self=No
         XYZ = np.array([input_df['X'].values,input_df['Y'].values,input_df['Z'].values]).T
 
         """[Gabriele] Convert to PCDom() instance. Used https://docs.pyvista.org/examples/00-load/wrap-trimesh.html as reference"""
-        start = time.time()
         point_cloud = PCDom() #[Gabriele] vtkpointSet object
         # OLD METHOD
 
@@ -85,8 +84,6 @@ def pc2vtk(in_file_name,raw_input_df,start_col,end_col,start_row,end_row,self=No
         pv_PD = PlD(XYZ)
         point_cloud.ShallowCopy(pv_PD)
         point_cloud.Modified()
-        end = time.time()
-        print(f'Point importing\n{XYZ.shape}: {end-start}\n')
         # points = pv.vtk_points(XYZ)
         # pcdom.SetPoints(points)
         # point_cloud = pcdom.cast_to_polydata()
