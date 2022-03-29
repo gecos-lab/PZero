@@ -438,32 +438,34 @@ def auto_sep(filename):
 
 def profiler(path,iter):
     '''[Gabriele]  Function used to profile the time needed to run a given function. The output is a .csv file in which each row corresponds the mean run time and std of functions. As a secondary output the profiler saves the raw differences in a separate file.'''
-    import time
+    import datetime
     root,base = os.path.split(path)
     diff_list = []
     def secondary(func):
         def inner(*args):
             title = func.__name__
+            date = datetime.datetime.now()
             print(f'\n-------------------{title} PROFILING STARTED-------------------\n')
             for i in range(iter):
                 print(f'{i+1} cycle of {iter}')
-                start = time.time()
+                start = datetime.datetime.now()
                 res = func(*args)
-                end = time.time()
-                diff = end-start
+                end = datetime.datetime.now()
+                diff = (end-start).total_seconds()
                 diff_list.append(diff)
                 print(f'cycle {i+1} completed. It took {diff} seconds')
             raw_time_diff = pd.DataFrame(diff_list,columns=['time diff [s]'])
-            raw_time_diff.to_csv(os.path.join(root,f'{title}_raw.csv'),sep=';')
+            raw_time_diff.to_csv(os.path.join(root,f'{title}_raw{date.strftime("%d_%m_%Y-%H%M%S")}.csv'),sep=';',mode='w')
             mean = np.mean(diff_list)
             std = np.std(diff_list)
+
             if os.path.exists(path):
                 with open(path,'a') as f:
-                    f.write(f'{title};{mean};{std};{iter}\n')
+                    f.write(f'{date.strftime("%d/%m/%Y")};{title};{mean};{std};{iter}\n')
             else:
                 with open(path,'a') as f:
-                    f.write(f'function title [-];mean [s];std [-];n of iterations[-]\n')
-                    f.write(f'{title};{mean};{std};{iter}\n')
+                    f.write(f'day [dd/mm/yyyy];function title [-];mean [s];std [-];n of iterations[-]\n')
+                    f.write(f'{date.strftime("%d/%m/%Y")};{title};{mean};{std};{iter}\n')
             print(f'Profiling finished in ~{mean*iter}s! The results are saved in the specified {root} directory')
             print(f'\n-------------------{title} PROFILING ENDED-------------------\n')
             return res
