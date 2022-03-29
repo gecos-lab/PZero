@@ -18,7 +18,7 @@ class Legend(QObject):
                           'color_R': [255, 255, 255, 255],
                           'color_G': [255, 255, 255, 255],
                           'color_B': [255, 255, 255, 255],
-                          'line_thick': [2.0, 2.0, 2.0, 2.0]}
+                          'line_thick': [2.0, 2.0, 2.0, 1.0]}
 
     def __init__(self, parent=None, *args, **kwargs):
         QObject.__init__(self, parent)

@@ -19,7 +19,7 @@ import numpy as np
 import pandas as pd
 
 """"VTK imports"""
-# import vtk
+from vtk import vtkPointSet
 """"VTK Numpy interface imports"""
 # import vtk.numpy_interface.dataset_adapter as dsa
 from vtk.util import numpy_support
@@ -1773,11 +1773,11 @@ class View3D(BaseView):
         elif collection == 'dom_coll':
             line_thick = self.parent.dom_coll.get_legend()['line_thick']
             """Note: no legend for image."""
-        if isinstance(self.parent.dom_coll.get_uid_vtk_obj(uid), PCDom):
-            # [Gabriele] If PCDom we need to set point size not line thickness
-            self.actors_df.loc[self.actors_df['uid'] == uid, 'actor'].values[0].GetProperty().SetPointSize(line_thick)
-        else:
-            self.actors_df.loc[self.actors_df['uid'] == uid, 'actor'].values[0].GetProperty().SetLineWidth(line_thick)
+            if isinstance(self.parent.dom_coll.get_uid_vtk_obj(uid), PCDom) or isinstance(self.parent.dom_coll.get_uid_vtk_obj(uid), vtkPointSet):
+                # [Gabriele] If PCDom we need to set point size not line thickness
+                self.actors_df.loc[self.actors_df['uid'] == uid, 'actor'].values[0].GetProperty().SetPointSize(line_thick)
+            else:
+                self.actors_df.loc[self.actors_df['uid'] == uid, 'actor'].values[0].GetProperty().SetLineWidth(line_thick)
 
     def set_actor_visible(self, uid=None, visible=None):
         """Set actor uid visible or invisible (visible = True or False)"""
@@ -1931,12 +1931,17 @@ class View3D(BaseView):
                                                color_bar_range=None, show_property_title=show_property_title, line_thick=line_thick,
                                                plot_texture_option=False, plot_rgb_option=plot_rgb_option, visible=visible)
 
-        elif isinstance(plot_entity, PCDom):
+        elif isinstance(plot_entity, PCDom) or isinstance(plot_entity, vtkPointSet):
+            if isinstance(plot_entity, vtkPointSet):
+                temp_PD = PolyData()
+                temp_PD.ShallowCopy(plot_entity)
+                plot_entity = temp_PD
 
+            # print(plot_entity)
             plot_rgb_option = None
             file = self.parent.dom_coll.df.loc[self.parent.dom_coll.df['uid'] == uid, "name"].values[0]
             if isinstance(plot_entity.points, np.ndarray):
-                """This  check is needed to avoid errors when trying to plot an empty
+                """This check is needed to avoid errors when trying to plot an empty
                 PolyData, just created at the beginning of a digitizing session."""
 
 
@@ -2124,7 +2129,7 @@ class View3D(BaseView):
     """Implementation of functions specific to this view (e.g. particular editing or visualization functions)"""
     """NONE AT THE MOMENT"""
 
-    def plot_PC_3D(self, uid=None, plot_entity=None,visible=None,color_RGB=None, show_property=None, show_scalar_bar=None, color_bar_range=None, show_property_title=None, plot_rgb_option=None, point_size=5.0, points_as_spheres=True):
+    def plot_PC_3D(self, uid=None, plot_entity=None,visible=None,color_RGB=None, show_property=None, show_scalar_bar=None, color_bar_range=None, show_property_title=None, plot_rgb_option=None, point_size=1.0, points_as_spheres=True):
         '''[Gabriele]  Plot the point cloud'''
 
         if not self.actors_df.empty:

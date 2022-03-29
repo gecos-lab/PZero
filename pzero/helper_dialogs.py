@@ -686,7 +686,7 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
         end_row = self.import_options_dict['EndRowspinBox']
         # print(self.input_data_df['r'])
         pc2vtk(self.import_options_dict['in_path'],self.input_data_df,start_col,end_col,start_row,end_row,self=self.parent)
-    @profiler('../pz_pers/reports/readfile.csv',100)
+    # @profiler('../pz_pers/reports/readfile.csv',100)
     def las2df(self,in_path):
         las_data = lp.read(in_path)
         dim_names = las_data.point_format.dimension_names
@@ -700,7 +700,7 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
         df = pd.DataFrame.from_dict(prop_dict)
         return df
 
-    @profiler('../pz_pers/reports/readfile.csv',100)
+    # @profiler('../pz_pers/reports/readfile.csv',100)
     def csv2df(self,path,sep,header):
         return pd.read_csv(path,sep=sep,header=header)
 
