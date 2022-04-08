@@ -1637,6 +1637,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         """List of selected_uids is cleared"""
         self.selected_uids = []
 
+
 class View3D(BaseView):
     """Create 3D view and import UI created with Qt Designer by subclassing base view"""
     """parent is the QT object that is launching this one, hence the ProjectWindow() instance in this case"""
@@ -1829,16 +1830,12 @@ class View3D(BaseView):
         elif isinstance(plot_entity, DEM):
             """Show texture specified in show_property"""
             if show_property in self.parent.dom_coll.df.loc[self.parent.dom_coll.df['uid'] == uid, "texture_uids"].values[0]:
-                active_image = self.parent.image_coll.df.loc[self.parent.image_coll.df['uid'] == show_property, "vtk_obj"].values[0]
+                active_image = self.parent.image_coll.get_uid_vtk_obj(show_property)
                 active_image_texture = active_image.texture
-                active_image_properties_components = active_image.properties_components
-                if active_image_properties_components == 3:
-                    plot_rgb_option = True
-                elif active_image_properties_components == 1:
-                    plot_rgb_option = False
+                # active_image_properties_components = active_image.properties_components[0]  # IF USED THIS MUST BE FIXED FOR TEXTURES WITH MORE THAN 3 COMPONENTS
                 this_actor = self.plot_mesh_3D(uid=uid, plot_entity=plot_entity, color_RGB=None, show_property=None, show_scalar_bar=None,
                                                color_bar_range=None, show_property_title=None, line_thick=None,
-                                               plot_texture_option=active_image_texture, plot_rgb_option=plot_rgb_option, visible=visible)
+                                               plot_texture_option=active_image_texture, plot_rgb_option=False, visible=visible)
             else:
                 plot_rgb_option = None
                 if show_property is None:
@@ -1864,24 +1861,11 @@ class View3D(BaseView):
             Texture options according to type."""
             if show_property is None or show_property == 'none':
                 plot_texture_option = None
-                plot_rgb_option = False
-                show_property_title = None
-                show_scalar_bar = False
             else:
                 plot_texture_option = plot_entity.texture
-                if plot_entity.get_property_components(show_property) == 3:
-                    plot_rgb_option = True
-                    show_property_title = None
-                    show_scalar_bar = False
-                else:
-                    plot_rgb_option = False
-                    # show_property_title = show_property
-                    # show_scalar_bar = True
-                    show_property_title = None
-                    show_scalar_bar = False
-            this_actor = self.plot_mesh_3D(uid=uid, plot_entity=plot_entity.frame, color_RGB=color_RGB, show_property=False, show_scalar_bar=show_scalar_bar,
-                                           color_bar_range=None, show_property_title=show_property_title, line_thick=line_thick,
-                                           plot_texture_option=plot_texture_option, plot_rgb_option=plot_rgb_option, visible=visible)
+            this_actor = self.plot_mesh_3D(uid=uid, plot_entity=plot_entity.frame, color_RGB=None, show_property=None, show_scalar_bar=None,
+                                           color_bar_range=None, show_property_title=None, line_thick=line_thick,
+                                           plot_texture_option=plot_texture_option, plot_rgb_option=False, visible=visible)
         elif isinstance(plot_entity, Seismics):
             plot_rgb_option = None
             if isinstance(plot_entity.points, np.ndarray):
@@ -1919,7 +1903,7 @@ class View3D(BaseView):
                 else:
                     if plot_entity.get_point_data_shape(show_property)[-1] == 3:
                         plot_rgb_option = True
-                this_actor = self.plot_mesh_3D(uid=uid, plot_entity=plot_entity, color_RGB=color_RGB, show_property=show_property, show_scalar_bar=show_scalar_bar,
+                this_actor = self.plot_mesh_3D(uid=uid, plot_entity=plot_entity, color_RGB=None, show_property=show_property, show_scalar_bar=show_scalar_bar,
                                                color_bar_range=None, show_property_title=show_property_title, line_thick=line_thick,
                                                plot_texture_option=False, plot_rgb_option=plot_rgb_option, visible=visible)
             else:
