@@ -64,19 +64,21 @@ class PropertiesCMaps(QObject):
         Note that at and iat can be used to access a single value in a cell directly (so values[] is not required), but do not work with conditional indexing."""
         """"Update the prop_legend_df. X, Y Z are added to the list in order not to alter them."""
         all_props = ['X', 'Y', 'Z']
+        add_props = []
         """Make a list of all properties (unique values)."""
         for collection in [parent.geol_coll, parent.dom_coll, parent.mesh3d_coll, parent.image_coll]:
             coll_props = collection.df['properties_names'].to_list()
             coll_props = list(pd.core.common.flatten(coll_props))
             coll_prop_comps = collection.df['properties_components'].to_list()
             coll_prop_comps = list(pd.core.common.flatten(coll_prop_comps))
-            coll_props_to_append = []
             for i in range(len(coll_props)):
                 if coll_prop_comps[i] == 3:
-                    coll_props_to_append = coll_props_to_append + [coll_props[i] + "[0]"] + [coll_props[i] + "[1]"] + [coll_props[i] + "[2]"]
-            all_props = all_props + coll_props + coll_props_to_append
-        all_props = list(set(all_props))  # a set is composed of unique values from a list
-        all_props = list(filter(None, all_props))  # eliminate empty elements
+                    add_props = add_props + [coll_props[i] + "[0]"] + [coll_props[i] + "[1]"] + [coll_props[i] + "[2]"]
+                elif coll_prop_comps[i] == 1:
+                    add_props = add_props + [coll_props[i]]
+        add_props = list(set(add_props))  # a set is composed of unique values from a list
+        add_props = list(filter(None, add_props))  # eliminate empty elements
+        all_props = all_props + add_props
         """Add new properties to dataframe."""
         for prop in all_props:
             if not prop in parent.prop_legend_df['property_name'].to_list():

@@ -512,6 +512,7 @@
     <addaction name="actionImportSHP"/>
     <addaction name="actionImportDEM"/>
     <addaction name="actionImportOrthoImage"/>
+    <addaction name="actionImportXsectionImage"/>
     <addaction name="actionImportSEGY"/>
     <addaction name="separator"/>
     <addaction name="actionExportCAD"/>
@@ -640,6 +641,7 @@
    <addaction name="actionImportSHP"/>
    <addaction name="actionImportDEM"/>
    <addaction name="actionImportOrthoImage"/>
+   <addaction name="actionImportXsectionImage"/>
    <addaction name="actionImportSEGY"/>
    <addaction name="separator"/>
    <addaction name="actionExportCAD"/>
@@ -1021,6 +1023,11 @@
   <action name="actionImportGocadBoundary">
    <property name="text">
     <string>Import Gocad Boundary</string>
+   </property>
+  </action>
+  <action name="actionImportXsectionImage">
+   <property name="text">
+    <string>Import Xsection Image</string>
    </property>
   </action>
  </widget>

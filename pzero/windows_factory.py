@@ -7,7 +7,7 @@ from PyQt5.QtCore import Qt
 
 """PZero imports"""
 from .base_view_window_ui import Ui_BaseViewWindow
-from .entities_factory import VertexSet, PolyLine, TriSurf, TetraSolid, XsVertexSet, XsPolyLine, DEM, MapImage, Voxet, XsVoxet, Plane, Seismics, XsTriSurf
+from .entities_factory import VertexSet, PolyLine, TriSurf, TetraSolid, XsVertexSet, XsPolyLine, DEM, MapImage, Voxet, XsVoxet, Plane, Seismics, XsTriSurf, XsImage
 from .helper_dialogs import input_one_value_dialog, input_text_dialog, input_combo_dialog, message_dialog, options_dialog, multiple_input_dialog, tic, toc
 # from .geological_collection import GeologicalCollection
 # from copy import deepcopy
@@ -1856,7 +1856,7 @@ class View3D(BaseView):
                 this_actor = self.plot_mesh_3D(uid=uid, plot_entity=plot_entity, color_RGB=color_RGB, show_property=show_property, show_scalar_bar=show_scalar_bar,
                                                color_bar_range=None, show_property_title=show_property_title, line_thick=line_thick,
                                                plot_texture_option=False, plot_rgb_option=plot_rgb_option, visible=visible)
-        elif isinstance(plot_entity, MapImage):
+        elif isinstance(plot_entity, (MapImage, XsImage)):
             """Do not plot directly image - it is much slower.
             Texture options according to type."""
             if show_property is None or show_property == 'none':
@@ -2793,9 +2793,17 @@ class ViewXsection(View2D):
                 # print(uid, " Entities belonging to other x_sections and DomXs class cannot be plot in this x_section.")
                 plot_entity = None
         elif collection == 'image_coll':
-            """To be updated in future for Xsection images______________________"""
-            # print(uid, " Images still not supported in x_section.")
-            plot_entity = None
+            if (self.parent.image_coll.get_uid_image_type(uid) == "XsImage" and
+                self.parent.image_coll.get_uid_x_section(uid) == self.this_x_section_uid):
+                    color_R = self.parent.image_coll.get_legend()['color_R']
+                    color_G = self.parent.image_coll.get_legend()['color_G']
+                    color_B = self.parent.image_coll.get_legend()['color_B']
+                    color_RGB = [color_R / 255, color_G / 255, color_B / 255]
+                    line_thick = self.parent.image_coll.get_legend()['line_thick']
+                    plot_entity = self.parent.image_coll.get_uid_vtk_obj(uid)
+            else:
+                # print(uid, " Entities belonging to other x_sections and XsVoxet class cannot be plot in this x_section.")
+                plot_entity = None
         if plot_entity:
             if isinstance(plot_entity, XsVoxet):
                 if plot_entity.bounds:
@@ -2811,6 +2819,37 @@ class ViewXsection(View2D):
                             self.ax.set_ylim(bottom=bottom, top=top)
                             this_actor.set_visible(visible)
                         else:
+                            W = [wz_bounds[0], wz_bounds[1], wz_bounds[1], wz_bounds[0], wz_bounds[0]]
+                            Z = [wz_bounds[2], wz_bounds[2], wz_bounds[3], wz_bounds[3], wz_bounds[2]]
+                            this_actor, = self.ax.plot(W, Z, color=color_RGB, linewidth=line_thick, label=uid, picker=True)
+                            this_actor.set_visible(visible)
+                    else:
+                        this_actor = None
+                else:
+                    this_actor = None
+            elif isinstance(plot_entity, XsImage):
+                if plot_entity.bounds:
+                    print('plot_entity.bounds: ', plot_entity.bounds)
+                    if (plot_entity.bounds[0] != plot_entity.bounds[1]) and (plot_entity.bounds[2] != plot_entity.bounds[3]):
+                        wz_bounds = plot_entity.xs_bounds
+                        print('wz_bounds: ', wz_bounds)
+                        if show_property not in [None, 'none']:
+                            print('show_property: ', show_property)
+                            left, right = self.ax.get_xlim()  # needed since sometimes plotting an image resizes the plot to the image area only
+                            bottom, top = self.ax.get_ylim()
+                            if plot_entity.get_property_components(show_property) == 3:
+                                """RGB for 3-component properties"""
+                                this_actor = self.ax.imshow(plot_entity.image_data(show_property), origin='upper', extent=wz_bounds, zorder=0)
+                            elif plot_entity.get_property_components(show_property) == 1:
+                                """Greyscale for single property images"""
+                                show_property_title = show_property
+                                show_property_cmap = self.parent.prop_legend_df.loc[self.parent.prop_legend_df['property_name'] == show_property_title, "colormap"].values[0]
+                                this_actor = self.ax.imshow(plot_entity.image_data(show_property), origin='upper', extent=wz_bounds, zorder=0, cmap=show_property_cmap)
+                            self.ax.set_xlim(left=left, right=right)
+                            self.ax.set_ylim(bottom=bottom, top=top)
+                            this_actor.set_visible(visible)
+                        else:
+                            print('show_property: ', show_property)
                             W = [wz_bounds[0], wz_bounds[1], wz_bounds[1], wz_bounds[0], wz_bounds[0]]
                             Z = [wz_bounds[2], wz_bounds[2], wz_bounds[3], wz_bounds[3], wz_bounds[2]]
                             this_actor, = self.ax.plot(W, Z, color=color_RGB, linewidth=line_thick, label=uid, picker=True)
