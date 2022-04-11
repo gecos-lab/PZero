@@ -20,7 +20,7 @@ class Ui_AssignWindow(object):
         self.AssignTable.setObjectName("AssignTable")
         self.AssignTable.setColumnCount(0)
         self.AssignTable.setRowCount(0)
-        self.AssignTable.verticalHeader().setVisible(False)
+        self.AssignTable.verticalHeader().setVisible(True)
         self.verticalLayout_2.addWidget(self.AssignTable)
         self.ConfirmButton = QtWidgets.QDialogButtonBox(self.AssignLayout)
         self.ConfirmButton.setStandardButtons(QtWidgets.QDialogButtonBox.Close|QtWidgets.QDialogButtonBox.Ok)

@@ -23,6 +23,7 @@ from vtk import vtkPointSet
 """"VTK Numpy interface imports"""
 # import vtk.numpy_interface.dataset_adapter as dsa
 from vtk.util import numpy_support
+from vtkmodules.vtkInteractionWidgets import vtkCameraOrientationWidget
 
 """3D plotting imports"""
 import pyvista as pv
@@ -829,7 +830,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.DOMsTableWidget.clear()
         self.DOMsTableWidget.setColumnCount(3)
         self.DOMsTableWidget.setRowCount(0)
-        self.DOMsTableWidget.setHorizontalHeaderLabels(['Name', 'uid','Colors'])
+        self.DOMsTableWidget.setHorizontalHeaderLabels(['Name', 'uid','Show property'])
         self.DOMsTableWidget.hideColumn(1)  # hide the uid column
         row = 0
         for uid in self.parent.dom_coll.df['uid'].to_list():
@@ -926,12 +927,14 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         if check_state == Qt.Checked:
             if not self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]:
                 self.actors_df.loc[self.actors_df['uid'] == uid, 'show'] = True
-                #print(self.actors_df['actor'])
                 self.set_actor_visible(uid=uid, visible=True)
+
+
         elif check_state == Qt.Unchecked:
             if self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]:
                 self.actors_df.loc[self.actors_df['uid'] == uid, 'show'] = False
                 self.set_actor_visible(uid=uid, visible=False)
+
 
     def toggle_property_texture(self):
         """Method to toggle the texture shown by a DEM that is already present in the view."""
@@ -1732,7 +1735,12 @@ class View3D(BaseView):
         self.plotter = pvQtInteractor(self.ViewFrame)
         self.plotter.set_background('black')  # background color - could be made interactive in the future
         self.ViewFrameLayout.addWidget(self.plotter.interactor)
-        self.plotter.show_axes_all()
+        # self.plotter.show_axes_all()
+
+        # [Gabriele] Set cool orientation gimble
+        self.cam_orient_widget = vtkCameraOrientationWidget()
+        self.cam_orient_widget.SetParentRenderer(self.plotter.renderer)
+        self.cam_orient_widget.On()
 
     def change_actor_color(self, uid=None, collection=None):
         if collection == 'geol_coll':
@@ -1833,7 +1841,6 @@ class View3D(BaseView):
             color_RGB = [color_R / 255, color_G / 255, color_B / 255]
             line_thick = self.parent.dom_coll.get_legend()['line_thick']
             plot_entity = self.parent.dom_coll.get_uid_vtk_obj(uid)
-            #print(plot_entity)
         elif collection == 'image_coll':
             """Note: no legend for image."""
             color_RGB = [255, 255, 255]
@@ -1931,67 +1938,46 @@ class View3D(BaseView):
                                                color_bar_range=None, show_property_title=show_property_title, line_thick=line_thick,
                                                plot_texture_option=False, plot_rgb_option=plot_rgb_option, visible=visible)
 
-        elif isinstance(plot_entity, PCDom) or isinstance(plot_entity, vtkPointSet):
-            if isinstance(plot_entity, vtkPointSet):
-                temp_PD = PolyData()
-                temp_PD.ShallowCopy(plot_entity)
-                plot_entity = temp_PD
+        elif isinstance(plot_entity, PCDom):
 
-            # print(plot_entity)
             plot_rgb_option = None
             file = self.parent.dom_coll.df.loc[self.parent.dom_coll.df['uid'] == uid, "name"].values[0]
             if isinstance(plot_entity.points, np.ndarray):
                 """This check is needed to avoid errors when trying to plot an empty
                 PolyData, just created at the beginning of a digitizing session."""
 
-
                 # [Gabriele] Basic properties
                 if show_property is None:
                     show_scalar_bar = False
+                    show_property_value = None
                     pass
                 elif show_property == 'none':
                     show_scalar_bar = False
-                    show_property = None
+                    show_property_value = None
                 elif show_property == 'X':
-                    show_property = plot_entity.points_X
+                    show_property_value = plot_entity.points_X
                 elif show_property == 'Y':
-                    show_property = plot_entity.points_Y
+                    show_property_value = plot_entity.points_Y
                 elif show_property == 'Z':
-                    show_property = plot_entity.points_Z
+                    show_property_value = plot_entity.points_Z
                 elif show_property == 'RGB':
                     show_scalar_bar = False
 
-                    if plot_entity.get_point_data('Red').size > 1:
-                        R = plot_entity.get_point_data('Red')
-                        G = plot_entity.get_point_data('Green')
-                        B = plot_entity.get_point_data('Blue')
-                        if '.laz' in file or '.las' in file:
-                            ''' [Gabriele] Las and laz files save color data in uint16 format. To conver to RGB we can divide by 255. Since show property only works with 0-1 values we divide again by 255.'''
-                            R = (R/255**2)
-                            G = (G/255**2)
-                            B = (B/255**2)
-                        elif type(R[0]) is int:
-                            # [Gabriele] If is an integer divide by 255 to have it in the 0-1 range
-                            R = (R/255)
-                            G = (G/255)
-                            B = (B/255)
-                        show_property = np.array([R,G,B]).T # [Gabriele] Set color data as a 3xn matrix (w/o .T is a nx3 matrix)
+                    if plot_entity.get_point_data('RGB').size > 1:
+                        show_property_value = plot_entity.get_point_data('RGB')
                         plot_rgb_option = True # [Gabriele] Use RGB
 
                     else:
                         print('No RGB values present')
-                        show_property = None
+                        show_property_value = None
 
                 else:
                     show_scalar_bar = True
-                    if '.laz' in file or '.las' in file:
-                        show_property = plot_entity.get_point_data(show_property)/255**2
-                    else:
-                        show_property = plot_entity.get_point_data(show_property)
+                    show_property_value = plot_entity.get_point_data(show_property)
 
 
 
-            this_actor = self.plot_PC_3D(uid=uid,plot_entity=plot_entity,color_RGB=color_RGB, show_property=show_property, show_scalar_bar=show_scalar_bar, color_bar_range=None, show_property_title=show_property_title, plot_rgb_option=plot_rgb_option,visible=visible,point_size=line_thick)
+            this_actor = self.plot_PC_3D(uid=uid,plot_entity=plot_entity,color_RGB=color_RGB, show_property=show_property_value, show_scalar_bar=show_scalar_bar, color_bar_range=None, show_property_title=show_property_title, plot_rgb_option=plot_rgb_option,visible=visible,point_size=line_thick)
 
         elif isinstance(plot_entity, MapImage):
             """Texture options according to type."""
@@ -2145,6 +2131,8 @@ class View3D(BaseView):
             show_property_cmap = self.parent.prop_legend_df.loc[self.parent.prop_legend_df['property_name'] == show_property_title, "colormap"].values[0]
         else:
             show_property_cmap = None
+
+
         this_actor= self.plotter.add_points(plot_entity,name=uid,
                                             style='points',
                                             point_size=point_size,
@@ -2156,12 +2144,11 @@ class View3D(BaseView):
                                             flip_scalars=False,
                                             interpolate_before_map=True,
                                             cmap=show_property_cmap,
-                                            scalar_bar_args={'title': show_property_title, 'title_font_size': 20, 'label_font_size': 16, 'shadow': True, 'interactive': True,'fmt':"%.1f"},
+                                            scalar_bar_args={'title': show_property_title, 'title_font_size': 20, 'label_font_size': 16, 'shadow': True, 'interactive': True},
                                             rgb=plot_rgb_option,
                                             show_scalar_bar=show_scalar_bar)
 
-
-
+        # self.n_points = plot_entity.GetNumberOfPoints()
         if not visible:
             this_actor.SetVisibility(False)
         if not self.actors_df.empty:
