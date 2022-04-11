@@ -23,7 +23,8 @@ pd.set_option('display.max_columns', pd_max_columns)
 pd.set_option('display.precision', pd_show_precision)
 pd.set_option('display.max_colwidth', pd_max_colwidth)
 
-""""Methods used to create cross sections."""
+
+""""Methods used to create boundaries. TO BE MOVED IN ANOTHER MODULE - WORKS IN MAP VIEW?? ________________________________"""
 
 
 def boundary_from_points(self):
@@ -42,14 +43,14 @@ def boundary_from_points(self):
     while True:
         self.vector_by_mouse(verbose=True)
         boundary_dict_in = {'warning': ['Boundary from points', 'Build new Boundary from a user-drawn line that represents the horizontal diagonal\nof the Bounding box.\nOnce drawn, values can be modified from keyboard or by drawing another vector.', 'QLabel'],
-                           'name': ['Insert Boundary name', 'new_boundary', 'QLineEdit'],
-                           'origin_x': ['Insert origin X coord', self.vbm_U0, 'QLineEdit'],
-                           'origin_y': ['Insert origin Y coord', self.vbm_V0, 'QLineEdit'],
-                           'end_x': ['Insert end-point X coord', self.vbm_Uf, 'QLineEdit'],
-                           'end_y': ['Insert end-point Y coord', self.vbm_Vf, 'QLineEdit'],
-                           'top': ['Insert top', 1000.0, 'QLineEdit'],
-                           'bottom': ['Insert bottom', -1000.0, 'QLineEdit'],
-                           'activatevolume': ['volumeyn', 'Do not create volume. Create horizontal parallelogram at Z=0 meters', 'QCheckBox']}
+                            'name': ['Insert Boundary name', 'new_boundary', 'QLineEdit'],
+                            'origin_x': ['Insert origin X coord', self.vbm_U0, 'QLineEdit'],
+                            'origin_y': ['Insert origin Y coord', self.vbm_V0, 'QLineEdit'],
+                            'end_x': ['Insert end-point X coord', self.vbm_Uf, 'QLineEdit'],
+                            'end_y': ['Insert end-point Y coord', self.vbm_Vf, 'QLineEdit'],
+                            'top': ['Insert top', 1000.0, 'QLineEdit'],
+                            'bottom': ['Insert bottom', -1000.0, 'QLineEdit'],
+                            'activatevolume': ['volumeyn', 'Do not create volume. Create horizontal parallelogram at Z=0 meters', 'QCheckBox']}
         boundary_dict_updt = general_input_dialog(title='New Boundary from points', input_dict=boundary_dict_in)
         if boundary_dict_updt is not None:
             break
@@ -108,6 +109,7 @@ def boundary_from_points(self):
     """Un-Freeze QT interface"""
     for action in self.findChildren(QAction):
         action.setEnabled(True)
+
 
 class BoundaryCollection(QAbstractTableModel):
     """
