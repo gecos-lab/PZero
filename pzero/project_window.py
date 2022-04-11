@@ -31,7 +31,7 @@ from .windows_factory import View3D
 from .windows_factory import ViewMap
 from .windows_factory import ViewXsection
 from .helper_dialogs import options_dialog, save_file_dialog, open_file_dialog, input_combo_dialog, message_dialog, multiple_input_dialog, input_one_value_dialog, input_text_dialog, progress_dialog
-from .image2vtk import geo_image2vtk
+from .image2vtk import geo_image2vtk, xs_image2vtk
 from .stl2vtk import vtk2stl, vtk2stl_dilation
 from .obj2vtk import vtk2obj
 from .ply2vtk import vtk2ply
@@ -124,7 +124,8 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.actionImportVedo.triggered.connect(lambda: vedo2vtk(self=self))
         self.actionImportSHP.triggered.connect(self.import_SHP)
         self.actionImportDEM.triggered.connect(self.import_DEM)
-        self.actionImportOrthoImage.triggered.connect(self.import_image)
+        self.actionImportOrthoImage.triggered.connect(self.import_orthoimage)
+        self.actionImportXsectionImage.triggered.connect(self.import_xsimage)
         self.actionImportSEGY.triggered.connect(self.import_SEGY)
 
         """File>Export actions -> slots"""
@@ -461,7 +462,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         """Create the boundary_coll BoundaryCollection (a Qt QAbstractTableModel with a Pandas dataframe as attribute)
         and connect the model to BoundaryTableView (a Qt QTableView created with QTDesigner and provided by
         Ui_ProjectWindow). Setting the model also updates the view."""
-        self.boundary_coll = BoundaryCollection(parent=self)  #_________________________________________________
+        self.boundary_coll = BoundaryCollection(parent=self)
         self.proxy_boundary_coll = QSortFilterProxyModel(self)
         self.proxy_boundary_coll.setSourceModel(self.boundary_coll)
         self.BoundariesTableView.setModel(self.proxy_boundary_coll)
@@ -477,6 +478,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         """Create the prop_legend_df table (a Pandas dataframe), create the corresponding QT
         PropertiesCMaps table widget self.prop_legend (a Qt QTableWidget that is internally connected to its data source),
         and update the widget."""
+        """_____________UPDATE THIS TO ALLOW SORTING BY PROPERTY NAME__________________________________________"""
         self.prop_legend_df = pd.DataFrame(PropertiesCMaps.prop_cmap_dict)
         self.prop_legend = PropertiesCMaps()
         self.prop_legend.update_widget(parent=self)
@@ -555,6 +557,11 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 im_writer.SetInputData(self.image_coll.get_uid_vtk_obj(uid))
                 im_writer.Write()
                 prgs_bar.add_one()
+            elif self.image_coll.df.loc[self.image_coll.df['uid'] == uid, 'image_type'].values[0] in ["Seismics"]:
+                sg_writer = vtk.vtkXMLStructuredGridWriter()
+                sg_writer.SetFileName(out_dir_name + "/" + uid + ".vts")
+                sg_writer.SetInputData(self.image_coll.get_uid_vtk_obj(uid))
+                sg_writer.Write()
         """Save mesh3d collection table to JSON file and entities as VTK."""
         out_cols = list(self.mesh3d_coll.df.columns)
         out_cols.remove('vtk_obj')
@@ -567,11 +574,6 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 im_writer.SetFileName(out_dir_name + "/" + uid + ".vti")
                 im_writer.SetInputData(self.mesh3d_coll.get_uid_vtk_obj(uid))
                 im_writer.Write()
-            elif self.mesh3d_coll.df.loc[self.mesh3d_coll.df['uid'] == uid, 'mesh3d_type'].values[0] in ["Seismics"]:
-                sg_writer = vtk.vtkXMLStructuredGridWriter()
-                sg_writer.SetFileName(out_dir_name + "/" + uid + ".vts")
-                sg_writer.SetInputData(self.mesh3d_coll.get_uid_vtk_obj(uid))
-                sg_writer.Write()
             prgs_bar.add_one()
         """Save boundaries collection table to JSON file and entities as VTK."""  #_________________________________________________
         out_cols = list(self.boundary_coll.df.columns)
@@ -716,6 +718,16 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     im_reader.Update()
                     vtk_object.ShallowCopy(im_reader.GetOutput())
                     vtk_object.Modified()
+                elif self.image_coll.df.loc[self.image_coll.df['uid'] == uid, 'image_type'].values[0] in ["Seismics"]:
+                    if not os.path.isfile((in_dir_name + "/" + uid + ".vts")):
+                        print("error: missing VTK file")
+                        return
+                    vtk_object = Seismics()
+                    sg_reader = vtk.vtkXMLStructuredGridReader()
+                    sg_reader.SetFileName(in_dir_name + "/" + uid + ".vts")
+                    sg_reader.Update()
+                    vtk_object.ShallowCopy(sg_reader.GetOutput())
+                    vtk_object.Modified()
                 self.image_coll.set_uid_vtk_obj(uid=uid, vtk_obj=vtk_object)
                 prgs_bar.add_one()
             self.image_coll.endResetModel()
@@ -750,18 +762,8 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     im_reader.Update()
                     vtk_object.ShallowCopy(im_reader.GetOutput())
                     vtk_object.Modified()
-                elif self.mesh3d_coll.df.loc[self.mesh3d_coll.df['uid'] == uid, 'mesh3d_type'].values[0] in ["Seismics"]:
-                    if not os.path.isfile((in_dir_name + "/" + uid + ".vts")):
-                        print("error: missing VTK file")
-                        return
-                    vtk_object = Seismics()
-                    sg_reader = vtk.vtkXMLStructuredGridReader()
-                    sg_reader.SetFileName(in_dir_name + "/" + uid + ".vts")
-                    sg_reader.Update()
-                    vtk_object.ShallowCopy(sg_reader.GetOutput())
-                    vtk_object.Modified()
-                    prgs_bar.add_one()
                 self.mesh3d_coll.set_uid_vtk_obj(uid=uid, vtk_obj=vtk_object)
+                prgs_bar.add_one()
             self.mesh3d_coll.endResetModel()
         """Read boundaries collection and files"""  #_________________________________________________
         if os.path.isfile((in_dir_name + '/boundary_table.csv')) or os.path.isfile((in_dir_name + '/boundary_table.json')):
@@ -884,15 +886,33 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             self.TextTerminal.appendPlainText('in_file_name: ' + in_file_name)
             dem2vtk(self=self, in_file_name=in_file_name)
 
-    def import_image(self):
-        """Import DEM file and update DEM collection."""
-        """TO BE REVIEWED______________"""
+    def import_orthoimage(self):
+        """Import orthoimage and update image collection."""
         self.TextTerminal.appendPlainText("Importing image from supported format (GDAL)")
         """Select and open input file"""
         in_file_name = open_file_dialog(parent=self, caption='Import image from file', filter="Image (*.tif *.jpg *.png *.bmp)")
         if in_file_name:
             self.TextTerminal.appendPlainText('in_file_name: ' + in_file_name)
             geo_image2vtk(self=self, in_file_name=in_file_name)
+
+    def import_xsimage(self):
+        """Import XSimage and update image collection."""
+        self.TextTerminal.appendPlainText("Importing image from supported format (GDAL)")
+        """Select and open input file"""
+        in_file_name = open_file_dialog(parent=self, caption='Import image from file', filter="Image (*.tif *.jpg *.png *.bmp)")
+        if in_file_name:
+            self.TextTerminal.appendPlainText('in_file_name: ' + in_file_name)
+            """Select the Xsection"""
+            if self.xsect_coll.get_uids():
+                x_section_name = input_combo_dialog(parent=None, title="Xsection", label="Choose Xsection", choice_list=self.xsect_coll.get_names())
+            else:
+                message_dialog(title="Xsection", message="No Xsection in project")
+                return
+            if x_section_name:
+                x_section_uid = self.xsect_coll.df.loc[self.xsect_coll.df['name'] == x_section_name, 'uid'].values[0]
+                xs_image2vtk(self=self, in_file_name=in_file_name, x_section_uid=x_section_uid)
+                self.prop_legend.update_widget(parent=self)
+
 
     def import_SEGY(self):
         """Import SEGY file and update Mesh3D collection."""

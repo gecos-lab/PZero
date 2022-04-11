@@ -4,9 +4,11 @@ PZero© Andrea Bistacchi"""
 from copy import deepcopy
 import uuid
 import os
+import vtk
 from vtk.util import numpy_support
-from .entities_factory import MapImage
+from .entities_factory import MapImage, XsImage
 from .image_collection import ImageCollection
+from .helper_dialogs import multiple_input_dialog
 import numpy as np
 import rasterio as rio
 import rasterio.plot as rio_plt
@@ -35,14 +37,15 @@ def geo_image2vtk(self=None, in_file_name=None):
             vtk_array = numpy_support.numpy_to_vtk(geo_image.read(1).ravel(), deep=True)
             vtk_array.SetName('greyscale')
         elif geo_image.count == 3:
-            vtk_r_band = geo_image.read(1)
-            vtk_g_band = geo_image.read(2)
-            vtk_b_band = geo_image.read(3)
-            numpy_array = np.dstack((vtk_r_band, vtk_g_band, vtk_b_band))
+            vtk_r_property = geo_image.read(1)
+            vtk_g_property = geo_image.read(2)
+            vtk_b_property = geo_image.read(3)
+            numpy_array = np.dstack((vtk_r_property, vtk_g_property, vtk_b_property))
             # vtk_array = numpy_support.numpy_to_vtk(np.flip(numpy_array.swapaxes(0, 1), axis=1).reshape((-1, 3), order='F'), deep=True)
             vtk_array = numpy_support.numpy_to_vtk(numpy_array.swapaxes(0, 1).reshape((-1, 3), order='F'), deep=True)
             vtk_array.SetName('RGB')
         else:
+            """ADD OPTION FOR MULTIBAND IMAGES HERE_____________________________"""
             return
         """Create MapImage entity (inherits from vtk.vtkImageData) and then set all data."""
         vtk_image = MapImage()
@@ -61,11 +64,12 @@ def geo_image2vtk(self=None, in_file_name=None):
         curr_obj_dict['uid'] = str(uuid.uuid4())
         curr_obj_dict['name'] = os.path.basename(in_file_name)
         curr_obj_dict['image_type'] = "MapImage"
+        curr_obj_dict['properties_components'] = vtk_image.properties_components
+        curr_obj_dict['properties_types'] = vtk_image.properties_types
         if geo_image.count == 1:
-            curr_obj_dict['bands_n'] = int(1)
+            curr_obj_dict['properties_names'] = ['greyscale']
         elif geo_image.count == 3:
-            curr_obj_dict['bands_n'] = int(3)
-        curr_obj_dict['num_type'] = vtk_image.GetScalarType()
+            curr_obj_dict['properties_names'] = ['RGB']
         curr_obj_dict['vtk_obj'] = vtk_image
         """Add to entity collection."""
         self.image_coll.add_entity_from_dict(entity_dict=curr_obj_dict)
@@ -74,3 +78,101 @@ def geo_image2vtk(self=None, in_file_name=None):
         del vtk_image
     except:
         self.TextTerminal.appendPlainText("Image file not recognized ERROR.")
+
+
+def xs_image2vtk(self=None, in_file_name=None, x_section_uid=None):
+    """Import and add an image to the imaage collection
+    <self> is the calling ProjectWindow() instance."""
+    #try:
+    """Open raster file format (tiff or other accepted by GDAL) with rasterio.
+    The image is not read here but will be read afterwards with xs_image.read()
+    http://xarray.pydata.org/en/stable/io.html#rasterio
+    http://www-2.unipv.it/compmech/seminars/group/VTK-VMTK.pdf"""
+    xs_image = rio.open(in_file_name)
+    """Image size as read by rasterio."""
+    dim_W = xs_image.width
+    dim_Z = xs_image.height
+    """Cross-section azimuth"""
+    azimuth = self.xsect_coll.get_uid_azimuth(x_section_uid)
+    """x-section georeferencing dialog"""
+    in_dict = {'origin_W': ['Origin W', '0.0'],
+               'origin_Z': ['Origin Z', '0.0'],
+               'width': ['width', '1.0'],
+               'height': ['height', '1.0']}
+    out_dict = multiple_input_dialog(title='XSection image georeferencing\n(in XSection reference frame)', input_dict=in_dict)
+    if out_dict is None:
+        return
+    origin_W = float(out_dict['origin_W'])
+    origin_Z = float(out_dict['origin_Z'])
+    width = float(out_dict['width'])
+    height = float(out_dict['height'])
+    origin_X, origin_Y = self.xsect_coll.get_XY_from_W(section_uid=x_section_uid, W=origin_W)
+    origin = [origin_X, origin_Y, origin_Z]
+    print('origin: ', origin)
+    spacing_W = width/dim_W
+    spacing_Z = height/dim_Z
+    print('spacing_W: ', spacing_W)
+    print('spacing_Z: ', spacing_Z)
+    """The direction matrix is a 3x3 transformation matrix supporting scaling and rotation.
+    (double  	e00,
+    double  	e01,
+    double  	e02,
+    double  	e10,
+    double  	e11,
+    double  	e12,
+    double  	e20,
+    double  	e21,
+    double  	e22)"""
+    """CHECK THIS FOR VARIOUS SECTION ORIENTATIONS______________________________________________________________"""
+    direction_matrix = [np.sin(azimuth * np.pi / 180), 0, -(np.cos(azimuth * np.pi / 180)),
+                        np.cos(azimuth * np.pi / 180), 0, np.sin(azimuth * np.pi / 180),
+                        0, 1, 0]
+    """Read the image and convert to vtk array.
+    Deep copy used since the image is read now from file.
+    DO NOT specify the array type as e.g. in array_type=vtk.VTK_CHAR"""
+    if xs_image.count == 1:
+        vtk_array = numpy_support.numpy_to_vtk(xs_image.read(1).ravel(), deep=True)
+        vtk_array.SetName('greyscale')
+    elif xs_image.count == 3:
+        vtk_r_property = xs_image.read(1)
+        vtk_g_property = xs_image.read(2)
+        vtk_b_property = xs_image.read(3)
+        numpy_array = np.dstack((vtk_r_property, vtk_g_property, vtk_b_property))
+        # vtk_array = numpy_support.numpy_to_vtk(np.flip(numpy_array.swapaxes(0, 1), axis=1).reshape((-1, 3), order='F'), deep=True)
+        vtk_array = numpy_support.numpy_to_vtk(numpy_array.swapaxes(0, 1).reshape((-1, 3), order='F'), deep=True)
+        vtk_array.SetName('RGB')
+    else:
+        """ADD OPTION FOR MULTIBAND IMAGES HERE_____________________________"""
+        return
+    """Create vtkImageData with the geometry to fit data"""
+    vtk_image = XsImage(x_section_uid=x_section_uid, parent=self)
+    vtk_image.SetOrigin(origin)
+    vtk_image.SetSpacing([spacing_W, spacing_Z, 0.0])
+    vtk_image.SetDimensions([dim_W, dim_Z, 1])
+    vtk_image.SetDirectionMatrix(direction_matrix)
+    vtk_image.GetPointData().AddArray(vtk_array)
+    if xs_image.count == 1:
+        vtk_image.GetPointData().SetActiveScalars('greyscale')
+    elif xs_image.count == 3:
+        vtk_image.GetPointData().SetActiveScalars('RGB')
+    print('vtk_image:\n', vtk_image)
+    """Create dictionary."""
+    curr_obj_dict = deepcopy(ImageCollection.image_entity_dict)
+    curr_obj_dict['uid'] = str(uuid.uuid4())
+    curr_obj_dict['name'] = os.path.basename(in_file_name)
+    curr_obj_dict['image_type'] = "XsImage"
+    curr_obj_dict['properties_components'] = vtk_image.properties_components
+    curr_obj_dict['properties_types'] = vtk_image.properties_types
+    curr_obj_dict['x_section'] = x_section_uid
+    if xs_image.count == 1:
+        curr_obj_dict['properties_names'] = ['greyscale']
+    elif xs_image.count == 3:
+        curr_obj_dict['properties_names'] = ['RGB']
+    curr_obj_dict['vtk_obj'] = vtk_image
+    """Add to entity collection."""
+    self.image_coll.add_entity_from_dict(entity_dict=curr_obj_dict)
+    """Cleaning (probably not necessary)."""
+    del curr_obj_dict
+    del vtk_image
+    # except:
+    #     self.TextTerminal.appendPlainText("Image file not recognized ERROR.")

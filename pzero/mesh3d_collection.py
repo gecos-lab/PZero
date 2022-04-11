@@ -33,7 +33,7 @@ class Mesh3DCollection(QAbstractTableModel):
                           'mesh3d_type': "undef",
                           'properties_names': [],
                           'properties_components': [],
-                          'x_section': "",  # this is the uid of the cross section for "XsVertexSet", "XsPolyLine", and "XsImage", empty for all others
+                          'x_section': "",  # this is the uid of the cross section for "XsVoxet", empty for all others
                           'vtk_obj': None}
 
     mesh3d_entity_type_dict = {'uid': str,
@@ -45,7 +45,7 @@ class Mesh3DCollection(QAbstractTableModel):
                                'vtk_obj': object}
 
     """List of valid data types."""
-    valid_mesh3d_types = ["TetraSolid", "Voxet", "Seismics", "XsVoxet"]
+    valid_mesh3d_types = ["TetraSolid", "Voxet", "XsVoxet"]
 
     """Initialize Mesh3DCollection table. Column headers are taken from
     Mesh3DCollection.mesh3d_entity_dict.keys(), and parent is supposed to be the project_window."""
@@ -98,6 +98,8 @@ class Mesh3DCollection(QAbstractTableModel):
             new_dict['vtk_obj'] = vtk_object
             self.remove_entity(uid)
             self.add_entity_from_dict(entity_dict=new_dict)
+            self.modelReset.emit()  # is this really necessary?
+            self.parent.prop_legend.update_widget(self.parent)
         else:
             print("ERROR - replace_vtk with vtk of a different type.")
 
