@@ -101,15 +101,18 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         """Welcome message"""
         self.TextTerminal.appendPlainText("Welcome to PZero!\n3D modelling application by Andrea Bistacchi, started June 3rd 2020.")
 
-        startup_option = options_dialog(title='PZero', message='Do you want to create a new project or open an existing one?', yes_role='Create New Project', no_role='Open Existing Project', reject_role='Close PZero')
-        if startup_option == 0:
-            self.TextTerminal.appendPlainText("Creating a new empty project.")
-            self.new_project()
-        elif startup_option == 1:
-            self.TextTerminal.appendPlainText("Opening an existing project.")
-            self.open_project()
-        else:
-            self.close(True)  # this actually crashes the application, but at the moment I do not have another working solution to close it
+        """Initialize empty project."""
+        self.create_empty()
+
+        # startup_option = options_dialog(title='PZero', message='Do you want to create a new project or open an existing one?', yes_role='Create New Project', no_role='Open Existing Project', reject_role='Close PZero')
+        # if startup_option == 0:
+        #     self.TextTerminal.appendPlainText("Creating a new empty project.")
+        #     self.new_project()
+        # elif startup_option == 1:
+        #     self.TextTerminal.appendPlainText("Opening an existing project.")
+        #     self.open_project()
+        # else:
+        #     self.close(True)  # this actually crashes the application, but at the moment I do not have another working solution to close it
 
         """File>Project actions -> slots"""
         self.actionProjectNew.triggered.connect(self.new_project)
@@ -600,8 +603,8 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             pass
         """Create empty containers."""
         self.create_empty()
-        """Save a new empty project to file"""
-        self.save_project()
+        # """Save a new empty project to file"""
+        # self.save_project()
 
     def open_project(self):
         """Opens a project previously saved to disk."""
