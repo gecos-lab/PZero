@@ -11,7 +11,8 @@ import pandas as pd
 from PyQt5.QtCore import QAbstractTableModel, Qt, pyqtSignal, QObject, QVariant, QAbstractItemModel
 # from PyQt5.QtGui import QStandardItem, QImage
 from .entities_factory import PolyData, Plane, VertexSet, PolyLine, TriSurf, TetraSolid, XsVertexSet, XsPolyLine, DEM, MapImage, Voxet
-from .helper_dialogs import multiple_input_dialog, general_input_dialog, open_file_dialog, auto_sep
+from .helper_dialogs import multiple_input_dialog, general_input_dialog, open_file_dialog
+from .helper_functions import auto_sep
 from .windows_factory import NavigationToolbar
 from PyQt5.QtWidgets import QAction
 
@@ -111,7 +112,7 @@ def section_from_points(self, drawn = True, section_dict_updt=None):
     for action in self.findChildren(QAction):
         if isinstance(action.parentWidget(), NavigationToolbar) is False:
             action.setDisabled(True)
-    # [Gabriele] Added new drawn flag to know if the data is drawn on map or is imported 
+    # [Gabriele] Added new drawn flag to know if the data is drawn on map or is imported
     if drawn:
         self.text_msg.set_text("Draw a vector with mouse to represent the new XSection")
         while True:
@@ -198,7 +199,7 @@ def sections_from_file(self):
                          'end_y': 0,
                          'top': 0,
                          'bottom': 0}
-    files = open_file_dialog(parent=self, caption="Import section traces", filter="GOCAD ASCII (*.pl);;ASCII (*.dat)", multiple = True)
+    files = open_file_dialog(parent=self, caption="Import section traces", filter="GOCAD ASCII (*.*);;ASCII (*.dat)", multiple = True)
 
     name, extension = splitext(files[0]) # [Gabriele] This could be implemented automatically in open_file_dialog (return file and extensio list)
 

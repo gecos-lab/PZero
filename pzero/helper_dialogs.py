@@ -6,6 +6,8 @@ from PyQt5 import QtWidgets, QtCore, Qt
 
 from .import_window_ui import Ui_ImportOptionsWindow
 from .assign_ui import Ui_AssignWindow
+from .helper_functions import profiler
+from .entities_factory import PolyData
 import pandas as pd
 import laspy as lp
 import os
@@ -15,6 +17,8 @@ import difflib as dl
 
 from csv import Sniffer
 
+# import vtk
+# import vtk.numpy_interface.dataset_adapter as dsa
 
 def options_dialog(title=None, message=None, yes_role=None, no_role=None, reject_role=None):
     """Generic message box with title, message, and three buttons.
@@ -431,69 +435,22 @@ class progress_dialog(QProgressDialog):
     def was_canceled(self):
         return self.wasCanceled()
 
-def auto_sep(filename):
-    with open(filename,'r') as IN:
-        separator = Sniffer().sniff(IN.readline()).delimiter
-    return separator
 
-def profiler(path,iter):
-    '''[Gabriele]  Function used to profile the time needed to run a given function. The output is a .csv file in which each row corresponds the mean run time and std of functions. As a secondary output the profiler saves the raw differences in a separate file.'''
-    import datetime
-    root,base = os.path.split(path)
-    diff_list = []
-    def secondary(func):
-        def inner(*args):
-            title = func.__name__
-            date = datetime.datetime.now()
-            print(f'\n-------------------{title} PROFILING STARTED-------------------\n')
-            for i in range(iter):
-                print(f'{i+1} cycle of {iter}')
-                start = datetime.datetime.now()
-                res = func(*args)
-                end = datetime.datetime.now()
-                diff = (end-start).total_seconds()
-                diff_list.append(diff)
-                print(f'cycle {i+1} completed. It took {diff} seconds')
-            raw_time_diff = pd.DataFrame(diff_list,columns=['time diff [s]'])
-            raw_time_diff.to_csv(os.path.join(root,f'{title}_raw{date.strftime("%d_%m_%Y-%H%M%S")}.csv'),sep=';',mode='w')
-            mean = np.mean(diff_list)
-            std = np.std(diff_list)
-
-            if os.path.exists(path):
-                with open(path,'a') as f:
-                    f.write(f'{date.strftime("%d/%m/%Y")};{title};{mean};{std};{iter}\n')
-            else:
-                with open(path,'a') as f:
-                    f.write(f'day [dd/mm/yyyy];function title [-];mean [s];std [-];n of iterations[-]\n')
-                    f.write(f'{date.strftime("%d/%m/%Y")};{title};{mean};{std};{iter}\n')
-            print(f'Profiling finished in ~{mean*iter}s! The results are saved in the specified {root} directory')
-            print(f'\n-------------------{title} PROFILING ENDED-------------------\n')
-            return res
-        return inner
-    return secondary
 
 class PCDataModel(QtCore.QAbstractTableModel):
 
     '''[Gabriele]  Abstract table model that can be used to quickly display imported pc files data  from a pandas df. Taken from this stack overflow post https://stackoverflow.com/questions/31475965/fastest-way-to-populate-qtableview-from-pandas-data-frame
     '''
-    def __init__(self, data, start_col,end_col,start_row,end_row, parent=None,*args, **kwargs):
+    def __init__(self, data, index_list, parent=None,*args, **kwargs):
         super(PCDataModel,self).__init__(*args, **kwargs)
 
-
-        self.limit = 100
-
-        if end_row == -1:
-            self.data = data.iloc[start_row:start_row+100, start_col:end_col] # [Gabriele] limit the preview data if the number of points are grater than 100
-            print(f'Number of points grater than {self.limit}, displaying the 100 rows below the start row')
-        else:
-            self.data = data.iloc[start_row:end_row, start_col:end_col]
+        self.data = data.iloc[:,index_list]
 
     def columnCount(self, parent=None): # [Gabriele] the n of columns is = to the number of columns of the input data set (.shape[1])
         return self.data.shape[1]
 
     def rowCount(self, parent=None): # [Gabriele] the n of rows is = to the number of rows of the input data set (.shape[0])
         return self.data.shape[0]
-    '''[Gabriele]  Populate the table with data depending on how much of the table is shown. The model has different indexes with different roles, DisplayRole has index 0.'''
 
     def data(self, index, role: QtCore.Qt.DisplayRole):
         # print(index.column())
@@ -507,6 +464,7 @@ class PCDataModel(QtCore.QAbstractTableModel):
     def headerData(self, col, orientation, role):
         if orientation == QtCore.Qt.Horizontal and role == QtCore.Qt.DisplayRole:
             return str(self.data.columns[col]) # [Gabriele] Set the header names
+
         if orientation == QtCore.Qt.Vertical and role == QtCore.Qt.DisplayRole:
             return self.data.index[col] # [Gabriele] Set the indexes
         return None
@@ -514,8 +472,7 @@ class PCDataModel(QtCore.QAbstractTableModel):
 
 class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
 
-    '''[Gabriele]  New window class used to display import options and data preview. To add a new import function (e.g. import_PC -> pc2vtk) append the function at the end of this class and add it to the import_func_dict with this template:
-        NameOfActionMenu: self.import_func()
+    '''[Gabriele]  New window class used to display import options and data preview.
     '''
 
     '''[Gabriele]  Different options that can be changed in the import menu:
@@ -538,7 +495,7 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
     'SeparatorcomboBox':' '
     }
 
-    '''[Gabriele]  Different types of separators.'''
+    '''[Gabriele]  Different types of separators. By writing not using the symbol as a display we can avoid possible confusion between similar separators (e.g tab and space)'''
     sep_dict= {
     '<space>': ' ',
     '<comma>': ',',
@@ -554,31 +511,23 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
 
         super(import_dialog, self).__init__(parent, *args, **kwargs)
         self.setupUi(self)
-        # _____________________________________________________________________________
-        # THE FOLLOWING ACTUALLY DELETES ANY REFERENCE TO CLOSED WINDOWS, HENCE FREEING
-        # MEMORY, BUT CREATES PROBLEMS WITH SIGNALS THAT ARE STILL ACTIVE
-        # SEE DISCUSSIONS ON QPointer AND WA_DeleteOnClose ON THE INTERNET
-        # self.setAttribute(Qt.WA_DeleteOnClose, True)
+
+        self.parent = parent
+        self.action = self.sender() # [Gabriele] Name of the actionmenu from which the import function was called.
+
+        '''[Gabriele]  To generalize the import menu we can use the import_func_dict that has keys that correspond to the action name (eg actionImportPC) and items to the function (eg import_PC). If a new action needs to use this interface we can add to the dict the object name of the action and add a new function. This gives more flexibility in the importers output since it doesn't depend on a single function.
+
+        To add a new import function (e.g. import_PC -> pc2vtk) add the function in this class and add it to the import_func_dict with this template:
+            NameOfActionMenu: self.import_func()'''
 
         self.import_func_dict = {
         'actionImportPC': self.import_PC
         }
-
-
-        self.parent = parent
-        self.action = self.sender() # [Gabriele] Name of the actionmenu from which the import function was called.
-        self.assigned = False
         self.show_qt_canvas()
 
 
         '''[Gabriele]  Different types of signals depending on the field in the import options'''
         self.PathtoolButton.clicked.connect(self.import_file)
-
-        self.StartColspinBox.valueChanged.connect(lambda: self.import_options(self.StartColspinBox.objectName(),self.StartColspinBox.value()))
-
-        self.EndColspinBox.valueChanged.connect(lambda: self.import_options(self.EndColspinBox.objectName(),self.EndColspinBox.value()))
-
-        self.HeaderspinBox.valueChanged.connect(lambda: self.import_options(self.HeaderspinBox.objectName(),self.HeaderspinBox.value()))
 
         self.StartRowspinBox.valueChanged.connect(lambda: self.import_options(self.StartRowspinBox.objectName(),self.StartRowspinBox.value()))
 
@@ -590,23 +539,14 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
 
         self.PreviewButton.clicked.connect(lambda: self.preview_file(self.input_data_df))
 
-        self.assignDataButton.clicked.connect(lambda: assign_data(self))
 
         self.ConfirmBox.accepted.connect(self.import_func_dict[self.action.objectName()])
         self.ConfirmBox.rejected.connect(self.close)
 
-    def closeEvent(self, event):
 
-        """Override the standard closeEvent method since self.plotter.close() is needed to cleanly close the vtk plotter."""
-        reply = QMessageBox.question(self, 'Closing window', 'Close this window?', QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
-        if reply == QMessageBox.Yes:
-            #self.quit()  # needed to cleanly close the vtk plotter
-            event.accept()
-        else:
-            event.ignore()
 
-    '''[Gabriele]  Single function that manages all of the above signals.'''
     def import_options(self,origin,value):
+        '''[Gabriele]  Single function that manages all of the signals by adding to the import_options_dict a key,value pair corresponding to the origin object name and the set value.'''
         self.import_options_dict[origin] = value
 
     def show_qt_canvas(self):
@@ -614,8 +554,9 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
         self.show()
 
     def import_file(self):
+        '''[Gabriele] Function used to read and preview a PC data file. The open_file_dialog function is used to obtain the file path. Once the file is chosen a different parser is used depending on the extension. Once the file is read the properties are autoassigned (where possible)'''
 
-        self.import_options_dict['in_path'] = open_file_dialog(parent=self,caption='Import point cloud data',filter="All supported (*.txt *.csv *.xyz *.ply *.las *.laz);;Text files (*.txt *.csv *.xyz);;PLY files (*.ply);;LAS/LAZ files (*.las *.laz)")
+        self.import_options_dict['in_path'] = open_file_dialog(parent=self,caption='Import point cloud data',filter="All supported (*.txt *.csv *.xyz *.asc *.ply *.las *.laz);;Text files (*.txt *.csv *.xyz *.asc);;PLY files (*.ply);;LAS/LAZ files (*.las *.laz)")
         self.PathlineEdit.setText(self.import_options_dict['in_path'])
 
 
@@ -627,70 +568,112 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
             if extension == '.las' or extension == '.laz':
                 self.input_data_df = self.las2df(self.import_options_dict['in_path'])
 
+            elif extension == '.ply':
+                self.input_data_df = self.ply2df(self.import_options_dict['in_path'])
             else:
                 self.input_data_df = self.csv2df(self.import_options_dict['in_path'],
                                             self.import_options_dict['SeparatorcomboBox'],
                                             self.import_options_dict['HeaderspinBox'])
 
-            self.default_attr_list = ['As is','X','Y','Z','Red','Green','Blue','Intensity','User defined','N.a.']
+            self.default_attr_list = ['As is','X','Y','Z','Red','Green','Blue','Intensity','Normals','User defined','N.a.']
 
-            '''[Gabriele]  Auto-assign values using the difflib library. If there is no match then the column name is not changed (As is). In this step the combo_index list is compiled. This list is later used in the assign window to fill the combo boxes with the correct attribute. For non matches the As is value is attribuited.'''
+            '''[Gabriele]  Auto-assign values using the difflib library (internal). If there is no match then the column is not imported (N.a.). In this step the rename_dict dictionary is compiled where:
+            - the keys correspond to the column index of the input df
+            - the items correspond to the matched attribute (match score >0.8).
+            If there is no match, the item will correspond to the original input column name.
 
-            self.col_names = list(self.input_data_df.columns)
-            self.rename_df = {}
-            self.combo_index = []
+            This dict is then used in the assign_data menu window to fill the corresponding values in each comboBox.
+            '''
+
+            col_names = list(self.input_data_df.columns)
+            self.rename_dict = {}
 
             remove_char_dict = {"/":"","\\":"","?":"","!":"","-":"","_":""} # [Gabriele] Forbidden characters that are removed from the names using the translate function
 
-            for attr in self.col_names:
+            for i,attr in enumerate(col_names):
                 table = attr.maketrans(remove_char_dict)
                 matches = [dl.SequenceMatcher(None,attr.translate(table).lower(),string.lower()).ratio() for string in self.default_attr_list]
                 match = max(matches)
 
                 if match > 0.8:
                     index = matches.index(match)
-                    self.rename_df[attr] = self.default_attr_list[index]
-                    self.combo_index.append(index)
+                    self.rename_dict[i] = self.default_attr_list[index]
                 else:
-                    self.rename_df[attr] = attr
-                    self.combo_index.append(0)
-            self.input_data_df=self.input_data_df.rename(columns=self.rename_df)
-
-
+                    self.rename_dict[i] = 'N.a.'
+            self.assign_data() # [Gabriele] Open the assign data ui.
         except ValueError:
             print('Could not preview: invalid column, row or separator')
         except FileNotFoundError:
             print('Could not preview: invalid file name')
 
 
-    '''[Gabriele]  Function used to preview the data using the PCDataModel'''
-
     def preview_file(self,input_data_df):
-
-        start_col = self.import_options_dict['StartColspinBox']
-        end_col = self.import_options_dict['EndColspinBox']
-
-        start_row = self.import_options_dict['StartRowspinBox']
-        end_row = self.import_options_dict['EndRowspinBox']
-
-        self.model = PCDataModel(self.input_data_df,start_col,end_col,start_row,end_row)
+        '''[Gabriele]  Function used to preview the data using the PCDataModel. The column and row ranges are obtained to properly slice the preview table.'''
+        value_dict = {k:v for k,v in list(self.rename_dict.items()) if v != 'N.a.'}
+        index_list = list(value_dict.keys())
+        self.model = PCDataModel(self.input_data_df,index_list)
         self.dataView.setModel(self.model)
 
-        '''[Gabriele]  When the endrow number is -1 -> use all rows (below the start row). Else use the range defined as start_row (skip_rows) and end_row - start_row (n_rows)'''
 
 
     def import_PC(self):
-         # [Gabriele] import the data without the preview
-        start_col = self.import_options_dict['StartColspinBox']
-        end_col = self.import_options_dict['EndColspinBox']
+        '''[Gabriele]  Import the pc data in PZero. Here the information needed to read and properly import the whole file is prepared:
+        - path: file path
+        - row_range: range of needed rows
+        - delimiter: delimiter type
+        - clean_dict: sliced and without N.a. version of the raw rename_dict
+        - col_names: names of the column that will be used to set the properties name in the vtk object (final header of the pandas df)
+        - index_list: list of final column index used for the import. This is necessary since the header names can change depending on the file so it's better to point to an ubiquitous column index instead of a name.
+        - x and y_pos: index position of the X and Y data column. Note that these columns are not always labeled as such in the raw imported df.
+        - offset: offset quantity to recenter the point cloud.
+        '''
+
+        path = self.import_options_dict['in_path']
 
         start_row = self.import_options_dict['StartRowspinBox']
         end_row = self.import_options_dict['EndRowspinBox']
-        # print(self.input_data_df['r'])
-        pc2vtk(self.import_options_dict['in_path'],self.input_data_df,start_col,end_col,start_row,end_row,self=self.parent)
-    # @profiler('../pz_pers/reports/readfile.csv',100)
-    def las2df(self,in_path):
-        las_data = lp.read(in_path)
+
+        row_range = range(start_row,end_row)
+
+
+        delimiter = self.import_options_dict['SeparatorcomboBox']
+
+        clean_dict = {k:v for k,v in list(self.rename_dict.items()) if v != 'N.a.'}
+        col_names = list(clean_dict.values())
+        index_list = list(clean_dict.keys())
+
+        ''' [Gabriele] X and Y are not always called exactly like this and they can occupy other positions. The clean_dict is reverse searched (get the key using a given valdue) to obtain the index positions of the X Y columns in the raw df.'''
+
+        x_pos = index_list[col_names.index('X')]
+        y_pos = index_list[col_names.index('Y')]
+        offset = self.input_data_df.loc[0][[x_pos,y_pos]].round(-2)
+        pc2vtk(in_file_name=path,
+               col_names=col_names,
+               row_range=row_range,
+               usecols=index_list,
+               delimiter=delimiter,
+               offset=offset,
+               self=self.parent,
+               header_row=0)
+
+    # @profiler('../pz_pers/reports/readfile.csv',200)
+    def las2df(self,path):
+        '''[Gabriele]  LAS/LAZ file parser.
+        Reads .las and .laz file using the laspy package. The whole file is read and then processed in a dict cycling through the dim_names list. The dict then is converted in a pandas dataframe using the from_dict function.
+        --------------------------------------------------------
+        Inputs:
+        - .las/.laz file path
+
+        Outputs:
+        - pandas df
+
+        avg run time of 0.0016 +- 0.0001 s for 50 lines
+        --------------------------------------------------------
+        '''
+        with lp.open(path) as f:
+            for chunk in f.chunk_iterator(50):
+                las_data = chunk
+                break
         dim_names = las_data.point_format.dimension_names
         prop_dict = dict()
         for dim in dim_names:
@@ -702,9 +685,137 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
         df = pd.DataFrame.from_dict(prop_dict)
         return df
 
-    # @profiler('../pz_pers/reports/readfile.csv',100)
     def csv2df(self,path,sep,header):
-        return pd.read_csv(path,sep=sep,header=header)
+        '''[Gabriele]  csv file parser.
+        It reads the specified csv file using pd.read_csv. Wrapped in a function so that it can be profiled.
+        --------------------------------------------------------
+        Inputs:
+        - csv file path
+
+        Outputs:
+        - Pandas df
+
+        avg run time of 0.0014+-0.0007 s for 50 lines
+        --------------------------------------------------------
+
+        '''
+        df = pd.read_csv(path,sep=sep,header=header,nrows=50,engine='c',index_col=False)
+        return df
+
+    # @profiler('../pz_pers/reports/readfile.csv',200)
+    def ply2df(self,path):
+        '''[Gabriele]  PLY file parser.
+        It reads the first header lines to search for properties such as XYZ, RGB etcetc. When the end_header line is reached the file is read as a normal .csv file and parsed with pandas.read_csv skipping the header lines.
+        --------------------------------------------------------
+        Inputs:
+        - PLY file path
+
+        Outputs:
+        - Pandas df
+
+        avg run time of 0.0017 +- 0.0005s for 50 lines.
+        --------------------------------------------------------
+
+        '''
+        header = []
+        end_line = 0
+        with open(path,'r') as f:
+            for i,line in enumerate(f):
+                if 'property' in line :
+                    header.append(line.split()[-1])
+                elif 'end_header' in line:
+                    end_line = i
+                    break
+        df = pd.read_csv(path,skiprows=index+1,delimiter=' ',names=header,engine='c',index_col=False,nrows=50)
+        return df
+
+    def assign_data(self):
+
+        df = self.input_data_df
+        col_names = list(df.columns)
+        LineList = []
+
+        self.AssignTable.setRowCount(len(col_names))
+        self.AssignTable.setColumnCount(3)
+        self.AssignTable.setHorizontalHeaderLabels(['Column name','Property name','Custom property name'])
+
+        for i,col in enumerate(col_names):
+            '''[Gabriele]  To create the assign menu we cicle through the column names and assign the comboBox text to the corresponding rename_dict item if the item is contained in the default_attr_list'''
+            self.ColnameItem = QtWidgets.QTableWidgetItem()
+            self.ColnameItem.setText(str(col_names[i]))
+            self.AttrcomboBox = QtWidgets.QComboBox(self)
+            self.AttrcomboBox.setObjectName(f'AttrcomboBox{i}')
+            self.AttrcomboBox.setEditable(False)
+            self.AttrcomboBox.addItems(self.default_attr_list)
+            self.AttrcomboBox.activated.connect(lambda: ass_value())
+            self.ScalarnameLine = QtWidgets.QLineEdit()
+            self.ScalarnameLine.setObjectName(f'ScalarnameLine{i}')
+            self.ScalarnameLine.setEnabled(False)
+            self.ScalarnameLine.returnPressed.connect(lambda: ass_scalar())
+            self.AssignTable.setItem(i,0,self.ColnameItem)
+            self.AssignTable.setCellWidget(i,1,self.AttrcomboBox)
+            self.AssignTable.setCellWidget(i,2,self.ScalarnameLine)
+            LineList.append(self.AssignTable.cellWidget(i,2))
+
+            if self.rename_dict[i] in self.default_attr_list:
+                self.AssignTable.cellWidget(i,1).setCurrentText(self.rename_dict[i])
+            elif 'user_' in self.rename_dict[i]:
+                self.AssignTable.cellWidget(i,1).setCurrentText('User defined')
+                self.AssignTable.cellWidget(i,2).setEnabled(True)
+                self.AssignTable.cellWidget(i,2).setText(self.rename_dict[i])
+
+            else:
+                self.AssignTable.cellWidget(i,1).setCurrentText('As is')
+
+            self.AssignTable.setCellWidget(i,2,self.ScalarnameLine)
+            self.AssignTable.horizontalHeader().setSectionResizeMode(0,QtWidgets.QHeaderView.ResizeToContents)
+            self.AssignTable.setColumnWidth(1,200)
+            self.AssignTable.setColumnWidth(2,300)
+
+        # self.resize(750, 600) #[Gabriele] Set appropriate window size
+
+        def ass_value():
+
+            '''[Gabriele] Get column and row of clicked widget in table '''
+
+            clicked = QtWidgets.QApplication.focusWidget().pos()
+            index = self.AssignTable.indexAt(clicked)
+            col = index.column()
+            row = index.row()
+            sel_combo = self.AssignTable.cellWidget(row,col) # [Gabriele] Combobox @ row and column
+
+            '''[Gabriele] Use a dict to rename the columns. The keys are the column index of the original df while the values are the new names. '''
+
+            if sel_combo.currentText() == 'User defined':
+                self.AssignTable.cellWidget(row,2).setEnabled(True)
+                self.AssignTable.cellWidget(row,2).setPlaceholderText('user_')
+
+            elif sel_combo.currentText() == 'As is':
+                self.rename_dict[row] = df.columns[row]
+                # self.AssignTable.cellWidget(row,2).clear()
+                self.AssignTable.cellWidget(row,2).setEnabled(False)
+            else:
+                items = list(self.rename_dict.values())
+                self.AssignTable.cellWidget(row,2).clear()
+                self.AssignTable.cellWidget(row,2).setEnabled(False)
+                if sel_combo.currentText() in items and sel_combo.currentText() != 'N.a.':
+                    print('Item already assigned')
+                else:
+                    self.rename_dict[row] = sel_combo.currentText()
+
+        def ass_scalar():
+
+            clicked = QtWidgets.QApplication.focusWidget().pos()
+            index = self.AssignTable.indexAt(clicked)
+            col = index.column()
+            row = index.row()
+            '''[Gabriele]  This is the only way I could to choose the QLineEdit otherwise self.AssignTable.cellWidget(row,2) returns somehow a QWidget instad than a QLineEdit'''
+            sel_line = LineList[row]
+            scal_name = f'user_{sel_line.text()}'
+            self.rename_dict[row] = scal_name
+            sel_line.setText(scal_name)
+
+
 
 class assign_data(QMainWindow, Ui_AssignWindow):
 
@@ -716,11 +827,11 @@ class assign_data(QMainWindow, Ui_AssignWindow):
         self.parent = parent
         self.show_qt_canvas()
         self.ConfirmButton.rejected.connect(self.close)
+        self.LineList = []
 
         try:
-            self.df = self.parent.input_data_df
-            n_attr = self.parent.input_data_df.shape[1]
-            self.col_names = list(self.df.columns)
+            df = self.parent.input_data_df
+            col_names = list(df.columns)
 
 
 
@@ -728,38 +839,44 @@ class assign_data(QMainWindow, Ui_AssignWindow):
             print('No data to assign')
             self.ConfirmButton.accepted.connect(self.close)
         else:
-            self.AssignTable.setRowCount(n_attr)
-            self.AssignTable.setColumnCount(4)
-            self.AssignTable.setHorizontalHeaderLabels(['Column name','Attributes','Scalar value name','Scalar value state'])
+            self.AssignTable.setRowCount(len(col_names))
+            self.AssignTable.setColumnCount(3)
+            self.AssignTable.setHorizontalHeaderLabels(['Column name','Property name','Custom property name'])
             self.ConfirmButton.accepted.connect(self.modify_df)
 
-            for i in range(n_attr):
+            for i,col in enumerate(col_names):
+                '''[Gabriele]  To create the assign menu we cicle through the column names and assign the comboBox text to the corresponding rename_dict item if the item is contained in the default_attr_list'''
+                self.ColnameItem = QtWidgets.QTableWidgetItem()
+                self.ColnameItem.setText(str(col_names[i]))
                 self.AttrcomboBox = QtWidgets.QComboBox(self)
                 self.AttrcomboBox.setObjectName(f'AttrcomboBox{i}')
                 self.AttrcomboBox.setEditable(False)
                 self.AttrcomboBox.addItems(self.parent.default_attr_list)
                 self.AttrcomboBox.activated.connect(lambda: self.ass_value())
-                self.ColnameItem = QtWidgets.QTableWidgetItem()
-                self.ColnameItem.setText(str(self.col_names[i]))
-                self.ScalarnameText = QtWidgets.QLineEdit()
-                self.ScalarnameText.setEnabled(False)
-                self.ScalarnameText.returnPressed.connect(lambda: self.ass_scalar())
-                self.ScalarnameText.textEdited.connect(lambda: self.update_label())
-                self.ScalarnameLabel = QtWidgets.QLabel()
-                self.ScalarnameLabel.setText('Absent')
-
-
+                self.ScalarnameLine = QtWidgets.QLineEdit()
+                self.ScalarnameLine.setObjectName(f'ScalarnameLine{i}')
+                self.ScalarnameLine.setEnabled(False)
+                self.ScalarnameLine.returnPressed.connect(lambda: self.ass_scalar())
                 self.AssignTable.setItem(i,0,self.ColnameItem)
                 self.AssignTable.setCellWidget(i,1,self.AttrcomboBox)
-                combo_index = self.parent.combo_index[i]
-                self.AssignTable.cellWidget(i,1).setCurrentText(self.parent.default_attr_list[combo_index])
-                self.AssignTable.setCellWidget(i,2,self.ScalarnameText)
-                self.AssignTable.setCellWidget(i,3,self.ScalarnameLabel)
-                self.AssignTable.horizontalHeader().setSectionResizeMode(0,QtWidgets.QHeaderView.ResizeToContents)
-                self.AssignTable.setColumnWidth(2,150)
-                self.AssignTable.setColumnWidth(3,150)
+                self.AssignTable.setCellWidget(i,2,self.ScalarnameLine)
+                self.LineList.append(self.AssignTable.cellWidget(i,2))
+                if self.parent.rename_dict[i] in self.parent.default_attr_list:
+                    self.AssignTable.cellWidget(i,1).setCurrentText(self.parent.rename_dict[i])
+                elif 'user_' in self.parent.rename_dict[i]:
+                    self.AssignTable.cellWidget(i,1).setCurrentText('User defined')
+                    self.AssignTable.cellWidget(i,2).setEnabled(True)
+                    self.AssignTable.cellWidget(i,2).setText(self.parent.rename_dict[i])
 
-            self.resize(self.AssignTable.horizontalHeader().length()+self.AssignTable.verticalHeader().sizeHint().width()+self.AssignTable.frameWidth() * 2, 620) #[Gabriele] Set appropriate window size
+                else:
+                    self.AssignTable.cellWidget(i,1).setCurrentText('As is')
+
+                self.AssignTable.setCellWidget(i,2,self.ScalarnameLine)
+                self.AssignTable.horizontalHeader().setSectionResizeMode(0,QtWidgets.QHeaderView.ResizeToContents)
+                self.AssignTable.setColumnWidth(1,200)
+                self.AssignTable.setColumnWidth(2,300)
+
+            self.resize(750, 600) #[Gabriele] Set appropriate window size
 
     def ass_value(self):
 
@@ -771,23 +888,24 @@ class assign_data(QMainWindow, Ui_AssignWindow):
         row = index.row()
         sel_combo = self.AssignTable.cellWidget(row,col) # [Gabriele] Combobox @ row and column
 
-        '''[Gabriele] Use a dict to rename the columns. The keys are the original column names while the values are the new names.
-        [Problem]: If there are two values with the same name it renames both of them without throwing any errors and this breakes importing (two different columns with the same name in the same df-> no bueno). This needs fixin' '''
+        '''[Gabriele] Use a dict to rename the columns. The keys are the column index of the original df while the values are the new names. '''
 
         if sel_combo.currentText() == 'User defined':
             self.AssignTable.cellWidget(row,2).setEnabled(True)
+            self.AssignTable.cellWidget(row,2).setPlaceholderText('user_')
+
         elif sel_combo.currentText() == 'As is':
-            self.parent.rename_df[self.df.columns[row]] = self.df.columns[row]
-            self.df = self.parent.input_data_df.rename(columns=self.parent.rename_df)
+            self.parent.rename_dict[row] = df.columns[row]
+            # self.AssignTable.cellWidget(row,2).clear()
+            self.AssignTable.cellWidget(row,2).setEnabled(False)
         else:
-            header = list(self.df.head())
+            items = list(self.parent.rename_dict.values())
             self.AssignTable.cellWidget(row,2).clear()
             self.AssignTable.cellWidget(row,2).setEnabled(False)
-            if sel_combo.currentText() in header:
+            if sel_combo.currentText() in items and sel_combo.currentText() != 'N.a.':
                 print('Item already assigned')
             else:
-                self.parent.rename_df[self.df.columns[row]] = sel_combo.currentText()
-                self.df = self.parent.input_data_df.rename(columns=self.parent.rename_df)
+                self.parent.rename_dict[row] = sel_combo.currentText()
 
     def ass_scalar(self):
 
@@ -795,23 +913,23 @@ class assign_data(QMainWindow, Ui_AssignWindow):
         index = self.AssignTable.indexAt(clicked)
         col = index.column()
         row = index.row()
-        sel_line = self.AssignTable.cellWidget(row,col) # [Gabriele] lineEdit @ row and column
+        '''[Gabriele]  This is the only way I could to choose the QLineEdit otherwise self.AssignTable.cellWidget(row,2) returns somehow a QWidget instad than a QLineEdit'''
+        sel_line = self.LineList[row]
         scal_name = f'user_{sel_line.text()}'
-        self.parent.rename_df[self.df.columns[row]] = scal_name
-        self.df = self.parent.input_data_df.rename(columns=self.parent.rename_df)
-        self.AssignTable.cellWidget(row,3).setText('Set')
+        self.parent.rename_dict[row] = scal_name
+        sel_line.setText(scal_name)
 
-    def update_label(self):
-        clicked = QtWidgets.QApplication.focusWidget().pos()
-        index = self.AssignTable.indexAt(clicked)
-        col = index.column()
-        row = index.row()
-        self.AssignTable.cellWidget(row,3).setText('Modified')
 
     def show_qt_canvas(self):
         """Show the Qt Window"""
         self.show()
 
     def modify_df(self):
-        self.parent.input_data_df = self.df # [Gabriele] Update the data in memory
+        for i,line in enumerate(self.LineList):
+            if 'user_' in line.text():
+                ...
+            elif line.text():
+                scal_name = f'user_{line.text()}'
+                self.parent.rename_dict[i] = scal_name
+        print(self.parent.rename_dict)
         self.close()
