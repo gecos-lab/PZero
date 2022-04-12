@@ -838,15 +838,23 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             property_texture_combo = QComboBox()
             property_texture_combo.uid = uid
             property_texture_combo.addItem("none")
-            property_texture_combo.texture_uid_list = ["none", "X", "Y", "Z","RGB"]
+            property_texture_combo.texture_uid_list = ["none", "X", "Y", "Z"]
             property_texture_combo.addItem("X")
             property_texture_combo.addItem("Y")
             property_texture_combo.addItem("Z")
-            property_texture_combo.addItem("RGB")
-            for prop in self.parent.dom_coll.get_uid_properties_names(uid):
+            # property_texture_combo.addItem("RGB")
+
+            '''[Gabriele] To add support to multi components properties (e.g. RGB) we can add a component check (if components > 1). If this statement is True we can iterate over the n components and set the new n properties using the template prop[n_component]. These properties do not point to actual data (the "RGB[0]" property is not present) but to a slice of the orginal property (RGB[:,0]).'''
+
+            for prop, components in zip(self.parent.dom_coll.get_uid_properties_names(uid),self.parent.dom_coll.get_uid_properties_components(uid)):
                 if prop not in self.parent.dom_coll.df.loc[self.parent.dom_coll.df['uid'] == uid, "texture_uids"].values[0]:
                     property_texture_combo.addItem(prop)
                     property_texture_combo.texture_uid_list.append(prop)
+
+                    if components > 1:
+                        for component in range(components):
+                            property_texture_combo.addItem(f'{prop}[{component}]')
+                            property_texture_combo.texture_uid_list.append(f'{prop}[{component}]')
             for texture_uid in self.parent.dom_coll.df.loc[self.parent.dom_coll.df['uid'] == uid, 'texture_uids'].values[0]:
                 texture_name = self.parent.image_coll.df.loc[self.parent.image_coll.df['uid'] == texture_uid, 'name'].values[0]
                 property_texture_combo.addItem(texture_name)
@@ -876,15 +884,23 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             property_texture_combo = QComboBox()
             property_texture_combo.uid = uid
             property_texture_combo.addItem("none")
-            property_texture_combo.texture_uid_list = ["none", "X", "Y", "Z","RGB"]
+            property_texture_combo.texture_uid_list = ["none", "X", "Y", "Z"]
             property_texture_combo.addItem("X")
             property_texture_combo.addItem("Y")
             property_texture_combo.addItem("Z")
-            property_texture_combo.addItem("RGB")
-            for prop in self.parent.dom_coll.get_uid_properties_names(uid):
+            # property_texture_combo.addItem("RGB")
+
+            '''[Gabriele] See function above for explanation'''
+
+            for prop, components in zip(self.parent.dom_coll.get_uid_properties_names(uid),self.parent.dom_coll.get_uid_properties_components(uid)):
                 if prop not in self.parent.dom_coll.df.loc[self.parent.dom_coll.df['uid'] == uid, "texture_uids"].values[0]:
                     property_texture_combo.addItem(prop)
                     property_texture_combo.texture_uid_list.append(prop)
+
+                    if components > 1:
+                        for n_component in range(components):
+                            property_texture_combo.addItem(f'{prop}[{n_component}]')
+                            property_texture_combo.texture_uid_list.append(f'{prop}[{n_component}]')
             for texture_uid in self.parent.dom_coll.df.loc[self.parent.dom_coll.df['uid'] == uid, 'texture_uids'].values[0]:
                 texture_name = self.parent.image_coll.df.loc[self.parent.image_coll.df['uid'] == texture_uid, 'name'].values[0]
                 property_texture_combo.addItem(texture_name)
@@ -1777,6 +1793,10 @@ class View3D(BaseView):
         self.cam_orient_widget.SetParentRenderer(self.plotter.renderer)
         self.cam_orient_widget.On()
 
+        # [Gabriele] Set horizontal default orientation because the vertical colorbar interferes with the gimble
+        pv.global_theme.colorbar_orientation = 'horizontal'
+
+
     def change_actor_color(self, uid=None, collection=None):
         if collection == 'geol_coll':
             color_R = self.parent.geol_coll.get_uid_legend(uid=uid)['color_R']
@@ -1976,7 +1996,6 @@ class View3D(BaseView):
             if isinstance(plot_entity.points, np.ndarray):
                 """This check is needed to avoid errors when trying to plot an empty
                 PolyData, just created at the beginning of a digitizing session."""
-
                 # [Gabriele] Basic properties
                 if show_property is None:
                     show_scalar_bar = False
@@ -1991,20 +2010,25 @@ class View3D(BaseView):
                     show_property_value = plot_entity.points_Y
                 elif show_property == 'Z':
                     show_property_value = plot_entity.points_Z
-                elif show_property == 'RGB':
-                    show_scalar_bar = False
 
-                    if plot_entity.get_point_data('RGB').size > 1:
-                        show_property_value = plot_entity.get_point_data('RGB')
-                        plot_rgb_option = True # [Gabriele] Use RGB
+                elif show_property[-1] == ']':
+                    show_scalar_bar = True
+                    pos1 = show_property.index('[')
+                    pos2 = show_property.index(']')
+                    original_prop = show_property[:pos1]
+                    index = int(show_property[pos1+1:pos2])
+                    show_property_value = plot_entity.get_point_data(original_prop)[:,index]
+                else:
+                    n_comp = self.parent.dom_coll.get_uid_properties_components(uid)[self.parent.dom_coll.get_uid_properties_names(uid).index(show_property)]
+                    if n_comp > 1:
+                        show_property_value= plot_entity.get_point_data(show_property)
+                        if show_property == 'RGB':
+                            show_scalar_bar = False
+                            plot_rgb_option = True # [Gabriele] Use RGB
 
                     else:
-                        print('No RGB values present')
-                        show_property_value = None
-
-                else:
-                    show_scalar_bar = True
-                    show_property_value = plot_entity.get_point_data(show_property)
+                        show_scalar_bar = True
+                        show_property_value = plot_entity.get_point_data(show_property)
 
 
 
@@ -2177,7 +2201,7 @@ class View3D(BaseView):
                                             flip_scalars=False,
                                             interpolate_before_map=True,
                                             cmap=show_property_cmap,
-                                            scalar_bar_args={'title': show_property_title, 'title_font_size': 20, 'label_font_size': 16, 'shadow': True, 'interactive': True},
+                                            scalar_bar_args={'title': show_property_title, 'title_font_size': 20, 'label_font_size': 16, 'shadow': True, 'interactive': True,'vertical':False},
                                             rgb=plot_rgb_option,
                                             show_scalar_bar=show_scalar_bar)
 

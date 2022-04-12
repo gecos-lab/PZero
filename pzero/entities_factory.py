@@ -352,7 +352,7 @@ class PolyData(vtk.vtkPolyData):
 
     def get_point_data_shape(self, data_key=None):
         """Returns the shape of a point data attribute matrix."""
-        if isinstance(self, (VertexSet, PolyLine, TriSurf, TetraSolid, XsVertexSet, XsPolyLine)):
+        if isinstance(self, (VertexSet, PolyLine, TriSurf, TetraSolid, XsVertexSet, XsPolyLine,PCDom)):
             """For vector entities we have attribute arrays of the same length as the number of points.
             This method yields the number of points and the number of components of the attribute."""
             try:

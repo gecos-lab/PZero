@@ -132,35 +132,31 @@ def pc2vtk(in_file_name,col_names,row_range,header_row,usecols,delimiter,offset,
         # [Gabriele] Create pyvista PolyData using XYZ data
 
         pv_PD = PlD(XYZ)
-
         ''' [Gabriele] Set properties (exclude XYZ data) and add properties names and components in the appropriate lists (properties_names and properties_components).'''
-        properties_df = input_df.drop(['X','Y','Z'],axis=1)
+        input_df.drop(['X','Y','Z'],axis=1,inplace=True)
 
-
-        properties_components= []
-        if not properties_df.empty:
-            if 'Red' in properties_df.columns:
+        if not input_df.empty:
+            if 'Red' in input_df.columns:
+                # print(properties_df)
                 pv_PD['RGB'] = np.array([input_df['Red'],input_df['Green'],input_df['Blue']]).T
-                ''' [Gabriele] [PROBLEM] if the array is recasted to int8 the following error occurs vtkScalarsToColors.cxx:1487 ERR| vtkLookupTable (0x558e44fcfb30): char type does not have enough values to hold a color
+
+                ''' [Gabriele] [PROBLEM] if the array is recasted to int8 the following error occurs:
+                vtkScalarsToColors.cxx:1487 ERR| vtkLookupTable (0x558e44fcfb30): char type does not have enough values to hold a color
+
+                I have no idea why
                 '''
 
-                properties_df.drop(['Red','Green','Blue'],axis=1,inplace=True)
-            print(pv_PD['RGB'])
+                input_df.drop(['Red','Green','Blue'],axis=1,inplace=True)
 
-            properties_names = list(properties_df.columns)
-
-            for property in properties_names:
-                properties_value = properties_df[property].values
-                component_length = np.array(properties_value[0]).flatten().size
-                properties_components.append(component_length)
-                pv_PD[property] = properties_value
+            for property in input_df.columns:
+                pv_PD[property] = input_df[property].values
                 # point_cloud.set_point_data(property,properties_value)
-        else:
-            properties_names = []
 
         print('4. Adding PC to project')
         point_cloud.ShallowCopy(pv_PD)
         point_cloud.Modified()
+        properties_names = point_cloud.point_data_keys
+        properties_components = [point_cloud.get_point_data_shape(i)[1] for i in properties_names]
 
         """Create dictionary."""
         curr_obj_attributes = deepcopy(DomCollection.dom_entity_dict)
