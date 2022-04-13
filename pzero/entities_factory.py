@@ -364,6 +364,10 @@ class PolyData(vtk.vtkPolyData):
                 n_components = 1
             return [n_points, n_components]
 
+    def get_point_data_type(self, data_key=None):
+        '''[Gabriele] Get point data type'''  
+        return dsa.WrapDataObject(self).PointData[data_key].dtype.name
+
     def set_point_data(self, data_key=None, attribute_matrix=None):
         """Sets point data attribute from Numpy array (sets a completely new point attributes array)
         Applying ravel to the input n-d array is required to flatten the array as in VTK arrays."""

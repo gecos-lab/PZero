@@ -25,42 +25,6 @@ from .helper_functions import profiler
 
 def pc2vtk(in_file_name,col_names,row_range,header_row,usecols,delimiter,offset,self=None):
 
-    # # @profiler('../pz_pers/reports/importfile.csv',200)
-    # def old_method(XYZ):
-    #     n_cells = XYZ.shape[0]
-    #     point_cloud = PCDom() #[Gabriele] vtkpointSet object
-    #     points = vtkPoints() #[Gabriele] points object
-    #     vertices = vtkCellArray() #[Gabriele] vertices (cells)
-    #     vertices.InsertNextCell(n_cells) #[Gabriele] set n cells with n= number of points in the dataset
-    #
-    #  #[Gabriele] insert the datasets points and assign each point to a cell
-    #     for p in XYZ:
-    #         pid = points.InsertNextPoint(p)
-    #         vertices.InsertCellPoint(pid)
-    #
-    #
-    #
-    #     point_cloud.SetPoints(points) #[Gabriele] Assign the points to the point_cloud (vtkPolyData)
-    #     point_cloud.SetVerts(vertices) #[Gabriele] Assign the vertices to the point_cloud (vtkPolyData)
-    #     return point_cloud
-    #
-    # @profiler('../pz_pers/reports/importfile.csv',200)
-    # def new_method(XYZ):
-    #     point_cloud = PCDom()
-    #     pv_PD = PlD(XYZ)
-    #     point_cloud.ShallowCopy(pv_PD)
-    #     point_cloud.Modified()
-    #     return point_cloud
-
-    def ps_method(XYZ):
-        point_cloud = vtkPointSet()
-        points = vtk_points(XYZ)
-        point_cloud.SetPoints(points)
-        return point_cloud
-
-
-    # chunk_size = 10**6
-    # @profiler('../pz_pers/reports/other_method.csv',200)
 
     print('1. Reading and importing file')
 
@@ -138,13 +102,11 @@ def pc2vtk(in_file_name,col_names,row_range,header_row,usecols,delimiter,offset,
         if not input_df.empty:
             if 'Red' in input_df.columns:
                 # print(properties_df)
-                pv_PD['RGB'] = np.array([input_df['Red'],input_df['Green'],input_df['Blue']]).T
+                if self.check255Box.isChecked():
+                    pv_PD['RGB'] = np.array([input_df['Red'],input_df['Green'],input_df['Blue']]).T.astype(np.uint8)
+                else:
+                    pv_PD['RGB'] = np.array([input_df['Red'],input_df['Green'],input_df['Blue']]).T
 
-                ''' [Gabriele] [PROBLEM] if the array is recasted to int8 the following error occurs:
-                vtkScalarsToColors.cxx:1487 ERR| vtkLookupTable (0x558e44fcfb30): char type does not have enough values to hold a color
-
-                I have no idea why
-                '''
 
                 input_df.drop(['Red','Green','Blue'],axis=1,inplace=True)
 
@@ -157,6 +119,7 @@ def pc2vtk(in_file_name,col_names,row_range,header_row,usecols,delimiter,offset,
         point_cloud.Modified()
         properties_names = point_cloud.point_data_keys
         properties_components = [point_cloud.get_point_data_shape(i)[1] for i in properties_names]
+        properties_types = [point_cloud.get_point_data_type(i) for i in properties_names]
 
         """Create dictionary."""
         curr_obj_attributes = deepcopy(DomCollection.dom_entity_dict)
@@ -166,11 +129,10 @@ def pc2vtk(in_file_name,col_names,row_range,header_row,usecols,delimiter,offset,
         curr_obj_attributes['texture_uids'] = []
         curr_obj_attributes['properties_names'] = properties_names
         curr_obj_attributes['properties_components'] = properties_components
+        curr_obj_attributes['properties_types'] = properties_types
         curr_obj_attributes['vtk_obj'] = point_cloud
-        self.TextTerminal.appendPlainText(f'vtk_obj: {curr_obj_attributes["vtk_obj"]}')
         """Add to entity collection."""
-        self.dom_coll.add_entity_from_dict(entity_dict=curr_obj_attributes)
-        self.TextTerminal.appendPlainText(f'Successfully imported {in_file_name}')
+        self.parent.dom_coll.add_entity_from_dict(entity_dict=curr_obj_attributes)
         """Cleaning."""
         del input_df
         del pv_PD

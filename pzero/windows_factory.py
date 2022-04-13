@@ -19,7 +19,6 @@ import numpy as np
 import pandas as pd
 
 """"VTK imports"""
-from vtk import vtkPointSet
 """"VTK Numpy interface imports"""
 # import vtk.numpy_interface.dataset_adapter as dsa
 from vtk.util import numpy_support
@@ -1704,21 +1703,6 @@ class View3D(BaseView):
         self.menuBaseView.setTitle("Project")
         self.actionBase_Tool.setText("Project")
 
-        # [Gabriele] Options menu
-
-        self.menuOptions = QMenu("Options",self)
-        self.menuWindow.addMenu(self.menuOptions)
-
-        self.useCube = QAction("Orientation cube", self)
-        box_args = {'color_box': True,
-                    'opacity':1}
-        self.useCube.triggered.connect(lambda: self.plotter.add_axes(box=True,box_args=box_args))
-        self.menuOptions.addAction(self.useCube)
-
-        self.useAxis = QAction("Orientation axis", self)
-        self.useAxis.triggered.connect(lambda: self.plotter.add_axes(box=False))
-        self.menuOptions.addAction(self.useAxis)
-
         # [Gabriele] Default views menu
 
         self.menuView = QMenu("Views",self)
@@ -1836,7 +1820,7 @@ class View3D(BaseView):
         elif collection == 'dom_coll':
             line_thick = self.parent.dom_coll.get_legend()['line_thick']
             """Note: no legend for image."""
-            if isinstance(self.parent.dom_coll.get_uid_vtk_obj(uid), PCDom) or isinstance(self.parent.dom_coll.get_uid_vtk_obj(uid), vtkPointSet):
+            if isinstance(self.parent.dom_coll.get_uid_vtk_obj(uid), PCDom):
                 # [Gabriele] If PCDom we need to set point size not line thickness
                 self.actors_df.loc[self.actors_df['uid'] == uid, 'actor'].values[0].GetProperty().SetPointSize(line_thick)
             else:
@@ -2010,20 +1994,25 @@ class View3D(BaseView):
                     show_property_value = plot_entity.points_Y
                 elif show_property == 'Z':
                     show_property_value = plot_entity.points_Z
-
                 elif show_property[-1] == ']':
+                    '''[Gabriele] we can identify multicomponents properties such as RGB[0] or Normals[0] by taking the last charcter of the property name ("]").'''
+
                     show_scalar_bar = True
+                    # [Gabriele] Get the start and end index of the [n_component]
                     pos1 = show_property.index('[')
                     pos2 = show_property.index(']')
+                    # [Gabriele] Get the original property (e.g. RGB[0] -> RGB)
                     original_prop = show_property[:pos1]
+                    # [Gabriele] Get the column index (the n_component value)
                     index = int(show_property[pos1+1:pos2])
                     show_property_value = plot_entity.get_point_data(original_prop)[:,index]
                 else:
                     n_comp = self.parent.dom_coll.get_uid_properties_components(uid)[self.parent.dom_coll.get_uid_properties_names(uid).index(show_property)]
+                    '''[Gabriele] Get the n of components for the given property. If it's > 1 then do stuff depending on the type of property (e.g. show_rgb_option -> True if the property is RGB)'''
                     if n_comp > 1:
                         show_property_value= plot_entity.get_point_data(show_property)
+                        show_scalar_bar = False
                         if show_property == 'RGB':
-                            show_scalar_bar = False
                             plot_rgb_option = True # [Gabriele] Use RGB
 
                     else:

@@ -34,6 +34,7 @@ class DomCollection(QAbstractTableModel):
                        'texture_uids': [],  # this refers to the uids of image data for which the texture coordinates have been calculated
                        'properties_names': [],
                        'properties_components': [],
+                       'properties_types':[],
                        'x_section': "",  # this is the uid of the cross section for "XsVertexSet", "XsPolyLine", and "XsImage", empty for all others
                        'vtk_obj': None}
 
@@ -43,6 +44,7 @@ class DomCollection(QAbstractTableModel):
                             'texture_uids': list,
                             'properties_names': list,
                             'properties_components': list,
+                            'properties_types':list,
                             'x_section': str, # this is the uid of the cross section for "XsVertexSet", "XsPolyLine", and "XsImage", empty for all others
                             'vtk_obj': object}
 
