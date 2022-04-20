@@ -3,7 +3,7 @@ pyvista>=0.32.1
 pyvistaqt>=0.6.0
 numpy>=1.21.5
 vtk>=9.1.0
-laspy[laszip,lazrs]
+laspy[laszip,lazrs]~=2.1.2
 
 matplotlib>=3.5.1
 shapely>=1.8.0
@@ -15,9 +15,7 @@ colorcet>=3.0.0
 cmocean>=2.0
 loopstructural>=v1.4.1
 
-vedo<=2021.0.6
+vedo~=2022.2.0
 geopandas>=0.10.2
 
 scipy>=1.7.3
-
-PyQt5

@@ -49,7 +49,7 @@ class DomCollection(QAbstractTableModel):
                             'vtk_obj': object}
 
     """List of valid data types."""
-    valid_dom_types = ["DEM", "TSDom", "PCDom", "DomXs"]
+    valid_dom_types = ["DEM", "TSDom", "PCDom"]
 
     """Initialize DomCollection table. Column headers are taken from
     DomCollection.dom_entity_dict.keys(), and parent is supposed to be the project_window.

@@ -1,7 +1,7 @@
 """helper_dialogs.py
 PZero© Andrea Bistacchi"""
 
-from PyQt5.QtWidgets import QMessageBox, QInputDialog, QLineEdit, QPushButton, QFileDialog, QWidget, QProgressDialog, QMainWindow,QComboBox
+from PyQt5.QtWidgets import QMessageBox, QInputDialog, QLineEdit, QPushButton, QFileDialog, QWidget, QProgressDialog, QMainWindow, QComboBox
 from PyQt5.QtGui import QColor
 from PyQt5 import QtWidgets, QtCore, Qt
 
@@ -17,6 +17,7 @@ from .pc2vtk import pc2vtk
 import difflib as dl
 
 from csv import Sniffer
+
 
 # import vtk
 # import vtk.numpy_interface.dataset_adapter as dsa
@@ -69,11 +70,11 @@ def input_one_value_dialog(parent=None, title="title", label="label", default_va
         return
 
 
-def open_file_dialog(parent=None, caption=None, filter=None, multiple = False):
+def open_file_dialog(parent=None, caption=None, filter=None, multiple=False):
     """Open a dialog and input a file or folder name.
     If the dialog is closed without a valid file name, it returns None."""
     if multiple:
-        in_file_name = QFileDialog.getOpenFileNames(parent=parent,caption=caption,filter=filter)
+        in_file_name = QFileDialog.getOpenFileNames(parent=parent, caption=caption, filter=filter)
         in_file_name = in_file_name[0]
     else:
         in_file_name = QFileDialog.getOpenFileName(parent=parent, caption=caption, filter=filter)
@@ -222,7 +223,7 @@ def input_checkbox_dialog(title="title", label="label", choice_list=None):
         objects_qt[element] = [None, None]
         """Create QCheckBoxes."""
         objects_qt[element][0] = QtWidgets.QCheckBox(widget)
-        objects_qt[element][0].setText(element) # set text for the checkbox
+        objects_qt[element][0].setText(element)  # set text for the checkbox
         gridLayout.addWidget(objects_qt[element][0], i + 2, 1)
         i += 1
     """Create OK Button, add it to the grid layout an set name and state"""
@@ -286,7 +287,7 @@ def general_input_dialog(title="title", input_dict=None):
         if input_dict[key][2] == "QLabel":
             """Create QLabels, assign them to the grid layout, and set the text."""
             objects_qt[key][0] = QtWidgets.QLabel(widget)
-            objects_qt[key][0].setText(input_dict[key][1]) # use second column to set the label
+            objects_qt[key][0].setText(input_dict[key][1])  # use second column to set the label
             gridLayout.addWidget(objects_qt[key][0], i + 1, 1)
         elif input_dict[key][2] == "QLineEdit":
             if isinstance(input_dict[key][1], int):
@@ -328,7 +329,7 @@ def general_input_dialog(title="title", input_dict=None):
             gridLayout.addWidget(objects_qt[key][1], i + 1, 2)
         elif input_dict[key][2] == "QCheckBox":
             objects_qt[key][0] = QtWidgets.QCheckBox(widget)
-            objects_qt[key][0].setText(input_dict[key][1]) # use second column to set the label
+            objects_qt[key][0].setText(input_dict[key][1])  # use second column to set the label
             gridLayout.addWidget(objects_qt[key][0], i + 1, 1)
         elif input_dict[key][2] == "QSpinBox":
             """---- to be implemented ----"""
@@ -430,53 +431,49 @@ class progress_dialog(QProgressDialog):
         self.forceShow()
 
     def add_one(self):
-        self.setValue(self.value()+1)
+        self.setValue(self.value() + 1)
 
     @property
     def was_canceled(self):
         return self.wasCanceled()
 
 
-
 class PCDataModel(QtCore.QAbstractTableModel):
-
     '''[Gabriele]  Abstract table model that can be used to quickly display imported pc files data  from a pandas df. Taken from this stack overflow post https://stackoverflow.com/questions/31475965/fastest-way-to-populate-qtableview-from-pandas-data-frame
     '''
-    def __init__(self, data, index_list, parent=None,*args, **kwargs):
-        super(PCDataModel,self).__init__(*args, **kwargs)
+
+    def __init__(self, data, index_list, parent=None, *args, **kwargs):
+        super(PCDataModel, self).__init__(*args, **kwargs)
 
         self.data = data
         self.index_list = index_list
 
-    def columnCount(self, parent=None): # [Gabriele] the n of columns is = to the number of columns of the input data set (.shape[1])
+    def columnCount(self, parent=None):  # [Gabriele] the n of columns is = to the number of columns of the input data set (.shape[1])
         return self.data.shape[1]
 
-    def rowCount(self, parent=None): # [Gabriele] the n of rows is = to the number of rows of the input data set (.shape[0])
+    def rowCount(self, parent=None):  # [Gabriele] the n of rows is = to the number of rows of the input data set (.shape[0])
         return self.data.shape[0]
 
     def data(self, index, role):
         # print(index.column())
         if index.isValid():
             if role == QtCore.Qt.DisplayRole:
-                return str(self.data.iloc[index.row(), index.column()])
-            # if role == QtCore.Qt.BackgroundRole and index.column() in self.index_list:
-            #     return QColor(QtCore.Qt.green)
+                return str(self.data.iloc[index.row(), index.column()])  # if role == QtCore.Qt.BackgroundRole and index.column() in self.index_list:  # return QColor(QtCore.Qt.green)
         return None
 
     '''[Gabriele] Set header and index If the "container" is horizontal (orientation index 1) and has a display role (index 0) (-> is the header of the table). If the "container" is vertical (orientation index 2) and has a display role (index 0) (-> is the index of the table).'''
 
     def headerData(self, col, orientation, role):
         if orientation == QtCore.Qt.Horizontal and role == QtCore.Qt.DisplayRole:
-            return str(self.data.columns[col]) # [Gabriele] Set the header names
+            return str(self.data.columns[col])  # [Gabriele] Set the header names
         if orientation == QtCore.Qt.Horizontal and role == QtCore.Qt.BackgroundRole and col in self.index_list:
-            return QColor(QtCore.Qt.green) # [Gabriele] Set the color
+            return QColor(QtCore.Qt.green)  # [Gabriele] Set the color
         if orientation == QtCore.Qt.Vertical and role == QtCore.Qt.DisplayRole:
-            return self.data.index[col] # [Gabriele] Set the indexes
+            return self.data.index[col]  # [Gabriele] Set the indexes
         return None
 
 
 class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
-
     '''[Gabriele]  New window class used to display import options and data preview.
     '''
 
@@ -489,25 +486,10 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
         + EndRowspinBox -> End import on row number
         + Separator -> Type of separtor in the data set'''
 
-
-    import_options_dict = {
-    'in_path':'',
-    'StartRowspinBox':0,
-    'EndRowspinBox':100,
-    'SeparatorcomboBox':' '
-    }
+    import_options_dict = {'in_path': '', 'StartRowspinBox': 0, 'EndRowspinBox': 100, 'SeparatorcomboBox': ' '}
 
     '''[Gabriele]  Different types of separators. By writing not using the symbol as a display we can avoid possible confusion between similar separators (e.g tab and space)'''
-    sep_dict= {
-    '<space>': ' ',
-    '<comma>': ',',
-    '<semi-col>': ';',
-    '<tab>':'   '
-    }
-
-
-
-
+    sep_dict = {'<space>': ' ', '<comma>': ',', '<semi-col>': ';', '<tab>': '   '}
 
     def __init__(self, parent=None, *args, **kwargs):
 
@@ -515,45 +497,39 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
         self.setupUi(self)
 
         self.parent = parent
-        self.action = self.sender() # [Gabriele] Name of the actionmenu from which the import function was called.
+        self.action = self.sender()  # [Gabriele] Name of the actionmenu from which the import function was called.
 
         '''[Gabriele]  To generalize the import menu we can use the import_func_dict that has keys that correspond to the action name (eg actionImportPC) and items to the function (eg import_PC). If a new action needs to use this interface we can add to the dict the object name of the action and add a new function. This gives more flexibility in the importers output since it doesn't depend on a single function.
 
         To add a new import function (e.g. import_PC -> pc2vtk) add the function in this class and add it to the import_func_dict with this template:
             NameOfActionMenu: self.import_func()'''
 
-        self.import_func_dict = {
-        'actionImportPC': self.import_PC
-        }
+        self.import_func_dict = {'actionImportPC': self.import_PC}
         self.show_qt_canvas()
-
 
         '''[Gabriele]  Different types of signals depending on the field in the import options'''
         self.PathtoolButton.clicked.connect(lambda: self.import_file())
         self.PathlineEdit.editingFinished.connect(lambda: self.import_file(path=self.PathlineEdit.text()))
 
-        self.StartRowspinBox.valueChanged.connect(lambda: self.import_options(self.StartRowspinBox.objectName(),self.StartRowspinBox.value()))
+        self.StartRowspinBox.valueChanged.connect(lambda: self.import_options(self.StartRowspinBox.objectName(), self.StartRowspinBox.value()))
 
-        self.EndRowspinBox.valueChanged.connect(lambda: self.import_options(self.EndRowspinBox.objectName(),self.EndRowspinBox.value()))
+        self.EndRowspinBox.valueChanged.connect(lambda: self.import_options(self.EndRowspinBox.objectName(), self.EndRowspinBox.value()))
 
         ''' [Gabriele] The text separator value is confronted with the dict values and then assigned the correct symbol. <comma> --> ","'''
 
-        self.SeparatorcomboBox.currentTextChanged.connect(lambda: self.import_options(self.SeparatorcomboBox.objectName(),self.sep_dict[self.SeparatorcomboBox.currentText()]))
+        self.SeparatorcomboBox.currentTextChanged.connect(lambda: self.import_options(self.SeparatorcomboBox.objectName(), self.sep_dict[self.SeparatorcomboBox.currentText()]))
 
         self.PreviewButton.clicked.connect(lambda: self.preview_file(self.input_data_df))
-
 
         self.ConfirmBox.accepted.connect(self.import_func_dict[self.action.objectName()])
         self.ConfirmBox.rejected.connect(self.close)
 
         self.AssignTable.setColumnCount(3)
-        self.AssignTable.setHorizontalHeaderLabels(['Column name','Property name','Custom property name'])
-        self.AssignTable.setColumnWidth(1,200)
-        self.AssignTable.setColumnWidth(2,300)
+        self.AssignTable.setHorizontalHeaderLabels(['Column name', 'Property name', 'Custom property name'])
+        self.AssignTable.setColumnWidth(1, 200)
+        self.AssignTable.setColumnWidth(2, 300)
 
-
-
-    def import_options(self,origin,value):
+    def import_options(self, origin, value):
         '''[Gabriele]  Single function that manages all of the signals by adding to the import_options_dict a key,value pair corresponding to the origin object name and the set value.'''
         self.import_options_dict[origin] = value
 
@@ -561,19 +537,17 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
         """Show the Qt Window"""
         self.show()
 
-    def import_file(self,path=None):
+    def import_file(self, path=None):
         '''[Gabriele] Function used to read and preview a PC data file. The open_file_dialog function is used to obtain the file path. Once the file is chosen a different parser is used depending on the extension. Once the file is read the properties are autoassigned (where possible)'''
         if path == None:
-            self.import_options_dict['in_path'] = open_file_dialog(parent=self,caption='Import point cloud data',filter="All supported (*.txt *.csv *.xyz *.asc *.ply *.las *.laz);;Text files (*.txt *.csv *.xyz *.asc);;PLY files (*.ply);;LAS/LAZ files (*.las *.laz)")
+            self.import_options_dict['in_path'] = open_file_dialog(parent=self, caption='Import point cloud data', filter="All supported (*.txt *.csv *.xyz *.asc *.ply *.las *.laz);;Text files (*.txt *.csv *.xyz *.asc);;PLY files (*.ply);;LAS/LAZ files (*.las *.laz)")
             self.PathlineEdit.setText(self.import_options_dict['in_path'])
         else:
             self.import_options_dict['in_path'] = path
 
-
-
         try:
 
-            _,extension = os.path.splitext(self.import_options_dict['in_path'])
+            _, extension = os.path.splitext(self.import_options_dict['in_path'])
 
             if extension == '.las' or extension == '.laz':
                 self.input_data_df = self.las2df(self.import_options_dict['in_path'])
@@ -581,10 +555,9 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
             elif extension == '.ply':
                 self.input_data_df = self.ply2df(self.import_options_dict['in_path'])
             else:
-                self.input_data_df = self.csv2df(self.import_options_dict['in_path'],
-                                            self.import_options_dict['SeparatorcomboBox'])
+                self.input_data_df = self.csv2df(self.import_options_dict['in_path'], self.import_options_dict['SeparatorcomboBox'])
 
-            self.default_attr_list = ['As is','X','Y','Z','Red','Green','Blue','Intensity','Normals','User defined','N.a.']
+            self.default_attr_list = ['As is', 'X', 'Y', 'Z', 'Red', 'Green', 'Blue', 'Intensity', 'Normals', 'User defined', 'N.a.']
 
             '''[Gabriele]  Auto-assign values using the difflib library (internal). If there is no match then the column is not imported (N.a.). In this step the rename_dict dictionary is compiled where:
             - the keys correspond to the column index of the input df
@@ -597,11 +570,11 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
             col_names = list(self.input_data_df.columns)
             self.rename_dict = {}
 
-            remove_char_dict = {"/":"","\\":"","?":"","!":"","-":"","_":""} # [Gabriele] Forbidden characters that are removed from the names using the translate function
+            remove_char_dict = {"/": "", "\\": "", "?": "", "!": "", "-": "", "_": ""}  # [Gabriele] Forbidden characters that are removed from the names using the translate function
 
-            for i,attr in enumerate(col_names):
+            for i, attr in enumerate(col_names):
                 table = attr.maketrans(remove_char_dict)
-                matches = [dl.SequenceMatcher(None,attr.translate(table).lower(),string.lower()).ratio() for string in self.default_attr_list]
+                matches = [dl.SequenceMatcher(None, attr.translate(table).lower(), string.lower()).ratio() for string in self.default_attr_list]
                 match = max(matches)
 
                 if match > 0.8:
@@ -609,7 +582,7 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
                     self.rename_dict[i] = self.default_attr_list[index]
                 else:
                     self.rename_dict[i] = 'N.a.'
-            self.assign_data() # [Gabriele] Open the assign data ui.
+            self.assign_data()  # [Gabriele] Open the assign data ui.
         except ValueError:
             print('Could not preview: invalid column, row or separator')
         except FileNotFoundError:
@@ -618,15 +591,12 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
             self.AssignTable.setRowCount(0)
             self.dataView.setModel(None)
 
-
-    def preview_file(self,input_data_df):
+    def preview_file(self, input_data_df):
         '''[Gabriele]  Function used to preview the data using the PCDataModel. The column and row ranges are obtained to properly slice the preview table.'''
-        value_dict = {k:v for k,v in list(self.rename_dict.items()) if v != 'N.a.'}
+        value_dict = {k: v for k, v in list(self.rename_dict.items()) if v != 'N.a.'}
         index_list = list(value_dict.keys())
-        self.model = PCDataModel(self.input_data_df,index_list)
+        self.model = PCDataModel(self.input_data_df, index_list)
         self.dataView.setModel(self.model)
-
-
 
     def import_PC(self):
         '''[Gabriele]  Import the pc data in PZero. Here the information needed to read and properly import the whole file is prepared:
@@ -645,12 +615,11 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
         start_row = self.import_options_dict['StartRowspinBox']
         end_row = self.import_options_dict['EndRowspinBox']
 
-        row_range = range(start_row,end_row)
-
+        row_range = range(start_row, end_row)
 
         delimiter = self.import_options_dict['SeparatorcomboBox']
 
-        clean_dict = {k:v for k,v in list(self.rename_dict.items()) if v != 'N.a.'}
+        clean_dict = {k: v for k, v in list(self.rename_dict.items()) if v != 'N.a.'}
         col_names = list(clean_dict.values())
         index_list = list(clean_dict.keys())
 
@@ -658,18 +627,11 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
 
         x_pos = index_list[col_names.index('X')]
         y_pos = index_list[col_names.index('Y')]
-        offset = self.input_data_df.loc[0][[x_pos,y_pos]].round(-2)
-        pc2vtk(in_file_name=path,
-               col_names=col_names,
-               row_range=row_range,
-               usecols=index_list,
-               delimiter=delimiter,
-               offset=offset,
-               self=self,
-               header_row=0)
+        offset = self.input_data_df.loc[0][[x_pos, y_pos]].round(-2)
+        pc2vtk(in_file_name=path, col_names=col_names, row_range=row_range, usecols=index_list, delimiter=delimiter, offset=offset, self=self, header_row=0)
 
     # @profiler('../pz_pers/reports/readfile.csv',200)
-    def las2df(self,path):
+    def las2df(self, path):
         '''[Gabriele]  LAS/LAZ file parser.
         Reads .las and .laz file using the laspy package. The whole file is read and then processed in a dict cycling through the dim_names list. The dict then is converted in a pandas dataframe using the from_dict function.
         --------------------------------------------------------
@@ -697,7 +659,7 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
         df = pd.DataFrame.from_dict(prop_dict)
         return df
 
-    def csv2df(self,path,sep):
+    def csv2df(self, path, sep):
         '''[Gabriele]  csv file parser.
         It reads the specified csv file using pd.read_csv. Wrapped in a function so that it can be profiled.
         --------------------------------------------------------
@@ -711,11 +673,11 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
         --------------------------------------------------------
 
         '''
-        df = pd.read_csv(path,sep=sep,nrows=50,engine='c',index_col=False)
+        df = pd.read_csv(path, sep=sep, nrows=50, engine='c', index_col=False)
         return df
 
     # @profiler('../pz_pers/reports/readfile.csv',200)
-    def ply2df(self,path):
+    def ply2df(self, path):
         '''[Gabriele]  PLY file parser.
         It reads the first header lines to search for properties such as XYZ, RGB etcetc. When the "end_header" line is reached the file is read as a normal .csv file and parsed with pandas.read_csv skipping the header lines.
         --------------------------------------------------------
@@ -731,14 +693,14 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
         '''
         header = []
         end_line = 0
-        with open(path,'r') as f:
-            for i,line in enumerate(f):
-                if 'property' in line :
+        with open(path, 'r') as f:
+            for i, line in enumerate(f):
+                if 'property' in line:
                     header.append(line.split()[-1])
                 elif 'end_header' in line:
                     end_line = i
                     break
-        df = pd.read_csv(path,skiprows=end_line+1,delimiter=' ',names=header,engine='c',index_col=False,nrows=50)
+        df = pd.read_csv(path, skiprows=end_line + 1, delimiter=' ', names=header, engine='c', index_col=False, nrows=50)
         return df
 
     def assign_data(self):
@@ -749,7 +711,7 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
 
         self.AssignTable.setRowCount(len(col_names))
 
-        for i,col in enumerate(col_names):
+        for i, col in enumerate(col_names):
             '''[Gabriele]  To create the assign menu we cicle through the column names and assign the comboBox text to the corresponding rename_dict item if the item is contained in the default_attr_list'''
             self.ColnameItem = QtWidgets.QTableWidgetItem()
             self.ColnameItem.setText(str(col_names[i]))
@@ -762,24 +724,23 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
             self.ScalarnameLine.setObjectName(f'ScalarnameLine{i}')
             self.ScalarnameLine.setEnabled(False)
             self.ScalarnameLine.returnPressed.connect(lambda: ass_scalar())
-            self.AssignTable.setItem(i,0,self.ColnameItem)
-            self.AssignTable.setCellWidget(i,1,self.AttrcomboBox)
-            self.AssignTable.setCellWidget(i,2,self.ScalarnameLine)
-            LineList.append(self.AssignTable.cellWidget(i,2))
+            self.AssignTable.setItem(i, 0, self.ColnameItem)
+            self.AssignTable.setCellWidget(i, 1, self.AttrcomboBox)
+            self.AssignTable.setCellWidget(i, 2, self.ScalarnameLine)
+            LineList.append(self.AssignTable.cellWidget(i, 2))
 
             if self.rename_dict[i] in self.default_attr_list:
-                self.AssignTable.cellWidget(i,1).setCurrentText(self.rename_dict[i])
+                self.AssignTable.cellWidget(i, 1).setCurrentText(self.rename_dict[i])
             elif 'user_' in self.rename_dict[i]:
-                self.AssignTable.cellWidget(i,1).setCurrentText('User defined')
-                self.AssignTable.cellWidget(i,2).setEnabled(True)
-                self.AssignTable.cellWidget(i,2).setText(self.rename_dict[i])
+                self.AssignTable.cellWidget(i, 1).setCurrentText('User defined')
+                self.AssignTable.cellWidget(i, 2).setEnabled(True)
+                self.AssignTable.cellWidget(i, 2).setText(self.rename_dict[i])
 
             else:
-                self.AssignTable.cellWidget(i,1).setCurrentText('As is')
+                self.AssignTable.cellWidget(i, 1).setCurrentText('As is')
 
-            self.AssignTable.setCellWidget(i,2,self.ScalarnameLine)
-            self.AssignTable.horizontalHeader().setSectionResizeMode(0,QtWidgets.QHeaderView.ResizeToContents)
-
+            self.AssignTable.setCellWidget(i, 2, self.ScalarnameLine)
+            self.AssignTable.horizontalHeader().setSectionResizeMode(0, QtWidgets.QHeaderView.ResizeToContents)
 
         # self.resize(750, 600) #[Gabriele] Set appropriate window size
 
@@ -791,27 +752,28 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
             index = self.AssignTable.indexAt(clicked)
             col = index.column()
             row = index.row()
-            sel_combo = self.AssignTable.cellWidget(row,col) # [Gabriele] Combobox @ row and column
+            sel_combo = self.AssignTable.cellWidget(row, col)  # [Gabriele] Combobox @ row and column
 
             '''[Gabriele] Use a dict to rename the columns. The keys are the column index of the original df while the values are the new names. '''
 
             if sel_combo.currentText() == 'User defined':
-                self.AssignTable.cellWidget(row,2).setEnabled(True)
-                self.AssignTable.cellWidget(row,2).setPlaceholderText('user_')
+                self.AssignTable.cellWidget(row, 2).setEnabled(True)
+                self.AssignTable.cellWidget(row, 2).setPlaceholderText('user_')
 
             elif sel_combo.currentText() == 'As is':
                 self.rename_dict[row] = df.columns[row]
                 # self.AssignTable.cellWidget(row,2).clear()
-                self.AssignTable.cellWidget(row,2).setEnabled(False)
+                self.AssignTable.cellWidget(row, 2).setEnabled(False)
             else:
                 items = list(self.rename_dict.values())
-                self.AssignTable.cellWidget(row,2).clear()
-                self.AssignTable.cellWidget(row,2).setEnabled(False)
+                self.AssignTable.cellWidget(row, 2).clear()
+                self.AssignTable.cellWidget(row, 2).setEnabled(False)
                 if sel_combo.currentText() in items and sel_combo.currentText() != 'N.a.':
                     print('Item already assigned')
                 else:
                     self.rename_dict[row] = sel_combo.currentText()
             self.preview_file(self.input_data_df)
+
         def ass_scalar():
 
             clicked = QtWidgets.QApplication.focusWidget().pos()

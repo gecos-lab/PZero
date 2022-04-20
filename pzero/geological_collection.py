@@ -65,7 +65,7 @@ class GeologicalCollection(QAbstractTableModel):
                               "fold_axis"]
 
     """List of valid data types."""
-    valid_topological_type = ["VertexSet", "PolyLine", "TriSurf", "XsPolyLine"]
+    valid_topological_type = ["VertexSet", "PolyLine", "TriSurf", "XsVertexSet", "XsPolyLine"]
 
     """Initialize GeologicalCollection table. Column headers are taken from
     GeologicalCollection.geological_entity_dict.keys(), and parent is supposed to be the project_window."""
