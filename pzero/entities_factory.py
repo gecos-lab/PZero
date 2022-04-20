@@ -340,13 +340,10 @@ class PolyData(vtk.vtkPolyData):
     def get_point_data(self, data_key=None):
         """Returns a point data attribute as Numpy array. This cannot be converted to
         a property method since the key of the attribute must be specified."""
-        if isinstance(self, (VertexSet, PolyLine, TriSurf, TetraSolid, XsVertexSet, XsPolyLine)):
+        if isinstance(self, (VertexSet, PolyLine, TriSurf, TetraSolid, XsVertexSet, XsPolyLine, PCDom)):
             """For vector entities return a n-by-m-dimensional array where n is the
             number of points and m is the number of components of the attribute."""
             point_data = dsa.WrapDataObject(self).PointData[data_key].reshape((self.get_point_data_shape(data_key=data_key)[0], self.get_point_data_shape(data_key=data_key)[1]))
-        elif isinstance(self, PolyData):
-            '''[Gabriele]  For point entities we don't need to reshape'''
-            point_data = dsa.WrapDataObject(self).PointData[data_key]
         """We use np.squeeze to remove axes with length 1, so a 1D array will be returned with shape (n, ) and not with shape (n, 1)."""
         return np.squeeze(point_data)
 
@@ -365,7 +362,7 @@ class PolyData(vtk.vtkPolyData):
             return [n_points, n_components]
 
     def get_point_data_type(self, data_key=None):
-        '''[Gabriele] Get point data type'''  
+        '''[Gabriele] Get point data type'''
         return dsa.WrapDataObject(self).PointData[data_key].dtype.name
 
     def set_point_data(self, data_key=None, attribute_matrix=None):

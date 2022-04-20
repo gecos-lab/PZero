@@ -155,6 +155,8 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
     def show_qt_canvas(self):
         """Show the Qt Window"""
         self.show()
+        if isinstance(self, View3D):
+            self.cam_orient_widget.On() # [Gabriele] The orientation widget needs to be turned on AFTER the canvas is shown
 
     """Methods used to build and update the geology and topology trees."""
 
@@ -1772,10 +1774,9 @@ class View3D(BaseView):
         self.ViewFrameLayout.addWidget(self.plotter.interactor)
         # self.plotter.show_axes_all()
 
-        # [Gabriele] Set cool orientation gimble
+        # [Gabriele] Set cool orientation gimble (turned on after the qt canvas is shown)
         self.cam_orient_widget = vtkCameraOrientationWidget()
         self.cam_orient_widget.SetParentRenderer(self.plotter.renderer)
-        self.cam_orient_widget.On()
 
         # [Gabriele] Set horizontal default orientation because the vertical colorbar interferes with the gimble
         pv.global_theme.colorbar_orientation = 'horizontal'

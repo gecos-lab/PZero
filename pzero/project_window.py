@@ -21,6 +21,7 @@ from .boundary_collection import BoundaryCollection
 from .legend_manager import Legend
 from .properties_manager import PropertiesCMaps
 from .gocad2vtk import gocad2vtk, vtk2gocad, gocad2vtk_section, gocad2vtk_boundary
+from .pc2vtk import pc2vtk
 from .pyvista2vtk import pyvista2vtk
 from .vedo2vtk import vedo2vtk
 from .shp2vtk import shp2vtk
@@ -125,7 +126,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.actionImportGocadXsection.triggered.connect(self.import_gocad_section)
         self.actionImportGocadBoundary.triggered.connect(self.import_gocad_boundary)
         self.actionImportPyvista.triggered.connect(lambda: pyvista2vtk(self=self))
-        self.actionImportPC.triggered.connect(lambda: import_dialog(parent=self))
+        self.actionImportPC.triggered.connect(self.import_PC)
         self.actionImportVedo.triggered.connect(lambda: vedo2vtk(self=self))
         self.actionImportSHP.triggered.connect(self.import_SHP)
         self.actionImportDEM.triggered.connect(self.import_DEM)
@@ -944,12 +945,13 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             self.TextTerminal.appendPlainText('in_file_name: ' + in_file_name)
             gocad2vtk_boundary(self=self, in_file_name=in_file_name, uid_from_name=False)
 
-    def import_PC(self):  # ________________________________________________________________________________________________________ MAKE THIS SIMILAR TO OTHER DIALOGUES AND MOVE THE IMPORT INTERFACE IN THE MODULE
+    def import_PC(self):
         """Import point cloud data. File extension dependent (.txt, .xyz, .las) -> Ui_ImportOptionsWindow ui to preview the data (similar to stereonet)"""
-        self.window = QMainWindow()
-        self.ui = Ui_ImportOptionsWindow(self)
-        self.ui.setupUi(self.window)
-        self.window.show()
+        args = import_dialog(self).args
+        if args:
+            in_file_name,col_names,row_range,index_list,delimiter,offset,origin = args
+            self.TextTerminal.appendPlainText('in_file_name: ' + in_file_name)
+            pc2vtk(in_file_name=in_file_name, col_names=col_names, row_range=row_range, usecols=index_list, delimiter=delimiter, offset=offset, self=origin, header_row=0)
 
     def import_SHP(self):  # __________________________________________________________________ UPDATE IN shp2vtk.py OR DUPLICATE THIS TO IMPORT SHP GEOLOGY OR BOUNDARY
         """Import SHP file and update geological collection."""
