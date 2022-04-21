@@ -459,6 +459,8 @@ class PCDataModel(QtCore.QAbstractTableModel):
         if index.isValid():
             if role == QtCore.Qt.DisplayRole:
                 return str(self.data.iloc[index.row(), index.column()])  # if role == QtCore.Qt.BackgroundRole and index.column() in self.index_list:  # return QColor(QtCore.Qt.green)
+            if role == QtCore.Qt.BackgroundRole and index.column() in self.index_list:
+                return QColor(QtCore.Qt.green)  # [Gabriele] Set the color
         return None
 
     '''[Gabriele] Set header and index If the "container" is horizontal (orientation index 1) and has a display role (index 0) (-> is the header of the table). If the "container" is vertical (orientation index 2) and has a display role (index 0) (-> is the index of the table).'''
@@ -466,8 +468,6 @@ class PCDataModel(QtCore.QAbstractTableModel):
     def headerData(self, col, orientation, role):
         if orientation == QtCore.Qt.Horizontal and role == QtCore.Qt.DisplayRole:
             return str(self.data.columns[col])  # [Gabriele] Set the header names
-        if orientation == QtCore.Qt.Horizontal and role == QtCore.Qt.BackgroundRole and col in self.index_list:
-            return QColor(QtCore.Qt.green)  # [Gabriele] Set the color
         if orientation == QtCore.Qt.Vertical and role == QtCore.Qt.DisplayRole:
             return self.data.index[col]  # [Gabriele] Set the indexes
         return None
@@ -493,11 +493,14 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
 
     def __init__(self, parent=None, *args, **kwargs):
 
+        self.loop = QtCore.QEventLoop()  # Create a QEventLoop necessary to stop the main loop
         super(import_dialog, self).__init__(parent, *args, **kwargs)
         self.setupUi(self)
 
         self.parent = parent
         self.action = self.sender()  # [Gabriele] Name of the actionmenu from which the import function was called.
+
+        self.args = []
 
         '''[Gabriele]  To generalize the import menu we can use the import_func_dict that has keys that correspond to the action name (eg actionImportPC) and items to the function (eg import_PC). If a new action needs to use this interface we can add to the dict the object name of the action and add a new function. This gives more flexibility in the importers output since it doesn't depend on a single function.
 
@@ -505,7 +508,7 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
             NameOfActionMenu: self.import_func()'''
 
         self.import_func_dict = {'actionImportPC': self.import_PC}
-        self.show_qt_canvas()
+
 
         '''[Gabriele]  Different types of signals depending on the field in the import options'''
         self.PathtoolButton.clicked.connect(lambda: self.import_file())
@@ -529,6 +532,8 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
         self.AssignTable.setColumnWidth(1, 200)
         self.AssignTable.setColumnWidth(2, 300)
 
+        self.show_qt_canvas()
+
     def import_options(self, origin, value):
         '''[Gabriele]  Single function that manages all of the signals by adding to the import_options_dict a key,value pair corresponding to the origin object name and the set value.'''
         self.import_options_dict[origin] = value
@@ -536,6 +541,7 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
     def show_qt_canvas(self):
         """Show the Qt Window"""
         self.show()
+        self.loop.exec_()  # Execute the QEventLoop
 
     def import_file(self, path=None):
         '''[Gabriele] Function used to read and preview a PC data file. The open_file_dialog function is used to obtain the file path. Once the file is chosen a different parser is used depending on the extension. Once the file is read the properties are autoassigned (where possible)'''
@@ -628,7 +634,11 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
         x_pos = index_list[col_names.index('X')]
         y_pos = index_list[col_names.index('Y')]
         offset = self.input_data_df.loc[0][[x_pos, y_pos]].round(-2)
-        pc2vtk(in_file_name=path, col_names=col_names, row_range=row_range, usecols=index_list, delimiter=delimiter, offset=offset, self=self, header_row=0)
+        self.args = [path,col_names,row_range,index_list,delimiter,offset,self]
+        self.close()
+        self.loop.quit()
+        # [Gabriele] Would be more convinient to import from here. This way we can modify the import parameters without opening every time the dialog.
+        # pc2vtk(in_file_name=path, col_names=col_names, row_range=row_range, usecols=index_list, delimiter=delimiter, offset=offset, self=self, header_row=0)
 
     # @profiler('../pz_pers/reports/readfile.csv',200)
     def las2df(self, path):
@@ -786,3 +796,6 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
             self.rename_dict[row] = scal_name
             sel_line.setText(scal_name)
             self.preview_file(self.input_data_df)
+    def close_ui(self):
+        self.close()
+        self.loop.quit()
