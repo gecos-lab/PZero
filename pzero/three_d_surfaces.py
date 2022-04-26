@@ -13,7 +13,7 @@ from .helper_dialogs import multiple_input_dialog, input_one_value_dialog, input
 from .entities_factory import TriSurf, XsPolyLine, PolyLine, VertexSet, Voxet, XsVoxet, XsTriSurf, XsVertexSet, MapImage, DEM
 
 """LoopStructural import(s)"""
-import LoopStructural as loop3d  # which name?
+from LoopStructural import GeologicalModel
 
 
 def interpolation_delaunay_2d(self):
@@ -302,7 +302,7 @@ def implicit_model_loop_structural(self):
     * ``damp - bool`` - whether to add a small number to the diagonal of the interpolation matrix for discrete interpolators - this can help speed up the solver and makes the solution more stable for some interpolators"""
     print("-> create model...")
     tic()
-    model = loop3d.GeologicalModel(origin, maximum)
+    model = GeologicalModel(origin, maximum)
     toc()
     """Link the input data dataframe to the model."""
     print("-> set_model_data...")

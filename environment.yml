@@ -4,20 +4,18 @@ channels:
   - conda-forge
   - defaults
 dependencies:
-  - python=3.8
+  - python=3.9
+  - rasterio
+  - xarray
   - scipy
   - matplotlib
-  - numpy
-  - pandas
+  - geopandas
+  - shapely
+  - vedo
+  - pyvistaqt
+  - pyvista
+  - laspy
+  - ezdxf
+  - loopstructural
   - cmocean
   - colorcet
-  - shapely
-  - xarray
-  - geopandas
-  - rasterio
-  - pyvistaqt
-  - vedo
-  - pyvista
-  - ezdxf
-  - laspy
-  - loopstructural
