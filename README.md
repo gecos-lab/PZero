@@ -146,7 +146,7 @@ pip3 install -r /path/to/requirements.txt
 After the required packages are installed **PZero** can be run with:
 
 ```bash
-python3 pzero_run.py
+python3 pzero.py
 ```
 
 ### Conda installation (optional):
