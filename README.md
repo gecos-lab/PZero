@@ -42,7 +42,7 @@ conda activate pzero
 Then you can start PZero with:
 
 ```
-python pzero_run.py
+python pzero.py
 ```
 
 To activate and deactivate the pzero environment, and in case you want to remove it completely, use respectively (in ```conda terminal```):
@@ -112,7 +112,7 @@ pip3 install -r requirements.txt
 And finally ***PZero*** can be run with:
 
 ```
-python3 pzero_run.py
+python3 pzero.py
 ```
 
 ### Quick and easy installation on Linux (debian) using pip
