@@ -2,7 +2,7 @@
 PZero© Andrea Bistacchi"""
 
 """Import as much as possible as from <module> import <class> or <class as ...>"""
-import vtk
+from vtk import vtkPoints
 from numpy import array as np_array
 from numpy import set_printoptions as np_set_printoptions
 from pandas import DataFrame as pd_DataFrame
@@ -86,7 +86,7 @@ def boundary_from_points(self):
         """Build Boundary as volume"""
         boundary_dict['topological_type'] = 'TriSurf'
         boundary_dict['vtk_obj'] = TriSurf()
-        nodes = vtk.vtkPoints()
+        nodes = vtkPoints()
         nodes.InsertPoint(0, boundary_dict_updt['origin_x'], boundary_dict_updt['origin_y'], boundary_dict_updt['bottom'])
         nodes.InsertPoint(1, boundary_dict_updt['end_x'], boundary_dict_updt['origin_y'], boundary_dict_updt['bottom'])
         nodes.InsertPoint(2, boundary_dict_updt['end_x'], boundary_dict_updt['end_y'], boundary_dict_updt['bottom'])

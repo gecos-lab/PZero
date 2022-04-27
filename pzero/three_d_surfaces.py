@@ -197,6 +197,7 @@ def implicit_model_loop_structural(self):
     all_input_data_df = pd.DataFrame(columns=list(loop_input_dict.keys()))
     """For every selected item extract interesting data: XYZ, feature_name, val, etc."""
     prgs_bar = progress_dialog(max_value=len(input_uids), title_txt="Input dataframe", label_txt="Adding geological objects to input dataframe...", cancel_txt=None, parent=self)
+    print(len(input_uids))
     for uid in input_uids:
         """Create empty dataframe to collect input data for this object."""
         entity_input_data_df = pd.DataFrame(columns=list(loop_input_dict.keys()))
@@ -218,7 +219,9 @@ def implicit_model_loop_structural(self):
         """Append dataframe for this input entity to the general input dataframe."""
         all_input_data_df = all_input_data_df.append(entity_input_data_df, ignore_index=True)
         prgs_bar.add_one()
+        print(prgs_bar)
     toc()
+    prgs_bar.close()
     """Drop columns with no valid value (i.e. all NaNs)."""
     print("-> drop empty columns...")
     tic()
