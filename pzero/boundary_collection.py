@@ -1,10 +1,13 @@
 """boundary_collection.py
 PZero© Andrea Bistacchi"""
 
-import numpy as np
-import pandas as pd
-import uuid
+"""Import as much as possible as from <module> import <class> or <class as ...>"""
 import vtk
+from numpy import array as np_array
+from numpy import set_printoptions as np_set_printoptions
+from pandas import DataFrame as pd_DataFrame
+from pandas import set_option as pd_set_option
+from uuid import uuid4 as uuid_uuid4
 from copy import deepcopy
 from PyQt5.QtCore import QAbstractTableModel, Qt, QVariant
 from .windows_factory import NavigationToolbar
@@ -17,11 +20,11 @@ pd_desired_width = 800
 pd_max_columns = 20
 pd_show_precision = 4
 pd_max_colwidth = 80
-pd.set_option('display.width', pd_desired_width)
-np.set_printoptions(linewidth=pd_desired_width)
-pd.set_option('display.max_columns', pd_max_columns)
-pd.set_option('display.precision', pd_show_precision)
-pd.set_option('display.max_colwidth', pd_max_colwidth)
+pd_set_option('display.width', pd_desired_width)
+np_set_printoptions(linewidth=pd_desired_width)
+pd_set_option('display.max_columns', pd_max_columns)
+pd_set_option('display.precision', pd_show_precision)
+pd_set_option('display.max_colwidth', pd_max_colwidth)
 
 
 """"Methods used to create boundaries. TO BE MOVED IN ANOTHER MODULE - WORKS IN MAP VIEW?? ________________________________"""
@@ -93,18 +96,18 @@ def boundary_from_points(self):
         nodes.InsertPoint(6, boundary_dict_updt['end_x'], boundary_dict_updt['end_y'], boundary_dict_updt['top'])
         nodes.InsertPoint(7, boundary_dict_updt['origin_x'], boundary_dict_updt['end_y'], boundary_dict_updt['top'])
         boundary_dict['vtk_obj'].SetPoints(nodes)
-        boundary_dict['vtk_obj'].append_cell(np.array([0, 1, 4]))
-        boundary_dict['vtk_obj'].append_cell(np.array([1, 4, 5]))
-        boundary_dict['vtk_obj'].append_cell(np.array([1, 2, 5]))
-        boundary_dict['vtk_obj'].append_cell(np.array([2, 5, 6]))
-        boundary_dict['vtk_obj'].append_cell(np.array([2, 3, 6]))
-        boundary_dict['vtk_obj'].append_cell(np.array([3, 6, 7]))
-        boundary_dict['vtk_obj'].append_cell(np.array([0, 4, 7]))
-        boundary_dict['vtk_obj'].append_cell(np.array([0, 3, 7]))
-        boundary_dict['vtk_obj'].append_cell(np.array([4, 6, 7]))
-        boundary_dict['vtk_obj'].append_cell(np.array([4, 5, 6]))
-        boundary_dict['vtk_obj'].append_cell(np.array([0, 1, 3]))
-        boundary_dict['vtk_obj'].append_cell(np.array([1, 2, 3]))
+        boundary_dict['vtk_obj'].append_cell(np_array([0, 1, 4]))
+        boundary_dict['vtk_obj'].append_cell(np_array([1, 4, 5]))
+        boundary_dict['vtk_obj'].append_cell(np_array([1, 2, 5]))
+        boundary_dict['vtk_obj'].append_cell(np_array([2, 5, 6]))
+        boundary_dict['vtk_obj'].append_cell(np_array([2, 3, 6]))
+        boundary_dict['vtk_obj'].append_cell(np_array([3, 6, 7]))
+        boundary_dict['vtk_obj'].append_cell(np_array([0, 4, 7]))
+        boundary_dict['vtk_obj'].append_cell(np_array([0, 3, 7]))
+        boundary_dict['vtk_obj'].append_cell(np_array([4, 6, 7]))
+        boundary_dict['vtk_obj'].append_cell(np_array([4, 5, 6]))
+        boundary_dict['vtk_obj'].append_cell(np_array([0, 1, 3]))
+        boundary_dict['vtk_obj'].append_cell(np_array([1, 2, 3]))
     uid = self.parent.boundary_coll.add_entity_from_dict(entity_dict=boundary_dict)
     """Un-Freeze QT interface"""
     for action in self.findChildren(QAction):
@@ -145,7 +148,7 @@ class BoundaryCollection(QAbstractTableModel):
         self.parent = parent
 
         """Initialize Pandas dataframe."""
-        self.df = pd.DataFrame(columns=list(self.boundary_entity_dict.keys()))
+        self.df = pd_DataFrame(columns=list(self.boundary_entity_dict.keys()))
 
         """Here we use .columns.get_indexer to get indexes of the columns that we would like to be editable in the QTableView"""
         self.editable_columns = self.df.columns.get_indexer(["name"])
@@ -156,7 +159,7 @@ class BoundaryCollection(QAbstractTableModel):
         """Add entity to collection from dictionary.
         Create a new uid if it is not included in the dictionary."""
         if not entity_dict['uid']:
-            entity_dict['uid'] = str(uuid.uuid4())
+            entity_dict['uid'] = str(uuid_uuid4())
         """"Append new row to dataframe. Note that the 'append()' method for Pandas dataframes DOES NOT
         work in place, hence a NEW dataframe is created every time and then substituted to the old one."""
         self.df = self.df.append(entity_dict, ignore_index=True)
