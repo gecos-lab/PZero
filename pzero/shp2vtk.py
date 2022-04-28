@@ -54,17 +54,17 @@ def shp2vtk(self=None, in_file_name=None):
             # if gdf.is_valid[row] and not gdf.is_empty[row]:
             try:
                 if "name" in column_names:
-                    curr_obj_dict["name"] = gdf[row, "name"]
+                    curr_obj_dict["name"] = gdf.loc[row, "name"]
                 if "geological_type" in column_names:
-                    curr_obj_dict["geological_type"] = gdf[row, "geological_type"]
+                    curr_obj_dict["geological_type"] = gdf.loc[row, "geological_type"]
                 if "geo_type" in column_names:
-                    curr_obj_dict["geological_type"] = gdf[row, "geo_type"]
+                    curr_obj_dict["geological_type"] = gdf.loc[row, "geo_type"]
                 if "geological_feature" in column_names:
-                    curr_obj_dict["geological_feature"] = gdf[row, "geological_feature"]
+                    curr_obj_dict["geological_feature"] = gdf.loc[row, "geological_feature"]
                 if "geo_feat" in column_names:
-                    curr_obj_dict["geological_feature"] = gdf[row, "geo_feat"]
+                    curr_obj_dict["geological_feature"] = gdf.loc[row, "geo_feat"]
                 if "scenario" in column_names:
-                    curr_obj_dict["scenario"] = gdf[row, "scenario"]
+                    curr_obj_dict["scenario"] = gdf.loc[row, "scenario"]
                 curr_obj_dict["topological_type"] = "PolyLine"
                 curr_obj_dict["vtk_obj"] = PolyLine()
                 outXYZ = np.array(gdf.loc[row].geometry)
