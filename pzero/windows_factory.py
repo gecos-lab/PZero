@@ -14,7 +14,7 @@ from .helper_dialogs import input_one_value_dialog, input_text_dialog, input_com
 # from copy import deepcopy
 
 """Maths imports"""
-import math
+from math import degrees, sqrt, atan2
 import numpy as np
 import pandas as pd
 
@@ -25,7 +25,7 @@ from vtk.util import numpy_support
 from vtkmodules.vtkInteractionWidgets import vtkCameraOrientationWidget
 
 """3D plotting imports"""
-import pyvista as pv
+from pyvista import global_theme as pv_global_theme
 from pyvistaqt import QtInteractor as pvQtInteractor
 
 """2D plotting imports"""
@@ -1779,7 +1779,7 @@ class View3D(BaseView):
         self.cam_orient_widget.SetParentRenderer(self.plotter.renderer)
 
         # [Gabriele] Set horizontal default orientation because the vertical colorbar interferes with the gimble
-        pv.global_theme.colorbar_orientation = 'horizontal'
+        pv_global_theme.colorbar_orientation = 'horizontal'
 
 
     def change_actor_color(self, uid=None, collection=None):
@@ -2092,7 +2092,7 @@ class View3D(BaseView):
             The is is needed to avoid sending the camera to the origin that is the
             default position before any mesh is plotted."""
             camera_position = self.plotter.camera_position
-        if show_property_title is not None:
+        if show_property_title is not None and show_property_title != 'none':
             show_property_cmap = self.parent.prop_legend_df.loc[self.parent.prop_legend_df['property_name'] == show_property_title, "colormap"].values[0]
             print(show_property_cmap)
         else:
@@ -2627,8 +2627,8 @@ class View2D(BaseView):
                     self.vbm_Vf = event.ydata # save final Y data
                     self.temp_vbm_dU = event.xdata - self.temp_vbm_U0
                     self.temp_vbm_dV = event.ydata - self.temp_vbm_V0
-                    self.temp_vbm_length = math.sqrt(self.temp_vbm_dU ** 2 + self.temp_vbm_dV ** 2)
-                    self.temp_vbm_azimuth = math.degrees(math.atan2(self.temp_vbm_dU, self.temp_vbm_dV))
+                    self.temp_vbm_length = sqrt(self.temp_vbm_dU ** 2 + self.temp_vbm_dV ** 2)
+                    self.temp_vbm_azimuth = degrees(atan2(self.temp_vbm_dU, self.temp_vbm_dV))
                     self.temp_vbm_line.set_data([self.temp_vbm_U0, event.xdata], [self.temp_vbm_V0, event.ydata])
                     self.temp_vbm_line.figure.canvas.draw()  # ________________WE NEED SOMETHING HERE TO SHOW THESE VALUES IN REAL TIME____________________________________________  # self.text_msg.set_text("dU: {0:.2f} dV: {1:.2f} length: {2:d} azimuth: {3:d}".format(self.temp_vbm_dU,  #                                                                                     self.temp_vbm_dV,  #                                                                                     self.temp_vbm_length,  #                                                                                     self.temp_vbm_azimuth))
                 except:
