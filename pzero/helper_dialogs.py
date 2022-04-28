@@ -17,7 +17,7 @@ from os import path as os_path
 from numpy import c_ as np_c_
 # from .pc2vtk import pc2vtk
 from difflib import SequenceMatcher
-# from csv import Sniffer
+from .helper_functions import auto_sep
 
 def options_dialog(title=None, message=None, yes_role=None, no_role=None, reject_role=None):
     """Generic message box with title, message, and three buttons.
@@ -485,7 +485,7 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
 
     import_options_dict = {'in_path': '', 'StartRowspinBox': 0, 'EndRowspinBox': 100, 'SeparatorcomboBox': ' '}
 
-    '''[Gabriele]  Different types of separators. By writing not using the symbol as a display we can avoid possible confusion between similar separators (e.g tab and space)'''
+    '''[Gabriele]  Different types of separators. By writing not using the symbol as a display we can avoid possible confusion between similar separators (e.g tab and space)-> now the separator is auto assigned with the auto_sep function'''
     sep_dict = {'<space>': ' ', '<comma>': ',', '<semi-col>': ';', '<tab>': '   '}
 
     def __init__(self, parent=None, *args, **kwargs):
@@ -558,7 +558,7 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
             elif extension == '.ply':
                 self.input_data_df = self.ply2df(self.import_options_dict['in_path'])
             else:
-                self.input_data_df = self.csv2df(self.import_options_dict['in_path'], self.import_options_dict['SeparatorcomboBox'])
+                self.input_data_df = self.csv2df(self.import_options_dict['in_path'])
 
             self.default_attr_list = ['As is', 'X', 'Y', 'Z', 'Red', 'Green', 'Blue', 'Intensity', 'Normals', 'User defined', 'N.a.']
 
@@ -666,7 +666,7 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
         df = pd_DataFrame.from_dict(prop_dict)
         return df
 
-    def csv2df(self, path, sep):
+    def csv2df(self, path):
         '''[Gabriele]  csv file parser.
         It reads the specified csv file using pd_read_csv. Wrapped in a function so that it can be profiled.
         --------------------------------------------------------
@@ -680,6 +680,8 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
         --------------------------------------------------------
 
         '''
+        sep = auto_sep(path)
+        self.SeparatorcomboBox.setCurrentIndex(list(self.sep_dict.values()).index(sep))
         df = pd_read_csv(path, sep=sep, nrows=50, engine='c', index_col=False)
         return df
 

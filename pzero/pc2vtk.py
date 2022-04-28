@@ -12,15 +12,18 @@ import numpy as np
 import os
 from copy import deepcopy
 from vtk import vtkPoints,vtkCellArray, vtkPointSet
-import uuid
+from uuid import uuid4
 from .entities_factory import PCDom
 from .dom_collection import DomCollection
 from pyvista import PolyData as PlD
 from pyvista import vtk_points
 # import pyvista as pv
-import pandas as pd
-import laspy as lp
-from .helper_functions import profiler
+from pandas import DataFrame as pd_df
+from pandas import to_numeric as pd_to_numeric
+from pandas import read_csv as pd_read_csv
+
+from laspy import read as lp_read
+# from .helper_functions import profiler
 
 
 def pc2vtk(in_file_name,col_names,row_range,header_row,usecols,delimiter,offset,self=None):
@@ -50,10 +53,10 @@ def pc2vtk(in_file_name,col_names,row_range,header_row,usecols,delimiter,offset,
                 if 'end_header' in line:
                     index = i
                     break
-        input_df = pd.read_csv(in_file_name,skiprows=index+1+skiprows,usecols=usecols,delimiter=delimiter,names=col_names,index_col=False,nrows=nrows)
+        input_df = pd_read_csv(in_file_name,skiprows=index+1+skiprows,usecols=usecols,delimiter=delimiter,names=col_names,index_col=False,nrows=nrows)
 
     elif ext == '.las' or ext == '.laz':
-        las_data = lp.read(in_file_name)
+        las_data = lp_read(in_file_name)
         dim_names = las_data.point_format.dimension_names
         prop_dict = dict()
         for dim in dim_names:
@@ -63,18 +66,18 @@ def pc2vtk(in_file_name,col_names,row_range,header_row,usecols,delimiter,offset,
             else:
                 prop_dict[dim] = np.c_[las_data[dim]].flatten()
         if row_range:
-            input_df = pd.DataFrame.from_dict(prop_dict).iloc[row_range,usecols]
+            input_df = pd_df.from_dict(prop_dict).iloc[row_range,usecols]
         else:
-            input_df = pd.DataFrame.from_dict(prop_dict).iloc[:,usecols]
+            input_df = pd_df.from_dict(prop_dict).iloc[:,usecols]
         input_df.columns = col_names
 
     else:
-        input_df = pd.read_csv(in_file_name,delimiter=delimiter,usecols=usecols,skiprows=skiprows,nrows=nrows,names=col_names)
+        input_df = pd_read_csv(in_file_name,delimiter=delimiter,usecols=usecols,skiprows=skiprows,nrows=nrows,names=col_names)
 
     print('2. Checking the data')
 
     # [Gabriele] Check if in the whole dataset there are NaNs text and such
-    val_check = input_df.apply(lambda c: pd.to_numeric(c, errors='coerce').notnull().all())
+    val_check = input_df.apply(lambda c: pd_to_numeric(c, errors='coerce').notnull().all())
 
 
 
@@ -123,7 +126,7 @@ def pc2vtk(in_file_name,col_names,row_range,header_row,usecols,delimiter,offset,
 
         """Create dictionary."""
         curr_obj_attributes = deepcopy(DomCollection.dom_entity_dict)
-        curr_obj_attributes['uid'] = str(uuid.uuid4())
+        curr_obj_attributes['uid'] = str(uuid4())
         curr_obj_attributes['name'] = basename
         curr_obj_attributes['dom_type'] = "PCDom"
         curr_obj_attributes['texture_uids'] = []
