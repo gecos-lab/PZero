@@ -439,6 +439,26 @@ class VertexSet(PolyData):
         vset_copy.DeepCopy(self)
         return vset_copy
 
+    def auto_cells(self,point):
+        """Set cells automatically assuming that the vertexes are in the correct order,
+        from first to last, and that the polyline is a single part."""
+        if self.GetNumberOfCells() != 0:
+            """Remove all cells. This is obtained calling DeleteCells without any
+            argument and in this case RemoveDeletedCells() is not necessary."""
+            self.DeleteCells()
+            self.GetVerts().Modified()
+
+
+
+        points = vtk.vtkPoints() #[Gabriele] points object
+        vertices = vtk.vtkCellArray() #[Gabriele] vertices (cells)
+        vertices.InsertNextCell(1) #[Gabriele] set n cells with n= number of points in the dataset
+        pid = points.InsertNextPoint(point[0])
+        vertices.InsertCellPoint(pid)
+        self.SetPoints(points) #[Gabriele] Assign the points to the point_cloud (vtkPolyData)
+        self.SetVerts(vertices) #[Gabriele] Assign the vertices to the point_cloud (vtkPolyData)
+        self.Modified()
+        self.Modified()
 
 class PolyLine(PolyData):  # _____________________________ HERE WE MUST DECIDE WHETHER TO USE LINE (TYPE = 3) OR POLYLINE (TYPE = 4) CELLS - NOT BOTH - POLYLINE COULD BE USEFUL FOR MULTI-PART
     """PolyLine is a polyline derived from BaseEntity and vtk.vtkPolyData"""

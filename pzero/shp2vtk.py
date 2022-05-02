@@ -87,7 +87,46 @@ def shp2vtk(self=None, in_file_name=None):
                 print("Invalid object")
             del curr_obj_dict
     elif gdf.geom_type[0] == "Point":
-        print("VertexSet not yet implemented.")
+        for row in range(gdf.shape[0]):
+            print("____ROW: ", row)
+            curr_obj_dict = deepcopy(GeologicalCollection.geological_entity_dict)
+            # if gdf.is_valid[row] and not gdf.is_empty[row]:
+            try:
+                if "name" in column_names:
+                    curr_obj_dict["name"] = gdf.loc[row, "name"]
+                if "geological_type" in column_names:
+                    curr_obj_dict["geological_type"] = gdf.loc[row, "geological_type"]
+                if "geo_type" in column_names:
+                    curr_obj_dict["geological_type"] = gdf.loc[row, "geo_type"]
+                if "geological_feature" in column_names:
+                    curr_obj_dict["geological_feature"] = gdf.loc[row, "geological_feature"]
+                if "geo_feat" in column_names:
+                    curr_obj_dict["geological_feature"] = gdf.loc[row, "geo_feat"]
+                if "scenario" in column_names:
+                    curr_obj_dict["scenario"] = gdf.loc[row, "scenario"]
+                curr_obj_dict["topological_type"] = "VertexSet"
+                curr_obj_dict["vtk_obj"] = VertexSet()
+                outXYZ = [np.array(gdf.loc[row].geometry)]
+                # print("outXYZ:\n", outXYZ)
+                # print("np.shape(outXYZ):\n", np.shape(outXYZ))
+                if np.shape(outXYZ)[1] == 2:
+                    outZ = np.zeros((np.shape(outXYZ)[0], 1))
+                    # print("outZ:\n", outZ)
+                    outXYZ = np.column_stack((outXYZ, outZ))
+                # print("outXYZ:\n", outXYZ)
+                curr_obj_dict["vtk_obj"].points = outXYZ
+                curr_obj_dict["vtk_obj"].auto_cells(outXYZ)
+
+                """Create entity from the dictionary and run left_right."""
+                if curr_obj_dict["vtk_obj"].points_number > 0:
+                    output_uid = self.geol_coll.add_entity_from_dict(curr_obj_dict)
+                else:
+                    print("Empty object")
+            # else:
+            except:
+                print("Invalid object")
+            del curr_obj_dict
+        # print("VertexSet not yet implemented.")
     else:
         print("Only Point and Line geometries can be imported - aborting.")
         return
