@@ -107,7 +107,7 @@ def draw_line(self):
                 """Create new vtk object, then replace it to the previous one (only necessary when the number of line vertices is reduced."""
                 line_dict['vtk_obj'].points = new_points
                 if point_n > 2:
-                    line_dict['vtk_obj'].auto_cells()
+                    line_dict['vtk_obj'].auto_cells()  # try copying the cell array skipping the last one as in .cells[:-1, :]_____________________
                 self.parent.geol_coll.replace_vtk(uid=uid, vtk_object=line_dict['vtk_obj'])
                 del line_dict
                 point_n -= 1
@@ -220,7 +220,7 @@ def sort_line_nodes(self):
     """If more than one line is selected, keep the first."""
     current_uid = self.selected_uids[0]
     """For some reason in the following the [:] is needed."""
-    self.parent.geol_coll.get_uid_vtk_obj(current_uid).sort_nodes()
+    self.parent.geol_coll.get_uid_vtk_obj(current_uid).sort_nodes()  # this could be probably done per-part__________________________
     """Deselect input line."""
     self.selected_uids = []
     self.parent.geology_geom_modified_signal.emit([current_uid])  # emit uid as list to force redraw()
@@ -411,7 +411,7 @@ def extend_line(self):
                 """Create new vtk object, then replace it to the previous one (only necessary when the number of line vertices is reduced."""
                 line_dict['vtk_obj'].points = new_points
                 if point_n > 2:
-                    line_dict['vtk_obj'].auto_cells()
+                    line_dict['vtk_obj'].auto_cells()  # try copying the cell array skipping the last one as in .cells[:-1, :]_____________________
                 self.parent.geol_coll.replace_vtk(uid=current_uid, vtk_object=line_dict['vtk_obj'])
                 del line_dict
                 point_n -= 1
@@ -491,7 +491,7 @@ def split_line_line(self):
     """Check if the two lineal geometries have shared path with dimension 1 (= they share a line-type object)"""
     if shp_line_in_paper.crosses(shp_line_in_scissors) == True:
         """Run the split shapely function."""
-        lines = split(shp_line_in_paper, shp_line_in_scissors)
+        lines = split(shp_line_in_paper, shp_line_in_scissors)  # lines must include all line parts not affected by splitting and two parts for the split line__________
     else:  # handles the case when the LineString share a linear path and, for the moment, exists the tool
         """Un-Freeze QT interface"""
         for action in self.findChildren(QAction):
@@ -653,7 +653,7 @@ def split_line_existing_point(self):
         new_line_1['vtk_obj'].points = new_points_1
         new_line_1['vtk_obj'].auto_cells()
         new_line_2['vtk_obj'].points = new_points_2
-        new_line_2['vtk_obj'].auto_cells()
+        new_line_2['vtk_obj'].auto_cells()  # lines must include all line parts not affected by splitting and two parts for the split line__________
         """Replace VTK object"""
         if new_line_1['vtk_obj'].points_number > 0:
             self.parent.geol_coll.replace_vtk(uid=current_uid, vtk_object=new_line_1['vtk_obj'])
@@ -677,9 +677,10 @@ def split_line_existing_point(self):
     for action in self.findChildren(QAction):
         action.setEnabled(True)
 
+# check merge, snap, and see if a bridge nodes method is needed____________________
 
 def merge_lines(self):
-    """Merge two (contiguous or non-contiguous) lines."""
+    """Merge two (contiguous or non-contiguous) lines."""    # lines must include all line parts not affected by splitting and two parts for the split line__________
     print("Merge two lines. First line has been selected, please select second line for merging.")
     """Terminate running event loops"""
     self.stop_event_loops()
@@ -865,7 +866,7 @@ def snap_line(self):
         action.setEnabled(True)
 
 
-def resample_line_distance(self):
+def resample_line_distance(self):  # this must be done per-part_______________________________________________________
     """Resample selected line with constant spacing. Distance of spacing is required"""
     print("Resample line. Define constant spacing for resampling.")
     """Terminate running event loops"""
@@ -944,7 +945,7 @@ def resample_line_distance(self):
         action.setEnabled(True)
 
 
-def resample_line_number_points(self):
+def resample_line_number_points(self):  # this must be done per-part_______________________________________________________
     """Resample selected line with constant spacing. Number of points to divide the line in is required"""
     print("Resample line. Define number of vertices to create on the line.")
     """Terminate running event loops"""
@@ -1022,7 +1023,7 @@ def resample_line_number_points(self):
         action.setEnabled(True)
 
 
-def simplify_line(self):
+def simplify_line(self):  # this must be done per-part_______________________________________________________
     """Return a simplified representation of the line. Permits the user to choose a value for the Tolerance parameter."""
     print("Simplify line. Define tolerance value: small values result in more vertices and great similarity with the input line.")
     """Terminate running event loops"""
@@ -1098,7 +1099,7 @@ def simplify_line(self):
         action.setEnabled(True)
 
 
-def copy_parallel(self):
+def copy_parallel(self):  # this must be done per-part_______________________________________________________
     """Parallel folding. Create a line copied and translated from a template line using Shapely.
     Since lines are oriented left-to-right and bottom-to-top, and here we copy a line to the left,
     a positive distance creates a line shifted upwards and to the left."""
@@ -1204,7 +1205,7 @@ def copy_parallel(self):
         action.setEnabled(True)
 
 
-def copy_kink(self):
+def copy_kink(self):  # this must be done per-part_______________________________________________________
     """Kink folding. Create a line copied and translated from a template line using Shapely.
     Since lines are oriented left-to-right and bottom-to-top, and here we copy a line to the left,
     a positive distance creates a line shifted upwards and to the left."""
@@ -1298,7 +1299,7 @@ def copy_kink(self):
         action.setEnabled(True)
 
 
-def copy_similar(self):
+def copy_similar(self):  # this must be done per-part_______________________________________________________
     """Similar folding. Create a line copied and translated from a template line."""
     print("Copy Similar. Create a line copied and translated.")
     """Terminate running event loops"""
