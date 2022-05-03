@@ -968,10 +968,11 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         IN THE FUTURE see if it is possible and more efficient to keep the actor and just change the property shown."""
 
         # [Gabriele] Remove the previous scalar bar if present
-        try:
-            self.plotter.remove_scalar_bar()
-        except IndexError:
-            pass
+        if hasattr(self,'plotter'):
+            try:
+                self.plotter.remove_scalar_bar()
+            except IndexError:
+                pass
 
         self.remove_actor_in_view(uid=uid)
 

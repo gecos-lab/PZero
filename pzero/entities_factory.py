@@ -439,7 +439,7 @@ class VertexSet(PolyData):
         vset_copy.DeepCopy(self)
         return vset_copy
 
-    def auto_cells(self,point):
+    def auto_cells(self):
         """Set cells automatically assuming that the vertexes are in the correct order,
         from first to last, and that the polyline is a single part."""
         if self.GetNumberOfCells() != 0:
@@ -450,14 +450,13 @@ class VertexSet(PolyData):
 
 
 
-        points = vtk.vtkPoints() #[Gabriele] points object
         vertices = vtk.vtkCellArray() #[Gabriele] vertices (cells)
-        vertices.InsertNextCell(1) #[Gabriele] set n cells with n= number of points in the dataset
-        pid = points.InsertNextPoint(point[0])
-        vertices.InsertCellPoint(pid)
-        self.SetPoints(points) #[Gabriele] Assign the points to the point_cloud (vtkPolyData)
+        npoints = self.points_number # [Gabriele] Points present in the object
+        cellIds = [0]
+        for pid in range(npoints):
+            cellIds[0] = pid
+            vertices.InsertNextCell(1,cellIds)
         self.SetVerts(vertices) #[Gabriele] Assign the vertices to the point_cloud (vtkPolyData)
-        self.Modified()
         self.Modified()
 
 

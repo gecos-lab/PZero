@@ -15,6 +15,7 @@ from shapely import affinity
 from shapely.geometry import asLineString, LineString, Point, asPoint, MultiLineString
 from shapely.ops import split, snap
 
+from .orientation_analysis import dip_directions2normals
 """Importer for SHP files and other GIS formats, to be improved IN THE FUTURE.
 Known bugs for multi-part polylines.
 Points not handled correctly."""
@@ -106,45 +107,64 @@ def shp2vtk(self=None, in_file_name=None):
             #     print("Invalid object")
             del curr_obj_dict
     elif gdf.geom_type[0] == "Point":
-        for row in range(gdf.shape[0]):
-            print("____ROW: ", row)
-            curr_obj_dict = deepcopy(GeologicalCollection.geological_entity_dict)
-            # if gdf.is_valid[row] and not gdf.is_empty[row]:
-            try:
+        if "geo_feat" in column_names:
+            gdf_index = gdf.set_index("geo_feat")
+            feat_list = set(gdf_index.index)
+
+            for i in feat_list:
+                curr_obj_dict = deepcopy(GeologicalCollection.geological_entity_dict)
+
                 if "name" in column_names:
-                    curr_obj_dict["name"] = gdf.loc[row, "name"]
+                    curr_obj_dict["name"] = gdf_index.loc[i, "name"][0]
                 if "geological_type" in column_names:
-                    curr_obj_dict["geological_type"] = gdf.loc[row, "geological_type"]
+                    curr_obj_dict["geological_type"] = gdf_index.loc[i, "geological_type"][0]
                 if "geo_type" in column_names:
-                    curr_obj_dict["geological_type"] = gdf.loc[row, "geo_type"]
+                    curr_obj_dict["geological_type"] = gdf_index.loc[i, "geo_type"][0]
                 if "geological_feature" in column_names:
-                    curr_obj_dict["geological_feature"] = gdf.loc[row, "geological_feature"]
+                    curr_obj_dict["geological_feature"] = i
                 if "geo_feat" in column_names:
-                    curr_obj_dict["geological_feature"] = gdf.loc[row, "geo_feat"]
+                    curr_obj_dict["geological_feature"] = i
                 if "scenario" in column_names:
-                    curr_obj_dict["scenario"] = gdf.loc[row, "scenario"]
+                    curr_obj_dict["scenario"] = gdf_index.loc[row, "scenario"]
+
                 curr_obj_dict["topological_type"] = "VertexSet"
                 curr_obj_dict["vtk_obj"] = VertexSet()
-                outXYZ = [np_array(gdf.loc[row].geometry)]
-                # print("outXYZ:\n", outXYZ)
-                # print("np_shape(outXYZ):\n", np_shape(outXYZ))
+
+                gdf_index['coords'] = gdf_index.geometry.apply(lambda x: np_array(x)) # [Gabriele] add a coordinate column in the gdf_index dataframe
+                outXYZ = np_array([p for p in gdf_index.loc[i,'coords']])
+
                 if np_shape(outXYZ)[1] == 2:
                     outZ = np_zeros((np_shape(outXYZ)[0], 1))
                     # print("outZ:\n", outZ)
                     outXYZ = np_column_stack((outXYZ, outZ))
-                # print("outXYZ:\n", outXYZ)
-                curr_obj_dict["vtk_obj"].points = outXYZ
-                curr_obj_dict["vtk_obj"].auto_cells(outXYZ)
 
-                """Create entity from the dictionary and run left_right."""
+                curr_obj_dict["vtk_obj"].points = outXYZ
+
+                if 'dip_dir' in column_names:
+                    dir = (gdf_index.loc[i, "dip_dir"]-90)%360
+                    curr_obj_dict["vtk_obj"].set_point_data('dir',dir.values)
+                if 'dir' in column_names:
+                    curr_obj_dict["vtk_obj"].set_point_data('dir',gdf_index.loc[i, "dir"].values)
+                if 'dip':
+                    curr_obj_dict["vtk_obj"].set_point_data('dip',gdf_index.loc[i, "dip"].values)
+                if 'dip' in column_names and ('dir' in column_names or 'dip_dir' in column_names):
+                    normals = dip_directions2normals(curr_obj_dict["vtk_obj"].get_point_data('dip'), curr_obj_dict["vtk_obj"].get_point_data('dir'))
+                    curr_obj_dict["vtk_obj"].set_point_data('Normals',normals)
+
+
+
+
                 if curr_obj_dict["vtk_obj"].points_number > 0:
+                    curr_obj_dict["vtk_obj"].auto_cells()
+                    # print(curr_obj_dict["vtk_obj"].point_data_keys)
+                    properties_names = curr_obj_dict["vtk_obj"].point_data_keys
+                    properties_components = [curr_obj_dict["vtk_obj"].get_point_data_shape(key)[1] for key in properties_names]
+                    curr_obj_dict['properties_names'] = properties_names
+                    curr_obj_dict['properties_components'] = properties_components
                     output_uid = self.geol_coll.add_entity_from_dict(curr_obj_dict)
-                else:
-                    print("Empty object")
-            # else:
-            except:
-                print("Invalid object")
-            del curr_obj_dict  # print("VertexSet not yet implemented.")
+                    del curr_obj_dict
+        else:
+            print('Incomplete data. At least the geological_feature property must be present')
     else:
         print("Only Point and Line geometries can be imported - aborting.")
         return  # except:  #     self.TextTerminal.appendPlainText("SHP file not recognized ERROR.")
