@@ -546,7 +546,10 @@
     </property>
     <addaction name="actionEditEntityClone"/>
     <addaction name="actionEditEntityRemove"/>
+    <addaction name="separator"/>
+    <addaction name="actionConnectedParts"/>
     <addaction name="actionMergeEntities"/>
+    <addaction name="actionSplitMultipart"/>
     <addaction name="separator"/>
     <addaction name="actionEditTextureAdd"/>
     <addaction name="actionEditTextureRemove"/>
@@ -693,7 +696,10 @@
    </attribute>
    <addaction name="actionEditEntityClone"/>
    <addaction name="actionEditEntityRemove"/>
+   <addaction name="separator"/>
+   <addaction name="actionConnectedParts"/>
    <addaction name="actionMergeEntities"/>
+   <addaction name="actionSplitMultipart"/>
    <addaction name="separator"/>
    <addaction name="actionEditTextureAdd"/>
    <addaction name="actionEditTextureRemove"/>
@@ -703,6 +709,7 @@
    <addaction name="separator"/>
    <addaction name="actionCalculateNormal"/>
    <addaction name="actionCalculateLineation"/>
+   <addaction name="separator"/>
   </widget>
   <widget class="QToolBar" name="toolBarInterpolation">
    <property name="sizePolicy">
@@ -1028,6 +1035,16 @@
   <action name="actionImportXsectionImage">
    <property name="text">
     <string>Import Xsection Image</string>
+   </property>
+  </action>
+  <action name="actionConnectedParts">
+   <property name="text">
+    <string>Connected Parts</string>
+   </property>
+  </action>
+  <action name="actionSplitMultipart">
+   <property name="text">
+    <string>Split Multi-part</string>
    </property>
   </action>
  </widget>

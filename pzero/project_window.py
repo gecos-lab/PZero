@@ -139,7 +139,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
 
         """Edit actions -> slots"""
         self.actionEditEntityRemove.triggered.connect(self.entity_remove)
+        self.actionConnectedParts.triggered.connect(self.connected_parts)
         self.actionMergeEntities.triggered.connect(self.entities_merge)
+        self.actionSplitMultipart.triggered.connect(self.split_multipart)
         self.actionEditTextureAdd.triggered.connect(self.texture_add)
         self.actionEditTextureRemove.triggered.connect(self.texture_remove)
         self.actionAddProperty.triggered.connect(self.property_add)
@@ -482,6 +484,27 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
 
     def lineations_calculate(self):  # ____________________________________________________ IMPLEMENT THIS FOR POINTS WITH PLUNGE/TREND AND FOR POLYLINES
         """Calculate lineations on geological entities."""
+        pass
+
+    def connected_parts(self):
+        """Calculate connectivity of PolyLine and TriSurf entities."""
+        if self.selected_uids:
+            if self.shown_table == "tabGeology":
+                collection = self.geol_coll
+            elif self.shown_table == "tabDOMs":
+                collection = self.dom_coll
+            elif self.shown_table == "tabBoundaries":
+                collection = self.boundary_coll
+            else:
+                return
+            for uid in self.selected_uids:
+                if isinstance(collection.get_uid_vtk_obj(uid), (PolyLine, TriSurf)):
+                    collection.append_uid_property(uid=uid, property_name="RegionId", property_components=1)
+                    collection.get_uid_vtk_obj(uid).connected_calc()
+                    self.prop_legend.update_widget(self)
+
+    def split_multipart(self):
+        """Split multi-part entities into single-parts."""
         pass
 
     """Methods used to save/open/create new projects."""

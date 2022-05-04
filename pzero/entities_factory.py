@@ -1,7 +1,7 @@
 """entities_factory.py
 PZero© Andrea Bistacchi"""
 
-from vtk import vtkPolyData, vtkPoints, vtkCellCenters, vtkIdFilter, vtkCleanPolyData, vtkPolyDataNormals, vtkPlane, vtkCellArray, vtkLine, vtkIdList, vtkTriangleFilter, vtkTriangle, vtkFeatureEdges, vtkCleanPolyData, vtkStripper, vtkPolygon, vtkUnstructuredGrid, vtkTetra, vtkImageData, vtkStructuredGrid
+from vtk import vtkPolyData, vtkPoints, vtkCellCenters, vtkIdFilter, vtkCleanPolyData, vtkPolyDataNormals, vtkPlane, vtkCellArray, vtkLine, vtkIdList, vtkTriangleFilter, vtkTriangle, vtkFeatureEdges, vtkCleanPolyData, vtkStripper, vtkPolygon, vtkUnstructuredGrid, vtkTetra, vtkImageData, vtkStructuredGrid, vtkPolyDataConnectivityFilter
 from vtk.util.numpy_support import vtk_to_numpy
 from vtk.numpy_interface.dataset_adapter import WrapDataObject, vtkDataArrayToVTKArray
 from pyvista import PolyData as pv_PolyData
@@ -436,6 +436,21 @@ class PolyData(vtkPolyData):
                 return topological_type
             else:
                 return None
+
+    def connected_calc(self):
+        """Adds a scalar property called RegionId with the connected region index, useful for processing and
+        visualization (it will be automatically added to the properties legend).
+        Also returns the number of connected regions.
+        Returns None in case it is called for a VertexSet, so it works for PolyLine and TriSurf only."""
+        if not isinstance(self, VertexSet):
+            connectivity_filter = vtkPolyDataConnectivityFilter()
+            connectivity_filter.SetInputData(self)
+            connectivity_filter.SetExtractionModeToAllRegions()
+            connectivity_filter.ColorRegionsOn()
+            connectivity_filter.Update()
+            numRegions = connectivity_filter.GetNumberOfExtractedRegions()
+            self.GetPointData().SetScalars(connectivity_filter.GetOutput().GetPointData().GetScalars())
+            return numRegions
 
 
 class Plane(vtkPlane):  # _______________________ AT THE MOMENT THIS DOES NOT EXPOSE ANY OTHER METHOD - SEE IF IT IS USEFUL

@@ -323,3 +323,4 @@ class Ui_BaseViewWindow(object):
         self.toolBarBase.setWindowTitle(_translate("BaseViewWindow", "toolBar"))
         self.actionClose.setText(_translate("BaseViewWindow", "Close Window"))
         self.actionBase_Tool.setText(_translate("BaseViewWindow", "Base Tool"))
+
