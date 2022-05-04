@@ -295,7 +295,7 @@
                <string>&lt;space&gt;</string>
               </property>
               <property name="placeholderText">
-               <string/>
+               <string notr="true"/>
               </property>
               <item>
                <property name="text">

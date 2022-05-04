@@ -152,7 +152,7 @@ class Ui_ImportOptionsWindow(object):
         self.formLayout.setWidget(2, QtWidgets.QFormLayout.LabelRole, self.SeparatoLabel)
         self.SeparatorcomboBox = QtWidgets.QComboBox(self.OptionsFrame)
         self.SeparatorcomboBox.setEditable(True)
-        self.SeparatorcomboBox.setPlaceholderText("")
+        # self.SeparatorcomboBox.setPlaceholderText("")
         self.SeparatorcomboBox.setObjectName("SeparatorcomboBox")
         self.SeparatorcomboBox.addItem("")
         self.SeparatorcomboBox.addItem("")
@@ -210,4 +210,3 @@ class Ui_ImportOptionsWindow(object):
         self.check255Box.setText(_translate("ImportOptionsWindow", "Limit RGB values to the 0-255 range"))
         self.PreviewButton.setText(_translate("ImportOptionsWindow", "Preview"))
         self.actionImport.setText(_translate("ImportOptionsWindow", "Import"))
-

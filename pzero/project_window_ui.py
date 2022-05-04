@@ -11,7 +11,7 @@ from PyQt5 import QtCore, QtGui, QtWidgets
 class Ui_ProjectWindow(object):
     def setupUi(self, ProjectWindow):
         ProjectWindow.setObjectName("ProjectWindow")
-        ProjectWindow.resize(1280, 800)
+        ProjectWindow.resize(1280, 806)
         sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.MinimumExpanding, QtWidgets.QSizePolicy.MinimumExpanding)
         sizePolicy.setHorizontalStretch(0)
         sizePolicy.setVerticalStretch(0)
@@ -363,6 +363,8 @@ class Ui_ProjectWindow(object):
         self.actionConnectedParts.setObjectName("actionConnectedParts")
         self.actionSplitMultipart = QtWidgets.QAction(ProjectWindow)
         self.actionSplitMultipart.setObjectName("actionSplitMultipart")
+        self.actionImportPC = QtWidgets.QAction(ProjectWindow)
+        self.actionImportPC.setObjectName("actionImportPC")
         self.menuFile.addAction(self.actionProjectNew)
         self.menuFile.addAction(self.actionProjectOpen)
         self.menuFile.addAction(self.actionProjectSave)
@@ -370,6 +372,7 @@ class Ui_ProjectWindow(object):
         self.menuFile.addAction(self.actionImportGocad)
         self.menuFile.addAction(self.actionImportGocadXsection)
         self.menuFile.addAction(self.actionImportGocadBoundary)
+        self.menuFile.addAction(self.actionImportPC)
         self.menuFile.addAction(self.actionImportPyvista)
         self.menuFile.addAction(self.actionImportVedo)
         self.menuFile.addAction(self.actionImportSHP)
@@ -432,6 +435,7 @@ class Ui_ProjectWindow(object):
         self.toolbarFile.addAction(self.actionImportGocad)
         self.toolbarFile.addAction(self.actionImportGocadXsection)
         self.toolbarFile.addAction(self.actionImportGocadBoundary)
+        self.toolbarFile.addAction(self.actionImportPC)
         self.toolbarFile.addAction(self.actionImportPyvista)
         self.toolbarFile.addAction(self.actionImportVedo)
         self.toolbarFile.addAction(self.actionImportSHP)
@@ -582,4 +586,5 @@ class Ui_ProjectWindow(object):
         self.actionImportXsectionImage.setText(_translate("ProjectWindow", "Import Xsection Image"))
         self.actionConnectedParts.setText(_translate("ProjectWindow", "Connected Parts"))
         self.actionSplitMultipart.setText(_translate("ProjectWindow", "Split Multi-part"))
+        self.actionImportPC.setText(_translate("ProjectWindow", "Import Point Clouds"))
 

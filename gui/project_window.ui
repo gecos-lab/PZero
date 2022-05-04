@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>1280</width>
-    <height>800</height>
+    <height>806</height>
    </rect>
   </property>
   <property name="sizePolicy">
@@ -507,6 +507,7 @@
     <addaction name="actionImportGocad"/>
     <addaction name="actionImportGocadXsection"/>
     <addaction name="actionImportGocadBoundary"/>
+    <addaction name="actionImportPC"/>
     <addaction name="actionImportPyvista"/>
     <addaction name="actionImportVedo"/>
     <addaction name="actionImportSHP"/>
@@ -639,6 +640,7 @@
    <addaction name="actionImportGocad"/>
    <addaction name="actionImportGocadXsection"/>
    <addaction name="actionImportGocadBoundary"/>
+   <addaction name="actionImportPC"/>
    <addaction name="actionImportPyvista"/>
    <addaction name="actionImportVedo"/>
    <addaction name="actionImportSHP"/>
@@ -1045,6 +1047,11 @@
   <action name="actionSplitMultipart">
    <property name="text">
     <string>Split Multi-part</string>
+   </property>
+  </action>
+  <action name="actionImportPC">
+   <property name="text">
+    <string>Import Point Clouds</string>
    </property>
   </action>
  </widget>
