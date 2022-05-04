@@ -607,11 +607,18 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         # self.dom_coll.df[out_cols].to_csv(out_dir_name + '/dom_table.csv', encoding='utf-8', index=False)
         prgs_bar = progress_dialog(max_value=self.dom_coll.df.shape[0], title_txt="Save DOM", label_txt="Saving DOM objects...", cancel_txt=None, parent=self)
         for uid in self.dom_coll.df['uid'].to_list():
+            print(self.dom_coll.df.loc[self.dom_coll.df['uid'] == uid, 'dom_type'].values[0])
             if self.dom_coll.df.loc[self.dom_coll.df['uid'] == uid, 'dom_type'].values[0] == "DEM":
                 sg_writer = vtk.vtkXMLStructuredGridWriter()
                 sg_writer.SetFileName(out_dir_name + "/" + uid + ".vts")
                 sg_writer.SetInputData(self.dom_coll.get_uid_vtk_obj(uid))
                 sg_writer.Write()
+                prgs_bar.add_one()
+            elif self.dom_coll.df.loc[self.dom_coll.df['uid'] == uid, 'dom_type'].values[0] == "DomXs":
+                pl_writer = vtk.vtkXMLPolyDataWriter()
+                pl_writer.SetFileName(out_dir_name + "/" + uid + ".vtp")
+                pl_writer.SetInputData(self.dom_coll.get_uid_vtk_obj(uid))
+                pl_writer.Write()
                 prgs_bar.add_one()
             elif self.dom_coll.df.loc[self.dom_coll.df['uid'] == uid, 'dom_type'].values[0] == "PCDom":  # _____________ PROBABLY THE SAME WILL WORK FOR TSDOMs
                 """Save PCDOm collection entities as VTK"""
@@ -759,6 +766,14 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     sg_reader.SetFileName(in_dir_name + "/" + uid + ".vts")
                     sg_reader.Update()
                     vtk_object.ShallowCopy(sg_reader.GetOutput())
+                    vtk_object.Modified()
+                elif self.dom_coll.get_uid_dom_type(uid) == "DomXs":
+                    xsect_uid = self.dom_coll.get_uid_x_section(uid)
+                    vtk_object = XsPolyLine(x_section_uid=xsect_uid, parent=self)
+                    pl_reader = vtk.vtkXMLPolyDataReader()
+                    pl_reader.SetFileName(in_dir_name + "/" + uid + ".vtp")
+                    pl_reader.Update()
+                    vtk_object.ShallowCopy(pl_reader.GetOutput())
                     vtk_object.Modified()
                 elif self.dom_coll.df.loc[self.dom_coll.df['uid'] == uid, 'dom_type'].values[0] == 'TSDom':
                     """Add code to read TSDOM here__________"""
