@@ -44,7 +44,7 @@ def interpolation_delaunay_2d(self):
     """Check if the output of the widget is empty or not. If the Cancel button was clicked, the tool quits"""
     if surf_dict_updt is None:
         return
-    """Ask for the Tolerance and Alpha values. Tolerance controls discarding of closely spaced points. 
+    """Ask for the Tolerance and Alpha values. Tolerance controls discarding of closely spaced points.
     Alpha controls the 'size' of output primitivies - a 0 Alpha Value outputs a triangle mesh."""
     tolerance_value = input_one_value_dialog(title='Delaunay2D Parameters', label='Tolerance Value', default_value=0.001)
     if tolerance_value is None:
@@ -298,10 +298,10 @@ def implicit_model_loop_structural(self):
     """Create model as instance of Loop GeologicalModel with limits given by origin and maximum.
     Keep rescale=True (default) for performance and precision.
     THIS SHOULD BE CHANGED IN FUTURE TO BETTER DEAL WITH IRREGULARLY DISTRIBUTED INPUT DATA.
-    * ``interpolatortype`` - we can either use a PiecewiseLinearInterpolator ``PLI``, a FiniteDifferenceInterpolator ``FDI`` or a radial basis interpolator ``surfe`` 
+    * ``interpolatortype`` - we can either use a PiecewiseLinearInterpolator ``PLI``, a FiniteDifferenceInterpolator ``FDI`` or a radial basis interpolator ``surfe``
     * ``nelements - int`` is the how many elements are used to discretize the resulting solution
     * ``buffer - float`` buffer percentage around the model area
-    * ``solver`` - the algorithm to solve the least squares problem e.g. ``lu`` for lower upper decomposition, ``cg`` for conjugate gradient, ``pyamg`` for an algorithmic multigrid solver 
+    * ``solver`` - the algorithm to solve the least squares problem e.g. ``lu`` for lower upper decomposition, ``cg`` for conjugate gradient, ``pyamg`` for an algorithmic multigrid solver
     * ``damp - bool`` - whether to add a small number to the diagonal of the interpolation matrix for discrete interpolators - this can help speed up the solver and makes the solution more stable for some interpolators"""
     print("-> create model...")
     tic()
@@ -464,7 +464,7 @@ def surface_smoothing(self):
     if convergence_value is None:
         convergence_value = 1
     smoother.SetConvergence(convergence_value)
-    """Ask for BoundarySmoothing (smoothing of vertices on the boundary of the mesh) and FeatureEdgeSmoothing 
+    """Ask for BoundarySmoothing (smoothing of vertices on the boundary of the mesh) and FeatureEdgeSmoothing
     (smoothing along sharp interior edges)."""
     boundary_smoothing = input_text_dialog(title='Surface smoothing parameters', label='Boundary Smoothing (ON/OFF)', default_text='OFF')
     if boundary_smoothing is None:
@@ -622,7 +622,7 @@ def decimation_pro_resampling(self):
         deci.BoundaryVertexDeletionOn()
     elif bound_vert_del == 'OFF' or bound_vert_del == 'off':
         deci.BoundaryVertexDeletionOff()
-    """Splitting switch. Turn on/off the splitting of the mesh at corners, along edges, at non-manifold points, or 
+    """Splitting switch. Turn on/off the splitting of the mesh at corners, along edges, at non-manifold points, or
     anywhere else a split is required."""
     splitting = input_text_dialog(title='Decimation Resampling parameters', label='Splitting (ON to preserve original topology/OFF)', default_text='ON')
     if splitting is None:
@@ -1077,11 +1077,12 @@ def project_2_xs(self):
         return
     """Define projection parameters (float64 needed for "t" afterwards)"""
     xs_names = self.xsect_coll.get_names()
-    input_dict = {'xs_name': ['XSection: ', xs_names], 'proj_plunge': ['Projection axis plunge: ', 0.0], 'proj_trend': ['Projection axis trend: ', 0.0]}
+    input_dict = {'xs_name': ['XSection: ', xs_names], 'proj_plunge': ['Projection axis plunge: ', 0.0], 'proj_trend': ['Projection axis trend: ', 0.0],'dist_sec':['Maximum distance from section: ',0.0]}
     options_dict = multiple_input_dialog(title='Projection to XSection', input_dict=input_dict)
     if options_dict is None:
         return
     xs_name = options_dict['xs_name']
+    xs_dist = options_dict['dist_sec']
     xs_uid = self.xsect_coll.df.loc[self.xsect_coll.df['name'] == xs_name, 'uid'].values[0]
     proj_plunge = np.float64(options_dict['proj_plunge'])
     proj_trend = np.float64(options_dict['proj_trend'])
@@ -1098,6 +1099,16 @@ def project_2_xs(self):
     ya = np.float64(self.xsect_coll.get_uid_base_y(xs_uid))
     xb = np.float64(self.xsect_coll.get_uid_end_x(xs_uid))
     yb = np.float64(self.xsect_coll.get_uid_end_y(xs_uid))
+
+
+    m1 = (yb-ya)/(xb-xa)
+    q1 = ya-(m1*xa)
+
+    m2 = -(1/m1)
+
+
+
+
     """Calculate projection direction cosines (float64 needed for "t" afterwards)."""
     alpha = np.float64(np.sin(proj_trend * np.pi / 180.0) * np.cos(proj_plunge * np.pi / 180.0))
     beta = np.float64(np.cos(proj_trend * np.pi / 180.0) * np.cos(proj_plunge * np.pi / 180.0))
@@ -1115,8 +1126,6 @@ def project_2_xs(self):
         entity_dict['x_section'] = xs_uid
         if self.geol_coll.get_uid_topological_type(uid) == "VertexSet":
             entity_dict['topological_type'] = "XsVertexSet"
-            out_vtk = XsVertexSet(x_section_uid=xs_uid, parent=self)
-            out_vtk.DeepCopy(self.geol_coll.get_uid_vtk_obj(uid))
         elif self.geol_coll.get_uid_topological_type(uid) == "PolyLine":
             entity_dict['topological_type'] = "XsPolyLine"
             out_vtk = XsPolyLine(x_section_uid=xs_uid, parent=self)
@@ -1128,18 +1137,62 @@ def project_2_xs(self):
          np.float64 is needed to calculate "t" with a good precision
          when X and Y are in UTM coordinates with very large values,
          then the result is cast to float32 that is the VTK standard."""
-        xo = out_vtk.points_X.astype(np.float64)
-        yo = out_vtk.points_Y.astype(np.float64)
-        zo = out_vtk.points_Z.astype(np.float64)
-        t = (-xo*(yb-ya) - yo*(xa-xb) - ya*xb + yb*xa) / (alpha*(yb-ya) + beta*(xa-xb))
-        out_vtk.points_X[:] = (xo + alpha * t).astype(np.float32)
-        out_vtk.points_Y[:] = (yo + beta * t).astype(np.float32)
-        out_vtk.points_Z[:] = (zo + gamma * t).astype(np.float32)
-        """Output, checking for multipart for polylines."""
-        if entity_dict['topological_type'] == "XsVertexSet":
+        if entity_dict['topological_type'] == "XsVertexSet" and xs_dist > 0:
+            map_data = self.geol_coll.get_uid_vtk_obj(uid)
+            list = []
+            old_prop = map_data.point_data_keys
+            clean_outvtk = XsVertexSet(x_section_uid=xs_uid, parent=self)
+
+            for i,x in enumerate(map_data.points_X[:]):
+                y = map_data.points_Y[i]
+                q2 = map_data.points_Y[i] - m2*x
+                x_int = (q2-q1)/(m1-m2)
+                y_int = (m1*x_int)+q1
+
+                p_dist = np.sqrt(np.power(x-x_int,2)+np.power(y-y_int,2))
+                # print(p_dist)
+
+                if p_dist<xs_dist:
+                    list.append(i)
+            if len(list) > 0:
+                xo = map_data.points_X[list].astype(np.float64)
+                yo = map_data.points_Y[list].astype(np.float64)
+                zo = map_data.points_Z[list].astype(np.float64)
+                t = (-xo*(yb-ya) - yo*(xa-xb) - ya*xb + yb*xa) / (alpha*(yb-ya) + beta*(xa-xb))
+
+                proj_x = (xo + alpha * t).astype(np.float32)
+                proj_y = (yo + beta * t).astype(np.float32)
+                proj_z = (zo + gamma * t).astype(np.float32)
+                clean_outvtk.points = np.array([proj_x,proj_y,proj_z]).T
+                clean_outvtk.auto_cells()
+                # for key in map_data.point_data_keys:
+                #     data_clean = map_data.get_point_data(key)[list]
+                #     clean_outvtk.set_point_data(key,data_clean)
+                clean_outvtk.Modified()
+
+                entity_dict['vtk_obj'] = clean_outvtk
+                entity_dict['properties_names'] = []
+                entity_dict['properties_components'] = []
+                out_uid = self.geol_coll.add_entity_from_dict(entity_dict=entity_dict)
+            else:
+                print(f'No measure found for group {entity_dict["name"]}, try to extend the maximum distance')
+
+        elif entity_dict['topological_type'] == "XsVertexSet":
+            out_vtk = XsVertexSet(x_section_uid=xs_uid, parent=self)
+            out_vtk.DeepCopy(self.geol_coll.get_uid_vtk_obj(uid))
+            xo = out_vtk.points_X.astype(np.float64)
+            yo = out_vtk.points_Y.astype(np.float64)
+            zo = out_vtk.points_Z.astype(np.float64)
+            t = (-xo*(yb-ya) - yo*(xa-xb) - ya*xb + yb*xa) / (alpha*(yb-ya) + beta*(xa-xb))
+
+            out_vtk.points_X[:] = (xo + alpha * t).astype(np.float32)
+            out_vtk.points_Y[:] = (yo + beta * t).astype(np.float32)
+            out_vtk.points_Z[:] = (zo + gamma * t).astype(np.float32)
             entity_dict['vtk_obj'] = out_vtk
             out_uid = self.geol_coll.add_entity_from_dict(entity_dict=entity_dict)
+
         elif entity_dict['topological_type'] == "XsPolyLine":
+            """Output, checking for multipart for polylines."""
             connectivity = vtk.vtkPolyDataConnectivityFilter()
             connectivity.SetInputData(out_vtk)
             connectivity.SetExtractionModeToAllRegions()

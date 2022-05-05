@@ -27,6 +27,7 @@ from vtkmodules.vtkInteractionWidgets import vtkCameraOrientationWidget
 """3D plotting imports"""
 from pyvista import global_theme as pv_global_theme
 from pyvistaqt import QtInteractor as pvQtInteractor
+from pyvista import Arrow,Circle, PolyData
 
 """2D plotting imports"""
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
@@ -1933,6 +1934,15 @@ class View3D(BaseView):
                     show_property = plot_entity.points_Y
                 elif show_property == 'Z':
                     show_property = plot_entity.points_Z
+                elif show_property == 'Normals':
+                    print('Normals still not supported')
+                    show_scalar_bar = False
+                    show_property_title = None
+                    # pv_downcast = PolyData()
+                    # pv_downcast.ShallowCopy(plot_entity)
+                    # pv_downcast.Modified()
+                    # # print(pv_downcast['Normals'])
+                    # plot_entity = pv_downcast.glyph(orient=True,scale=True ,geom=Arrow())
                 else:
                     if plot_entity.get_point_data_shape(show_property)[-1] == 3:
                         plot_rgb_option = True
@@ -2095,7 +2105,6 @@ class View3D(BaseView):
             camera_position = self.plotter.camera_position
         if show_property_title is not None and show_property_title != 'none':
             show_property_cmap = self.parent.prop_legend_df.loc[self.parent.prop_legend_df['property_name'] == show_property_title, "colormap"].values[0]
-            print(show_property_cmap)
         else:
             show_property_cmap = None
         this_actor = self.plotter.add_mesh(plot_entity,
@@ -3086,12 +3095,16 @@ class ViewXsection(View2D):
                         W = plot_entity.points_W
                         Z = plot_entity.points_Z
                         if isinstance(plot_entity, XsVertexSet):
+                            # print(uid)
+                            # print(self.selected_uids)
                             if uid in self.selected_uids:
                                 if show_property == "Normals":
                                     U = np.cos(plot_entity.points_xs_app_dip * np.pi / 180)
                                     V = np.sin(plot_entity.points_xs_app_dip * np.pi / 180)
+
                                     # in quiver scale=40 means arrow is 1/40 of figure width, (shaft) width is scaled to figure width, head length and width are scaled to shaft
                                     this_actor = self.ax.quiver(W, Z, U, V, pivot='mid', scale=50, width=0.002, headwidth=1, headlength=0.01, headaxislength=0.01, facecolor=color_RGB, edgecolor='white', linewidth=1)
+
                                 else:
                                     this_actor, = self.ax.plot(W, Z, color=color_RGB, linestyle='', marker='o', markersize=12, markeredgecolor='white', label=uid, picker=True)
                                 this_actor.set_visible(visible)
@@ -3100,7 +3113,7 @@ class ViewXsection(View2D):
                                     U = np.cos(plot_entity.points_xs_app_dip * np.pi / 180)
                                     V = -np.sin(plot_entity.points_xs_app_dip * np.pi / 180)
                                     # in quiver scale=40 means arrow is 1/40 of figure width, (shaft) width is scaled to figure width, head length and width are scaled to shaft
-                                    this_actor = self.ax.quiver(W, Z, U, V, pivot='mid', scale=50, width=0.002, headwidth=1, headlength=0.01, headaxislength=0.01, facecolor=color_RGB, edgecolor='white', linewidth=1)
+                                    this_actor = self.ax.quiver(W,Z,U,V,pivot='mid', scale=50, width=0.002, headwidth=1, headlength=0.01, headaxislength=0.01, facecolor=color_RGB, edgecolor='white', linewidth=1)
                                 else:
                                     this_actor, = self.ax.plot(W, Z, color=color_RGB, linestyle='', marker='o', markersize=8, markeredgecolor='white', label=uid, picker=True)
                                 this_actor.set_visible(visible)

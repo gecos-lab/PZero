@@ -10,6 +10,8 @@ from numpy import shape as np_shape
 from numpy import arctan2 as np_arctan2
 from numpy import arctan as np_arctan
 from numpy import tan as np_tan
+from numpy import cos as np_cos
+from numpy import sin as np_sin
 from numpy import arcsin as np_arcsin
 from numpy import pi as np_pi
 from numpy import empty as np_empty
