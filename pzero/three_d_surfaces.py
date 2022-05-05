@@ -545,9 +545,10 @@ def linear_extrusion(self):
     if plunge == 90:
         plunge = 89
     """Ask for vertical extrusion: how extruded will the surface be?"""
-    vertical_extrusion = input_one_value_dialog(title='Linear Extrusion', label='Vertical Extrusion', default_value=-1000)
-    if vertical_extrusion is None:
-        vertical_extrusion = -1000
+    extrusion_par = {'bottom':['Lower limit:', -1000],'top':['Higher limit:',1000]}
+    vertical_extrusion = multiple_input_dialog(title='Vertical Extrusion', input_dict=extrusion_par)
+    # if vertical_extrusion is None:
+    #     vertical_extrusion = -1000
     linear_extrusion = vtk.vtkLinearExtrusionFilter()
     linear_extrusion.CappingOn()  # yes or no?
     linear_extrusion.SetExtrusionTypeToVectorExtrusion()
@@ -556,7 +557,8 @@ def linear_extrusion(self):
     y_vector = np.cos(np.pi * (trend + 180) / 180)
     z_vector = np.tan(np.pi * (plunge + 180) / 180)
     linear_extrusion.SetVector(x_vector, y_vector, z_vector)  # double,double,double format
-    linear_extrusion.SetScaleFactor(vertical_extrusion)  # double format
+    linear_extrusion.SetScaleFactor(vertical_extrusion['bottom'])  # double format
+    linear_extrusion.SetScaleFactor(vertical_extrusion['top'])
     linear_extrusion.SetInputData(self.geol_coll.get_uid_vtk_obj(input_uids[0]))
     linear_extrusion.Update()
     """ShallowCopy is the way to copy the new interpolated surface into the TriSurf instance created at the beginning"""
