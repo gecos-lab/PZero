@@ -545,10 +545,14 @@ def linear_extrusion(self):
     if plunge == 90:
         plunge = 89
     """Ask for vertical extrusion: how extruded will the surface be?"""
-    extrusion_par = {'bottom':['Lower limit:', -1000],'top':['Higher limit:',1000]}
+    extrusion_par = {'bottom':['Lower limit:', -1000],'top':['Higher limit',1000]}
     vertical_extrusion = multiple_input_dialog(title='Vertical Extrusion', input_dict=extrusion_par)
-    # if vertical_extrusion is None:
-    #     vertical_extrusion = -1000
+    print(vertical_extrusion)
+    if vertical_extrusion is None:
+        print('Wrong extrusion parameters, please check the top and bottom values')
+        return
+
+    total_extrusion = vertical_extrusion['top']+np.abs(vertical_extrusion['bottom'])
     linear_extrusion = vtk.vtkLinearExtrusionFilter()
     linear_extrusion.CappingOn()  # yes or no?
     linear_extrusion.SetExtrusionTypeToVectorExtrusion()
@@ -557,12 +561,22 @@ def linear_extrusion(self):
     y_vector = np.cos(np.pi * (trend + 180) / 180)
     z_vector = np.tan(np.pi * (plunge + 180) / 180)
     linear_extrusion.SetVector(x_vector, y_vector, z_vector)  # double,double,double format
-    linear_extrusion.SetScaleFactor(vertical_extrusion['bottom'])  # double format
-    linear_extrusion.SetScaleFactor(vertical_extrusion['top'])
+    linear_extrusion.SetScaleFactor(total_extrusion)  # double format
     linear_extrusion.SetInputData(self.geol_coll.get_uid_vtk_obj(input_uids[0]))
     linear_extrusion.Update()
+
+    # [Gabriele] translate the plane using the xyz vector with intensity = negative extrusion value.
+    translate = vtk.vtkTransform()
+    translate.Translate(x_vector*vertical_extrusion['bottom'],y_vector*vertical_extrusion['bottom'],z_vector*vertical_extrusion['bottom'])
+
+    transform_filter = vtk.vtkTransformPolyDataFilter()
+    transform_filter.SetTransform(translate)
+    transform_filter.SetInputConnection(linear_extrusion.GetOutputPort())
+    transform_filter.Update()
+
+    out_polydata = transform_filter.GetOutput()
     """ShallowCopy is the way to copy the new interpolated surface into the TriSurf instance created at the beginning"""
-    surf_dict['vtk_obj'].ShallowCopy(linear_extrusion.GetOutput())
+    surf_dict['vtk_obj'].ShallowCopy(out_polydata)
     surf_dict['vtk_obj'].Modified()
     """Add new entity from surf_dict. Function add_entity_from_dict creates a new uid"""
     if surf_dict['vtk_obj'].points_number > 0:
@@ -1102,15 +1116,6 @@ def project_2_xs(self):
     xb = np.float64(self.xsect_coll.get_uid_end_x(xs_uid))
     yb = np.float64(self.xsect_coll.get_uid_end_y(xs_uid))
 
-
-    m1 = (yb-ya)/(xb-xa)
-    q1 = ya-(m1*xa)
-
-    m2 = -(1/m1)
-
-
-
-
     """Calculate projection direction cosines (float64 needed for "t" afterwards)."""
     alpha = np.float64(np.sin(proj_trend * np.pi / 180.0) * np.cos(proj_plunge * np.pi / 180.0))
     beta = np.float64(np.cos(proj_trend * np.pi / 180.0) * np.cos(proj_plunge * np.pi / 180.0))
@@ -1139,47 +1144,8 @@ def project_2_xs(self):
          np.float64 is needed to calculate "t" with a good precision
          when X and Y are in UTM coordinates with very large values,
          then the result is cast to float32 that is the VTK standard."""
-        if entity_dict['topological_type'] == "XsVertexSet" and xs_dist > 0:
-            map_data = self.geol_coll.get_uid_vtk_obj(uid)
-            list = []
-            old_prop = map_data.point_data_keys
-            clean_outvtk = XsVertexSet(x_section_uid=xs_uid, parent=self)
 
-            for i,x in enumerate(map_data.points_X[:]):
-                y = map_data.points_Y[i]
-                q2 = map_data.points_Y[i] - m2*x
-                x_int = (q2-q1)/(m1-m2)
-                y_int = (m1*x_int)+q1
-
-                p_dist = np.sqrt(np.power(x-x_int,2)+np.power(y-y_int,2))
-                # print(p_dist)
-
-                if p_dist<xs_dist:
-                    list.append(i)
-            if len(list) > 0:
-                xo = map_data.points_X[list].astype(np.float64)
-                yo = map_data.points_Y[list].astype(np.float64)
-                zo = map_data.points_Z[list].astype(np.float64)
-                t = (-xo*(yb-ya) - yo*(xa-xb) - ya*xb + yb*xa) / (alpha*(yb-ya) + beta*(xa-xb))
-
-                proj_x = (xo + alpha * t).astype(np.float32)
-                proj_y = (yo + beta * t).astype(np.float32)
-                proj_z = (zo + gamma * t).astype(np.float32)
-                clean_outvtk.points = np.array([proj_x,proj_y,proj_z]).T
-                clean_outvtk.auto_cells()
-                # for key in map_data.point_data_keys:
-                #     data_clean = map_data.get_point_data(key)[list]
-                #     clean_outvtk.set_point_data(key,data_clean)
-                clean_outvtk.Modified()
-
-                entity_dict['vtk_obj'] = clean_outvtk
-                entity_dict['properties_names'] = []
-                entity_dict['properties_components'] = []
-                out_uid = self.geol_coll.add_entity_from_dict(entity_dict=entity_dict)
-            else:
-                print(f'No measure found for group {entity_dict["name"]}, try to extend the maximum distance')
-
-        elif entity_dict['topological_type'] == "XsVertexSet":
+        if entity_dict['topological_type'] == "XsVertexSet":
             out_vtk = XsVertexSet(x_section_uid=xs_uid, parent=self)
             out_vtk.DeepCopy(self.geol_coll.get_uid_vtk_obj(uid))
             xo = out_vtk.points_X.astype(np.float64)
@@ -1190,8 +1156,26 @@ def project_2_xs(self):
             out_vtk.points_X[:] = (xo + alpha * t).astype(np.float32)
             out_vtk.points_Y[:] = (yo + beta * t).astype(np.float32)
             out_vtk.points_Z[:] = (zo + gamma * t).astype(np.float32)
-            entity_dict['vtk_obj'] = out_vtk
-            out_uid = self.geol_coll.add_entity_from_dict(entity_dict=entity_dict)
+
+            out_vtk.set_point_data('distance',np.abs(t))
+            # print(out_vtk.get_point_data('distance'))
+
+            thresh = vtk.vtkThresholdPoints()
+            thresh.SetInputData(out_vtk)
+            thresh.ThresholdByLower(xs_dist)
+            thresh.SetInputArrayToProcess(0, 0, 0, vtk.vtkDataObject().FIELD_ASSOCIATION_POINTS,
+                                    'distance')
+            thresh.Update()
+
+            thresholded = thresh.GetOutput()
+
+            if thresholded.GetNumberOfPoints() > 0:
+
+                out_vtk.DeepCopy(thresholded)
+                entity_dict['vtk_obj'] = out_vtk
+                out_uid = self.geol_coll.add_entity_from_dict(entity_dict=entity_dict)
+            else:
+                print(f'No measure found for group {entity_dict["name"]}, try to extend the maximum distance')
 
         elif entity_dict['topological_type'] == "XsPolyLine":
             """Output, checking for multipart for polylines."""
@@ -1202,6 +1186,7 @@ def project_2_xs(self):
             n_regions = connectivity.GetNumberOfExtractedRegions()
             connectivity.SetExtractionModeToSpecifiedRegions()
             connectivity.Update()
+            # entity_dict['vtk_obj'] = XsPolyLine()
             for region in range(n_regions):
                 connectivity.InitializeSpecifiedRegionList()
                 connectivity.AddSpecifiedRegion(region)
@@ -1212,6 +1197,7 @@ def project_2_xs(self):
                 connectivity_clean.Update()
                 """Check if polyline really exists then create entity"""
                 if connectivity_clean.GetOutput().GetNumberOfPoints() > 0:
+                    # vtkAppendPolyData...
                     entity_dict['vtk_obj'] = XsPolyLine(x_section_uid=xs_uid, parent=self)
                     entity_dict['vtk_obj'].DeepCopy(connectivity_clean.GetOutput())
                     for data_key in entity_dict['vtk_obj'].point_data_keys:

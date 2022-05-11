@@ -306,7 +306,10 @@ class PolyData(vtkPolyData):
     def points_map_dip_azimuth(self):
         """Returns dip azimuth as Numpy array for map plotting if points have Normals property."""
         if "Normals" in self.point_data_keys:
-            map_dip_azimuth = np_arctan2(self.get_point_data("Normals")[:, 0], self.get_point_data("Normals")[:, 1]) * 180 / np_pi - 180
+            if len(np_shape(self.get_point_data("Normals")))>=2:
+                map_dip_azimuth = np_arctan2(self.get_point_data("Normals")[:, 0], self.get_point_data("Normals")[:, 1]) * 180 / np_pi - 180
+            else:
+                map_dip_azimuth = np_arctan2(self.get_point_data("Normals")[0], self.get_point_data("Normals")[1]) * 180 / np_pi - 180
             return map_dip_azimuth
         else:
             return None
@@ -315,7 +318,12 @@ class PolyData(vtkPolyData):
     def points_map_dip(self):
         """Returns dip as Numpy array for map plotting if points have Normals property."""
         if "Normals" in self.point_data_keys:
-            map_dip = 90 - np_arcsin(-self.get_point_data("Normals")[:, 2]) * 180 / np_pi
+            #problem with one point objects -> np_squeeze (called in get_point_data) returns a (3, ) array instead of a (n,3) array.
+            if len(np_shape(self.get_point_data("Normals")))>=2:
+
+                map_dip = 90 - np_arcsin(-self.get_point_data("Normals")[:, 2]) * 180 / np_pi
+            else:
+                map_dip = 90 - np_arcsin(-self.get_point_data("Normals")[2]) * 180 / np_pi
             return map_dip
         else:
             return None
@@ -373,7 +381,8 @@ class PolyData(vtkPolyData):
         #     """For point entities we don't need to reshape"""
         #     point_data = WrapDataObject(self).PointData[data_key]
         """We use np_squeeze to remove axes with length 1, so a 1D array will be returned with shape (n, ) and not with shape (n, 1)."""
-        return np_squeeze(point_data)
+        #The np_array is sometimes necessary. Without it in some cases this error occures: ndarray subclass __array_wrap__ method returned an object which was not an instance of an ndarray subclass
+        return np_squeeze(np_array(point_data))
 
     def get_point_data_shape(self, data_key=None):
         """Returns the shape of a point data attribute matrix."""

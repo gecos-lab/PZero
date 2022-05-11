@@ -709,6 +709,13 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
     def open_project(self):
         """Opens a project previously saved to disk."""
         """Create empty containers. This clears all previous objects and also allows for missing tables below."""
+        if self.geol_coll.get_number_of_entities() > 0:
+            confirm_new = QMessageBox.question(self, 'Open Project', 'Save all entities and variables of the present project?', QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+            if confirm_new == QMessageBox.No:
+                return
+            elif confirm_new == QMessageBox.Yes:
+                self.save_project()
+
         self.create_empty()
         """Select and open project file."""
         in_file_name = open_file_dialog(parent=self, caption="Open PZero project", filter=("PZero (*.p0)"))
