@@ -95,14 +95,15 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.add_all_entities()
         self.show_qt_canvas()
 
-        """Build and show geology and topology trees, and cross-section, DOM, image, lists"""
-        self.create_geology_tree()
-        self.create_topology_tree()
-        self.create_xsections_tree()
-        self.create_boundary_list()
-        self.create_mesh3d_list()
-        self.create_dom_list()
-        self.create_image_list()
+        if not isinstance(self,ViewXsection):
+            """Build and show geology and topology trees, and cross-section, DOM, image, lists"""
+            self.create_geology_tree()
+            self.create_topology_tree()
+            self.create_xsections_tree()
+            self.create_boundary_list()
+            self.create_mesh3d_list()
+            self.create_dom_list()
+            self.create_image_list()
 
         """Build and show other widgets, icons, tools - TO BE DONE_________________________________"""
 
@@ -161,14 +162,21 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
 
     """Methods used to build and update the geology and topology trees."""
 
-    def create_geology_tree(self):
+    def create_geology_tree(self,secuid=None):
         """Create geology tree with checkboxes and properties"""
         self.GeologyTreeWidget.clear()
         self.GeologyTreeWidget.setColumnCount(3)
         self.GeologyTreeWidget.setHeaderLabels(['Type > Feature > Scenario > Name', 'uid', 'property'])
         self.GeologyTreeWidget.hideColumn(1)  # hide the uid column
         self.GeologyTreeWidget.setItemsExpandable(True)
-        for geo_type in pd.unique(self.parent.geol_coll.df['geological_type']):
+
+        if secuid:
+            filtered_geo = self.parent.geol_coll.df.loc[(self.parent.geol_coll.df['x_section'] == secuid), 'geological_type']
+            geo_types = pd.unique(filtered_geo)
+        else:
+            geo_types = pd.unique(self.parent.geol_coll.df['geological_type'])
+
+        for geo_type in geo_types:
             glevel_1 = QTreeWidgetItem(self.GeologyTreeWidget, [geo_type])  # self.GeologyTreeWidget as parent -> top level
             glevel_1.setFlags(glevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
             for feature in pd.unique(self.parent.geol_coll.df.loc[self.parent.geol_coll.df['geological_type'] == geo_type, 'geological_feature']):
@@ -177,7 +185,11 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                 for scenario in pd.unique(self.parent.geol_coll.df.loc[(self.parent.geol_coll.df['geological_type'] == geo_type) & (self.parent.geol_coll.df['geological_feature'] == feature), 'scenario']):
                     glevel_3 = QTreeWidgetItem(glevel_2, [scenario])  # glevel_2 as parent -> 2nd middle level
                     glevel_3.setFlags(glevel_3.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
-                    for uid in self.parent.geol_coll.df.loc[(self.parent.geol_coll.df['geological_type'] == geo_type) & (self.parent.geol_coll.df['geological_feature'] == feature) & (self.parent.geol_coll.df['scenario'] == scenario), 'uid'].to_list():
+                    if secuid:
+                        uids = self.parent.geol_coll.df.loc[(self.parent.geol_coll.df['geological_type'] == geo_type) & (self.parent.geol_coll.df['geological_feature'] == feature) & (self.parent.geol_coll.df['scenario'] == scenario) & (self.parent.geol_coll.df['x_section'] == secuid), 'uid'].to_list()
+                    else:
+                        uids= self.parent.geol_coll.df.loc[(self.parent.geol_coll.df['geological_type'] == geo_type) & (self.parent.geol_coll.df['geological_feature'] == feature) & (self.parent.geol_coll.df['scenario'] == scenario), 'uid'].to_list()
+                    for uid in uids:
                         property_combo = QComboBox()
                         property_combo.uid = uid
                         property_combo.addItem("none")
@@ -200,20 +212,31 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.GeologyTreeWidget.itemChanged.connect(self.toggle_geology_topology_visibility)
         self.GeologyTreeWidget.expandAll()
 
-    def create_topology_tree(self):
+    def create_topology_tree(self,secuid=None):
         """Create topology tree with checkboxes and properties"""
         self.TopologyTreeWidget.clear()
         self.TopologyTreeWidget.setColumnCount(3)
         self.TopologyTreeWidget.setHeaderLabels(['Type > Scenario > Name', 'uid', 'property'])
         self.TopologyTreeWidget.hideColumn(1)  # hide the uid column
         self.TopologyTreeWidget.setItemsExpandable(True)
-        for topo_type in pd.unique(self.parent.geol_coll.df['topological_type']):
+
+        if secuid:
+            filtered_topo = self.parent.geol_coll.df.loc[(self.parent.geol_coll.df['x_section'] == secuid), 'topological_type']
+            topo_types = pd.unique(filtered_topo)
+        else:
+            topo_types = pd.unique(self.parent.geol_coll.df['topological_type'])
+
+        for topo_type in topo_types:
             tlevel_1 = QTreeWidgetItem(self.TopologyTreeWidget, [topo_type])  # self.GeologyTreeWidget as parent -> top level
             tlevel_1.setFlags(tlevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
             for scenario in pd.unique(self.parent.geol_coll.df.loc[self.parent.geol_coll.df['topological_type'] == topo_type, 'scenario']):
                 tlevel_2 = QTreeWidgetItem(tlevel_1, [scenario])  # tlevel_1 as parent -> middle level
                 tlevel_2.setFlags(tlevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
-                for uid in self.parent.geol_coll.df.loc[(self.parent.geol_coll.df['topological_type'] == topo_type) & (self.parent.geol_coll.df['scenario'] == scenario), 'uid'].to_list():
+                if secuid:
+                    uids = self.parent.geol_coll.df.loc[(self.parent.geol_coll.df['topological_type'] == topo_type) & (self.parent.geol_coll.df['scenario'] == scenario) & (self.parent.geol_coll.df['x_section'] == secuid), 'uid'].to_list()
+                else:
+                    uids = self.parent.geol_coll.df.loc[(self.parent.geol_coll.df['topological_type'] == topo_type) & (self.parent.geol_coll.df['scenario'] == scenario), 'uid'].to_list()
+                for uid in uids:
                     property_combo = QComboBox()
                     property_combo.uid = uid
                     property_combo.addItem("none")
@@ -714,7 +737,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
 
     """Methods used to build and update the Mesh3D table."""
 
-    def create_mesh3d_list(self):
+    def create_mesh3d_list(self,secuid=None):
         """Create mesh3D list with checkboxes."""
         self.Mesh3DTableWidget.clear()
         self.Mesh3DTableWidget.setColumnCount(3)
@@ -722,7 +745,11 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.Mesh3DTableWidget.setHorizontalHeaderLabels(['Name', 'uid'])
         self.Mesh3DTableWidget.hideColumn(1)  # hide the uid column
         row = 0
-        for uid in self.parent.mesh3d_coll.df['uid'].to_list():
+        if secuid:
+            uids = self.parent.mesh3d_coll.df.loc[(self.parent.mesh3d_coll.df['x_section']==secuid),'uid'].to_list()
+        else:
+            uids = self.parent.mesh3d_coll.df['uid'].to_list()
+        for uid in uids:
             name = self.parent.mesh3d_coll.df.loc[self.parent.mesh3d_coll.df['uid'] == uid, 'name'].values[0]
             name_item = QTableWidgetItem(name)
             name_item.setFlags(name_item.flags() | Qt.ItemIsUserCheckable)
@@ -823,7 +850,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
 
     """Methods used to build and update the DOM table."""
 
-    def create_dom_list(self):
+    def create_dom_list(self,secuid=None):
         """Create cross-sections list with checkboxes."""
         self.DOMsTableWidget.clear()
         self.DOMsTableWidget.setColumnCount(3)
@@ -831,7 +858,12 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.DOMsTableWidget.setHorizontalHeaderLabels(['Name', 'uid','Show property'])
         self.DOMsTableWidget.hideColumn(1)  # hide the uid column
         row = 0
-        for uid in self.parent.dom_coll.df['uid'].to_list():
+        if secuid:
+            uids = self.parent.dom_coll.df.loc[(self.parent.dom_coll.df['x_section']==secuid),'uid'].to_list()
+        else:
+            uids = self.parent.dom_coll.df['uid'].to_list()
+        for uid in uids:
+            print(self.parent.dom_coll.df.loc[self.parent.dom_coll.df['uid'] == uid, 'name'])
             name = self.parent.dom_coll.df.loc[self.parent.dom_coll.df['uid'] == uid, 'name'].values[0]
             name_item = QTableWidgetItem(name)
             name_item.setFlags(name_item.flags() | Qt.ItemIsUserCheckable)
@@ -2928,6 +2960,8 @@ class ViewXsection(View2D):
     """Create map view and import UI created with Qt Designer by subclassing base view"""
     """parent is the QT object that is launching this one, hence the ProjectWindow() instance in this case"""
 
+    '''[Gabriele]  [TODO] xsection update only objects that are projected on the section.''' 
+
     def __init__(self, parent=None, *args, **kwargs):
         """Set the Xsection"""
         if parent.xsect_coll.get_names():
@@ -2949,8 +2983,15 @@ class ViewXsection(View2D):
         self.ax.set_xlabel("W [m]", fontsize=int(self.base_font_size * .8))  # set label for W coordinate
         self.ax.set_ylabel("Z [m]", fontsize=int(self.base_font_size * .8))  # set label for Z coordinate
 
-    """Re-implementations of functions that appear in all views - see placeholders in BaseView()"""
-    """NONE AT THE MOMENT"""
+        """Re-implementations of functions that appear in all views - see placeholders in BaseView()"""
+        """NONE AT THE MOMENT"""
+        self.create_geology_tree(secuid=self.this_x_section_uid)
+        self.create_topology_tree(secuid=self.this_x_section_uid)
+        # self.create_xsections_tree()
+        # self.create_boundary_list()
+        self.create_mesh3d_list(secuid=self.this_x_section_uid)
+        self.create_dom_list(secuid=self.this_x_section_uid)
+        # self.create_image_list()
 
     """Implementation of functions specific to 2D views"""
 
