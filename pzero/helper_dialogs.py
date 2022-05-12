@@ -277,6 +277,7 @@ def general_input_dialog(title="title", input_dict=None):
     gridLayout = QGridLayout(widget)
     objects_qt = {}
     i = 0
+
     """FOR loop that builds labels and boxes according to the input_dict."""
     for key in input_dict:
         """Create dynamic variables."""
@@ -488,7 +489,7 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
     '''[Gabriele]  Different types of separators. By writing not using the symbol as a display we can avoid possible confusion between similar separators (e.g tab and space)-> now the separator is auto assigned with the auto_sep function'''
     sep_dict = {'<space>': ' ', '<comma>': ',', '<semi-col>': ';', '<tab>': '   '}
 
-    def __init__(self, parent=None, *args, **kwargs):
+    def __init__(self, parent=None, default_attr_list=None,ext_filter=None,caption=None,*args, **kwargs):
 
         self.loop = QEventLoop()  # Create a QEventLoop necessary to stop the main loop
         super(import_dialog, self).__init__(parent, *args, **kwargs)
@@ -496,17 +497,11 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
 
         self.parent = parent
         self.action = self.sender()  # [Gabriele] Name of the actionmenu from which the import function was called.
+        self.default_attr_list = default_attr_list
+        self.ext_filter = ext_filter
+        self.caption = caption
 
-        self.args = []
-
-        '''[Gabriele]  To generalize the import menu we can use the import_func_dict that has keys that correspond to the action name (eg actionImportPC) and items to the function (eg import_PC). If a new action needs to use this interface we can add to the dict the object name of the action and add a new function. This gives more flexibility in the importers output since it doesn't depend on a single function.
-
-        To add a new import function (e.g. import_PC -> pc2vtk) add the function in this class and add it to the import_func_dict with this template:
-            NameOfActionMenu: self.import_func()'''
-
-        self.import_func_dict = {'actionImportPC': self.import_PC}
-
-
+        self.setWindowTitle(caption)
         '''[Gabriele]  Different types of signals depending on the field in the import options'''
         self.PathtoolButton.clicked.connect(lambda: self.import_file())
         self.PathlineEdit.editingFinished.connect(lambda: self.import_file(path=self.PathlineEdit.text()))
@@ -521,7 +516,7 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
 
         self.PreviewButton.clicked.connect(lambda: self.preview_file(self.input_data_df))
 
-        self.ConfirmBox.accepted.connect(self.import_func_dict[self.action.objectName()])
+        self.ConfirmBox.accepted.connect(lambda: self.export_data())
         self.ConfirmBox.rejected.connect(self.close)
 
         self.AssignTable.setColumnCount(3)
@@ -543,7 +538,7 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
     def import_file(self, path=None):
         '''[Gabriele] Function used to read and preview a PC data file. The open_file_dialog function is used to obtain the file path. Once the file is chosen a different parser is used depending on the extension. Once the file is read the properties are autoassigned (where possible)'''
         if path == None:
-            self.import_options_dict['in_path'] = open_file_dialog(parent=self, caption='Import point cloud data', filter="All supported (*.txt *.csv *.xyz *.asc *.ply *.las *.laz);;Text files (*.txt *.csv *.xyz *.asc);;PLY files (*.ply);;LAS/LAZ files (*.las *.laz)")
+            self.import_options_dict['in_path'] = open_file_dialog(parent=self, caption='Import point cloud data', filter=self.ext_filter)
             self.PathlineEdit.setText(self.import_options_dict['in_path'])
         else:
             self.import_options_dict['in_path'] = path
@@ -552,15 +547,17 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
 
             _, extension = os_path.splitext(self.import_options_dict['in_path'])
 
-            if extension == '.las' or extension == '.laz':
+            if extension == '.las' or extension == '.laz': #this could be a problem with .las files (boreholes)
                 self.input_data_df = self.las2df(self.import_options_dict['in_path'])
 
             elif extension == '.ply':
                 self.input_data_df = self.ply2df(self.import_options_dict['in_path'])
+            elif extension == '.ags':
+                ...
             else:
                 self.input_data_df = self.csv2df(self.import_options_dict['in_path'])
 
-            self.default_attr_list = ['As is', 'X', 'Y', 'Z', 'Red', 'Green', 'Blue', 'Intensity', 'Normals', 'User defined', 'N.a.']
+
 
             '''[Gabriele]  Auto-assign values using the difflib library (internal). If there is no match then the column is not imported (N.a.). In this step the rename_dict dictionary is compiled where:
             - the keys correspond to the column index of the input df
@@ -601,7 +598,7 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
         self.model = PCDataModel(self.input_data_df, index_list)
         self.dataView.setModel(self.model)
 
-    def import_PC(self):
+    def export_data(self):
         '''[Gabriele]  Import the pc data in PZero. Here the information needed to read and properly import the whole file is prepared:
         - path: file path
         - row_range: range of needed rows
@@ -628,16 +625,13 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
 
         ''' [Gabriele] X and Y are not always called exactly like this and they can occupy other positions. The clean_dict is reverse searched (get the key using a given valdue) to obtain the index positions of the X Y columns in the raw df.'''
 
-        x_pos = index_list[col_names.index('X')]
-        y_pos = index_list[col_names.index('Y')]
-        offset = self.input_data_df.loc[0][[x_pos, y_pos]].round(-2)
-        self.args = [path,col_names,row_range,index_list,delimiter,offset,self]
+
+        self.args = [path,col_names,row_range,index_list,delimiter,self]
         self.close()
         self.loop.quit()
         # [Gabriele] Would be more convinient to import from here. This way we can modify the import parameters without opening every time the dialog.
         # pc2vtk(in_file_name=path, col_names=col_names, row_range=row_range, usecols=index_list, delimiter=delimiter, offset=offset, self=self, header_row=0)
 
-    # @profiler('../pz_pers/reports/readfile.csv',200)
     def las2df(self, path):
         '''[Gabriele]  LAS/LAZ file parser.
         Reads .las and .laz file using the laspy package. The whole file is read and then processed in a dict cycling through the dim_names list. The dict then is converted in a pandas dataframe using the from_dict function.
@@ -685,7 +679,6 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
         df = pd_read_csv(path, sep=sep, nrows=50, engine='c', index_col=False)
         return df
 
-    # @profiler('../pz_pers/reports/readfile.csv',200)
     def ply2df(self, path):
         '''[Gabriele]  PLY file parser.
         It reads the first header lines to search for properties such as XYZ, RGB etcetc. When the "end_header" line is reached the file is read as a normal .csv file and parsed with pandas.read_csv skipping the header lines.

@@ -26,7 +26,7 @@ from laspy import read as lp_read
 # from .helper_functions import profiler
 
 
-def pc2vtk(in_file_name,col_names,row_range,header_row,usecols,delimiter,offset,self=None):
+def pc2vtk(in_file_name,col_names,row_range,header_row,usecols,delimiter,self=None):
 
 
     print('1. Reading and importing file')
@@ -90,6 +90,8 @@ def pc2vtk(in_file_name,col_names,row_range,header_row,usecols,delimiter,offset,
         print('3. Creating PointCloud')
 
         ''' [Gabriele] Correcting input data by subtracting an equal value approximated to the hundreds (53932.4325 -> 53932.4325 - 53900.0000 = 32.4325). Can be always applied since for numbers < 100 the approximation is always 0.'''
+
+        offset = input_df.loc[0,['X', 'Y']].round(-2)
 
         input_df['X'] -= offset[0]
         input_df['Y'] -= offset[1]

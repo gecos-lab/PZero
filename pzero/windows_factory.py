@@ -8,7 +8,7 @@ from PyQt5.QtGui import QCloseEvent
 
 """PZero imports"""
 from .base_view_window_ui import Ui_BaseViewWindow
-from .entities_factory import VertexSet, PolyLine, TriSurf, TetraSolid, XsVertexSet, XsPolyLine, DEM, PCDom, MapImage, Voxet, XsVoxet, Plane, Seismics, XsTriSurf, XsImage, PolyData
+from .entities_factory import VertexSet, PolyLine, TriSurf, TetraSolid, XsVertexSet, XsPolyLine, DEM, PCDom, MapImage, Voxet, XsVoxet, Plane, Seismics, XsTriSurf, XsImage, PolyData, Wells
 from .helper_dialogs import input_one_value_dialog, input_text_dialog, input_combo_dialog, message_dialog, options_dialog, multiple_input_dialog, tic, toc,open_file_dialog
 # from .geological_collection import GeologicalCollection
 # from copy import deepcopy
@@ -27,7 +27,7 @@ from vtkmodules.vtkInteractionWidgets import vtkCameraOrientationWidget
 """3D plotting imports"""
 from pyvista import global_theme as pv_global_theme
 from pyvistaqt import QtInteractor as pvQtInteractor
-from pyvista import Arrow,Circle, PolyData
+from pyvista import Arrow,Circle, PolyData,Cylinder
 
 """2D plotting imports"""
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
@@ -104,11 +104,13 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             self.create_mesh3d_list()
             self.create_dom_list()
             self.create_image_list()
+            self.create_well_tree()
 
         """Build and show other widgets, icons, tools - TO BE DONE_________________________________"""
 
         """Connect signals to update functions. Use lambda functions where we need to pass additional
         arguments such as parent in addition to the signal itself - the updated_list."""
+
         self.parent.geology_added_signal.connect(lambda updated_list: self.geology_added_update_views(updated_list=updated_list))
         self.parent.geology_removed_signal.connect(lambda updated_list: self.geology_removed_update_views(updated_list=updated_list))
         self.parent.geology_geom_modified_signal.connect(lambda updated_list: self.geology_geom_modified_update_views(updated_list=updated_list))
@@ -151,6 +153,14 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.parent.image_added_signal.connect(lambda updated_list: self.image_added_update_views(updated_list=updated_list))
         self.parent.image_removed_signal.connect(lambda updated_list: self.image_removed_update_views(updated_list=updated_list))
         self.parent.image_metadata_modified_signal.connect(lambda updated_list: self.image_metadata_modified_update_views(updated_list=updated_list))
+
+        self.parent.well_added_signal.connect(lambda updated_list: self.well_added_update_views(updated_list=updated_list))
+        self.parent.well_removed_signal.connect(lambda updated_list: self.well_removed_update_views(updated_list=updated_list))
+        self.parent.well_data_keys_removed_signal.connect(lambda updated_list: self.well_data_keys_modified_update_views(updated_list=updated_list))
+        self.parent.well_data_val_modified_signal.connect(lambda updated_list: self.well_data_val_modified_update_views(updated_list=updated_list))
+        self.parent.well_metadata_modified_signal.connect(lambda updated_list: self.well_metadata_modified_update_views(updated_list=updated_list))
+        self.parent.well_legend_color_modified_signal.connect(lambda updated_list: self.well_legend_color_modified_update_views(updated_list=updated_list))
+        self.parent.well_legend_thick_modified_signal.connect(lambda updated_list: self.well_legend_thick_modified_update_views(updated_list=updated_list))
 
         self.parent.prop_legend_cmap_modified_signal.connect(lambda this_property: self.prop_legend_cmap_modified_update_views(this_property=this_property))
 
@@ -577,7 +587,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         IN THE FUTURE see if it is possible and more efficient to keep the actor and just change the property shown."""
         self.remove_actor_in_view(uid=uid)
         this_actor = self.show_actor_with_property(uid=uid, collection=collection, show_property=show_property, visible=show)
-        self.actors_df = self.actors_df.append({'uid': uid, 'actor': this_actor, 'show': show, 'collection': collection, 'show_prop': show_property}, ignore_index=True)  # self.set_actor_visible(uid=uid, visible=show)
+        self.actors_df = self.actors_df.append({'uid': uid, 'actor': this_actor, 'show': show, 'collection': collection, 'show_prop': show_property}, ignore_index=True) # self.set_actor_visible(uid=uid, visible=show)
 
     """Methods used to build and update the cross-section table."""
 
@@ -863,7 +873,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         else:
             uids = self.parent.dom_coll.df['uid'].to_list()
         for uid in uids:
-            print(self.parent.dom_coll.df.loc[self.parent.dom_coll.df['uid'] == uid, 'name'])
+            # print(self.parent.dom_coll.df.loc[self.parent.dom_coll.df['uid'] == uid, 'name'])
             name = self.parent.dom_coll.df.loc[self.parent.dom_coll.df['uid'] == uid, 'name'].values[0]
             name_item = QTableWidgetItem(name)
             name_item.setFlags(name_item.flags() | Qt.ItemIsUserCheckable)
@@ -1125,6 +1135,161 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         this_actor = self.show_actor_with_property(uid=uid, collection=collection, show_property=show_property, visible=show)
         self.actors_df = self.actors_df.append({'uid': uid, 'actor': this_actor, 'show': show, 'collection': collection, 'show_prop': show_property}, ignore_index=True)  # self.set_actor_visible(uid=uid, visible=show)
 
+    def create_well_tree(self):
+        """Create topology tree with checkboxes and properties"""
+        self.WellsTreeWidget.clear()
+        self.WellsTreeWidget.setColumnCount(3)
+        self.WellsTreeWidget.setHeaderLabels(['Loc ID > Unit name', 'uid', 'property'])
+        self.WellsTreeWidget.hideColumn(1)  # hide the uid column
+        self.WellsTreeWidget.setItemsExpandable(True)
+
+
+        locids = pd.unique(self.parent.well_coll.df['Loc ID'])
+
+        for locid in locids:
+            tlevel_1 = QTreeWidgetItem(self.WellsTreeWidget, [locid])  # self.GeologyTreeWidget as parent -> top level
+            tlevel_1.setFlags(tlevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
+            for geological_feature in pd.unique(self.parent.well_coll.df.loc[self.parent.well_coll.df['Loc ID'] == locid, 'geological_feature']):
+                uid = self.parent.well_coll.df.loc[(self.parent.well_coll.df['Loc ID'] == locid)&(self.parent.well_coll.df['geological_feature'] == geological_feature), 'uid'].values[0]
+                tlevel_2 = QTreeWidgetItem(tlevel_1, [geological_feature, uid])  # tlevel_1 as parent -> middle level
+                tlevel_2.setFlags(tlevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
+
+                property_combo = QComboBox()
+                property_combo.uid = uid
+                property_combo.addItem("none")
+                property_combo.addItem("X")
+                property_combo.addItem("Y")
+                property_combo.addItem("Z")
+                for prop in self.parent.well_coll.get_uid_properties_names(uid):
+                    property_combo.addItem(prop)
+
+                self.WellsTreeWidget.setItemWidget(tlevel_2, 2, property_combo)
+                property_combo.currentIndexChanged.connect(lambda: self.toggle_property())
+                tlevel_2.setFlags(tlevel_2.flags() | Qt.ItemIsUserCheckable)
+                if self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]:
+                    tlevel_2.setCheckState(0, Qt.Checked)
+                elif not self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]:
+                    tlevel_2.setCheckState(0, Qt.Unchecked)
+        """Send messages. Note that with tristate several signals are emitted in a sequence, one for each
+        changed item, but upper levels do not broadcast uid's so they are filtered in the toggle method."""
+        self.WellsTreeWidget.itemChanged.connect(self.toggle_well_visibility)
+        self.WellsTreeWidget.expandAll()
+
+
+    def update_well_tree_added(self, new_list=None):
+        ...
+    def update_well_tree_removed(self, new_list=None):
+        ...
+    def update_well_checkboxes(self, uid=None, uid_checkState=None):
+        """Update checkboxes in geology tree, called when state changed in topology tree."""
+        item = self.WellsTreeWidget.findItems(uid, Qt.MatchFixedString | Qt.MatchRecursive, 1)[0]
+        if uid_checkState == Qt.Checked:
+            item.setCheckState(0, Qt.Checked)
+        elif uid_checkState == Qt.Unchecked:
+            item.setCheckState(0, Qt.Unchecked)
+
+    def toggle_well_visibility(self, item, column):
+        """Called by self.WellsTreeWidget.itemChanged.connect(self.toggle_boundary_visibility)."""
+        name = item.text(0)  # not used
+        uid = item.text(1)
+        uid_checkState = item.checkState(0)
+        if uid:  # needed to skip messages from upper levels of tree that do not broadcast uid's
+            if uid_checkState == Qt.Checked:
+                if not self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]:
+                    self.actors_df.loc[self.actors_df['uid'] == uid, 'show'] = True
+                    self.set_actor_visible(uid=uid, visible=True)
+            elif uid_checkState == Qt.Unchecked:
+                if self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]:
+                    self.actors_df.loc[self.actors_df['uid'] == uid, 'show'] = False
+                    self.set_actor_visible(uid=uid, visible=False)
+
+            self.WellsTreeWidget.itemChanged.disconnect()
+            self.update_well_checkboxes(uid=uid, uid_checkState=uid_checkState)
+            self.WellsTreeWidget.itemChanged.connect(self.toggle_well_visibility)
+
+
+    def well_added_update_views(self, updated_list=None):
+        """This is called when an entity is added to the geological collection.
+        Disconnect signals to geology and topology tree, if they are set, to avoid a nasty loop
+        that disrupts the trees, then they are reconnected when the trees are rebuilt"""
+        self.WellsTreeWidget.itemChanged.disconnect()
+        """Create pandas dataframe as list of "new" actors"""
+        self.actors_df_new = pd.DataFrame(columns=['uid', 'actor', 'show', 'collection', 'show_prop'])
+        for uid in updated_list:
+            this_actor = self.show_actor_with_property(uid=uid, collection='well_coll', show_property=None, visible=True)
+
+            self.actors_df = self.actors_df.append({'uid': uid, 'actor': this_actor, 'show': True, 'collection': 'well_coll', 'show_prop': None}, ignore_index=True)
+
+            self.actors_df_new = self.actors_df_new.append({'uid': uid, 'actor': this_actor, 'show': True, 'collection': 'well_coll', 'show_prop': None}, ignore_index=True)
+
+            self.update_well_tree_added(self.actors_df_new)
+        """Re-connect signals."""
+        self.WellsTreeWidget.itemChanged.connect(self.toggle_well_visibility)
+
+    def well_removed_update_views(self, updated_list=None):
+        """This is called when an entity is removed from the geological collection.
+        Disconnect signals to geology and topology tree, if they are set, to avoid a nasty loop
+        that disrupts the trees, then they are reconnected when the trees are rebuilt"""
+        self.WellsTreeWidget.itemChanged.disconnect()
+        for uid in updated_list:
+            self.remove_actor_in_view(uid=uid, redraw=True)
+        self.update_well_tree_removed(removed_list=updated_list)
+        """Re-connect signals."""
+        self.WellsTreeWidget.itemChanged.connect(self.toggle_well_visibility)
+
+    def well_data_keys_modified_update_views(self, updated_list=None):
+        """This is called when entity point or cell data are modified.
+        Disconnect signals to geology and topology tree, if they are set, to avoid a nasty loop
+        that disrupts the trees, then they are reconnected when the trees are rebuilt"""
+        self.WellsTreeWidget.itemChanged.disconnect()
+        for uid in updated_list:
+            if not self.actors_df.loc[self.actors_df['uid'] == uid, 'show_prop'].to_list() == []:
+                if not self.actors_df.loc[self.actors_df['uid'] == uid, 'show_prop'].values[0] in self.parent.geol_coll.get_uid_properties_names(uid):
+                    show = self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].to_list()[0]
+                    self.remove_actor_in_view(uid=uid)
+                    this_actor = self.show_actor_with_property(uid=uid, collection='geol_coll', show_property=None, visible=show)
+                    self.actors_df = self.actors_df.append({'uid': uid, 'actor': this_actor, 'show': show, 'collection': 'well_coll', 'show_prop': None}, ignore_index=True)  # self.actors_df.loc[self.actors_df["uid"] == uid, 'actor'] = this_actor
+                    self.create_well_tree()
+        """Re-connect signals."""
+        self.WellsTreeWidget.itemChanged.connect(self.toggle_well_visibility)
+
+    def well_data_val_modified_update_views(self, updated_list=None):
+        ...
+
+    def well_metadata_modified_update_views(self, updated_list=None):
+        """This is called when entity metadata are modified, and the legend is automatically updated.
+        Disconnect signals to geology and topology tree, if they are set, to avoid a nasty loop
+        that disrupts the trees, then they are reconnected when the trees are rebuilt"""
+        self.WellsTreeWidget.itemChanged.disconnect()
+        for uid in updated_list:
+            """Case for entities modified"""
+            self.change_actor_color(uid=uid, collection='well_coll')
+            self.change_actor_line_thick(uid=uid, collection='well_coll')
+            self.create_well_tree()
+        """Re-connect signals."""
+        self.WellsTreeWidget.itemChanged.connect(self.toggle_well_visibility)
+
+    def well_legend_color_modified_update_views(self, updated_list=None):
+        """This is called when the color in the geological legend is modified.
+        Disconnect signals to geology and topology tree, if they are set, to avoid a nasty loop
+        that disrupts the trees, then they are reconnected when the trees are rebuilt"""
+        self.WellsTreeWidget.itemChanged.disconnect()
+        for uid in updated_list:
+            """Case for color changed"""
+            self.change_actor_color(uid=uid, collection='well_coll')
+        """Re-connect signals."""
+        self.WellsTreeWidget.itemChanged.connect(self.toggle_well_visibility)
+
+    def well_legend_thick_modified_update_views(self, updated_list=None):
+        """This is called when the line thickness in the geological legend is modified.
+        Disconnect signals to geology and topology tree, if they are set, to avoid a nasty loop
+        that disrupts the trees, then they are reconnected when the trees are rebuilt"""
+        self.WellsTreeWidget.itemChanged.disconnect()
+        for uid in updated_list:
+            """Case for line_thick changed"""
+            self.change_actor_line_thick(uid=uid, collection='well_coll')
+        """Re-connect signals."""
+        self.WellsTreeWidget.itemChanged.connect(self.toggle_well_visibility)
     """Methods used to add, remove, and update actors from the geological collection."""
 
     def geology_added_update_views(self, updated_list=None):
@@ -1137,6 +1302,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.actors_df_new = pd.DataFrame(columns=['uid', 'actor', 'show', 'collection', 'show_prop'])
         for uid in updated_list:
             this_actor = self.show_actor_with_property(uid=uid, collection='geol_coll', show_property=None, visible=True)
+
             self.actors_df = self.actors_df.append({'uid': uid, 'actor': this_actor, 'show': True, 'collection': 'geol_coll', 'show_prop': None}, ignore_index=True)
             self.actors_df_new = self.actors_df_new.append({'uid': uid, 'actor': this_actor, 'show': True, 'collection': 'geol_coll', 'show_prop': None}, ignore_index=True)
             self.update_geology_tree_added(self.actors_df_new)
@@ -1633,6 +1799,9 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         for uid in self.parent.image_coll.df['uid'].tolist():
             this_actor = self.show_actor_with_property(uid=uid, collection='image_coll', show_property=None, visible=False)
             self.actors_df = self.actors_df.append({'uid': uid, 'actor': this_actor, 'show': False, 'collection': 'image_coll', 'show_prop': None}, ignore_index=True)
+        for uid in self.parent.well_coll.df['uid'].tolist():
+            this_actor = self.show_actor_with_property(uid=uid, collection='well_coll', show_property=None, visible=False)
+            self.actors_df = self.actors_df.append({'uid': uid, 'actor': this_actor, 'show': False, 'collection': 'well_coll', 'show_prop': None}, ignore_index=True)
 
     def prop_legend_cmap_modified_update_views(self, this_property=None):
         """Redraw all actors that are currently shown with a property whose colormap has been changed."""
@@ -1703,6 +1872,8 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                 self.parent.dom_coll.remove_entity(uid=uid)
             elif self.actors_df.loc[self.actors_df['uid'] == uid, 'collection'].values[0] == 'image_coll':
                 self.parent.image_coll.remove_entity(uid=uid)
+            elif self.actors_df.loc[self.actors_df['uid'] == uid, 'collection'].values[0] == 'well_coll':
+                self.parent.well_coll.remove_entity(uid=uid)
         """List of selected_uids is cleared"""
         self.selected_uids = []
 
@@ -1837,9 +2008,15 @@ class View3D(BaseView):
             color_R = self.parent.dom_coll.get_legend()['color_R']
             color_G = self.parent.dom_coll.get_legend()['color_G']
             color_B = self.parent.dom_coll.get_legend()['color_B']
+        elif collection == 'well_coll':
+            color_R = self.parent.well_coll.get_uid_legend(uid=uid)['color_R']
+            color_G = self.parent.well_coll.get_uid_legend(uid=uid)['color_G']
+            color_B = self.parent.well_coll.get_uid_legend(uid=uid)['color_B']
+
         """Note: no legend for image."""
         """Update color for actor uid"""
         color_RGB = [color_R / 255, color_G / 255, color_B / 255]
+
         self.actors_df.loc[self.actors_df['uid'] == uid, 'actor'].values[0].GetProperty().SetColor(color_RGB)
 
     def change_actor_line_thick(self, uid=None, collection=None):
@@ -1860,6 +2037,8 @@ class View3D(BaseView):
                 self.actors_df.loc[self.actors_df['uid'] == uid, 'actor'].values[0].GetProperty().SetPointSize(line_thick)
             else:
                 self.actors_df.loc[self.actors_df['uid'] == uid, 'actor'].values[0].GetProperty().SetLineWidth(line_thick)
+        elif collection == 'well_coll':
+            line_thick = self.parent.well_coll.get_legend()['line_thick']
 
     def set_actor_visible(self, uid=None, visible=None):
         """Set actor uid visible or invisible (visible = True or False)"""
@@ -1920,6 +2099,13 @@ class View3D(BaseView):
             color_RGB = [255, 255, 255]
             line_thick = 5.0
             plot_entity = self.parent.image_coll.get_uid_vtk_obj(uid)
+        elif collection == 'well_coll':
+            color_R = self.parent.well_coll.get_uid_legend(uid=uid)['color_R']
+            color_G = self.parent.well_coll.get_uid_legend(uid=uid)['color_G']
+            color_B = self.parent.well_coll.get_uid_legend(uid=uid)['color_B']
+            color_RGB = [color_R / 255, color_G / 255, color_B / 255]
+            line_thick = self.parent.well_coll.get_uid_legend(uid=uid)['line_thick']
+            plot_entity = self.parent.well_coll.get_uid_vtk_obj(uid)
         else:
             print("no collection")
             this_actor = None
@@ -2119,6 +2305,28 @@ class View3D(BaseView):
                                                plot_texture_option=False, plot_rgb_option=plot_rgb_option, visible=visible)
             else:
                 this_actor = None
+        elif isinstance(plot_entity, Wells):
+            plot_rgb_option = None
+            if show_property is None:
+                show_scalar_bar = False
+                pass
+            elif show_property == 'none':
+                show_scalar_bar = False
+                show_property = None
+            elif show_property == 'X':
+                show_property = plot_entity.points_X
+            elif show_property == 'Y':
+                show_property = plot_entity.points_Y
+            elif show_property == 'Z':
+                show_property = plot_entity.points_Z
+            else:
+                if plot_entity.get_point_data_shape(show_property)[-1] == 3:
+                    plot_rgb_option = True
+
+            this_actor = self.plot_mesh_3D(uid=uid, plot_entity=plot_entity, color_RGB=color_RGB, show_property=show_property, show_scalar_bar=show_scalar_bar,
+                                           color_bar_range=None, show_property_title=show_property_title, line_thick=line_thick,
+                                           plot_texture_option=False, plot_rgb_option=plot_rgb_option, visible=visible,smooth_shading=True)
+
         else:
             print("[Windows factory]: actor with no class")
             this_actor = None
@@ -2127,7 +2335,7 @@ class View3D(BaseView):
     def plot_mesh_3D(self, uid=None, plot_entity=None, color_RGB=None, show_property=None, show_scalar_bar=None,
                      color_bar_range=None, show_property_title=None, line_thick=None,
                      plot_texture_option=None, plot_rgb_option=None, visible=None,
-                     style='surface', point_size=5.0, points_as_spheres=False):
+                     style='surface', point_size=5.0, points_as_spheres=False,smooth_shading=False,split_sharp_edges=False):
         if not self.actors_df.empty:
             """This stores the camera position before redrawing the actor.
             Added to avoid a bug that sometimes sends the scene to a very distant place.
@@ -2163,7 +2371,8 @@ class View3D(BaseView):
                                            texture=plot_texture_option,  # ________________________________ vtk.vtkTexture or np.ndarray or boolean, will work if input mesh has texture coordinates. True > first available texture. String > texture with that name already associated to mesh.
                                            render_points_as_spheres=points_as_spheres,
                                            render_lines_as_tubes=False,
-                                           smooth_shading=False,
+                                           smooth_shading=smooth_shading,
+                                           split_sharp_edges=split_sharp_edges,
                                            ambient=0.0,
                                            diffuse=1.0,
                                            specular=0.0,
@@ -2960,7 +3169,7 @@ class ViewXsection(View2D):
     """Create map view and import UI created with Qt Designer by subclassing base view"""
     """parent is the QT object that is launching this one, hence the ProjectWindow() instance in this case"""
 
-    '''[Gabriele]  [TODO] xsection update only objects that are projected on the section.''' 
+    '''[Gabriele]  [TODO] xsection update only objects that are projected on the section.'''
 
     def __init__(self, parent=None, *args, **kwargs):
         """Set the Xsection"""

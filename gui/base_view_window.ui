@@ -110,8 +110,8 @@
          <rect>
           <x>0</x>
           <y>0</y>
-          <width>282</width>
-          <height>448</height>
+          <width>278</width>
+          <height>416</height>
          </rect>
         </property>
         <property name="sizePolicy">
@@ -176,8 +176,8 @@
          <rect>
           <x>0</x>
           <y>0</y>
-          <width>282</width>
-          <height>448</height>
+          <width>278</width>
+          <height>416</height>
          </rect>
         </property>
         <property name="sizePolicy">
@@ -236,8 +236,8 @@
          <rect>
           <x>0</x>
           <y>0</y>
-          <width>282</width>
-          <height>448</height>
+          <width>107</width>
+          <height>107</height>
          </rect>
         </property>
         <property name="sizePolicy">
@@ -307,6 +307,14 @@
         </layout>
        </widget>
        <widget class="QWidget" name="BoundariesPage">
+        <property name="geometry">
+         <rect>
+          <x>0</x>
+          <y>0</y>
+          <width>107</width>
+          <height>107</height>
+         </rect>
+        </property>
         <property name="sizePolicy">
          <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
           <horstretch>0</horstretch>
@@ -346,8 +354,8 @@
          <rect>
           <x>0</x>
           <y>0</y>
-          <width>282</width>
-          <height>448</height>
+          <width>107</width>
+          <height>107</height>
          </rect>
         </property>
         <property name="sizePolicy">
@@ -401,8 +409,8 @@
          <rect>
           <x>0</x>
           <y>0</y>
-          <width>282</width>
-          <height>448</height>
+          <width>107</width>
+          <height>107</height>
          </rect>
         </property>
         <property name="sizePolicy">
@@ -451,13 +459,37 @@
          </item>
         </layout>
        </widget>
+       <widget class="QWidget" name="WellsPage">
+        <property name="geometry">
+         <rect>
+          <x>0</x>
+          <y>0</y>
+          <width>278</width>
+          <height>416</height>
+         </rect>
+        </property>
+        <attribute name="label">
+         <string>Wells</string>
+        </attribute>
+        <layout class="QVBoxLayout" name="verticalLayout_9">
+         <item>
+          <widget class="QTreeWidget" name="WellsTreeWidget">
+           <column>
+            <property name="text">
+             <string notr="true">1</string>
+            </property>
+           </column>
+          </widget>
+         </item>
+        </layout>
+       </widget>
        <widget class="QWidget" name="ImagesPage">
         <property name="geometry">
          <rect>
           <x>0</x>
           <y>0</y>
-          <width>282</width>
-          <height>448</height>
+          <width>107</width>
+          <height>107</height>
          </rect>
         </property>
         <property name="sizePolicy">

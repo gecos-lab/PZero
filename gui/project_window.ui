@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>1280</width>
-    <height>806</height>
+    <height>800</height>
    </rect>
   </property>
   <property name="sizePolicy">
@@ -251,6 +251,16 @@
            <bool>true</bool>
           </property>
          </widget>
+        </item>
+       </layout>
+      </widget>
+      <widget class="QWidget" name="tabWells">
+       <attribute name="title">
+        <string>Wells</string>
+       </attribute>
+       <layout class="QVBoxLayout" name="verticalLayout_10">
+        <item>
+         <widget class="QTableView" name="WellsTableView"/>
         </item>
        </layout>
       </widget>
@@ -514,6 +524,7 @@
     <addaction name="actionImportDEM"/>
     <addaction name="actionImportOrthoImage"/>
     <addaction name="actionImportXsectionImage"/>
+    <addaction name="actionImport_well_data"/>
     <addaction name="actionImportSEGY"/>
     <addaction name="separator"/>
     <addaction name="actionExportCAD"/>
@@ -647,6 +658,7 @@
    <addaction name="actionImportDEM"/>
    <addaction name="actionImportOrthoImage"/>
    <addaction name="actionImportXsectionImage"/>
+   <addaction name="actionImport_well_data"/>
    <addaction name="actionImportSEGY"/>
    <addaction name="separator"/>
    <addaction name="actionExportCAD"/>
@@ -1052,6 +1064,11 @@
   <action name="actionImportPC">
    <property name="text">
     <string>Import Point Clouds</string>
+   </property>
+  </action>
+  <action name="actionImport_well_data">
+   <property name="text">
+    <string>Import well data</string>
    </property>
   </action>
  </widget>

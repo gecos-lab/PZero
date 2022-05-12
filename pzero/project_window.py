@@ -11,13 +11,14 @@ from PyQt5.QtCore import Qt, QSortFilterProxyModel, pyqtSignal
 import vtk
 import pandas as pd
 from .project_window_ui import Ui_ProjectWindow
-from .entities_factory import Plane, VertexSet, PolyLine, TriSurf, XsVertexSet, XsPolyLine, DEM, MapImage, Voxet, Seismics, XsVoxet, TetraSolid, PCDom, TSDom
+from .entities_factory import Plane, VertexSet, PolyLine, TriSurf, XsVertexSet, XsPolyLine, DEM, MapImage, Voxet, Seismics, XsVoxet, TetraSolid, PCDom, TSDom, Wells
 from .geological_collection import GeologicalCollection
 from .xsection_collection import XSectionCollection
 from .dom_collection import DomCollection
 from .image_collection import ImageCollection
 from .mesh3d_collection import Mesh3DCollection
 from .boundary_collection import BoundaryCollection
+from .well_collection import WellCollection
 from .legend_manager import Legend
 from .properties_manager import PropertiesCMaps
 from .gocad2vtk import gocad2vtk, vtk2gocad, gocad2vtk_section, gocad2vtk_boundary
@@ -27,11 +28,12 @@ from .vedo2vtk import vedo2vtk
 from .shp2vtk import shp2vtk
 from .dem2vtk import dem2vtk
 from .dxf2vtk import vtk2dxf
+from .well2vtk import well2vtk
 from .segy2vtk import segy2vtk
 from .windows_factory import View3D
 from .windows_factory import ViewMap
 from .windows_factory import ViewXsection
-from .helper_dialogs import options_dialog, save_file_dialog, open_file_dialog, input_combo_dialog, message_dialog, multiple_input_dialog, input_one_value_dialog, input_text_dialog, progress_dialog, import_dialog
+from .helper_dialogs import options_dialog, save_file_dialog, open_file_dialog, input_combo_dialog, message_dialog, multiple_input_dialog, input_one_value_dialog, input_text_dialog, progress_dialog, import_dialog,general_input_dialog
 from .image2vtk import geo_image2vtk, xs_image2vtk
 from .stl2vtk import vtk2stl, vtk2stl_dilation
 from .obj2vtk import vtk2obj
@@ -88,6 +90,14 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
     image_removed_signal = pyqtSignal(list)
     image_metadata_modified_signal = pyqtSignal(list)
 
+    well_added_signal = pyqtSignal(list)
+    well_removed_signal = pyqtSignal(list)
+    well_data_keys_removed_signal = pyqtSignal(list)
+    well_data_val_modified_signal = pyqtSignal(list)
+    well_metadata_modified_signal = pyqtSignal(list)
+    well_legend_color_modified_signal = pyqtSignal(list)
+    well_legend_thick_modified_signal = pyqtSignal(list)
+
     prop_legend_cmap_modified_signal = pyqtSignal(str)
 
     """Add other signals above this line ----------------------------------------"""
@@ -132,6 +142,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.actionImportDEM.triggered.connect(self.import_DEM)
         self.actionImportOrthoImage.triggered.connect(self.import_mapimage)
         self.actionImportXsectionImage.triggered.connect(self.import_xsimage)
+        self.actionImport_well_data.triggered.connect(self.import_welldata)
         self.actionImportSEGY.triggered.connect(self.import_SEGY)
 
         """File>Export actions -> slots"""
@@ -560,13 +571,23 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.proxy_boundary_coll.setSourceModel(self.boundary_coll)
         self.BoundariesTableView.setModel(self.proxy_boundary_coll)
 
+        '''[Gabriele]  Create the weel_coll WellCollection (a Qt QAbstractTableModel with a Pandas dataframe as attribute)
+        and connect the model to WellTableView (a Qt QTableView created with QTDesigner and provided by
+        Ui_ProjectWindow). Setting the model also updates the view.'''
+        self.well_coll = WellCollection(parent=self)
+        self.proxy_well_coll = QSortFilterProxyModel(self)
+        self.proxy_well_coll.setSourceModel(self.well_coll)
+        self.WellsTableView.setModel(self.proxy_well_coll)
+
         """Create the geol_legend_df legend table (a Pandas dataframe), create the corresponding QT
         Legend self.legend (a Qt QTreeWidget that is internally connected to its data source),
         and update the widget."""
         self.geol_legend_df = pd.DataFrame(columns=list(Legend.geol_legend_dict.keys()))
+        self.well_legend_df = pd.DataFrame(columns=list(Legend.well_legend_dict.keys()))
         self.others_legend_df = pd.DataFrame(deepcopy(Legend.others_legend_dict))
         self.legend = Legend()
         self.legend.update_widget(parent=self)
+
 
         """Create the prop_legend_df table (a Pandas dataframe), create the corresponding QT
         PropertiesCMaps table widget self.prop_legend (a Qt QTableWidget that is internally connected to its data source),
@@ -574,6 +595,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.prop_legend_df = pd.DataFrame(PropertiesCMaps.prop_cmap_dict)
         self.prop_legend = PropertiesCMaps()
         self.prop_legend.update_widget(parent=self)
+
 
     def save_project(self):
         """Save project to file and folder"""
@@ -990,11 +1012,14 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
 
     def import_PC(self):
         """Import point cloud data. File extension dependent (.txt, .xyz, .las) -> Ui_ImportOptionsWindow ui to preview the data (similar to stereonet)"""
-        args = import_dialog(self).args
+        default_attr_list = ['As is', 'X', 'Y', 'Z', 'Red', 'Green', 'Blue', 'Intensity', 'Normals', 'User defined', 'N.a.']
+        ext_filter = "All supported (*.txt *.csv *.xyz *.asc *.ply *.las *.laz);;Text files (*.txt *.csv *.xyz *.asc);;PLY files (*.ply);;LAS/LAZ files (*.las *.laz)"
+
+        args = import_dialog(self,default_attr_list=default_attr_list,ext_filter=ext_filter,caption='Import point cloud data').args
         if args:
-            in_file_name,col_names,row_range,index_list,delimiter,offset,origin = args
+            in_file_name,col_names,row_range,index_list,delimiter,origin = args
             self.TextTerminal.appendPlainText('in_file_name: ' + in_file_name)
-            pc2vtk(in_file_name=in_file_name, col_names=col_names, row_range=row_range, usecols=index_list, delimiter=delimiter, offset=offset, self=origin, header_row=0)
+            pc2vtk(in_file_name=in_file_name, col_names=col_names, row_range=row_range, usecols=index_list, delimiter=delimiter, self=origin, header_row=0)
 
     def import_SHP(self):  # __________________________________________________________________ UPDATE IN shp2vtk.py OR DUPLICATE THIS TO IMPORT SHP GEOLOGY OR BOUNDARY
         """Import SHP file and update geological collection."""
@@ -1040,6 +1065,22 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 x_section_uid = self.xsect_coll.df.loc[self.xsect_coll.df['name'] == x_section_name, 'uid'].values[0]
                 xs_image2vtk(self=self, in_file_name=in_file_name, x_section_uid=x_section_uid)
                 self.prop_legend.update_widget(parent=self)
+
+    def import_welldata(self):
+        # default_attr_list = ['LocationID', 'LocationType', 'Easting', 'Northing', 'GroundLevel', 'FinalDepth', 'Orientation', 'Inclination', 'DepthTop', 'DepthBase', 'LegCode','GeologyCode','N.a.']
+        # ext_filter = "All supported (*.txt *.csv *.xyz *.asc *.ags);;Text files (*.txt *.csv *.xyz *.asc);;AGS files (*.ags)"
+        #
+        # dict = {'well_loc':['Well location file path','','QLineEdit'],'well_data':['Well data file path','','QLineEdit']}
+        #
+        # input_dialog = general_input_dialog(title='Import well data',input_dict=dict)
+        #
+        #
+        # args = import_dialog(parent=self,default_attr_list=default_attr_list,ext_filter=ext_filter,caption='Import well data').args
+        # if args:
+        #     in_file_name,col_names,row_range,index_list,delimiter,origin = args
+        #     self.TextTerminal.appendPlainText('in_file_name: ' + in_file_name)
+        #     well2vtk(in_file_name=in_file_name, col_names=col_names, row_range=row_range, usecols=index_list, delimiter=delimiter, self=origin, header_row=0)
+        well2vtk(self=self)
 
     def import_SEGY(self):  # ___________________________________________________________ TO BE REVIEWED AND UPDATED IN MODULE segy2vtk
         """Import SEGY file and update Mesh3D collection."""
