@@ -1,7 +1,7 @@
 """helper_dialogs.py
 PZero© Andrea Bistacchi"""
 
-from PyQt5.QtWidgets import QMessageBox, QInputDialog, QLineEdit, QPushButton, QFileDialog, QWidget, QProgressDialog, QMainWindow, QComboBox, QGridLayout, QLabel, QCheckBox, QTableWidgetItem, QHeaderView, QApplication
+from PyQt5.QtWidgets import QMessageBox, QInputDialog, QLineEdit, QPushButton, QFileDialog, QWidget, QProgressDialog, QMainWindow, QComboBox, QGridLayout, QLabel, QCheckBox, QTableWidgetItem, QHeaderView, QApplication,QFormLayout
 # from PyQt5.QtWidgets import QSpinBox, QDoubleSpinBox
 from PyQt5.QtGui import QColor
 from PyQt5.QtCore import QEventLoop, Qt, QAbstractTableModel
@@ -332,7 +332,16 @@ def general_input_dialog(title="title", input_dict=None):
         elif input_dict[key][2] == "QSpinBox":
             """---- to be implemented ----"""
             pass
+        elif input_dict[key][2] == "QPushButton":
+            # func = input_dict[key][3]
+            objects_qt[key][0] = QPushButton(widget)
+            objects_qt[key][0].setObjectName(input_dict[key][0])
+            objects_qt[key][0].setText(input_dict[key][1])
+            # objects_qt[key][0].clicked.connect(func)
+            gridLayout.addWidget(objects_qt[key][0], i + 1, 1)
         i += 1
+    # if input_dict[key][2] == "QPushButton":
+    #     return widget
     """Create OK Button, add it to the grid layout an set name and state."""
     button_ok = QPushButton(widget)
     gridLayout.addWidget(button_ok, i + 2, 1)
@@ -489,7 +498,7 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
     '''[Gabriele]  Different types of separators. By writing not using the symbol as a display we can avoid possible confusion between similar separators (e.g tab and space)-> now the separator is auto assigned with the auto_sep function'''
     sep_dict = {'<space>': ' ', '<comma>': ',', '<semi-col>': ';', '<tab>': '   '}
 
-    def __init__(self, parent=None, default_attr_list=None,ext_filter=None,caption=None,*args, **kwargs):
+    def __init__(self, parent=None, default_attr_list=None,ext_filter=None,caption=None,add_opt=None,multiple=False,*args, **kwargs):
 
         self.loop = QEventLoop()  # Create a QEventLoop necessary to stop the main loop
         super(import_dialog, self).__init__(parent, *args, **kwargs)
@@ -503,7 +512,7 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
 
         self.setWindowTitle(caption)
         '''[Gabriele]  Different types of signals depending on the field in the import options'''
-        self.PathtoolButton.clicked.connect(lambda: self.import_file())
+        self.PathtoolButton.clicked.connect(lambda: self.import_file(multiple=multiple))
         self.PathlineEdit.editingFinished.connect(lambda: self.import_file(path=self.PathlineEdit.text()))
 
         self.StartRowspinBox.valueChanged.connect(lambda: self.import_options(self.StartRowspinBox.objectName(), self.StartRowspinBox.value()))
@@ -524,6 +533,16 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
         self.AssignTable.setColumnWidth(1, 200)
         self.AssignTable.setColumnWidth(2, 300)
 
+        if add_opt is not None:
+            for i,opt in enumerate(add_opt):
+                opt_name = opt[0]
+                opt_label = opt[1]
+                setattr(self,opt_name,QCheckBox(self.OptionsFrame))
+                opt = getattr(self,opt_name)
+                opt.setObjectName(opt_name)
+                opt.setText(opt_label)
+                self.formLayout.setWidget(3+i, QFormLayout.FieldRole, opt)
+
         self.show_qt_canvas()
 
     def import_options(self, origin, value):
@@ -535,27 +554,32 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
         self.show()
         self.loop.exec_()  # Execute the QEventLoop
 
-    def import_file(self, path=None):
+    def import_file(self, path=None,multiple=False):
         '''[Gabriele] Function used to read and preview a PC data file. The open_file_dialog function is used to obtain the file path. Once the file is chosen a different parser is used depending on the extension. Once the file is read the properties are autoassigned (where possible)'''
         if path == None:
-            self.import_options_dict['in_path'] = open_file_dialog(parent=self, caption='Import point cloud data', filter=self.ext_filter)
-            self.PathlineEdit.setText(self.import_options_dict['in_path'])
+            self.import_options_dict['in_path'] = open_file_dialog(parent=self, caption='Import point cloud data', filter=self.ext_filter,multiple=multiple)
+            if multiple:
+                path = self.import_options_dict["in_path"][0]
+                self.PathlineEdit.setText(f'Multiple file chosen in {os_path.dirname(path)}')
+            else:
+                path = self.import_options_dict['in_path']
+                self.PathlineEdit.setText(path)
         else:
             self.import_options_dict['in_path'] = path
 
         try:
 
-            _, extension = os_path.splitext(self.import_options_dict['in_path'])
+            _, extension = os_path.splitext(path)
 
             if extension == '.las' or extension == '.laz': #this could be a problem with .las files (boreholes)
-                self.input_data_df = self.las2df(self.import_options_dict['in_path'])
+                self.input_data_df = self.las2df(path)
 
             elif extension == '.ply':
-                self.input_data_df = self.ply2df(self.import_options_dict['in_path'])
+                self.input_data_df = self.ply2df(path)
             elif extension == '.ags':
                 ...
             else:
-                self.input_data_df = self.csv2df(self.import_options_dict['in_path'])
+                self.input_data_df = self.csv2df(path)
 
 
 
@@ -782,7 +806,7 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
             index = self.AssignTable.indexAt(clicked)
             col = index.column()
             row = index.row()
-            '''[Gabriele]  This is the only way I could to choose the QLineEdit otherwise self.AssignTable.cellWidget(row,2) returns somehow a QWidget instad than a QLineEdit'''
+            '''[Gabriele]  This is the only way to choose the QLineEdit otherwise self.AssignTable.cellWidget(row,2) returns somehow a QWidget instad than a QLineEdit'''
             sel_line = LineList[row]
             scal_name = f'user_{sel_line.text()}'
             self.rename_dict[row] = scal_name

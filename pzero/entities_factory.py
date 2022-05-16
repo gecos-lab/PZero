@@ -1832,7 +1832,7 @@ class Image3D(Image):  # _______________________________________________________
         return frame
 
 
-class Wells(PolyData):
+class Wells(PolyLine):
     # [Gabriele] vtkCylinderSource could be used but it is not supported by pyvista
 
     def __init__(self, *args, **kwargs):
@@ -1840,5 +1840,14 @@ class Wells(PolyData):
     #
     def deep_copy(self):
         well_copy = Wells()
+        well_copy.DeepCopy(self)
+        return well_copy
+
+class WellMarker(VertexSet):
+    def __init__(self, *args, **kwargs):
+        super(WellMarker, self).__init__(*args, **kwargs)
+    #
+    def deep_copy(self):
+        well_copy = WellMarker()
         well_copy.DeepCopy(self)
         return well_copy

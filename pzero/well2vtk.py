@@ -10,58 +10,113 @@ import os
 from copy import deepcopy
 import vtk
 import pyvista as pv
-from .entities_factory import Wells
+from .entities_factory import Wells,WellMarker
 from uuid import uuid4
 # from .entities_factory import WellData
 from .helper_functions import auto_sep
 from .well_collection import WellCollection
+from .geological_collection import GeologicalCollection
 import pandas as pd
 
 def well2vtk(in_file_name=None,col_names=None,row_range=None,header_row=None,usecols=None,delimiter=None,self=None):
 
-    temp_path = "~/STORAGE/Unibro/Libri-e-dispense/Anno-5/Secondo-Semestre/Stage/Dati/villad/GIS"
+    paths = in_file_name
 
-    loc = pd.read_csv(f'{temp_path}/sondaggi_loc.csv',sep=',')
-    data = pd.read_csv(f'{temp_path}/sondaggi.csv',sep=',')
+    data_paths = paths[1]
 
-    shape = data.shape[0]
+    print(data_paths)
 
-    data.loc[shape] = [data['ID'].values[0],loc['PROFONDITA'].values[0],'END']
+    loc = pd.read_csv(paths[0],sep=delimiter[0],usecols=usecols[0],names=col_names[0],header=header_row)
 
-    print(data)
+    for path in data_paths:
 
-    unique_id = pd.unique(data['ID'])
-    location = loc.loc[loc['Nome_indag'].values==unique_id[0],['Nome_indag','E','N','QUOTA']]
-    direction = np.array([0,0,-1])
+        data = pd.read_csv(path,sep=delimiter[1],usecols=usecols[1],names=col_names[1],header=header_row)
 
-    center = location[['E','N','QUOTA']].values[0]
+        shape = data.shape[0]
 
-    legs = [0]
-    for i,v in enumerate(data['prof_top'][1:]):
-        legs.append(v-data['prof_top'][i])
+        data.loc[shape] = [data['LocationID'].values[0],loc['FinalDepth'].values[0],'END']
 
-    for i,l in enumerate(legs[:2]):
-        center[2] -= l/2+legs[i+1]/2
+        unique_id = pd.unique(data['LocationID'])
+        location = loc.loc[loc['LocationID'].values==unique_id[0],['LocationID','Easting','Northing','GroundLevel']]
+        direction = np.array([0,0,-1])
 
-        vtk_cyl = Wells()
+        top = np.array(location[['Easting','Northing','GroundLevel']].values[0])
 
-        cylinder = pv.Cylinder(center=center,direction=direction,height=legs[i+1],radius=5,resolution=20)
-        # cylinder = pv.Disc(center=center,normal=direction,outer=5,inner=0,c_res=100)
+        if ('Trend' or 'Plunge') not in list(loc.keys()) or (pd.isna(loc.loc[loc['LocationID'].values==unique_id[0],'Trend'].values) or pd.isna(loc.loc[loc['LocationID'].values==unique_id[0],'Plunge'].values)) :
+            print('Trend or plunge value not specified. Assuming vertical borehole')
+            trend = 0
+            plunge = np.deg2rad(90)
+        else:
+            trend = np.deg2rad(loc.loc[loc['LocationID'].values==unique_id[0],'Trend'].values[0])
+            plunge = np.deg2rad(loc.loc[loc['LocationID'].values==unique_id[0],'Plunge'].values[0])
+            print(trend,plunge)
 
-        vtk_cyl.ShallowCopy(cylinder)
 
-        # print(vtk_cyl)
+        legs = [0]
+        for i,v in enumerate(data['DepthTop'][1:]):
+            legs.append(v-data['DepthTop'][i])
 
-        curr_obj_attributes = deepcopy(WellCollection.well_entity_dict)
-        curr_obj_attributes['uid'] = str(uuid4())
-        curr_obj_attributes['Loc ID'] = f'{unique_id[0]}'
-        curr_obj_attributes['geological_feature'] = f'{data.loc[i,"unit"]}'
-        curr_obj_attributes['properties_names'] = []
-        curr_obj_attributes['properties_components'] = []
-        curr_obj_attributes['properties_types'] = []
-        curr_obj_attributes['vtk_obj'] = vtk_cyl
-        self.well_coll.add_entity_from_dict(entity_dict=curr_obj_attributes)
-        del cylinder
+        for i,l in enumerate(legs[:2]):
+
+            length = legs[i+1]
+
+            # top[2] -= l
+            x_bottom = top[0]+(length*np.cos(plunge)*np.cos(360-trend)) # [Gabriele] This is strange. The DEMs' north direction is alligned with the y axis while the angle is calculated from the x axis clockwise direction.
+            y_bottom = top[1]+(length*np.cos(plunge)*np.sin(360-trend))
+            z_bottom = top[2]-(length*np.sin(plunge))
+
+            bottom = np.array([x_bottom,y_bottom,z_bottom])
+
+            points = np.array([top,bottom])
+
+
+            # marker_pv = pv.PolyData(top)
+
+
+            well_line = Wells()
+
+            well_marker = WellMarker()
+
+            # well_marker.ShallowCopy(marker_pv)
+
+
+
+            well_line.points = points
+            well_line.auto_cells()
+            well_marker.points = np.array([top])
+            well_marker.auto_cells()
+
+            top = np.array([x_bottom,y_bottom,z_bottom])
+
+            curr_obj_attributes = deepcopy(WellCollection.well_entity_dict)
+            curr_obj_attributes['uid'] = str(uuid4())
+            curr_obj_attributes['Loc ID'] = f'{unique_id[0]}'
+            curr_obj_attributes['geological_feature'] = f'{data.loc[i,"GeologyCode"]}'
+            curr_obj_attributes['properties_names'] = []
+            curr_obj_attributes['properties_components'] = []
+            curr_obj_attributes['properties_types'] = []
+            curr_obj_attributes['vtk_obj'] = well_line
+            self.well_coll.add_entity_from_dict(entity_dict=curr_obj_attributes)
+
+
+            marker_obj_attributes = deepcopy(GeologicalCollection.geological_entity_dict)
+            marker_obj_attributes['uid'] = str(uuid4())
+            marker_obj_attributes['name'] = f'{data.loc[i,"GeologyCode"]}_marker'
+            marker_obj_attributes["topological_type"] = "VertexSet"
+            marker_obj_attributes['geological_type'] = 'top'
+            marker_obj_attributes['geological_feature'] = f'{data.loc[i,"GeologyCode"]}'
+            marker_obj_attributes['scenario'] = 'undef'
+            marker_obj_attributes['properties_names'] = []
+            marker_obj_attributes['properties_components'] = []
+            marker_obj_attributes['properties_types'] = []
+            marker_obj_attributes['x_section'] = curr_obj_attributes['uid']
+            marker_obj_attributes['vtk_obj'] = well_marker
+
+            self.geol_coll.add_entity_from_dict(entity_dict=marker_obj_attributes)
+
+
+            del well_line
+            del well_marker
         #
     # basename = os.path.basename(in_file_name)
     # _,ext = os.path.splitext(basename)

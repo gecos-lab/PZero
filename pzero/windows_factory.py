@@ -8,7 +8,7 @@ from PyQt5.QtGui import QCloseEvent
 
 """PZero imports"""
 from .base_view_window_ui import Ui_BaseViewWindow
-from .entities_factory import VertexSet, PolyLine, TriSurf, TetraSolid, XsVertexSet, XsPolyLine, DEM, PCDom, MapImage, Voxet, XsVoxet, Plane, Seismics, XsTriSurf, XsImage, PolyData, Wells
+from .entities_factory import VertexSet, PolyLine, TriSurf, TetraSolid, XsVertexSet, XsPolyLine, DEM, PCDom, MapImage, Voxet, XsVoxet, Plane, Seismics, XsTriSurf, XsImage, PolyData, Wells, WellMarker
 from .helper_dialogs import input_one_value_dialog, input_text_dialog, input_combo_dialog, message_dialog, options_dialog, multiple_input_dialog, tic, toc,open_file_dialog
 # from .geological_collection import GeologicalCollection
 # from copy import deepcopy
@@ -95,7 +95,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.add_all_entities()
         self.show_qt_canvas()
 
-        if not isinstance(self,ViewXsection):
+        if not isinstance(self,ViewXsection): # [Gabriele] Whithout this the doms crash when plotted
             """Build and show geology and topology trees, and cross-section, DOM, image, lists"""
             self.create_geology_tree()
             self.create_topology_tree()
@@ -180,7 +180,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.GeologyTreeWidget.hideColumn(1)  # hide the uid column
         self.GeologyTreeWidget.setItemsExpandable(True)
 
-        if secuid:
+        if secuid: # [Gabriele] This must be put in the rest of the signals (update_add,update remove etcetc)
             filtered_geo = self.parent.geol_coll.df.loc[(self.parent.geol_coll.df['x_section'] == secuid), 'geological_type']
             geo_types = pd.unique(filtered_geo)
         else:
@@ -862,6 +862,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
 
     def create_dom_list(self,secuid=None):
         """Create cross-sections list with checkboxes."""
+        print('qui')
         self.DOMsTableWidget.clear()
         self.DOMsTableWidget.setColumnCount(3)
         self.DOMsTableWidget.setRowCount(0)
@@ -899,10 +900,12 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                         for component in range(components):
                             property_texture_combo.addItem(f'{prop}[{component}]')
                             property_texture_combo.texture_uid_list.append(f'{prop}[{component}]')
+
             for texture_uid in self.parent.dom_coll.df.loc[self.parent.dom_coll.df['uid'] == uid, 'texture_uids'].values[0]:
                 texture_name = self.parent.image_coll.df.loc[self.parent.image_coll.df['uid'] == texture_uid, 'name'].values[0]
                 property_texture_combo.addItem(texture_name)
                 property_texture_combo.texture_uid_list.append(texture_uid)
+
             self.DOMsTableWidget.insertRow(row)
             self.DOMsTableWidget.setItem(row, 0, name_item)
             self.DOMsTableWidget.setItem(row, 1, uid_item)
@@ -918,6 +921,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
 
     def update_dom_list_added(self, new_list=None):
         """Update DOM list without creating a new model"""
+        print('update_dom_list_added')
         row = self.DOMsTableWidget.rowCount()
         for uid in new_list['uid']:
             name = self.parent.dom_coll.df.loc[self.parent.dom_coll.df['uid'] == uid, 'name'].values[0]
@@ -978,8 +982,9 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
     def toggle_dom_visibility(self, cell):
         """Called by self.DOMsTableWidget.itemChanged.connect(self.toggle_dom_visibility)."""
         check_state = self.DOMsTableWidget.item(cell.row(), 0).checkState()  # this is the check state of cell "name"
+
         uid = self.DOMsTableWidget.item(cell.row(), 1).text()  # this is the text of cell "uid"
-        #print(uid)
+        # print(uid)
         if check_state == Qt.Checked:
             if not self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]:
                 self.actors_df.loc[self.actors_df['uid'] == uid, 'show'] = True
@@ -1852,6 +1857,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
 
     def entity_remove_selected(self):
         """Remove entities selected in View"""
+
         if not self.selected_uids:
             return
         """Confirm removal dialog."""
@@ -2038,7 +2044,8 @@ class View3D(BaseView):
             else:
                 self.actors_df.loc[self.actors_df['uid'] == uid, 'actor'].values[0].GetProperty().SetLineWidth(line_thick)
         elif collection == 'well_coll':
-            line_thick = self.parent.well_coll.get_legend()['line_thick']
+            line_thick = self.parent.well_coll.get_uid_legend(uid=uid)['line_thick']
+            self.actors_df.loc[self.actors_df['uid'] == uid, 'actor'].values[0].GetProperty().SetLineWidth(line_thick)
 
     def set_actor_visible(self, uid=None, visible=None):
         """Set actor uid visible or invisible (visible = True or False)"""
@@ -2135,7 +2142,7 @@ class View3D(BaseView):
                                                plot_texture_option=False, plot_rgb_option=plot_rgb_option, visible=visible)
             else:
                 this_actor = None
-        elif isinstance(plot_entity, (VertexSet, XsVertexSet)):
+        elif isinstance(plot_entity, (VertexSet, XsVertexSet,WellMarker)):
             plot_rgb_option = None
             if isinstance(plot_entity.points, np.ndarray):
                 """This  check is needed to avoid errors when trying to plot an empty
@@ -2325,7 +2332,8 @@ class View3D(BaseView):
 
             this_actor = self.plot_mesh_3D(uid=uid, plot_entity=plot_entity, color_RGB=color_RGB, show_property=show_property, show_scalar_bar=show_scalar_bar,
                                            color_bar_range=None, show_property_title=show_property_title, line_thick=line_thick,
-                                           plot_texture_option=False, plot_rgb_option=plot_rgb_option, visible=visible,smooth_shading=True)
+                                           plot_texture_option=False, plot_rgb_option=plot_rgb_option, visible=visible,
+                                           render_lines_as_tubes=True)
 
         else:
             print("[Windows factory]: actor with no class")
@@ -2335,7 +2343,7 @@ class View3D(BaseView):
     def plot_mesh_3D(self, uid=None, plot_entity=None, color_RGB=None, show_property=None, show_scalar_bar=None,
                      color_bar_range=None, show_property_title=None, line_thick=None,
                      plot_texture_option=None, plot_rgb_option=None, visible=None,
-                     style='surface', point_size=5.0, points_as_spheres=False,smooth_shading=False,split_sharp_edges=False):
+                     style='surface', point_size=5.0, points_as_spheres=False,render_lines_as_tubes=False):
         if not self.actors_df.empty:
             """This stores the camera position before redrawing the actor.
             Added to avoid a bug that sometimes sends the scene to a very distant place.
@@ -2370,9 +2378,8 @@ class View3D(BaseView):
                                            name=uid,  # actor name
                                            texture=plot_texture_option,  # ________________________________ vtk.vtkTexture or np.ndarray or boolean, will work if input mesh has texture coordinates. True > first available texture. String > texture with that name already associated to mesh.
                                            render_points_as_spheres=points_as_spheres,
-                                           render_lines_as_tubes=False,
-                                           smooth_shading=smooth_shading,
-                                           split_sharp_edges=split_sharp_edges,
+                                           render_lines_as_tubes=render_lines_as_tubes,
+                                           smooth_shading=False,
                                            ambient=0.0,
                                            diffuse=1.0,
                                            specular=0.0,
@@ -2388,7 +2395,8 @@ class View3D(BaseView):
                                            annotations=None,  # dictionary of annotations for scale bar witor 'points'h keys = float values and values = string annotations
                                            pickable=True,  # bool
                                            preference="point",
-                                           log_scale=False)
+                                           log_scale=False,
+                                           )
         if not visible:
             this_actor.SetVisibility(False)
         if not self.actors_df.empty:

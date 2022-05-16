@@ -26,7 +26,7 @@ class Legend(QObject):
                         'color_R': int(255),
                         'color_G': int(255),
                         'color_B': int(255),
-                        'line_thick': 2.0}
+                        'line_thick': 10.0}
 
     legend_type_dict = {'geological_type': str,
                         'geological_feature': str,
@@ -167,6 +167,7 @@ class Legend(QObject):
                 color_B = parent.well_legend_df.loc[(parent.well_legend_df['Loc ID'] == locid) & (parent.well_legend_df['geological_feature'] == feature), "color_B"].values[0]
 
                 line_thick = parent.well_legend_df.loc[(parent.well_legend_df['Loc ID'] == locid) & (parent.well_legend_df['geological_feature'] == feature), "line_thick"].values[0]
+                # print(line_thick)
 
                 # if not isinstance(geol_sequence_value, str):
                 #     print("geol_sequence_value: ", geol_sequence_value)
@@ -180,7 +181,7 @@ class Legend(QObject):
                 "geol_line_thick_spn > QSpinBox used to select line thickness"
                 well_line_thick_spn = QSpinBox()
                 well_line_thick_spn.locid = locid  # this is to pass these values to the update function below
-                well_line_thick_spn.geological_feature = feature
+                well_line_thick_spn.feature = feature
                 well_line_thick_spn.setValue(line_thick)
 
                 "Create items"
@@ -189,7 +190,7 @@ class Legend(QObject):
                 parent.LegendTreeWidget.setItemWidget(llevel_2, 5, well_line_thick_spn)
                 "Set signals for the widgets below"
                 well_color_dialog_btn.clicked.connect(lambda: self.change_well_feature_color(parent=parent))
-                # well_line_thick_spn.valueChanged.connect(lambda: self.change_well_feature_line_thick(parent=parent))
+                well_line_thick_spn.valueChanged.connect(lambda: self.change_well_feature_line_thick(parent=parent))
 
         parent.LegendTreeWidget.expandAll()
 
@@ -336,3 +337,14 @@ class Legend(QObject):
         """Signal to update actors in windows. This is emitted only for the modified uid under the 'color' key."""
         updated_list = parent.well_coll.df.loc[(parent.well_coll.df['Loc ID'] == locid) & (parent.well_coll.df['geological_feature'] == feature), "uid"].to_list()
         parent.well_legend_color_modified_signal.emit(updated_list)
+
+    def change_well_feature_line_thick(self,parent=None):
+        locid = self.sender().locid
+        feature = self.sender().feature
+        line_thick = self.sender().value()
+        "Here the query is reversed and modified, dropping the values() method, to allow SETTING the line thickness in the legend"
+        parent.well_legend_df.loc[(parent.well_legend_df['Loc ID'] == locid) & (parent.well_legend_df['geological_feature'] == feature), "line_thick"] = line_thick
+        """Signal to update actors in windows. This is emitted only for the modified uid under the 'line_thick' key."""
+        updated_list = parent.well_coll.df.loc[(parent.well_coll.df['Loc ID'] == locid) & (parent.well_coll.df['geological_feature'] == feature), "uid"].to_list()
+        # print(updated_list)
+        parent.well_legend_thick_modified_signal.emit(updated_list)

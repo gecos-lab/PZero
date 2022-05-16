@@ -31,6 +31,7 @@ def interpolation_delaunay_2d(self):
     else:
         """Deep copy list of selected uids needed otherwise problems can arise if the main geology table is deselected while the dataframe is being built"""
         input_uids = deepcopy(self.selected_uids)
+        print(input_uids)
     for uid in input_uids:
         if isinstance(self.geol_coll.get_uid_vtk_obj(uid), PolyLine) or isinstance(self.geol_coll.get_uid_vtk_obj(uid), XsPolyLine) or isinstance(self.geol_coll.get_uid_vtk_obj(uid), VertexSet) or isinstance(self.geol_coll.get_uid_vtk_obj(uid), XsVertexSet) or isinstance(self.geol_coll.get_uid_vtk_obj(uid), TriSurf):
             pass

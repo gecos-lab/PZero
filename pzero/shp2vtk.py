@@ -137,7 +137,7 @@ def shp2vtk(self=None, in_file_name=None):
                     outZ = np_zeros((np_shape(outXYZ)[0], 1))
                     # print("outZ:\n", outZ)
                     outXYZ = np_column_stack((outXYZ, outZ))
-
+                print(np_shape(outXYZ))
                 curr_obj_dict["vtk_obj"].points = outXYZ
 
                 if 'dip_dir' in column_names:

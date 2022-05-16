@@ -6,7 +6,7 @@ from copy import deepcopy
 from datetime import datetime
 from shutil import copy2
 
-from PyQt5.QtWidgets import QMainWindow, QMessageBox, QProgressDialog
+from PyQt5.QtWidgets import QMainWindow, QMessageBox, QProgressDialog,QPushButton
 from PyQt5.QtCore import Qt, QSortFilterProxyModel, pyqtSignal
 import vtk
 import pandas as pd
@@ -254,6 +254,15 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             for idx in selected_idxs:
                 selected_uids.append(self.boundary_coll.data(index=idx, role=Qt.DisplayRole))
             return selected_uids
+        elif self.shown_table == "tabWells":
+            selected_idxs_proxy = self.WellsTableView.selectionModel().selectedRows()
+            selected_idxs = []
+            for idx_proxy in selected_idxs_proxy:
+                selected_idxs.append(self.proxy_well_coll.mapToSource(idx_proxy))
+            selected_uids = []
+            for idx in selected_idxs:
+                selected_uids.append(self.well_coll.data(index=idx, role=Qt.DisplayRole))
+            return selected_uids
         elif self.shown_table == "tabLegend":
             pass
         elif self.shown_table == "tabProperties":
@@ -263,6 +272,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
 
     def entity_remove(self):
         """Remove entities selected in an attribute table. Just rows completely selected are removed."""
+
         if not self.selected_uids:
             return
         """Confirm removal dialog."""
@@ -283,6 +293,8 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 self.image_coll.remove_entity(uid=uid)
             elif self.shown_table == "tabBoundaries":
                 self.boundary_coll.remove_entity(uid=uid)
+            elif self.shown_table == "tabWells":
+                self.well_coll.remove_entity(uid=uid)
 
     def entities_merge(self):  # ____________________________________________________ CHECK (1) HOW PROPERTIES AND TEXTURES ARE AFFECTED BY MERGING, (2) HOW IT WORKS FOR DOMs
         """Merge entities of the same type - VertexSet, PolyLine, TriSurf, ..."""
@@ -618,6 +630,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         fout.write("Last saved revision:\n")
         fout.write("rev_" + now)
         fout.close()
+
+        """--------------------- SAVE LEGENDS ---------------------"""
+
         """Save geological legend table to JSON file. Keep old CSV table format here in comments, in case it might be useful in the future."""
         self.geol_legend_df.to_json(out_dir_name + '/geol_legend_table.json', orient='index')
         # self.geol_legend_df.to_csv(out_dir_name + '/geol_legend_table.csv', encoding='utf-8', index=False)
@@ -627,12 +642,18 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         """Save properties legend table to JSON file."""
         self.prop_legend_df.to_json(out_dir_name + '/prop_legend_df.json', orient='index')
         # self.prop_legend_df.to_csv(out_dir_name + '/prop_legend_df.csv', encoding='utf-8', index=False)
+
+        self.well_legend_df.to_json(out_dir_name + '/well_legend_table.json', orient='index')
+
+        """--------------------- SAVE tables ---------------------"""
+
         """Save x_section table to JSON file."""
         out_cols = list(self.xsect_coll.df.columns)
         out_cols.remove('vtk_plane')
         out_cols.remove('vtk_frame')
         self.xsect_coll.df[out_cols].to_json(out_dir_name + '/xsection_table.json', orient='index')
         # self.xsect_coll.df[out_cols].to_csv(out_dir_name + '/xsection_table.csv', encoding='utf-8', index=False)
+
         """Save geological collection table to JSON file and entities as VTK."""
         out_cols = list(self.geol_coll.df.columns)
         out_cols.remove('vtk_obj')
@@ -645,6 +666,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             pd_writer.SetInputData(self.geol_coll.get_uid_vtk_obj(uid))
             pd_writer.Write()
             prgs_bar.add_one()
+
         """Save DOM collection table to JSON file and entities as VTK."""
         out_cols = list(self.dom_coll.df.columns)
         out_cols.remove('vtk_obj')
@@ -672,6 +694,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 pd_writer.SetInputData(self.dom_coll.get_uid_vtk_obj(uid))
                 pd_writer.Write()
                 prgs_bar.add_one()
+
         """Save image collection table to JSON file and entities as VTK."""
         out_cols = list(self.image_coll.df.columns)
         out_cols.remove('vtk_obj')
@@ -690,6 +713,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 sg_writer.SetFileName(out_dir_name + "/" + uid + ".vts")
                 sg_writer.SetInputData(self.image_coll.get_uid_vtk_obj(uid))
                 sg_writer.Write()
+
         """Save mesh3d collection table to JSON file and entities as VTK."""
         out_cols = list(self.mesh3d_coll.df.columns)
         out_cols.remove('vtk_obj')
@@ -703,6 +727,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 im_writer.SetInputData(self.mesh3d_coll.get_uid_vtk_obj(uid))
                 im_writer.Write()
             prgs_bar.add_one()
+
         """Save boundaries collection table to JSON file and entities as VTK."""
         out_cols = list(self.boundary_coll.df.columns)
         out_cols.remove('vtk_obj')
@@ -715,6 +740,21 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             pd_writer.SetInputData(self.boundary_coll.get_uid_vtk_obj(uid))
             pd_writer.Write()
             prgs_bar.add_one()
+
+        """Save wells collection table to JSON file and entities as VTK."""
+
+        out_cols = list(self.well_coll.df.columns)
+        out_cols.remove('vtk_obj')
+        self.well_coll.df[out_cols].to_json(out_dir_name + '/well_table.json', orient='index')
+        # self.boundary_coll.df[out_cols].to_csv(out_dir_name + '/boundary_table.csv', encoding='utf-8', index=False)
+        prgs_bar = progress_dialog(max_value=self.well_coll.df.shape[0], title_txt="Save wells", label_txt="Saving well objects...", cancel_txt=None, parent=self)
+        for uid in self.well_coll.df['uid'].to_list():
+            pd_writer = vtk.vtkXMLPolyDataWriter()
+            pd_writer.SetFileName(out_dir_name + "/" + uid + ".vtp")
+            pd_writer.SetInputData(self.well_coll.get_uid_vtk_obj(uid))
+            pd_writer.Write()
+            prgs_bar.add_one()
+
 
     def new_project(self):
         """Creates a new empty project, after having cleared all variables."""
@@ -729,7 +769,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         # self.save_project()
 
     def open_project(self):
+
         """Opens a project previously saved to disk."""
+
         """Create empty containers. This clears all previous objects and also allows for missing tables below."""
         if self.geol_coll.get_number_of_entities() > 0:
             confirm_new = QMessageBox.question(self, 'Open Project', 'Save all entities and variables of the present project?', QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
@@ -742,6 +784,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         if not in_file_name:
             return
         self.out_file_name = in_file_name
+
         """Read name of last revision in project file. This opens the last revision.
         To open a different one, edit the project file."""  # _________________________________________________________________________ IN THE FUTURE an option to open a specific revision could be added
         fin = open(in_file_name, 'rt')
@@ -756,6 +799,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
          as CSV tables, however JSON is used now because it leads to less problems and errors
          for numeric and list fields. In fact, reading Pandas dataframes from JSON, dtype
          from the class definitions specifies the type of each column."""  # ____________________________________ CONSIDER REMOVING THE POSSIBILITY TO OPEN OLD PROJECTS WITH CSV TABLES, THAT WILL CAUSE ERRORS IN CASE OF LISTS
+
+        """--------------------- READ LEGENDS ---------------------"""
+
         """First read geological and others legend tables."""
         if os.path.isfile((in_dir_name + '/geol_legend_table.csv')) or os.path.isfile((in_dir_name + '/geol_legend_table.json')):
             if os.path.isfile((in_dir_name + '/geol_legend_table.json')):
@@ -765,6 +811,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             if not new_geol_legend_df.empty:
                 self.geol_legend_df = new_geol_legend_df
             self.geol_legend_df.sort_values(by='geological_time', ascending=True, inplace=True)
+
         if os.path.isfile((in_dir_name + '/others_legend_table.csv')) or os.path.isfile((in_dir_name + '/others_legend_table.json')):
             if os.path.isfile((in_dir_name + '/others_legend_table.json')):
                 new_others_legend_df = pd.read_json(in_dir_name + '/others_legend_table.json', orient='index', dtype=Legend.legend_type_dict)
@@ -775,6 +822,18 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 for type in self.others_legend_df['other_type'].values:
                     if type in new_others_legend_df['other_type'].values:
                         self.others_legend_df[self.others_legend_df['other_type'] == type] = new_others_legend_df[new_others_legend_df['other_type'] == type].values
+
+
+        if os.path.isfile((in_dir_name + '/well_legend_table.csv')) or os.path.isfile((in_dir_name + '/well_legend_table.json')):
+            if os.path.isfile((in_dir_name + '/well_legend_table.json')):
+                new_well_legend_df = pd.read_json(in_dir_name + '/well_legend_table.json', orient='index', dtype=Legend.legend_type_dict)
+            else:
+                new_well_legend_df = pd.read_csv(in_dir_name + '/well_legend_table.csv', encoding='utf-8', dtype=Legend.legend_type_dict, keep_default_na=False)
+            if not new_well_legend_df.empty:
+                self.well_legend_df = new_well_legend_df
+            self.well_legend_df.sort_values(by='Loc ID', ascending=True, inplace=True)
+
+
         if os.path.isfile((in_dir_name + '/prop_legend_df.csv')) or os.path.isfile((in_dir_name + '/prop_legend_df.json')):
             if os.path.isfile((in_dir_name + '/prop_legend_df.json')):
                 new_prop_legend_df = pd.read_json(in_dir_name + '/prop_legend_df.json', orient='index', dtype=PropertiesCMaps.prop_cmap_type_dict)
@@ -782,8 +841,14 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     self.prop_legend_df = new_prop_legend_df
             else:
                 self.prop_legend.update_widget(parent=self)
+
+
+
         """Update all legends."""
         self.legend.update_widget(parent=self)
+
+        """--------------------- READ TABLES ---------------------"""
+
         """Read x_section table and build cross-sections. Note beginResetModel() and endResetModel()."""
         if os.path.isfile((in_dir_name + '/xsection_table.csv')) or os.path.isfile((in_dir_name + '/xsection_table.json')):
             self.xsect_coll.beginResetModel()
@@ -796,6 +861,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             for uid in self.xsect_coll.df["uid"].tolist():
                 self.xsect_coll.set_geometry(uid=uid)
             self.xsect_coll.endResetModel()
+
         """Read DOM table and files. Note beginResetModel() and endResetModel()."""
         if os.path.isfile((in_dir_name + '/dom_table.csv')) or os.path.isfile((in_dir_name + '/dom_table.json')):
             self.dom_coll.beginResetModel()
@@ -839,6 +905,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 self.dom_coll.set_uid_vtk_obj(uid=uid, vtk_obj=vtk_object)
                 prgs_bar.add_one()
             self.dom_coll.endResetModel()
+
         """Read image collection and files"""
         if os.path.isfile((in_dir_name + '/image_table.csv')) or os.path.isfile((in_dir_name + '/image_table.json')):
             self.image_coll.beginResetModel()
@@ -873,6 +940,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 self.image_coll.set_uid_vtk_obj(uid=uid, vtk_obj=vtk_object)
                 prgs_bar.add_one()
             self.image_coll.endResetModel()
+
         """Read mesh3d collection and files"""
         if os.path.isfile((in_dir_name + '/mesh3d_table.csv')) or os.path.isfile((in_dir_name + '/mesh3d_table.json')):
             self.mesh3d_coll.beginResetModel()
@@ -907,6 +975,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 self.mesh3d_coll.set_uid_vtk_obj(uid=uid, vtk_obj=vtk_object)
                 prgs_bar.add_one()
             self.mesh3d_coll.endResetModel()
+
         """Read boundaries collection and files"""
         if os.path.isfile((in_dir_name + '/boundary_table.csv')) or os.path.isfile((in_dir_name + '/boundary_table.json')):
             self.boundary_coll.beginResetModel()
@@ -933,6 +1002,33 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 self.boundary_coll.set_uid_vtk_obj(uid=uid, vtk_obj=vtk_object)
                 prgs_bar.add_one()
             self.boundary_coll.endResetModel()
+
+        """Read well table and files"""
+        if os.path.isfile((in_dir_name + '/well_table.csv')) or os.path.isfile((in_dir_name + '/well_table.json')):
+            self.well_coll.beginResetModel()
+            if os.path.isfile((in_dir_name + '/well_table.json')):
+                new_well_coll_df = pd.read_json(in_dir_name + '/well_table.json', orient='index', dtype=WellCollection.well_entity_type_dict)
+                if not new_well_coll_df.empty:
+                    self.well_coll.df = new_well_coll_df
+            else:
+                self.well_coll.df = pd.read_csv(in_dir_name + '/well_table.csv', encoding='utf-8', dtype=WellCollection.well_entity_type_dict, keep_default_na=False)
+            prgs_bar = progress_dialog(max_value=self.well_coll.df.shape[0], title_txt="Open wells", label_txt="Opening well objects...", cancel_txt=None, parent=self)
+            for uid in self.well_coll.df['uid'].to_list():
+                if not os.path.isfile((in_dir_name + "/" + uid + ".vtp")):
+                    print("error: missing VTK file")
+                    return
+                vtk_object = PolyLine()
+                pd_reader = vtk.vtkXMLPolyDataReader()
+                pd_reader.SetFileName(in_dir_name + "/" + uid + ".vtp")
+                pd_reader.Update()
+                vtk_object.ShallowCopy(pd_reader.GetOutput())
+                vtk_object.Modified()
+                self.well_coll.set_uid_vtk_obj(uid=uid, vtk_obj=vtk_object)
+                prgs_bar.add_one()
+            self.well_coll.endResetModel()
+        self.prop_legend.update_widget(parent=self)
+
+
         """Read geological table and files. Note beginResetModel() and endResetModel()."""
         if os.path.isfile((in_dir_name + '/geological_table.csv')) or os.path.isfile((in_dir_name + '/geological_table.json')):
             self.geol_coll.beginResetModel()
@@ -1015,7 +1111,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         default_attr_list = ['As is', 'X', 'Y', 'Z', 'Red', 'Green', 'Blue', 'Intensity', 'Normals', 'User defined', 'N.a.']
         ext_filter = "All supported (*.txt *.csv *.xyz *.asc *.ply *.las *.laz);;Text files (*.txt *.csv *.xyz *.asc);;PLY files (*.ply);;LAS/LAZ files (*.las *.laz)"
 
-        args = import_dialog(self,default_attr_list=default_attr_list,ext_filter=ext_filter,caption='Import point cloud data').args
+        add_opt = [['check255Box','Display RGB values within the 0-255 range']]
+
+        args = import_dialog(self,default_attr_list=default_attr_list,ext_filter=ext_filter,caption='Import point cloud data',add_opt=add_opt).args
         if args:
             in_file_name,col_names,row_range,index_list,delimiter,origin = args
             self.TextTerminal.appendPlainText('in_file_name: ' + in_file_name)
@@ -1067,20 +1165,35 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 self.prop_legend.update_widget(parent=self)
 
     def import_welldata(self):
-        # default_attr_list = ['LocationID', 'LocationType', 'Easting', 'Northing', 'GroundLevel', 'FinalDepth', 'Orientation', 'Inclination', 'DepthTop', 'DepthBase', 'LegCode','GeologyCode','N.a.']
-        # ext_filter = "All supported (*.txt *.csv *.xyz *.asc *.ags);;Text files (*.txt *.csv *.xyz *.asc);;AGS files (*.ags)"
+
+        default_attr_list = ['As is','LocationID', 'LocationType', 'Easting', 'Northing', 'GroundLevel', 'FinalDepth', 'Trend', 'Plunge', 'DepthTop', 'DepthBase', 'LegCode','GeologyCode','N.a.']
+
+        ext_filter = "All supported (*.txt *.csv *.xyz *.asc *.ags);;Text files (*.txt *.csv *.xyz *.asc);;AGS files (*.ags)"
+
+
+        # in_dict = {'well_loc':['LocPushButton','Import well location data','QPushButton'],'well_data':['DataPushButton','Import well data','QPushButton']}
         #
-        # dict = {'well_loc':['Well location file path','','QLineEdit'],'well_data':['Well data file path','','QLineEdit']}
-        #
-        # input_dialog = general_input_dialog(title='Import well data',input_dict=dict)
-        #
-        #
-        # args = import_dialog(parent=self,default_attr_list=default_attr_list,ext_filter=ext_filter,caption='Import well data').args
-        # if args:
-        #     in_file_name,col_names,row_range,index_list,delimiter,origin = args
-        #     self.TextTerminal.appendPlainText('in_file_name: ' + in_file_name)
-        #     well2vtk(in_file_name=in_file_name, col_names=col_names, row_range=row_range, usecols=index_list, delimiter=delimiter, self=origin, header_row=0)
-        well2vtk(self=self)
+        # input_dialog = general_input_dialog(title='Import well data',input_dict=in_dict)
+        # print(input_dialog.findChildren(QPushButton))
+
+        # input_dialog.LocPushButton.clicked.connect(lambda: print('ciao'))
+        # input_dialog.DataPushButton.clicked.connect(lambda: print('ciao'))
+
+
+        locargs = import_dialog(parent=self,default_attr_list=default_attr_list,ext_filter=ext_filter,caption='Import well location data').args
+
+        dataargs = import_dialog(parent=self,default_attr_list=default_attr_list,ext_filter=ext_filter,caption='Import well data',multiple=True).args
+
+
+        if locargs and dataargs:
+            in_file_name = [locargs[0],dataargs[0]]
+            col_names = [locargs[1],dataargs[1]]
+            index_list = [locargs[3],dataargs[3]]
+            delimiter = [locargs[4],dataargs[4]]
+            origin = [locargs[5],dataargs[5]]
+            # self.TextTerminal.appendPlainText('in_file_name: ' + in_file_name)
+            well2vtk(in_file_name=in_file_name, col_names=col_names, usecols=index_list, delimiter=delimiter, self=self, header_row=0)
+        # well2vtk(self=self)
 
     def import_SEGY(self):  # ___________________________________________________________ TO BE REVIEWED AND UPDATED IN MODULE segy2vtk
         """Import SEGY file and update Mesh3D collection."""

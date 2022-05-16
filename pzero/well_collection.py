@@ -70,7 +70,7 @@ class WellCollection(QAbstractTableModel):
                                                                             'color_R': round(np.random.random() * 255),
                                                                             'color_G': round(np.random.random() * 255),
                                                                             'color_B': round(np.random.random() * 255),
-                                                                            'line_thick': 2.0},
+                                                                            'line_thick': 15.0},
                                                                            ignore_index=True)
             self.parent.legend.update_widget(self.parent)
             self.parent.prop_legend.update_widget(self.parent)
