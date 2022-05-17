@@ -1182,9 +1182,85 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
 
 
     def update_well_tree_added(self, new_list=None):
-        ...
-    def update_well_tree_removed(self, new_list=None):
-        ...
+        """Update geology tree without creating a new model"""
+        for uid in new_list['uid']:
+            if self.WellsTreeWidget.findItems(self.parent.well_coll.get_uid_well_locid(uid), Qt.MatchExactly, 0) != []:
+                """Already exists a TreeItem (1 level) for the geological type"""
+                counter_1 = 0
+                for child_1 in range(self.WellsTreeWidget.findItems(self.parent.well_coll.get_uid_well_locid(uid), Qt.MatchExactly, 0)[0].childCount()):
+                    glevel_2 = QTreeWidgetItem(self.WellsTreeWidget.findItems(self.parent.well_coll.get_uid_well_locid(uid), Qt.MatchExactly, 0)[0], [self.parent.well_coll.get_uid_geological_feature(uid),uid])
+                    glevel_2.setFlags(glevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
+                    self.WellsTreeWidget.insertTopLevelItem(0, glevel_2)
+
+                    property_combo = QComboBox()
+                    property_combo.uid = uid
+                    property_combo.addItem("none")
+                    property_combo.addItem("X")
+                    property_combo.addItem("Y")
+                    property_combo.addItem("Z")
+                    for prop in self.parent.well_coll.get_uid_properties_names(uid):
+                        property_combo.addItem(prop)
+
+                    self.WellsTreeWidget.setItemWidget(glevel_2, 2, property_combo)
+                    property_combo.currentIndexChanged.connect(lambda: self.toggle_property())
+                    glevel_2.setFlags(glevel_2.flags() | Qt.ItemIsUserCheckable)
+                    if self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]:
+                        glevel_2.setCheckState(0, Qt.Checked)
+                    elif not self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]:
+                        glevel_2.setCheckState(0, Qt.Unchecked)
+                    self.WellsTreeWidget.insertTopLevelItem(0, glevel_2)
+                    break
+            else:
+                """Different geological type, geological feature and scenario"""
+                glevel_1 = QTreeWidgetItem(self.WellsTreeWidget, [self.parent.well_coll.get_uid_well_locid(uid)])
+                glevel_1.setFlags(glevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
+                self.WellsTreeWidget.insertTopLevelItem(0, glevel_1)
+
+                property_combo = QComboBox()
+                property_combo.uid = uid
+                property_combo.addItem("none")
+                property_combo.addItem("X")
+                property_combo.addItem("Y")
+                property_combo.addItem("Z")
+                for prop in self.parent.well_coll.get_uid_properties_names(uid):
+                    property_combo.addItem(prop)
+
+                name = self.parent.well_coll.get_uid_geological_feature(uid)
+                glevel_2 = QTreeWidgetItem(glevel_1, [name, uid])
+                self.WellsTreeWidget.setItemWidget(glevel_2, 2, property_combo)
+                property_combo.currentIndexChanged.connect(lambda: self.toggle_property())
+                glevel_2.setFlags(glevel_2.flags() | Qt.ItemIsUserCheckable)
+                if self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]:
+                    glevel_2.setCheckState(0, Qt.Checked)
+                elif not self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]:
+                    glevel_2.setCheckState(0, Qt.Unchecked)
+                self.WellsTreeWidget.insertTopLevelItem(0, glevel_2)
+                break
+
+        self.WellsTreeWidget.itemChanged.connect(self.toggle_well_visibility)
+        self.WellsTreeWidget.expandAll()
+
+
+
+    def update_well_tree_removed(self, removed_list=None):
+        """When geological entity is removed, update Geology Tree without building a new model"""
+        success = 0
+        for uid in removed_list:
+            for well_locid in range(self.WellsTreeWidget.topLevelItemCount()):
+                """Iterate through every Geological Type top level"""
+                for child_geo_feat in range(self.WellsTreeWidget.topLevelItem(well_locid).childCount()):
+                    """Iterate through every Geological Feature child"""
+                    if self.WellsTreeWidget.topLevelItem(well_locid).child(child_geo_feat).text(1) == uid:
+                        """Complete check: entity found has the uid of the entity we need to remove. Delete child, then ensure no Child or Top Level remain empty"""
+                        success = 1
+                        self.WellsTreeWidget.topLevelItem(well_locid).child(child_geo_feat).removeChild(self.WellsTreeWidget.topLevelItem(well_locid).child(child_geo_feat))
+
+                        if self.WellsTreeWidget.topLevelItem(well_locid).childCount() == 0:
+                            self.WellsTreeWidget.takeTopLevelItem(well_locid)
+                        break
+                if success == 1:
+                    break
+
     def update_well_checkboxes(self, uid=None, uid_checkState=None):
         """Update checkboxes in geology tree, called when state changed in topology tree."""
         item = self.WellsTreeWidget.findItems(uid, Qt.MatchFixedString | Qt.MatchRecursive, 1)[0]
