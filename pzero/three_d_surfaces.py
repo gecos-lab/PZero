@@ -1160,23 +1160,27 @@ def project_2_xs(self):
 
             out_vtk.set_point_data('distance',np.abs(t))
             # print(out_vtk.get_point_data('distance'))
-
-            thresh = vtk.vtkThresholdPoints()
-            thresh.SetInputData(out_vtk)
-            thresh.ThresholdByLower(xs_dist)
-            thresh.SetInputArrayToProcess(0, 0, 0, vtk.vtkDataObject().FIELD_ASSOCIATION_POINTS,
-                                    'distance')
-            thresh.Update()
-
-            thresholded = thresh.GetOutput()
-
-            if thresholded.GetNumberOfPoints() > 0:
-
-                out_vtk.DeepCopy(thresholded)
+            if xs_dist <= 0:
                 entity_dict['vtk_obj'] = out_vtk
                 out_uid = self.geol_coll.add_entity_from_dict(entity_dict=entity_dict)
             else:
-                print(f'No measure found for group {entity_dict["name"]}, try to extend the maximum distance')
+
+                thresh = vtk.vtkThresholdPoints()
+                thresh.SetInputData(out_vtk)
+                thresh.ThresholdByLower(xs_dist)
+                thresh.SetInputArrayToProcess(0, 0, 0, vtk.vtkDataObject().FIELD_ASSOCIATION_POINTS,
+                                        'distance')
+                thresh.Update()
+
+                thresholded = thresh.GetOutput()
+
+                if thresholded.GetNumberOfPoints() > 0:
+
+                    out_vtk.DeepCopy(thresholded)
+                    entity_dict['vtk_obj'] = out_vtk
+                    out_uid = self.geol_coll.add_entity_from_dict(entity_dict=entity_dict)
+                else:
+                    print(f'No measure found for group {entity_dict["name"]}, try to extend the maximum distance')
 
         elif entity_dict['topological_type'] == "XsPolyLine":
             """Output, checking for multipart for polylines."""

@@ -38,7 +38,7 @@ def shp2vtk(self=None, in_file_name=None):
     """Read shape file into a GeoPandas dataframe. Each row is an entity with geometry stored in the geometry column in shapely format."""
     gdf = gpd_read_file(in_file_name)
     # print("geometry type: ", gdf.geom_type[0])
-    print("CRS:\n", gdf.crs)
+    # print("CRS:\n", gdf.crs)
     # if False in gdf.is_valid[:]:
     #     print("Not valid geometries found - aborting.")
     #     return
@@ -46,12 +46,12 @@ def shp2vtk(self=None, in_file_name=None):
     #     print("Empty geometries found - aborting.")
     #     return
     column_names = list(gdf.columns)
-    print("Column names of GeoDataframe: ", list(gdf.columns))
-    print("GeoDataframe:\n", gdf)
+    # print("Column names of GeoDataframe: ", list(gdf.columns))
+    # print("GeoDataframe:\n", gdf)
     if (gdf.geom_type[0] == "LineString") or (gdf.geom_type[0] == "MultiLineString"):
         for row in range(gdf.shape[0]):
-            print("____ROW: ", row)
-            print("geometry type: ", gdf.geom_type[row])
+            # print("____ROW: ", row)
+            # print("geometry type: ", gdf.geom_type[row])
             curr_obj_dict = deepcopy(GeologicalCollection.geological_entity_dict)
             # if gdf.is_valid[row] and not gdf.is_empty[row]:
             # try:
@@ -137,7 +137,7 @@ def shp2vtk(self=None, in_file_name=None):
                     outZ = np_zeros((np_shape(outXYZ)[0], 1))
                     # print("outZ:\n", outZ)
                     outXYZ = np_column_stack((outXYZ, outZ))
-                print(np_shape(outXYZ))
+                # print(np_shape(outXYZ))
                 curr_obj_dict["vtk_obj"].points = outXYZ
 
                 if 'dip_dir' in column_names:

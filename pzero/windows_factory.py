@@ -180,7 +180,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.GeologyTreeWidget.hideColumn(1)  # hide the uid column
         self.GeologyTreeWidget.setItemsExpandable(True)
 
-        if secuid: # [Gabriele] This must be put in the rest of the signals (update_add,update remove etcetc)
+        if secuid:
             filtered_geo = self.parent.geol_coll.df.loc[(self.parent.geol_coll.df['x_section'] == secuid), 'geological_type']
             geo_types = pd.unique(filtered_geo)
         else:
@@ -189,16 +189,28 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         for geo_type in geo_types:
             glevel_1 = QTreeWidgetItem(self.GeologyTreeWidget, [geo_type])  # self.GeologyTreeWidget as parent -> top level
             glevel_1.setFlags(glevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
-            for feature in pd.unique(self.parent.geol_coll.df.loc[self.parent.geol_coll.df['geological_type'] == geo_type, 'geological_feature']):
+
+            if secuid:
+                filtered_geo_feat = self.parent.geol_coll.df.loc[(self.parent.geol_coll.df['geological_type'] == geo_type) & (self.parent.geol_coll.df['x_section'] == secuid), 'geological_feature']
+                geo_features = pd.unique(filtered_geo_feat)
+            else:
+                geo_features = pd.unique(self.parent.geol_coll.df.loc[self.parent.geol_coll.df['geological_type'] == geo_type, 'geological_feature'])
+
+            for feature in geo_features:
                 glevel_2 = QTreeWidgetItem(glevel_1, [feature])  # glevel_1 as parent -> 1st middle level
                 glevel_2.setFlags(glevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
-                for scenario in pd.unique(self.parent.geol_coll.df.loc[(self.parent.geol_coll.df['geological_type'] == geo_type) & (self.parent.geol_coll.df['geological_feature'] == feature), 'scenario']):
+
+                geo_scenario = pd.unique(self.parent.geol_coll.df.loc[(self.parent.geol_coll.df['geological_type'] == geo_type) & (self.parent.geol_coll.df['geological_feature'] == feature),'scenario'])
+
+                for scenario in geo_scenario:
                     glevel_3 = QTreeWidgetItem(glevel_2, [scenario])  # glevel_2 as parent -> 2nd middle level
                     glevel_3.setFlags(glevel_3.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
+
                     if secuid:
                         uids = self.parent.geol_coll.df.loc[(self.parent.geol_coll.df['geological_type'] == geo_type) & (self.parent.geol_coll.df['geological_feature'] == feature) & (self.parent.geol_coll.df['scenario'] == scenario) & (self.parent.geol_coll.df['x_section'] == secuid), 'uid'].to_list()
                     else:
                         uids= self.parent.geol_coll.df.loc[(self.parent.geol_coll.df['geological_type'] == geo_type) & (self.parent.geol_coll.df['geological_feature'] == feature) & (self.parent.geol_coll.df['scenario'] == scenario), 'uid'].to_list()
+
                     for uid in uids:
                         property_combo = QComboBox()
                         property_combo.uid = uid
@@ -208,7 +220,8 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                         property_combo.addItem("Z")
                         for prop in self.parent.geol_coll.get_uid_properties_names(uid):
                             property_combo.addItem(prop)
-                        name = self.parent.geol_coll.df.loc[self.parent.geol_coll.df['uid'] == uid, 'name'].values[0]
+
+                        name = self.parent.geol_coll.df.loc[(self.parent.geol_coll.df['uid'] == uid), 'name'].values[0]
                         glevel_4 = QTreeWidgetItem(glevel_3, [name, uid])  # glevel_3 as parent -> lower level
                         self.GeologyTreeWidget.setItemWidget(glevel_4, 2, property_combo)
                         property_combo.currentIndexChanged.connect(lambda: self.toggle_property())
@@ -269,9 +282,14 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.TopologyTreeWidget.itemChanged.connect(self.toggle_geology_topology_visibility)
         self.TopologyTreeWidget.expandAll()
 
-    def update_geology_tree_added(self, new_list=None):
+    def update_geology_tree_added(self, new_list=None,secuid=None):
         """Update geology tree without creating a new model"""
-        for uid in new_list['uid']:
+        uid_list = list(new_list['uid'])
+        if secuid:
+            for i,uid in enumerate(new_list['uid']):
+                if secuid != self.parent.geol_coll.df.loc[self.parent.geol_coll.df['uid'] == uid, 'x_section'].values[0]:
+                    del uid_list[i]
+        for uid in uid_list:
             if self.GeologyTreeWidget.findItems(self.parent.geol_coll.get_uid_geological_type(uid), Qt.MatchExactly, 0) != []:
                 """Already exists a TreeItem (1 level) for the geological type"""
                 counter_1 = 0
@@ -425,9 +443,14 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                 if success == 1:
                     break
 
-    def update_topology_tree_added(self, new_list=None):
+    def update_topology_tree_added(self, new_list=None,secuid=None):
         """Update topology tree without creating a new model"""
-        for uid in new_list['uid']:
+        uid_list = list(new_list['uid'])
+        if secuid:
+            for i,uid in enumerate(new_list['uid']):
+                if secuid != self.parent.geol_coll.df.loc[self.parent.geol_coll.df['uid'] == uid, 'x_section'].values[0]:
+                    del uid_list[i]
+        for uid in uid_list:
             if self.TopologyTreeWidget.findItems(self.parent.geol_coll.get_uid_topological_type(uid), Qt.MatchExactly, 0) != []:
                 """Already exists a TreeItem (1 level) for the topological type"""
                 counter_1 = 0
@@ -591,7 +614,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
 
     """Methods used to build and update the cross-section table."""
 
-    def create_xsections_tree(self):
+    def create_xsections_tree(self,secuid=None):
         """Create XSection tree with checkboxes and properties"""
         self.XSectionTreeWidget.clear()
         self.XSectionTreeWidget.setColumnCount(2)
@@ -601,7 +624,11 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         name_xslevel1 = ["All XSections"]
         xslevel_1 = QTreeWidgetItem(self.XSectionTreeWidget, name_xslevel1)  # self.XSectionTreeWidget as parent -> top level
         xslevel_1.setFlags(xslevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
-        for uid in self.parent.xsect_coll.df['uid']:
+        if secuid:
+            uids = self.parent.xsect_coll.df.loc[self.parent.xsect_coll.df['uid'] == secuid, 'uid'].values[0]
+        else:
+            uids = self.parent.xsect_coll.df['uid']
+        for uid in uids:
             name = self.parent.xsect_coll.df.loc[self.parent.xsect_coll.df['uid'] == uid, 'name'].values[0]
             xslevel_2 = QTreeWidgetItem(xslevel_1, [name, uid])  # xslevel_2 as parent -> lower level
             xslevel_2.setFlags(xslevel_2.flags() | Qt.ItemIsUserCheckable)
@@ -614,9 +641,14 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.XSectionTreeWidget.itemChanged.connect(self.toggle_xsection_visibility)
         self.XSectionTreeWidget.expandAll()
 
-    def update_xsections_tree_added(self, new_list=None):
+    def update_xsections_tree_added(self, new_list=None,secuid=None):
         """Update XSection tree without creating a new model"""
-        for uid in new_list['uid']:
+        uid_list = list(new_list['uid'])
+        if secuid:
+            for i,uid in enumerate(new_list['uid']):
+                if secuid != uid:
+                    del uid_list[i]
+        for uid in uid_list:
             name = self.parent.xsect_coll.get_uid_name(uid)
             xslevel_2 = QTreeWidgetItem(self.XSectionTreeWidget.findItems("All XSections", Qt.MatchExactly, 0)[0], [name, uid])
             xslevel_2.setFlags(xslevel_2.flags() | Qt.ItemIsUserCheckable)
@@ -790,7 +822,12 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
     def update_mesh3d_list_added(self, new_list=None):
         """Update Mesh3D list without creating a new model"""
         row = self.Mesh3DTableWidget.rowCount()
-        for uid in new_list['uid']:
+        uid_list = list(new_list['uid'])
+        if secuid:
+            for i,uid in enumerate(new_list['uid']):
+                if secuid != self.parent.mesh3d_coll.df.loc[self.parent.mesh3d_coll.df['uid'] == uid, 'x_section'].values[0]:
+                    del uid_list[i]
+        for uid in uid_list:
             name = self.parent.mesh3d_coll.df.loc[self.parent.mesh3d_coll.df['uid'] == uid, 'name'].values[0]
             name_item = QTableWidgetItem(name)
             name_item.setFlags(name_item.flags() | Qt.ItemIsUserCheckable)
@@ -862,7 +899,6 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
 
     def create_dom_list(self,secuid=None):
         """Create cross-sections list with checkboxes."""
-        print('qui')
         self.DOMsTableWidget.clear()
         self.DOMsTableWidget.setColumnCount(3)
         self.DOMsTableWidget.setRowCount(0)
@@ -919,11 +955,16 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         """Send message with argument = the cell being checked/unchecked."""
         self.DOMsTableWidget.itemChanged.connect(self.toggle_dom_visibility)
 
-    def update_dom_list_added(self, new_list=None):
+    def update_dom_list_added(self, new_list=None,secuid=None):
         """Update DOM list without creating a new model"""
         print('update_dom_list_added')
         row = self.DOMsTableWidget.rowCount()
-        for uid in new_list['uid']:
+        uid_list = list(new_list['uid'])
+        if secuid:
+            for i,uid in enumerate(new_list['uid']):
+                if secuid != self.parent.dom_coll.df.loc[self.parent.dom_coll.df['uid'] == uid, 'x_section'].values[0]:
+                    del uid_list[i]
+        for uid in uid_list:
             name = self.parent.dom_coll.df.loc[self.parent.dom_coll.df['uid'] == uid, 'name'].values[0]
             name_item = QTableWidgetItem(name)
             name_item.setFlags(name_item.flags() | Qt.ItemIsUserCheckable)
@@ -3473,5 +3514,64 @@ class ViewXsection(View2D):
             this_actor = None
         return this_actor
 
+    '''[Gabriele] Update the views depending on the secuid. We need to redefine the functions to use the secuid parameter for the update_dom_list_added func. We just need the x_added_x functions because the x_removed_x works on an already build/modified tree'''
+
+    def geology_added_update_views(self, updated_list=None):
+        """This is called when an entity is added to the geological collection.
+        Disconnect signals to geology and topology tree, if they are set, to avoid a nasty loop
+        that disrupts the trees, then they are reconnected when the trees are rebuilt"""
+        self.GeologyTreeWidget.itemChanged.disconnect()
+        self.TopologyTreeWidget.itemChanged.disconnect()
+        """Create pandas dataframe as list of "new" actors"""
+        self.actors_df_new = pd.DataFrame(columns=['uid', 'actor', 'show', 'collection', 'show_prop'])
+        for uid in updated_list:
+            this_actor = self.show_actor_with_property(uid=uid, collection='geol_coll', show_property=None, visible=True)
+
+            self.actors_df = self.actors_df.append({'uid': uid, 'actor': this_actor, 'show': True, 'collection': 'geol_coll', 'show_prop': None}, ignore_index=True)
+            self.actors_df_new = self.actors_df_new.append({'uid': uid, 'actor': this_actor, 'show': True, 'collection': 'geol_coll', 'show_prop': None}, ignore_index=True)
+            self.update_geology_tree_added(self.actors_df_new,secuid=self.this_x_section_uid)
+            self.update_topology_tree_added(self.actors_df_new,secuid=self.this_x_section_uid)
+        """Re-connect signals."""
+        self.GeologyTreeWidget.itemChanged.connect(self.toggle_geology_topology_visibility)
+        self.TopologyTreeWidget.itemChanged.connect(self.toggle_geology_topology_visibility)
+    def mesh3d_added_update_views(self, updated_list=None):
+        """This is called when a mesh3d is added to the mesh3d collection.
+        Disconnect signals to mesh3d list, if they are set, then they are
+        reconnected when the list is rebuilt"""
+        self.Mesh3DTableWidget.itemChanged.disconnect()
+        self.actors_df_new = pd.DataFrame(columns=['uid', 'actor', 'show', 'collection', 'show_prop'])
+        for uid in updated_list:
+            this_actor = self.show_actor_with_property(uid=uid, collection='mesh3d_coll', show_property=None, visible=False)
+            self.actors_df = self.actors_df.append({'uid': uid, 'actor': this_actor, 'show': False, 'collection': 'mesh3d_coll', 'show_prop': None}, ignore_index=True)
+            self.actors_df_new = self.actors_df_new.append({'uid': uid, 'actor': this_actor, 'show': False, 'collection': 'mesh3d_coll', 'show_prop': None}, ignore_index=True)
+            self.update_mesh3d_list_added(self.actors_df_new,secuid=self.this_x_section_uid)
+        """Re-connect signals."""
+        self.Mesh3DTableWidget.itemChanged.connect(self.toggle_mesh3d_visibility)
+    def dom_added_update_views(self, updated_list=None):
+        """This is called when a DOM is added to the xsect collection.
+        Disconnect signals to dom list, if they are set, then they are
+        reconnected when the list is rebuilt"""
+        self.DOMsTableWidget.itemChanged.disconnect()
+        self.actors_df_new = pd.DataFrame(columns=['uid', 'actor', 'show', 'collection', 'show_prop'])
+        for uid in updated_list:
+            this_actor = self.show_actor_with_property(uid=uid, collection='dom_coll', show_property=None, visible=False)
+            self.actors_df = self.actors_df.append({'uid': uid, 'actor': this_actor, 'show': False, 'collection': 'dom_coll', 'show_prop': None}, ignore_index=True)
+            self.actors_df_new = self.actors_df_new.append({'uid': uid, 'actor': this_actor, 'show': False, 'collection': 'dom_coll', 'show_prop': None}, ignore_index=True)
+            self.update_dom_list_added(self.actors_df_new,secuid=self.this_x_section_uid)
+        """Re-connect signals."""
+        self.DOMsTableWidget.itemChanged.connect(self.toggle_dom_visibility)
+    def xsect_added_update_views(self, updated_list=None):
+        """This is called when a cross-section is added to the xsect collection.
+        Disconnect signals to xsect list, if they are set, then they are
+        reconnected when the list is rebuilt"""
+        self.XSectionTreeWidget.itemChanged.disconnect()
+        self.actors_df_new = pd.DataFrame(columns=['uid', 'actor', 'show', 'collection', 'show_prop'])
+        for uid in updated_list:
+            this_actor = self.show_actor_with_property(uid=uid, collection='xsect_coll', show_property=None, visible=True)
+            self.actors_df = self.actors_df.append({'uid': uid, 'actor': this_actor, 'show': True, 'collection': 'xsect_coll', 'show_prop': None}, ignore_index=True)
+            self.actors_df_new = self.actors_df_new.append({'uid': uid, 'actor': this_actor, 'show': True, 'collection': 'xsect_coll', 'show_prop': None}, ignore_index=True)
+            self.update_xsections_tree_added(self.actors_df_new,secuid=self.this_x_section_uid)
+        """Re-connect signals."""
+        self.XSectionTreeWidget.itemChanged.connect(self.toggle_xsection_visibility)
     """Implementation of functions specific to this view (e.g. particular editing or visualization functions)"""
     """NONE AT THE MOMENT"""
