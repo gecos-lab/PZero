@@ -61,8 +61,8 @@ def well2vtk(in_file_name=None,col_names=None,row_range=None,header_row=None,use
             length = legs[i+1]
 
             # top[2] -= l
-            x_bottom = top[0]+(length*np.cos(plunge)*np.cos(360-trend)) # [Gabriele] This is strange. The DEMs' north direction is alligned with the y axis while the angle is calculated from the x axis clockwise direction.
-            y_bottom = top[1]+(length*np.cos(plunge)*np.sin(360-trend))
+            x_bottom = top[0]+(length*np.cos(plunge)*np.sin(trend)) 
+            y_bottom = top[1]+(length*np.cos(plunge)*np.cos(trend))
             z_bottom = top[2]-(length*np.sin(plunge))
 
             bottom = np.array([x_bottom,y_bottom,z_bottom])
