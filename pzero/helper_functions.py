@@ -58,3 +58,10 @@ def profiler(path,iter):
             return res
         return inner
     return secondary
+
+def mesh_keys(mesh):
+
+    from vtk.numpy_interface.dataset_adapter import WrapDataObject, vtkDataArrayToVTKArray
+
+    keys = WrapDataObject(mesh).PointData.keys()
+    return(keys)

@@ -12,6 +12,7 @@ from .entities_factory import VertexSet, PolyLine, TriSurf, TetraSolid, XsVertex
 from .helper_dialogs import input_one_value_dialog, input_text_dialog, input_combo_dialog, message_dialog, options_dialog, multiple_input_dialog, tic, toc,open_file_dialog
 # from .geological_collection import GeologicalCollection
 # from copy import deepcopy
+from .helper_functions import mesh_keys
 
 """Maths imports"""
 from math import degrees, sqrt, atan2
@@ -2033,6 +2034,11 @@ class View3D(BaseView):
         self.menuBaseView.setTitle("Project")
         self.actionBase_Tool.setText("Project")
 
+        #[Gabriele] Add picker action
+        self.pickMesh = QAction("Pick object",self)
+        self.pickMesh.triggered.connect(lambda: self.pick_mesh())
+        self.menuBaseView.addAction(self.pickMesh)
+
         # [Gabriele] Default views menu
 
         self.menuView = QMenu("Views",self)
@@ -2108,6 +2114,16 @@ class View3D(BaseView):
 
         # [Gabriele] Set horizontal default orientation because the vertical colorbar interferes with the gimble
         pv_global_theme.colorbar_orientation = 'horizontal'
+
+    #     # [Gabriele] Add picking functionality (this should be put in a menu to enable or disable)
+    #
+    #     self.plotter.enable_mesh_picking(callback=self.pkd_mesh, show=True,show_message=False,style='wireframe',color='yellow')
+    #
+    #
+    # def pkd_mesh(self,mesh):
+    #
+    #     keys = mesh_keys(mesh)
+    #     print(keys)
 
 
     def change_actor_color(self, uid=None, collection=None):
