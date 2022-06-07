@@ -1,7 +1,7 @@
 """entities_factory.py
 PZero© Andrea Bistacchi"""
 
-from vtk import vtkPolyData, vtkPoints, vtkCellCenters, vtkIdFilter, vtkCleanPolyData, vtkPolyDataNormals, vtkPlane, vtkCellArray, vtkLine, vtkIdList, vtkTriangleFilter, vtkTriangle, vtkFeatureEdges, vtkCleanPolyData, vtkStripper, vtkPolygon, vtkUnstructuredGrid, vtkTetra, vtkImageData, vtkStructuredGrid, vtkPolyDataConnectivityFilter, vtkCylinderSource
+from vtk import vtkPolyData, vtkPoints, vtkCellCenters, vtkIdFilter, vtkCleanPolyData, vtkPolyDataNormals, vtkPlane, vtkCellArray, vtkLine, vtkIdList, vtkTriangleFilter, vtkTriangle, vtkFeatureEdges, vtkCleanPolyData, vtkStripper, vtkPolygon, vtkUnstructuredGrid, vtkTetra, vtkImageData, vtkStructuredGrid, vtkPolyDataConnectivityFilter, vtkCylinderSource,vtkThreshold,vtkDataObject,vtkThresholdPoints,vtkDelaunay2D
 from vtk.util.numpy_support import vtk_to_numpy
 from vtk.numpy_interface.dataset_adapter import WrapDataObject, vtkDataArrayToVTKArray
 from pyvista import PolyData as pv_PolyData
@@ -463,6 +463,47 @@ class PolyData(vtkPolyData):
             self.GetPointData().SetScalars(connectivity_filter.GetOutput().GetPointData().GetScalars())
             return numRegions
 
+    def split_multipart(self):
+        """Split multi-part entities into single-parts."""
+        part_list = []
+        if not isinstance(self, VertexSet):
+            # print(self.cells)
+            connectivity_filter = vtkPolyDataConnectivityFilter()
+            connectivity_filter.SetInputData(self)
+            connectivity_filter.SetExtractionModeToAllRegions()
+            connectivity_filter.ColorRegionsOn()
+            connectivity_filter.Update()
+            numRegions = connectivity_filter.GetNumberOfExtractedRegions()
+
+            thresh = vtkThresholdPoints()
+            thresh.SetInputArrayToProcess(0, 0, 0, vtkDataObject().FIELD_ASSOCIATION_POINTS,'RegionId')
+            thresh.SetInputConnection(connectivity_filter.GetOutputPort())
+
+            delaunay_2d = vtkDelaunay2D()
+
+            '''[Gabriele] This is a temporary solution. For some reason the Threshold (not ThresholdPoints used here) extracts only the points and not the cells of the surface. Because of this to create a new surface we extract the points and set them as vertex set enabling to recreate the cells (auto_cells func) and then interpolate using delaunay.'''
+            for i in range(numRegions):
+                points = VertexSet()
+                surf = TriSurf()
+
+
+                thresh.ThresholdBetween(i,i)
+                thresh.Update()
+
+                points.ShallowCopy(thresh.GetOutput())
+                points.auto_cells()
+
+
+                delaunay_2d.SetInputDataObject(points)
+                delaunay_2d.SetTolerance(0.001)
+                delaunay_2d.SetAlpha(0)
+                delaunay_2d.Update()  # executes the interpolation
+                surf.ShallowCopy(delaunay_2d.GetOutput())
+                # print(vtk_obj)
+                part_list.append(surf)
+                del points,surf
+            return part_list
+
 
 class Plane(vtkPlane):  # _______________________ AT THE MOMENT THIS DOES NOT EXPOSE ANY OTHER METHOD - SEE IF IT IS USEFUL
     """Plane is a class used as a base for cross-section planes. Basically this is the standard vtkPlane
@@ -764,7 +805,6 @@ class TriSurf(PolyData):
             trisurf_copy.points_Z[point_idx] = trisurf_copy.points_Z[point_idx] + row[3]
         trisurf_copy.Modified()
         return trisurf_copy
-
 
 class XSectionBaseEntity:
     """This abstract class is used just to implement the method to calculate the W coordinate for all geometrical/topological entities belonging to a XSection.

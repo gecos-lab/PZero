@@ -41,6 +41,7 @@ from .ply2vtk import vtk2ply
 from .three_d_surfaces import interpolation_delaunay_2d, poisson_interpolation, implicit_model_loop_structural, surface_smoothing, linear_extrusion, decimation_pro_resampling, decimation_quadric_resampling, subdivision_resampling, intersection_xs, project_2_dem, project_2_xs
 from .orientation_analysis import set_normals
 
+from uuid import uuid4
 
 class ProjectWindow(QMainWindow, Ui_ProjectWindow):
     """Create project window and import UI created with Qt Designer by subclassing both"""
@@ -527,9 +528,32 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     self.prop_legend.update_widget(self)
 
     def split_multipart(self):
-        """Split multi-part entities into single-parts."""
-        pass
-
+        if self.selected_uids:
+            if self.shown_table == "tabGeology":
+                collection = self.geol_coll
+            elif self.shown_table == "tabDOMs":
+                collection = self.dom_coll
+            elif self.shown_table == "tabBoundaries":
+                collection = self.boundary_coll
+            else:
+                return
+            for uid in self.selected_uids:
+                obj = collection.get_uid_vtk_obj(uid)
+                if isinstance(obj, (PolyLine, TriSurf)):
+                    parts = obj.split_multipart()
+                    print(parts)
+                    for i,part in enumerate(parts):
+                        entity_dict = deepcopy(GeologicalCollection.geological_entity_dict)
+                        entity_dict['name'] = f'{collection.get_uid_name(uid)}'
+                        entity_dict['topological_type'] = collection.get_uid_topological_type(uid)
+                        entity_dict['geological_type'] = collection.get_uid_geological_type(uid)
+                        entity_dict['geological_feature'] = collection.get_uid_geological_feature(uid)
+                        entity_dict['scenario'] = collection.get_uid_scenario(uid)
+                        entity_dict['properties_names'] = collection.get_uid_properties_names(uid)
+                        entity_dict['properties_components'] = collection.get_uid_properties_components(uid)
+                        entity_dict['vtk_obj'] = part
+                        collection.add_entity_from_dict(entity_dict)
+            print(collection.df['uid'])
     """Methods used to save/open/create new projects."""
 
     def create_empty(self):
@@ -1219,6 +1243,8 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             os.mkdir(out_dir_name)
         if cad_format == "DXF":
             print("is DXF")
+            os.mkdir(f'{out_dir_name}/csv')
+            os.mkdir(f'{out_dir_name}/dxf')
             vtk2dxf(self=self, out_dir_name=out_dir_name)
         elif cad_format == "GOCAD":
             # vtk2gocad(self=self, out_file_name=(out_dir_name + '/gocad_ascii.gp'))
