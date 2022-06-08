@@ -495,7 +495,7 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
 
     import_options_dict = {'in_path': '', 'StartRowspinBox': 0, 'EndRowspinBox': 100, 'SeparatorcomboBox': ' '}
 
-    '''[Gabriele]  Different types of separators. By writing not using the symbol as a display we can avoid possible confusion between similar separators (e.g tab and space)-> now the separator is auto assigned with the auto_sep function'''
+    '''[Gabriele]  Different types of separators. By writing not using the symbol as a display we can avoid possible confusion between similar separators (e.g tab and space)-> the separator is auto assigned with the auto_sep function'''
     sep_dict = {'<space>': ' ', '<comma>': ',', '<semi-col>': ';', '<tab>': '   '}
 
     def __init__(self, parent=None, default_attr_list=None,ext_filter=None,caption=None,add_opt=None,multiple=False,*args, **kwargs):

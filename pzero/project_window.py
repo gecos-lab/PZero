@@ -1108,7 +1108,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
 
     def import_PC(self):
         """Import point cloud data. File extension dependent (.txt, .xyz, .las) -> Ui_ImportOptionsWindow ui to preview the data (similar to stereonet)"""
-        default_attr_list = ['As is', 'X', 'Y', 'Z', 'Red', 'Green', 'Blue', 'Intensity', 'Normals', 'User defined', 'N.a.']
+
+        default_attr_list = ['As is', 'X', 'Y', 'Z', 'Red', 'Green', 'Blue', 'Intensity', 'Nx','Ny','Nz', 'User defined', 'N.a.']
+
         ext_filter = "All supported (*.txt *.csv *.xyz *.asc *.ply *.las *.laz);;Text files (*.txt *.csv *.xyz *.asc);;PLY files (*.ply);;LAS/LAZ files (*.las *.laz)"
 
         add_opt = [['check255Box','Display RGB values within the 0-255 range']]

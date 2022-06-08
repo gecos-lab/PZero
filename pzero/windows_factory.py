@@ -4,7 +4,7 @@ PZero© Andrea Bistacchi"""
 """QT imports"""
 from PyQt5.QtWidgets import *
 from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QCloseEvent
+from PyQt5.QtGui import QCloseEvent,QFont
 
 """PZero imports"""
 from .base_view_window_ui import Ui_BaseViewWindow
@@ -12,6 +12,7 @@ from .entities_factory import VertexSet, PolyLine, TriSurf, TetraSolid, XsVertex
 from .helper_dialogs import input_one_value_dialog, input_text_dialog, input_combo_dialog, message_dialog, options_dialog, multiple_input_dialog, tic, toc,open_file_dialog
 # from .geological_collection import GeologicalCollection
 # from copy import deepcopy
+from .helper_functions import pc2o3d,o3d2pc
 
 """Maths imports"""
 from math import degrees, sqrt, atan2
@@ -2033,6 +2034,74 @@ class View3D(BaseView):
         self.menuBaseView.setTitle("Project")
         self.actionBase_Tool.setText("Project")
 
+
+        self.actionFilters = QAction(self)
+        self.actionFilters.setText("Filters")
+
+        font = QFont()
+        font.setBold(True)
+        font.setItalic(True)
+        font.setWeight(75)
+        self.actionFilters.setFont(font)
+        self.actionFilters.setObjectName("actionFilters")
+        self.actionRadialf = QAction(self)
+        self.actionRadialf.setObjectName("actionRadialf")
+        self.actionSurface_densityf = QAction(self)
+        self.actionSurface_densityf.setObjectName("actionSurface_densityf")
+        self.actionRoughnessf = QAction(self)
+        self.actionRoughnessf.setObjectName("actionRoughnessf")
+        self.actionCurvaturef = QAction(self)
+        self.actionCurvaturef.setObjectName("actionCurvaturef")
+        self.actionColorf = QAction(self)
+        self.actionColorf.setObjectName("actionColorf")
+        self.actionManualf = QAction(self)
+        self.actionManualf.setObjectName("actionManualf")
+
+        self.actionRadialf.setText("Radial distance filter")
+        self.actionSurface_densityf.setText("Surface density")
+        self.actionRoughnessf.setText("Roughness")
+        self.actionCurvaturef.setText("Curvature")
+        self.actionColorf.setText('Color')
+        self.actionManualf.setText("Manual")
+
+        self.actionRadialf.triggered.connect(lambda: self.radial_filt())
+        self.actionSurface_densityf.triggered.connect(lambda: self.surf_den_filt())
+        self.actionRoughnessf.triggered.connect(lambda: self.rough_filt())
+        self.actionCurvaturef.triggered.connect(lambda: self.curv_filt())
+        self.actionColorf.triggered.connect(lambda: self.col_filt())
+        self.actionManualf.triggered.connect(lambda: self.manual_filt())
+
+        self.menuTools.addAction(self.actionFilters)
+        self.menuTools.addSeparator()
+        self.menuTools.addAction(self.actionRadialf)
+        self.menuTools.addAction(self.actionSurface_densityf)
+        self.menuTools.addAction(self.actionRoughnessf)
+        self.menuTools.addAction(self.actionCurvaturef)
+        self.menuTools.addAction(self.actionManualf)
+
+
+        self.actionNormals = QAction(self)
+        font = QFont()
+        font.setBold(True)
+        font.setItalic(True)
+        font.setUnderline(False)
+        font.setWeight(75)
+        self.actionNormals.setFont(font)
+        self.actionNormals.setObjectName("actionNormals")
+        self.actionCalculate_normalsf = QAction(self)
+        self.actionCalculate_normalsf.setObjectName("actionCalculate_normals")
+        self.actionNormals_to_DDRf = QAction(self)
+        self.actionNormals_to_DDRf.setObjectName("actionNormals_to_DDR")
+
+        self.actionNormals.setText("Normals")
+        self.actionCalculate_normalsf.setText("Calculate normals")
+        self.actionNormals_to_DDRf.setText("Normals to Dip/Dip direction")
+
+        self.menuTools.addAction(self.actionNormals)
+        self.menuTools.addSeparator()
+        self.menuTools.addAction(self.actionCalculate_normalsf)
+        self.menuTools.addAction(self.actionNormals_to_DDRf)
+
         # [Gabriele] Default views menu
 
         self.menuView = QMenu("Views",self)
@@ -2366,7 +2435,7 @@ class View3D(BaseView):
                     if n_comp > 1:
                         show_property_value= plot_entity.get_point_data(show_property)
                         show_scalar_bar = False
-                        if show_property == 'RGB':
+                        if show_property == 'RGB' or show_property == 'Normals':
                             plot_rgb_option = True # [Gabriele] Use RGB
 
                     else:
@@ -2580,6 +2649,30 @@ class View3D(BaseView):
         return this_actor
 
 
+    '''[Gabriele] PC Filters ----------------------------------------------------'''
+
+    def radial_filt(self):
+        uids = self.parent.dom_coll.get_dom_type_uids('PCDom')
+
+        for uid in uids:
+            pc_obj = self.parent.dom_coll.get_uid_vtk_obj(uid)
+            self.o3d_obj = pc2o3d(self,pc_obj)
+
+            filtered_o3d = self.o3d_obj.remove_radius_outlier(10,5,print_progress=True)
+            print(filtered_o3d)
+
+
+    def surf_den_filt(self):
+        ...
+
+    def rough_filt(self):
+        print('Roughness filtering')
+    def curv_filt(self):
+        print('Curvature filtering')
+    def col_filt(self):
+        print('Color filtering')
+    def manual_filt(self):
+        print('Manual filtering')
 
 class View2D(BaseView):
     """Create 2D view and import UI created with Qt Designer by subclassing base view"""

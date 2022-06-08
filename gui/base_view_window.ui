@@ -236,8 +236,8 @@
          <rect>
           <x>0</x>
           <y>0</y>
-          <width>107</width>
-          <height>107</height>
+          <width>278</width>
+          <height>416</height>
          </rect>
         </property>
         <property name="sizePolicy">
@@ -311,8 +311,8 @@
          <rect>
           <x>0</x>
           <y>0</y>
-          <width>107</width>
-          <height>107</height>
+          <width>278</width>
+          <height>416</height>
          </rect>
         </property>
         <property name="sizePolicy">
@@ -354,8 +354,8 @@
          <rect>
           <x>0</x>
           <y>0</y>
-          <width>107</width>
-          <height>107</height>
+          <width>278</width>
+          <height>416</height>
          </rect>
         </property>
         <property name="sizePolicy">
@@ -409,8 +409,8 @@
          <rect>
           <x>0</x>
           <y>0</y>
-          <width>107</width>
-          <height>107</height>
+          <width>278</width>
+          <height>416</height>
          </rect>
         </property>
         <property name="sizePolicy">
@@ -488,8 +488,8 @@
          <rect>
           <x>0</x>
           <y>0</y>
-          <width>107</width>
-          <height>107</height>
+          <width>278</width>
+          <height>416</height>
          </rect>
         </property>
         <property name="sizePolicy">
@@ -662,8 +662,24 @@
     </property>
     <addaction name="actionClose"/>
    </widget>
+   <widget class="QMenu" name="menuTools">
+    <property name="title">
+     <string>Tools</string>
+    </property>
+    <addaction name="actionFilters"/>
+    <addaction name="separator"/>
+    <addaction name="actionSurface_densityf"/>
+    <addaction name="actionRoughnessf"/>
+    <addaction name="actionCurvaturef"/>
+    <addaction name="actionManualf"/>
+    <addaction name="actionNormalsf"/>
+    <addaction name="separator"/>
+    <addaction name="actionCalculate_normals"/>
+    <addaction name="actionNormals_to_DDR"/>
+   </widget>
    <addaction name="menuBaseView"/>
    <addaction name="menuWindow"/>
+   <addaction name="menuTools"/>
    <addaction name="menuHelp"/>
   </widget>
   <widget class="QStatusBar" name="statusbar">
@@ -723,6 +739,61 @@
   <action name="actionBase_Tool">
    <property name="text">
     <string>Base Tool</string>
+   </property>
+  </action>
+  <action name="actionFilters">
+   <property name="text">
+    <string>Filters</string>
+   </property>
+   <property name="font">
+    <font>
+     <weight>75</weight>
+     <italic>true</italic>
+     <bold>true</bold>
+    </font>
+   </property>
+  </action>
+  <action name="actionSurface_densityf">
+   <property name="text">
+    <string>Surface density</string>
+   </property>
+  </action>
+  <action name="actionRoughnessf">
+   <property name="text">
+    <string>Roughness</string>
+   </property>
+  </action>
+  <action name="actionCurvaturef">
+   <property name="text">
+    <string>Curvature</string>
+   </property>
+  </action>
+  <action name="actionManualf">
+   <property name="text">
+    <string>Manual</string>
+   </property>
+  </action>
+  <action name="actionNormalsf">
+   <property name="text">
+    <string>Normals</string>
+   </property>
+   <property name="font">
+    <font>
+     <weight>75</weight>
+     <italic>true</italic>
+     <bold>true</bold>
+     <underline>false</underline>
+    </font>
+   </property>
+  </action>
+  <action name="actionCalculate_normals">
+   <property name="text">
+    <string>Calculate normals</string>
+   </property>
+  </action>
+  <action name="actionNormals_to_DDR">
+   <property name="text">
+    <string>Normals to Dip/Dip direction</string>
    </property>
   </action>
  </widget>

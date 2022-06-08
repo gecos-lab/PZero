@@ -58,3 +58,18 @@ def profiler(path,iter):
             return res
         return inner
     return secondary
+
+
+def pc2o3d(self,pc_obj):
+
+    from open3d import geometry
+    from open3d import utility
+
+    points = pc_obj.points
+    o3d_pc = geometry.PointCloud()
+    o3d_pc.points = utility.Vector3dVector(points)
+
+    return o3d_pc
+
+def o3d2pc(self,o3d_obj):
+    ...

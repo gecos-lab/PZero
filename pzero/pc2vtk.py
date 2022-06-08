@@ -108,12 +108,24 @@ def pc2vtk(in_file_name,col_names,row_range,header_row,usecols,delimiter,self=No
             if 'Red' in input_df.columns:
                 # print(properties_df)
                 if self.check255Box.isChecked():
-                    pv_PD['RGB'] = np.array([input_df['Red'],input_df['Green'],input_df['Blue']]).T.astype(np.uint8)
+                    RGB = np.array([input_df['Red'],input_df['Green'],input_df['Blue']]).T.astype(np.uint8)
                 else:
-                    pv_PD['RGB'] = np.array([input_df['Red'],input_df['Green'],input_df['Blue']]).T
+                    RGB = np.array([input_df['Red'],input_df['Green'],input_df['Blue']]).T
 
+                pv_PD['RGB'] = RGB
 
                 input_df.drop(['Red','Green','Blue'],axis=1,inplace=True)
+
+            if 'Nx' in input_df.columns:
+                # print(properties_df)
+                if self.check255Box.isChecked():
+                    normals = np.array([input_df['Nx'],input_df['Ny'],input_df['Nz']]).T.astype(np.uint8)
+                else:
+                    normals = np.array([input_df['Nx'],input_df['Ny'],input_df['Nz']]).T
+
+                pv_PD['Normals'] = normals
+
+                input_df.drop(['Nx','Ny','Nz'],axis=1,inplace=True)
 
             for property in input_df.columns:
                 pv_PD[property] = input_df[property].values
