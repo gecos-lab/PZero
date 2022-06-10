@@ -505,7 +505,7 @@ class VertexSet(PolyData):
         self.Modified()
 
 
-class PolyLine(PolyData):  # _____________________________ HERE WE MUST DECIDE WHETHER TO USE LINE (TYPE = 3) OR POLYLINE (TYPE = 4) CELLS - NOT BOTH - POLYLINE COULD BE USEFUL FOR MULTI-PART
+class PolyLine(PolyData):
     """PolyLine is a polyline derived from BaseEntity and vtkPolyData"""
     def __init__(self, *args, **kwargs):
         super(PolyLine, self).__init__(*args, **kwargs)

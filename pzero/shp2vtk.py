@@ -131,7 +131,7 @@ def shp2vtk(self=None, in_file_name=None):
                 curr_obj_dict["vtk_obj"] = VertexSet()
 
                 gdf_index['coords'] = gdf_index.geometry.apply(lambda x: np_array(x)) # [Gabriele] add a coordinate column in the gdf_index dataframe
-                outXYZ = np_array([p for p in gdf_index.loc[i,'coords']])
+                outXYZ = np_array([p for p in gdf_index.loc[i, 'coords']])
 
                 if np_shape(outXYZ)[1] == 2:
                     outZ = np_zeros((np_shape(outXYZ)[0], 1))
@@ -142,11 +142,11 @@ def shp2vtk(self=None, in_file_name=None):
 
                 if 'dip_dir' in column_names:
                     dir = (gdf_index.loc[i, "dip_dir"]-90)%360
-                    curr_obj_dict["vtk_obj"].set_point_data('dir',dir.values)
+                    curr_obj_dict["vtk_obj"].set_point_data('dir', dir.values)
                 if 'dir' in column_names:
-                    curr_obj_dict["vtk_obj"].set_point_data('dir',gdf_index.loc[i, "dir"].values)
+                    curr_obj_dict["vtk_obj"].set_point_data('dir', gdf_index.loc[i, "dir"].values)
                 if 'dip':
-                    curr_obj_dict["vtk_obj"].set_point_data('dip',gdf_index.loc[i, "dip"].values)
+                    curr_obj_dict["vtk_obj"].set_point_data('dip', gdf_index.loc[i, "dip"].values)
                 if 'dip' in column_names and ('dir' in column_names or 'dip_dir' in column_names):
                     normals = dip_directions2normals(curr_obj_dict["vtk_obj"].get_point_data('dip'), curr_obj_dict["vtk_obj"].get_point_data('dir'))
                     curr_obj_dict["vtk_obj"].set_point_data('Normals',normals)
