@@ -608,7 +608,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
 
     """Methods used to build and update the cross-section table."""
 
-    def create_xsections_tree(self,sec_uid=None):
+    def create_xsections_tree(self, sec_uid=None):
         """Create XSection tree with checkboxes and properties"""
         self.XSectionTreeWidget.clear()
         self.XSectionTreeWidget.setColumnCount(2)
@@ -619,9 +619,9 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         xslevel_1 = QTreeWidgetItem(self.XSectionTreeWidget, name_xslevel1)  # self.XSectionTreeWidget as parent -> top level
         xslevel_1.setFlags(xslevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
         if sec_uid:
-            uids = self.parent.xsect_coll.df.loc[self.parent.xsect_coll.df['uid'] == sec_uid, 'uid'].values[0]
+            uids = self.parent.xsect_coll.df.loc[self.parent.xsect_coll.df['uid'] == sec_uid, 'uid'].to_list()
         else:
-            uids = self.parent.xsect_coll.df['uid']
+            uids = self.parent.xsect_coll.df['uid'].to_list()
         for uid in uids:
             name = self.parent.xsect_coll.df.loc[self.parent.xsect_coll.df['uid'] == uid, 'name'].values[0]
             xslevel_2 = QTreeWidgetItem(xslevel_1, [name, uid])  # xslevel_2 as parent -> lower level
@@ -700,15 +700,19 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
 
     """Methods used to build and update the Boundary table."""
 
-    def create_boundary_list(self):
+    def create_boundary_list(self, sec_uid=None):
         """Create boundaries list with checkboxes."""
         self.BoundariesTableWidget.clear()
         self.BoundariesTableWidget.setColumnCount(2)
         self.BoundariesTableWidget.setRowCount(0)
         self.BoundariesTableWidget.setHorizontalHeaderLabels(['Name', 'uid'])
         self.BoundariesTableWidget.hideColumn(1)  # hide the uid column
+        if sec_uid:
+            uids = self.parent.boundary_coll.df.loc[(self.parent.boundary_coll.df['x_section'] == sec_uid), 'uid'].to_list()
+        else:
+            uids = self.parent.boundary_coll.df['uid'].to_list()
         row = 0
-        for uid in self.parent.boundary_coll.df['uid'].to_list():
+        for uid in uids:
             name = self.parent.boundary_coll.df.loc[self.parent.boundary_coll.df['uid'] == uid, 'name'].values[0]
             name_item = QTableWidgetItem(name)
             name_item.setFlags(name_item.flags() | Qt.ItemIsUserCheckable)
@@ -780,11 +784,11 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.Mesh3DTableWidget.setRowCount(0)
         self.Mesh3DTableWidget.setHorizontalHeaderLabels(['Name', 'uid'])
         self.Mesh3DTableWidget.hideColumn(1)  # hide the uid column
-        row = 0
         if sec_uid:
             uids = self.parent.mesh3d_coll.df.loc[(self.parent.mesh3d_coll.df['x_section']==sec_uid),'uid'].to_list()
         else:
             uids = self.parent.mesh3d_coll.df['uid'].to_list()
+        row = 0
         for uid in uids:
             name = self.parent.mesh3d_coll.df.loc[self.parent.mesh3d_coll.df['uid'] == uid, 'name'].values[0]
             name_item = QTableWidgetItem(name)
@@ -1062,15 +1066,19 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
 
     """Methods used to build and update the image table."""
 
-    def create_image_list(self):
+    def create_image_list(self, sec_uid=None):
         """Create image list with checkboxes."""
         self.ImagesTableWidget.clear()
         self.ImagesTableWidget.setColumnCount(3)
         self.ImagesTableWidget.setRowCount(0)
         self.ImagesTableWidget.setHorizontalHeaderLabels(['Name', 'uid'])
         self.ImagesTableWidget.hideColumn(1)  # hide the uid column
+        if sec_uid:
+            uids = self.parent.image_coll.df.loc[(self.parent.image_coll.df['x_section'] == sec_uid), 'uid'].to_list()
+        else:
+            uids = self.parent.image_coll.df['uid'].to_list()
         row = 0
-        for uid in self.parent.image_coll.df['uid'].to_list():
+        for uid in uids:
             name = self.parent.image_coll.df.loc[self.parent.image_coll.df['uid'] == uid, 'name'].values[0]
             name_item = QTableWidgetItem(name)
             name_item.setFlags(name_item.flags() | Qt.ItemIsUserCheckable)
@@ -3305,11 +3313,11 @@ class ViewXsection(View2D):
         """NONE AT THE MOMENT"""
         self.create_geology_tree(sec_uid=self.this_x_section_uid)
         self.create_topology_tree(sec_uid=self.this_x_section_uid)
-        # self.create_xsections_tree()   # _____________________________________________________________ALSO THIS
-        # self.create_boundary_list()   # _____________________________________________________________ALSO THIS
+        self.create_xsections_tree(sec_uid=self.this_x_section_uid)
+        self.create_boundary_list(sec_uid=self.this_x_section_uid)
         self.create_mesh3d_list(sec_uid=self.this_x_section_uid)
         self.create_dom_list(sec_uid=self.this_x_section_uid)
-        # self.create_image_list()   # _____________________________________________________________ALSO THIS
+        self.create_image_list(sec_uid=self.this_x_section_uid)
 
     """Implementation of functions specific to 2D views"""
 
