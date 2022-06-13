@@ -815,8 +815,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         rev_name = fin.readlines()[2]
         fin.close()
         in_dir_name = in_file_name[:-3] + '_p0/' + rev_name
-        self.TextTerminal.appendPlainText(("Opening project/revision : " + in_file_name + " / " + rev_name + "\n"))
+        self.TextTerminal.appendPlainText(("Opening project/revision : " + in_file_name + "/" + rev_name + "\n"))
         if not os.path.isdir(in_dir_name):
+            print(in_dir_name)
             print("error: missing folder")
             return
         """In the following it is still possible to open old projects with metadata stored

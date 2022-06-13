@@ -474,34 +474,18 @@ class PolyData(vtkPolyData):
             connectivity_filter.ColorRegionsOn()
             connectivity_filter.Update()
             numRegions = connectivity_filter.GetNumberOfExtractedRegions()
+            connectivity = connectivity_filter.GetOutput()
 
-            thresh = vtkThresholdPoints()
-            thresh.SetInputArrayToProcess(0, 0, 0, vtkDataObject().FIELD_ASSOCIATION_POINTS,'RegionId')
-            thresh.SetInputConnection(connectivity_filter.GetOutputPort())
+            temp = pv_PolyData()
+            temp.ShallowCopy(connectivity)
 
-            delaunay_2d = vtkDelaunay2D()
-
-            '''[Gabriele] This is a temporary solution. For some reason the Threshold (not ThresholdPoints used here) extracts only the points and not the cells of the surface. Because of this to create a new surface we extract the points and set them as vertex set enabling to recreate the cells (auto_cells func) and then interpolate using delaunay.'''
+            '''[Gabriele] We use extract_surface to cast Unstructured grid (given by extract_points) in PolyData'''
             for i in range(numRegions):
-                points = VertexSet()
-                surf = TriSurf()
+                part = TriSurf()
+                thresh = temp.extract_points(temp['RegionId'] == i).extract_surface()
+                part.ShallowCopy(thresh)
+                part_list.append(part)
 
-
-                thresh.ThresholdBetween(i,i)
-                thresh.Update()
-
-                points.ShallowCopy(thresh.GetOutput())
-                points.auto_cells()
-
-
-                delaunay_2d.SetInputDataObject(points)
-                delaunay_2d.SetTolerance(0.001)
-                delaunay_2d.SetAlpha(0)
-                delaunay_2d.Update()  # executes the interpolation
-                surf.ShallowCopy(delaunay_2d.GetOutput())
-                # print(vtk_obj)
-                part_list.append(surf)
-                del points,surf
             return part_list
 
 
