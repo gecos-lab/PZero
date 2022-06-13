@@ -153,6 +153,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.actionConnectedParts.triggered.connect(self.connected_parts)
         self.actionMergeEntities.triggered.connect(self.entities_merge)
         self.actionSplitMultipart.triggered.connect(self.split_multipart)
+        """______________________________________ ADD TOOL TO PRINT VTK INFO self.TextTerminal.appendPlainText( -- vtk object as text -- )"""
         self.actionEditTextureAdd.triggered.connect(self.texture_add)
         self.actionEditTextureRemove.triggered.connect(self.texture_remove)
         self.actionAddProperty.triggered.connect(self.property_add)
