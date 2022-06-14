@@ -42,16 +42,17 @@ from matplotlib.collections import PathCollection
 from matplotlib.tri.tricontour import TriContourSet
 import matplotlib.style as mplstyle
 # from matplotlib.backend_bases import FigureCanvasBase
+import mplstereonet
 
 """Probably not-required imports"""
 # import sys
 # from time import sleep
 
-
+mplstyle.use(['dark_background', 'fast'])
 """Background color for matplotlib plots.
 Could be made interactive in the future.
 'fast' is supposed to make plotting large objects faster"""
-mplstyle.use(['dark_background', 'fast'])
+
 
 
 class NavigationToolbar(NavigationToolbar2QT):
@@ -168,8 +169,6 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
     def show_qt_canvas(self):
         """Show the Qt Window"""
         self.show()
-        if isinstance(self, View3D):
-            self.cam_orient_widget.On() # [Gabriele] The orientation widget needs to be turned on AFTER the canvas is shown
 
     """Methods used to build and update the geology and topology trees."""
 
@@ -2019,7 +2018,10 @@ class View3D(BaseView):
         self.setWindowTitle("3D View")
 
     """Re-implementations of functions that appear in all views - see placeholders in BaseView()"""
-
+    def show_qt_canvas(self):
+        """Show the Qt Window"""
+        self.show()
+        self.cam_orient_widget.On() # [Gabriele] The orientation widget needs to be turned on AFTER the canvas is shown
     def closeEvent(self, event):
         """Override the standard closeEvent method since self.plotter.close() is needed to cleanly close the vtk plotter."""
         reply = QMessageBox.question(self, 'Closing window', 'Close this window?', QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
@@ -2835,6 +2837,7 @@ class View2D(BaseView):
             pass
 
     def set_actor_visible(self, uid=None, visible=None):
+        print(self.actors_df.loc[self.actors_df['uid'] == uid, 'actor'].values[0].__class__.__name__)
         """Set actor uid visible or invisible (visible = True or False)"""
         if isinstance(self.actors_df.loc[self.actors_df['uid'] == uid, 'actor'].values[0], Line2D):
             "Case for Line2D"
@@ -3591,3 +3594,256 @@ class ViewXsection(View2D):
         self.XSectionTreeWidget.itemChanged.connect(self.toggle_xsection_visibility)
     """Implementation of functions specific to this view (e.g. particular editing or visualization functions)"""
     """NONE AT THE MOMENT"""
+
+
+class ViewStereoplot(BaseView):
+    def __init__(self, *args, **kwargs):
+        super(ViewStereoplot, self).__init__(*args, **kwargs)
+        self.setWindowTitle("Stereoplot View")
+        # mplstyle.context('classic')
+    def initialize_menu_tools(self):
+        self.menuPlot = QMenu('Plot options',self)
+
+        self.actionSetPolar = QAction('Set polar grid',self)
+        self.actionSetPolar.triggered.connect(lambda: self.polar_grid())
+        self.menuPlot.addAction(self.actionSetPolar)
+        self.menubar.insertMenu(self.menuHelp.menuAction(),self.menuPlot)
+
+
+
+    def initialize_interactor(self):
+
+        with mplstyle.context(('default')):
+            """Create Matplotlib canvas, figure and navi_toolbar"""
+            self.figure,self.ax = mplstereonet.subplots()  # create a Matplotlib figure; this implicitly creates also the canvas to contain the figure
+
+        self.canvas = FigureCanvas(self.figure)  # get a reference to the canvas that contains the figure
+        # print("dir(self.canvas):\n", dir(self.canvas))
+        """https://doc.qt.io/qt-5/qsizepolicy.html"""
+        self.navi_toolbar = NavigationToolbar(self.figure.canvas, self)  # create a navi_toolbar with the matplotlib.backends.backend_qt5agg method NavigationToolbar
+
+        """Create Qt layout and add Matplotlib canvas, figure and navi_toolbar"""
+        # canvas_widget = self.figure.canvas
+        # canvas_widget.setAutoFillBackground(True)
+        self.ViewFrameLayout.addWidget(self.canvas)  # add Matplotlib canvas (created above) as a widget to the Qt layout
+        # print(plot_widget)
+        self.ViewFrameLayout.addWidget(self.navi_toolbar)  # add navigation navi_toolbar (created above) to the layout
+
+        self.ax.grid()
+
+    def create_geology_tree(self):
+        """Create geology tree with checkboxes and properties"""
+        self.GeologyTreeWidget.clear()
+        self.GeologyTreeWidget.setColumnCount(3)
+        self.GeologyTreeWidget.setHeaderLabels(['Type > Feature > Scenario > Name', 'uid', 'property'])
+        self.GeologyTreeWidget.hideColumn(1)  # hide the uid column
+        self.GeologyTreeWidget.setItemsExpandable(True)
+
+        filtered_geo = self.parent.geol_coll.df.loc[(self.parent.geol_coll.df['topological_type'] == 'VertexSet'), 'geological_type']
+        geo_types = pd.unique(filtered_geo)
+
+        for geo_type in geo_types:
+            glevel_1 = QTreeWidgetItem(self.GeologyTreeWidget, [geo_type])  # self.GeologyTreeWidget as parent -> top level
+            glevel_1.setFlags(glevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
+
+
+            filtered_geo_feat = self.parent.geol_coll.df.loc[(self.parent.geol_coll.df['geological_type'] == geo_type) & (self.parent.geol_coll.df['topological_type'] == 'VertexSet'), 'geological_feature']
+            geo_features = pd.unique(filtered_geo_feat)
+
+
+            for feature in geo_features:
+                glevel_2 = QTreeWidgetItem(glevel_1, [feature])  # glevel_1 as parent -> 1st middle level
+                glevel_2.setFlags(glevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
+
+                geo_scenario = pd.unique(self.parent.geol_coll.df.loc[(self.parent.geol_coll.df['geological_type'] == geo_type) & (self.parent.geol_coll.df['geological_feature'] == feature),'scenario'])
+
+                for scenario in geo_scenario:
+                    glevel_3 = QTreeWidgetItem(glevel_2, [scenario])  # glevel_2 as parent -> 2nd middle level
+                    glevel_3.setFlags(glevel_3.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
+
+
+                    uids = self.parent.geol_coll.df.loc[(self.parent.geol_coll.df['geological_type'] == geo_type) & (self.parent.geol_coll.df['geological_feature'] == feature) & (self.parent.geol_coll.df['scenario'] == scenario) & (self.parent.geol_coll.df['topological_type'] == 'VertexSet'), 'uid'].to_list()
+
+                    for uid in uids:
+                        property_combo = QComboBox()
+                        property_combo.uid = uid
+                        property_combo.addItem("Poles")
+                        # property_combo.addItem("Planes")
+
+                        name = self.parent.geol_coll.df.loc[(self.parent.geol_coll.df['uid'] == uid), 'name'].values[0]
+                        glevel_4 = QTreeWidgetItem(glevel_3, [name, uid])  # glevel_3 as parent -> lower level
+                        self.GeologyTreeWidget.setItemWidget(glevel_4, 2, property_combo)
+                        property_combo.currentIndexChanged.connect(lambda: self.toggle_property())
+                        glevel_4.setFlags(glevel_4.flags() | Qt.ItemIsUserCheckable)
+                        if self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]:
+                            glevel_4.setCheckState(0, Qt.Checked)
+                        elif not self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]:
+                            glevel_4.setCheckState(0, Qt.Unchecked)
+        """Send messages. Note that with tristate several signals are emitted in a sequence, one for each
+        changed item, but upper levels do not broadcast uid's so they are filtered in the toggle method."""
+        self.GeologyTreeWidget.itemChanged.connect(self.toggle_geology_topology_visibility)
+        self.GeologyTreeWidget.expandAll()
+
+    def create_topology_tree(self):
+        """Create topology tree with checkboxes and properties"""
+        self.TopologyTreeWidget.clear()
+        self.TopologyTreeWidget.setColumnCount(3)
+        self.TopologyTreeWidget.setHeaderLabels(['Type > Scenario > Name', 'uid', 'property'])
+        self.TopologyTreeWidget.hideColumn(1)  # hide the uid column
+        self.TopologyTreeWidget.setItemsExpandable(True)
+
+        filtered_topo = self.parent.geol_coll.df.loc[(self.parent.geol_coll.df['topological_type'] == 'VertexSet'), 'topological_type']
+        topo_types = pd.unique(filtered_topo)
+
+        for topo_type in topo_types:
+            tlevel_1 = QTreeWidgetItem(self.TopologyTreeWidget, [topo_type])  # self.GeologyTreeWidget as parent -> top level
+            tlevel_1.setFlags(tlevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
+            for scenario in pd.unique(self.parent.geol_coll.df.loc[self.parent.geol_coll.df['topological_type'] == topo_type, 'scenario']):
+                tlevel_2 = QTreeWidgetItem(tlevel_1, [scenario])  # tlevel_1 as parent -> middle level
+                tlevel_2.setFlags(tlevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
+
+                uids = self.parent.geol_coll.df.loc[(self.parent.geol_coll.df['topological_type'] == topo_type) & (self.parent.geol_coll.df['scenario'] == scenario) & (self.parent.geol_coll.df['topological_type'] == 'VertexSet'), 'uid'].to_list()
+
+                for uid in uids:
+                    property_combo = QComboBox()
+                    property_combo.uid = uid
+                    property_combo.addItem("Poles")
+                    # property_combo.addItem("Planes")
+                    name = self.parent.geol_coll.df.loc[self.parent.geol_coll.df['uid'] == uid, 'name'].values[0]
+                    tlevel_3 = QTreeWidgetItem(tlevel_2, [name, uid])  # tlevel_2 as parent -> lower level
+                    self.TopologyTreeWidget.setItemWidget(tlevel_3, 2, property_combo)
+                    property_combo.currentIndexChanged.connect(lambda: self.toggle_property())
+                    tlevel_3.setFlags(tlevel_3.flags() | Qt.ItemIsUserCheckable)
+                    if self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]:
+                        tlevel_3.setCheckState(0, Qt.Checked)
+                    elif not self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]:
+                        tlevel_3.setCheckState(0, Qt.Unchecked)
+        """Send messages. Note that with tristate several signals are emitted in a sequence, one for each
+        changed item, but upper levels do not broadcast uid's so they are filtered in the toggle method."""
+        self.TopologyTreeWidget.itemChanged.connect(self.toggle_geology_topology_visibility)
+        self.TopologyTreeWidget.expandAll()
+
+
+    def set_actor_visible(self, uid=None, visible=None):
+        # print(self.actors_df)
+        print(self.dir)
+        """Set actor uid visible or invisible (visible = True or False)"""
+        if isinstance(self.actors_df.loc[self.actors_df['uid'] == uid, 'actor'].values[0], Line2D):
+            "Case for Line2D"
+            self.actors_df.loc[self.actors_df['uid'] == uid, 'actor'].values[0].set_visible(visible)
+            self.actors_df.loc[self.actors_df['uid'] == uid, 'actor'].values[0].figure.canvas.draw()
+        elif isinstance(self.actors_df.loc[self.actors_df['uid'] == uid, 'actor'].values[0], PathCollection):
+            "Case for PathCollection -> ax.scatter"
+            pass
+        elif isinstance(self.actors_df.loc[self.actors_df['uid'] == uid, 'actor'].values[0], TriContourSet):
+            "Case for TriContourSet -> ax.tricontourf"
+            pass
+        elif isinstance(self.actors_df.loc[self.actors_df['uid'] == uid, 'actor'].values[0], AxesImage):
+            "Case for AxesImage (i.e. images)"
+            """Hide other images if (1) they are shown and (2) you are showing another one."""
+            for hide_uid in self.actors_df.loc[(self.actors_df['collection'] == 'image_coll') & (self.actors_df['show']) & (self.actors_df['uid'] != uid), 'uid'].to_list():
+                self.actors_df.loc[self.actors_df['uid'] == hide_uid, 'show'] = False
+                self.actors_df.loc[self.actors_df['uid'] == hide_uid, 'actor'].values[0].set_visible(False)
+                row = self.ImagesTableWidget.findItems(hide_uid, Qt.MatchExactly)[0].row()
+                self.ImagesTableWidget.item(row, 0).setCheckState(Qt.Unchecked)
+            """Then show this one."""
+            self.actors_df.loc[self.actors_df['uid'] == uid, 'actor'].values[0].set_visible(visible)
+            self.actors_df.loc[self.actors_df['uid'] == uid, 'actor'].values[0].figure.canvas.draw()
+        else:
+            "Do-nothing option to avoid errors, but it does not set/unset visibility."
+            pass
+
+    def remove_actor_in_view(self, uid=None, redraw=False):
+        """"Remove actor from plotter"""
+        """Can remove a single entity or a list of entities as actors - here we remove a single entity"""
+
+        if not self.actors_df.loc[self.actors_df['uid'] == uid].empty:
+            if self.actors_df.loc[self.actors_df['uid'] == uid, 'actor'].values[0]:
+                # print(self.actors_df.loc[self.actors_df['uid'] == uid, 'actor'].values)
+                # print(self.actors_df.loc[self.actors_df['uid'] == uid, 'actor'].values[0])
+                self.actors_df.loc[self.actors_df['uid'] == uid, 'actor'].values[0].remove()
+                self.actors_df.drop(self.actors_df[self.actors_df['uid'] == uid].index, inplace=True)
+            if redraw:
+                """IN THE FUTURE check if there is a way to redraw just the actor that has just been removed."""
+                self.figure.canvas.draw()
+                print("redraw all - a more efficient alternative should be found")
+
+    def show_actor_with_property(self, uid=None, collection=None, show_property='Poles', visible=None):
+        if show_property is None:
+            show_property='Poles'
+        """Show actor with scalar property (default None)
+        https://github.com/pyvista/pyvista/blob/140b15be1d4021b81ded46b1c212c70e86a98ee7/pyvista/plotting/plotting.py#L1045"""
+        """First get entity from collection."""
+        if collection == 'geol_coll':
+            color_R = self.parent.geol_coll.get_uid_legend(uid=uid)['color_R']
+            color_G = self.parent.geol_coll.get_uid_legend(uid=uid)['color_G']
+            color_B = self.parent.geol_coll.get_uid_legend(uid=uid)['color_B']
+            color_RGB = [color_R / 255, color_G / 255, color_B / 255]
+            line_thick = self.parent.geol_coll.get_uid_legend(uid=uid)['line_thick']
+            plot_entity = self.parent.geol_coll.get_uid_vtk_obj(uid)
+        elif collection == 'xsect_coll':
+            color_R = self.parent.xsect_coll.get_legend()['color_R']
+            color_G = self.parent.xsect_coll.get_legend()['color_G']
+            color_B = self.parent.xsect_coll.get_legend()['color_B']
+            color_RGB = [color_R / 255, color_G / 255, color_B / 255]
+            line_thick = self.parent.xsect_coll.get_legend()['line_thick']
+            plot_entity = self.parent.xsect_coll.get_uid_vtk_frame(uid)
+        """Then plot."""
+        if isinstance(plot_entity, VertexSet):
+            if isinstance(plot_entity.points, np.ndarray):
+                if plot_entity.points_number > 0:
+                    """This  check is needed to avoid errors when trying to plot an empty
+                    PolyData, just created at the beginning of a digitizing session.
+                    Check if both these conditions are necessary_________________"""
+
+                    self.dir = plot_entity.get_point_data('dir')
+                    self.dip = plot_entity.get_point_data('dip')
+                    if uid in self.selected_uids:
+                        if show_property == "Planes":
+                            # U = np.sin((plot_entity.points_map_dip_azimuth+90) * np.pi / 180)
+                            # V = np.cos((plot_entity.points_map_dip_azimuth+90) * np.pi / 180)
+                            # # in quiver scale=40 means arrow is 1/40 of figure width, (shaft) width is scaled to figure width, head length and width are scaled to shaft
+                            this_actor = self.ax.plane(self.dir,self.dip,color=color_RGB)[0]
+                            # print('Only poles for now')
+                            # this_actor = None
+                        else:
+                            this_actor = self.ax.pole(self.dir, self.dip, color=color_RGB)[0]
+
+                        this_actor.set_visible(visible)
+                    else:
+                        if show_property == "Planes":
+                            # U = np.sin((plot_entity.points_map_dip_azimuth+90) * np.pi / 180)
+                            # V = np.cos((plot_entity.points_map_dip_azimuth+90) * np.pi / 180)
+                            # # in quiver scale=40 means arrow is 1/40 of figure width, (shaft) width is scaled to figure width, head length and width are scaled to shaft
+                            this_actor = self.ax.plane(self.dir,self.dip,color=color_RGB)[0]
+                            # print(this_actor)
+                            # print('Only poles for now')
+                            # this_actor = None
+                        else:
+                            this_actor = self.ax.pole(self.dir, self.dip, color=color_RGB)[0]
+                        if this_actor:
+                            this_actor.set_visible(visible)
+                else:
+                    this_actor = None
+            else:
+                this_actor = None
+        if this_actor:
+            this_actor.figure.canvas.draw()
+        return this_actor
+
+
+
+    """"_______________________________________________________________________________"""
+    def stop_event_loops(self):
+        """Terminate running event loops"""
+        self.figure.canvas.stop_event_loop()
+
+
+
+
+
+
+
+
+    def polar_grid(self):
+        ...

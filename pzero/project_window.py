@@ -33,6 +33,7 @@ from .segy2vtk import segy2vtk
 from .windows_factory import View3D
 from .windows_factory import ViewMap
 from .windows_factory import ViewXsection
+from .windows_factory import ViewStereoplot
 from .helper_dialogs import options_dialog, save_file_dialog, open_file_dialog, input_combo_dialog, message_dialog, multiple_input_dialog, input_one_value_dialog, input_text_dialog, progress_dialog, import_dialog,general_input_dialog
 from .image2vtk import geo_image2vtk, xs_image2vtk
 from .stl2vtk import vtk2stl, vtk2stl_dilation
@@ -178,7 +179,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.actionView3D.triggered.connect(lambda: View3D(parent=self))
         self.actionViewMap.triggered.connect(lambda: ViewMap(parent=self))
         self.actionViewPlaneXsection.triggered.connect(lambda: ViewXsection(parent=self))
-        # self.actionViewStereoplot.triggered.connect(lambda: ViewStereoplot(parent=self))
+        self.actionViewStereoplot.triggered.connect(lambda: ViewStereoplot(parent=self))
 
     def closeEvent(self, event):
         """Re-implement the standard closeEvent method of QWidget and ask (1) to save project, and (2) for confirmation to quit."""
