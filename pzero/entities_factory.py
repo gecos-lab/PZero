@@ -1,7 +1,7 @@
 """entities_factory.py
 PZero© Andrea Bistacchi"""
 
-from vtk import vtkPolyData, vtkPoints, vtkCellCenters, vtkIdFilter, vtkCleanPolyData, vtkPolyDataNormals, vtkPlane, vtkCellArray, vtkLine, vtkIdList, vtkTriangleFilter, vtkTriangle, vtkFeatureEdges, vtkCleanPolyData, vtkStripper, vtkPolygon, vtkUnstructuredGrid, vtkTetra, vtkImageData, vtkStructuredGrid, vtkPolyDataConnectivityFilter, vtkCylinderSource
+from vtk import vtkPolyData, vtkPoints, vtkCellCenters, vtkIdFilter, vtkCleanPolyData, vtkPolyDataNormals, vtkPlane, vtkCellArray, vtkLine, vtkIdList, vtkTriangleFilter, vtkTriangle, vtkFeatureEdges, vtkCleanPolyData, vtkStripper, vtkPolygon, vtkUnstructuredGrid, vtkTetra, vtkImageData, vtkStructuredGrid, vtkPolyDataConnectivityFilter, vtkCylinderSource,vtkThreshold,vtkDataObject,vtkThresholdPoints,vtkDelaunay2D
 from vtk.util.numpy_support import vtk_to_numpy
 from vtk.numpy_interface.dataset_adapter import WrapDataObject, vtkDataArrayToVTKArray
 from pyvista import PolyData as pv_PolyData
@@ -463,6 +463,31 @@ class PolyData(vtkPolyData):
             self.GetPointData().SetScalars(connectivity_filter.GetOutput().GetPointData().GetScalars())
             return numRegions
 
+    def split_multipart(self):
+        """Split multi-part entities into single-parts."""
+        part_list = []
+        if not isinstance(self, VertexSet):
+            # print(self.cells)
+            connectivity_filter = vtkPolyDataConnectivityFilter()
+            connectivity_filter.SetInputData(self)
+            connectivity_filter.SetExtractionModeToAllRegions()
+            connectivity_filter.ColorRegionsOn()
+            connectivity_filter.Update()
+            numRegions = connectivity_filter.GetNumberOfExtractedRegions()
+            connectivity = connectivity_filter.GetOutput()
+
+            temp = pv_PolyData()
+            temp.ShallowCopy(connectivity)
+
+            '''[Gabriele] We use extract_surface to cast Unstructured grid (given by extract_points) in PolyData'''
+            for i in range(numRegions):
+                part = TriSurf()
+                thresh = temp.extract_points(temp['RegionId'] == i).extract_surface()
+                part.ShallowCopy(thresh)
+                part_list.append(part)
+
+            return part_list
+
 
 class Plane(vtkPlane):  # _______________________ AT THE MOMENT THIS DOES NOT EXPOSE ANY OTHER METHOD - SEE IF IT IS USEFUL
     """Plane is a class used as a base for cross-section planes. Basically this is the standard vtkPlane
@@ -764,7 +789,6 @@ class TriSurf(PolyData):
             trisurf_copy.points_Z[point_idx] = trisurf_copy.points_Z[point_idx] + row[3]
         trisurf_copy.Modified()
         return trisurf_copy
-
 
 class XSectionBaseEntity:
     """This abstract class is used just to implement the method to calculate the W coordinate for all geometrical/topological entities belonging to a XSection.

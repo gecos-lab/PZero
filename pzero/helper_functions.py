@@ -59,17 +59,9 @@ def profiler(path,iter):
         return inner
     return secondary
 
+def mesh_keys(mesh):
 
-def pc2o3d(self,pc_obj):
+    from vtk.numpy_interface.dataset_adapter import WrapDataObject, vtkDataArrayToVTKArray
 
-    from open3d import geometry
-    from open3d import utility
-
-    points = pc_obj.points
-    o3d_pc = geometry.PointCloud()
-    o3d_pc.points = utility.Vector3dVector(points)
-
-    return o3d_pc
-
-def o3d2pc(self,o3d_obj):
-    ...
+    keys = WrapDataObject(mesh).PointData.keys()
+    return(keys)

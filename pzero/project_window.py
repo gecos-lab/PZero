@@ -33,6 +33,7 @@ from .segy2vtk import segy2vtk
 from .windows_factory import View3D
 from .windows_factory import ViewMap
 from .windows_factory import ViewXsection
+from .windows_factory import ViewStereoplot
 from .helper_dialogs import options_dialog, save_file_dialog, open_file_dialog, input_combo_dialog, message_dialog, multiple_input_dialog, input_one_value_dialog, input_text_dialog, progress_dialog, import_dialog,general_input_dialog
 from .image2vtk import geo_image2vtk, xs_image2vtk
 from .stl2vtk import vtk2stl, vtk2stl_dilation
@@ -41,6 +42,7 @@ from .ply2vtk import vtk2ply
 from .three_d_surfaces import interpolation_delaunay_2d, poisson_interpolation, implicit_model_loop_structural, surface_smoothing, linear_extrusion, decimation_pro_resampling, decimation_quadric_resampling, subdivision_resampling, intersection_xs, project_2_dem, project_2_xs
 from .orientation_analysis import set_normals
 
+from uuid import uuid4
 
 class ProjectWindow(QMainWindow, Ui_ProjectWindow):
     """Create project window and import UI created with Qt Designer by subclassing both"""
@@ -177,7 +179,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.actionView3D.triggered.connect(lambda: View3D(parent=self))
         self.actionViewMap.triggered.connect(lambda: ViewMap(parent=self))
         self.actionViewPlaneXsection.triggered.connect(lambda: ViewXsection(parent=self))
-        # self.actionViewStereoplot.triggered.connect(lambda: ViewStereoplot(parent=self))
+        self.actionViewStereoplot.triggered.connect(lambda: ViewStereoplot(parent=self))
 
     def closeEvent(self, event):
         """Re-implement the standard closeEvent method of QWidget and ask (1) to save project, and (2) for confirmation to quit."""
@@ -527,9 +529,32 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     self.prop_legend.update_widget(self)
 
     def split_multipart(self):
-        """Split multi-part entities into single-parts."""
-        pass
-
+        if self.selected_uids:
+            if self.shown_table == "tabGeology":
+                collection = self.geol_coll
+            elif self.shown_table == "tabDOMs":
+                collection = self.dom_coll
+            elif self.shown_table == "tabBoundaries":
+                collection = self.boundary_coll
+            else:
+                return
+            for uid in self.selected_uids:
+                obj = collection.get_uid_vtk_obj(uid)
+                if isinstance(obj, (PolyLine, TriSurf)):
+                    parts = obj.split_multipart()
+                    print(parts)
+                    for i,part in enumerate(parts):
+                        entity_dict = deepcopy(GeologicalCollection.geological_entity_dict)
+                        entity_dict['name'] = f'{collection.get_uid_name(uid)}'
+                        entity_dict['topological_type'] = collection.get_uid_topological_type(uid)
+                        entity_dict['geological_type'] = collection.get_uid_geological_type(uid)
+                        entity_dict['geological_feature'] = collection.get_uid_geological_feature(uid)
+                        entity_dict['scenario'] = collection.get_uid_scenario(uid)
+                        entity_dict['properties_names'] = collection.get_uid_properties_names(uid)
+                        entity_dict['properties_components'] = collection.get_uid_properties_components(uid)
+                        entity_dict['vtk_obj'] = part
+                        collection.add_entity_from_dict(entity_dict)
+            print(collection.df['uid'])
     """Methods used to save/open/create new projects."""
 
     def create_empty(self):
@@ -791,8 +816,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         rev_name = fin.readlines()[2]
         fin.close()
         in_dir_name = in_file_name[:-3] + '_p0/' + rev_name
-        self.TextTerminal.appendPlainText(("Opening project/revision : " + in_file_name + " / " + rev_name + "\n"))
+        self.TextTerminal.appendPlainText(("Opening project/revision : " + in_file_name + "/" + rev_name + "\n"))
         if not os.path.isdir(in_dir_name):
+            print(in_dir_name)
             print("error: missing folder")
             return
         """In the following it is still possible to open old projects with metadata stored
@@ -1221,6 +1247,8 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             os.mkdir(out_dir_name)
         if cad_format == "DXF":
             print("is DXF")
+            os.mkdir(f'{out_dir_name}/csv')
+            os.mkdir(f'{out_dir_name}/dxf')
             vtk2dxf(self=self, out_dir_name=out_dir_name)
         elif cad_format == "GOCAD":
             # vtk2gocad(self=self, out_file_name=(out_dir_name + '/gocad_ascii.gp'))
