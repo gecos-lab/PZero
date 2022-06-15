@@ -525,11 +525,31 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 if isinstance(collection.get_uid_vtk_obj(uid), (PolyLine, TriSurf)):
                     collection.append_uid_property(uid=uid, property_name="RegionId", property_components=1)
                     collection.get_uid_vtk_obj(uid).connected_calc()
-                    self.prop_legend.update_widget(self)
+            self.prop_legend.update_widget(self)
 
     def split_multipart(self):
         """Split multi-part entities into single-parts."""
-        pass
+        if self.selected_uids:
+            if self.shown_table == "tabGeology":
+                collection = self.geol_coll
+            elif self.shown_table == "tabDOMs":
+                collection = self.dom_coll
+            elif self.shown_table == "tabBoundaries":
+                collection = self.boundary_coll
+            else:
+                return
+            for uid in self.selected_uids:
+                if isinstance(collection.get_uid_vtk_obj(uid), (PolyLine, TriSurf)):
+                    collection.append_uid_property(uid=uid, property_name="RegionId", property_components=1)
+                    vtk_out_list = collection.get_uid_vtk_obj(uid).split_parts()
+                    vtk_out_dict = deepcopy(collection.df.loc[collection.df['uid'] == uid].drop(['uid', 'vtk_obj'], axis=1).to_dict('records')[0])
+                    for vtk_object in vtk_out_list:
+                        print(vtk_object)
+                        vtk_out_dict['uid'] = None
+                        vtk_out_dict['vtk_obj'] = vtk_object
+                        collection.add_entity_from_dict(entity_dict=vtk_out_dict)
+                    collection.remove_entity(uid)
+            self.prop_legend.update_widget(self)
 
     """Methods used to save/open/create new projects."""
 
