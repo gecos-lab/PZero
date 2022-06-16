@@ -2024,68 +2024,33 @@ class View3D(BaseView):
 
     def initialize_menu_tools(self):
         """Customize menus and tools for this view"""
-        self.menuBaseView.setTitle("Project")
-        self.actionBase_Tool.setText("Project")
+        self.menuBaseView.setTitle("Edit")
+        self.actionBase_Tool.setText("Edit")
 
-        # [Gabriele] Default views menu
+        """Manage home view"""
+        self.saveHomeView = QAction("Save home view", self)
+        self.saveHomeView.triggered.connect(self.save_home_view)
+        self.menuWindow.addAction(self.saveHomeView)
 
-        self.menuView = QMenu("Views",self)
-        self.menuWindow.addMenu(self.menuView)
+        self.zoomHomeView = QAction("Zoom to home view", self)
+        self.zoomHomeView.triggered.connect(self.zoom_home_view)
+        self.menuWindow.addAction(self.zoomHomeView)
 
-        # [Gabriele] Save current view
-        self.setView = QAction("Set view", self)
-        self.setView.triggered.connect(lambda: self.view_manager("save"))
-        self.menuView.addAction(self.setView)
+        self.zoomActive = QAction("Zoom to active", self)
+        self.zoomActive.triggered.connect(self.zoom_active)
+        self.menuWindow.addAction(self.zoomActive)
 
-        self.setView = QAction("Set view to active", self) # [Gabriele] If two objects are active it centers the view on the barycenter.
-        self.setView.triggered.connect(lambda: self.plotter.reset_camera())
-        self.menuView.addAction(self.setView)
+    def save_home_view(self):
+        print("self.default_view = self.plotter.camera_position")
+        self.default_view = self.plotter.camera_position
 
-        self.menuView.addSeparator()
+    def zoom_home_view(self):
+        print("self.plotter.camera_position = self.default_view")
+        self.plotter.camera_position = self.default_view
 
-        # [Gabriele] x,y,z +ve and -ve options
-        self.xposView = QAction("x +ve", self)
-        self.xposView.triggered.connect(lambda: self.plotter.view_yz())
-        self.menuView.addAction(self.xposView)
-
-        self.xnegView = QAction("x -ve", self)
-        self.xnegView.triggered.connect(lambda: self.plotter.view_yz(True))
-        self.menuView.addAction(self.xnegView)
-
-        self.yposView = QAction("y +ve", self)
-        self.yposView.triggered.connect(lambda: self.plotter.view_xz(True))
-        self.menuView.addAction(self.yposView)
-
-        self.ynegView = QAction("y -ve", self)
-        self.ynegView.triggered.connect(lambda: self.plotter.view_xz())
-        self.menuView.addAction(self.ynegView)
-
-        self.zposView = QAction("z +ve", self)
-        self.zposView.triggered.connect(lambda: self.plotter.view_xy())
-        self.menuView.addAction(self.zposView)
-
-        self.znegView = QAction("z -ve", self)
-        self.znegView.triggered.connect(lambda: self.plotter.view_xy(True))
-        self.menuView.addAction(self.znegView)
-
-        self.menuView.addSeparator()
-
-        # [Gabriele] Return to saved view
-        self.resetView = QAction("Reset view", self)
-        self.resetView.triggered.connect(lambda: self.view_manager("reset"))
-        self.menuView.addAction(self.resetView)
-
-    def view_manager(self, mode):
-        if mode == "save":
-                self.default_view = self.plotter.camera_position
-        elif mode == "reset":
-                self.plotter.camera_position = self.default_view
-        #
-        # self.setView = QAction(BaseViewWindow)
-        # self.setView.setObjectName("setview")
-        # self.menuViews.addAction("setview")
-
-
+    def zoom_active(self):
+        plot("self.plotter.reset_camera()")
+        self.plotter.reset_camera()
 
     def initialize_interactor(self):
         """Add the pyvista interactor object to self.ViewFrameLayout ->
@@ -2094,12 +2059,10 @@ class View3D(BaseView):
         self.plotter.set_background('black')  # background color - could be made interactive in the future
         self.ViewFrameLayout.addWidget(self.plotter.interactor)
         # self.plotter.show_axes_all()
-
-        # [Gabriele] Set cool orientation gimble (turned on after the qt canvas is shown)
+        """Set orientation widget (turned on after the qt canvas is shown)"""
         self.cam_orient_widget = vtkCameraOrientationWidget()
         self.cam_orient_widget.SetParentRenderer(self.plotter.renderer)
-
-        # [Gabriele] Set horizontal default orientation because the vertical colorbar interferes with the gimble
+        """Set default orientation horizontal because vertical colorbars interfere with the widget."""
         pv_global_theme.colorbar_orientation = 'horizontal'
 
 
@@ -2128,11 +2091,9 @@ class View3D(BaseView):
             color_R = self.parent.well_coll.get_uid_legend(uid=uid)['color_R']
             color_G = self.parent.well_coll.get_uid_legend(uid=uid)['color_G']
             color_B = self.parent.well_coll.get_uid_legend(uid=uid)['color_B']
-
         """Note: no legend for image."""
         """Update color for actor uid"""
         color_RGB = [color_R / 255, color_G / 255, color_B / 255]
-
         self.actors_df.loc[self.actors_df['uid'] == uid, 'actor'].values[0].GetProperty().SetColor(color_RGB)
 
     def change_actor_line_thick(self, uid=None, collection=None):
@@ -2310,7 +2271,7 @@ class View3D(BaseView):
                     show_property = plot_entity.points_Y
                 elif show_property == 'Z':
                     show_property = plot_entity.points_Z
-                elif show_property == 'RGB': #[Gabriele] For now this can do______________________
+                elif show_property == 'RGB':
                     show_scalar_bar = False
                     show_property = None
                 else:
@@ -2319,15 +2280,12 @@ class View3D(BaseView):
                 this_actor = self.plot_mesh_3D(uid=uid, plot_entity=plot_entity, color_RGB=color_RGB, show_property=show_property, show_scalar_bar=show_scalar_bar,
                                                color_bar_range=None, show_property_title=show_property_title, line_thick=line_thick,
                                                plot_texture_option=False, plot_rgb_option=plot_rgb_option, visible=visible)
-
         elif isinstance(plot_entity, PCDom):
-
             plot_rgb_option = None
             file = self.parent.dom_coll.df.loc[self.parent.dom_coll.df['uid'] == uid, "name"].values[0]
             if isinstance(plot_entity.points, np.ndarray):
                 """This check is needed to avoid errors when trying to plot an empty
                 PolyData, just created at the beginning of a digitizing session."""
-                # [Gabriele] Basic properties
                 if show_property is None:
                     show_scalar_bar = False
                     show_property_value = None
@@ -2342,8 +2300,7 @@ class View3D(BaseView):
                 elif show_property == 'Z':
                     show_property_value = plot_entity.points_Z
                 elif show_property[-1] == ']':
-                    '''[Gabriele] we can identify multicomponents properties such as RGB[0] or Normals[0] by taking the last charcter of the property name ("]").'''
-
+                    '''[Gabriele] we can identify multicomponents properties such as RGB[0] or Normals[0] by taking the last character of the property name ("]").'''
                     show_scalar_bar = True
                     # [Gabriele] Get the start and end index of the [n_component]
                     pos1 = show_property.index('[')
@@ -2352,7 +2309,7 @@ class View3D(BaseView):
                     original_prop = show_property[:pos1]
                     # [Gabriele] Get the column index (the n_component value)
                     index = int(show_property[pos1+1:pos2])
-                    show_property_value = plot_entity.get_point_data(original_prop)[:,index]
+                    show_property_value = plot_entity.get_point_data(original_prop)[:, index]
                 else:
                     n_comp = self.parent.dom_coll.get_uid_properties_components(uid)[self.parent.dom_coll.get_uid_properties_names(uid).index(show_property)]
                     '''[Gabriele] Get the n of components for the given property. If it's > 1 then do stuff depending on the type of property (e.g. show_rgb_option -> True if the property is RGB)'''
@@ -2360,16 +2317,11 @@ class View3D(BaseView):
                         show_property_value= plot_entity.get_point_data(show_property)
                         show_scalar_bar = False
                         if show_property == 'RGB':
-                            plot_rgb_option = True # [Gabriele] Use RGB
-
+                            plot_rgb_option = True
                     else:
                         show_scalar_bar = True
                         show_property_value = plot_entity.get_point_data(show_property)
-
-
-
             this_actor = self.plot_PC_3D(uid=uid,plot_entity=plot_entity,color_RGB=color_RGB, show_property=show_property_value, show_scalar_bar=show_scalar_bar, color_bar_range=None, show_property_title=show_property_title, plot_rgb_option=plot_rgb_option,visible=visible,point_size=line_thick)
-
         elif isinstance(plot_entity, (MapImage, XsImage)):
             """Do not plot directly image - it is much slower.
             Texture options according to type."""
@@ -2439,12 +2391,10 @@ class View3D(BaseView):
             else:
                 if plot_entity.get_point_data_shape(show_property)[-1] == 3:
                     plot_rgb_option = True
-
             this_actor = self.plot_mesh_3D(uid=uid, plot_entity=plot_entity, color_RGB=color_RGB, show_property=show_property, show_scalar_bar=show_scalar_bar,
                                            color_bar_range=None, show_property_title=show_property_title, line_thick=line_thick,
                                            plot_texture_option=False, plot_rgb_option=plot_rgb_option, visible=visible,
                                            render_lines_as_tubes=True)
-
         else:
             print("[Windows factory]: actor with no class")
             this_actor = None
@@ -2505,8 +2455,7 @@ class View3D(BaseView):
                                            annotations=None,  # dictionary of annotations for scale bar witor 'points'h keys = float values and values = string annotations
                                            pickable=True,  # bool
                                            preference="point",
-                                           log_scale=False,
-                                           )
+                                           log_scale=False)
         if not visible:
             this_actor.SetVisibility(False)
         if not self.actors_df.empty:
@@ -2531,9 +2480,8 @@ class View3D(BaseView):
     """Implementation of functions specific to this view (e.g. particular editing or visualization functions)"""
     """NONE AT THE MOMENT"""
 
-    def plot_PC_3D(self, uid=None, plot_entity=None,visible=None,color_RGB=None, show_property=None, show_scalar_bar=None, color_bar_range=None, show_property_title=None, plot_rgb_option=None, point_size=1.0, points_as_spheres=True):
+    def plot_PC_3D(self, uid=None, plot_entity=None,visible=None, color_RGB=None, show_property=None, show_scalar_bar=None, color_bar_range=None, show_property_title=None, plot_rgb_option=None, point_size=1.0, points_as_spheres=True):
         """""""[Gabriele]  Plot the point cloud"""
-
         if not self.actors_df.empty:
             """This stores the camera position before redrawing the actor.
             Added to avoid a bug that sometimes sends the scene to a very distant place.
@@ -2541,15 +2489,12 @@ class View3D(BaseView):
             The is is needed to avoid sending the camera to the origin that is the
             default position before any mesh is plotted."""
             camera_position = self.plotter.camera_position
-
-        # [Gabriele] if rgb options is true -> there is no need of cmap
-        if show_property is not None and plot_rgb_option == None:
+        if show_property is not None and plot_rgb_option is None:
             show_property_cmap = self.parent.prop_legend_df.loc[self.parent.prop_legend_df['property_name'] == show_property_title, "colormap"].values[0]
         else:
             show_property_cmap = None
-
-
-        this_actor= self.plotter.add_points(plot_entity,name=uid,
+        this_actor= self.plotter.add_points(plot_entity,
+                                            name=uid,
                                             style='points',
                                             point_size=point_size,
                                             render_points_as_spheres=points_as_spheres,
@@ -2563,7 +2508,6 @@ class View3D(BaseView):
                                             scalar_bar_args={'title': show_property_title, 'title_font_size': 20, 'label_font_size': 16, 'shadow': True, 'interactive': True,'vertical':False},
                                             rgb=plot_rgb_option,
                                             show_scalar_bar=show_scalar_bar)
-
         # self.n_points = plot_entity.GetNumberOfPoints()
         if not visible:
             this_actor.SetVisibility(False)
@@ -2697,12 +2641,10 @@ class View2D(BaseView):
         self.pick_with_mouse_U_pixels = 0
         self.pick_with_mouse_V_pixels = 0
         self.pick_with_mouse_button = None
-
         self.vector_by_mouse_dU = 0
         self.vector_by_mouse_dV = 0
         self.vector_by_mouse_length = 0
         self.vector_by_mouse_azimuth = 0
-
         """Initialize some other variable"""
         # self.current_line = None
         self.vertex_ind = None
@@ -2711,21 +2653,17 @@ class View2D(BaseView):
         self.dV = 0.0
         self.Us = []
         self.Vs = []
-
         """Create Matplotlib canvas, figure and navi_toolbar"""
         self.figure = Figure()  # create a Matplotlib figure; this implicitly creates also the canvas to contain the figure
         self.canvas = FigureCanvas(self.figure)  # get a reference to the canvas that contains the figure
         # print("dir(self.canvas):\n", dir(self.canvas))
         """https://doc.qt.io/qt-5/qsizepolicy.html"""
         self.navi_toolbar = NavigationToolbar(self.canvas, self)  # create a navi_toolbar with the matplotlib.backends.backend_qt5agg method NavigationToolbar
-
         """Create Qt layout and add Matplotlib canvas, figure and navi_toolbar"""
         self.ViewFrameLayout.addWidget(self.canvas)  # add Matplotlib canvas (created above) as a widget to the Qt layout
         self.ViewFrameLayout.addWidget(self.navi_toolbar)  # add navigation navi_toolbar (created above) to the layout
-
         """Get reference to figure axes (Matplotlib)"""
         self.ax = self.figure.gca()  # create reference to plt figure axes gca() = "get current axes"
-
         """Set properties of figure and axes (Matplotlib)
         IN THE FUTURE SOLVE PROBLEMS WITH AXES NOT FILLING THE WHOLE CANVAS________"""
         figure_size = self.figure.get_size_inches() * self.figure.dpi
@@ -2738,7 +2676,6 @@ class View2D(BaseView):
         # self.figure.set_tight_layout(True)
         # self.ax.use_sticky_edges = False  # https://matplotlib.org/stable/gallery/subplots_axes_and_figures/axes_margins.html
         # self.figure.set_constrained_layout(True)
-
         """Create container for text messages at the base of the canvas."""
         """SEND THIS TO STATUS BAR IN THE FUTURE?_____________"""
         self.text_msg = self.ax.add_artist(TextArea("some text", textprops=dict(fontsize=int(self.base_font_size), color="crimson")))
@@ -2784,7 +2721,6 @@ class View2D(BaseView):
             pass
 
     def change_actor_line_thick(self, uid=None, collection=None):
-
         """Update line thickness for actor uid"""
         if collection == 'geol_coll':
             line_thick = self.parent.geol_coll.get_uid_legend(uid=uid)['line_thick']
@@ -2796,6 +2732,8 @@ class View2D(BaseView):
             line_thick = self.parent.mesh3d_coll.get_legend()['line_thick']
         elif collection == 'dom_coll':
             line_thick = self.parent.dom_coll.get_legend()['line_thick']
+        else:
+            return
         """Note: no legend for image."""
         if isinstance(self.actors_df.loc[self.actors_df['uid'] == uid, 'actor'].values[0], Line2D):
             "Case for Line2D"
@@ -3331,9 +3269,7 @@ class ViewXsection(View2D):
         """Show actor with scalar property (default None)
         https://github.com/pyvista/pyvista/blob/140b15be1d4021b81ded46b1c212c70e86a98ee7/pyvista/plotting/plotting.py#L1045"""
         if collection == 'geol_coll':
-            if ((self.parent.geol_coll.get_uid_topological_type(uid) == "XsVertexSet" or
-                self.parent.geol_coll.get_uid_topological_type(uid) == "XsPolyLine") and
-                self.parent.geol_coll.get_uid_x_section(uid) == self.this_x_section_uid):
+            if (self.parent.geol_coll.get_uid_topological_type(uid) == "XsVertexSet" or self.parent.geol_coll.get_uid_topological_type(uid) == "XsPolyLine") and self.parent.geol_coll.get_uid_x_section(uid) == self.this_x_section_uid:
                 color_R = self.parent.geol_coll.get_uid_legend(uid=uid)['color_R']
                 color_G = self.parent.geol_coll.get_uid_legend(uid=uid)['color_G']
                 color_B = self.parent.geol_coll.get_uid_legend(uid=uid)['color_B']
@@ -3354,8 +3290,7 @@ class ViewXsection(View2D):
             else:
                 plot_entity = None
         elif collection == 'boundary_coll':
-            if (self.parent.boundary_coll.get_uid_topological_type(uid) == "XsPolyLine" and
-                self.parent.boundary_coll.get_uid_x_section(uid) == self.this_x_section_uid):
+            if self.parent.boundary_coll.get_uid_topological_type(uid) == "XsPolyLine" and self.parent.boundary_coll.get_uid_x_section(uid) == self.this_x_section_uid:
                     color_R = self.parent.boundary_coll.get_legend()['color_R']
                     color_G = self.parent.boundary_coll.get_legend()['color_G']
                     color_B = self.parent.boundary_coll.get_legend()['color_B']
@@ -3365,8 +3300,7 @@ class ViewXsection(View2D):
             else:
                 plot_entity = None
         elif collection == 'mesh3d_coll':
-            if (self.parent.mesh3d_coll.get_uid_mesh3d_type(uid) == "XsVoxet" and
-                self.parent.mesh3d_coll.get_uid_x_section(uid) == self.this_x_section_uid):
+            if self.parent.mesh3d_coll.get_uid_mesh3d_type(uid) == "XsVoxet" and self.parent.mesh3d_coll.get_uid_x_section(uid) == self.this_x_section_uid:
                     color_R = self.parent.mesh3d_coll.get_legend()['color_R']
                     color_G = self.parent.mesh3d_coll.get_legend()['color_G']
                     color_B = self.parent.mesh3d_coll.get_legend()['color_B']
@@ -3376,8 +3310,7 @@ class ViewXsection(View2D):
             else:
                 plot_entity = None
         elif collection == 'dom_coll':
-            if (self.parent.dom_coll.get_uid_dom_type(uid) == "DomXs" and
-                self.parent.dom_coll.get_uid_x_section(uid) == self.this_x_section_uid):
+            if self.parent.dom_coll.get_uid_dom_type(uid) == "DomXs" and self.parent.dom_coll.get_uid_x_section(uid) == self.this_x_section_uid:
                     color_R = self.parent.dom_coll.get_legend()['color_R']
                     color_G = self.parent.dom_coll.get_legend()['color_G']
                     color_B = self.parent.dom_coll.get_legend()['color_B']
@@ -3387,8 +3320,7 @@ class ViewXsection(View2D):
             else:
                 plot_entity = None
         elif collection == 'image_coll':
-            if (self.parent.image_coll.get_uid_image_type(uid) == "XsImage" and
-                self.parent.image_coll.get_uid_x_section(uid) == self.this_x_section_uid):
+            if self.parent.image_coll.get_uid_image_type(uid) == "XsImage" and self.parent.image_coll.get_uid_x_section(uid) == self.this_x_section_uid:
                     color_R = self.parent.image_coll.get_legend()['color_R']
                     color_G = self.parent.image_coll.get_legend()['color_G']
                     color_B = self.parent.image_coll.get_legend()['color_B']

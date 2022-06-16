@@ -540,7 +540,8 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 return
             for uid in self.selected_uids:
                 if isinstance(collection.get_uid_vtk_obj(uid), (PolyLine, TriSurf)):
-                    collection.append_uid_property(uid=uid, property_name="RegionId", property_components=1)
+                    if  "RegionId" not in collection.get_uid_properties_names(uid):
+                        collection.append_uid_property(uid=uid, property_name="RegionId", property_components=1)
                     vtk_out_list = collection.get_uid_vtk_obj(uid).split_parts()
                     vtk_out_dict = deepcopy(collection.df.loc[collection.df['uid'] == uid].drop(['uid', 'vtk_obj'], axis=1).to_dict('records')[0])
                     for vtk_object in vtk_out_list:
