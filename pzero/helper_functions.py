@@ -59,9 +59,29 @@ def profiler(path,iter):
         return inner
     return secondary
 
-def mesh_keys(mesh):
 
-    from vtk.numpy_interface.dataset_adapter import WrapDataObject, vtkDataArrayToVTKArray
 
-    keys = WrapDataObject(mesh).PointData.keys()
-    return(keys)
+def angle_wrapper(angle):
+    from numpy import pi
+
+    return angle%(2*pi)
+
+def add_vtk_obj(self,vtk_obj,type):
+    from copy import deepcopy
+    from uuid import uuid4
+    from .geological_collection import GeologicalCollection
+    import numpy as np
+
+    if type == 'measurement':
+        curr_obj_dict = deepcopy(GeologicalCollection.geological_entity_dict)
+        properties_name = vtk_obj.point_data_keys
+        properties_components = [vtk_obj.get_point_data_shape(i)[1] for i in properties_name]
+        name = f"{int(vtk_obj.get_point_data('dir'))}/{int(vtk_obj.get_point_data('dip'))}"
+        curr_obj_dict['uid'] = str(uuid4())
+        curr_obj_dict['name'] = name
+        curr_obj_dict['topological_type'] = "VertexSet"
+        curr_obj_dict['properties_names'] = properties_name
+        curr_obj_dict['properties_components'] = properties_components
+        curr_obj_dict['vtk_obj'] = vtk_obj
+        """Add to entity collection."""
+        self.parent.geol_coll.add_entity_from_dict(entity_dict=curr_obj_dict)

@@ -92,6 +92,13 @@ class DomCollection(QAbstractTableModel):
     def replace_vtk(self, uid=None, vtk_object=None):
         if isinstance(vtk_object, type(self.df.loc[self.df['uid'] == uid, 'vtk_obj'].values[0])):
             new_dict = deepcopy(self.df.loc[self.df['uid'] == uid, self.df.columns != 'vtk_obj'].to_dict('records')[0])
+            keys = vtk_object.point_data_keys
+            for key in keys:
+                if key not in new_dict['properties_names']:
+                    components = vtk_object.get_point_data_shape(key)[1]
+                    new_dict['properties_names'].append(key)
+                    new_dict['properties_components'].append(components)
+
             new_dict['vtk_obj'] = vtk_object
             self.remove_entity(uid)
             self.add_entity_from_dict(entity_dict=new_dict)

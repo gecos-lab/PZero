@@ -428,7 +428,6 @@ class PolyData(vtkPolyData):
         pass
 
     def get_cell_data(self, parent=None, data_key=None):  # _______________________ TO BE IMPLEMENTED IF WE WANT TO WORK WITH CELL DATA
-        """Returns cell attribute as Numpy array"""
         pass
 
     def set_cell_data(self, parent=None, data_key=None, attribute_matrix=None):  # _______________________ TO BE IMPLEMENTED IF WE WANT TO WORK WITH CELL DATA
@@ -438,7 +437,6 @@ class PolyData(vtkPolyData):
     def edit_cell_data(self, parent=None, data_key=None, cell_id=None, cell_data_array=None):  # _______________________ TO BE IMPLEMENTED IF WE WANT TO WORK WITH CELL DATA
         """Sets cell attribute from Numpy array"""
         pass
-
     @property
     def topological_type(self):
         for topological_type in valid_topological_types:
@@ -489,7 +487,7 @@ class PolyData(vtkPolyData):
             return part_list
 
 
-class Plane(vtkPlane):  # _______________________ AT THE MOMENT THIS DOES NOT EXPOSE ANY OTHER METHOD - SEE IF IT IS USEFUL
+class Plane(PolyData):  # _______________________ AT THE MOMENT THIS DOES NOT EXPOSE ANY OTHER METHOD - SEE IF IT IS USEFUL
     """Plane is a class used as a base for cross-section planes. Basically this is the standard vtkPlane
     class, but exposes methods from vtk.numpy_interface.dataset_adapter (dsa) to access data as Numpy
     arrays instead of VTK arrays. Numpy arrays are just a reference to the underlying VTK arrays, so
@@ -530,6 +528,10 @@ class VertexSet(PolyData):
         self.Modified()
 
 
+class Giacitura(VertexSet):
+    ''' Class for giaciture measurements'''
+    def __init__(self, *args, **kwargs):
+        super(Giacitura, self).__init__(*args, **kwargs)
 class PolyLine(PolyData):  # _____________________________ HERE WE MUST DECIDE WHETHER TO USE LINE (TYPE = 3) OR POLYLINE (TYPE = 4) CELLS - NOT BOTH - POLYLINE COULD BE USEFUL FOR MULTI-PART
     """PolyLine is a polyline derived from BaseEntity and vtkPolyData"""
     def __init__(self, *args, **kwargs):
