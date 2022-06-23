@@ -459,9 +459,34 @@ class PolyData(vtkPolyData):
             connectivity_filter.SetExtractionModeToAllRegions()
             connectivity_filter.ColorRegionsOn()
             connectivity_filter.Update()
-            numRegions = connectivity_filter.GetNumberOfExtractedRegions()
+            num_regions = connectivity_filter.GetNumberOfExtractedRegions()
             self.GetPointData().SetScalars(connectivity_filter.GetOutput().GetPointData().GetScalars())
-            return numRegions
+            return num_regions
+
+    def split_parts(self):
+        """Splits connected parts using RegionId from self.connected_calc().
+        Also returns the number of connected regions.
+        Returns None in case it is called for a VertexSet, so it works for PolyLine and TriSurf only."""
+        if isinstance(self, (PolyLine, TriSurf)):
+            connectivity_filter = vtkPolyDataConnectivityFilter()
+            connectivity_filter.SetInputData(self)
+            connectivity_filter.SetExtractionModeToAllRegions()
+            connectivity_filter.ColorRegionsOn()
+            connectivity_filter.Update()
+            num_regions = connectivity_filter.GetNumberOfExtractedRegions()
+            connectivity_filter.SetExtractionModeToSpecifiedRegions()
+            vtk_out_list = []
+            for rid in range(num_regions):
+                connectivity_filter.InitializeSpecifiedRegionList()
+                connectivity_filter.AddSpecifiedRegion(rid)
+                connectivity_filter.Update()
+                if isinstance(self, PolyLine):
+                    vtk_out_obj = PolyLine()
+                elif isinstance(self, TriSurf):
+                    vtk_out_obj = TriSurf()
+                vtk_out_obj.DeepCopy(connectivity_filter.GetOutput())
+                vtk_out_list.append(vtk_out_obj)
+            return vtk_out_list
 
     def split_multipart(self):
         """Split multi-part entities into single-parts."""
@@ -530,7 +555,7 @@ class VertexSet(PolyData):
         self.Modified()
 
 
-class PolyLine(PolyData):  # _____________________________ HERE WE MUST DECIDE WHETHER TO USE LINE (TYPE = 3) OR POLYLINE (TYPE = 4) CELLS - NOT BOTH - POLYLINE COULD BE USEFUL FOR MULTI-PART
+class PolyLine(PolyData):
     """PolyLine is a polyline derived from BaseEntity and vtkPolyData"""
     def __init__(self, *args, **kwargs):
         super(PolyLine, self).__init__(*args, **kwargs)

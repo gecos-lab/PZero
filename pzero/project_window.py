@@ -155,6 +155,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.actionConnectedParts.triggered.connect(self.connected_parts)
         self.actionMergeEntities.triggered.connect(self.entities_merge)
         self.actionSplitMultipart.triggered.connect(self.split_multipart)
+        """______________________________________ ADD TOOL TO PRINT VTK INFO self.TextTerminal.appendPlainText( -- vtk object as text -- )"""
         self.actionEditTextureAdd.triggered.connect(self.texture_add)
         self.actionEditTextureRemove.triggered.connect(self.texture_remove)
         self.actionAddProperty.triggered.connect(self.property_add)
@@ -526,9 +527,10 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 if isinstance(collection.get_uid_vtk_obj(uid), (PolyLine, TriSurf)):
                     collection.append_uid_property(uid=uid, property_name="RegionId", property_components=1)
                     collection.get_uid_vtk_obj(uid).connected_calc()
-                    self.prop_legend.update_widget(self)
+            self.prop_legend.update_widget(self)
 
     def split_multipart(self):
+        """Split multi-part entities into single-parts."""
         if self.selected_uids:
             if self.shown_table == "tabGeology":
                 collection = self.geol_coll
@@ -539,22 +541,19 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             else:
                 return
             for uid in self.selected_uids:
-                obj = collection.get_uid_vtk_obj(uid)
-                if isinstance(obj, (PolyLine, TriSurf)):
-                    parts = obj.split_multipart()
-                    print(parts)
-                    for i,part in enumerate(parts):
-                        entity_dict = deepcopy(GeologicalCollection.geological_entity_dict)
-                        entity_dict['name'] = f'{collection.get_uid_name(uid)}'
-                        entity_dict['topological_type'] = collection.get_uid_topological_type(uid)
-                        entity_dict['geological_type'] = collection.get_uid_geological_type(uid)
-                        entity_dict['geological_feature'] = collection.get_uid_geological_feature(uid)
-                        entity_dict['scenario'] = collection.get_uid_scenario(uid)
-                        entity_dict['properties_names'] = collection.get_uid_properties_names(uid)
-                        entity_dict['properties_components'] = collection.get_uid_properties_components(uid)
-                        entity_dict['vtk_obj'] = part
-                        collection.add_entity_from_dict(entity_dict)
-            print(collection.df['uid'])
+                if isinstance(collection.get_uid_vtk_obj(uid), (PolyLine, TriSurf)):
+                    if  "RegionId" not in collection.get_uid_properties_names(uid):
+                        collection.append_uid_property(uid=uid, property_name="RegionId", property_components=1)
+                    vtk_out_list = collection.get_uid_vtk_obj(uid).split_parts()
+                    vtk_out_dict = deepcopy(collection.df.loc[collection.df['uid'] == uid].drop(['uid', 'vtk_obj'], axis=1).to_dict('records')[0])
+                    for vtk_object in vtk_out_list:
+                        print(vtk_object)
+                        vtk_out_dict['uid'] = None
+                        vtk_out_dict['vtk_obj'] = vtk_object
+                        collection.add_entity_from_dict(entity_dict=vtk_out_dict)
+                    collection.remove_entity(uid)
+            self.prop_legend.update_widget(self)
+
     """Methods used to save/open/create new projects."""
 
     def create_empty(self):
