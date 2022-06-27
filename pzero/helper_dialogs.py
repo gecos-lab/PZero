@@ -79,10 +79,13 @@ def open_file_dialog(parent=None, caption=None, filter=None, multiple=False):
     return in_file_name
 
 
-def save_file_dialog(parent=None, caption=None, filter=None):
+def save_file_dialog(parent=None, caption=None, filter=None,directory=False):
     """Open a dialog and input a file or folder name.
     If the dialog is closed without a valid file name, it returns None."""
-    out_file_name = QFileDialog.getSaveFileName(parent=parent, caption=caption, filter=filter)
+    if directory:
+        out_file_name = [QFileDialog.getExistingDirectory(parent=parent, caption=caption)]
+    else:
+        out_file_name = QFileDialog.getSaveFileName(parent=parent, caption=caption, filter=filter)
     out_file_name = out_file_name[0]
     return out_file_name
 

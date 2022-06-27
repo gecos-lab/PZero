@@ -86,7 +86,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         actor = the actor
         show = a boolean to show (True) or hide (false) the actor
         collection = the original collection of the actor, e.g. geol_coll, xsect_coll, etc."""
-        self.actors_df = pd.DataFrame(columns=['uid', 'actor', 'show', 'collection', 'show_prop'])
+        self.actors_df = pd.DataFrame(columns=['uid', 'actor', 'show', 'collection'])
 
         """Create list of selected uid's."""
         self.selected_uids = []
@@ -2072,15 +2072,25 @@ class View3D(BaseView):
         """Set default orientation horizontal because vertical colorbars interfere with the widget."""
         pv_global_theme.colorbar_orientation = 'horizontal'
 
-    #     # [Gabriele] Add picking functionality (this should be put in a menu to enable or disable)
-    #
-    #     self.plotter.enable_mesh_picking(callback=self.pkd_mesh, show=True,show_message=False,style='wireframe',color='yellow')
-    #
-    #
-    # def pkd_mesh(self,mesh):
-    #
-    #     keys = mesh_keys(mesh)
-    #     print(keys)
+        # [Gabriele] Add picking functionality (this should be put in a menu to enable or disable)
+
+        self.plotter.enable_mesh_picking(callback=self.pkd_mesh, show=True,show_message=False,style='wireframe',color='yellow')
+
+
+    def pkd_mesh(self,mesh):
+        position = mesh.center
+        bounds = mesh.bounds
+        actors = self.actors_df['actor']
+
+        for i,actor in enumerate(actors):
+            # print(f'actor {i} bounds: {actor.GetBounds()}')
+            # print(f'actor {i} center: {actor.GetCenter()}')
+            if position == list(actor.GetCenter()) and bounds == actor.GetBounds():
+                idx = self.actors_df.loc[self.actors_df['actor'] == actor, 'uid'].index[0]
+                # print(idx)
+                self.parent.GeologyTableView.selectRow(idx)
+
+
 
 
     def change_actor_color(self, uid=None, collection=None):

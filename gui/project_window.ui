@@ -6,7 +6,7 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>1280</width>
+    <width>2673</width>
     <height>800</height>
    </rect>
   </property>
@@ -467,7 +467,7 @@
     <rect>
      <x>0</x>
      <y>0</y>
-     <width>1280</width>
+     <width>2673</width>
      <height>30</height>
     </rect>
    </property>
@@ -524,10 +524,11 @@
     <addaction name="actionImportDEM"/>
     <addaction name="actionImportOrthoImage"/>
     <addaction name="actionImportXsectionImage"/>
-    <addaction name="actionImport_well_data"/>
+    <addaction name="actionImportWellData"/>
     <addaction name="actionImportSEGY"/>
     <addaction name="separator"/>
     <addaction name="actionExportCAD"/>
+    <addaction name="actionExportVTK"/>
     <addaction name="separator"/>
     <addaction name="actionQuit"/>
    </widget>
@@ -658,10 +659,11 @@
    <addaction name="actionImportDEM"/>
    <addaction name="actionImportOrthoImage"/>
    <addaction name="actionImportXsectionImage"/>
-   <addaction name="actionImport_well_data"/>
+   <addaction name="actionImportWellData"/>
    <addaction name="actionImportSEGY"/>
    <addaction name="separator"/>
    <addaction name="actionExportCAD"/>
+   <addaction name="actionExportVTK"/>
    <addaction name="separator"/>
    <addaction name="actionQuit"/>
   </widget>
@@ -1066,9 +1068,14 @@
     <string>Import Point Clouds</string>
    </property>
   </action>
-  <action name="actionImport_well_data">
+  <action name="actionImportWellData">
    <property name="text">
     <string>Import well data</string>
+   </property>
+  </action>
+  <action name="actionExportVTK">
+   <property name="text">
+    <string>Export vtk</string>
    </property>
   </action>
  </widget>

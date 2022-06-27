@@ -22,7 +22,7 @@ def vtk2dxf(self=None, out_dir_name=None):
             R = legend['color_R']
             G = legend['color_G']
             B = legend['color_B']
-            parts = self.geol_coll.get_uid_vtk_obj(uid).split_multipart()
+            parts = self.geol_coll.get_uid_vtk_obj(uid).split_parts()
             # print(len(parts))
             for i,part in enumerate(parts):
                 dxf_out = ezdxf.new()
@@ -84,7 +84,7 @@ def vtk2dxf(self=None, out_dir_name=None):
 
                 # print("Writing DXF... please wait.")
                 df.to_csv(f'{out_dir_name}/csv/{out_file_name}.csv',index=False)
-                dfb.to_csv(f'{out_dir_name}/csv/{out_file_name}.csv',index=False)
+                dfb.to_csv(f'{out_dir_name}/csv/{out_file_name}_border.csv',index=False)
 
                 dxf_out.saveas(f'{out_dir_name}/dxf/{out_file_name}.dxf')
 

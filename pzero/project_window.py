@@ -144,11 +144,12 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.actionImportDEM.triggered.connect(self.import_DEM)
         self.actionImportOrthoImage.triggered.connect(self.import_mapimage)
         self.actionImportXsectionImage.triggered.connect(self.import_xsimage)
-        self.actionImport_well_data.triggered.connect(self.import_welldata)
+        self.actionImportWellData.triggered.connect(self.import_welldata)
         self.actionImportSEGY.triggered.connect(self.import_SEGY)
 
         """File>Export actions -> slots"""
         self.actionExportCAD.triggered.connect(self.export_cad)
+        self.actionExportVTK.triggered.connect(self.export_vtk)
 
         """Edit actions -> slots"""
         self.actionEditEntityRemove.triggered.connect(self.entity_remove)
@@ -547,7 +548,6 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     vtk_out_list = collection.get_uid_vtk_obj(uid).split_parts()
                     vtk_out_dict = deepcopy(collection.df.loc[collection.df['uid'] == uid].drop(['uid', 'vtk_obj'], axis=1).to_dict('records')[0])
                     for vtk_object in vtk_out_list:
-                        print(vtk_object)
                         vtk_out_dict['uid'] = None
                         vtk_out_dict['vtk_obj'] = vtk_object
                         collection.add_entity_from_dict(entity_dict=vtk_out_dict)
@@ -1298,3 +1298,17 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.boundary_coll.df[out_cols].to_csv(out_dir_name + '/boundary_table.csv', encoding='utf-8', index=False)
         self.boundary_coll.df[out_cols].to_json(out_dir_name + '/boundary_table.json', orient='index')
         print("All files saved.")
+    def export_vtk(self):
+        '''[Gabriele] Function used to export selected objects as vtk files'''
+        if not self.selected_uids:
+            return
+
+        else:
+            self.out_dir_name = save_file_dialog(parent=self, caption="Select save directory.", directory=True)
+            # print(self.out_file_name)
+            for uid in self.selected_uids:
+                print(f'exporting {uid}')
+                pd_writer = vtk.vtkXMLPolyDataWriter()
+                pd_writer.SetFileName(f'{self.out_dir_name}/{uid}.vtp')
+                pd_writer.SetInputData(self.geol_coll.get_uid_vtk_obj(uid))
+                pd_writer.Write()

@@ -488,30 +488,6 @@ class PolyData(vtkPolyData):
                 vtk_out_list.append(vtk_out_obj)
             return vtk_out_list
 
-    def split_multipart(self):
-        """Split multi-part entities into single-parts."""
-        part_list = []
-        if not isinstance(self, VertexSet):
-            # print(self.cells)
-            connectivity_filter = vtkPolyDataConnectivityFilter()
-            connectivity_filter.SetInputData(self)
-            connectivity_filter.SetExtractionModeToAllRegions()
-            connectivity_filter.ColorRegionsOn()
-            connectivity_filter.Update()
-            numRegions = connectivity_filter.GetNumberOfExtractedRegions()
-            connectivity = connectivity_filter.GetOutput()
-
-            temp = pv_PolyData()
-            temp.ShallowCopy(connectivity)
-
-            '''[Gabriele] We use extract_surface to cast Unstructured grid (given by extract_points) in PolyData'''
-            for i in range(numRegions):
-                part = TriSurf()
-                thresh = temp.extract_points(temp['RegionId'] == i).extract_surface()
-                part.ShallowCopy(thresh)
-                part_list.append(part)
-
-            return part_list
 
 
 class Plane(vtkPlane):  # _______________________ AT THE MOMENT THIS DOES NOT EXPOSE ANY OTHER METHOD - SEE IF IT IS USEFUL
