@@ -8,7 +8,7 @@ from PyQt5.QtGui import QCloseEvent
 
 """PZero imports"""
 from .base_view_window_ui import Ui_BaseViewWindow
-from .entities_factory import VertexSet, PolyLine, TriSurf, TetraSolid, XsVertexSet, XsPolyLine, DEM, PCDom, MapImage, Voxet, XsVoxet, Plane, Seismics, XsTriSurf, XsImage, PolyData, Wells, WellMarker
+from .entities_factory import VertexSet, PolyLine, TriSurf, TetraSolid, XsVertexSet, XsPolyLine, DEM, PCDom, MapImage, Voxet, XsVoxet, Plane, Seismics, XsTriSurf, XsImage, PolyData, Wells, WellMarker,Attitude
 from .helper_dialogs import input_one_value_dialog, input_text_dialog, input_combo_dialog, message_dialog, options_dialog, multiple_input_dialog, tic, toc,open_file_dialog
 # from .geological_collection import GeologicalCollection
 # from copy import deepcopy
@@ -2240,7 +2240,7 @@ class View3D(BaseView):
                                                plot_texture_option=False, plot_rgb_option=plot_rgb_option, visible=visible)
             else:
                 this_actor = None
-        elif isinstance(plot_entity, (VertexSet, XsVertexSet,WellMarker)):
+        elif isinstance(plot_entity, (VertexSet, XsVertexSet,WellMarker,Attitude)):
             plot_rgb_option = None
             if isinstance(plot_entity.points, np.ndarray):
                 """This  check is needed to avoid errors when trying to plot an empty
@@ -3110,7 +3110,7 @@ class ViewMap(View2D):
             line_thick = self.parent.image_coll.get_legend()['line_thick']
             plot_entity = self.parent.image_coll.get_uid_vtk_obj(uid)
         """Then plot."""
-        if isinstance(plot_entity, (VertexSet, PolyLine, XsVertexSet, XsPolyLine)):
+        if isinstance(plot_entity, (VertexSet, PolyLine, XsVertexSet, XsPolyLine, Attitude)):
             if isinstance(plot_entity.points, np.ndarray):
                 if plot_entity.points_number > 0:
                     """This  check is needed to avoid errors when trying to plot an empty
@@ -3118,7 +3118,7 @@ class ViewMap(View2D):
                     Check if both these conditions are necessary_________________"""
                     X = plot_entity.points_X
                     Y = plot_entity.points_Y
-                    if isinstance(plot_entity, VertexSet):
+                    if isinstance(plot_entity, (VertexSet,Attitude)):
                         if uid in self.selected_uids:
                             if show_property == "Normals":
                                 U = np.sin((plot_entity.points_map_dip_azimuth+90) * np.pi / 180)
@@ -3242,8 +3242,9 @@ class ViewMap(View2D):
                     this_actor = None
             else:
                 this_actor = None
-        this_actor.figure.canvas.draw()
-        return this_actor
+        if this_actor:
+            this_actor.figure.canvas.draw()
+            return this_actor
 
     """Implementation of functions specific to this view (e.g. particular editing or visualization functions)"""
 
@@ -3654,7 +3655,6 @@ class ViewStereoplot(BaseView):
 
     def set_actor_visible(self, uid=None, visible=None):
         # print(self.actors_df)
-        print(self.dir)
         """Set actor uid visible or invisible (visible = True or False)"""
         if isinstance(self.actors_df.loc[self.actors_df['uid'] == uid, 'actor'].values[0], Line2D):
             "Case for Line2D"
@@ -3709,15 +3709,10 @@ class ViewStereoplot(BaseView):
             color_RGB = [color_R / 255, color_G / 255, color_B / 255]
             line_thick = self.parent.geol_coll.get_uid_legend(uid=uid)['line_thick']
             plot_entity = self.parent.geol_coll.get_uid_vtk_obj(uid)
-        elif collection == 'xsect_coll':
-            color_R = self.parent.xsect_coll.get_legend()['color_R']
-            color_G = self.parent.xsect_coll.get_legend()['color_G']
-            color_B = self.parent.xsect_coll.get_legend()['color_B']
-            color_RGB = [color_R / 255, color_G / 255, color_B / 255]
-            line_thick = self.parent.xsect_coll.get_legend()['line_thick']
-            plot_entity = self.parent.xsect_coll.get_uid_vtk_frame(uid)
+        else:
+            plot_entity = None
         """Then plot."""
-        if isinstance(plot_entity, VertexSet):
+        if isinstance(plot_entity, Attitude):
             if isinstance(plot_entity.points, np.ndarray):
                 if plot_entity.points_number > 0:
                     """This  check is needed to avoid errors when trying to plot an empty
@@ -3731,9 +3726,9 @@ class ViewStereoplot(BaseView):
                             # U = np.sin((plot_entity.points_map_dip_azimuth+90) * np.pi / 180)
                             # V = np.cos((plot_entity.points_map_dip_azimuth+90) * np.pi / 180)
                             # # in quiver scale=40 means arrow is 1/40 of figure width, (shaft) width is scaled to figure width, head length and width are scaled to shaft
-                            this_actor = self.ax.plane(self.dir,self.dip,color=color_RGB)[0]
-                            # print('Only poles for now')
-                            # this_actor = None
+                            #this_actor = self.ax.plane(self.dir,self.dip,color=color_RGB)[0]
+                            print('Only poles for now')
+                            this_actor = None
                         else:
                             this_actor = self.ax.pole(self.dir, self.dip, color=color_RGB)[0]
 
@@ -3743,10 +3738,10 @@ class ViewStereoplot(BaseView):
                             # U = np.sin((plot_entity.points_map_dip_azimuth+90) * np.pi / 180)
                             # V = np.cos((plot_entity.points_map_dip_azimuth+90) * np.pi / 180)
                             # # in quiver scale=40 means arrow is 1/40 of figure width, (shaft) width is scaled to figure width, head length and width are scaled to shaft
-                            this_actor = self.ax.plane(self.dir,self.dip,color=color_RGB)[0]
+                            #this_actor = self.ax.plane(self.dir,self.dip,color=color_RGB)[0]
                             # print(this_actor)
-                            # print('Only poles for now')
-                            # this_actor = None
+                            print('Only poles for now')
+                            this_actor = None
                         else:
                             this_actor = self.ax.pole(self.dir, self.dip, color=color_RGB)[0]
                         if this_actor:
@@ -3755,6 +3750,8 @@ class ViewStereoplot(BaseView):
                     this_actor = None
             else:
                 this_actor = None
+        else:
+            this_actor = None
         if this_actor:
             this_actor.figure.canvas.draw()
         return this_actor

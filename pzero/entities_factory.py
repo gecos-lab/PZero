@@ -1,7 +1,7 @@
 """entities_factory.py
 PZero© Andrea Bistacchi"""
 
-from vtk import vtkPolyData, vtkPoints, vtkCellCenters, vtkIdFilter, vtkCleanPolyData, vtkPolyDataNormals, vtkPlane, vtkCellArray, vtkLine, vtkIdList, vtkTriangleFilter, vtkTriangle, vtkFeatureEdges, vtkCleanPolyData, vtkStripper, vtkPolygon, vtkUnstructuredGrid, vtkTetra, vtkImageData, vtkStructuredGrid, vtkPolyDataConnectivityFilter, vtkCylinderSource,vtkThreshold,vtkDataObject,vtkThresholdPoints,vtkDelaunay2D
+from vtk import vtkPolyData, vtkPoints, vtkCellCenters, vtkIdFilter, vtkCleanPolyData, vtkPolyDataNormals, vtkPlane, vtkCellArray, vtkLine, vtkIdList, vtkTriangleFilter, vtkTriangle, vtkFeatureEdges, vtkCleanPolyData, vtkStripper, vtkPolygon, vtkUnstructuredGrid, vtkTetra, vtkImageData, vtkStructuredGrid, vtkPolyDataConnectivityFilter, vtkCylinderSource,vtkThreshold,vtkDataObject,vtkThresholdPoints,vtkDelaunay2D,vtkPolyDataMapper
 from vtk.util.numpy_support import vtk_to_numpy
 from vtk.numpy_interface.dataset_adapter import WrapDataObject, vtkDataArrayToVTKArray
 from pyvista import PolyData as pv_PolyData
@@ -473,18 +473,21 @@ class PolyData(vtkPolyData):
             connectivity_filter.SetExtractionModeToAllRegions()
             connectivity_filter.ColorRegionsOn()
             connectivity_filter.Update()
-            num_regions = connectivity_filter.GetNumberOfExtractedRegions()
             connectivity_filter.SetExtractionModeToSpecifiedRegions()
+            num_regions = connectivity_filter.GetNumberOfExtractedRegions()
             vtk_out_list = []
             for rid in range(num_regions):
                 connectivity_filter.InitializeSpecifiedRegionList()
                 connectivity_filter.AddSpecifiedRegion(rid)
                 connectivity_filter.Update()
+                cleaner = vtkCleanPolyData()
+                cleaner.SetInputConnection(connectivity_filter.GetOutputPort())
+                cleaner.Update()
                 if isinstance(self, PolyLine):
                     vtk_out_obj = PolyLine()
                 elif isinstance(self, TriSurf):
                     vtk_out_obj = TriSurf()
-                vtk_out_obj.DeepCopy(connectivity_filter.GetOutput())
+                vtk_out_obj.DeepCopy(cleaner.GetOutput())
                 vtk_out_list.append(vtk_out_obj)
             return vtk_out_list
 
@@ -1876,3 +1879,12 @@ class WellMarker(VertexSet):
         well_copy = WellMarker()
         well_copy.DeepCopy(self)
         return well_copy
+
+class Attitude(VertexSet):
+    def __init__(self, *args, **kwargs):
+        super(Attitude, self).__init__(*args, **kwargs)
+    #
+    def deep_copy(self):
+        att_copy = Attitude()
+        att_copy.DeepCopy(self)
+        return att_copy

@@ -2,7 +2,7 @@
 PZero© Andrea Bistacchi"""
 
 from copy import deepcopy
-from .entities_factory import PolyLine, VertexSet
+from .entities_factory import PolyLine, VertexSet, Attitude
 from numpy import array as np_array
 from numpy import shape as np_shape
 from numpy import zeros as np_zeros
@@ -111,8 +111,15 @@ def shp2vtk(self=None, in_file_name=None):
             gdf_index = gdf.set_index("geo_feat")
             feat_list = set(gdf_index.index)
 
+
+
             for i in feat_list:
                 curr_obj_dict = deepcopy(GeologicalCollection.geological_entity_dict)
+
+                if 'dip' in gdf.columns:
+                    vtk_obj = Attitude()
+                else:
+                    vtk_obj = VertexSet()
 
                 if "name" in column_names:
                     curr_obj_dict["name"] = gdf_index.loc[i, "name"][0]
@@ -128,7 +135,7 @@ def shp2vtk(self=None, in_file_name=None):
                     curr_obj_dict["scenario"] = gdf_index.loc[row, "scenario"]
 
                 curr_obj_dict["topological_type"] = "VertexSet"
-                curr_obj_dict["vtk_obj"] = VertexSet()
+                curr_obj_dict["vtk_obj"] = vtk_obj
 
                 gdf_index['coords'] = gdf_index.geometry.apply(lambda x: np_array(x)) # [Gabriele] add a coordinate column in the gdf_index dataframe
                 outXYZ = np_array([p for p in gdf_index.loc[i, 'coords']])

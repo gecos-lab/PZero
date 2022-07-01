@@ -11,7 +11,7 @@ from PyQt5.QtCore import Qt, QSortFilterProxyModel, pyqtSignal
 import vtk
 import pandas as pd
 from .project_window_ui import Ui_ProjectWindow
-from .entities_factory import Plane, VertexSet, PolyLine, TriSurf, XsVertexSet, XsPolyLine, DEM, MapImage, Voxet, Seismics, XsVoxet, TetraSolid, PCDom, TSDom, Wells
+from .entities_factory import Plane, VertexSet, PolyLine, TriSurf, XsVertexSet, XsPolyLine, DEM, MapImage, Voxet, Seismics, XsVoxet, TetraSolid, PCDom, TSDom, Wells,Attitude
 from .geological_collection import GeologicalCollection
 from .xsection_collection import XSectionCollection
 from .dom_collection import DomCollection
@@ -1069,7 +1069,11 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     print("error: missing VTK file")
                     return
                 if self.geol_coll.get_uid_topological_type(uid) == 'VertexSet':
-                    vtk_object = VertexSet()
+                    if 'dip' in self.geol_coll.get_uid_properties_names(uid):
+                        print('ciao')
+                        vtk_object=Attitude()
+                    else:
+                        vtk_object = VertexSet()
                 elif self.geol_coll.get_uid_topological_type(uid) == 'PolyLine':
                     vtk_object = PolyLine()
                 elif self.geol_coll.get_uid_topological_type(uid) == 'TriSurf':
