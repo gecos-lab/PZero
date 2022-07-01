@@ -39,7 +39,7 @@ from .image2vtk import geo_image2vtk, xs_image2vtk
 from .stl2vtk import vtk2stl, vtk2stl_dilation
 from .obj2vtk import vtk2obj
 from .ply2vtk import vtk2ply
-from .three_d_surfaces import interpolation_delaunay_2d, poisson_interpolation, implicit_model_loop_structural, surface_smoothing, linear_extrusion, decimation_pro_resampling, decimation_quadric_resampling, subdivision_resampling, intersection_xs, project_2_dem, project_2_xs
+from .three_d_surfaces import interpolation_delaunay_2d, poisson_interpolation, implicit_model_loop_structural, surface_smoothing, linear_extrusion, decimation_pro_resampling, decimation_quadric_resampling, subdivision_resampling, intersection_xs, project_2_dem, project_2_xs, split_surf
 from .orientation_analysis import set_normals
 
 from uuid import uuid4
@@ -176,6 +176,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.actionProject2DEM.triggered.connect(lambda: project_2_dem(self))
         self.actionIntersectionXSection.triggered.connect(lambda: intersection_xs(self))
         self.actionProject2XSection.triggered.connect(lambda: project_2_xs(self))
+        self.actionSplitSurf.triggered.connect(lambda: split_surf(self))
 
         """View actions -> slots"""
         self.actionView3D.triggered.connect(lambda: View3D(parent=self))

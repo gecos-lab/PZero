@@ -590,6 +590,7 @@
     <addaction name="actionIntersectionXSection"/>
     <addaction name="actionProject2XSection"/>
     <addaction name="actionProject2DEM"/>
+    <addaction name="actionSplitSurf"/>
    </widget>
    <addaction name="menuFile"/>
    <addaction name="menuEdit"/>
@@ -768,6 +769,7 @@
    <addaction name="actionIntersectionXSection"/>
    <addaction name="actionProject2XSection"/>
    <addaction name="actionProject2DEM"/>
+   <addaction name="actionSplitSurf"/>
   </widget>
   <widget class="QToolBar" name="toolBarWindows">
    <property name="sizePolicy">
@@ -1076,6 +1078,11 @@
   <action name="actionExportVTK">
    <property name="text">
     <string>Export vtk</string>
+   </property>
+  </action>
+  <action name="actionSplitSurf">
+   <property name="text">
+    <string>Split surfaces</string>
    </property>
   </action>
  </widget>

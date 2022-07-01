@@ -12,6 +12,8 @@ from .mesh3d_collection import Mesh3DCollection
 from .helper_dialogs import multiple_input_dialog, input_one_value_dialog, input_text_dialog, input_combo_dialog, input_checkbox_dialog, tic, toc, progress_dialog, general_input_dialog
 from .entities_factory import TriSurf, XsPolyLine, PolyLine, VertexSet, Voxet, XsVoxet, XsTriSurf, XsVertexSet, MapImage, DEM
 
+import pyvista as pv
+
 """LoopStructural import(s)"""
 from LoopStructural import GeologicalModel
 
@@ -1211,3 +1213,54 @@ def project_2_xs(self):
                     out_uid = self.geol_coll.add_entity_from_dict(entity_dict=entity_dict)
                 else:
                     print(" -- empty object -- ")
+
+
+def split_surf(self):
+    ''' Split two surfaces. This should be integrated with intersection_xs in one function since is the same thing'''
+    if self.shown_table != "tabGeology":
+        print(" -- Only geological objects can be intersected -- ")
+        return
+    if not self.selected_uids:
+        print("No input data selected.")
+        return
+    else:
+        """Deep copy list of selected uids needed otherwise problems can arise if the main geology table is deseselcted while the dataframe is being built"""
+        input_uids = deepcopy(self.selected_uids)
+        print(input_uids)
+        # 0. Define the reference surface and target surfaces
+        ref_surf = self.geol_coll.get_uid_vtk_obj(input_uids[0])
+        targ_surfs = [self.geol_coll.get_uid_vtk_obj(uid) for uid in input_uids[1:]]
+
+        for i,targ_surf in enumerate(targ_surfs):
+
+            temp_surf = pv.PolyData()
+            temp_surf.ShallowCopy(targ_surf)
+            # surf_sub = temp_surf.subdivide(3,'linear') #shape preserving
+
+            implicit_dist = temp_surf.compute_implicit_distance(ref_surf)
+            intersect = vtk.vtkClipPolyData()
+            intersect.SetInputData(implicit_dist)
+            intersect.GenerateClippedOutputOn()
+
+            intersect.Update()
+
+            parts = [intersect.GetOutput(),intersect.GetClippedOutput()]
+
+            for part in parts:
+                # vtk_obj = TriSurf()
+                uid = input_uids[i+1]
+                obj_dict = deepcopy(self.geol_coll.geological_entity_dict)
+                obj_dict['topological_type'] = self.geol_coll.get_uid_topological_type(uid)
+                obj_dict['vtk_obj'] = TriSurf()
+                obj_dict['name'] = self.geol_coll.get_uid_name(uid) + '_split'
+                obj_dict['geological_type'] = self.geol_coll.get_uid_geological_type(uid)
+                obj_dict['geological_feature'] = self.geol_coll.get_uid_geological_feature(uid)
+                obj_dict['scenario'] = self.geol_coll.get_uid_scenario(uid)
+                obj_dict['properties_names'] = self.geol_coll.get_uid_properties_names(uid)
+                obj_dict['properties_components'] = self.geol_coll.get_uid_properties_components(uid)
+                obj_dict['vtk_obj'].DeepCopy(part)
+                self.geol_coll.add_entity_from_dict(obj_dict)
+                print(obj_dict['vtk_obj'])
+
+
+        # 1. Calculate the implicit distance of the target surface[1,2,3,4,..] from the reference surface[0]
