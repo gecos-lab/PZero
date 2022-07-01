@@ -480,11 +480,14 @@ class PolyData(vtkPolyData):
                 connectivity_filter.InitializeSpecifiedRegionList()
                 connectivity_filter.AddSpecifiedRegion(rid)
                 connectivity_filter.Update()
+                cleaner = vtkCleanPolyData()
+                cleaner.SetInputConnection(connectivity_filter.GetOutputPort())
+                cleaner.Update()
                 if isinstance(self, PolyLine):
                     vtk_out_obj = PolyLine()
                 elif isinstance(self, TriSurf):
                     vtk_out_obj = TriSurf()
-                vtk_out_obj.DeepCopy(connectivity_filter.GetOutput())
+                vtk_out_obj.DeepCopy(cleaner.GetOutput())
                 vtk_out_list.append(vtk_out_obj)
             return vtk_out_list
 
