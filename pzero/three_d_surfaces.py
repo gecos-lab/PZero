@@ -709,9 +709,12 @@ def decimation_quadric_resampling(self):
         print(" -- empty object -- ")
 
 
-def subdivision_resampling(self):
-    """vtkButterflySubdivisionFilter subdivides a triangular, polygonal surface; four new triangles are created
-     for each triangle of the polygonal surface."""
+def subdivision_resampling(self,type='linear',n_subd=2):
+    """ Different types of subdivisions. Subdivides a triangular, polygonal surface; four new triangles are created
+    for each triangle of the polygonal surface.:
+     1. vtkLinearSubdivisionFilter (shape preserving)
+     2. vtkButterflySubdivisionFilter  (not shape preserving)
+     3. vtkLoopSubdivisionFilter (not shape preserving)"""
     print("Subdivision resampling: resample target surface and increase number of triangles of the mesh")
     if self.shown_table != "tabGeology":
         print(" -- Only geological objects can be resampled -- ")
@@ -737,12 +740,20 @@ def subdivision_resampling(self):
     surf_dict['geological_type'] = self.geol_coll.get_uid_geological_type(input_uids[0])
     surf_dict['topological_type'] = 'TriSurf'
     surf_dict['vtk_obj'] = TriSurf()
+
+    if type == 'linear':
+        subdiv_filter = vtk.vtkLinearSubdivisionFilter()
+    elif type == 'butterfly':
+        subdiv_filter = vtk.vtkButterflySubdivisionFilter()
+    elif type == 'loop':
+        subdiv_filter = vtk.vtkLoopSubdivisionFilter()
     """Create a new instance of the decimation class"""
-    buttefly_subdiv = vtk.vtkButterflySubdivisionFilter()
-    buttefly_subdiv.SetInputData(self.geol_coll.get_uid_vtk_obj(input_uids[0]))
-    buttefly_subdiv.Update()
+
+    subdiv_filter.SetInputData(self.geol_coll.get_uid_vtk_obj(input_uids[0]))
+    subdiv_filter.SetNumberOfSubdivisions(n_subd)
+    subdiv_filter.Update()
     """ShallowCopy is the way to copy the new interpolated surface into the TriSurf instance created at the beginning"""
-    surf_dict['vtk_obj'].ShallowCopy(buttefly_subdiv.GetOutput())
+    surf_dict['vtk_obj'].ShallowCopy(subdiv_filter.GetOutput())
     surf_dict['vtk_obj'].Modified()
     """Add new entity from surf_dict. Function add_entity_from_dict creates a new uid"""
     if surf_dict['vtk_obj'].points_number > 0:

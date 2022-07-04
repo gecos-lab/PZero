@@ -169,7 +169,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.actionPoissonInterpolation.triggered.connect(lambda: poisson_interpolation(self))
         self.actionLoopStructuralImplicitModelling.triggered.connect(lambda: implicit_model_loop_structural(self))
         self.actionSurfaceSmoothing.triggered.connect(lambda: surface_smoothing(self))
-        self.actionSubdivisionResampling.triggered.connect(lambda: subdivision_resampling(self))
+        self.actionSubdivisionResampling.triggered.connect(self.subd_res_dialog)
         self.actionDecimationPro.triggered.connect(lambda: decimation_pro_resampling(self))
         self.actionDecimationQuadric.triggered.connect(lambda: decimation_quadric_resampling(self))
         self.actionExtrusion.triggered.connect(lambda: linear_extrusion(self))
@@ -513,6 +513,10 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
     def lineations_calculate(self):  # ____________________________________________________ IMPLEMENT THIS FOR POINTS WITH PLUNGE/TREND AND FOR POLYLINES
         """Calculate lineations on geological entities."""
         pass
+    def subd_res_dialog(self):
+        dict = {'type':['Subdivision type:',['linear','butterfly','loop']],'n_subd':['Number of iterations',2]}
+        subd_input = multiple_input_dialog('Subdivision dialog',dict)
+        subdivision_resampling(self,type=subd_input['type'],n_subd=subd_input['n_subd'])
 
     def connected_parts(self):
         """Calculate connectivity of PolyLine and TriSurf entities."""

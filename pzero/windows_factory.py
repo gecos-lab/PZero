@@ -44,6 +44,8 @@ import matplotlib.style as mplstyle
 # from matplotlib.backend_bases import FigureCanvasBase
 import mplstereonet
 
+from uuid import UUID
+
 """Probably not-required imports"""
 # import sys
 # from time import sleep
@@ -86,7 +88,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         actor = the actor
         show = a boolean to show (True) or hide (false) the actor
         collection = the original collection of the actor, e.g. geol_coll, xsect_coll, etc."""
-        self.actors_df = pd.DataFrame(columns=['uid', 'actor', 'show', 'collection'])
+        self.actors_df = pd.DataFrame(columns=['uid', 'actor', 'show', 'collection','pointer'])
 
         """Create list of selected uid's."""
         self.selected_uids = []
@@ -2043,9 +2045,9 @@ class View3D(BaseView):
         self.menuWindow.addAction(self.zoomActive)
 
         #[Gabriele] Add picker action
-        self.pickMesh = QAction("Pick object",self)
-        self.pickMesh.triggered.connect(lambda: self.pick_mesh())
-        self.menuBaseView.addAction(self.pickMesh)
+        # self.pickMesh = QAction("Pick object",self)
+        # self.pickMesh.triggered.connect(lambda: self.pick_mesh())
+        # self.menuBaseView.addAction(self.pickMesh)
 
     def save_home_view(self):
         print("self.default_view = self.plotter.camera_position")
@@ -2078,17 +2080,29 @@ class View3D(BaseView):
 
 
     def pkd_mesh(self,mesh):
-        position = mesh.center
-        bounds = mesh.bounds
-        actors = self.actors_df['actor']
 
-        for i,actor in enumerate(actors):
-            # print(f'actor {i} bounds: {actor.GetBounds()}')
-            # print(f'actor {i} center: {actor.GetCenter()}')
-            if position == list(actor.GetCenter()) and bounds == actor.GetBounds():
-                idx = self.actors_df.loc[self.actors_df['actor'] == actor, 'uid'].index[0]
-                # print(idx)
-                self.parent.GeologyTableView.selectRow(idx)
+        uid = list(filter(lambda x: ('tag_' in x),mesh_keys(mesh)))[0].split('_')[1]
+        print(uid)
+        # rend_act = self.plotter.renderer.actors
+        # print(self.actors_df)
+        # print(rend_act)
+        # # print(position,bounds)
+        print('-----------------------------------')
+
+
+        for actor in enumerate(self.actors_df):
+
+            idx = self.actors_df.loc[self.actors_df['uid'] == uid].index[0]
+            self.parent.GeologyTableView.selectRow(idx)
+        #     # print(f'actor {i} bounds: {actor.GetBounds()}')
+        #     # print(f'actor {i} center: {actor.GetCenter()}')
+        #     if position == list(actor.GetCenter()) and bounds == actor.GetBounds():
+        #
+        #         # print(list(act0x5641e8c05db0or.GetCenter()),actor.GetBounds())
+        #
+        #         idx = self.actors_df.loc[self.actors_df['actor'] == actor, 'uid'].index[0]
+        #         # print(idx)
+        #
 
 
 
@@ -2217,6 +2231,7 @@ class View3D(BaseView):
         """Then plot the vtk object with proper options."""
         if isinstance(plot_entity, (PolyLine, TriSurf, XsPolyLine)):
             plot_rgb_option = None
+            plot_entity.set_tag(uid)
             if isinstance(plot_entity.points, np.ndarray):
                 """This  check is needed to avoid errors when trying to plot an empty
                 PolyData, just created at the beginning of a digitizing session."""
@@ -2833,6 +2848,7 @@ class View2D(BaseView):
 
         def select_actor_pick(event):
             while self.selected_uids == []:
+                print(event.artist)
                 if event.artist:
                     if self.actors_df.loc[self.actors_df['actor'] == event.artist, 'collection'].values[0] == 'geol_coll':
                         """IN THE FUTURE check why the condition above rises an error, but then the code runs flawlessly."""
