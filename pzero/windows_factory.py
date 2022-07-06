@@ -88,7 +88,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         actor = the actor
         show = a boolean to show (True) or hide (false) the actor
         collection = the original collection of the actor, e.g. geol_coll, xsect_coll, etc."""
-        self.actors_df = pd.DataFrame(columns=['uid', 'actor', 'show', 'collection','pointer'])
+        self.actors_df = pd.DataFrame(columns=['uid', 'actor', 'show', 'collection'])
 
         """Create list of selected uid's."""
         self.selected_uids = []
@@ -1902,8 +1902,8 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             this_actor = self.show_actor_with_property(uid=uid, collection='geol_coll', show_property=None, visible=True)
             self.actors_df = self.actors_df.append({'uid': uid, 'actor': this_actor, 'show': True, 'collection': 'geol_coll', 'show_prop': None}, ignore_index=True)
         for uid in self.parent.xsect_coll.df['uid'].tolist():
-            this_actor = self.show_actor_with_property(uid=uid, collection='xsect_coll', show_property=None, visible=True)
-            self.actors_df = self.actors_df.append({'uid': uid, 'actor': this_actor, 'show': True, 'collection': 'xsect_coll', 'show_prop': None}, ignore_index=True)
+            this_actor = self.show_actor_with_property(uid=uid, collection='xsect_coll', show_property=None, visible=False)
+            self.actors_df = self.actors_df.append({'uid': uid, 'actor': this_actor, 'show': False, 'collection': 'xsect_coll', 'show_prop': None}, ignore_index=True)
         for uid in self.parent.boundary_coll.df['uid'].tolist():
             this_actor = self.show_actor_with_property(uid=uid, collection='boundary_coll', show_property=None, visible=False)
             self.actors_df = self.actors_df.append({'uid': uid, 'actor': this_actor, 'show': False, 'collection': 'boundary_coll', 'show_prop': None}, ignore_index=True)
@@ -2089,11 +2089,9 @@ class View3D(BaseView):
         # # print(position,bounds)
         print('-----------------------------------')
 
-
-        for actor in enumerate(self.actors_df):
-
-            idx = self.actors_df.loc[self.actors_df['uid'] == uid].index[0]
-            self.parent.GeologyTableView.selectRow(idx)
+        print(self.actors_df['uid'].values)
+        idx = self.actors_df.loc[self.actors_df['uid'] == uid].index[0]
+        self.parent.GeologyTableView.selectRow(idx)
         #     # print(f'actor {i} bounds: {actor.GetBounds()}')
         #     # print(f'actor {i} center: {actor.GetCenter()}')
         #     if position == list(actor.GetCenter()) and bounds == actor.GetBounds():
@@ -2232,6 +2230,7 @@ class View3D(BaseView):
         if isinstance(plot_entity, (PolyLine, TriSurf, XsPolyLine)):
             plot_rgb_option = None
             plot_entity.set_tag(uid)
+            print(plot_entity.point_data_keys)
             if isinstance(plot_entity.points, np.ndarray):
                 """This  check is needed to avoid errors when trying to plot an empty
                 PolyData, just created at the beginning of a digitizing session."""

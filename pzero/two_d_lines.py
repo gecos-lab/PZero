@@ -886,11 +886,13 @@ def resample_line_distance(self):  # this must be done per-part_________________
     current_uid = self.selected_uids[0]
     """Ask for distance for evenly spacing resampling"""
     distance_delta = input_one_value_dialog(parent=self, title="Spacing distance for Line Resampling", label="Insert spacing distance", default_value="Distance")
-    if distance_delta is None:
+    if distance_delta is None or isinstance(distance_delta, str):
         """Un-Freeze QT interface"""
         for action in self.findChildren(QAction):
             action.setEnabled(True)
         return
+    else:
+        distance_delta = int(distance_delta)
     if distance_delta <= 0:
         distance_delta = 20
     """Create empty dictionary for the output line"""
@@ -964,12 +966,14 @@ def resample_line_number_points(self):  # this must be done per-part____________
     """If more than one line is selected, keep the first"""
     current_uid = self.selected_uids[0]
     """Ask for the number of points for evenly spacing resampling"""
-    number_of_points = int(input_one_value_dialog(parent=self, title="Number of points for Line Resampling", label="Insert number of points", default_value="Number"))
-    if number_of_points is None:
+    number_of_points = input_one_value_dialog(parent=self, title="Number of points for Line Resampling", label="Insert number of points", default_value="Number")
+    if number_of_points is None or isinstance(number_of_points,str):
         """Un-Freeze QT interface"""
         for action in self.findChildren(QAction):
             action.setEnabled(True)
         return
+    else:
+        number_of_points = int(number_of_points)
     if number_of_points <= 1:
         number_of_points = 20
     """Editing loop"""
