@@ -8,11 +8,11 @@ from PyQt5.QtGui import QCloseEvent,QFont
 
 """PZero imports"""
 from .base_view_window_ui import Ui_BaseViewWindow
-from .entities_factory import VertexSet, PolyLine, TriSurf, TetraSolid, XsVertexSet, XsPolyLine, DEM, PCDom, MapImage, Voxet, XsVoxet, Plane, Seismics, XsTriSurf, XsImage, PolyData, Wells, WellMarker,Giacitura
+from .entities_factory import VertexSet, PolyLine, TriSurf, TetraSolid, XsVertexSet, XsPolyLine, DEM, PCDom, MapImage, Voxet, XsVoxet, Plane, Seismics, XsTriSurf, XsImage, PolyData, Wells, WellMarker,Attitude
 from .helper_dialogs import input_one_value_dialog, input_text_dialog, input_combo_dialog, message_dialog, options_dialog, multiple_input_dialog, tic, toc,open_file_dialog
 # from .geological_collection import GeologicalCollection
 # from copy import deepcopy
-from .helper_functions import add_vtk_obj,angle_wrapper
+from .helper_functions import add_vtk_obj,angle_wrapper,PCA
 
 """Maths imports"""
 from math import degrees, sqrt, atan2
@@ -28,8 +28,10 @@ from vtkmodules.vtkInteractionWidgets import vtkCameraOrientationWidget
 """3D plotting imports"""
 from pyvista import global_theme as pv_global_theme
 from pyvistaqt import QtInteractor as pvQtInteractor
-from pyvista import Arrow, Circle, PolyData, Cylinder, Sphere
+from pyvista import Arrow, Circle, PolyData, Cylinder, Sphere, Disc
 from pyvista import Plane as pvPlane
+from pyvista import _vtk
+from pyvista import read_texture
 
 """2D plotting imports"""
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
@@ -2020,6 +2022,7 @@ class View3D(BaseView):
 
         """Rename Base View, Menu and Tool"""
         self.setWindowTitle("3D View")
+        self.tog_att = -1 #Attitude picker disabled
 
     """Re-implementations of functions that appear in all views - see placeholders in BaseView()"""
     def show_qt_canvas(self):
@@ -2045,6 +2048,13 @@ class View3D(BaseView):
         self.actionNormals2dd.triggered.connect(lambda: self.normals2dd())
         self.menuEdit.addAction(self.actionNormals2dd)
         self.menuTools.addMenu(self.menuEdit)
+
+        self.menuPicker = QMenu('Pickers',self)
+
+        self.actionPickAttitude = QAction('Toggle measure attitude on a mesh',self)
+        self.actionPickAttitude.triggered.connect(lambda: self.act_att())
+        self.menuPicker.addAction(self.actionPickAttitude)
+        self.menuTools.addMenu(self.menuPicker)
         # self.menubar.insertMenu(self.menuHelp.menuAction(),self.menuEdit)
 
         #[Gabriele] Add picker action
@@ -2130,10 +2140,68 @@ class View3D(BaseView):
 
     #     # [Gabriele] Add picking functionality (this should be put in a menu to enable or disable)
     #
-        self.plotter.enable_point_picking(callback=self.pkd_point,show_message=False,color='yellow',use_mesh=True)
+    def act_att(self):
+
+        if self.tog_att == -1:
+            set_name = input_text_dialog(parent=self,title="Set name", label="Define set name", default_text="set_0")
+            self.plotter.enable_point_picking(callback=lambda mesh,pid: self.pkd_point(mesh,pid,set_name),show_message=False,color='yellow',use_mesh=True)
+            self.tog_att *= -1
+            print('Picking enabled')
+        else:
+            picker = self.plotter.picker
+            #print(picker)
+            picker.RemoveObservers(_vtk.vtkCommand.EndPickEvent)
+            self.tog_att *= -1
+            print('Picking disabled')
+
+    def pkd_point(self,mesh,pid,set_name):
+        def best_fitting_plane(points, equation=False):
+            ''' code from https://stackoverflow.com/a/38770513/19331382'''
+            """ Computes the best fitting plane of the given points
+
+            Parameters
+            ----------
+            points: array
+                The x,y,z coordinates corresponding to the points from which we want
+                to define the best fitting plane. Expected format:
+                    array([
+                    [x1,y1,z1],
+                    ...,
+                    [xn,yn,zn]])
+
+            equation(Optional) : bool
+                    Set the oputput plane format:
+                        If True return the a,b,c,d coefficients of the plane.
+                        If False(Default) return 1 Point and 1 Normal vector.
+            Returns
+            -------
+            a, b, c, d : float
+                The coefficients solving the plane equation.
+
+            or
+
+            point, normal: array
+                The plane defined by 1 Point and 1 Normal vector. With format:
+                array([Px,Py,Pz]), array([Nx,Ny,Nz])
+
+            """
+
+            w, v = PCA(points)
+
+            #: the normal of the plane is the last eigenvector
+            normal = v[:,2]
+
+            #: get a point from the plane
+            point = np.mean(points, axis=0)
 
 
-    def pkd_point(self,mesh,pid):
+            if equation:
+                a, b, c = normal
+                d = -(np.dot(normal, point))
+                return a, b, c, d
+
+            else:
+                return point, normal
 
         # print(mesh)
         dim = 0.2
@@ -2149,6 +2217,7 @@ class View3D(BaseView):
         sel_points  = mesh.select_enclosed_points(sphere,check_surface=False)
         points = mesh.points[np.where(sel_points['SelectedPoints'] == 1 )]
 
+        plane_c,plane_n = best_fitting_plane(points)
         sel_p = PolyData(points)
 
         range = sel_p.points[:,0].max() - sel_p.points[:,0].min()
@@ -2160,9 +2229,9 @@ class View3D(BaseView):
         #     norm_mean *= -1
 
 
-        temp_point = PolyData(center)
-        temp_point['Normals'] = [norm_mean]
-        # temp_plane = pvPlane(center=center,direction = norm_mean, i_size=dim,j_size=dim,i_resolution=1,j_resolution=1)
+        temp_point = PolyData(plane_c)
+        temp_point['Normals'] = [plane_n]
+        temp_plane = pvPlane(center=plane_c,direction = plane_n, i_size=dim,j_size=dim,i_resolution=1,j_resolution=1)
 
         nx,ny,nz = temp_point["Normals"][0]
         dip = np.arccos(np.abs(nz))
@@ -2171,16 +2240,16 @@ class View3D(BaseView):
         temp_point['dir'] = [np.rad2deg(dir)]
 
 
-        point = Giacitura()
+        point = Attitude()
 
         point.ShallowCopy(temp_point)
 
         # print(self.parent.geol_coll)
 
-        add_vtk_obj(self,point,'measurement')
+        add_vtk_obj(self,point,'measurement',name=set_name)
 
 
-        # actor = self.plotter.add_mesh(plane,color='r',pickable =False)
+        #self.plotter.add_mesh(temp_plane,color='r',pickable =False)
         # print(plane)
 
         # pts = mesh.extract_points(sel_points['SelectedPoints'].view(bool), adjacent_cells=False)
@@ -2339,10 +2408,14 @@ class View3D(BaseView):
                                                plot_texture_option=False, plot_rgb_option=plot_rgb_option, visible=visible)
             else:
                 this_actor = None
-        elif isinstance(plot_entity, (VertexSet, XsVertexSet,WellMarker,Giacitura)):
-            if isinstance(plot_entity, Giacitura):
+        elif isinstance(plot_entity, (VertexSet, XsVertexSet,WellMarker,Attitude)):
+            if isinstance(plot_entity, Attitude):
                 pickable=False
+            else:
+                pickable=True
+            style = 'points'
             plot_rgb_option = None
+            texture=False
             if isinstance(plot_entity.points, np.ndarray):
                 """This  check is needed to avoid errors when trying to plot an empty
                 PolyData, just created at the beginning of a digitizing session."""
@@ -2359,21 +2432,31 @@ class View3D(BaseView):
                 elif show_property == 'Z':
                     show_property = plot_entity.points_Z
                 elif show_property == 'Normals':
-                    print('Normals still not supported')
+                    r = self.parent.geol_coll.get_uid_legend(uid=uid)['line_thick']
+                    texture = read_texture('pzero/icons/dip.png')
+                    disk = Disc(outer = 25,inner=0,c_res=30)
+                    disk.texture_map_to_plane(inplace=True)
+                    # print('Normals still not supported')
                     show_scalar_bar = False
-                    show_property_title = None
-                    # pv_downcast = PolyData()
-                    # pv_downcast.ShallowCopy(plot_entity)
-                    # pv_downcast.Modified()
+                    show_property = None
+                    show_property_title = 'none'
+                    style = 'surface'
+                    pv_downcast = PolyData()
+                    pv_downcast.ShallowCopy(plot_entity)
+                    pv_downcast.Modified()
+
                     # # print(pv_downcast['Normals'])
-                    # plot_entity = pv_downcast.glyph(orient=True,scale=True ,geom=Arrow())
+                    plot_entity = pv_downcast.glyph(orient='Normals',scale='Normals',geom=disk)
+
+
+
                 else:
                     if plot_entity.get_point_data_shape(show_property)[-1] == 3:
                         plot_rgb_option = True
                 this_actor = self.plot_mesh_3D(uid=uid, plot_entity=plot_entity, color_RGB=color_RGB, show_property=show_property, show_scalar_bar=show_scalar_bar,
                                                color_bar_range=None, show_property_title=show_property_title, line_thick=line_thick,
-                                               plot_texture_option=False, plot_rgb_option=plot_rgb_option, visible=visible,
-                                               style='points', point_size=line_thick*10.0, points_as_spheres=True, pickable=pickable)
+                                               plot_texture_option=texture, plot_rgb_option=plot_rgb_option, visible=visible,
+                                               style=style, point_size=line_thick*10.0, points_as_spheres=True, pickable=pickable)
             else:
                 this_actor = None
         elif isinstance(plot_entity, DEM):
@@ -4111,7 +4194,7 @@ class ViewStereoplot(BaseView):
         else:
             plot_entity = None
         """Then plot."""
-        if isinstance(plot_entity, (VertexSet,Giacitura)):
+        if isinstance(plot_entity, (VertexSet,Attitude)):
             if isinstance(plot_entity.points, np.ndarray):
                 if plot_entity.points_number > 0:
                     """This  check is needed to avoid errors when trying to plot an empty

@@ -66,22 +66,106 @@ def angle_wrapper(angle):
 
     return angle%(2*pi)
 
-def add_vtk_obj(self,vtk_obj,type):
+def add_vtk_obj(self,vtk_obj,type,name=None):
     from copy import deepcopy
     from uuid import uuid4
     from .geological_collection import GeologicalCollection
     import numpy as np
+    from vtk import vtkAppendPolyData
+    from .entities_factory import Attitude
 
     if type == 'measurement':
-        curr_obj_dict = deepcopy(GeologicalCollection.geological_entity_dict)
-        properties_name = vtk_obj.point_data_keys
-        properties_components = [vtk_obj.get_point_data_shape(i)[1] for i in properties_name]
-        name = f"{int(vtk_obj.get_point_data('dir'))}/{int(vtk_obj.get_point_data('dip'))}"
-        curr_obj_dict['uid'] = str(uuid4())
-        curr_obj_dict['name'] = name
-        curr_obj_dict['topological_type'] = "VertexSet"
-        curr_obj_dict['properties_names'] = properties_name
-        curr_obj_dict['properties_components'] = properties_components
-        curr_obj_dict['vtk_obj'] = vtk_obj
-        """Add to entity collection."""
-        self.parent.geol_coll.add_entity_from_dict(entity_dict=curr_obj_dict)
+
+        if name in self.parent.geol_coll.df['name'].values:
+            appender = vtkAppendPolyData()
+            uid = self.parent.geol_coll.get_name_uid(name)
+            old_vtk_obj = self.parent.geol_coll.get_uid_vtk_obj(uid)
+            appender.AddInputData(old_vtk_obj)
+            appender.AddInputData(vtk_obj)
+
+            appender.Update()
+
+            new_vtk_obj = Attitude()
+            new_vtk_obj.ShallowCopy(appender.GetOutput())
+
+            self.parent.geol_coll.replace_vtk(uid,new_vtk_obj,const_color=True)
+
+
+        else:
+            curr_obj_dict = deepcopy(GeologicalCollection.geological_entity_dict)
+            properties_name = vtk_obj.point_data_keys
+            properties_components = [vtk_obj.get_point_data_shape(i)[1] for i in properties_name]
+            curr_obj_dict['uid'] = str(uuid4())
+            curr_obj_dict['name'] = name
+            curr_obj_dict['scenario'] = name
+            curr_obj_dict['topological_type'] = "VertexSet"
+            curr_obj_dict['properties_names'] = properties_name
+            curr_obj_dict['properties_components'] = properties_components
+            curr_obj_dict['vtk_obj'] = vtk_obj
+            """Add to entity collection."""
+            self.parent.geol_coll.add_entity_from_dict(entity_dict=curr_obj_dict)
+
+def PCA(data, correlation = False, sort = True):
+    from numpy import mean as np_mean
+    from numpy import corrcoef as np_corrcoef
+    from numpy import cov as np_cov
+    from numpy import linalg as np_linalg
+    ''' PCA code taken from https://stackoverflow.com/a/38770513/19331382'''
+    """ Applies Principal Component Analysis to the data
+
+    Parameters
+    ----------
+    data: array
+        The array containing the data. The array must have NxM dimensions, where each
+        of the N rows represents a different individual record and each of the M columns
+        represents a different variable recorded for that individual record.
+            array([
+            [V11, ... , V1m],
+            ...,
+            [Vn1, ... , Vnm]])
+
+    correlation(Optional) : bool
+            Set the type of matrix to be computed (see Notes):
+                If True compute the correlation matrix.
+                If False(Default) compute the covariance matrix.
+
+    sort(Optional) : bool
+            Set the order that the eigenvalues/vectors will have
+                If True(Default) they will be sorted (from higher value to less).
+                If False they won't.
+    Returns
+    -------
+    eigenvalues: (1,M) array
+        The eigenvalues of the corresponding matrix.
+
+    eigenvector: (M,M) array
+        The eigenvectors of the corresponding matrix.
+
+    Notes
+    -----
+    The correlation matrix is a better choice when there are different magnitudes
+    representing the M variables. Use covariance matrix in other cases.
+
+    """
+
+    mean = np_mean(data, axis=0)
+
+    data_adjust = data - mean
+
+    #: the data is transposed due to np.cov/corrcoef syntax
+    if correlation:
+
+        matrix = np_corrcoef(data_adjust.T)
+
+    else:
+        matrix = np_cov(data_adjust.T)
+
+    eigenvalues, eigenvectors = np_linalg.eig(matrix)
+
+    if sort:
+        #: sort eigenvalues and eigenvectors
+        sort = eigenvalues.argsort()[::-1]
+        eigenvalues = eigenvalues[sort]
+        eigenvectors = eigenvectors[:,sort]
+
+    return eigenvalues, eigenvectors

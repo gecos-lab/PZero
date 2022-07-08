@@ -84,7 +84,7 @@ class GeologicalCollection(QAbstractTableModel):
 
     """Custom methods used to add or remove entities, query the dataframe, etc."""
 
-    def add_entity_from_dict(self, entity_dict=None):
+    def add_entity_from_dict(self, entity_dict=None,color=None):
         """Add entity to collection from dictionary."""
         """Create a new uid if it is not included in the dictionary."""
         if not entity_dict['uid']:
@@ -99,12 +99,16 @@ class GeologicalCollection(QAbstractTableModel):
         feature = entity_dict["geological_feature"]
         scenario = entity_dict["scenario"]
         if self.parent.geol_legend_df.loc[(self.parent.geol_legend_df['geological_type'] == geo_type) & (self.parent.geol_legend_df['geological_feature'] == feature) & (self.parent.geol_legend_df['scenario'] == scenario)].empty:
+            if color:
+                R,G,B = color
+            else:
+                R,G,B = np.round(np.random.random(3) * 255)
             self.parent.geol_legend_df = self.parent.geol_legend_df.append({'geological_type': geo_type,
                                                                             'geological_feature': feature,
                                                                             'scenario': scenario,
-                                                                            'color_R': round(np.random.random() * 255),
-                                                                            'color_G': round(np.random.random() * 255),
-                                                                            'color_B': round(np.random.random() * 255),
+                                                                            'color_R': R,
+                                                                            'color_G': G,
+                                                                            'color_B': B,
                                                                             'line_thick': 2.0,
                                                                             'geological_time': 0.0,
                                                                             'geological_sequence': "strati_0"},
@@ -188,12 +192,19 @@ class GeologicalCollection(QAbstractTableModel):
         out_uid = self.add_entity_from_dict(self, entity_dict=entity_dict)
         return out_uid
 
-    def replace_vtk(self, uid=None, vtk_object=None):
+    def replace_vtk(self, uid=None, vtk_object=None,const_color=False):
         if isinstance(vtk_object, type(self.df.loc[self.df['uid'] == uid, 'vtk_obj'].values[0])):
             new_dict = deepcopy(self.df.loc[self.df['uid'] == uid, self.df.columns != 'vtk_obj'].to_dict('records')[0])
             new_dict['vtk_obj'] = vtk_object
+            if const_color:
+                R = self.get_uid_legend(uid=uid)['color_R']
+                G = self.get_uid_legend(uid=uid)['color_G']
+                B = self.get_uid_legend(uid=uid)['color_B']
+                color = [R,G,B]
+            else:
+                color=None
             self.remove_entity(uid)
-            self.add_entity_from_dict(entity_dict=new_dict)
+            self.add_entity_from_dict(entity_dict=new_dict,color=color)
         else:
             print("ERROR - replace_vtk with vtk of a different type.")
 
@@ -295,6 +306,9 @@ class GeologicalCollection(QAbstractTableModel):
     def set_uid_name(self, uid=None, name=None):
         """Set value(s) stored in dataframe (as pointer) from uid."""
         self.df.loc[self.df['uid'] == uid, 'name'] = name
+
+    def get_name_uid(self,name=None):
+        return self.df.loc[self.df['name'] == name, 'uid'].values[0]
 
     def get_uid_topological_type(self, uid=None):
         """Get value(s) stored in dataframe (as pointer) from uid."""

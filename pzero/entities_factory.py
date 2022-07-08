@@ -528,10 +528,10 @@ class VertexSet(PolyData):
         self.Modified()
 
 
-class Giacitura(VertexSet):
+class Attitude(VertexSet):
     ''' Class for giaciture measurements'''
     def __init__(self, *args, **kwargs):
-        super(Giacitura, self).__init__(*args, **kwargs)
+        super(Attitude, self).__init__(*args, **kwargs)
 class PolyLine(PolyData):  # _____________________________ HERE WE MUST DECIDE WHETHER TO USE LINE (TYPE = 3) OR POLYLINE (TYPE = 4) CELLS - NOT BOTH - POLYLINE COULD BE USEFUL FOR MULTI-PART
     """PolyLine is a polyline derived from BaseEntity and vtkPolyData"""
     def __init__(self, *args, **kwargs):
