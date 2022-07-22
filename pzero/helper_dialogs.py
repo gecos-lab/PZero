@@ -6,6 +6,7 @@ from PyQt5.QtWidgets import QMessageBox, QInputDialog, QLineEdit, QPushButton, Q
 from PyQt5.QtGui import QColor
 from PyQt5.QtCore import QEventLoop, Qt, QAbstractTableModel
 from .import_window_ui import Ui_ImportOptionsWindow
+from .navigator_window import Ui_NavWindow
 # from .assign_ui import Ui_AssignWindow
 # from .helper_functions import profiler
 # from .entities_factory import PolyData
@@ -818,3 +819,49 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
     def close_ui(self):
         self.close()
         self.loop.quit()
+
+
+class NavigatorWidget(QMainWindow,Ui_NavWindow):
+
+    def __init__(self, parent=None,val_list=None,start_idx=None,*args, **kwargs):
+
+        self.loop = QEventLoop()  # Create a QEventLoop necessary to stop the main loop
+        super(NavigatorWidget, self).__init__(parent, *args, **kwargs)
+        self.setupUi(self)
+
+        self.parent = parent
+        self.idx = start_idx
+        self.value_list = val_list
+        curr_obj = self.value_list[self.idx]
+
+        self.ForwardButton.clicked.connect(self.forward)
+        self.BackButton.clicked.connect(self.back)
+        self.SectionLabel.setText(curr_obj)
+        self.setWindowTitle("Section navigator")
+        self.show_qt_canvas()
+
+    def show_qt_canvas(self):
+        """Show the Qt Window"""
+        self.show()
+        self.loop.exec_()  # Execute the QEventLoop
+
+    def forward(self):
+        self.idx +=1
+        print(self.idx)
+        if self.idx > len(self.value_list)-1:
+            self.idx = 0
+
+        curr_obj = self.value_list[self.idx]
+        self.SectionLabel.setText(curr_obj)
+        return curr_obj
+
+    def back(self):
+        self.idx -=1
+        print(self.idx)
+        if self.idx < 0:
+            self.idx = len(self.value_list)-1
+
+
+        curr_obj = self.value_list[self.idx]
+        self.SectionLabel.setText(curr_obj)
+        return curr_obj

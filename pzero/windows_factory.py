@@ -9,7 +9,7 @@ from PyQt5.QtGui import QCloseEvent
 """PZero imports"""
 from .base_view_window_ui import Ui_BaseViewWindow
 from .entities_factory import VertexSet, PolyLine, TriSurf, TetraSolid, XsVertexSet, XsPolyLine, DEM, PCDom, MapImage, Voxet, XsVoxet, Plane, Seismics, XsTriSurf, XsImage, PolyData, Wells, WellMarker,Attitude
-from .helper_dialogs import input_one_value_dialog, input_text_dialog, input_combo_dialog, message_dialog, options_dialog, multiple_input_dialog, tic, toc,open_file_dialog
+from .helper_dialogs import input_one_value_dialog, input_text_dialog, input_combo_dialog, message_dialog, options_dialog, multiple_input_dialog, tic, toc,open_file_dialog,NavigatorWidget
 # from .geological_collection import GeologicalCollection
 # from copy import deepcopy
 from .helper_functions import mesh_keys
@@ -3270,8 +3270,9 @@ class ViewXsection(View2D):
 
     '''[Gabriele]  [TODO] xsection update only objects that are projected on the section.'''
 
-    def __init__(self, parent=None, *args, **kwargs):
+    def __init__(self, parent=None,*args, **kwargs):
         """Set the Xsection"""
+
         if parent.xsect_coll.get_names():
             self.this_x_section_name = input_combo_dialog(parent=None, title="Xsection", label="Choose Xsection", choice_list=parent.xsect_coll.get_names())
         else:
@@ -3301,6 +3302,9 @@ class ViewXsection(View2D):
         self.create_dom_list(sec_uid=self.this_x_section_uid)
         self.create_image_list(sec_uid=self.this_x_section_uid)
 
+
+
+
     """Implementation of functions specific to 2D views"""
 
     def initialize_menu_tools(self):
@@ -3308,6 +3312,9 @@ class ViewXsection(View2D):
         super().initialize_menu_tools()
         """Tools specific to Xsection view"""
         """NONE AT THE MOMENT"""
+        self.secNavigator = QAction("Section navigator", self)
+        self.secNavigator.triggered.connect(self.navigator)
+        self.menuWindow.addAction(self.secNavigator)
 
     def show_actor_with_property(self, uid=None, collection=None, show_property=None, visible=None):
         """Show actor with scalar property (default None)
@@ -3538,6 +3545,10 @@ class ViewXsection(View2D):
     """Implementation of functions specific to this view (e.g. particular editing or visualization functions)"""
 
     """NONE AT THE MOMENT"""
+    def navigator(self):
+        sec_list = self.parent.xsect_coll.get_names()
+        idx = sec_list.index(self.this_x_section_name)
+        NavigatorWidget(self,sec_list,idx)
 
 
 class ViewStereoplot(BaseView):
