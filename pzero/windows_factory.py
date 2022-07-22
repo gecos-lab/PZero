@@ -2216,13 +2216,12 @@ class View3D(BaseView):
 
         sel_points  = mesh.select_enclosed_points(sphere,check_surface=False)
         points = mesh.points[np.where(sel_points['SelectedPoints'] == 1 )]
+        plane_c ,plane_n = best_fitting_plane(points)
+        #sel_p = PolyData(points)
 
-        plane_c,plane_n = best_fitting_plane(points)
-        sel_p = PolyData(points)
-
-        range = sel_p.points[:,0].max() - sel_p.points[:,0].min()
-        surf = sel_p.reconstruct_surface()
-        norm_mean = np.mean(surf.point_normals,axis=0)
+        # range = sel_p.points[:,0].max() - sel_p.points[:,0].min()
+        # surf = sel_p.reconstruct_surface()
+        # norm_mean = np.mean(surf.point_normals,axis=0)
         # std = np.std(surf.cell_normals,axis=0)
         # print(std)
         # if norm_mean[2]<0:
@@ -2230,11 +2229,11 @@ class View3D(BaseView):
 
 
         temp_point = PolyData(plane_c)
-        temp_point['Normals'] = [plane_n]
-        temp_plane = pvPlane(center=plane_c,direction = plane_n, i_size=dim,j_size=dim,i_resolution=1,j_resolution=1)
+        #temp_point['Normals'] = [plane_n]
+        # temp_plane = pvPlane(center=plane_c,direction = plane_n, i_size=dim,j_size=dim,i_resolution=1,j_resolution=1)
 
-        nx,ny,nz = temp_point["Normals"][0]
-        dip = np.arccos(np.abs(nz))
+        nx,ny,nz = plane_n
+        dip = np.arccos(nz)
         dir = angle_wrapper(np.arctan2(nx, ny)-np.deg2rad(90))
         temp_point['dip'] = [np.rad2deg(dip)]
         temp_point['dir'] = [np.rad2deg(dir)]

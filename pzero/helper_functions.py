@@ -117,7 +117,7 @@ def PCA(data, correlation = False, sort = True):
     ----------
     data: array
         The array containing the data. The array must have NxM dimensions, where each
-        of the N rows represents a different individual record and each of the M columns
+        of the N rows represents a different individual record (point) and each of the M columns (xyz)
         represents a different variable recorded for that individual record.
             array([
             [V11, ... , V1m],
@@ -136,10 +136,10 @@ def PCA(data, correlation = False, sort = True):
     Returns
     -------
     eigenvalues: (1,M) array
-        The eigenvalues of the corresponding matrix.
+    The eigenvalues of the corresponding matrix. -> max sum of the square distances
 
     eigenvector: (M,M) array
-        The eigenvectors of the corresponding matrix.
+        The eigenvectors of the corresponding matrix.-> vector for the given PC axis
 
     Notes
     -----
@@ -150,7 +150,7 @@ def PCA(data, correlation = False, sort = True):
 
     mean = np_mean(data, axis=0)
 
-    data_adjust = data - mean
+    data_adjust = data - mean # center the points to the mean
 
     #: the data is transposed due to np.cov/corrcoef syntax
     if correlation:
