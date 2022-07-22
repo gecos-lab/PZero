@@ -17,7 +17,7 @@ def vtk2dxf(self=None, out_dir_name=None):
     list_names = []
     for uid in self.geol_coll.df['uid']:
         if isinstance(self.geol_coll.get_uid_vtk_obj(uid), TriSurf):
-
+            print(uid)
             legend = self.geol_coll.get_uid_legend(uid=uid)
             R = legend['color_R']
             G = legend['color_G']
@@ -30,7 +30,7 @@ def vtk2dxf(self=None, out_dir_name=None):
                 # print(part)
                 df = pd.DataFrame()
                 dfb = pd.DataFrame()
-                vtk_entity = part
+                vtk_entity = part.retopo()
                 # test_pc = pv.PolyData()
                 #
                 # test_pc.ShallowCopy(vtk_entity)
@@ -59,7 +59,10 @@ def vtk2dxf(self=None, out_dir_name=None):
                 """3D faces"""
                 for c in range(vtk_entity.GetNumberOfCells()):
                     face_points = numpy_support.vtk_to_numpy(vtk_entity.GetCell(c).GetPoints().GetData())
-                    dxf_model.add_3dface(face_points, dxfattribs={'layer': layer,'color': 256})
+                    if len(face_points) <3:
+                        print(f'problem with cell {c} in {layer}, skipping cell')
+                    else:
+                        dxf_model.add_3dface(face_points, dxfattribs={'layer': layer,'color': 256})
 
                 """border -> https://lorensen.github.io/VTKExamples/site/Python/Meshes/BoundaryEdges/"""
                 vtk_border = vtk_entity.get_clean_boundary()

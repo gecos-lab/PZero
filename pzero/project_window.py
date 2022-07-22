@@ -1307,6 +1307,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.boundary_coll.df[out_cols].to_csv(out_dir_name + '/boundary_table.csv', encoding='utf-8', index=False)
         self.boundary_coll.df[out_cols].to_json(out_dir_name + '/boundary_table.json', orient='index')
         print("All files saved.")
+
     def export_vtk(self):
         '''[Gabriele] Function used to export selected objects as vtk files'''
         if not self.selected_uids:
@@ -1317,7 +1318,12 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             # print(self.out_file_name)
             for uid in self.selected_uids:
                 print(f'exporting {uid}')
+                border = self.geol_coll.get_uid_vtk_obj(uid).get_clean_boundary()
                 pd_writer = vtk.vtkXMLPolyDataWriter()
                 pd_writer.SetFileName(f'{self.out_dir_name}/{uid}.vtp')
                 pd_writer.SetInputData(self.geol_coll.get_uid_vtk_obj(uid))
+                pd_writer.Write()
+                pd_writer = vtk.vtkXMLPolyDataWriter()
+                pd_writer.SetFileName(f'{self.out_dir_name}/{uid}_border.vtp')
+                pd_writer.SetInputData(border)
                 pd_writer.Write()

@@ -1,7 +1,7 @@
 """entities_factory.py
 PZero© Andrea Bistacchi"""
 
-from vtk import vtkPolyData, vtkPoints, vtkCellCenters, vtkIdFilter, vtkCleanPolyData, vtkPolyDataNormals, vtkPlane, vtkCellArray, vtkLine, vtkIdList, vtkTriangleFilter, vtkTriangle, vtkFeatureEdges, vtkCleanPolyData, vtkStripper, vtkPolygon, vtkUnstructuredGrid, vtkTetra, vtkImageData, vtkStructuredGrid, vtkPolyDataConnectivityFilter, vtkCylinderSource,vtkThreshold,vtkDataObject,vtkThresholdPoints,vtkDelaunay2D,vtkPolyDataMapper
+from vtk import vtkPolyData, vtkPoints, vtkCellCenters, vtkIdFilter, vtkCleanPolyData, vtkPolyDataNormals, vtkPlane, vtkCellArray, vtkLine, vtkIdList, vtkTriangleFilter, vtkTriangle, vtkFeatureEdges, vtkCleanPolyData, vtkStripper, vtkPolygon, vtkUnstructuredGrid, vtkTetra, vtkImageData, vtkStructuredGrid, vtkPolyDataConnectivityFilter, vtkCylinderSource,vtkThreshold,vtkDataObject,vtkThresholdPoints,vtkDelaunay2D,vtkPolyDataMapper,vtkQuadricDecimation,vtkSmoothPolyDataFilter,vtkLinearSubdivisionFilter
 from vtk.util.numpy_support import vtk_to_numpy
 from vtk.numpy_interface.dataset_adapter import WrapDataObject, vtkDataArrayToVTKArray
 from pyvista import PolyData as pv_PolyData
@@ -800,6 +800,45 @@ class TriSurf(PolyData):
             trisurf_copy.points_Z[point_idx] = trisurf_copy.points_Z[point_idx] + row[3]
         trisurf_copy.Modified()
         return trisurf_copy
+
+    def retopo(self):
+        '''[Gabriele] Function used to retopologize a given surface. This is useful in the case of
+        semplifying irregular triangulated meshes for CAD exporting or aesthetic reasons.
+        The function is a combonation of two filters:
+
+        - vtkQuadraticDecimation
+        - vtkSmoothPolyDataFilter
+
+        For now the parameters (eg. SetTargetReduction, RelaxationFactor etc etc) are fixed but
+        in the future it would be nicer to have an adaptive method (maybe using vtkMeshQuality?)
+        '''
+
+
+
+        dec = vtkQuadricDecimation()
+        dec.SetInputData(self)
+        # tr.SetSourceData(bord)
+        dec.SetTargetReduction(0.2)
+        dec.VolumePreservationOn()
+        dec.Update()
+
+        smooth = vtkSmoothPolyDataFilter()
+        smooth.SetInputConnection(dec.GetOutputPort())
+
+        # smooth.SetInputData(surf)
+        smooth.SetNumberOfIterations(40)
+        smooth.SetRelaxationFactor(0.1)
+        smooth.BoundarySmoothingOn()
+        smooth.FeatureEdgeSmoothingOn()
+        smooth.Update()
+
+        clean = vtkCleanPolyData()
+        clean.SetInputConnection(smooth.GetOutputPort())
+        clean.Update()
+
+        self.ShallowCopy(clean.GetOutput())
+        return self
+
 
 class XSectionBaseEntity:
     """This abstract class is used just to implement the method to calculate the W coordinate for all geometrical/topological entities belonging to a XSection.
