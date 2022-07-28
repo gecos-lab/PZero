@@ -7,6 +7,7 @@ from PyQt5.QtGui import QColor
 from PyQt5.QtCore import QEventLoop, Qt, QAbstractTableModel
 from .import_window_ui import Ui_ImportOptionsWindow
 from .navigator_window import Ui_NavWindow
+from .preview_window_ui import Ui_PreviewWindow
 # from .assign_ui import Ui_AssignWindow
 # from .helper_functions import profiler
 # from .entities_factory import PolyData
@@ -19,6 +20,12 @@ from numpy import c_ as np_c_
 # from .pc2vtk import pc2vtk
 from difflib import SequenceMatcher
 from .helper_functions import auto_sep
+
+
+from vtk import vtkCameraOrientationWidget
+from pyvista import global_theme as pv_global_theme
+from pyvista import examples
+from pyvistaqt import QtInteractor as pvQtInteractor
 
 def options_dialog(title=None, message=None, yes_role=None, no_role=None, reject_role=None):
     """Generic message box with title, message, and three buttons.
@@ -101,7 +108,7 @@ def message_dialog(title=None, message=None):
     return
 
 
-def multiple_input_dialog(title="title", input_dict=None):
+def multiple_input_dialog(title="title", input_dict=None,return_widget=False):
     """Generic widget for input of several variables. It takes as input:
     1) title of the widget
     2) a dictionary of the form -->
@@ -129,14 +136,14 @@ def multiple_input_dialog(title="title", input_dict=None):
         gridLayout.addWidget(objects_qt[key][0], i + 1, 1)
         """Create QLineEdits and QComboBoxes."""
         if isinstance(input_dict[key][1], list):
-            objects_qt[key][1] = QComboBox(widget)
+            objects_qt[key][1] = QComboBox(widget,objectName=f'par_{key}')
             objects_qt[key][1].addItems(input_dict[key][1])
             objects_qt[key][1].setEditable(True)
         elif isinstance(input_dict[key][1], int):
-            objects_qt[key][1] = QLineEdit(widget)
+            objects_qt[key][1] = QLineEdit(widget,objectName=f'par_{key}')
             objects_qt[key][1].setText(str(input_dict[key][1]))
         elif isinstance(input_dict[key][1], float):
-            objects_qt[key][1] = QLineEdit(widget)
+            objects_qt[key][1] = QLineEdit(widget,objectName=f'par_{key}')
             objects_qt[key][1].setText(str(input_dict[key][1]))
         # elif isinstance(input_dict[key][1], int):
         #     objects_qt[key][1] = QSpinBox(widget)
@@ -153,18 +160,22 @@ def multiple_input_dialog(title="title", input_dict=None):
             objects_qt[key][1].setText(input_dict[key][1])
         gridLayout.addWidget(objects_qt[key][1], i + 1, 2)
         i += 1
-    """Create OK Button, add it to the grid layout an set name and state."""
-    button_ok = QPushButton(widget)
-    gridLayout.addWidget(button_ok, i + 2, 1)
-    button_ok.setAutoDefault(True)
-    button_ok.setText("OK")
-    """Cancel Button, add it to the grid layout an set name and state."""
-    button_cancel = QPushButton(widget)
-    gridLayout.addWidget(button_cancel, i + 2, 2)
-    button_cancel.setAutoDefault(True)
-    button_cancel.setText("Cancel")
-    """Show the widget."""
-    widget.show()
+
+    if not return_widget:
+        """Create OK Button, add it to the grid layout an set name and state."""
+        button_ok = QPushButton(widget)
+        gridLayout.addWidget(button_ok, i + 2, 1)
+        button_ok.setAutoDefault(True)
+        button_ok.setText("OK")
+        """Cancel Button, add it to the grid layout an set name and state."""
+        button_cancel = QPushButton(widget)
+        gridLayout.addWidget(button_cancel, i + 2, 2)
+        button_cancel.setAutoDefault(True)
+        button_cancel.setText("Cancel")
+        """Show the widget."""
+        widget.show()
+    else:
+        return widget
 
     def cancel_option():
         """Clear the objects_qt dictionary if Cancel button is clicked"""
@@ -865,3 +876,112 @@ class NavigatorWidget(QMainWindow,Ui_NavWindow):
         curr_obj = self.value_list[self.idx]
         self.SectionLabel.setText(curr_obj)
         return curr_obj
+
+
+class PreviewWidget(QMainWindow,Ui_PreviewWindow):
+
+    def __init__(self, parent=None,titles=None,mesh=None,opt_widget=None,method=None,function=None,*args, **kwargs):
+
+        self.loop = QEventLoop()  # Create a QEventLoop necessary to stop the main loop
+        super(PreviewWidget, self).__init__(parent, *args, **kwargs)
+        self.setupUi(self)
+
+        self.parent = parent
+        self.previewButton.clicked.connect(self.plot)
+        self.ConfirmButtonBox.rejected.connect(self.close)
+        self.ConfirmButtonBox.accepted.connect(self.apply)
+        self.method = method
+        self.function = function
+        self.parameters = []
+        if (titles, opt_widget):
+            self.title1 = titles[0]
+            self.title2 = titles[1]
+            self.OptionsLayout.addWidget(opt_widget)
+            for child in opt_widget.children():
+                if child.objectName():
+                    self.parameters.append(child)
+            self.initialize_interactor()
+        else:
+            return
+
+
+        # input_dict = {'dec_int': ['Decimation intensity: ', 0], 'n_iter': ['Number of iterations: ', 40], 'rel_fac': ['Relaxation factor: ', 0.1]}
+        # test = multiple_input_dialog(title='Retopologize surface', input_dict=input_dict,return_widget=True)
+        # self.OptionsLayout.addWidget(test)
+
+
+
+        self.show_qt_canvas()
+
+
+
+
+
+
+    def show_qt_canvas(self):
+        """Show the Qt Window"""
+        self.show()
+        self.loop.exec_()  # Execute the QEventLoop
+
+    def closeEvent(self, event):
+        self.preview_plotter.close()  # needed to cleanly close the vtk plotter
+        event.accept()
+
+
+    def initialize_interactor(self):
+        """Add the pyvista interactor object to self.ViewFrameLayout ->
+        the layout of an empty frame generated with Qt Designer"""
+        self.preview_plotter = pvQtInteractor(self.PreviewVerticalFrame,shape=(1,2))
+        self.preview_plotter.set_background('black')  # background color - could be made interactive in the future
+        self.PreviewLayout.addWidget(self.preview_plotter.interactor)
+        uid = self.parent.selected_uids[0]
+        self.mesh = self.parent.geol_coll.get_uid_vtk_obj(uid)
+
+
+        self.preview_plotter.subplot(0, 0)
+        self.preview_plotter.add_text("Original mesh", font_size=10)
+        self.preview_plotter.add_mesh(self.mesh, style='wireframe', color='y')
+        self.preview_plotter.subplot(0, 1)
+        self.preview_plotter.add_text("Retopologized mesh", font_size=10)
+        # self.preview_plotter.add_mesh(self.decimated, style='wireframe', color='y')
+
+        self.preview_plotter.link_views()
+        # self.preview_plotter.show_axes_all()
+
+    def plot(self):
+        parameters = []
+
+        for par in self.parameters:
+            if isinstance(par,QLineEdit):
+                parameters.append(par.text())
+            elif isinstance(par,QComboBox):
+                parameters.append(par.currentText())
+            elif isinstance(par,QCheckBox):
+                parameters.append(par.checkState())
+
+
+
+        mod_mesh = self.function(self.parent,1,*parameters)
+        self.preview_plotter.clear()
+        self.preview_plotter.subplot(0, 0)
+        self.preview_plotter.add_text("Original mesh", font_size=10)
+        self.preview_plotter.add_mesh(self.mesh, style='wireframe', color='y')
+        self.preview_plotter.subplot(0, 1)
+        self.preview_plotter.add_text("Retopologized mesh", font_size=10)
+        self.preview_plotter.add_mesh(mod_mesh, style='wireframe', color='y')
+
+    def apply(self):
+        parameters = []
+
+        for par in self.parameters:
+            if isinstance(par,QLineEdit):
+                parameters.append(par.text())
+            elif isinstance(par,QComboBox):
+                parameters.append(par.currentText())
+            elif isinstance(par,QCheckBox):
+                parameters.append(par.checkState())
+
+
+
+        mod_mesh = self.function(self.parent,0,*parameters)
+        self.close()

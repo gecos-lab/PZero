@@ -801,43 +801,7 @@ class TriSurf(PolyData):
         trisurf_copy.Modified()
         return trisurf_copy
 
-    def retopo(self):
-        '''[Gabriele] Function used to retopologize a given surface. This is useful in the case of
-        semplifying irregular triangulated meshes for CAD exporting or aesthetic reasons.
-        The function is a combonation of two filters:
-
-        - vtkQuadraticDecimation
-        - vtkSmoothPolyDataFilter
-
-        For now the parameters (eg. SetTargetReduction, RelaxationFactor etc etc) are fixed but
-        in the future it would be nicer to have an adaptive method (maybe using vtkMeshQuality?)
-        '''
-
-
-
-        dec = vtkQuadricDecimation()
-        dec.SetInputData(self)
-        # tr.SetSourceData(bord)
-        dec.SetTargetReduction(0.2)
-        dec.VolumePreservationOn()
-        dec.Update()
-
-        smooth = vtkSmoothPolyDataFilter()
-        smooth.SetInputConnection(dec.GetOutputPort())
-
-        # smooth.SetInputData(surf)
-        smooth.SetNumberOfIterations(40)
-        smooth.SetRelaxationFactor(0.1)
-        smooth.BoundarySmoothingOn()
-        smooth.FeatureEdgeSmoothingOn()
-        smooth.Update()
-
-        clean = vtkCleanPolyData()
-        clean.SetInputConnection(smooth.GetOutputPort())
-        clean.Update()
-
-        self.ShallowCopy(clean.GetOutput())
-        return self
+    
 
 
 class XSectionBaseEntity:

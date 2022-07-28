@@ -2064,6 +2064,7 @@ class View3D(BaseView):
     def initialize_interactor(self):
         """Add the pyvista interactor object to self.ViewFrameLayout ->
         the layout of an empty frame generated with Qt Designer"""
+        print(self.ViewFrame)
         self.plotter = pvQtInteractor(self.ViewFrame)
         self.plotter.set_background('black')  # background color - could be made interactive in the future
         self.ViewFrameLayout.addWidget(self.plotter.interactor)

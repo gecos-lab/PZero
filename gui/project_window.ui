@@ -6,7 +6,7 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>2673</width>
+    <width>1418</width>
     <height>800</height>
    </rect>
   </property>
@@ -467,7 +467,7 @@
     <rect>
      <x>0</x>
      <y>0</y>
-     <width>2673</width>
+     <width>1418</width>
      <height>30</height>
     </rect>
    </property>
@@ -585,6 +585,7 @@
     <addaction name="actionSubdivisionResampling"/>
     <addaction name="actionDecimationPro"/>
     <addaction name="actionDecimationQuadric"/>
+    <addaction name="actionRetopologize"/>
     <addaction name="separator"/>
     <addaction name="actionExtrusion"/>
     <addaction name="actionIntersectionXSection"/>
@@ -764,6 +765,7 @@
    <addaction name="actionSubdivisionResampling"/>
    <addaction name="actionDecimationPro"/>
    <addaction name="actionDecimationQuadric"/>
+   <addaction name="actionRetopologize"/>
    <addaction name="separator"/>
    <addaction name="actionExtrusion"/>
    <addaction name="actionIntersectionXSection"/>
@@ -1083,6 +1085,11 @@
   <action name="actionSplitSurf">
    <property name="text">
     <string>Split surfaces</string>
+   </property>
+  </action>
+  <action name="actionRetopologize">
+   <property name="text">
+    <string>Retopologize</string>
    </property>
   </action>
  </widget>

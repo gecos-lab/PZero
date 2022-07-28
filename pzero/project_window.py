@@ -34,12 +34,12 @@ from .windows_factory import View3D
 from .windows_factory import ViewMap
 from .windows_factory import ViewXsection
 from .windows_factory import ViewStereoplot
-from .helper_dialogs import options_dialog, save_file_dialog, open_file_dialog, input_combo_dialog, message_dialog, multiple_input_dialog, input_one_value_dialog, input_text_dialog, progress_dialog, import_dialog,general_input_dialog
+from .helper_dialogs import options_dialog, save_file_dialog, open_file_dialog, input_combo_dialog, message_dialog, multiple_input_dialog, input_one_value_dialog, input_text_dialog, progress_dialog, import_dialog,general_input_dialog,PreviewWidget
 from .image2vtk import geo_image2vtk, xs_image2vtk
 from .stl2vtk import vtk2stl, vtk2stl_dilation
 from .obj2vtk import vtk2obj
 from .ply2vtk import vtk2ply
-from .three_d_surfaces import interpolation_delaunay_2d, poisson_interpolation, implicit_model_loop_structural, surface_smoothing, linear_extrusion, decimation_pro_resampling, decimation_quadric_resampling, subdivision_resampling, intersection_xs, project_2_dem, project_2_xs, split_surf
+from .three_d_surfaces import interpolation_delaunay_2d, poisson_interpolation, implicit_model_loop_structural, surface_smoothing, linear_extrusion, decimation_pro_resampling, decimation_quadric_resampling, subdivision_resampling, intersection_xs, project_2_dem, project_2_xs, split_surf,retopo
 from .orientation_analysis import set_normals
 
 from uuid import uuid4
@@ -177,6 +177,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.actionIntersectionXSection.triggered.connect(lambda: intersection_xs(self))
         self.actionProject2XSection.triggered.connect(lambda: project_2_xs(self))
         self.actionSplitSurf.triggered.connect(lambda: split_surf(self))
+        self.actionRetopologize.triggered.connect(self.retopologize_surface)
 
         """View actions -> slots"""
         self.actionView3D.triggered.connect(lambda: View3D(parent=self))
@@ -513,10 +514,43 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
     def lineations_calculate(self):  # ____________________________________________________ IMPLEMENT THIS FOR POINTS WITH PLUNGE/TREND AND FOR POLYLINES
         """Calculate lineations on geological entities."""
         pass
+
     def subd_res_dialog(self):
         dict = {'type':['Subdivision type:',['linear','butterfly','loop']],'n_subd':['Number of iterations',2]}
-        subd_input = multiple_input_dialog('Subdivision dialog',dict)
-        subdivision_resampling(self,type=subd_input['type'],n_subd=subd_input['n_subd'])
+        subd_input = multiple_input_dialog('Subdivision dialog',dict,return_widget=True)
+
+        sel_uids = self.selected_uids
+        if len(sel_uids) > 1:
+            print('Multiple surfaces selected, only one will be previewed')
+        elif len(sel_uids) == 0:
+            print('No selected objects')
+
+        for uid in sel_uids:
+            mesh = self.geol_coll.get_uid_vtk_obj(uid)
+
+        PreviewWidget(parent=self,titles = ['Original mesh','Retopologized mesh'],
+                             mesh=mesh, opt_widget=subd_input,function=subdivision_resampling)
+        # subdivision_resampling(self,type=subd_input['type'],n_subd=subd_input['n_subd'])
+
+    def retopologize_surface(self):
+
+        input_dict = {'dec_int': ['Decimation intensity: ', 0], 'n_iter': ['Number of iterations: ', 40], 'rel_fac': ['Relaxation factor: ', 0.1]}
+        retop_par_widg = multiple_input_dialog(title='Retopologize surface', input_dict=input_dict,return_widget=True)
+
+        sel_uids = self.selected_uids
+        if len(sel_uids) > 1:
+            print('Multiple surfaces selected, only one will be previewed')
+        elif len(sel_uids) == 0:
+            print('No selected objects')
+
+        for uid in sel_uids:
+            mesh = self.geol_coll.get_uid_vtk_obj(uid)
+
+
+        PreviewWidget(parent=self,titles = ['Original mesh','Retopologized mesh'],
+                      opt_widget=retop_par_widg,function=retopo)
+
+
 
     def connected_parts(self):
         """Calculate connectivity of PolyLine and TriSurf entities."""
