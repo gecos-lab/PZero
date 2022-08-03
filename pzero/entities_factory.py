@@ -413,13 +413,6 @@ class PolyData(vtkPolyData):
         for col in range(np_size(point_data_array)):
             WrapDataObject(self).PointData[data_key][point_id, col] = point_data_array[col]
 
-    def set_tag(self,tag_name):
-        keys = self.point_data_keys
-        for key in keys:
-            if 'tag_' in key:
-                self.remove_point_data(key)
-        self.init_point_data(f'tag_{tag_name}',1)
-
     def list_cell_data(self):  # _______________________ TO BE IMPLEMENTED IF WE WANT TO WORK WITH CELL DATA
         """Lists cell attribute names"""
         pass
@@ -801,7 +794,7 @@ class TriSurf(PolyData):
         trisurf_copy.Modified()
         return trisurf_copy
 
-    
+
 
 
 class XSectionBaseEntity:

@@ -834,6 +834,12 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
 
 class NavigatorWidget(QMainWindow,Ui_NavWindow):
 
+    ''' Navigator widget prototype for Xsections. This widget can be used to
+    change the different Xsections without opening a new window.
+
+    FOR NOW IS INACTIVE. 
+    '''
+
     def __init__(self, parent=None,val_list=None,start_idx=None,*args, **kwargs):
 
         self.loop = QEventLoop()  # Create a QEventLoop necessary to stop the main loop
@@ -880,7 +886,19 @@ class NavigatorWidget(QMainWindow,Ui_NavWindow):
 
 class PreviewWidget(QMainWindow,Ui_PreviewWindow):
 
-    def __init__(self, parent=None,titles=None,mesh=None,opt_widget=None,method=None,function=None,*args, **kwargs):
+    ''' Widget used to attach a pyvista plotter instance to a dialog (such as
+    general input dialog). This can be useful to view the final object before
+    applying the given function (e.g. resample, simplify ...).
+
+    This widget takes:
+    - parent
+    - titles: Titles for the two views
+    - mesh: the initial mesh
+    - opt_widget: the widget resulting from the dialog (return_widget option see multiple_input_dialog)
+    - function: function to apply to the mesh
+    '''
+
+    def __init__(self, parent=None,titles=None,mesh=None,opt_widget=None,function=None,*args, **kwargs):
 
         self.loop = QEventLoop()  # Create a QEventLoop necessary to stop the main loop
         super(PreviewWidget, self).__init__(parent, *args, **kwargs)
@@ -890,7 +908,6 @@ class PreviewWidget(QMainWindow,Ui_PreviewWindow):
         self.previewButton.clicked.connect(self.plot)
         self.ConfirmButtonBox.rejected.connect(self.close)
         self.ConfirmButtonBox.accepted.connect(self.apply)
-        self.method = method
         self.function = function
         self.parameters = []
         if (titles, opt_widget):
@@ -904,18 +921,7 @@ class PreviewWidget(QMainWindow,Ui_PreviewWindow):
         else:
             return
 
-
-        # input_dict = {'dec_int': ['Decimation intensity: ', 0], 'n_iter': ['Number of iterations: ', 40], 'rel_fac': ['Relaxation factor: ', 0.1]}
-        # test = multiple_input_dialog(title='Retopologize surface', input_dict=input_dict,return_widget=True)
-        # self.OptionsLayout.addWidget(test)
-
-
-
         self.show_qt_canvas()
-
-
-
-
 
 
     def show_qt_canvas(self):

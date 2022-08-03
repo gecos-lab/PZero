@@ -2075,33 +2075,29 @@ class View3D(BaseView):
         """Set default orientation horizontal because vertical colorbars interfere with the widget."""
         pv_global_theme.colorbar_orientation = 'horizontal'
 
-        # [Gabriele] Add picking functionality (this should be put in a menu to enable or disable)
+        # [Gabriele] Add picking functionality (this should be togglable)
 
         self.plotter.enable_mesh_picking(callback=self.pkd_mesh, show=True,show_message=False,style='wireframe',color='yellow')
 
 
     def pkd_mesh(self,mesh):
 
-        uid = list(filter(lambda x: ('tag_' in x),mesh_keys(mesh)))[0].split('_')[1]
-        print(uid)
-        # rend_act = self.plotter.renderer.actors
-        # print(self.actors_df)
-        # print(rend_act)
-        # # print(position,bounds)
-        print('-----------------------------------')
+        ''' Very basic function to pick a mesh and select the corresponding item
+            in the legend. The item is selected by comparing the selected mesh center and boundary
+            with all of the centers and boundaries of the available object.
 
-        print(self.actors_df['uid'].values)
-        idx = self.actors_df.loc[self.actors_df['uid'] == uid].index[0]
-        self.parent.GeologyTableView.selectRow(idx)
-        #     # print(f'actor {i} bounds: {actor.GetBounds()}')
-        #     # print(f'actor {i} center: {actor.GetCenter()}')
-        #     if position == list(actor.GetCenter()) and bounds == actor.GetBounds():
-        #
-        #         # print(list(act0x5641e8c05db0or.GetCenter()),actor.GetBounds())
-        #
-        #         idx = self.actors_df.loc[self.actors_df['actor'] == actor, 'uid'].index[0]
-        #         # print(idx)
-        #
+            THIS IS NOT OPTIMAL FOR LARGE PROJECTS. It could be usefull to calculate
+            the parameters at startup (when loading the objects) or when creating new
+            objects and save them in a specific file/list.'''
+
+        for uid in self.actors_df['uid']:
+
+            vtk_obj = self.parent.geol_coll.get_uid_vtk_obj(uid)
+            if mesh.center == list(vtk_obj.GetCenter()) and mesh.bounds == vtk_obj.GetBounds():
+                sel_uid = uid
+                idx = self.actors_df.loc[self.actors_df['uid'] == sel_uid].index[0]
+                self.parent.GeologyTableView.selectRow(idx)
+                return
 
 
 
@@ -2230,8 +2226,6 @@ class View3D(BaseView):
         """Then plot the vtk object with proper options."""
         if isinstance(plot_entity, (PolyLine, TriSurf, XsPolyLine)):
             plot_rgb_option = None
-            plot_entity.set_tag(uid)
-            print(plot_entity.point_data_keys)
             if isinstance(plot_entity.points, np.ndarray):
                 """This  check is needed to avoid errors when trying to plot an empty
                 PolyData, just created at the beginning of a digitizing session."""
@@ -2792,7 +2786,6 @@ class View2D(BaseView):
             pass
 
     def set_actor_visible(self, uid=None, visible=None):
-        print(self.actors_df.loc[self.actors_df['uid'] == uid, 'actor'].values[0].__class__.__name__)
         """Set actor uid visible or invisible (visible = True or False)"""
         if isinstance(self.actors_df.loc[self.actors_df['uid'] == uid, 'actor'].values[0], Line2D):
             "Case for Line2D"
@@ -2848,7 +2841,6 @@ class View2D(BaseView):
 
         def select_actor_pick(event):
             while self.selected_uids == []:
-                print(event.artist)
                 if event.artist:
                     if self.actors_df.loc[self.actors_df['actor'] == event.artist, 'collection'].values[0] == 'geol_coll':
                         """IN THE FUTURE check why the condition above rises an error, but then the code runs flawlessly."""
