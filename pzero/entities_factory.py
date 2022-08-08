@@ -487,7 +487,7 @@ class PolyData(vtkPolyData):
             return part_list
 
 
-class Plane(PolyData,vtkPlane):  # _______________________ AT THE MOMENT THIS DOES NOT EXPOSE ANY OTHER METHOD - SEE IF IT IS USEFUL
+class Plane(vtkPlane):  # _______________________ AT THE MOMENT THIS DOES NOT EXPOSE ANY OTHER METHOD - SEE IF IT IS USEFUL
     """Plane is a class used as a base for cross-section planes. Basically this is the standard vtkPlane
     class, but exposes methods from vtk.numpy_interface.dataset_adapter (dsa) to access data as Numpy
     arrays instead of VTK arrays. Numpy arrays are just a reference to the underlying VTK arrays, so
