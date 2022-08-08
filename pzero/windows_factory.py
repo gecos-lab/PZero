@@ -2053,6 +2053,19 @@ class View3D(BaseView):
         self.zoomActive.triggered.connect(self.zoom_active)
         self.menuWindow.addAction(self.zoomActive)
 
+        self.menuEdit = QMenu('Edit point cloud',self)
+        self.actionNormals2dd = QAction('Convert normals to Dip/Direction',self)
+        self.actionNormals2dd.triggered.connect(lambda: self.normals2dd())
+        self.menuEdit.addAction(self.actionNormals2dd)
+        self.menuTools.addMenu(self.menuEdit)
+
+        self.menuPicker = QMenu('Pickers',self)
+
+        self.actionPickAttitude = QAction('Toggle measure attitude on a mesh',self)
+        self.actionPickAttitude.triggered.connect(lambda: self.act_att())
+        self.menuPicker.addAction(self.actionPickAttitude)
+        self.menuTools.addMenu(self.menuPicker)
+
     def save_home_view(self):
         print("self.default_view = self.plotter.camera_position")
         self.default_view = self.plotter.camera_position
