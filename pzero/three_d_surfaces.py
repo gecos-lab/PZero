@@ -4,13 +4,16 @@ PZero© Andrea Bistacchi"""
 from copy import deepcopy
 from vtk.util import numpy_support
 from scipy.interpolate import griddata
+from uuid import uuid4
 import vtk
 import numpy as np
 import pandas as pd
 from .geological_collection import GeologicalCollection
 from .mesh3d_collection import Mesh3DCollection
-from .helper_dialogs import multiple_input_dialog, input_one_value_dialog, input_text_dialog, input_combo_dialog, input_checkbox_dialog, tic, toc, progress_dialog, general_input_dialog
+from .helper_dialogs import multiple_input_dialog, input_one_value_dialog, input_text_dialog, input_combo_dialog, input_checkbox_dialog, tic, toc, progress_dialog, general_input_dialog,PreviewWidget
 from .entities_factory import TriSurf, XsPolyLine, PolyLine, VertexSet, Voxet, XsVoxet, XsTriSurf, XsVertexSet, MapImage, DEM
+
+import pyvista as pv
 
 """LoopStructural import(s)"""
 from LoopStructural import GeologicalModel
@@ -31,7 +34,6 @@ def interpolation_delaunay_2d(self):
     else:
         """Deep copy list of selected uids needed otherwise problems can arise if the main geology table is deselected while the dataframe is being built"""
         input_uids = deepcopy(self.selected_uids)
-        print(input_uids)
     for uid in input_uids:
         if isinstance(self.geol_coll.get_uid_vtk_obj(uid), PolyLine) or isinstance(self.geol_coll.get_uid_vtk_obj(uid), XsPolyLine) or isinstance(self.geol_coll.get_uid_vtk_obj(uid), VertexSet) or isinstance(self.geol_coll.get_uid_vtk_obj(uid), XsVertexSet) or isinstance(self.geol_coll.get_uid_vtk_obj(uid), TriSurf):
             pass
@@ -198,7 +200,6 @@ def implicit_model_loop_structural(self):
     all_input_data_df = pd.DataFrame(columns=list(loop_input_dict.keys()))
     """For every selected item extract interesting data: XYZ, feature_name, val, etc."""
     prgs_bar = progress_dialog(max_value=len(input_uids), title_txt="Input dataframe", label_txt="Adding geological objects to input dataframe...", cancel_txt=None, parent=self)
-    print(len(input_uids))
     for uid in input_uids:
         """Create empty dataframe to collect input data for this object."""
         entity_input_data_df = pd.DataFrame(columns=list(loop_input_dict.keys()))
@@ -548,7 +549,6 @@ def linear_extrusion(self):
     """Ask for vertical extrusion: how extruded will the surface be?"""
     extrusion_par = {'bottom':['Lower limit:', -1000],'top':['Higher limit',1000]}
     vertical_extrusion = multiple_input_dialog(title='Vertical Extrusion', input_dict=extrusion_par)
-    print(vertical_extrusion)
     if vertical_extrusion is None:
         print('Wrong extrusion parameters, please check the top and bottom values')
         return
@@ -707,9 +707,12 @@ def decimation_quadric_resampling(self):
         print(" -- empty object -- ")
 
 
-def subdivision_resampling(self):
-    """vtkButterflySubdivisionFilter subdivides a triangular, polygonal surface; four new triangles are created
-     for each triangle of the polygonal surface."""
+def subdivision_resampling(self,mode=0,type='linear',n_subd=2):
+    """ Different types of subdivisions. Subdivides a triangular, polygonal surface; four new triangles are created
+    for each triangle of the polygonal surface.:
+     1. vtkLinearSubdivisionFilter (shape preserving)
+     2. vtkButterflySubdivisionFilter  (not shape preserving)
+     3. vtkLoopSubdivisionFilter (not shape preserving)"""
     print("Subdivision resampling: resample target surface and increase number of triangles of the mesh")
     if self.shown_table != "tabGeology":
         print(" -- Only geological objects can be resampled -- ")
@@ -723,30 +726,42 @@ def subdivision_resampling(self):
         input_uids = deepcopy(self.selected_uids)
     for uid in input_uids:
         if isinstance(self.geol_coll.get_uid_vtk_obj(uid), TriSurf):
-            pass
+
+            if type == 'linear':
+                subdiv_filter = vtk.vtkLinearSubdivisionFilter()
+            elif type == 'butterfly':
+                subdiv_filter = vtk.vtkButterflySubdivisionFilter()
+            elif type == 'loop':
+                subdiv_filter = vtk.vtkLoopSubdivisionFilter()
+            """Create a new instance of the decimation class"""
+
+            subdiv_filter.SetInputData(self.geol_coll.get_uid_vtk_obj(input_uids[0]))
+            subdiv_filter.SetNumberOfSubdivisions(int(n_subd))
+            subdiv_filter.Update()
+            """ShallowCopy is the way to copy the new interpolated surface into the TriSurf instance created at the beginning"""
+
+            if mode:
+                return subdiv_filter.GetOutput()
+            else:
+            # """Add new entity from surf_dict. Function add_entity_from_dict creates a new uid"""
+                """Create deepcopy of the geological entity dictionary."""
+                surf_dict = deepcopy(self.geol_coll.geological_entity_dict)
+                surf_dict['name'] = self.geol_coll.get_uid_name(uid) + '_subdivided'
+                surf_dict['geological_feature'] = self.geol_coll.get_uid_geological_feature(uid)
+                surf_dict['scenario'] = self.geol_coll.get_uid_scenario(uid)
+                surf_dict['geological_type'] = self.geol_coll.get_uid_geological_type(uid)
+                surf_dict['topological_type'] = 'TriSurf'
+                surf_dict['vtk_obj'] = TriSurf()
+                surf_dict['vtk_obj'].ShallowCopy(subdiv_filter.GetOutput())
+                surf_dict['vtk_obj'].Modified()
+
+                if surf_dict['vtk_obj'].points_number > 0:
+                    self.geol_coll.add_entity_from_dict(surf_dict)
+                else:
+                    print(" -- empty object -- ")
         else:
             print(" -- Error input type: only TriSurf type -- ")
             return
-    """Create deepcopy of the geological entity dictionary."""
-    surf_dict = deepcopy(self.geol_coll.geological_entity_dict)
-    surf_dict['name'] = self.geol_coll.get_uid_name(input_uids[0]) + '_subdivided'
-    surf_dict['geological_feature'] = self.geol_coll.get_uid_geological_feature(input_uids[0])
-    surf_dict['scenario'] = self.geol_coll.get_uid_scenario(input_uids[0])
-    surf_dict['geological_type'] = self.geol_coll.get_uid_geological_type(input_uids[0])
-    surf_dict['topological_type'] = 'TriSurf'
-    surf_dict['vtk_obj'] = TriSurf()
-    """Create a new instance of the decimation class"""
-    buttefly_subdiv = vtk.vtkButterflySubdivisionFilter()
-    buttefly_subdiv.SetInputData(self.geol_coll.get_uid_vtk_obj(input_uids[0]))
-    buttefly_subdiv.Update()
-    """ShallowCopy is the way to copy the new interpolated surface into the TriSurf instance created at the beginning"""
-    surf_dict['vtk_obj'].ShallowCopy(buttefly_subdiv.GetOutput())
-    surf_dict['vtk_obj'].Modified()
-    """Add new entity from surf_dict. Function add_entity_from_dict creates a new uid"""
-    if surf_dict['vtk_obj'].points_number > 0:
-        self.geol_coll.add_entity_from_dict(surf_dict)
-    else:
-        print(" -- empty object -- ")
 
 
 def intersection_xs(self):
@@ -1211,3 +1226,156 @@ def project_2_xs(self):
                     out_uid = self.geol_coll.add_entity_from_dict(entity_dict=entity_dict)
                 else:
                     print(" -- empty object -- ")
+
+
+def split_surf(self):
+    ''' Split two surfaces. This should be integrated with intersection_xs in one function since is the same thing'''
+    if self.shown_table != "tabGeology":
+        print(" -- Only geological objects can be intersected -- ")
+        return
+    if not self.selected_uids:
+        print("No input data selected.")
+        return
+    else:
+        """Deep copy list of selected uids needed otherwise problems can arise if the main geology table is deseselcted while the dataframe is being built"""
+        input_uids = deepcopy(self.selected_uids)
+        # 0. Define the reference surface and target surfaces
+        ref_surf = self.geol_coll.get_uid_vtk_obj(input_uids[0])
+        targ_surfs = [self.geol_coll.get_uid_vtk_obj(uid) for uid in input_uids[1:]]
+
+        for i,targ_surf in enumerate(targ_surfs): #for every target surface
+
+            temp_surf = pv.PolyData()
+            temp_surf.ShallowCopy(targ_surf)
+            implicit_dist = temp_surf.compute_implicit_distance(ref_surf)
+            intersect = vtk.vtkClipPolyData()
+            intersect.SetInputData(implicit_dist)
+            intersect.GenerateClippedOutputOn()
+
+            intersect.Update()
+
+            appender = vtk.vtkAppendPolyData()
+
+
+            ''' The parts are always 2 even if the surf is crossed more than once
+            (the implicit distance is calculated orthogonal to the ref. surface).
+            For multiple intersections the splitting will result in a multipart
+            object that can be further split using split_parts(). We can then
+            append each single part in a multipart object and assign
+            the RegionId property using connected_calc().
+            '''
+            parts = [intersect.GetOutput(),intersect.GetClippedOutput()]
+
+            for part in parts:
+                temp = TriSurf()
+                temp.ShallowCopy(part)
+                subparts = temp.split_parts()
+                for subpart in subparts:
+                    appender.AddInputData(subpart)
+
+            appender.Update()
+
+            final_obj = TriSurf()
+            final_obj.DeepCopy(appender.GetOutput())
+            final_obj.clean_topology
+
+            uid = input_uids[i+1] #Use the target obj as reference
+            obj_dict = deepcopy(self.geol_coll.geological_entity_dict)
+
+            obj_dict['uid'] = str(uuid4())
+
+            obj_dict['topological_type'] = self.geol_coll.get_uid_topological_type(uid)
+
+            obj_dict['vtk_obj'] = final_obj
+
+            obj_dict['name'] = self.geol_coll.get_uid_name(uid) + '_split'
+
+            obj_dict['geological_type'] = self.geol_coll.get_uid_geological_type(uid)
+
+            obj_dict['geological_feature'] = self.geol_coll.get_uid_geological_feature(uid)
+
+            obj_dict['scenario'] = self.geol_coll.get_uid_scenario(uid)
+
+            self.geol_coll.add_entity_from_dict(obj_dict)
+
+            #Calculate connectivity for the splitted surface
+
+            self.geol_coll.append_uid_property(uid=obj_dict['uid'], property_name="RegionId", property_components=1)
+
+            self.geol_coll.get_uid_vtk_obj(obj_dict['uid']).connected_calc()
+            self.prop_legend.update_widget(self)
+            del temp
+
+
+
+
+        # 1. Calculate the implicit distance of the target surface[1,2,3,4,..] from the reference surface[0]
+
+def retopo(self,mode=0,dec_int=0.2,n_iter=40,rel_fac=0.1):
+    '''[Gabriele] Function used to retopologize a given surface. This is useful in the case of
+    semplifying irregular triangulated meshes for CAD exporting or aesthetic reasons.
+    The function is a combonation of two filters:
+
+    - vtkQuadraticDecimation
+    - vtkSmoothPolyDataFilter
+
+    For now the parameters (eg. SetTargetReduction, RelaxationFactor etc etc) are fixed but
+    in the future it would be nicer to have an adaptive method (maybe using vtkMeshQuality?)
+    '''
+    if self.shown_table != "tabGeology":
+        print(" -- Only geological objects can be retopologized -- ")
+        return
+    if not self.selected_uids:
+        print("No input data selected.")
+        return
+    else:
+        """Deep copy list of selected uids needed otherwise problems can arise if the main geology table is deseselcted while the dataframe is being built"""
+        input_uids = deepcopy(self.selected_uids)
+
+        for uid in input_uids:
+            if isinstance(self.geol_coll.get_uid_vtk_obj(uid), TriSurf):
+
+                mesh = self.geol_coll.get_uid_vtk_obj(uid)
+                dec = vtk.vtkQuadricDecimation()
+                dec.SetInputData(mesh)
+                # tr.SetSourceData(bord)
+                dec.SetTargetReduction(float(dec_int))
+                dec.VolumePreservationOn()
+                dec.Update()
+
+                smooth = vtk.vtkSmoothPolyDataFilter()
+                smooth.SetInputConnection(dec.GetOutputPort())
+
+                # smooth.SetInputData(surf)
+                smooth.SetNumberOfIterations(int(n_iter))
+                smooth.SetRelaxationFactor(float(rel_fac))
+                smooth.BoundarySmoothingOn()
+                smooth.FeatureEdgeSmoothingOn()
+                smooth.Update()
+
+                clean = vtk.vtkCleanPolyData()
+                clean.SetInputConnection(smooth.GetOutputPort())
+                clean.Update()
+
+
+                if mode:
+                    return clean.GetOutput()
+                else:
+                    """Create deepcopy of the geological entity dictionary."""
+                    surf_dict = deepcopy(self.geol_coll.geological_entity_dict)
+                    surf_dict['name'] = self.geol_coll.get_uid_name(uid) + '_retopo'
+                    surf_dict['geological_feature'] = self.geol_coll.get_uid_geological_feature(uid)
+                    surf_dict['scenario'] = self.geol_coll.get_uid_scenario(uid)
+                    surf_dict['geological_type'] = self.geol_coll.get_uid_geological_type(uid)
+                    surf_dict['topological_type'] = 'TriSurf'
+                    surf_dict['vtk_obj'] = TriSurf()
+                    surf_dict['vtk_obj'].ShallowCopy(clean.GetOutput())
+                    surf_dict['vtk_obj'].Modified()
+
+                    if surf_dict['vtk_obj'].points_number > 0:
+                        self.geol_coll.add_entity_from_dict(surf_dict)
+                    else:
+                        print(" -- empty object -- ")
+            else:
+                print(" -- Error input type: only TriSurf type -- ")
+                return

@@ -48,6 +48,8 @@ import matplotlib.style as mplstyle
 # from matplotlib.backend_bases import FigureCanvasBase
 import mplstereonet
 
+from uuid import UUID
+
 """Probably not-required imports"""
 # import sys
 # from time import sleep
@@ -90,7 +92,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         actor = the actor
         show = a boolean to show (True) or hide (false) the actor
         collection = the original collection of the actor, e.g. geol_coll, xsect_coll, etc."""
-        self.actors_df = pd.DataFrame(columns=['uid', 'actor', 'show', 'collection', 'show_prop'])
+        self.actors_df = pd.DataFrame(columns=['uid', 'actor', 'show', 'collection'])
 
         """Create list of selected uid's."""
         self.selected_uids = []
@@ -1908,8 +1910,8 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             this_actor = self.show_actor_with_property(uid=uid, collection='geol_coll', show_property=None, visible=True)
             self.actors_df = self.actors_df.append({'uid': uid, 'actor': this_actor, 'show': True, 'collection': 'geol_coll', 'show_prop': None}, ignore_index=True)
         for uid in self.parent.xsect_coll.df['uid'].tolist():
-            this_actor = self.show_actor_with_property(uid=uid, collection='xsect_coll', show_property=None, visible=True)
-            self.actors_df = self.actors_df.append({'uid': uid, 'actor': this_actor, 'show': True, 'collection': 'xsect_coll', 'show_prop': None}, ignore_index=True)
+            this_actor = self.show_actor_with_property(uid=uid, collection='xsect_coll', show_property=None, visible=False)
+            self.actors_df = self.actors_df.append({'uid': uid, 'actor': this_actor, 'show': False, 'collection': 'xsect_coll', 'show_prop': None}, ignore_index=True)
         for uid in self.parent.boundary_coll.df['uid'].tolist():
             this_actor = self.show_actor_with_property(uid=uid, collection='boundary_coll', show_property=None, visible=False)
             self.actors_df = self.actors_df.append({'uid': uid, 'actor': this_actor, 'show': False, 'collection': 'boundary_coll', 'show_prop': None}, ignore_index=True)
@@ -2081,6 +2083,7 @@ class View3D(BaseView):
     def initialize_interactor(self):
         """Add the pyvista interactor object to self.ViewFrameLayout ->
         the layout of an empty frame generated with Qt Designer"""
+        print(self.ViewFrame)
         self.plotter = pvQtInteractor(self.ViewFrame)
         self.plotter.set_background('black')  # background color - could be made interactive in the future
         self.ViewFrameLayout.addWidget(self.plotter.interactor)
@@ -3301,7 +3304,7 @@ class ViewMap(View2D):
             line_thick = self.parent.image_coll.get_legend()['line_thick']
             plot_entity = self.parent.image_coll.get_uid_vtk_obj(uid)
         """Then plot."""
-        if isinstance(plot_entity, (VertexSet, PolyLine, XsVertexSet, XsPolyLine)):
+        if isinstance(plot_entity, (VertexSet, PolyLine, XsVertexSet, XsPolyLine, Attitude)):
             if isinstance(plot_entity.points, np.ndarray):
                 if plot_entity.points_number > 0:
                     """This  check is needed to avoid errors when trying to plot an empty
@@ -3309,7 +3312,7 @@ class ViewMap(View2D):
                     Check if both these conditions are necessary_________________"""
                     X = plot_entity.points_X
                     Y = plot_entity.points_Y
-                    if isinstance(plot_entity, VertexSet):
+                    if isinstance(plot_entity, (VertexSet,Attitude)):
                         if uid in self.selected_uids:
                             if show_property == "Normals":
                                 U = np.sin((plot_entity.points_map_dip_azimuth+90) * np.pi / 180)
@@ -3433,8 +3436,9 @@ class ViewMap(View2D):
                     this_actor = None
             else:
                 this_actor = None
-        this_actor.figure.canvas.draw()
-        return this_actor
+        if this_actor:
+            this_actor.figure.canvas.draw()
+            return this_actor
 
     """Implementation of functions specific to this view (e.g. particular editing or visualization functions)"""
 
@@ -3445,8 +3449,9 @@ class ViewXsection(View2D):
 
     '''[Gabriele]  [TODO] xsection update only objects that are projected on the section.'''
 
-    def __init__(self, parent=None, *args, **kwargs):
+    def __init__(self, parent=None,*args, **kwargs):
         """Set the Xsection"""
+
         if parent.xsect_coll.get_names():
             self.this_x_section_name = input_combo_dialog(parent=None, title="Xsection", label="Choose Xsection", choice_list=parent.xsect_coll.get_names())
         else:
@@ -3476,6 +3481,9 @@ class ViewXsection(View2D):
         self.create_dom_list(sec_uid=self.this_x_section_uid)
         self.create_image_list(sec_uid=self.this_x_section_uid)
 
+
+
+
     """Implementation of functions specific to 2D views"""
 
     def initialize_menu_tools(self):
@@ -3483,6 +3491,9 @@ class ViewXsection(View2D):
         super().initialize_menu_tools()
         """Tools specific to Xsection view"""
         """NONE AT THE MOMENT"""
+        self.secNavigator = QAction("Section navigator", self)
+        self.secNavigator.triggered.connect(self.navigator)
+        self.menuWindow.addAction(self.secNavigator)
 
     def show_actor_with_property(self, uid=None, collection=None, show_property=None, visible=None):
         """Show actor with scalar property (default None)
@@ -3713,6 +3724,10 @@ class ViewXsection(View2D):
     """Implementation of functions specific to this view (e.g. particular editing or visualization functions)"""
 
     """NONE AT THE MOMENT"""
+    def navigator(self):
+        sec_list = self.parent.xsect_coll.get_names()
+        idx = sec_list.index(self.this_x_section_name)
+        NavigatorWidget(self,sec_list,idx)
 
 
 class ViewStereoplot(BaseView):

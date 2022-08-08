@@ -11,7 +11,7 @@ from PyQt5.QtCore import Qt, QSortFilterProxyModel, pyqtSignal
 import vtk
 import pandas as pd
 from .project_window_ui import Ui_ProjectWindow
-from .entities_factory import Plane, VertexSet, PolyLine, TriSurf, XsVertexSet, XsPolyLine, DEM, MapImage, Voxet, Seismics, XsVoxet, TetraSolid, PCDom, TSDom, Wells
+from .entities_factory import Plane, VertexSet, PolyLine, TriSurf, XsVertexSet, XsPolyLine, DEM, MapImage, Voxet, Seismics, XsVoxet, TetraSolid, PCDom, TSDom, Wells,Attitude
 from .geological_collection import GeologicalCollection
 from .xsection_collection import XSectionCollection
 from .dom_collection import DomCollection
@@ -34,12 +34,12 @@ from .windows_factory import View3D
 from .windows_factory import ViewMap
 from .windows_factory import ViewXsection
 from .windows_factory import ViewStereoplot
-from .helper_dialogs import options_dialog, save_file_dialog, open_file_dialog, input_combo_dialog, message_dialog, multiple_input_dialog, input_one_value_dialog, input_text_dialog, progress_dialog, import_dialog,general_input_dialog
+from .helper_dialogs import options_dialog, save_file_dialog, open_file_dialog, input_combo_dialog, message_dialog, multiple_input_dialog, input_one_value_dialog, input_text_dialog, progress_dialog, import_dialog,general_input_dialog,PreviewWidget
 from .image2vtk import geo_image2vtk, xs_image2vtk
 from .stl2vtk import vtk2stl, vtk2stl_dilation
 from .obj2vtk import vtk2obj
 from .ply2vtk import vtk2ply
-from .three_d_surfaces import interpolation_delaunay_2d, poisson_interpolation, implicit_model_loop_structural, surface_smoothing, linear_extrusion, decimation_pro_resampling, decimation_quadric_resampling, subdivision_resampling, intersection_xs, project_2_dem, project_2_xs
+from .three_d_surfaces import interpolation_delaunay_2d, poisson_interpolation, implicit_model_loop_structural, surface_smoothing, linear_extrusion, decimation_pro_resampling, decimation_quadric_resampling, subdivision_resampling, intersection_xs, project_2_dem, project_2_xs, split_surf,retopo
 from .orientation_analysis import set_normals
 
 from uuid import uuid4
@@ -144,11 +144,12 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.actionImportDEM.triggered.connect(self.import_DEM)
         self.actionImportOrthoImage.triggered.connect(self.import_mapimage)
         self.actionImportXsectionImage.triggered.connect(self.import_xsimage)
-        self.actionImport_well_data.triggered.connect(self.import_welldata)
+        self.actionImportWellData.triggered.connect(self.import_welldata)
         self.actionImportSEGY.triggered.connect(self.import_SEGY)
 
         """File>Export actions -> slots"""
         self.actionExportCAD.triggered.connect(self.export_cad)
+        self.actionExportVTK.triggered.connect(self.export_vtk)
 
         """Edit actions -> slots"""
         self.actionEditEntityRemove.triggered.connect(self.entity_remove)
@@ -168,13 +169,15 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.actionPoissonInterpolation.triggered.connect(lambda: poisson_interpolation(self))
         self.actionLoopStructuralImplicitModelling.triggered.connect(lambda: implicit_model_loop_structural(self))
         self.actionSurfaceSmoothing.triggered.connect(lambda: surface_smoothing(self))
-        self.actionSubdivisionResampling.triggered.connect(lambda: subdivision_resampling(self))
+        self.actionSubdivisionResampling.triggered.connect(self.subd_res_dialog)
         self.actionDecimationPro.triggered.connect(lambda: decimation_pro_resampling(self))
         self.actionDecimationQuadric.triggered.connect(lambda: decimation_quadric_resampling(self))
         self.actionExtrusion.triggered.connect(lambda: linear_extrusion(self))
         self.actionProject2DEM.triggered.connect(lambda: project_2_dem(self))
         self.actionIntersectionXSection.triggered.connect(lambda: intersection_xs(self))
         self.actionProject2XSection.triggered.connect(lambda: project_2_xs(self))
+        self.actionSplitSurf.triggered.connect(lambda: split_surf(self))
+        self.actionRetopologize.triggered.connect(self.retopologize_surface)
 
         """View actions -> slots"""
         self.actionView3D.triggered.connect(lambda: View3D(parent=self))
@@ -512,6 +515,43 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         """Calculate lineations on geological entities."""
         pass
 
+    def subd_res_dialog(self):
+        dict = {'type':['Subdivision type:',['linear','butterfly','loop']],'n_subd':['Number of iterations',2]}
+        subd_input = multiple_input_dialog('Subdivision dialog',dict,return_widget=True)
+
+        sel_uids = self.selected_uids
+        if len(sel_uids) > 1:
+            print('Multiple surfaces selected, only one will be previewed')
+        elif len(sel_uids) == 0:
+            print('No selected objects')
+
+        for uid in sel_uids:
+            mesh = self.geol_coll.get_uid_vtk_obj(uid)
+
+        PreviewWidget(parent=self,titles = ['Original mesh','Subdivided mesh'],
+                             mesh=mesh, opt_widget=subd_input,function=subdivision_resampling)
+        # subdivision_resampling(self,type=subd_input['type'],n_subd=subd_input['n_subd'])
+
+    def retopologize_surface(self):
+
+        input_dict = {'dec_int': ['Decimation intensity: ', 0], 'n_iter': ['Number of iterations: ', 40], 'rel_fac': ['Relaxation factor: ', 0.1]}
+        retop_par_widg = multiple_input_dialog(title='Retopologize surface', input_dict=input_dict,return_widget=True)
+
+        sel_uids = self.selected_uids
+        if len(sel_uids) > 1:
+            print('Multiple surfaces selected, only one will be previewed')
+        elif len(sel_uids) == 0:
+            print('No selected objects')
+
+        for uid in sel_uids:
+            mesh = self.geol_coll.get_uid_vtk_obj(uid)
+
+
+        PreviewWidget(parent=self,titles = ['Original mesh','Retopologized mesh'],
+                      opt_widget=retop_par_widg,function=retopo)
+
+
+
     def connected_parts(self):
         """Calculate connectivity of PolyLine and TriSurf entities."""
         if self.selected_uids:
@@ -547,7 +587,6 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     vtk_out_list = collection.get_uid_vtk_obj(uid).split_parts()
                     vtk_out_dict = deepcopy(collection.df.loc[collection.df['uid'] == uid].drop(['uid', 'vtk_obj'], axis=1).to_dict('records')[0])
                     for vtk_object in vtk_out_list:
-                        print(vtk_object)
                         vtk_out_dict['uid'] = None
                         vtk_out_dict['vtk_obj'] = vtk_object
                         collection.add_entity_from_dict(entity_dict=vtk_out_dict)
@@ -1069,7 +1108,11 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     print("error: missing VTK file")
                     return
                 if self.geol_coll.get_uid_topological_type(uid) == 'VertexSet':
-                    vtk_object = VertexSet()
+                    if 'dip' in self.geol_coll.get_uid_properties_names(uid):
+                        print('ciao')
+                        vtk_object=Attitude()
+                    else:
+                        vtk_object = VertexSet()
                 elif self.geol_coll.get_uid_topological_type(uid) == 'PolyLine':
                     vtk_object = PolyLine()
                 elif self.geol_coll.get_uid_topological_type(uid) == 'TriSurf':
@@ -1300,3 +1343,23 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.boundary_coll.df[out_cols].to_csv(out_dir_name + '/boundary_table.csv', encoding='utf-8', index=False)
         self.boundary_coll.df[out_cols].to_json(out_dir_name + '/boundary_table.json', orient='index')
         print("All files saved.")
+
+    def export_vtk(self):
+        '''[Gabriele] Function used to export selected objects as vtk files'''
+        if not self.selected_uids:
+            return
+
+        else:
+            self.out_dir_name = save_file_dialog(parent=self, caption="Select save directory.", directory=True)
+            # print(self.out_file_name)
+            for uid in self.selected_uids:
+                print(f'exporting {uid}')
+                border = self.geol_coll.get_uid_vtk_obj(uid).get_clean_boundary()
+                pd_writer = vtk.vtkXMLPolyDataWriter()
+                pd_writer.SetFileName(f'{self.out_dir_name}/{uid}.vtp')
+                pd_writer.SetInputData(self.geol_coll.get_uid_vtk_obj(uid))
+                pd_writer.Write()
+                pd_writer = vtk.vtkXMLPolyDataWriter()
+                pd_writer.SetFileName(f'{self.out_dir_name}/{uid}_border.vtp')
+                pd_writer.SetInputData(border)
+                pd_writer.Write()
