@@ -25,13 +25,12 @@ import pandas as pd
 # import vtk.numpy_interface.dataset_adapter as dsa
 from vtk.util import numpy_support
 from vtkmodules.vtkInteractionWidgets import vtkCameraOrientationWidget
-from vtk import vtkAppendPolyData
+from vtk import vtkAppendPolyData,vtkExtractPoints
+from vtk import vtkSphere
 
 """3D plotting imports"""
 from pyvista import global_theme as pv_global_theme
 from pyvistaqt import QtInteractor as pvQtInteractor
-from pyvista import Arrow, Circle, PolyData, Cylinder, Sphere, Disc
-from pyvista import Plane as pvPlane
 from pyvista import _vtk
 from pyvista import read_texture
 
@@ -2145,8 +2144,10 @@ class View3D(BaseView):
     def act_att(self):
 
         if self.tog_att == -1:
-            set_name = input_text_dialog(parent=self,title="Set name", label="Define set name", default_text="set_0")
-            self.plotter.enable_point_picking(callback=lambda mesh,pid: self.pkd_point(mesh,pid,set_name),show_message=False,color='yellow',use_mesh=True)
+            input_dict = {'name': ['Set name: ', 'Set_0'], 'geological_type': ['Geological type: ', GeologicalCollection.valid_geological_types]}
+
+            set_opt = multiple_input_dialog(title="Create measure set", input_dict=input_dict)
+            self.plotter.enable_point_picking(callback=lambda mesh,pid: self.pkd_point(mesh,pid,set_opt),show_message=False,color='yellow',use_mesh=True)
             self.tog_att *= -1
             print('Picking enabled')
         else:
@@ -2156,18 +2157,26 @@ class View3D(BaseView):
             self.tog_att *= -1
             print('Picking disabled')
 
-    def pkd_point(self,mesh,pid,set_name):
+    def pkd_point(self,mesh,pid,set_opt):
 
-        # print(mesh)
         sph_r = 0.2 #radius of the selection sphere
 
         center = mesh.points[pid]
+        sphere = vtkSphere()
+        sphere.SetCenter(center)
+        sphere.SetRadius(sph_r)
 
-        sphere = Sphere(center=center,radius=sph_r)
+        extr = vtkExtractPoints()
 
-        sel_points  = mesh.select_enclosed_points(sphere,check_surface=False)
-        points = mesh.points[np.where(sel_points['SelectedPoints'] == 1 )]
-        plane_c ,plane_n = best_fitting_plane(points)
+        extr.SetImplicitFunction(sphere)
+        extr.SetInputData(mesh)
+        extr.ExtractInsideOn()
+        extr.Update()
+        temp_obj = PolyData()
+        temp_obj.ShallowCopy(extr.GetOutput())
+
+        plane_c ,plane_n = best_fitting_plane(temp_obj.points)
+        del temp_obj
 
         if plane_n[2]>0: #If Z is positive flip the normals
             plane_n *=-1
@@ -2196,8 +2205,8 @@ class View3D(BaseView):
 
         # print(att_point)
 
-        if set_name in self.parent.geol_coll.df['name'].values:
-            uid = self.parent.geol_coll.get_name_uid(set_name)
+        if set_opt['name'] in self.parent.geol_coll.df['name'].values:
+            uid = self.parent.geol_coll.get_name_uid(set_opt['name'])
             old_vtk_obj = self.parent.geol_coll.get_uid_vtk_obj(uid)
 
             old_vtk_obj.append_point(point_vector=plane_c)
@@ -2222,9 +2231,10 @@ class View3D(BaseView):
 
             curr_obj_dict = deepcopy(GeologicalCollection.geological_entity_dict)
             curr_obj_dict['uid'] = str(uuid4())
-            curr_obj_dict['name'] = set_name
-            curr_obj_dict['scenario'] = set_name
+            curr_obj_dict['name'] = set_opt['name']
+            curr_obj_dict['geological_type'] = set_opt['geological_type']
             curr_obj_dict['topological_type'] = "VertexSet"
+            curr_obj_dict['geological_feature'] = set_opt['name']
             curr_obj_dict['properties_names'] = properties_name
             curr_obj_dict['properties_components'] = properties_components
             curr_obj_dict['vtk_obj'] = att_point
@@ -2420,7 +2430,7 @@ class View3D(BaseView):
                 elif show_property == 'Normals':
                     # r = self.parent.geol_coll.get_uid_legend(uid=uid)['line_thick']
                     # texture = read_texture('pzero/icons/dip.png')
-                    # disk = Disc(outer = 10,inner=0,c_res=30)
+                    # disk = pvDisc(outer = 10,inner=0,c_res=30)
                     # disk.texture_map_to_plane(inplace=True)
                     # show_scalar_bar = False
                     # show_property = None
@@ -2787,7 +2797,7 @@ class View3D(BaseView):
             # normals[normals_neg] *= -1
             # for i,normal in enumerate(normals):
             #     center = vtk_obj.points[i]
-            #     arrow = Arrow(center,direction = normal,tip_radius=0.05,shaft_radius=0.025,scale=0.2)
+            #     arrow = pvArrow(center,direction = normal,tip_radius=0.05,shaft_radius=0.025,scale=0.2)
             #     self.plotter.add_mesh(arrow,color='yellow')
 
 
@@ -3794,41 +3804,62 @@ class ViewStereoplot(BaseView):
     def __init__(self, *args, **kwargs):
         super(ViewStereoplot, self).__init__(*args, **kwargs)
         self.setWindowTitle("Stereoplot View")
+        self.tog_contours = -1
         # mplstyle.context('classic')
     def initialize_menu_tools(self):
+
+        self.actionContours = QAction('View contours',self)
+        self.actionContours.triggered.connect(lambda: self.toggle_contours(filled=False))
+        self.menuTools.addAction(self.actionContours)
+
+
         self.menuPlot = QMenu('Plot options',self)
+
 
         self.menuGrids = QMenu('Grid overlays',self)
         self.actionSetPolar = QAction('Set polar grid',self)
-        self.actionSetPolar.triggered.connect(lambda: self.change_grid('polar'))
+        self.actionSetPolar.triggered.connect(lambda: self.change_grid(kind='polar'))
         self.actionSetEq = QAction('Set equatorial grid',self)
-        self.actionSetEq.triggered.connect(lambda: self.change_grid('equatorial'))
+        self.actionSetEq.triggered.connect(lambda: self.change_grid(kind='equatorial'))
         self.menuGrids.addAction(self.actionSetPolar)
         self.menuGrids.addAction(self.actionSetEq)
         self.menuPlot.addMenu(self.menuGrids)
+
+        self.menuProj = QMenu('Stereoplot projection',self)
+        self.actionSetEquiare = QAction('Equiareal (Schmidt)',self)
+        self.actionSetEquiare.triggered.connect(lambda: self.change_proj(projection='equal_area_stereonet'))
+        self.actionSetEquiang = QAction('Equiangolar (Wulff)',self)
+        self.actionSetEquiang.triggered.connect(lambda: self.change_proj(projection='equal_angle_stereonet'))
+        self.menuProj.addAction(self.actionSetEquiare)
+        self.menuProj.addAction(self.actionSetEquiang)
+        self.menuPlot.addMenu(self.menuProj)
         self.menubar.insertMenu(self.menuHelp.menuAction(),self.menuPlot)
 
 
 
-    def initialize_interactor(self):
+
+
+
+    def initialize_interactor(self,kind=None,projection='equal_area_stereonet'):
+        self.grid_kind = kind
+        self.proj_type = projection
 
         with mplstyle.context(('default')):
             """Create Matplotlib canvas, figure and navi_toolbar"""
-            self.figure,self.ax = mplstereonet.subplots()  # create a Matplotlib figure; this implicitly creates also the canvas to contain the figure
+            self.figure,self.ax = mplstereonet.subplots(projection=self.proj_type)  # create a Matplotlib figure; this implicitly creates also the canvas to contain the figure
 
         self.canvas = FigureCanvas(self.figure)  # get a reference to the canvas that contains the figure
         # print("dir(self.canvas):\n", dir(self.canvas))
         """https://doc.qt.io/qt-5/qsizepolicy.html"""
         self.navi_toolbar = NavigationToolbar(self.figure.canvas, self)  # create a navi_toolbar with the matplotlib.backends.backend_qt5agg method NavigationToolbar
 
-        """Create Qt layout and add Matplotlib canvas, figure and navi_toolbar"""
+        """Create Qt layout andNone add Matplotlib canvas, figure and navi_toolbar"""
         # canvas_widget = self.figure.canvas
         # canvas_widget.setAutoFillBackground(True)
         self.ViewFrameLayout.addWidget(self.canvas)  # add Matplotlib canvas (created above) as a widget to the Qt layout
         # print(plot_widget)
         self.ViewFrameLayout.addWidget(self.navi_toolbar)  # add navigation navi_toolbar (created above) to the layout
-
-        self.ax.grid(color='k')
+        self.ax.grid(kind=self.grid_kind,color='k')
 
     def create_geology_tree(self):
         """Create geology tree with checkboxes and properties"""
@@ -4166,7 +4197,7 @@ class ViewStereoplot(BaseView):
                 self.figure.canvas.draw()
                 print("redraw all - a more efficient alternative should be found")
 
-    def show_actor_with_property(self, uid=None, collection=None, show_property='Poles', visible=None):
+    def show_actor_with_property(self, uid=None, collection=None, show_property='Poles', visible=None,filled=None):
         if show_property is None:
             show_property='Poles'
         """Show actor with scalar property (default None)
@@ -4199,6 +4230,7 @@ class ViewStereoplot(BaseView):
                     self.dip_az = plot_entity.points_map_dip_azimuth
                     self.dip = plot_entity.points_map_dip
 
+
                     # [Gabriele] Dip az needs to be converted to strike (dz-90) to plot with mplstereonet
                     if uid in self.selected_uids:
                         if show_property == "Planes":
@@ -4211,6 +4243,12 @@ class ViewStereoplot(BaseView):
                         if show_property == "Planes":
                             this_actor = self.ax.plane(self.dip_az-90,self.dip,color=color_RGB)[0]
                         else:
+                            if filled is not None and visible is True:
+
+                                if filled:
+                                    self.ax.density_contourf(self.dip_az-90, self.dip,measurement='poles')
+                                else:
+                                    self.ax.density_contour(self.dip_az-90, self.dip,measurement='poles')
                             this_actor = self.ax.pole(self.dip_az-90, self.dip, color=color_RGB)[0]
                         if this_actor:
                             this_actor.set_visible(visible)
@@ -4224,18 +4262,73 @@ class ViewStereoplot(BaseView):
             this_actor.figure.canvas.draw()
         return this_actor
 
-
-
-    """"_______________________________________________________________________________"""
     def stop_event_loops(self):
         """Terminate running event loops"""
         self.figure.canvas.stop_event_loop()
 
 
     def change_grid(self,kind):
-        if kind == 'equatorial':
-            self.ax.grid()
+        self.grid_kind = kind
+        self.ViewFrameLayout.removeWidget(self.canvas)
+        self.ViewFrameLayout.removeWidget(self.navi_toolbar)
+        self.initialize_interactor(kind=kind,projection=self.proj_type)
+        uids = self.parent.geol_coll.df.loc[self.parent.geol_coll.df['topological_type']=='VertexSet','uid']
+
+
+        # print(uids)
+        '''[Gabriele]It is not always the case that VertexSets have normal data (are attitude measurements). When importing from shp we should add a dialog to identify VertexSets as Attitude measurements
+        '''
+
+        # att_uid_list = []
+        # for uid in uids:
+        #     obj = self.parent.geol_coll.get_uid_vtk_obj(uid)
+        #     if isinstance(obj, Attitude):
+        #         att_uid_list.append(uid)
+        # print(att_uid_list)
+        for uid in uids:
+            show = self.actors_df.loc[self.actors_df['uid']==uid,'show'].values[0]
+            self.remove_actor_in_view(uid,redraw=False)
+            this_actor = self.show_actor_with_property(uid,'geol_coll',visible=show)
+            self.actors_df = self.actors_df.append({'uid': uid, 'actor': this_actor, 'show': show, 'collection': 'geol_collection', 'show_prop': 'poles'}, ignore_index=True)
+            #For now only geol_collection (I guess this is the only collection for attitude measurements)
+
+    def change_proj(self,projection):
+        self.proj_type = projection
+        self.ViewFrameLayout.removeWidget(self.canvas)
+        self.ViewFrameLayout.removeWidget(self.navi_toolbar)
+        self.initialize_interactor(kind=self.grid_kind,projection=self.proj_type)
+        uids = self.parent.geol_coll.df.loc[self.parent.geol_coll.df['topological_type']=='VertexSet','uid']
+        for uid in uids:
+            show = self.actors_df.loc[self.actors_df['uid']==uid,'show'].values[0]
+            self.remove_actor_in_view(uid,redraw=False)
+            this_actor=self.show_actor_with_property(uid,'geol_coll',visible=show)
+            self.actors_df = self.actors_df.append({'uid': uid, 'actor': this_actor, 'show': show, 'collection': 'geol_collection', 'show_prop': 'poles'}, ignore_index=True)
+
+    def toggle_contours(self,filled=False):
+
+        '''[Gabriele] This is not the best way, but for now will do.
+        It's a toggle switch that display kamb contours for visible poles in
+        the stereoplot.'''
+
+        self.ViewFrameLayout.removeWidget(self.canvas)
+        self.ViewFrameLayout.removeWidget(self.navi_toolbar)
+
+        self.initialize_interactor(kind=self.grid_kind,projection=self.proj_type)
+        uids = self.parent.geol_coll.df.loc[self.parent.geol_coll.df['topological_type']=='VertexSet','uid']
+
+        if self.tog_contours == -1:
+            filled_opt = filled
+            self.tog_contours *= -1
+            print('Contours enabled')
         else:
-            self.ax.grid(kind=kind,color='k')
-        self.figure.canvas.draw()
-        # self.parent.geology_added_signal.emit
+            filled_opt = None
+            self.tog_contours *= -1
+            print('Contours disabled')
+
+        for uid in uids:
+            show = self.actors_df.loc[self.actors_df['uid']==uid,'show'].values[0]
+
+            self.remove_actor_in_view(uid,redraw=False)
+
+            this_actor=self.show_actor_with_property(uid,'geol_coll',visible=show,filled=filled_opt)
+            self.actors_df = self.actors_df.append({'uid': uid, 'actor': this_actor, 'show': show, 'collection': 'geol_collection', 'show_prop': 'poles'}, ignore_index=True)
