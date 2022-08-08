@@ -10,9 +10,10 @@ from PyQt5.QtGui import QCloseEvent,QFont
 from .base_view_window_ui import Ui_BaseViewWindow
 from .entities_factory import VertexSet, PolyLine, TriSurf, TetraSolid, XsVertexSet, XsPolyLine, DEM, PCDom, MapImage, Voxet, XsVoxet, Plane, Seismics, XsTriSurf, XsImage, PolyData, Wells, WellMarker,Attitude
 from .helper_dialogs import input_one_value_dialog, input_text_dialog, input_combo_dialog, message_dialog, options_dialog, multiple_input_dialog, tic, toc,open_file_dialog
-# from .geological_collection import GeologicalCollection
-# from copy import deepcopy
-from .helper_functions import add_vtk_obj,angle_wrapper,PCA
+from .geological_collection import GeologicalCollection
+from copy import deepcopy
+from uuid import uuid4
+from .helper_functions import add_vtk_obj,angle_wrapper,PCA,best_fitting_plane
 
 """Maths imports"""
 from math import degrees, sqrt, atan2
@@ -24,6 +25,7 @@ import pandas as pd
 # import vtk.numpy_interface.dataset_adapter as dsa
 from vtk.util import numpy_support
 from vtkmodules.vtkInteractionWidgets import vtkCameraOrientationWidget
+from vtk import vtkAppendPolyData
 
 """3D plotting imports"""
 from pyvista import global_theme as pv_global_theme
@@ -2155,68 +2157,20 @@ class View3D(BaseView):
             print('Picking disabled')
 
     def pkd_point(self,mesh,pid,set_name):
-        def best_fitting_plane(points, equation=False):
-            ''' code from https://stackoverflow.com/a/38770513/19331382'''
-            """ Computes the best fitting plane of the given points
-
-            Parameters
-            ----------
-            points: array
-                The x,y,z coordinates corresponding to the points from which we want
-                to define the best fitting plane. Expected format:
-                    array([
-                    [x1,y1,z1],
-                    ...,
-                    [xn,yn,zn]])
-
-            equation(Optional) : bool
-                    Set the oputput plane format:
-                        If True return the a,b,c,d coefficients of the plane.
-                        If False(Default) return 1 Point and 1 Normal vector.
-            Returns
-            -------
-            a, b, c, d : float
-                The coefficients solving the plane equation.
-
-            or
-
-            point, normal: array
-                The plane defined by 1 Point and 1 Normal vector. With format:
-                array([Px,Py,Pz]), array([Nx,Ny,Nz])
-
-            """
-
-            w, v = PCA(points)
-
-            #: the normal of the plane is the last eigenvector
-            normal = v[:,2]
-
-            #: get a point from the plane
-            point = np.mean(points, axis=0)
-
-
-            if equation:
-                a, b, c = normal
-                d = -(np.dot(normal, point))
-                return a, b, c, d
-
-            else:
-                return point, normal
 
         # print(mesh)
-        dim = 0.2
+        sph_r = 0.2 #radius of the selection sphere
 
         center = mesh.points[pid]
 
-        sphere = Sphere(center=center,radius=dim)
-        # sphere_act = plt.add_mesh(sphere,style='wireframe',pickable =False)
-        # act_list.append(sphere_act)
-
-        #[Gabriele] This part maybe is quicker if using VTK
+        sphere = Sphere(center=center,radius=sph_r)
 
         sel_points  = mesh.select_enclosed_points(sphere,check_surface=False)
         points = mesh.points[np.where(sel_points['SelectedPoints'] == 1 )]
         plane_c ,plane_n = best_fitting_plane(points)
+
+        if plane_n[2]>0: #If Z is positive flip the normals
+            plane_n *=-1
         #sel_p = PolyData(points)
 
         # range = sel_p.points[:,0].max() - sel_p.points[:,0].min()
@@ -2228,24 +2182,54 @@ class View3D(BaseView):
         #     norm_mean *= -1
 
 
-        temp_point = PolyData(plane_c)
-        #temp_point['Normals'] = [plane_n]
-        # temp_plane = pvPlane(center=plane_c,direction = plane_n, i_size=dim,j_size=dim,i_resolution=1,j_resolution=1)
+        # temp_point = PolyData(plane_c)
+        # #temp_point['Normals'] = [plane_n]
+        # # temp_plane = pvPlane(center=plane_c,direction = plane_n, i_size=dim,j_size=dim,i_resolution=1,j_resolution=1)
+        #
+        # nx,ny,nz = plane_n
+        # dip = np.arccos(nz)
+        # dir = angle_wrapper(np.arctan2(nx, ny)-np.deg2rad(90))
+        # temp_point['dip'] = [np.rad2deg(dip)]
+        # temp_point['dir'] = [np.rad2deg(dir)]
 
-        nx,ny,nz = plane_n
-        dip = np.arccos(nz)
-        dir = angle_wrapper(np.arctan2(nx, ny)-np.deg2rad(90))
-        temp_point['dip'] = [np.rad2deg(dip)]
-        temp_point['dir'] = [np.rad2deg(dir)]
 
 
-        point = Attitude()
+        # print(att_point)
 
-        point.ShallowCopy(temp_point)
+        if set_name in self.parent.geol_coll.df['name'].values:
+            uid = self.parent.geol_coll.get_name_uid(set_name)
+            old_vtk_obj = self.parent.geol_coll.get_uid_vtk_obj(uid)
 
-        # print(self.parent.geol_coll)
+            old_vtk_obj.append_point(point_vector=plane_c)
+            old_plane_n = old_vtk_obj.get_point_data('Normals')
+            old_plane_n = np.append(old_plane_n,plane_n).reshape(-1,3)
+            old_vtk_obj.set_point_data('Normals',old_plane_n)
+            old_vtk_obj.auto_cells()
+            self.parent.geol_coll.replace_vtk(uid,old_vtk_obj,const_color=True)
+        else:
+            att_point = Attitude()
 
-        add_vtk_obj(self,point,'measurement',name=set_name)
+            att_point.append_point(point_vector=plane_c)
+            att_point.auto_cells()
+
+            att_point.init_point_data(data_key='Normals',dimension=3)
+
+            att_point.set_point_data(data_key='Normals',attribute_matrix=plane_n)
+
+
+            properties_name = att_point.point_data_keys
+            properties_components = [att_point.get_point_data_shape(i)[1] for i in properties_name]
+
+            curr_obj_dict = deepcopy(GeologicalCollection.geological_entity_dict)
+            curr_obj_dict['uid'] = str(uuid4())
+            curr_obj_dict['name'] = set_name
+            curr_obj_dict['scenario'] = set_name
+            curr_obj_dict['topological_type'] = "VertexSet"
+            curr_obj_dict['properties_names'] = properties_name
+            curr_obj_dict['properties_components'] = properties_components
+            curr_obj_dict['vtk_obj'] = att_point
+            """Add to entity collection."""
+            self.parent.geol_coll.add_entity_from_dict(entity_dict=curr_obj_dict)
 
 
         #self.plotter.add_mesh(temp_plane,color='r',pickable =False)
@@ -2293,6 +2277,9 @@ class View3D(BaseView):
         """Update line thickness for actor uid"""
         if collection == 'geol_coll':
             line_thick = self.parent.geol_coll.get_uid_legend(uid=uid)['line_thick']
+            if isinstance(self.parent.geol_coll.get_uid_vtk_obj(uid),Attitude):
+                self.actors_df.loc[self.actors_df['uid'] == uid, 'actor'].values[0].GetProperty().SetPointSize(line_thick)
+
         elif collection == 'xsect_coll':
             line_thick = self.parent.xsect_coll.get_legend()['line_thick']
         elif collection == 'boundary_coll':
@@ -2431,21 +2418,22 @@ class View3D(BaseView):
                 elif show_property == 'Z':
                     show_property = plot_entity.points_Z
                 elif show_property == 'Normals':
-                    r = self.parent.geol_coll.get_uid_legend(uid=uid)['line_thick']
-                    texture = read_texture('pzero/icons/dip.png')
-                    disk = Disc(outer = 25,inner=0,c_res=30)
-                    disk.texture_map_to_plane(inplace=True)
-                    # print('Normals still not supported')
-                    show_scalar_bar = False
-                    show_property = None
-                    show_property_title = 'none'
-                    style = 'surface'
-                    pv_downcast = PolyData()
-                    pv_downcast.ShallowCopy(plot_entity)
-                    pv_downcast.Modified()
-
-                    # # print(pv_downcast['Normals'])
-                    plot_entity = pv_downcast.glyph(orient='Normals',scale='Normals',geom=disk)
+                    # r = self.parent.geol_coll.get_uid_legend(uid=uid)['line_thick']
+                    # texture = read_texture('pzero/icons/dip.png')
+                    # disk = Disc(outer = 10,inner=0,c_res=30)
+                    # disk.texture_map_to_plane(inplace=True)
+                    # show_scalar_bar = False
+                    # show_property = None
+                    #
+                    # show_property_title = 'none'
+                    # style = 'surface'
+                    # pv_downcast = PolyData()
+                    # pv_downcast.ShallowCopy(plot_entity)
+                    # pv_downcast.Modified()
+                    #
+                    # print(pv_downcast['Normals'])
+                    # plot_entity = pv_downcast.glyph(orient='Normals',geom=disk)
+                    print('Normals not available for now in 3D view')
 
 
 
@@ -2779,16 +2767,19 @@ class View3D(BaseView):
             if 'Normals' not in prop_keys:
                 print('Normal data not present. Import or create normal data to proceed')
             else:
-                normals = vtk_obj.get_point_data('Normals')
-                nx,ny,nz = normals[:,0],normals[:,1],normals[:,2]
-                dip = np.arccos(np.abs(nz))
-                dir = angle_wrapper(np.arctan2(nx, ny)-np.deg2rad(90))
+                # normals = vtk_obj.get_point_data('Normals')
+                # nx,ny,nz = normals[:,0],normals[:,1],normals[:,2]
+                # dip = np.arccos(np.abs(nz))
+                # dir = np.arctan2(nx, ny)-np.deg2rad(90))
+                dip = vtk_obj.points_map_dip
+                dip_az = vtk_obj.points_map_dip_azimuth
 
+                # print(np.rad2deg(dir))
                 vtk_obj.init_point_data('dip',1)
-                vtk_obj.init_point_data('dir',1)
+                vtk_obj.init_point_data('dip direction',1)
 
-                vtk_obj.set_point_data('dip',np.rad2deg(dip))
-                vtk_obj.set_point_data('dir',np.rad2deg(dir))
+                vtk_obj.set_point_data('dip',dip)
+                vtk_obj.set_point_data('dip direction',np.abs(dip_az))
 
                 self.parent.dom_coll.replace_vtk(uid,vtk_obj)
             # print(normals)
@@ -3807,9 +3798,14 @@ class ViewStereoplot(BaseView):
     def initialize_menu_tools(self):
         self.menuPlot = QMenu('Plot options',self)
 
+        self.menuGrids = QMenu('Grid overlays',self)
         self.actionSetPolar = QAction('Set polar grid',self)
-        self.actionSetPolar.triggered.connect(lambda: self.polar_grid())
-        self.menuPlot.addAction(self.actionSetPolar)
+        self.actionSetPolar.triggered.connect(lambda: self.change_grid('polar'))
+        self.actionSetEq = QAction('Set equatorial grid',self)
+        self.actionSetEq.triggered.connect(lambda: self.change_grid('equatorial'))
+        self.menuGrids.addAction(self.actionSetPolar)
+        self.menuGrids.addAction(self.actionSetEq)
+        self.menuPlot.addMenu(self.menuGrids)
         self.menubar.insertMenu(self.menuHelp.menuAction(),self.menuPlot)
 
 
@@ -3832,7 +3828,7 @@ class ViewStereoplot(BaseView):
         # print(plot_widget)
         self.ViewFrameLayout.addWidget(self.navi_toolbar)  # add navigation navi_toolbar (created above) to the layout
 
-        self.ax.grid()
+        self.ax.grid(color='k')
 
     def create_geology_tree(self):
         """Create geology tree with checkboxes and properties"""
@@ -4193,37 +4189,29 @@ class ViewStereoplot(BaseView):
         else:
             plot_entity = None
         """Then plot."""
-        if isinstance(plot_entity, (VertexSet,Attitude)):
+        if isinstance(plot_entity, (VertexSet, Attitude)):
             if isinstance(plot_entity.points, np.ndarray):
                 if plot_entity.points_number > 0:
-                    """This  check is needed to avoid errors when trying to plot an empty
+                    """This check is needed to avoid errors when trying to plot an empty
                     PolyData, just created at the beginning of a digitizing session.
                     Check if both these conditions are necessary_________________"""
-                    self.dir = plot_entity.get_point_data('dir')
-                    self.dip = plot_entity.get_point_data('dip')
+
+                    self.dip_az = plot_entity.points_map_dip_azimuth
+                    self.dip = plot_entity.points_map_dip
+
+                    # [Gabriele] Dip az needs to be converted to strike (dz-90) to plot with mplstereonet
                     if uid in self.selected_uids:
                         if show_property == "Planes":
-                            # U = np.sin((plot_entity.points_map_dip_azimuth+90) * np.pi / 180)
-                            # V = np.cos((plot_entity.points_map_dip_azimuth+90) * np.pi / 180)
-                            # # in quiver scale=40 means arrow is 1/40 of figure width, (shaft) width is scaled to figure width, head length and width are scaled to shaft
-                            this_actor = self.ax.plane(self.dir,self.dip,color=color_RGB)[0]
-                            # print('Only poles for now')
-                            # this_actor = None
+                            this_actor = self.ax.plane(self.dip_az-90,self.dip,color=color_RGB)[0]
                         else:
-                            this_actor = self.ax.pole(self.dir, self.dip, color=color_RGB)[0]
+                            this_actor = self.ax.pole(self.dip_az-90, self.dip, color=color_RGB)[0]
 
                         this_actor.set_visible(visible)
                     else:
                         if show_property == "Planes":
-                            # U = np.sin((plot_entity.points_map_dip_azimuth+90) * np.pi / 180)
-                            # V = np.cos((plot_entity.points_map_dip_azimuth+90) * np.pi / 180)
-                            # # in quiver scale=40 means arrow is 1/40 of figure width, (shaft) width is scaled to figure width, head length and width are scaled to shaft
-                            this_actor = self.ax.plane(self.dir,self.dip,color=color_RGB)[0]
-                            # print(this_actor)
-                            # print('Only poles for now')
-                            # this_actor = None
+                            this_actor = self.ax.plane(self.dip_az-90,self.dip,color=color_RGB)[0]
                         else:
-                            this_actor = self.ax.pole(self.dir, self.dip, color=color_RGB)[0]
+                            this_actor = self.ax.pole(self.dip_az-90, self.dip, color=color_RGB)[0]
                         if this_actor:
                             this_actor.set_visible(visible)
                 else:
@@ -4244,11 +4232,10 @@ class ViewStereoplot(BaseView):
         self.figure.canvas.stop_event_loop()
 
 
-
-
-
-
-
-
-    def polar_grid(self):
-        ...
+    def change_grid(self,kind):
+        if kind == 'equatorial':
+            self.ax.grid()
+        else:
+            self.ax.grid(kind=kind,color='k')
+        self.figure.canvas.draw()
+        # self.parent.geology_added_signal.emit

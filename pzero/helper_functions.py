@@ -62,6 +62,7 @@ def profiler(path,iter):
 
 
 def angle_wrapper(angle):
+    '''[Gabriele] Simple function to wrap a [pi;-pi] angle in [0;2pi]''' 
     from numpy import pi
 
     return angle%(2*pi)
@@ -84,7 +85,6 @@ def add_vtk_obj(self,vtk_obj,type,name=None):
             appender.AddInputData(vtk_obj)
 
             appender.Update()
-
             new_vtk_obj = Attitude()
             new_vtk_obj.ShallowCopy(appender.GetOutput())
 
@@ -169,3 +169,55 @@ def PCA(data, correlation = False, sort = True):
         eigenvectors = eigenvectors[:,sort]
 
     return eigenvalues, eigenvectors
+
+
+def best_fitting_plane(points, equation=False):
+    from numpy import mean as np_mean
+    from numpy import dot as np_dot
+
+    ''' code from https://stackoverflow.com/a/38770513/19331382'''
+    """ Computes the best fitting plane of the given points
+
+    Parameters
+    ----------
+    points: array
+        The x,y,z coordinates corresponding to the points from which we want
+        to define the best fitting plane. Expected format:
+            array([
+            [x1,y1,z1],
+            ...,
+            [xn,yn,zn]])
+
+    equation(Optional) : bool
+            Set the oputput plane format:
+                If True return the a,b,c,d coefficients of the plane.
+                If False(Default) return 1 Point and 1 Normal vector.
+    Returns
+    -------
+    a, b, c, d : float
+        The coefficients solving the plane equation.
+
+    or
+
+    point, normal: array
+        The plane defined by 1 Point and 1 Normal vector. With format:
+        array([Px,Py,Pz]), array([Nx,Ny,Nz])
+
+    """
+
+    w, v = PCA(points)
+
+    #: the normal to the plane is the last eigenvector (lower correlation)
+    normal = v[:,2]
+
+    #: get center point of the plane (mean)
+    point = np_mean(points, axis=0)
+
+
+    if equation:
+        a, b, c = normal
+        d = -(np_dot(normal, point))
+        return a, b, c, d
+
+    else:
+        return point, normal

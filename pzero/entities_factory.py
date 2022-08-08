@@ -304,7 +304,7 @@ class PolyData(vtkPolyData):
 
     @property
     def points_map_dip_azimuth(self):
-        """Returns dip azimuth as Numpy array for map plotting if points have Normals property."""
+        """Returns dip azimuth (in grad) as Numpy array for map plotting if points have Normals property."""
         if "Normals" in self.point_data_keys:
             if len(np_shape(self.get_point_data("Normals")))>=2:
                 map_dip_azimuth = np_arctan2(self.get_point_data("Normals")[:, 0], self.get_point_data("Normals")[:, 1]) * 180 / np_pi - 180
@@ -316,7 +316,7 @@ class PolyData(vtkPolyData):
 
     @property
     def points_map_dip(self):
-        """Returns dip as Numpy array for map plotting if points have Normals property."""
+        """Returns dip (in grad) as Numpy array for map plotting if points have Normals property."""
         if "Normals" in self.point_data_keys:
             #problem with one point objects -> np_squeeze (called in get_point_data) returns a (3, ) array instead of a (n,3) array.
             if len(np_shape(self.get_point_data("Normals")))>=2:
@@ -487,7 +487,7 @@ class PolyData(vtkPolyData):
             return part_list
 
 
-class Plane(PolyData):  # _______________________ AT THE MOMENT THIS DOES NOT EXPOSE ANY OTHER METHOD - SEE IF IT IS USEFUL
+class Plane(PolyData,vtkPlane):  # _______________________ AT THE MOMENT THIS DOES NOT EXPOSE ANY OTHER METHOD - SEE IF IT IS USEFUL
     """Plane is a class used as a base for cross-section planes. Basically this is the standard vtkPlane
     class, but exposes methods from vtk.numpy_interface.dataset_adapter (dsa) to access data as Numpy
     arrays instead of VTK arrays. Numpy arrays are just a reference to the underlying VTK arrays, so
@@ -529,9 +529,11 @@ class VertexSet(PolyData):
 
 
 class Attitude(VertexSet):
-    ''' Class for giaciture measurements'''
+    ''' Class for attitude measurements'''
+
     def __init__(self, *args, **kwargs):
         super(Attitude, self).__init__(*args, **kwargs)
+
 class PolyLine(PolyData):  # _____________________________ HERE WE MUST DECIDE WHETHER TO USE LINE (TYPE = 3) OR POLYLINE (TYPE = 4) CELLS - NOT BOTH - POLYLINE COULD BE USEFUL FOR MULTI-PART
     """PolyLine is a polyline derived from BaseEntity and vtkPolyData"""
     def __init__(self, *args, **kwargs):
@@ -1561,6 +1563,7 @@ class PCDom(PolyData):  # _______________________ DO WE NEED ADDITIONAL METHODS 
         pcdom_copy = PCDom()
         pcdom_copy.DeepCopy(self)
         return pcdom_copy
+
 
     # @property
     # def points(self):
