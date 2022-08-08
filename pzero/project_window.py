@@ -528,7 +528,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         for uid in sel_uids:
             mesh = self.geol_coll.get_uid_vtk_obj(uid)
 
-        PreviewWidget(parent=self,titles = ['Original mesh','Retopologized mesh'],
+        PreviewWidget(parent=self,titles = ['Original mesh','Subdivided mesh'],
                              mesh=mesh, opt_widget=subd_input,function=subdivision_resampling)
         # subdivision_resampling(self,type=subd_input['type'],n_subd=subd_input['n_subd'])
 
