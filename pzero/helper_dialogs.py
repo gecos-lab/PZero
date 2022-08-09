@@ -837,7 +837,7 @@ class NavigatorWidget(QMainWindow,Ui_NavWindow):
     ''' Navigator widget prototype for Xsections. This widget can be used to
     change the different Xsections without opening a new window.
 
-    FOR NOW IS INACTIVE. 
+    FOR NOW IS INACTIVE.
     '''
 
     def __init__(self, parent=None,val_list=None,start_idx=None,*args, **kwargs):
@@ -910,7 +910,7 @@ class PreviewWidget(QMainWindow,Ui_PreviewWindow):
         self.ConfirmButtonBox.accepted.connect(self.apply)
         self.function = function
         self.parameters = []
-        if (titles, opt_widget):
+        if (mesh, titles, opt_widget):
             self.title1 = titles[0]
             self.title2 = titles[1]
             self.OptionsLayout.addWidget(opt_widget)
@@ -945,10 +945,10 @@ class PreviewWidget(QMainWindow,Ui_PreviewWindow):
 
 
         self.preview_plotter.subplot(0, 0)
-        self.preview_plotter.add_text("Original mesh", font_size=10)
+        self.preview_plotter.add_text(self.title1, font_size=10)
         self.preview_plotter.add_mesh(self.mesh, style='wireframe', color='y')
         self.preview_plotter.subplot(0, 1)
-        self.preview_plotter.add_text("Retopologized mesh", font_size=10)
+        self.preview_plotter.add_text(self.title2, font_size=10)
         # self.preview_plotter.add_mesh(self.decimated, style='wireframe', color='y')
 
         self.preview_plotter.link_views()
@@ -970,10 +970,10 @@ class PreviewWidget(QMainWindow,Ui_PreviewWindow):
         mod_mesh = self.function(self.parent,1,*parameters)
         self.preview_plotter.clear()
         self.preview_plotter.subplot(0, 0)
-        self.preview_plotter.add_text("Original mesh", font_size=10)
+        self.preview_plotter.add_text(self.title1, font_size=10)
         self.preview_plotter.add_mesh(self.mesh, style='wireframe', color='y')
         self.preview_plotter.subplot(0, 1)
-        self.preview_plotter.add_text("Retopologized mesh", font_size=10)
+        self.preview_plotter.add_text(self.title2, font_size=10)
         self.preview_plotter.add_mesh(mod_mesh, style='wireframe', color='y')
 
     def apply(self):

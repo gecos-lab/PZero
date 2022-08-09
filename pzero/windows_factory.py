@@ -33,6 +33,8 @@ from pyvista import global_theme as pv_global_theme
 from pyvistaqt import QtInteractor as pvQtInteractor
 from pyvista import _vtk
 from pyvista import read_texture
+from pyvista import Disc as pvDisc
+from pyvista import PolyData as pvPolyData
 
 """2D plotting imports"""
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
@@ -2028,6 +2030,7 @@ class View3D(BaseView):
         """Show the Qt Window"""
         self.show()
         self.cam_orient_widget.On() # [Gabriele] The orientation widget needs to be turned on AFTER the canvas is shown
+        self.plotter.enable_mesh_picking(callback=lambda mesh: self.pkd_mesh(mesh),show_message=False)
     def closeEvent(self, event):
         """Override the standard closeEvent method since self.plotter.close() is needed to cleanly close the vtk plotter."""
         reply = QMessageBox.question(self, 'Closing window', 'Close this window?', QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
@@ -2066,6 +2069,10 @@ class View3D(BaseView):
         self.actionPickAttitude = QAction('Toggle measure attitude on a mesh',self)
         self.actionPickAttitude.triggered.connect(lambda: self.act_att())
         self.menuPicker.addAction(self.actionPickAttitude)
+
+        self.actionPickMesh = QAction('Toggle mesh picking',self)
+        self.actionPickMesh.triggered.connect(lambda: self.act_pmesh())
+        self.menuPicker.addAction(self.actionPickMesh)
         self.menuTools.addMenu(self.menuPicker)
 
     def save_home_view(self):
@@ -2109,6 +2116,19 @@ class View3D(BaseView):
             picker = self.plotter.picker
             #print(picker)
             picker.RemoveObservers(_vtk.vtkCommand.EndPickEvent)
+            self.tog_att *= -1
+            print('Picking disabled')
+
+    def act_pmesh(self):
+        '''[Gabriele] Not the best solution but for now it works'''
+        if self.tog_att == -1:
+            self.plotter.enable_mesh_picking(callback=lambda mesh: self.pkd_mesh(mesh),show_message=False)
+            print('Mesh picking enabled')
+        else:
+            picker = self.plotter.picker
+            #print(picker)
+            picker.RemoveObservers(_vtk.vtkCommand.EndPickEvent)
+            self.plotter.enable_mesh_picking(callback=lambda mesh: self.pkd_mesh(mesh),show_message=False)
             self.tog_att *= -1
             print('Picking disabled')
 
@@ -2205,6 +2225,25 @@ class View3D(BaseView):
         # act_list.append(pts_act)
         # self.act_list.append(actor)
 
+    def pkd_mesh(self,mesh):
+
+
+        ''' Very basic function to pick a mesh and select the corresponding item
+            in the legend. The item is selected by comparing the selected mesh center and boundary with all of the centers and boundaries of the available object.
+            THIS IS NOT OPTIMAL FOR LARGE PROJECTS. It could be usefull to calculate
+            the parameters at startup (when loading the objects) or when creating new
+            objects and save them in a specific file/list.'''
+
+        for uid in self.actors_df['uid']:
+
+            vtk_obj = self.parent.geol_coll.get_uid_vtk_obj(uid)
+
+            if mesh.center == list(vtk_obj.GetCenter()) and mesh.bounds == vtk_obj.GetBounds():
+
+                sel_uid = uid
+                idx = self.actors_df.loc[self.actors_df['uid'] == sel_uid].index[0]
+                self.parent.GeologyTableView.selectRow(idx)
+                return
 
     def change_actor_color(self, uid=None, collection=None):
         if collection == 'geol_coll':
@@ -2382,21 +2421,21 @@ class View3D(BaseView):
                     show_property = plot_entity.points_Z
                 elif show_property == 'Normals':
                     # r = self.parent.geol_coll.get_uid_legend(uid=uid)['line_thick']
-                    # texture = read_texture('pzero/icons/dip.png')
-                    # disk = pvDisc(outer = 10,inner=0,c_res=30)
-                    # disk.texture_map_to_plane(inplace=True)
-                    # show_scalar_bar = False
-                    # show_property = None
-                    #
-                    # show_property_title = 'none'
-                    # style = 'surface'
-                    # pv_downcast = PolyData()
-                    # pv_downcast.ShallowCopy(plot_entity)
-                    # pv_downcast.Modified()
-                    #
+                    texture = read_texture('pzero/icons/dip.png')
+                    disk = pvDisc(outer = 10,inner=0,c_res=30)
+                    disk.texture_map_to_plane(inplace=True)
+                    show_scalar_bar = False
+                    show_property = None
+
+                    show_property_title = 'none'
+                    style = 'surface'
+                    pv_downcast = pvPolyData()
+                    pv_downcast.ShallowCopy(plot_entity)
+                    pv_downcast.Modified()
+
                     # print(pv_downcast['Normals'])
-                    # plot_entity = pv_downcast.glyph(orient='Normals',geom=disk)
-                    print('Normals not available for now in 3D view')
+                    plot_entity = pv_downcast.glyph(orient='Normals',geom=disk)
+                    # print('Normals not available for now in 3D view')
 
 
 

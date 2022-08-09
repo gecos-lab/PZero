@@ -524,6 +524,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             print('Multiple surfaces selected, only one will be previewed')
         elif len(sel_uids) == 0:
             print('No selected objects')
+            return
 
         for uid in sel_uids:
             mesh = self.geol_coll.get_uid_vtk_obj(uid)
@@ -542,6 +543,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             print('Multiple surfaces selected, only one will be previewed')
         elif len(sel_uids) == 0:
             print('No selected objects')
+            return
 
         for uid in sel_uids:
             mesh = self.geol_coll.get_uid_vtk_obj(uid)
