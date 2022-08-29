@@ -2076,15 +2076,15 @@ class View3D(BaseView):
         self.menuTools.addMenu(self.menuPicker)
 
     def save_home_view(self):
-        print("self.default_view = self.plotter.camera_position")
+
         self.default_view = self.plotter.camera_position
 
     def zoom_home_view(self):
-        print("self.plotter.camera_position = self.default_view")
+
         self.plotter.camera_position = self.default_view
 
     def zoom_active(self):
-        plot("self.plotter.reset_camera()")
+
         self.plotter.reset_camera()
 
     def initialize_interactor(self):
@@ -2116,6 +2116,7 @@ class View3D(BaseView):
             picker = self.plotter.picker
             #print(picker)
             picker.RemoveObservers(_vtk.vtkCommand.EndPickEvent)
+            self.plotter.enable_mesh_picking(callback=lambda mesh: self.pkd_mesh(mesh),show_message=False)
             self.tog_att *= -1
             print('Picking disabled')
 
