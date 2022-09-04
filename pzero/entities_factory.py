@@ -532,12 +532,6 @@ class VertexSet(PolyData):
         self.Modified()
 
 
-class Attitude(VertexSet):
-    ''' Class for attitude measurements'''
-
-    def __init__(self, *args, **kwargs):
-        super(Attitude, self).__init__(*args, **kwargs)
-
 class PolyLine(PolyData):  # _____________________________ HERE WE MUST DECIDE WHETHER TO USE LINE (TYPE = 3) OR POLYLINE (TYPE = 4) CELLS - NOT BOTH - POLYLINE COULD BE USEFUL FOR MULTI-PART
     """PolyLine is a polyline derived from BaseEntity and vtkPolyData"""
     def __init__(self, *args, **kwargs):
@@ -797,9 +791,6 @@ class TriSurf(PolyData):
             trisurf_copy.points_Z[point_idx] = trisurf_copy.points_Z[point_idx] + row[3]
         trisurf_copy.Modified()
         return trisurf_copy
-
-
-
 
 class XSectionBaseEntity:
     """This abstract class is used just to implement the method to calculate the W coordinate for all geometrical/topological entities belonging to a XSection.

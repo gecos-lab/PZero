@@ -1355,13 +1355,58 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             self.out_dir_name = save_file_dialog(parent=self, caption="Select save directory.", directory=True)
             # print(self.out_file_name)
             for uid in self.selected_uids:
-                print(f'exporting {uid}')
-                border = self.geol_coll.get_uid_vtk_obj(uid).get_clean_boundary()
-                pd_writer = vtk.vtkXMLPolyDataWriter()
-                pd_writer.SetFileName(f'{self.out_dir_name}/{uid}.vtp')
-                pd_writer.SetInputData(self.geol_coll.get_uid_vtk_obj(uid))
-                pd_writer.Write()
-                pd_writer = vtk.vtkXMLPolyDataWriter()
-                pd_writer.SetFileName(f'{self.out_dir_name}/{uid}_border.vtp')
-                pd_writer.SetInputData(border)
-                pd_writer.Write()
+                if self.shown_table == "tabGeology":
+                    entity = self.geol_coll.get_uid_vtk_obj(uid)
+
+                    pd_writer = vtk.vtkXMLPolyDataWriter()
+                    pd_writer.SetFileName(f'{self.out_dir_name}/{uid}.vtp')
+                    pd_writer.SetInputData(entity)
+                    pd_writer.Write()
+                    border = entity.get_clean_boundary()
+                    pd_writer = vtk.vtkXMLPolyDataWriter()
+                    pd_writer.SetFileName(f'{self.out_dir_name}/{uid}_border.vtp')
+                    pd_writer.SetInputData(border)
+                    pd_writer.Write()
+                elif self.shown_table == "tabXSections":
+                    entity = self.xsect_coll.get_uid_vtk_obj(uid)
+
+                    pd_writer = vtk.vtkXMLPolyDataWriter()
+                    pd_writer.SetFileName(f'{self.out_dir_name}/{uid}.vtp')
+                    pd_writer.SetInputData(entity)
+                    pd_writer.Write()
+                elif self.shown_table == "tabMeshes3D":
+                    entity = self.mesh3d_coll.get_uid_vtk_obj(uid)
+
+                    pd_writer = vtk.vtkXMLPolyDataWriter()
+                    pd_writer.SetFileName(f'{self.out_dir_name}/{uid}.vtp')
+                    pd_writer.SetInputData(entity)
+                    pd_writer.Write()
+                elif self.shown_table == "tabDOMs":
+                    entity = self.dom_coll.get_uid_vtk_obj(uid)
+
+                    pd_writer = vtk.vtkXMLPolyDataWriter()
+                    pd_writer.SetFileName(f'{self.out_dir_name}/{uid}.vtp')
+                    pd_writer.SetInputData(entity)
+                    pd_writer.Write()
+                elif self.shown_table == "tabImages":
+                    entity = self.image_coll.get_uid_vtk_obj(uid)
+
+                    pd_writer = vtk.vtkXMLPolyDataWriter()
+                    pd_writer.SetFileName(f'{self.out_dir_name}/{uid}.vtp')
+                    pd_writer.SetInputData(entity)
+                    pd_writer.Write()
+                elif self.shown_table == "tabBoundaries":
+                    entity = self.boundary_coll.get_uid_vtk_obj(uid)
+
+                    pd_writer = vtk.vtkXMLPolyDataWriter()
+                    pd_writer.SetFileName(f'{self.out_dir_name}/{uid}.vtp')
+                    pd_writer.SetInputData(entity)
+                    pd_writer.Write()
+                elif self.shown_table == "tabWells":
+                    entity = self.well_coll.get_uid_vtk_obj(uid)
+
+                    pd_writer = vtk.vtkXMLPolyDataWriter()
+                    pd_writer.SetFileName(f'{self.out_dir_name}/{uid}.vtp')
+                    pd_writer.SetInputData(entity)
+                    pd_writer.Write()
+                print(f'exported {uid}')
