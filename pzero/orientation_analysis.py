@@ -129,7 +129,16 @@ def set_normals(self):
                 print("All Normals set.")
             else:
                 print("Only VertexSet, XsVertexSet and TriSurf entities can be processed.")
+
+        elif self.shown_table == "tabDOMs":
+            print('Calculating normals for Point Cloud')
+            for uid in self.selected_uids:
+                self.dom_coll.append_uid_property(uid=uid, property_name="Normals", property_components=3)
+                self.dom_coll.get_uid_vtk_obj(uid).vtk_set_normals()
+                self.prop_legend.update_widget(self)
+                print(self.prop_legend_df)
+            print('Done')
         else:
-            print("Normals can be calculated only on geological entities (at the moment).")
+            print("Normals can be calculated only on geological entities and Point Clouds (at the moment).")
     else:
         print("No input data selected.")

@@ -572,6 +572,8 @@
     <addaction name="separator"/>
     <addaction name="actionCalculateNormal"/>
     <addaction name="actionCalculateLineation"/>
+    <addaction name="separator"/>
+    <addaction name="actionBuildOctree"/>
    </widget>
    <widget class="QMenu" name="menuInterpolation_tools">
     <property name="title">
@@ -1090,6 +1092,11 @@
   <action name="actionRetopologize">
    <property name="text">
     <string>Retopologize</string>
+   </property>
+  </action>
+  <action name="actionBuildOctree">
+   <property name="text">
+    <string>Build octree</string>
    </property>
   </action>
  </widget>

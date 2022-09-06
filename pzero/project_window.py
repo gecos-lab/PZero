@@ -164,6 +164,8 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.actionCalculateNormal.triggered.connect(self.normals_calculate)
         self.actionCalculateLineation.triggered.connect(self.lineations_calculate)
 
+        self.actionBuildOctree.triggered.connect(self.build_octree)
+
         """Interpolation actions -> slots"""
         self.actionDelaunay2DInterpolation.triggered.connect(lambda: interpolation_delaunay_2d(self))
         self.actionPoissonInterpolation.triggered.connect(lambda: poisson_interpolation(self))
@@ -514,6 +516,28 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
     def lineations_calculate(self):  # ____________________________________________________ IMPLEMENT THIS FOR POINTS WITH PLUNGE/TREND AND FOR POLYLINES
         """Calculate lineations on geological entities."""
         pass
+    def build_octree(self):
+        if self.selected_uids:
+            for uid in self.selected_uids:
+                if self.shown_table == "tabGeology":
+                    entity = self.geol_coll.get_uid_vtk_obj(uid)
+                elif self.shown_table == "tabXSections":
+                    entity = self.xsect_coll.get_uid_vtk_obj(uid)
+                elif self.shown_table == "tabMeshes3D":
+                    entity = self.mesh3d_coll.get_uid_vtk_obj(uid)
+                elif self.shown_table == "tabDOMs":
+                    entity = self.dom_coll.get_uid_vtk_obj(uid)
+                elif self.shown_table == "tabImages":
+                    entity = self.image_coll.get_uid_vtk_obj(uid)
+                elif self.shown_table == "tabBoundaries":
+                    entity = self.boundary_coll.get_uid_vtk_obj(uid)
+                elif self.shown_table == "tabWells":
+                    entity = self.well_coll.get_uid_vtk_obj(uid)
+
+                octree = vtk.vtkOctreePointLocator()
+                octree.SetDataSet(entity)
+                octree.BuildLocator()
+                entity.locator = octree
 
     def subd_res_dialog(self):
         dict = {'type':['Subdivision type:',['linear','butterfly','loop']],'n_subd':['Number of iterations',2]}
@@ -1354,7 +1378,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         else:
             self.out_dir_name = save_file_dialog(parent=self, caption="Select save directory.", directory=True)
             # print(self.out_file_name)
-            for uid in self.selected_uids:
+            for uid in self.selected_uids: #[gabriele] this could be generalized with a helper function
                 if self.shown_table == "tabGeology":
                     entity = self.geol_coll.get_uid_vtk_obj(uid)
 

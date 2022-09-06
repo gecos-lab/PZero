@@ -1,7 +1,7 @@
 """entities_factory.py
 PZero© Andrea Bistacchi"""
 
-from vtk import vtkPolyData, vtkPoints, vtkCellCenters, vtkIdFilter, vtkCleanPolyData, vtkPolyDataNormals, vtkPlane, vtkCellArray, vtkLine, vtkIdList, vtkTriangleFilter, vtkTriangle, vtkFeatureEdges, vtkCleanPolyData, vtkStripper, vtkPolygon, vtkUnstructuredGrid, vtkTetra, vtkImageData, vtkStructuredGrid, vtkPolyDataConnectivityFilter, vtkCylinderSource,vtkThreshold,vtkDataObject,vtkThresholdPoints,vtkDelaunay2D,vtkPolyDataMapper,vtkQuadricDecimation,vtkSmoothPolyDataFilter,vtkLinearSubdivisionFilter
+from vtk import vtkPolyData, vtkPoints, vtkCellCenters, vtkIdFilter, vtkCleanPolyData, vtkPolyDataNormals, vtkPlane, vtkCellArray, vtkLine, vtkIdList, vtkTriangleFilter, vtkTriangle, vtkFeatureEdges, vtkCleanPolyData, vtkStripper, vtkPolygon, vtkUnstructuredGrid, vtkTetra, vtkImageData, vtkStructuredGrid, vtkPolyDataConnectivityFilter, vtkCylinderSource,vtkThreshold,vtkDataObject,vtkThresholdPoints,vtkDelaunay2D,vtkPolyDataMapper,vtkQuadricDecimation,vtkSmoothPolyDataFilter,vtkLinearSubdivisionFilter,vtkLocator,vtkPCANormalEstimation
 from vtk.util.numpy_support import vtk_to_numpy
 from vtk.numpy_interface.dataset_adapter import WrapDataObject, vtkDataArrayToVTKArray
 from pyvista import PolyData as pv_PolyData
@@ -27,6 +27,7 @@ from numpy import sign as np_sign
 from numpy import sqrt as np_sqrt
 from numpy import hstack as np_hstack
 from numpy import column_stack as np_column_stack
+from numpy import where as np_where
 
 """
 Some notes on the way we derive our classes from VTK.
@@ -154,6 +155,7 @@ class PolyData(vtkPolyData):
     also modifies the VTK array and vice-versa. Property methods are used where logical and possible."""
     def __init__(self, *args, **kwargs):
         super(PolyData, self).__init__(*args, **kwargs)
+        self._locator = None
 
     @property
     def bounds(self):
@@ -286,7 +288,9 @@ class PolyData(vtkPolyData):
         Note that we use AutoOrientNormalsOff() since this would assume completely
         closed surfaces. Instead we use ConsistencyOn() and NonManifoldTraversalOff()
         to prevent problems where the consistency of polygonal ordering is corrupted
-        due to topological loops. See details in Chapter 9 of VTK textbook."""
+        due to topological loops. See details in Chapter 9 of VTK textbook.
+        vtkPolyDataNormals works only on polygons and triangle strips to calculate normals. For point clouds we can implement the vtkPCANormalEstimation filter (see vtk_set_normals in the PCDom class)
+        """
         """Run the filter."""
         normals_filter = vtkPolyDataNormals()
         normals_filter.SetInputData(self)
@@ -488,6 +492,18 @@ class PolyData(vtkPolyData):
                 vtk_out_obj.DeepCopy(cleaner.GetOutput())
                 vtk_out_list.append(vtk_out_obj)
             return vtk_out_list
+
+    ''' The locator property can be used to set and retrieve different vtkPointLocator (e.g. octree) types to use in vtkAlgorithms. '''
+    @property
+    def locator(self):
+        return self._locator
+
+    @locator.setter
+    def locator(self, locator):
+        print(locator)
+        if isinstance(locator,vtkLocator):
+            self._locator = locator
+
 
 
 
@@ -1562,32 +1578,25 @@ class PCDom(PolyData):  # _______________________ DO WE NEED ADDITIONAL METHODS 
         pcdom_copy.DeepCopy(self)
         return pcdom_copy
 
+    def vtk_set_normals(self):
 
-    # @property
-    # def points(self):
-    #     """Returns point coordinates as a Numpy array"""
-    #     return WrapDataObject(self).Points
-    #
-    # @points.setter
-    # def points(self, points_matrix=None):
-    #     """Sets point coordinates from a Numpy array (sets a completely new point array)"""
-    #     WrapDataObject(self).Points = points_matrix
-    #
-    #
-    # def cast_to_polydata(self):
-    #
-    #     # NEW METHOD
-    #     pv_PD = pv_PolyData(self.points)
-    #     vtk_points = pv_PD.GetPoints()
-    #     vtk_cells = pv_PD.GetVerts()
-    #     cast = PolyData()
-    #     cast.SetPoints(vtk_points)
-    #     cast.SetVerts(vtk_cells)
-    #     del pv_PD
-    #     del vtk_points
-    #     del vtk_cells
-    #
-    #     return cast
+        ''' Calculate normals for a point cloud using PCA. Since we are using PCA ,normals may point in +/- orientation, which may not be consistent with neighboring normals. To resolve this problem we can use SetNormalOrientationToGraphTraversal to perform a traversal of the point cloud and flip neighboring normals so that they are mutually consistent. Problem with big PointClouds since the traversal is done in chunks. This is why once the normals are calculated we flip all of the z positive normals (mutiplying Nx,Ny,Nz by -1)
+
+        NOTE: Maybe is better not do it with the PCA filter but by sampling the PC (e.g. using octree) and use the pca helper_function. By doing this we could calculate different PC statistics (curvature, normals, roughness, density and so on) for each sample point. It's a more efficient approach than just running multiple filters on the whole point cloud.
+        '''
+
+        normals_filter = vtkPCANormalEstimation()
+        normals_filter.SetInputData(self)
+        normals_filter.SetSampleSize(15)
+        normals_filter.SetNormalOrientationToGraphTraversal()
+
+        normals_filter.Update()
+        """Update the input polydata "self" with the new normals."""
+        normals = vtk_to_numpy(normals_filter.GetOutput().GetPointData().GetNormals())
+        print('Flipping to negative')
+        normals_flipped = np_where(normals[:,2:]>0,normals*-1,normals)
+        self.set_point_data('Normals',normals_flipped)
+        self.Modified()
 
 
 class TSDom(PolyData):  # __________________________________ TO BE IMPLEMENTED - could also be derived from TriSurf()

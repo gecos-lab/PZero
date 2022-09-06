@@ -13,7 +13,7 @@ from .helper_dialogs import input_one_value_dialog, input_text_dialog, input_com
 from .geological_collection import GeologicalCollection
 from copy import deepcopy
 from uuid import uuid4
-from .helper_functions import add_vtk_obj,angle_wrapper,PCA,best_fitting_plane
+from .helper_functions import angle_wrapper,PCA,best_fitting_plane
 
 """Maths imports"""
 from math import degrees, sqrt, atan2
@@ -2058,7 +2058,12 @@ class View3D(BaseView):
         self.zoomActive.triggered.connect(self.zoom_active)
         self.menuWindow.addAction(self.zoomActive)
 
+        # self.showOct = QAction("Show octree structure", self)
+        # self.showOct.triggered.connect(self.show_octree)
+        # self.menuWindow.addAction(self.showOct)
+
         self.menuEdit = QMenu('Edit point cloud',self)
+        # self.actionCalculateNormalsPC = QAction('Calculate normals for point clouds',self)
         self.actionNormals2dd = QAction('Convert normals to Dip/Direction',self)
         self.actionNormals2dd.triggered.connect(lambda: self.normals2dd())
         self.menuEdit.addAction(self.actionNormals2dd)
@@ -2148,11 +2153,10 @@ class View3D(BaseView):
         extr.SetInputData(mesh)
         extr.ExtractInsideOn()
         extr.Update()
-        temp_obj = PolyData()
-        temp_obj.ShallowCopy(extr.GetOutput())
+        #[Gabriele] We could try to do this with vtkPCANormalEstimation
+        points = numpy_support.vtk_to_numpy(extr.GetOutput().GetPoints().GetData())
+        plane_c ,plane_n = best_fitting_plane(points)
 
-        plane_c ,plane_n = best_fitting_plane(temp_obj.points)
-        del temp_obj
 
         if plane_n[2]>0: #If Z is positive flip the normals
             plane_n *=-1
@@ -2233,7 +2237,11 @@ class View3D(BaseView):
             in the legend. The item is selected by comparing the selected mesh center and boundary with all of the centers and boundaries of the available object.
             THIS IS NOT OPTIMAL FOR LARGE PROJECTS. It could be usefull to calculate
             the parameters at startup (when loading the objects) or when creating new
-            objects and save them in a specific file/list.'''
+            objects and save them in a specific file/list.
+
+            Another solution could be to define a new @property called tag that
+            is set when a new entity is created. The tag can be extracted when an entity is selected and searched for in the entity list. This way there is no need to compare the centers and boudaries.
+            '''
 
         for uid in self.actors_df['uid']:
 
@@ -2517,8 +2525,8 @@ class View3D(BaseView):
                     if n_comp > 1:
                         show_property_value= plot_entity.get_point_data(show_property)
                         show_scalar_bar = False
-                        if show_property == 'RGB':
-                            plot_rgb_option = True
+                        # if show_property == 'RGB':
+                        plot_rgb_option = True
                     else:
                         show_scalar_bar = True
                         show_property_value = plot_entity.get_point_data(show_property)
@@ -2716,6 +2724,20 @@ class View3D(BaseView):
             """See above."""
             self.plotter.camera_position = camera_position
         return this_actor
+
+
+
+    def show_octree(self):
+        vis_uids =  self.actors_df.loc[self.actors_df['show'] == True,'uid']
+        for uid in vis_uids:
+            vtk_obj = self.parent.dom_coll.get_uid_vtk_obj(uid)
+            oct = PolyData() #[Gabriele] possible recursion problem
+            # print(vtk_obj.locator)
+            vtk_obj.locator.GenerateRepresentation(3,oct)
+
+            self.plotter.add_mesh(oct,style='wireframe',color='red')
+
+
 
 
     '''[Gabriele] PC Filters ----------------------------------------------------'''
