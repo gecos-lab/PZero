@@ -1,7 +1,7 @@
 """entities_factory.py
 PZero© Andrea Bistacchi"""
 
-from vtk import vtkPolyData, vtkPoints, vtkCellCenters, vtkIdFilter, vtkCleanPolyData, vtkPolyDataNormals, vtkPlane, vtkCellArray, vtkLine, vtkIdList, vtkTriangleFilter, vtkTriangle, vtkFeatureEdges, vtkCleanPolyData, vtkStripper, vtkPolygon, vtkUnstructuredGrid, vtkTetra, vtkImageData, vtkStructuredGrid, vtkPolyDataConnectivityFilter, vtkCylinderSource,vtkThreshold,vtkDataObject,vtkThresholdPoints,vtkDelaunay2D,vtkPolyDataMapper,vtkQuadricDecimation,vtkSmoothPolyDataFilter,vtkLinearSubdivisionFilter,vtkLocator,vtkPCANormalEstimation
+from vtk import vtkPolyData, vtkPoints, vtkCellCenters, vtkIdFilter, vtkCleanPolyData, vtkPolyDataNormals, vtkPlane, vtkCellArray, vtkLine, vtkIdList, vtkTriangleFilter, vtkTriangle, vtkFeatureEdges, vtkCleanPolyData, vtkStripper, vtkPolygon, vtkUnstructuredGrid, vtkTetra, vtkImageData, vtkStructuredGrid, vtkPolyDataConnectivityFilter, vtkCylinderSource,vtkThreshold,vtkDataObject,vtkThresholdPoints,vtkDelaunay2D,vtkPolyDataMapper,vtkQuadricDecimation,vtkSmoothPolyDataFilter,vtkLinearSubdivisionFilter,vtkLocator,vtkPCANormalEstimation,vtkPointSet
 from vtk.util.numpy_support import vtk_to_numpy
 from vtk.numpy_interface.dataset_adapter import WrapDataObject, vtkDataArrayToVTKArray
 from pyvista import PolyData as pv_PolyData
@@ -29,6 +29,7 @@ from numpy import hstack as np_hstack
 from numpy import column_stack as np_column_stack
 from numpy import where as np_where
 
+from .helper_functions import profiler
 """
 Some notes on the way we derive our classes from VTK.
 
@@ -1572,23 +1573,30 @@ class PCDom(PolyData):  # _______________________ DO WE NEED ADDITIONAL METHODS 
     See discussion at https://discourse.vtk.org/t/proposal-adding-a-vtkpointcloud-data-structure/3872/3 """
     def __init__(self, *args, **kwargs):
         super(PCDom, self).__init__(*args, **kwargs)
+        self._point_set_proxy = None
 
     def deep_copy(self):
         pcdom_copy = PCDom()
         pcdom_copy.DeepCopy(self)
         return pcdom_copy
 
+    # @profiler('/home/gabriele/STORAGE/Unibro/Libri-e-dispense/Tesi/profiler_data/normals_calc/brolla_proxy',10)
     def vtk_set_normals(self):
 
-        ''' Calculate normals for a point cloud using PCA. Since we are using PCA ,normals may point in +/- orientation, which may not be consistent with neighboring normals. To resolve this problem we can use SetNormalOrientationToGraphTraversal to perform a traversal of the point cloud and flip neighboring normals so that they are mutually consistent. Problem with big PointClouds since the traversal is done in chunks. This is why once the normals are calculated we flip all of the z positive normals (mutiplying Nx,Ny,Nz by -1)
+        ''' Calculate normals for a point cloud using PCA. Since we are using PCA ,normals may point in +/- orientation, which may not be consistent with neighboring normals. To resolve this problem we can flip the normals using np_where. Once the normals are calculated we flip all of the z positive normals (mutiplying Nx,Ny,Nz by -1).
 
-        NOTE: Maybe is better not do it with the PCA filter but by sampling the PC (e.g. using octree) and use the pca helper_function. By doing this we could calculate different PC statistics (curvature, normals, roughness, density and so on) for each sample point. It's a more efficient approach than just running multiple filters on the whole point cloud.
+        NOTE: Maybe is better not do it with the PCA filter but by sampling the PC and use the pca helper_function. By doing this we could calculate different PC statistics (curvature, normals, roughness, density and so on) for each sample point. It's a more efficient approach than just running multiple filters on the whole point cloud. Using a vtkPointSet proxy could speed up the process.
+
+        Another approach could be to calculate the normals on a subsampled pc and then attribute the calculated values to a neighbourhood of points around the known value (voronoi style).
         '''
+        # if self.point_set_proxy is None:
+        #     self.generate_point_set()
 
+        # ps_proxy = self.point_set_proxy
         normals_filter = vtkPCANormalEstimation()
         normals_filter.SetInputData(self)
         normals_filter.SetSampleSize(15)
-        normals_filter.SetNormalOrientationToGraphTraversal()
+        # normals_filter.SetNormalOrientationToGraphTraversal()
 
         normals_filter.Update()
         """Update the input polydata "self" with the new normals."""
@@ -1597,6 +1605,28 @@ class PCDom(PolyData):  # _______________________ DO WE NEED ADDITIONAL METHODS 
         normals_flipped = np_where(normals[:,2:]>0,normals*-1,normals)
         self.set_point_data('Normals',normals_flipped)
         self.Modified()
+
+    ''' New property to retrieve and set vtkPointSet proxy model'''
+
+    @property
+    def point_set_proxy(self):
+        return self._point_set_proxy
+
+    @point_set_proxy.setter
+    def point_set_proxy(self,point_set_obj):
+        self._point_set_proxy = point_set_obj
+
+    def generate_point_set(self):
+        points = self.GetPoints()
+        ps = vtkPointSet()
+        ps.SetPoints(points)
+        ps.BuildLocator()
+
+        point_ids = vtk.vtkIdFilter()
+        point_ids.SetInputData(ps)
+        point_ids.SetPointIdsArrayName('OriginalIds')
+        point_ids.Update()
+        self.point_set_proxy = point_ids.GetOutput()
 
 
 class TSDom(PolyData):  # __________________________________ TO BE IMPLEMENTED - could also be derived from TriSurf()

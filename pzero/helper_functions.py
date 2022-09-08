@@ -7,17 +7,17 @@ def auto_sep(filename):
 
 def profiler(path,iter):
 
-    '''[Gabriele] Function used to profile the time needed to run a given function. The output is a .csv file in which each row corresponds the mean run time and std of functions. As a secondary output the profiler saves the raw differences in a separate file. This tool can be used as a decorator.
+    '''[Gabriele] Function used to profile the time needed to run a given function. The output is a text file in which each row corresponds the mean run time and std of functions. As a secondary output the profiler saves the raw differences in a separate csv file. This tool can be used as a decorator.
     -------------------------------------------------------------
     Input:
-        + path: Where to save the output files
+        + path: Where to save the output files (in csv,txt or whatever)
         + iter: Number of iterations
     Output:
-        + mean +- std time .csv file
+        + mean +- std time text file
         + raw data .csv file
     -------------------------------------------------------------
     Usage
-    @profiler(path/to/output/file,100)
+    @profiler(path/to/output/file.*,n_iter)
     def func(foo):
         dostuff
 
@@ -62,7 +62,7 @@ def profiler(path,iter):
 
 
 def angle_wrapper(angle):
-    '''[Gabriele] Simple function to wrap a [pi;-pi] angle in [0;2pi]''' 
+    '''[Gabriele] Simple function to wrap a [pi;-pi] angle in [0;2pi]'''
     from numpy import pi
 
     return angle%(2*pi)

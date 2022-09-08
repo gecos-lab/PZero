@@ -117,11 +117,7 @@ def pc2vtk(in_file_name,col_names,row_range,header_row,usecols,delimiter,self=No
                 input_df.drop(['Red','Green','Blue'],axis=1,inplace=True)
 
             if 'Nx' in input_df.columns:
-                # print(properties_df)
-                if self.check255Box.isChecked():
-                    normals = np.array([input_df['Nx'],input_df['Ny'],input_df['Nz']]).T.astype(np.uint8)
-                else:
-                    normals = np.array([input_df['Nx'],input_df['Ny'],input_df['Nz']]).T
+                normals = np.array([input_df['Nx'],input_df['Ny'],input_df['Nz']]).T
 
                 pv_PD['Normals'] = normals
 
@@ -137,6 +133,8 @@ def pc2vtk(in_file_name,col_names,row_range,header_row,usecols,delimiter,self=No
         properties_names = point_cloud.point_data_keys
         properties_components = [point_cloud.get_point_data_shape(i)[1] for i in properties_names]
         properties_types = [point_cloud.get_point_data_type(i) for i in properties_names]
+
+        # point_cloud.generate_point_set()
 
         """Create dictionary."""
         curr_obj_attributes = deepcopy(DomCollection.dom_entity_dict)

@@ -2150,7 +2150,7 @@ class View3D(BaseView):
         extr = vtkExtractPoints()
 
         extr.SetImplicitFunction(sphere)
-        extr.SetInputData(mesh)
+        extr.SetInputData(self.point_set_proxy)
         extr.ExtractInsideOn()
         extr.Update()
         #[Gabriele] We could try to do this with vtkPCANormalEstimation
