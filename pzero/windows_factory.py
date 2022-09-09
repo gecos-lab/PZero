@@ -1515,6 +1515,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.TopologyTreeWidget.itemChanged.connect(self.toggle_geology_topology_visibility)
 
     def geology_legend_color_modified_update_views(self, updated_list=None):
+        print(updated_list)
         """This is called when the color in the geological legend is modified.
         Disconnect signals to geology and topology tree, if they are set, to avoid a nasty loop
         that disrupts the trees, then they are reconnected when the trees are rebuilt"""
@@ -1522,7 +1523,11 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.TopologyTreeWidget.itemChanged.disconnect()
         for uid in updated_list:
             """Case for color changed"""
+            wells_list = self.parent.well_coll.get_uids()
+            if self.parent.geol_coll.get_uid_x_section(uid) in wells_list:
+                self.change_actor_color(uid=self.parent.geol_coll.get_uid_x_section(uid), collection='well_coll')
             self.change_actor_color(uid=uid, collection='geol_coll')
+
         """Re-connect signals."""
         self.GeologyTreeWidget.itemChanged.connect(self.toggle_geology_topology_visibility)
         self.TopologyTreeWidget.itemChanged.connect(self.toggle_geology_topology_visibility)
@@ -2288,7 +2293,7 @@ class View3D(BaseView):
         """Update line thickness for actor uid"""
         if collection == 'geol_coll':
             line_thick = self.parent.geol_coll.get_uid_legend(uid=uid)['line_thick']
-            if isinstance(self.parent.geol_coll.get_uid_vtk_obj(uid),Attitude):
+            if isinstance(self.parent.geol_coll.get_uid_vtk_obj(uid),VertexSet):
                 self.actors_df.loc[self.actors_df['uid'] == uid, 'actor'].values[0].GetProperty().SetPointSize(line_thick)
 
         elif collection == 'xsect_coll':

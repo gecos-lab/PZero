@@ -160,11 +160,11 @@ class Legend(QObject):
             llevel_1 = QTreeWidgetItem(parent.LegendTreeWidget, [locid])  # self.GeologyTreeWidget as parent -> top level
             for feature in pd.unique(parent.well_legend_df.loc[parent.well_legend_df['Loc ID'] == locid, 'geological_feature']):
                 # llevel_2 = QTreeWidgetItem(llevel_1, [geological_feature])  # llevel_1 as parent -> 2nd level
-                color_R = parent.well_legend_df.loc[(parent.well_legend_df['Loc ID'] == locid) & (parent.well_legend_df['geological_feature'] == feature), "color_R"].values[0]
-
-                color_G = parent.well_legend_df.loc[(parent.well_legend_df['Loc ID'] == locid) & (parent.well_legend_df['geological_feature'] == feature), "color_G"].values[0]
-
-                color_B = parent.well_legend_df.loc[(parent.well_legend_df['Loc ID'] == locid) & (parent.well_legend_df['geological_feature'] == feature), "color_B"].values[0]
+                # color_R = parent.well_legend_df.loc[(parent.well_legend_df['Loc ID'] == locid) & (parent.well_legend_df['geological_feature'] == feature), "color_R"].values[0]
+                #
+                # color_G = parent.well_legend_df.loc[(parent.well_legend_df['Loc ID'] == locid) & (parent.well_legend_df['geological_feature'] == feature), "color_G"].values[0]
+                #
+                # color_B = parent.well_legend_df.loc[(parent.well_legend_df['Loc ID'] == locid) & (parent.well_legend_df['geological_feature'] == feature), "color_B"].values[0]
 
                 line_thick = parent.well_legend_df.loc[(parent.well_legend_df['Loc ID'] == locid) & (parent.well_legend_df['geological_feature'] == feature), "line_thick"].values[0]
                 # print(line_thick)
@@ -174,10 +174,10 @@ class Legend(QObject):
                 #     geol_sequence_value = "strati_0"
                 #     print("geol_sequence_value: ", geol_sequence_value)
                 "geol_color_dialog_btn > QPushButton used to select color"
-                well_color_dialog_btn = QPushButton()
-                well_color_dialog_btn.locid = locid  # this is to pass these values to the update function below
-                well_color_dialog_btn.feature = feature
-                well_color_dialog_btn.setStyleSheet("background-color:rgb({},{},{})".format(color_R, color_G, color_B))
+                # well_color_dialog_btn = QPushButton()
+                # well_color_dialog_btn.locid = locid  # this is to pass these values to the update function below
+                # well_color_dialog_btn.feature = feature
+                # well_color_dialog_btn.setStyleSheet("background-color:rgb({},{},{})".format(color_R, color_G, color_B))
                 "geol_line_thick_spn > QSpinBox used to select line thickness"
                 well_line_thick_spn = QSpinBox()
                 well_line_thick_spn.locid = locid  # this is to pass these values to the update function below
@@ -185,11 +185,11 @@ class Legend(QObject):
                 well_line_thick_spn.setValue(line_thick)
 
                 "Create items"
-                llevel_2 = QTreeWidgetItem(llevel_1, [feature, str(color_R), str(color_G), str(color_B)])  # llevel_2 as parent -> 3rd level
-                parent.LegendTreeWidget.setItemWidget(llevel_2, 4, well_color_dialog_btn)
+                llevel_2 = QTreeWidgetItem(llevel_1, [feature])  # llevel_2 as parent -> 3rd level
+                # parent.LegendTreeWidget.setItemWidget(llevel_2, 4, well_color_dialog_btn)
                 parent.LegendTreeWidget.setItemWidget(llevel_2, 5, well_line_thick_spn)
                 "Set signals for the widgets below"
-                well_color_dialog_btn.clicked.connect(lambda: self.change_well_feature_color(parent=parent))
+                # well_color_dialog_btn.clicked.connect(lambda: self.change_well_feature_color(parent=parent))
                 well_line_thick_spn.valueChanged.connect(lambda: self.change_well_feature_line_thick(parent=parent))
 
         parent.LegendTreeWidget.expandAll()
@@ -218,8 +218,10 @@ class Legend(QObject):
         """Signal to update actors in windows. This is emitted only for the modified uid under the 'color' key."""
         updated_list = parent.geol_coll.df.loc[(parent.geol_coll.df['geological_type'] == geo_type) & (parent.geol_coll.df['geological_feature'] == feature) & (parent.geol_coll.df['scenario'] == scenario), "uid"].to_list()
         parent.geology_legend_color_modified_signal.emit(updated_list)
+        self.change_well_feature_color(parent,feature) #Update the wells
 
     def change_geology_feature_line_thick(self, parent=None):
+        print('ciao')
         geo_type = self.sender().geo_type
         feature = self.sender().feature
         scenario = self.sender().scenario
@@ -307,35 +309,39 @@ class Legend(QObject):
         elif other_type == "Boundary":
             parent.boundary_legend_thick_modified_signal.emit(parent.boundary_coll.df['uid'].tolist())
 
-    def change_well_feature_color(self,parent=None):
-        locid = self.sender().locid
-        feature = self.sender().feature
+    def change_well_feature_color(self,parent=None,feature=None):
+        # feature = self.sender().feature
+        #
+        # well_id = parent.geol_coll_df.loc[parent.geol_coll_df['uid'] == uid]
+        #
+        # locid = self.sender().locid
+
         """Here we use the same query as above to GET the color from the legend"""
-        old_color_R = parent.well_legend_df.loc[(parent.well_legend_df['Loc ID'] == locid) & (parent.well_legend_df['geological_feature'] == feature), "color_R"].values[0]
-
-        old_color_G = parent.well_legend_df.loc[(parent.well_legend_df['Loc ID'] == locid) & (parent.well_legend_df['geological_feature'] == feature), "color_G"].values[0]
-
-        old_color_B = parent.well_legend_df.loc[(parent.well_legend_df['Loc ID'] == locid) & (parent.well_legend_df['geological_feature'] == feature), "color_B"].values[0]
-
-        color_in = QColor(old_color_R, old_color_G, old_color_B)  # https://doc.qt.io/qtforpython/PySide2/QtGui/QColor.html#PySide2.QtGui.QColor
-        color_out = QColorDialog.getColor(initial=color_in, title="Select color")  # https://doc.qt.io/qtforpython/PySide2/QtWidgets/QColorDialog.html#PySide2.QtWidgets.PySide2.QtWidgets.QColorDialog.getColor
-        if not color_out.isValid():
-            color_out = color_in
-        new_color_R = color_out.red()
-        new_color_G = color_out.green()
-        new_color_B = color_out.blue()
+        # old_color_R = parent.well_legend_df.loc[(parent.well_legend_df['Loc ID'] == locid) & (parent.well_legend_df['geological_feature'] == feature), "color_R"].values[0]
+        #
+        # old_color_G = parent.well_legend_df.loc[(parent.well_legend_df['Loc ID'] == locid) & (parent.well_legend_df['geological_feature'] == feature), "color_G"].values[0]
+        #
+        # old_color_B = parent.well_legend_df.loc[(parent.well_legend_df['Loc ID'] == locid) & (parent.well_legend_df['geological_feature'] == feature), "color_B"].values[0]
+        #
+        # color_in = QColor(old_color_R, old_color_G, old_color_B)  # https://doc.qt.io/qtforpython/PySide2/QtGui/QColor.html#PySide2.QtGui.QColor
+        # color_out = QColorDialog.getColor(initial=color_in, title="Select color")  # https://doc.qt.io/qtforpython/PySide2/QtWidgets/QColorDialog.html#PySide2.QtWidgets.PySide2.QtWidgets.QColorDialog.getColor
+        # if not color_out.isValid():
+        #     color_out = color_in
+        # new_color_R = color_out.red()
+        # new_color_G = color_out.green()
+        # new_color_B = color_out.blue()
         """Here the query is reversed and modified, dropping the values() method, to allow SETTING the color in the legend."""
-        parent.well_legend_df.loc[(parent.well_legend_df['Loc ID'] == locid) & (parent.well_legend_df['geological_feature'] == feature), "color_R"] = new_color_R
+        parent.well_legend_df.loc[parent.well_legend_df['geological_feature'] == feature, "color_R"] = parent.geol_legend_df.loc[parent.geol_legend_df['geological_feature'] == feature, "color_R"].values[0]
 
-        parent.well_legend_df.loc[(parent.well_legend_df['Loc ID'] == locid) & (parent.well_legend_df['geological_feature'] == feature), "color_G"] = new_color_G
+        parent.well_legend_df.loc[parent.well_legend_df['geological_feature'] == feature, "color_G"] = parent.geol_legend_df.loc[parent.geol_legend_df['geological_feature'] == feature, "color_G"].values[0]
 
-        parent.well_legend_df.loc[(parent.well_legend_df['Loc ID'] == locid) & (parent.well_legend_df['geological_feature'] == feature), "color_B"] = new_color_B
+        parent.well_legend_df.loc[parent.well_legend_df['geological_feature'] == feature, "color_B"] = parent.geol_legend_df.loc[parent.geol_legend_df['geological_feature'] == feature, "color_B"].values[0]
 
         """Update button color."""
-        self.sender().setStyleSheet("background-color:rgb({},{},{})".format(new_color_R, new_color_G, new_color_B))
+        # self.sender().setStyleSheet("background-color:rgb({},{},{})".format(new_color_R, new_color_G, new_color_B))
 
         """Signal to update actors in windows. This is emitted only for the modified uid under the 'color' key."""
-        updated_list = parent.well_coll.df.loc[(parent.well_coll.df['Loc ID'] == locid) & (parent.well_coll.df['geological_feature'] == feature), "uid"].to_list()
+        updated_list = parent.well_coll.df.loc[parent.well_coll.df['geological_feature'] == feature, "uid"].to_list()
         parent.well_legend_color_modified_signal.emit(updated_list)
 
     def change_well_feature_line_thick(self,parent=None):

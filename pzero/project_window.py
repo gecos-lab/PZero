@@ -1368,8 +1368,13 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         out_cols.remove('vtk_obj')
         self.boundary_coll.df[out_cols].to_csv(out_dir_name + '/boundary_table.csv', encoding='utf-8', index=False)
         self.boundary_coll.df[out_cols].to_json(out_dir_name + '/boundary_table.json', orient='index')
-        print("All files saved.")
 
+        """Save well collection table to CSV and JSON files."""
+        out_cols = list(self.well_coll.df.columns)
+        out_cols.remove('vtk_obj')
+        self.well_coll.df[out_cols].to_json(out_dir_name + '/well_table.json', orient='index')
+        self.well_coll.df[out_cols].to_csv(out_dir_name + '/well_table.csv',encoding='utf-8', index=False)
+        print("All files saved.")
     def export_vtk(self):
         '''[Gabriele] Function used to export selected objects as vtk files'''
         if not self.selected_uids:

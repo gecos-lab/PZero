@@ -17,7 +17,6 @@ def vtk2dxf(self=None, out_dir_name=None):
     list_names = []
     for uid in self.geol_coll.df['uid']:
         if isinstance(self.geol_coll.get_uid_vtk_obj(uid), TriSurf):
-            print(uid)
             legend = self.geol_coll.get_uid_legend(uid=uid)
             R = legend['color_R']
             G = legend['color_G']
@@ -30,7 +29,7 @@ def vtk2dxf(self=None, out_dir_name=None):
                 # print(part)
                 df = pd.DataFrame()
                 dfb = pd.DataFrame()
-                vtk_entity = part.retopo()
+                vtk_entity = part
                 # test_pc = pv.PolyData()
                 #
                 # test_pc.ShallowCopy(vtk_entity)
@@ -112,7 +111,6 @@ def vtk2dxf(self=None, out_dir_name=None):
             #     for i in range(vtk_entity.GetNumberOfCells()):
             #         dxf_model.add_polyline3d((vtk_entity.GetCell(i).GetPoints().GetPoint(0),
             #                                   vtk_entity.GetCell(i).GetPoints().GetPoint(1)))
-
     for uid in self.boundary_coll.df['uid']:
         if isinstance(self.boundary_coll.get_uid_vtk_obj(uid), TriSurf):
             layer = uid + "_" + self.boundary_coll.df.loc[self.boundary_coll.df['uid'] == uid, 'name'].values[0]
@@ -127,6 +125,47 @@ def vtk2dxf(self=None, out_dir_name=None):
             #     border_points = numpy_support.vtk_to_numpy(vtk_border.GetCell(cell).GetPoints().GetData())
             #     dxf_model.add_polyline3d(border_points, dxfattribs={'layer': layer})
             print("entity exported\n")
+    for uid in self.well_coll.df['uid']:
+        legend = self.well_coll.get_uid_legend(uid=uid)
+        vtk_entity = self.well_coll.get_uid_vtk_obj(uid)
+        R = legend['color_R']
+        G = legend['color_G']
+        B = legend['color_B']
+        dxf_out = ezdxf.new()
+        dxf_model = dxf_out.modelspace()
+        # print(part)
+        df = pd.DataFrame()
+        layer = f'{self.well_coll.df.loc[self.well_coll.df["uid"] == uid, "geological_feature"].values[0]}'
+
+        xyz = numpy_support.vtk_to_numpy(vtk_entity.GetPoints().GetData())
+
+        df['x'] = xyz[:,0]
+        df['y'] = xyz[:,1]
+        df['z'] = xyz[:,2]
+
+
+        dxf_out.layers.add(name=layer)
+
+        line_layer = dxf_out.layers.get(layer)
+        line_layer.rgb = (R,G,B)
+
+        for cell in range(vtk_entity.GetNumberOfCells()):
+            line_points = numpy_support.vtk_to_numpy(vtk_entity.GetCell(cell).GetPoints().GetData())
+            dxf_model.add_polyline3d(line_points, dxfattribs={'layer': layer,'color':256})
+        # print("entity exported\n")
+
+        out_file_name = f'{uid}_{layer}'
+        list_uids.append(uid)
+        list_names.append(layer)
+
+
+
+
+        # print("Writing DXF... please wait.")
+        df.to_csv(f'{out_dir_name}/csv/{out_file_name}.csv',index=False)
+
+        dxf_out.saveas(f'{out_dir_name}/dxf/{out_file_name}.dxf')
+
 
     complete_list = pd.DataFrame({'uids':list_uids,'geological_features':list_names})
     complete_list.to_csv(f'{out_dir_name}/exported_object_list.csv',index=False)

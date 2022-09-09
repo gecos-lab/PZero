@@ -50,7 +50,7 @@ class WellCollection(QAbstractTableModel):
 
     """Custom methods used to add or remove entities, query the dataframe, etc."""
 
-    def add_entity_from_dict(self, entity_dict=None):
+    def add_entity_from_dict(self, entity_dict=None,color=None):
         """Add entity to collection from dictionary.
         Create a new uid if it is not included in the dictionary."""
         if not entity_dict['uid']:
@@ -65,13 +65,17 @@ class WellCollection(QAbstractTableModel):
         locid = entity_dict['Loc ID']
         feature = entity_dict["geological_feature"]
         if self.parent.well_legend_df.loc[(self.parent.well_legend_df['Loc ID'] == locid) & (self.parent.well_legend_df['geological_feature'] == feature)].empty:
+            R = self.parent.geol_legend_df.loc[(self.parent.geol_legend_df['geological_feature'] == feature),'color_R'].values[0]
+            G = self.parent.geol_legend_df.loc[(self.parent.geol_legend_df['geological_feature'] == feature),'color_G'].values[0]
+            B = self.parent.geol_legend_df.loc[(self.parent.geol_legend_df['geological_feature'] == feature),'color_B'].values[0]
+            
             self.parent.well_legend_df = self.parent.well_legend_df.append({'Loc ID': locid,
                                                                             'geological_feature': feature,
-                                                                            'color_R': round(np.random.random() * 255),
-                                                                            'color_G': round(np.random.random() * 255),
-                                                                            'color_B': round(np.random.random() * 255),
+                                                                            'color_R': R,
+                                                                            'color_G': G,
+                                                                            'color_B': B,
                                                                             'line_thick': 15.0},
-                                                                           ignore_index=True)
+                                                                            ignore_index=True)
             self.parent.legend.update_widget(self.parent)
             self.parent.prop_legend.update_widget(self.parent)
         """Then emit signal to update the views."""

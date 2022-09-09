@@ -55,13 +55,13 @@ def well2vtk(in_file_name=None,col_names=None,row_range=None,header_row=None,use
         legs = [0]
         for i,v in enumerate(data['DepthTop'][1:]):
             legs.append(v-data['DepthTop'][i])
-
+        color = dict()
         for i,l in enumerate(legs[:2]):
 
             length = legs[i+1]
 
             # top[2] -= l
-            x_bottom = top[0]+(length*np.cos(plunge)*np.sin(trend)) 
+            x_bottom = top[0]+(length*np.cos(plunge)*np.sin(trend))
             y_bottom = top[1]+(length*np.cos(plunge)*np.cos(trend))
             z_bottom = top[2]-(length*np.sin(plunge))
 
@@ -88,23 +88,23 @@ def well2vtk(in_file_name=None,col_names=None,row_range=None,header_row=None,use
 
             top = np.array([x_bottom,y_bottom,z_bottom])
 
+            geo_code = data.loc[i,"GeologyCode"]
+
             curr_obj_attributes = deepcopy(WellCollection.well_entity_dict)
             curr_obj_attributes['uid'] = str(uuid4())
             curr_obj_attributes['Loc ID'] = f'{unique_id[0]}'
-            curr_obj_attributes['geological_feature'] = f'{data.loc[i,"GeologyCode"]}'
+            curr_obj_attributes['geological_feature'] = f'{geo_code}'
             curr_obj_attributes['properties_names'] = []
             curr_obj_attributes['properties_components'] = []
             curr_obj_attributes['properties_types'] = []
             curr_obj_attributes['vtk_obj'] = well_line
-            self.well_coll.add_entity_from_dict(entity_dict=curr_obj_attributes)
-
 
             marker_obj_attributes = deepcopy(GeologicalCollection.geological_entity_dict)
             marker_obj_attributes['uid'] = str(uuid4())
             marker_obj_attributes['name'] = f'{data.loc[i,"GeologyCode"]}_marker'
             marker_obj_attributes["topological_type"] = "VertexSet"
             marker_obj_attributes['geological_type'] = 'top'
-            marker_obj_attributes['geological_feature'] = f'{data.loc[i,"GeologyCode"]}'
+            marker_obj_attributes['geological_feature'] = f'{geo_code}'
             marker_obj_attributes['scenario'] = 'undef'
             marker_obj_attributes['properties_names'] = []
             marker_obj_attributes['properties_components'] = []
@@ -113,6 +113,13 @@ def well2vtk(in_file_name=None,col_names=None,row_range=None,header_row=None,use
             marker_obj_attributes['vtk_obj'] = well_marker
 
             self.geol_coll.add_entity_from_dict(entity_dict=marker_obj_attributes)
+
+
+
+            self.well_coll.add_entity_from_dict(entity_dict=curr_obj_attributes)
+
+
+
 
 
             del well_line
