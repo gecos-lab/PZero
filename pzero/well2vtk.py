@@ -105,7 +105,7 @@ def well2vtk(in_file_name=None,col_names=None,row_range=None,header_row=None,use
             marker_obj_attributes["topological_type"] = "VertexSet"
             marker_obj_attributes['geological_type'] = 'top'
             marker_obj_attributes['geological_feature'] = f'{geo_code}'
-            marker_obj_attributes['scenario'] = 'undef'
+            marker_obj_attributes['scenario'] = f'{unique_id[0]}'
             marker_obj_attributes['properties_names'] = []
             marker_obj_attributes['properties_components'] = []
             marker_obj_attributes['properties_types'] = []

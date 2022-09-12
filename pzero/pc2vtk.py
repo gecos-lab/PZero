@@ -11,11 +11,12 @@ Convert point cloud data (txt, csv, xyz, las ...) in vtk objects.
 import numpy as np
 import os
 from copy import deepcopy
-from vtk import vtkPoints,vtkCellArray, vtkPointSet
+from vtk import vtkPoints, vtkPointSet
+from vtk.util.numpy_support import numpy_to_vtk
 from uuid import uuid4
 from .entities_factory import PCDom
 from .dom_collection import DomCollection
-from pyvista import PolyData as PlD
+from pyvista import PointSet
 from pyvista import vtk_points
 # import pyvista as pv
 from pandas import DataFrame as pd_df
@@ -33,7 +34,9 @@ def pc2vtk(in_file_name,col_names,row_range,header_row,usecols,delimiter,self=No
 
     basename = os.path.basename(in_file_name)
     _,ext = os.path.splitext(basename)
-    point_cloud = PCDom() #[Gabriele] vtkpointSet object
+
+    point_cloud = PCDom() #[Gabriele] vtkPointSet object
+    points = vtkPoints()
 
     skip_range = range(1,row_range.start)
     if skip_range:
@@ -96,39 +99,52 @@ def pc2vtk(in_file_name,col_names,row_range,header_row,usecols,delimiter,self=No
         input_df['X'] -= offset[0]
         input_df['Y'] -= offset[1]
 
-        XYZ = np.array([input_df['X'].values,input_df['Y'].values,input_df['Z'].values]).T
+        XYZ = numpy_to_vtk(np.column_stack((input_df['X'].values,input_df['Y'].values,input_df['Z'].values)))
+
 
         # [Gabriele] Create pyvista PolyData using XYZ data
+        points.SetData(XYZ)
+        point_cloud.SetPoints(points)
+        point_cloud.Modified()
 
-        pv_PD = PlD(XYZ)
+        # pv_PD = PointSet(XYZ)
         ''' [Gabriele] Set properties (exclude XYZ data) and add properties names and components in the appropriate lists (properties_names and properties_components).'''
         input_df.drop(['X','Y','Z'],axis=1,inplace=True)
 
         if not input_df.empty:
             if 'Red' in input_df.columns:
+                point_cloud.init_point_data('RGB',3)
                 # print(properties_df)
                 if self.check255Box.isChecked():
                     RGB = np.array([input_df['Red'],input_df['Green'],input_df['Blue']]).T.astype(np.uint8)
                 else:
                     RGB = np.array([input_df['Red'],input_df['Green'],input_df['Blue']]).T
 
-                pv_PD['RGB'] = RGB
+                point_cloud.set_point_data('RGB',RGB)
 
                 input_df.drop(['Red','Green','Blue'],axis=1,inplace=True)
 
             if 'Nx' in input_df.columns:
+                point_cloud.init_point_data('Normals',3)
                 normals = np.array([input_df['Nx'],input_df['Ny'],input_df['Nz']]).T
 
-                pv_PD['Normals'] = normals
+                point_cloud.set_point_data('Normals',normals)
 
                 input_df.drop(['Nx','Ny','Nz'],axis=1,inplace=True)
 
             for property in input_df.columns:
-                pv_PD[property] = input_df[property].values
+                n_components = np.shape(input_df[property].values)
+                if len(n_components):
+                    n_components = 1
+                else:
+                    n_components = n_components[1]
+                point_cloud.init_point_data(property,n_components)
+
+                point_cloud.set_point_data(property,input_df[property].values)
                 # point_cloud.set_point_data(property,properties_value)
 
         print('4. Adding PC to project')
-        point_cloud.ShallowCopy(pv_PD)
+        # point_cloud.ShallowCopy(pv_PD)
         point_cloud.Modified()
         properties_names = point_cloud.point_data_keys
         properties_components = [point_cloud.get_point_data_shape(i)[1] for i in properties_names]
@@ -150,6 +166,6 @@ def pc2vtk(in_file_name,col_names,row_range,header_row,usecols,delimiter,self=No
         self.parent.dom_coll.add_entity_from_dict(entity_dict=curr_obj_attributes)
         """Cleaning."""
         del input_df
-        del pv_PD
+        # del pv_PD
         del point_cloud
         print('Done!')

@@ -35,6 +35,7 @@ from pyvista import _vtk
 from pyvista import read_texture
 from pyvista import Disc as pvDisc
 from pyvista import PolyData as pvPolyData
+from pyvista import PointSet as pvPointSet
 
 """2D plotting imports"""
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
@@ -2071,7 +2072,10 @@ class View3D(BaseView):
         # self.actionCalculateNormalsPC = QAction('Calculate normals for point clouds',self)
         self.actionNormals2dd = QAction('Convert normals to Dip/Direction',self)
         self.actionNormals2dd.triggered.connect(lambda: self.normals2dd())
+        self.actionFilter = QAction('Filter',self)
+        self.actionFilter.triggered.connect(lambda: self.radial_filt())
         self.menuEdit.addAction(self.actionNormals2dd)
+        self.menuEdit.addAction(self.actionFilter)
         self.menuTools.addMenu(self.menuEdit)
 
         self.menuPicker = QMenu('Pickers',self)
@@ -2145,6 +2149,7 @@ class View3D(BaseView):
 
     def pkd_point(self,mesh,pid,set_opt):
 
+
         sph_r = 0.2 #radius of the selection sphere
 
         center = mesh.points[pid]
@@ -2154,13 +2159,14 @@ class View3D(BaseView):
 
         extr = vtkExtractPoints()
 
+        point_proxy = mesh.generate_point_set()
         extr.SetImplicitFunction(sphere)
-        extr.SetInputData(self.point_set_proxy)
+        extr.SetInputData(mesh)
         extr.ExtractInsideOn()
         extr.Update()
         #[Gabriele] We could try to do this with vtkPCANormalEstimation
         points = numpy_support.vtk_to_numpy(extr.GetOutput().GetPoints().GetData())
-        plane_c ,plane_n = best_fitting_plane(points)
+        plane_c,plane_n = best_fitting_plane(points)
 
 
         if plane_n[2]>0: #If Z is positive flip the normals
@@ -2385,7 +2391,6 @@ class View3D(BaseView):
             this_actor = None
         """Then plot the vtk object with proper options."""
         if isinstance(plot_entity, (PolyLine, TriSurf, XsPolyLine)):
-
             plot_rgb_option = None
             if isinstance(plot_entity.points, np.ndarray):
                 """This  check is needed to avoid errors when trying to plot an empty
@@ -2496,6 +2501,8 @@ class View3D(BaseView):
                                                plot_texture_option=False, plot_rgb_option=plot_rgb_option, visible=visible)
         elif isinstance(plot_entity, PCDom):
             plot_rgb_option = None
+            new_plot = pvPointSet()
+            new_plot.ShallowCopy(plot_entity)#this is temporary
             file = self.parent.dom_coll.df.loc[self.parent.dom_coll.df['uid'] == uid, "name"].values[0]
             if isinstance(plot_entity.points, np.ndarray):
                 """This check is needed to avoid errors when trying to plot an empty
@@ -2535,7 +2542,7 @@ class View3D(BaseView):
                     else:
                         show_scalar_bar = True
                         show_property_value = plot_entity.get_point_data(show_property)
-            this_actor = self.plot_PC_3D(uid=uid,plot_entity=plot_entity,color_RGB=color_RGB, show_property=show_property_value, show_scalar_bar=show_scalar_bar, color_bar_range=None, show_property_title=show_property_title, plot_rgb_option=plot_rgb_option,visible=visible,point_size=line_thick)
+            this_actor = self.plot_PC_3D(uid=uid,plot_entity=new_plot,color_RGB=color_RGB, show_property=show_property_value, show_scalar_bar=show_scalar_bar, color_bar_range=None, show_property_title=show_property_title, plot_rgb_option=plot_rgb_option,visible=visible,point_size=line_thick)
         elif isinstance(plot_entity, (MapImage, XsImage)):
             """Do not plot directly image - it is much slower.
             Texture options according to type."""
@@ -2695,7 +2702,7 @@ class View3D(BaseView):
     """NONE AT THE MOMENT"""
 
     def plot_PC_3D(self, uid=None, plot_entity=None,visible=None, color_RGB=None, show_property=None, show_scalar_bar=None, color_bar_range=None, show_property_title=None, plot_rgb_option=None, point_size=1.0, points_as_spheres=True):
-        """""""[Gabriele]  Plot the point cloud"""
+        """[Gabriele]  Plot the point cloud"""
         if not self.actors_df.empty:
             """This stores the camera position before redrawing the actor.
             Added to avoid a bug that sometimes sends the scene to a very distant place.
@@ -2751,11 +2758,10 @@ class View3D(BaseView):
         uids = self.parent.dom_coll.get_dom_type_uids('PCDom')
 
         for uid in uids:
-            pc_obj = self.parent.dom_coll.get_uid_vtk_obj(uid)
-            self.o3d_obj = pc2o3d(self,pc_obj)
-
-            filtered_o3d = self.o3d_obj.remove_radius_outlier(10,5,print_progress=True)
-            print(filtered_o3d)
+            vtk_obj = self.parent.dom_coll.get_uid_vtk_obj(uid)
+            vtk_obj.calc_radius()
+            print(vtk_obj)
+            self.parent.dom_coll.replace_vtk(uid,vtk_obj)
 
 
     def surf_den_filt(self):

@@ -1,7 +1,7 @@
 """entities_factory.py
 PZero© Andrea Bistacchi"""
 
-from vtk import vtkPolyData, vtkPoints, vtkCellCenters, vtkIdFilter, vtkCleanPolyData, vtkPolyDataNormals, vtkPlane, vtkCellArray, vtkLine, vtkIdList, vtkTriangleFilter, vtkTriangle, vtkFeatureEdges, vtkCleanPolyData, vtkStripper, vtkPolygon, vtkUnstructuredGrid, vtkTetra, vtkImageData, vtkStructuredGrid, vtkPolyDataConnectivityFilter, vtkCylinderSource,vtkThreshold,vtkDataObject,vtkThresholdPoints,vtkDelaunay2D,vtkPolyDataMapper,vtkQuadricDecimation,vtkSmoothPolyDataFilter,vtkLinearSubdivisionFilter,vtkLocator,vtkPCANormalEstimation,vtkPointSet
+from vtk import vtkPolyData, vtkPoints, vtkCellCenters, vtkIdFilter, vtkCleanPolyData, vtkPolyDataNormals, vtkPlane, vtkCellArray, vtkLine, vtkIdList, vtkTriangleFilter, vtkTriangle, vtkFeatureEdges, vtkCleanPolyData, vtkStripper, vtkPolygon, vtkUnstructuredGrid, vtkTetra, vtkImageData, vtkStructuredGrid, vtkPolyDataConnectivityFilter, vtkCylinderSource,vtkThreshold,vtkDataObject,vtkThresholdPoints,vtkDelaunay2D,vtkPolyDataMapper,vtkQuadricDecimation,vtkSmoothPolyDataFilter,vtkLinearSubdivisionFilter,vtkLocator,vtkPCANormalEstimation,vtkPointSet,vtkRadiusOutlierRemoval,vtkAppendPolyData
 from vtk.util.numpy_support import vtk_to_numpy
 from vtk.numpy_interface.dataset_adapter import WrapDataObject, vtkDataArrayToVTKArray
 from pyvista import PolyData as pv_PolyData
@@ -28,6 +28,7 @@ from numpy import sqrt as np_sqrt
 from numpy import hstack as np_hstack
 from numpy import column_stack as np_column_stack
 from numpy import where as np_where
+from numpy import repeat as np_repeat
 
 from .helper_functions import profiler
 """
@@ -1568,7 +1569,7 @@ class DEM(vtkStructuredGrid):
         self.GetPointData().SetActiveTCoords(map_image_uid)
 
 
-class PCDom(PolyData):  # _______________________ DO WE NEED ADDITIONAL METHODS WITH RESPECT TO POLYDATA?
+class PCDom(vtkPointSet):  # _______________________ DO WE NEED ADDITIONAL METHODS WITH RESPECT TO POLYDATA?
     """Point Cloud DOM.
     See discussion at https://discourse.vtk.org/t/proposal-adding-a-vtkpointcloud-data-structure/3872/3 """
     def __init__(self, *args, **kwargs):
@@ -1579,6 +1580,173 @@ class PCDom(PolyData):  # _______________________ DO WE NEED ADDITIONAL METHODS 
         pcdom_copy = PCDom()
         pcdom_copy.DeepCopy(self)
         return pcdom_copy
+
+    @property
+    def bounds(self):
+        """Returns a list with xmin, xmax, ymin, ymax, zmin, zmax."""
+        return self.GetBounds()
+
+    @property
+    def points_number(self):
+        """Returns the number of points."""
+        return WrapDataObject(self).GetNumberOfPoints()
+
+    @property
+    def points(self):
+        """Returns point coordinates as a Numpy array with columns for x, y, z."""
+        return WrapDataObject(self).Points
+
+    @points.setter
+    def points(self, points_matrix=None):
+        """Sets point coordinates from a Numpy array with columns for x, y, z (sets a completely new point array)."""
+        WrapDataObject(self).Points = points_matrix
+
+    @property
+    def points_X(self):
+        """Returns X point coordinates as Numpy array."""
+        return self.points[:, 0]
+
+    @property
+    def points_Y(self):
+        """Returns Y point coordinates as Numpy array"""
+        return self.points[:, 1]
+
+    @property
+    def points_Z(self):
+        """Returns Z point coordinates as Numpy array"""
+        return self.points[:, 2]
+
+    @property
+    def point_data_keys(self):
+        """Lists point data keys, if present (except handles the case of objects with no properties)."""
+        try:
+            return WrapDataObject(self).PointData.keys()
+        except:
+            return []
+
+    @property
+    def points_map_dip_azimuth(self):
+        """Returns dip azimuth (in grad) as Numpy array for map plotting if points have Normals property."""
+        if "Normals" in self.point_data_keys:
+            if len(np_shape(self.get_point_data("Normals")))>=2:
+                map_dip_azimuth = np_arctan2(self.get_point_data("Normals")[:, 0], self.get_point_data("Normals")[:, 1]) * 180 / np_pi - 180
+            else:
+                map_dip_azimuth = np_arctan2(self.get_point_data("Normals")[0], self.get_point_data("Normals")[1]) * 180 / np_pi - 180
+            return map_dip_azimuth
+        else:
+            return None
+
+    @property
+    def points_map_dip(self):
+        """Returns dip (in grad) as Numpy array for map plotting if points have Normals property."""
+        if "Normals" in self.point_data_keys:
+            #problem with one point objects -> np_squeeze (called in get_point_data) returns a (3, ) array instead of a (n,3) array.
+            if len(np_shape(self.get_point_data("Normals")))>=2:
+
+                map_dip = 90 - np_arcsin(-self.get_point_data("Normals")[:, 2]) * 180 / np_pi
+            else:
+                map_dip = 90 - np_arcsin(-self.get_point_data("Normals")[2]) * 180 / np_pi
+            return map_dip
+        else:
+            return None
+
+    @property
+    def points_map_trend(self):
+        """Returns trend as Numpy array for map plotting if points have Lineations property."""
+        if "Lineations" in self.point_data_keys:
+            map_trend = np_arctan2(self.get_point_data("Lineations")[:, 0], self.get_point_data("Lineations")[:, 1]) * 180 / np_pi
+            return map_trend
+        else:
+            return None
+
+    @property
+    def points_map_plunge(self):
+        """Returns plunge as Numpy array for map plotting if points have Lineations property."""
+        if "Lineations" in self.point_data_keys:
+            map_plunge = np_arcsin(-self.get_point_data("Lineations")[:, 2]) * 180 / np_pi
+            return map_plunge
+        else:
+            return None
+
+    def ids_to_scalar(self):
+        """Store point and cell ids on scalars named "vtkIdFilter_Ids".
+        vtkIdFilter is a filter that generates scalars or field data using cell and point ids.
+        That is, the point attribute data scalars or field data are generated from the point ids,
+        and the cell attribute data scalars or field data are generated from the cell ids.
+        In theory one could decide to record only point or cell ids using PointIdsOn/Off and CellIdsOn/Off.
+        Here we use the default name for the scalar storing the ids, that is "vtkIdFilter_Ids", but
+        in theory this could be changed with SetPointIdsArrayName(<new_name>) and
+        SetCellIdsArrayName(<new_name>). In this case also the last lines must be modified accordingly."""
+        """Run the filter."""
+        id_filter = vtkIdFilter()
+        id_filter.SetInputData(self)
+        id_filter.PointIdsOn()
+        id_filter.CellIdsOn()
+        id_filter.Update()
+        """Update the input polydata "self" with the new scalars."""
+        self.GetPointData().SetScalars(id_filter.GetOutput().GetPointData().GetArray("vtkIdFilter_Ids"))
+        self.Modified()
+
+    def init_point_data(self, data_key=None, dimension=None):
+        """Creates a new point data attribute with name = data_key
+        as an empty Numpy array with dimension = 1, 2, 3, 4, 6, or 9.
+        These are the only dimensions accepted by VTK arrays."""
+        if dimension not in [1, 2, 3, 4, 6, 9]:
+            print("Error - dimension not in [1, 2, 3, 4, 6, 9]")
+            return
+        nan_array = np_empty((self.points_number, dimension))
+        nan_array[:] = np_NaN
+        WrapDataObject(self).PointData.append(nan_array, data_key)
+
+    def remove_point_data(self, data_key=None):
+        """Removes a point data attribute with name = data_key."""
+        self.GetPointData().RemoveArray(data_key)
+
+
+    def set_point_data(self, data_key=None, attribute_matrix=None):  # _____________________________________________ REVEL CITED HERE TO FLATTEN THE ARRAY AND THEN NOT USED?
+        """Sets point data attribute from Numpy array (sets a completely new point attributes array)
+        Applying ravel to the input n-d array is required to flatten the array as in VTK arrays
+        (see also reshape in get_point_data)."""
+        WrapDataObject(self).PointData.append(attribute_matrix, data_key)
+
+    def edit_point_data(self, data_key=None, point_id=None, point_data_array=None):
+        """Edits the data attribute of a single point from point_id and Numpy point_data_array"""
+        point_data_array = point_data_array.flat[:]  # to be sure that point_vector is a row vector
+        for col in range(np_size(point_data_array)):
+            WrapDataObject(self).PointData[data_key][point_id, col] = point_data_array[col]
+
+    def get_point_data_type(self, data_key=None):
+        """Get point data type."""
+        return WrapDataObject(self).PointData[data_key].dtype.name
+
+    ''' New property to retrieve and set vtkPointSet proxy model'''
+    def get_point_data_shape(self, data_key=None):
+        """Returns the shape of a point data attribute matrix."""
+        # if isinstance(self, (VertexSet, PolyLine, TriSurf, XsVertexSet, XsPolyLine, PCDom)):
+        """For vector entities we have attribute arrays of the same length as the number of points.
+        This method yields the number of points and the number of components of the attribute."""
+        n_points = np_shape(WrapDataObject(self).PointData[data_key])[0]
+        """The following solves the problem of Numpy returning just the length for 1D arrays."""
+        try:
+            n_components = np_shape(WrapDataObject(self).PointData[data_key])[1]
+        except:
+            n_components = 1
+        return [n_points, n_components]
+
+    def get_point_data(self, data_key=None):  # _________________________________________________________ CHECK THIS - PROBABLY reshape SHOULD APPLY TO ALL CASES
+        """Returns a point data attribute as Numpy array. This cannot be converted to
+        a property method since the key of the attribute must be specified."""
+        # if isinstance(self, (VertexSet, PolyLine, TriSurf, XsVertexSet, XsPolyLine)):
+        """For vector entities return a n-by-m-dimensional array where n is the
+        number of points and m is the number of components of the attribute.
+        Reshape is needed since the Numpy array returned by dsa is "flat" as a standard VTK array."""
+        point_data = WrapDataObject(self).PointData[data_key].reshape((self.get_point_data_shape(data_key=data_key)[0], self.get_point_data_shape(data_key=data_key)[1]))
+        # elif isinstance(self, PolyData):
+        #     """For point entities we don't need to reshape"""
+        #     point_data = WrapDataObject(self).PointData[data_key]
+        """We use np_squeeze to remove axes with length 1, so a 1D array will be returned with shape (n, ) and not with shape (n, 1)."""
+        #The np_array is sometimes necessary. Without it in some cases this error occures: ndarray subclass __array_wrap__ method returned an object which was not an instance of an ndarray subclass
+        return np_squeeze(np_array(point_data))
 
     # @profiler('/home/gabriele/STORAGE/Unibro/Libri-e-dispense/Tesi/profiler_data/normals_calc/brolla_proxy',10)
     def vtk_set_normals(self):
@@ -1596,7 +1764,7 @@ class PCDom(PolyData):  # _______________________ DO WE NEED ADDITIONAL METHODS 
         normals_filter = vtkPCANormalEstimation()
         normals_filter.SetInputData(self)
         normals_filter.SetSampleSize(15)
-        # normals_filter.SetNormalOrientationToGraphTraversal()
+        normals_filter.SetNormalOrientationToGraphTraversal()
 
         normals_filter.Update()
         """Update the input polydata "self" with the new normals."""
@@ -1606,27 +1774,52 @@ class PCDom(PolyData):  # _______________________ DO WE NEED ADDITIONAL METHODS 
         self.set_point_data('Normals',normals_flipped)
         self.Modified()
 
-    ''' New property to retrieve and set vtkPointSet proxy model'''
+    def calc_radius(self):
 
-    @property
-    def point_set_proxy(self):
-        return self._point_set_proxy
+        self.init_point_data('radial_filt',1)
 
-    @point_set_proxy.setter
-    def point_set_proxy(self,point_set_obj):
-        self._point_set_proxy = point_set_obj
+        r = vtkRadiusOutlierRemoval()
+        r.SetInputData(self)
+        r.GenerateOutliersOn()
+        r.SetRadius(20)
+        r.SetNumberOfNeighbors(6)
+        r.Update()
+        print('filer run')
+        appender = vtkAppendPolyData()
+        for i in range(2):
+            part = PolyData()
 
-    def generate_point_set(self):
-        points = self.GetPoints()
-        ps = vtkPointSet()
-        ps.SetPoints(points)
-        ps.BuildLocator()
+            part.ShallowCopy(r.GetOutput(i))
 
-        point_ids = vtk.vtkIdFilter()
-        point_ids.SetInputData(ps)
-        point_ids.SetPointIdsArrayName('OriginalIds')
-        point_ids.Update()
-        self.point_set_proxy = point_ids.GetOutput()
+            selected = np_repeat(i,part.points_number)
+
+            part.set_point_data('radial_filt',selected)
+            appender.AddInputData(part)
+
+        appender.Update()
+        self.GetPointData().SetScalars(appender.GetOutput().GetPointData().GetArray("radial_filt"))
+        print(self)
+
+    # @property
+    # def point_set_proxy(self):
+    #     return self._point_set_proxy
+    #
+    # @point_set_proxy.setter
+    # def point_set_proxy(self,point_set_obj):
+    #     self._point_set_proxy = point_set_obj
+    #
+    # def generate_point_set(self):
+    #     points = self.GetPoints()
+    #     ps = vtkPointSet()
+    #     ps.SetPoints(points)
+    #     ps.BuildLocator()
+    #
+    #     point_ids = vtk.vtkIdFilter()
+    #     point_ids.SetInputData(ps)
+    #     point_ids.SetPointIdsArrayName('OriginalIds')
+    #     point_ids.Update()
+    #     self.point_set_proxy = point_ids.GetOutput()
+    #     return self.point_set_proxy
 
 
 class TSDom(PolyData):  # __________________________________ TO BE IMPLEMENTED - could also be derived from TriSurf()
