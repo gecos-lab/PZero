@@ -135,10 +135,15 @@ def multiple_input_dialog(title="title", input_dict=None,return_widget=False):
         objects_qt[key][0].setText(input_dict[key][0])
         gridLayout.addWidget(objects_qt[key][0], i + 1, 1)
         """Create QLineEdits and QComboBoxes."""
+        print(type(input_dict[key][1]))
         if isinstance(input_dict[key][1], list):
             objects_qt[key][1] = QComboBox(widget,objectName=f'par_{key}')
             objects_qt[key][1].addItems(input_dict[key][1])
             objects_qt[key][1].setEditable(True)
+        elif isinstance(input_dict[key][1], bool):
+            objects_qt[key][1] = QCheckBox(widget,objectName=f'par_{key}')
+            # objects_qt[key][1].setText(str(input_dict[key][0]))
+            objects_qt[key][1].setChecked(input_dict[key][1])
         elif isinstance(input_dict[key][1], int):
             objects_qt[key][1] = QLineEdit(widget,objectName=f'par_{key}')
             objects_qt[key][1].setText(str(input_dict[key][1]))
@@ -895,7 +900,9 @@ class PreviewWidget(QMainWindow,Ui_PreviewWindow):
     - titles: Titles for the two views
     - mesh: the initial mesh
     - opt_widget: the widget resulting from the dialog (return_widget option see multiple_input_dialog)
-    - function: function to apply to the mesh
+    - function: function to apply to the mesh. For the function a mode argument (0 or 1) is set. if
+    Mode is 1 the first mesh is returned to be plotted in the previewer. For mode 0 the filter
+    is executed for all surfaces (the preview plotting is skipped).
     '''
 
     def __init__(self, parent=None,titles=None,mesh=None,opt_widget=None,function=None,*args, **kwargs):

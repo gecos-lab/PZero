@@ -427,7 +427,7 @@ def implicit_model_loop_structural(self):
     print("Loop interpolation completed.")
 
 
-def surface_smoothing(self):
+def surface_smoothing(self, mode=0,convergence_value=1,boundary_smoothing=False,edge_smoothing=False):
     """Smoothing tools adjust the positions of points to reduce the noise content in the surface."""
     print("Surface Smoothing: reduce the noise of the surface")
     if self.shown_table != "tabGeology":
@@ -442,55 +442,81 @@ def surface_smoothing(self):
         input_uids = deepcopy(self.selected_uids)
     for uid in input_uids:
         if isinstance(self.geol_coll.get_uid_vtk_obj(uid), TriSurf):
-            pass
+            smoother = vtk.vtkSmoothPolyDataFilter()
+            smoother.SetInputData(self.geol_coll.get_uid_vtk_obj(uid))
+            if convergence_value is None:
+                convergence_value = 1
+            smoother.SetConvergence(float(convergence_value))
+            smoother.SetBoundarySmoothing(boundary_smoothing)
+            smoother.SetFeatureEdgeSmoothing(edge_smoothing)
+            smoother.Update()
+            if mode:
+                return smoother.GetOutput()
+            else:
+                """Create deepcopy of the geological entity dictionary."""
+                surf_dict = deepcopy(self.geol_coll.geological_entity_dict)
+                surf_dict['name'] = self.geol_coll.get_uid_name(uid) + '_smoothed'
+                surf_dict['geological_feature'] = self.geol_coll.get_uid_geological_feature(uid)
+                surf_dict['scenario'] = self.geol_coll.get_uid_scenario(uid)
+                surf_dict['geological_type'] = self.geol_coll.get_uid_geological_type(uid)
+                surf_dict['topological_type'] = 'TriSurf'
+                surf_dict['vtk_obj'] = TriSurf()
+                surf_dict['vtk_obj'].ShallowCopy(smoother.GetOutput())
+                surf_dict['vtk_obj'].Modified()
+
+                if surf_dict['vtk_obj'].points_number > 0:
+                    self.geol_coll.add_entity_from_dict(surf_dict)
+                else:
+                    print(" -- empty object -- ")
+
         else:
             print(" -- Error input type: only TriSurf type -- ")
             return
-    """Create deepcopy of the geological entity dictionary."""
-    surf_dict = deepcopy(self.geol_coll.geological_entity_dict)
-    input_dict = {'name': ['TriSurf name: ', self.geol_coll.get_uid_name(input_uids[0]) + '_smooth'], 'geological_type': ['Geological type: ', GeologicalCollection.valid_geological_types], 'geological_feature': ['Geological feature: ', self.geol_coll.get_uid_geological_feature(input_uids[0])], 'scenario': ['Scenario: ', self.geol_coll.get_uid_scenario(input_uids[0])]}
-    surf_dict_updt = multiple_input_dialog(title='Surface smoothing', input_dict=input_dict)
-    """Check if the output of the widget is empty or not. If the Cancel button was clicked, the tool quits"""
-    if surf_dict_updt is None:
-        return
-    """Getting the values that have been typed by the user through the multiple input widget"""
-    for key in surf_dict_updt:
-        surf_dict[key] = surf_dict_updt[key]
-    surf_dict['topological_type'] = 'TriSurf'
-    surf_dict['vtk_obj'] = TriSurf()
-    """Create a new instance of the interpolation class"""
-    smoother = vtk.vtkSmoothPolyDataFilter()
-    smoother.SetInputData(self.geol_coll.get_uid_vtk_obj(input_uids[0]))
-    """Ask for the Convergence value (smaller numbers result in more smoothing iterations)."""
-    convergence_value = input_one_value_dialog(title='Surface smoothing parameters', label='Convergence Value (small values result in more smoothing)', default_value=1)
-    if convergence_value is None:
-        convergence_value = 1
-    smoother.SetConvergence(convergence_value)
-    """Ask for BoundarySmoothing (smoothing of vertices on the boundary of the mesh) and FeatureEdgeSmoothing
-    (smoothing along sharp interior edges)."""
-    boundary_smoothing = input_text_dialog(title='Surface smoothing parameters', label='Boundary Smoothing (ON/OFF)', default_text='OFF')
-    if boundary_smoothing is None:
-        pass
-    elif boundary_smoothing == 'ON' or boundary_smoothing == 'on':
-        smoother.SetBoundarySmoothing(True)
-    elif boundary_smoothing == 'OFF' or boundary_smoothing == 'off':
-        smoother.SetBoundarySmoothing(False)
-    edge_smooth_switch = input_text_dialog(title='Surface smoothing parameters', label='Feature Edge Smoothing (ON/OFF)', default_text='OFF')
-    if edge_smooth_switch is None:
-        pass
-    elif edge_smooth_switch == 'ON' or edge_smooth_switch == 'on':
-        smoother.SetBoundarySmoothing(True)
-    elif edge_smooth_switch == 'OFF' or edge_smooth_switch == 'off':
-        smoother.SetFeatureEdgeSmoothing(False)
-    smoother.Update()
-    """ShallowCopy is the way to copy the new interpolated surface into the TriSurf instance created at the beginning"""
-    surf_dict['vtk_obj'].ShallowCopy(smoother.GetOutput())
-    surf_dict['vtk_obj'].Modified()
-    """Add new entity from surf_dict. Function add_entity_from_dict creates a new uid"""
-    if surf_dict['vtk_obj'].points_number > 0:
-        self.geol_coll.add_entity_from_dict(surf_dict)
-    else:
-        print(" -- empty object -- ")
+    # """Create deepcopy of the geological entity dictionary."""
+    # surf_dict = deepcopy(self.geol_coll.geological_entity_dict)
+    # input_dict = {'name': ['TriSurf name: ', self.geol_coll.get_uid_name(input_uids[0]) + '_smooth'], 'geological_type': ['Geological type: ', GeologicalCollection.valid_geological_types], 'geological_feature': ['Geological feature: ', self.geol_coll.get_uid_geological_feature(input_uids[0])], 'scenario': ['Scenario: ', self.geol_coll.get_uid_scenario(input_uids[0])]}
+    # surf_dict_updt = multiple_input_dialog(title='Surface smoothing', input_dict=input_dict)
+    # """Check if the output of the widget is empty or not. If the Cancel button was clicked, the tool quits"""
+    # if surf_dict_updt is None:
+    #     return
+    # """Getting the values that have been typed by the user through the multiple input widget"""
+    # for key in surf_dict_updt:
+    #     surf_dict[key] = surf_dict_updt[key]
+    # surf_dict['topological_type'] = 'TriSurf'
+    # surf_dict['vtk_obj'] = TriSurf()
+    # """Create a new instance of the interpolation class"""
+    # smoother = vtk.vtkSmoothPolyDataFilter()
+    # smoother.SetInputData(self.geol_coll.get_uid_vtk_obj(input_uids[0]))
+    # """Ask for the Convergence value (smaller numbers result in more smoothing iterations)."""
+    # convergence_value = input_one_value_dialog(title='Surface smoothing parameters', label='Convergence Value (small values result in more smoothing)', default_value=1)
+    # if convergence_value is None:
+    #     convergence_value = 1
+    # smoother.SetConvergence(convergence_value)
+    # """Ask for BoundarySmoothing (smoothing of vertices on the boundary of the mesh) and FeatureEdgeSmoothing
+    # (smoothing along sharp interior edges)."""
+    # boundary_smoothing = input_text_dialog(title='Surface smoothing parameters', label='Boundary Smoothing (ON/OFF)', default_text='OFF')
+    # if boundary_smoothing is None:
+    #     pass
+    # elif boundary_smoothing == 'ON' or boundary_smoothing == 'on':
+    #     smoother.SetBoundarySmoothing(True)
+    # elif boundary_smoothing == 'OFF' or boundary_smoothing == 'off':
+    #     smoother.SetBoundarySmoothing(False)
+    # edge_smooth_switch = input_text_dialog(title='Surface smoothing parameters', label='Feature Edge Smoothing (ON/OFF)', default_text='OFF')
+    # if edge_smooth_switch is None:
+    #     pass
+    # elif edge_smooth_switch == 'ON' or edge_smooth_switch == 'on':
+    #     smoother.SetBoundarySmoothing(True)
+    # elif edge_smooth_switch == 'OFF' or edge_smooth_switch == 'off':
+    #     smoother.SetFeatureEdgeSmoothing(False)
+    # smoother.Update()
+    # """ShallowCopy is the way to copy the new interpolated surface into the TriSurf instance created at the beginning"""
+    # surf_dict['vtk_obj'].ShallowCopy(smoother.GetOutput())
+    # surf_dict['vtk_obj'].Modified()
+    # """Add new entity from surf_dict. Function add_entity_from_dict creates a new uid"""
+    # if surf_dict['vtk_obj'].points_number > 0:
+    #     self.geol_coll.add_entity_from_dict(surf_dict)
+    # else:
+    #     print(" -- empty object -- ")
 
 
 def linear_extrusion(self):
@@ -740,7 +766,7 @@ def subdivision_resampling(self,mode=0,type='linear',n_subd=2):
                 subdiv_filter = vtk.vtkLoopSubdivisionFilter()
             """Create a new instance of the decimation class"""
 
-            subdiv_filter.SetInputData(self.geol_coll.get_uid_vtk_obj(input_uids[0]))
+            subdiv_filter.SetInputData(self.geol_coll.get_uid_vtk_obj(uid))
             subdiv_filter.SetNumberOfSubdivisions(int(n_subd))
             subdiv_filter.Update()
             """ShallowCopy is the way to copy the new interpolated surface into the TriSurf instance created at the beginning"""

@@ -170,7 +170,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.actionDelaunay2DInterpolation.triggered.connect(lambda: interpolation_delaunay_2d(self))
         self.actionPoissonInterpolation.triggered.connect(lambda: poisson_interpolation(self))
         self.actionLoopStructuralImplicitModelling.triggered.connect(lambda: implicit_model_loop_structural(self))
-        self.actionSurfaceSmoothing.triggered.connect(lambda: surface_smoothing(self))
+        self.actionSurfaceSmoothing.triggered.connect(self.smooth_dialog)
         self.actionSubdivisionResampling.triggered.connect(self.subd_res_dialog)
         self.actionDecimationPro.triggered.connect(lambda: decimation_pro_resampling(self))
         self.actionDecimationQuadric.triggered.connect(lambda: decimation_quadric_resampling(self))
@@ -539,9 +539,27 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 octree.BuildLocator()
                 entity.locator = octree
 
+    def smooth_dialog(self):
+        input_dict = {'convergence_value':['Convergence value:',1],'boundary_smoothing':['Boundary smoothing',False],'edge_smoothing':['Edge smoothing',False]}
+        surf_dict_updt = multiple_input_dialog(title='Surface smoothing', input_dict=input_dict,return_widget=True)
+
+        sel_uids = self.selected_uids
+        if len(sel_uids) > 1:
+            print('Multiple surfaces selected, only one will be previewed')
+        elif len(sel_uids) == 0:
+            print('No selected objects')
+            return
+
+        for uid in sel_uids:
+            mesh = self.geol_coll.get_uid_vtk_obj(uid)
+
+
+
+        PreviewWidget(parent=self,titles = ['Original mesh','Smoothed mesh'],
+                             mesh=mesh, opt_widget=surf_dict_updt,function=surface_smoothing)
     def subd_res_dialog(self):
-        dict = {'type':['Subdivision type:',['linear','butterfly','loop']],'n_subd':['Number of iterations',2]}
-        subd_input = multiple_input_dialog('Subdivision dialog',dict,return_widget=True)
+        input_dict = {'type':['Subdivision type:',['linear','butterfly','loop']],'n_subd':['Number of iterations',2]}
+        subd_input = multiple_input_dialog('Subdivision dialog',input_dict,return_widget=True)
 
         sel_uids = self.selected_uids
         if len(sel_uids) > 1:
@@ -611,9 +629,13 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     if  "RegionId" not in collection.get_uid_properties_names(uid):
                         collection.append_uid_property(uid=uid, property_name="RegionId", property_components=1)
                     vtk_out_list = collection.get_uid_vtk_obj(uid).split_parts()
-                    vtk_out_dict = deepcopy(collection.df.loc[collection.df['uid'] == uid].drop(['uid', 'vtk_obj'], axis=1).to_dict('records')[0])
-                    for vtk_object in vtk_out_list:
+
+
+                    for i,vtk_object in enumerate(vtk_out_list):
+                        vtk_out_dict = deepcopy(collection.df.loc[collection.df['uid'] == uid].drop(['uid', 'vtk_obj'], axis=1).to_dict('records')[0])
+                        name = vtk_out_dict["name"]
                         vtk_out_dict['uid'] = None
+                        vtk_out_dict['name'] = f'{name}_{i}'
                         vtk_out_dict['vtk_obj'] = vtk_object
                         collection.add_entity_from_dict(entity_dict=vtk_out_dict)
                     collection.remove_entity(uid)
