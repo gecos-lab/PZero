@@ -221,7 +221,6 @@ class Legend(QObject):
         self.change_well_feature_color(parent,feature) #Update the wells
 
     def change_geology_feature_line_thick(self, parent=None):
-        print('ciao')
         geo_type = self.sender().geo_type
         feature = self.sender().feature
         scenario = self.sender().scenario

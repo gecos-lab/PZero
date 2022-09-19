@@ -155,6 +155,9 @@ def pc2vtk(in_file_name,col_names,row_range,header_row,usecols,delimiter,self=No
         """Create dictionary."""
         curr_obj_attributes = deepcopy(DomCollection.dom_entity_dict)
         curr_obj_attributes['uid'] = str(uuid4())
+
+        point_cloud.init_point_data(f'tag_{curr_obj_attributes["uid"]}',1)
+        point_cloud.Modified()
         curr_obj_attributes['name'] = basename
         curr_obj_attributes['dom_type'] = "PCDom"
         curr_obj_attributes['texture_uids'] = []
@@ -166,6 +169,5 @@ def pc2vtk(in_file_name,col_names,row_range,header_row,usecols,delimiter,self=No
         self.parent.dom_coll.add_entity_from_dict(entity_dict=curr_obj_attributes)
         """Cleaning."""
         del input_df
-        # del pv_PD
         del point_cloud
         print('Done!')

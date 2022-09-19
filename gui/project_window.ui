@@ -563,6 +563,7 @@
     <addaction name="actionConnectedParts"/>
     <addaction name="actionMergeEntities"/>
     <addaction name="actionSplitMultipart"/>
+    <addaction name="actionDecimatePointCloud"/>
     <addaction name="separator"/>
     <addaction name="actionEditTextureAdd"/>
     <addaction name="actionEditTextureRemove"/>
@@ -1097,6 +1098,11 @@
   <action name="actionBuildOctree">
    <property name="text">
     <string>Build octree</string>
+   </property>
+  </action>
+  <action name="actionDecimatePointCloud">
+   <property name="text">
+    <string>Decimate point cloud</string>
    </property>
   </action>
  </widget>

@@ -41,6 +41,7 @@ from .obj2vtk import vtk2obj
 from .ply2vtk import vtk2ply
 from .three_d_surfaces import interpolation_delaunay_2d, poisson_interpolation, implicit_model_loop_structural, surface_smoothing, linear_extrusion, decimation_pro_resampling, decimation_quadric_resampling, subdivision_resampling, intersection_xs, project_2_dem, project_2_xs, split_surf,retopo
 from .orientation_analysis import set_normals
+from .point_clouds import decimate_pc
 
 from uuid import uuid4
 
@@ -156,6 +157,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.actionConnectedParts.triggered.connect(self.connected_parts)
         self.actionMergeEntities.triggered.connect(self.entities_merge)
         self.actionSplitMultipart.triggered.connect(self.split_multipart)
+        self.actionDecimatePointCloud.triggered.connect(self.decimate_pc_dialog)
         """______________________________________ ADD TOOL TO PRINT VTK INFO self.TextTerminal.appendPlainText( -- vtk object as text -- )"""
         self.actionEditTextureAdd.triggered.connect(self.texture_add)
         self.actionEditTextureRemove.triggered.connect(self.texture_remove)
@@ -539,6 +541,28 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 octree.BuildLocator()
                 entity.locator = octree
 
+    def decimate_pc_dialog(self):
+        if self.selected_uids:
+            fac = input_one_value_dialog(parent=self, title="Decimation factor", label="Set the decimation factor (% of the original)", default_value=100.0)/100
+            for uid in self.selected_uids:
+                if self.shown_table == "tabDOMs":
+                    collection = self.dom_coll
+                    entity = collection.get_uid_vtk_obj(uid)
+
+                    vtk_object = decimate_pc(entity,fac)
+                    vtk_out_dict = deepcopy(collection.df.loc[collection.df['uid'] == uid].drop(['uid', 'vtk_obj'], axis=1).to_dict('records')[0])
+                    name = vtk_out_dict["name"]
+                    vtk_out_dict['uid'] = None
+                    vtk_out_dict['name'] = f'{name}_subsamp_{fac}'
+                    vtk_out_dict['vtk_obj'] = vtk_object
+                    collection.add_entity_from_dict(entity_dict=vtk_out_dict)
+                else:
+                    print('Only Point clouds are supported')
+                    return
+        else:
+            print('No entity selected')
+
+
     def smooth_dialog(self):
         input_dict = {'convergence_value':['Convergence value:',1],'boundary_smoothing':['Boundary smoothing',False],'edge_smoothing':['Edge smoothing',False]}
         surf_dict_updt = multiple_input_dialog(title='Surface smoothing', input_dict=input_dict,return_widget=True)
@@ -610,6 +634,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             for uid in self.selected_uids:
                 if isinstance(collection.get_uid_vtk_obj(uid), (PolyLine, TriSurf)):
                     collection.append_uid_property(uid=uid, property_name="RegionId", property_components=1)
+                    collection.get_uid_vtk_obj(uid).connected_calc()
+                elif isinstance(collection.get_uid_vtk_obj(uid), PCDom):
+                    collection.append_uid_property(uid=uid, property_name="ClusterId", property_components=1)
                     collection.get_uid_vtk_obj(uid).connected_calc()
             self.prop_legend.update_widget(self)
 
@@ -785,7 +812,6 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         # self.dom_coll.df[out_cols].to_csv(out_dir_name + '/dom_table.csv', encoding='utf-8', index=False)
         prgs_bar = progress_dialog(max_value=self.dom_coll.df.shape[0], title_txt="Save DOM", label_txt="Saving DOM objects...", cancel_txt=None, parent=self)
         for uid in self.dom_coll.df['uid'].to_list():
-            print(self.dom_coll.df.loc[self.dom_coll.df['uid'] == uid, 'dom_type'].values[0])
             if self.dom_coll.df.loc[self.dom_coll.df['uid'] == uid, 'dom_type'].values[0] == "DEM":
                 sg_writer = vtk.vtkXMLStructuredGridWriter()
                 sg_writer.SetFileName(out_dir_name + "/" + uid + ".vts")
@@ -1157,7 +1183,6 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     return
                 if self.geol_coll.get_uid_topological_type(uid) == 'VertexSet':
                     if 'dip' in self.geol_coll.get_uid_properties_names(uid):
-                        print('ciao')
                         vtk_object=Attitude()
                     else:
                         vtk_object = VertexSet()
@@ -1327,7 +1352,6 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
     def export_cad(self):  # ________________________________________________________________ IMPLEMENT GOCAD EXPORT
         """Base method to choose a CAD format for exporting geological entities."""
         cad_format = input_combo_dialog(parent=self, title="CAD format", label="Choose CAD format", choice_list=["DXF", "GOCAD", "OBJ", "PLY", "STL", "STL with 1m dilation"])
-        print(cad_format)
         out_dir_name = save_file_dialog(parent=self, caption="Export geological entities as CAD meshes.")
         if not out_dir_name:
             return
@@ -1434,11 +1458,13 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     pd_writer.Write()
                 elif self.shown_table == "tabDOMs":
                     entity = self.dom_coll.get_uid_vtk_obj(uid)
-
+                    temp = vtk.vtkPolyData()
+                    temp.ShallowCopy(entity) #I hate this
                     pd_writer = vtk.vtkXMLPolyDataWriter()
                     pd_writer.SetFileName(f'{self.out_dir_name}/{uid}.vtp')
-                    pd_writer.SetInputData(entity)
+                    pd_writer.SetInputData(temp)
                     pd_writer.Write()
+                    del temp
                 elif self.shown_table == "tabImages":
                     entity = self.image_coll.get_uid_vtk_obj(uid)
 

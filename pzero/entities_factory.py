@@ -1,11 +1,12 @@
 """entities_factory.py
 PZero© Andrea Bistacchi"""
 
-from vtk import vtkPolyData, vtkPoints, vtkCellCenters, vtkIdFilter, vtkCleanPolyData, vtkPolyDataNormals, vtkPlane, vtkCellArray, vtkLine, vtkIdList, vtkTriangleFilter, vtkTriangle, vtkFeatureEdges, vtkCleanPolyData, vtkStripper, vtkPolygon, vtkUnstructuredGrid, vtkTetra, vtkImageData, vtkStructuredGrid, vtkPolyDataConnectivityFilter, vtkCylinderSource,vtkThreshold,vtkDataObject,vtkThresholdPoints,vtkDelaunay2D,vtkPolyDataMapper,vtkQuadricDecimation,vtkSmoothPolyDataFilter,vtkLinearSubdivisionFilter,vtkLocator,vtkPCANormalEstimation,vtkPointSet,vtkRadiusOutlierRemoval,vtkAppendPolyData
+from vtk import vtkPolyData, vtkPoints, vtkCellCenters, vtkIdFilter, vtkCleanPolyData, vtkPolyDataNormals, vtkPlane, vtkCellArray, vtkLine, vtkIdList, vtkTriangleFilter, vtkTriangle, vtkFeatureEdges, vtkCleanPolyData, vtkStripper, vtkPolygon, vtkUnstructuredGrid, vtkTetra, vtkImageData, vtkStructuredGrid, vtkPolyDataConnectivityFilter, vtkCylinderSource,vtkThreshold,vtkDataObject,vtkThresholdPoints,vtkDelaunay2D,vtkPolyDataMapper,vtkQuadricDecimation,vtkSmoothPolyDataFilter,vtkLinearSubdivisionFilter,vtkPCANormalEstimation,vtkPointSet,vtkRadiusOutlierRemoval,vtkAppendPolyData,vtkStatisticalOutlierRemoval,vtkEuclideanClusterExtraction
 from vtk.util.numpy_support import vtk_to_numpy
 from vtk.numpy_interface.dataset_adapter import WrapDataObject, vtkDataArrayToVTKArray
 from pyvista import PolyData as pv_PolyData
 from pyvista import image_to_texture as pv_image_to_texture
+from pyvista.core.filters import _get_output, _update_alg
 from numpy import shape as np_shape
 from numpy import arctan2 as np_arctan2
 from numpy import arctan as np_arctan
@@ -502,7 +503,6 @@ class PolyData(vtkPolyData):
 
     @locator.setter
     def locator(self, locator):
-        print(locator)
         if isinstance(locator,vtkLocator):
             self._locator = locator
 
@@ -1574,7 +1574,6 @@ class PCDom(vtkPointSet):  # _______________________ DO WE NEED ADDITIONAL METHO
     See discussion at https://discourse.vtk.org/t/proposal-adding-a-vtkpointcloud-data-structure/3872/3 """
     def __init__(self, *args, **kwargs):
         super(PCDom, self).__init__(*args, **kwargs)
-        self._point_set_proxy = None
 
     def deep_copy(self):
         pcdom_copy = PCDom()
@@ -1630,6 +1629,7 @@ class PCDom(vtkPointSet):  # _______________________ DO WE NEED ADDITIONAL METHO
         if "Normals" in self.point_data_keys:
             if len(np_shape(self.get_point_data("Normals")))>=2:
                 map_dip_azimuth = np_arctan2(self.get_point_data("Normals")[:, 0], self.get_point_data("Normals")[:, 1]) * 180 / np_pi - 180
+                map_dip_azimuth = np_where(map_dip_azimuth == 360, 0,map_dip_azimuth)
             else:
                 map_dip_azimuth = np_arctan2(self.get_point_data("Normals")[0], self.get_point_data("Normals")[1]) * 180 / np_pi - 180
             return map_dip_azimuth
@@ -1702,7 +1702,27 @@ class PCDom(vtkPointSet):  # _______________________ DO WE NEED ADDITIONAL METHO
         """Removes a point data attribute with name = data_key."""
         self.GetPointData().RemoveArray(data_key)
 
-
+    def connected_calc(self):
+        """Adds a scalar property called RegionId with the connected region index, useful for processing and
+        visualization (it will be automatically added to the properties legend).
+        Also returns the number of connected regions.
+        Returns None in case it is called for a VertexSet, so it works for PolyLine and TriSurf only."""
+        temp = vtkPolyData()
+        temp.ShallowCopy(self)
+        connectivity_filter = vtkEuclideanClusterExtraction()
+        connectivity_filter.SetInputData(temp)
+        connectivity_filter.SetRadius(2)
+        connectivity_filter.SetExtractionModeToAllClusters()
+        connectivity_filter.ColorClustersOn()
+        # print(connectivity_filterconnectivity_filter.GetLocator())
+        # connectivity_filter.AlignedNormalsOn()
+        _update_alg(connectivity_filter,True,'test')
+        # connectivity_filter.Update()
+        # num_regions = connectivity_filter.GetNumberOfExtractedRegions()
+        # print(connectivity_filter.GetOutput().GetPointData().GetArray('RegionId'))
+        self.GetPointData().SetScalars(connectivity_filter.GetOutput().GetPointData().GetArray('ClusterId'))
+        self.Modified()
+        # return num_regions
     def set_point_data(self, data_key=None, attribute_matrix=None):  # _____________________________________________ REVEL CITED HERE TO FLATTEN THE ARRAY AND THEN NOT USED?
         """Sets point data attribute from Numpy array (sets a completely new point attributes array)
         Applying ravel to the input n-d array is required to flatten the array as in VTK arrays
@@ -1774,31 +1794,35 @@ class PCDom(vtkPointSet):  # _______________________ DO WE NEED ADDITIONAL METHO
         self.set_point_data('Normals',normals_flipped)
         self.Modified()
 
-    def calc_radius(self):
+    # def calc_radius(self):
 
-        self.init_point_data('radial_filt',1)
 
-        r = vtkRadiusOutlierRemoval()
-        r.SetInputData(self)
-        r.GenerateOutliersOn()
-        r.SetRadius(20)
-        r.SetNumberOfNeighbors(6)
-        r.Update()
-        print('filer run')
-        appender = vtkAppendPolyData()
-        for i in range(2):
-            part = PolyData()
 
-            part.ShallowCopy(r.GetOutput(i))
+        # self.init_point_data('radial_filt',1)
 
-            selected = np_repeat(i,part.points_number)
-
-            part.set_point_data('radial_filt',selected)
-            appender.AddInputData(part)
-
-        appender.Update()
-        self.GetPointData().SetScalars(appender.GetOutput().GetPointData().GetArray("radial_filt"))
-        print(self)
+        # # r = vtkStatisticalOutlierRemoval()
+        # r = vtkRadiusOutlierRemoval()
+        # r.SetInputData(self)
+        # r.GenerateOutliersOn()
+        # # r.SetSampleSize(10)
+        # r.SetRadius(200)
+        # r.SetNumberOfNeighbors(100)
+        # r.Update()
+        # # print(r.GetOutput().GetPoints())
+        # print('filer run')
+        # appender = vtkAppendPolyData()
+        # for i in range(2):
+        #     part = PolyData()
+        #
+        #     part.ShallowCopy(r.GetOutput(i))
+        #
+        #     selected = np_repeat(i,part.points_number)
+        #
+        #     part.set_point_data('radial_filt',selected)
+        #     appender.AddInputData(part)
+        #
+        # appender.Update()
+        # self.GetPointData().SetScalars(appender.GetOutput().GetPointData().GetArray("radial_filt"))
 
     # @property
     # def point_set_proxy(self):

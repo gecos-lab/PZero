@@ -25,7 +25,7 @@ import pandas as pd
 # import vtk.numpy_interface.dataset_adapter as dsa
 from vtk.util import numpy_support
 from vtkmodules.vtkInteractionWidgets import vtkCameraOrientationWidget
-from vtk import vtkAppendPolyData,vtkExtractPoints
+from vtk import vtkAppendPolyData,vtkExtractPoints,vtkIdList,vtkStaticPointLocator
 from vtk import vtkSphere
 
 """3D plotting imports"""
@@ -995,7 +995,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                 if prop not in self.parent.dom_coll.df.loc[self.parent.dom_coll.df['uid'] == uid, "texture_uids"].values[0]:
                     property_texture_combo.addItem(prop)
                     property_texture_combo.texture_uid_list.append(prop)
-                    print(prop)
+                    # print(prop)
                     if components > 1:
                         for n_component in range(components):
                             property_texture_combo.addItem(f'{prop}[{n_component}]')
@@ -1516,7 +1516,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.TopologyTreeWidget.itemChanged.connect(self.toggle_geology_topology_visibility)
 
     def geology_legend_color_modified_update_views(self, updated_list=None):
-        print(updated_list)
+        # print(updated_list)
         """This is called when the color in the geological legend is modified.
         Disconnect signals to geology and topology tree, if they are set, to avoid a nasty loop
         that disrupts the trees, then they are reconnected when the trees are rebuilt"""
@@ -2104,7 +2104,7 @@ class View3D(BaseView):
     def initialize_interactor(self):
         """Add the pyvista interactor object to self.ViewFrameLayout ->
         the layout of an empty frame generated with Qt Designer"""
-        print(self.ViewFrame)
+        # print(self.ViewFrame)
         self.plotter = pvQtInteractor(self.ViewFrame)
         self.plotter.set_background('black')  # background color - could be made interactive in the future
         self.ViewFrameLayout.addWidget(self.plotter.interactor)
@@ -2149,22 +2149,32 @@ class View3D(BaseView):
 
     def pkd_point(self,mesh,pid,set_opt):
 
+        uid = [i for i in mesh.array_names if 'tag_' in i][0][4:]
 
+        obj = self.parent.dom_coll.get_uid_vtk_obj(uid)
+        # locator = vtkStaticPointLocator()
+        # locator.SetDataSet(obj)
+        # locator.BuildLocator()
+        # id_list = vtkIdList()
+        # print(center)
+        #
+        # locator.FindClosestNPoints(30,center,id_list)
+        # print(obj.GetPoints().GetPoints(id_list).GetData())
+        #
         sph_r = 0.2 #radius of the selection sphere
-
         center = mesh.points[pid]
+
         sphere = vtkSphere()
         sphere.SetCenter(center)
         sphere.SetRadius(sph_r)
 
         extr = vtkExtractPoints()
 
-        point_proxy = mesh.generate_point_set()
         extr.SetImplicitFunction(sphere)
-        extr.SetInputData(mesh)
+        extr.SetInputData(obj)
         extr.ExtractInsideOn()
         extr.Update()
-        #[Gabriele] We could try to do this with vtkPCANormalEstimation
+        # [Gabriele] We could try to do this with vtkPCANormalEstimation
         points = numpy_support.vtk_to_numpy(extr.GetOutput().GetPoints().GetData())
         plane_c,plane_n = best_fitting_plane(points)
 
@@ -2232,6 +2242,9 @@ class View3D(BaseView):
             """Add to entity collection."""
             self.parent.geol_coll.add_entity_from_dict(entity_dict=curr_obj_dict)
 
+            del extr
+            del sphere
+
 
         #self.plotter.add_mesh(temp_plane,color='r',pickable =False)
         # print(plane)
@@ -2250,20 +2263,14 @@ class View3D(BaseView):
             the parameters at startup (when loading the objects) or when creating new
             objects and save them in a specific file/list.
 
-            Another solution could be to define a new @property called tag that
+            Another solution could be to define a new empty attribute called tag_uid that
             is set when a new entity is created. The tag can be extracted when an entity is selected and searched for in the entity list. This way there is no need to compare the centers and boudaries.
             '''
+        uid = [i for i in mesh.array_names if 'tag_' in i][0][4:]
 
-        for uid in self.actors_df['uid']:
-
-            vtk_obj = self.parent.geol_coll.get_uid_vtk_obj(uid)
-
-            if mesh.center == list(vtk_obj.GetCenter()) and mesh.bounds == vtk_obj.GetBounds():
-
-                sel_uid = uid
-                idx = self.actors_df.loc[self.actors_df['uid'] == sel_uid].index[0]
-                self.parent.GeologyTableView.selectRow(idx)
-                return
+        idx = self.actors_df.loc[self.actors_df['uid'] == uid].index[0]
+        self.parent.GeologyTableView.selectRow(idx)
+        return
 
     def change_actor_color(self, uid=None, collection=None):
         if collection == 'geol_coll':
@@ -2543,6 +2550,7 @@ class View3D(BaseView):
                         show_scalar_bar = True
                         show_property_value = plot_entity.get_point_data(show_property)
             this_actor = self.plot_PC_3D(uid=uid,plot_entity=new_plot,color_RGB=color_RGB, show_property=show_property_value, show_scalar_bar=show_scalar_bar, color_bar_range=None, show_property_title=show_property_title, plot_rgb_option=plot_rgb_option,visible=visible,point_size=line_thick)
+
         elif isinstance(plot_entity, (MapImage, XsImage)):
             """Do not plot directly image - it is much slower.
             Texture options according to type."""
@@ -2760,7 +2768,6 @@ class View3D(BaseView):
         for uid in uids:
             vtk_obj = self.parent.dom_coll.get_uid_vtk_obj(uid)
             vtk_obj.calc_radius()
-            print(vtk_obj)
             self.parent.dom_coll.replace_vtk(uid,vtk_obj)
 
 
