@@ -1309,7 +1309,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
 
     def import_welldata(self):
 
-        default_attr_list = ['As is','LocationID', 'LocationType', 'Easting', 'Northing', 'GroundLevel', 'FinalDepth', 'Trend', 'Plunge', 'DepthTop', 'DepthBase', 'LegCode','GeologyCode','N.a.']
+        loc_attr_list = ['As is','LocationID', 'LocationType', 'Easting', 'Northing', 'GroundLevel', 'FinalDepth', 'Trend', 'Plunge','N.a.']
+
+        data_attr_list = ['As is','LocationID','DepthTop', 'DepthBase','DepthPoint','GeologyCode','N.a.']
 
         ext_filter = "All supported (*.txt *.csv *.xyz *.asc *.ags);;Text files (*.txt *.csv *.xyz *.asc);;AGS files (*.ags)"
 
@@ -1323,9 +1325,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         # input_dialog.DataPushButton.clicked.connect(lambda: print('ciao'))
 
 
-        locargs = import_dialog(parent=self,default_attr_list=default_attr_list,ext_filter=ext_filter,caption='Import well location data').args
+        locargs = import_dialog(parent=self,default_attr_list=loc_attr_list,ext_filter=ext_filter,caption='Import well location data').args
 
-        dataargs = import_dialog(parent=self,default_attr_list=default_attr_list,ext_filter=ext_filter,caption='Import well data',multiple=True).args
+        dataargs = import_dialog(parent=self,default_attr_list=data_attr_list,ext_filter=ext_filter,caption='Import well data',multiple=True).args
 
 
         if locargs and dataargs:
