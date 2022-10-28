@@ -528,6 +528,7 @@
     <addaction name="actionImportSEGY"/>
     <addaction name="separator"/>
     <addaction name="actionExportCAD"/>
+    <addaction name="actionExportAttitudeMeasurements"/>
     <addaction name="actionExportVTK"/>
     <addaction name="separator"/>
     <addaction name="actionQuit"/>
@@ -1103,6 +1104,11 @@
   <action name="actionDecimatePointCloud">
    <property name="text">
     <string>Decimate point cloud</string>
+   </property>
+  </action>
+  <action name="actionExportAttitudeMeasurements">
+   <property name="text">
+    <string>Export attitude measurements</string>
    </property>
   </action>
  </widget>

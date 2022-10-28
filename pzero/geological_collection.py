@@ -100,7 +100,6 @@ class GeologicalCollection(QAbstractTableModel):
         scenario = entity_dict["scenario"]
         if self.parent.geol_legend_df.loc[(self.parent.geol_legend_df['geological_type'] == geo_type) & (self.parent.geol_legend_df['geological_feature'] == feature) & (self.parent.geol_legend_df['scenario'] == scenario)].empty:
             if color:
-                print(color)
                 R,G,B = color
             else:
                 R,G,B = np.round(np.random.random(3) * 255)

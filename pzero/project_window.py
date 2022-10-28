@@ -10,6 +10,7 @@ from PyQt5.QtWidgets import QMainWindow, QMessageBox, QProgressDialog,QPushButto
 from PyQt5.QtCore import Qt, QSortFilterProxyModel, pyqtSignal
 import vtk
 import pandas as pd
+from numpy import abs as np_abs
 from .project_window_ui import Ui_ProjectWindow
 from .entities_factory import Plane, VertexSet, PolyLine, TriSurf, XsVertexSet, XsPolyLine, DEM, MapImage, Voxet, Seismics, XsVoxet, TetraSolid, PCDom, TSDom, Wells,Attitude
 from .geological_collection import GeologicalCollection
@@ -151,6 +152,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         """File>Export actions -> slots"""
         self.actionExportCAD.triggered.connect(self.export_cad)
         self.actionExportVTK.triggered.connect(self.export_vtk)
+        self.actionExportAttitudeMeasurements.triggered.connect(self.export_att)
 
         """Edit actions -> slots"""
         self.actionEditEntityRemove.triggered.connect(self.entity_remove)
@@ -548,8 +550,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 if self.shown_table == "tabDOMs":
                     collection = self.dom_coll
                     entity = collection.get_uid_vtk_obj(uid)
-
-                    vtk_object = decimate_pc(entity,fac)
+                    vtk_object = PCDom()
+                    vtk_object.ShallowCopy(decimate_pc(entity,fac))
+                    vtk_object.generate_cells()
                     vtk_out_dict = deepcopy(collection.df.loc[collection.df['uid'] == uid].drop(['uid', 'vtk_obj'], axis=1).to_dict('records')[0])
                     name = vtk_out_dict["name"]
                     vtk_out_dict['uid'] = None
@@ -826,11 +829,14 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 prgs_bar.add_one()
             elif self.dom_coll.df.loc[self.dom_coll.df['uid'] == uid, 'dom_type'].values[0] == "PCDom":  # _____________ PROBABLY THE SAME WILL WORK FOR TSDOMs
                 """Save PCDOm collection entities as VTK"""
+                # temp = vtk.vtkPolyData()
+                # temp.ShallowCopy(self.dom_coll.get_uid_vtk_obj(uid))
                 pd_writer = vtk.vtkXMLPolyDataWriter()
                 pd_writer.SetFileName(out_dir_name + "/" + uid + ".vtp")
                 pd_writer.SetInputData(self.dom_coll.get_uid_vtk_obj(uid))
                 pd_writer.Write()
                 prgs_bar.add_one()
+                # del temp
 
         """Save image collection table to JSON file and entities as VTK."""
         out_cols = list(self.image_coll.df.columns)
@@ -1182,7 +1188,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     print("error: missing VTK file")
                     return
                 if self.geol_coll.get_uid_topological_type(uid) == 'VertexSet':
-                    if 'dip' in self.geol_coll.get_uid_properties_names(uid):
+                    if 'Normals' in self.geol_coll.get_uid_properties_names(uid):
                         vtk_object=Attitude()
                     else:
                         vtk_object = VertexSet()
@@ -1458,13 +1464,13 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     pd_writer.Write()
                 elif self.shown_table == "tabDOMs":
                     entity = self.dom_coll.get_uid_vtk_obj(uid)
-                    temp = vtk.vtkPolyData()
-                    temp.ShallowCopy(entity) #I hate this
+                    # temp = vtk.vtkPolyData()
+                    # temp.ShallowCopy(entity) #I hate this
                     pd_writer = vtk.vtkXMLPolyDataWriter()
                     pd_writer.SetFileName(f'{self.out_dir_name}/{uid}.vtp')
-                    pd_writer.SetInputData(temp)
+                    pd_writer.SetInputData(entity)
                     pd_writer.Write()
-                    del temp
+                    # del temp
                 elif self.shown_table == "tabImages":
                     entity = self.image_coll.get_uid_vtk_obj(uid)
 
@@ -1487,3 +1493,31 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     pd_writer.SetInputData(entity)
                     pd_writer.Write()
                 print(f'exported {uid}')
+
+    def export_att(self):
+        if not self.selected_uids:
+            print('No objects selected')
+            return
+
+        else:
+            self.out_dir_name = save_file_dialog(parent=self, caption="Select save directory.", directory=True)
+            # print(self.out_file_name)
+            for uid in self.selected_uids: #[gabriele] this could be generalized with a helper function
+                if self.shown_table == "tabGeology":
+                    entity = self.geol_coll.get_uid_vtk_obj(uid)
+                    name = self.geol_coll.get_uid_name(uid)
+                    if isinstance(entity, Attitude):
+
+                        dip_az = entity.points_map_dip_azimuth
+                        dip = entity.points_map_dip
+
+                        df = pd.DataFrame()
+                        df['dip_az'] = np_abs(dip_az)
+                        df['dip'] = np_abs(dip)
+
+                        df.to_csv(f'{self.out_dir_name}/measurements_{name}.csv',index=False)
+                    else:
+                        print('Only attitude measurements are supported')
+
+                else:
+                    print('Only geological objects are supported')

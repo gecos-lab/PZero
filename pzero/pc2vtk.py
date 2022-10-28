@@ -11,7 +11,7 @@ Convert point cloud data (txt, csv, xyz, las ...) in vtk objects.
 import numpy as np
 import os
 from copy import deepcopy
-from vtk import vtkPoints, vtkPointSet
+from vtk import vtkPoints, vtkPointSet,VTK_FLOAT
 from vtk.util.numpy_support import numpy_to_vtk
 from uuid import uuid4
 from .entities_factory import PCDom
@@ -22,16 +22,17 @@ from pyvista import vtk_points
 from pandas import DataFrame as pd_df
 from pandas import to_numeric as pd_to_numeric
 from pandas import read_csv as pd_read_csv
+import time
 
 from laspy import read as lp_read
-# from .helper_functions import profiler
+from .helper_functions import profiler
 
-
+# @profiler('../datiseri/benchmarks/lv_25.csv',50)
 def pc2vtk(in_file_name,col_names,row_range,header_row,usecols,delimiter,self=None):
 
 
     print('1. Reading and importing file')
-
+    # s = time.time()
     basename = os.path.basename(in_file_name)
     _,ext = os.path.splitext(basename)
 
@@ -99,7 +100,7 @@ def pc2vtk(in_file_name,col_names,row_range,header_row,usecols,delimiter,self=No
         input_df['X'] -= offset[0]
         input_df['Y'] -= offset[1]
 
-        XYZ = numpy_to_vtk(np.column_stack((input_df['X'].values,input_df['Y'].values,input_df['Z'].values)))
+        XYZ = numpy_to_vtk(np.column_stack((input_df['X'].values,input_df['Y'].values,input_df['Z'].values)),deep=True,array_type=VTK_FLOAT)
 
 
         # [Gabriele] Create pyvista PolyData using XYZ data
@@ -128,7 +129,8 @@ def pc2vtk(in_file_name,col_names,row_range,header_row,usecols,delimiter,self=No
                 point_cloud.init_point_data('Normals',3)
                 normals = np.array([input_df['Nx'],input_df['Ny'],input_df['Nz']]).T
 
-                point_cloud.set_point_data('Normals',normals)
+                normals_flipped = np.where(normals[:,2:]>0,normals*-1,normals)
+                point_cloud.set_point_data('Normals',normals_flipped)
 
                 input_df.drop(['Nx','Ny','Nz'],axis=1,inplace=True)
 
@@ -150,7 +152,7 @@ def pc2vtk(in_file_name,col_names,row_range,header_row,usecols,delimiter,self=No
         properties_components = [point_cloud.get_point_data_shape(i)[1] for i in properties_names]
         properties_types = [point_cloud.get_point_data_type(i) for i in properties_names]
 
-        # point_cloud.generate_point_set()
+        point_cloud.generate_cells()
 
         """Create dictionary."""
         curr_obj_attributes = deepcopy(DomCollection.dom_entity_dict)
@@ -168,6 +170,8 @@ def pc2vtk(in_file_name,col_names,row_range,header_row,usecols,delimiter,self=No
         """Add to entity collection."""
         self.parent.dom_coll.add_entity_from_dict(entity_dict=curr_obj_attributes)
         """Cleaning."""
+
+        # e = time.time()
+        print(f'Done! Imported {point_cloud.GetNumberOfPoints()} points')
         del input_df
         del point_cloud
-        print('Done!')

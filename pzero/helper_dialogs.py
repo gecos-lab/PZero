@@ -135,7 +135,6 @@ def multiple_input_dialog(title="title", input_dict=None,return_widget=False):
         objects_qt[key][0].setText(input_dict[key][0])
         gridLayout.addWidget(objects_qt[key][0], i + 1, 1)
         """Create QLineEdits and QComboBoxes."""
-        print(type(input_dict[key][1]))
         if isinstance(input_dict[key][1], list):
             objects_qt[key][1] = QComboBox(widget,objectName=f'par_{key}')
             objects_qt[key][1].addItems(input_dict[key][1])
