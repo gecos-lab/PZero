@@ -20,3 +20,4 @@ dependencies:
   - cmocean
   - colorcet
   - mplstereonet
+  - pythreejs

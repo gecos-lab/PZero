@@ -9,11 +9,11 @@ from PyQt5.QtGui import QCloseEvent,QFont
 """PZero imports"""
 from .base_view_window_ui import Ui_BaseViewWindow
 from .entities_factory import VertexSet, PolyLine, TriSurf, TetraSolid, XsVertexSet, XsPolyLine, DEM, PCDom, MapImage, Voxet, XsVoxet, Plane, Seismics, XsTriSurf, XsImage, PolyData, Wells, WellMarker,Attitude
-from .helper_dialogs import input_one_value_dialog, input_text_dialog, input_combo_dialog, message_dialog, options_dialog, multiple_input_dialog, tic, toc,open_file_dialog
+from .helper_dialogs import input_one_value_dialog, input_text_dialog, input_combo_dialog, message_dialog, options_dialog, multiple_input_dialog, tic, toc, open_file_dialog, save_file_dialog
 from .geological_collection import GeologicalCollection
 from copy import deepcopy
 from uuid import uuid4
-from .helper_functions import angle_wrapper,PCA,best_fitting_plane
+from .helper_functions import angle_wrapper, PCA, best_fitting_plane
 
 """Maths imports"""
 from math import degrees, sqrt, atan2
@@ -2052,54 +2052,92 @@ class View3D(BaseView):
         self.actionBase_Tool.setText("Edit")
 
         """Manage home view"""
-        self.saveHomeView = QAction("Save home view", self)
-        self.saveHomeView.triggered.connect(self.save_home_view)
-        self.menuWindow.addAction(self.saveHomeView)
+        self.saveHomeView = QAction("Save home view", self)  # create action
+        self.saveHomeView.triggered.connect(self.save_home_view)  # connect action to function
+        self.menuBaseView.addAction(self.saveHomeView)  # add action to menu
+        self.toolBarBase.addAction(self.saveHomeView)  # add action to toolbar
 
-        self.zoomHomeView = QAction("Zoom to home view", self)
+        self.zoomHomeView = QAction("Zoom to home", self)
         self.zoomHomeView.triggered.connect(self.zoom_home_view)
-        self.menuWindow.addAction(self.zoomHomeView)
+        self.menuBaseView.addAction(self.zoomHomeView)
+        self.toolBarBase.addAction(self.zoomHomeView)
 
         self.zoomActive = QAction("Zoom to active", self)
         self.zoomActive.triggered.connect(self.zoom_active)
-        self.menuWindow.addAction(self.zoomActive)
+        self.menuBaseView.addAction(self.zoomActive)
+        self.toolBarBase.addAction(self.zoomActive)
 
         # self.showOct = QAction("Show octree structure", self)
         # self.showOct.triggered.connect(self.show_octree)
-        # self.menuWindow.addAction(self.showOct)
+        # self.menuBaseView.addAction(self.showOct)
+        # self.toolBarBase.addAction(self.showOct)
 
-        self.menuEdit = QMenu('Edit point cloud',self)
-        # self.actionCalculateNormalsPC = QAction('Calculate normals for point clouds',self)
-        self.actionNormals2dd = QAction('Convert normals to Dip/Direction',self)
-        self.actionNormals2dd.triggered.connect(lambda: self.normals2dd())
-        self.actionFilter = QAction('Filter',self)
-        self.actionFilter.triggered.connect(lambda: self.radial_filt())
-        self.menuEdit.addAction(self.actionNormals2dd)
-        self.menuEdit.addAction(self.actionFilter)
-        self.menuTools.addMenu(self.menuEdit)
+        """______________THIS MUST BE MOVED TO MAIN WINDOW___________________________________________"""
+        self.actionNormals2dd = QAction('Normals to Dip/Direction', self)
+        self.actionNormals2dd.triggered.connect(self.normals2dd)
+        self.menuBaseView.addAction(self.actionNormals2dd)
+        self.toolBarBase.addAction(self.actionNormals2dd)
 
-        self.menuPicker = QMenu('Pickers',self)
+        """______________THIS MUST BE MOVED TO MAIN WINDOW AND NAME MUST BE MORE SPECIFIC_________________"""
+        self.actionFilter = QAction('Filter', self)
+        self.actionFilter.triggered.connect(self.radial_filt)
+        self.menuBaseView.addAction(self.actionFilter)
+        self.toolBarBase.addAction(self.actionFilter)
 
-        self.actionPickAttitude = QAction('Toggle measure attitude on a mesh',self)
-        self.actionPickAttitude.triggered.connect(lambda: self.act_att())
-        self.menuPicker.addAction(self.actionPickAttitude)
+        self.actionPickAttitude = QAction('Measure attitude', self)
+        self.actionPickAttitude.triggered.connect(self.act_att)
+        self.menuBaseView.addAction(self.actionPickAttitude)
+        self.toolBarBase.addAction(self.actionPickAttitude)
 
-        self.actionPickMesh = QAction('Toggle mesh picking',self)
+        self.actionPickMesh = QAction('Mesh picking', self)
         self.actionPickMesh.triggered.connect(lambda: self.act_pmesh())
-        self.menuPicker.addAction(self.actionPickMesh)
-        self.menuTools.addMenu(self.menuPicker)
+        self.menuBaseView.addAction(self.actionPickMesh)
+        self.toolBarBase.addAction(self.actionPickMesh)
+
+        self.actionExportGltf = QAction('Export as GLTF', self)
+        self.actionExportGltf.triggered.connect(self.export_gltf)
+        self.menuBaseView.addAction(self.actionExportGltf)
+        self.toolBarBase.addAction(self.actionExportGltf)
+
+        self.actionExportHtml = QAction('Export as HTML', self)
+        self.actionExportHtml.triggered.connect(self.export_html)
+        self.menuBaseView.addAction(self.actionExportHtml)
+        self.toolBarBase.addAction(self.actionExportHtml)
+
+        self.actionExportObj = QAction('Export as OBJ', self)
+        self.actionExportObj.triggered.connect(self.export_obj)
+        self.menuBaseView.addAction(self.actionExportObj)
+        self.toolBarBase.addAction(self.actionExportObj)
+
+        self.actionExportVtkjs = QAction('Export as VTKjs', self)
+        self.actionExportVtkjs.triggered.connect(self.export_vtkjs)
+        self.menuBaseView.addAction(self.actionExportVtkjs)
+        self.toolBarBase.addAction(self.actionExportVtkjs)
 
     def save_home_view(self):
-
         self.default_view = self.plotter.camera_position
 
     def zoom_home_view(self):
-
         self.plotter.camera_position = self.default_view
 
     def zoom_active(self):
-
         self.plotter.reset_camera()
+
+    def export_html(self):
+        out_file_name = save_file_dialog(parent=self, caption="Export 3D view as HTML.", filter="html (*.html)")
+        self.plotter.export_html(out_file_name)
+
+    def export_vtkjs(self):
+        out_file_name = save_file_dialog(parent=self, caption="Export 3D view as VTKjs.", filter="vtkjs (*.vtkjs)").removesuffix(".vtkjs")
+        self.plotter.export_vtkjs(out_file_name)
+
+    def export_obj(self):
+        out_file_name = save_file_dialog(parent=self, caption="Export 3D view as OBJ.", filter="obj (*.obj)").removesuffix(".obj")
+        self.plotter.export_obj(out_file_name)
+
+    def export_gltf(self):
+        out_file_name = save_file_dialog(parent=self, caption="Export 3D view as GLTF.", filter="gltf (*.gltf)")
+        self.plotter.export_gltf(out_file_name)
 
     def initialize_interactor(self):
         """Add the pyvista interactor object to self.ViewFrameLayout ->
@@ -2115,27 +2153,24 @@ class View3D(BaseView):
         """Set default orientation horizontal because vertical colorbars interfere with the widget."""
         pv_global_theme.colorbar_orientation = 'horizontal'
 
-    #     # [Gabriele] Add picking functionality (this should be put in a menu to enable or disable)
-    #
     def act_att(self):
 
         if self.tog_att == -1:
             input_dict = {'name': ['Set name: ', 'Set_0'], 'geological_type': ['Geological type: ', GeologicalCollection.valid_geological_types]}
-
             set_opt = multiple_input_dialog(title="Create measure set", input_dict=input_dict)
-            self.plotter.enable_point_picking(callback=lambda mesh,pid: self.pkd_point(mesh,pid,set_opt),show_message=False,color='yellow',use_mesh=True)
+            self.plotter.enable_point_picking(callback=lambda mesh, pid: self.pkd_point(mesh, pid, set_opt),show_message=False, color='yellow', use_mesh=True)
             self.tog_att *= -1
             print('Picking enabled')
         else:
             picker = self.plotter.picker
             #print(picker)
             picker.RemoveObservers(_vtk.vtkCommand.EndPickEvent)
-            self.plotter.enable_mesh_picking(callback=lambda mesh: self.pkd_mesh(mesh),show_message=False)
+            self.plotter.enable_mesh_picking(callback=lambda mesh: self.pkd_mesh(mesh), show_message=False)
             self.tog_att *= -1
             print('Picking disabled')
 
     def act_pmesh(self):
-        '''[Gabriele] Not the best solution but for now it works'''
+        """[Gabriele] Not the best solution but for now it works"""
         if self.tog_att == -1:
             self.plotter.enable_mesh_picking(callback=lambda mesh: self.pkd_mesh(mesh),show_message=False)
             print('Mesh picking enabled')
@@ -2147,10 +2182,8 @@ class View3D(BaseView):
             self.tog_att *= -1
             print('Picking disabled')
 
-    def pkd_point(self,mesh,pid,set_opt):
-
+    def pkd_point(self, mesh, pid, set_opt):
         uid = [i for i in mesh.array_names if 'tag_' in i][0][4:]
-
         obj = self.parent.dom_coll.get_uid_vtk_obj(uid)
         # locator = vtkStaticPointLocator()
         # locator.SetDataSet(obj)
