@@ -1262,23 +1262,35 @@ def project_2_xs(self):
 def split_surf(self):
     ''' Split two surfaces. This should be integrated with intersection_xs in one function since is the same thing'''
     if self.shown_table != "tabGeology":
-        print(" -- Only geological objects can be intersected -- ")
+        print(" -- Only surface objects can be intersected -- ")
         return
     if not self.selected_uids:
         print("No input data selected.")
         return
     else:
         """Deep copy list of selected uids needed otherwise problems can arise if the main geology table is deseselcted while the dataframe is being built"""
-        input_uids = deepcopy(self.selected_uids)
+        input_uids = deepcopy(self.selected_uids_all())
+        # print(self.selected_uids_all())
         # 0. Define the reference surface and target surfaces
-        ref_surf = self.geol_coll.get_uid_vtk_obj(input_uids[0])
+        if input_uids[0] not in self.geol_coll.get_uids():
+            ref_surf = self.dom_coll.get_uid_vtk_obj(input_uids[0])
+            pld = pv.PolyData(ref_surf.points)
+            pld.delaunay_2d(inplace=True)
+        else:
+            ref_surf = self.geol_coll.get_uid_vtk_obj(input_uids[0])
+
         targ_surfs = [self.geol_coll.get_uid_vtk_obj(uid) for uid in input_uids[1:]]
+
+        if isinstance(ref_surf,TriSurf):
+            ref_surf_mod = ref_surf.center_scale(scale_factors=[10.0,10.0,10.0])
+        else:
+            ref_surf_mod = pld
 
         for i,targ_surf in enumerate(targ_surfs): #for every target surface
 
             temp_surf = pv.PolyData()
             temp_surf.ShallowCopy(targ_surf)
-            implicit_dist = temp_surf.compute_implicit_distance(ref_surf)
+            implicit_dist = temp_surf.compute_implicit_distance(ref_surf_mod)
             intersect = vtk.vtkClipPolyData()
             intersect.SetInputData(implicit_dist)
             intersect.GenerateClippedOutputOn()

@@ -1,7 +1,7 @@
 """entities_factory.py
 PZero© Andrea Bistacchi"""
 
-from vtk import vtkPolyData, vtkPoints, vtkCellCenters, vtkIdFilter, vtkCleanPolyData, vtkPolyDataNormals, vtkPlane, vtkCellArray, vtkLine, vtkIdList, vtkTriangleFilter, vtkTriangle, vtkFeatureEdges, vtkCleanPolyData, vtkStripper, vtkPolygon, vtkUnstructuredGrid, vtkTetra, vtkImageData, vtkStructuredGrid, vtkPolyDataConnectivityFilter, vtkCylinderSource,vtkThreshold,vtkDataObject,vtkThresholdPoints,vtkDelaunay2D,vtkPolyDataMapper,vtkQuadricDecimation,vtkSmoothPolyDataFilter,vtkLinearSubdivisionFilter,vtkPCANormalEstimation,vtkPointSet,vtkRadiusOutlierRemoval,vtkAppendPolyData,vtkStatisticalOutlierRemoval,vtkEuclideanClusterExtraction
+from vtk import vtkPolyData, vtkPoints, vtkCellCenters, vtkIdFilter, vtkCleanPolyData, vtkPolyDataNormals, vtkPlane, vtkCellArray, vtkLine, vtkIdList, vtkTriangleFilter, vtkTriangle, vtkFeatureEdges, vtkCleanPolyData, vtkStripper, vtkPolygon, vtkUnstructuredGrid, vtkTetra, vtkImageData, vtkStructuredGrid, vtkPolyDataConnectivityFilter, vtkCylinderSource,vtkThreshold,vtkDataObject,vtkThresholdPoints,vtkDelaunay2D,vtkPolyDataMapper,vtkQuadricDecimation,vtkSmoothPolyDataFilter,vtkLinearSubdivisionFilter,vtkPCANormalEstimation,vtkPointSet,vtkRadiusOutlierRemoval,vtkAppendPolyData,vtkStatisticalOutlierRemoval,vtkEuclideanClusterExtraction, vtkCenterOfMass,vtkTransform,vtkTransformPolyDataFilter
 from vtk.util.numpy_support import vtk_to_numpy
 from vtk.numpy_interface.dataset_adapter import WrapDataObject, vtkDataArrayToVTKArray
 from pyvista import PolyData as pv_PolyData
@@ -505,6 +505,62 @@ class PolyData(vtkPolyData):
     def locator(self, locator):
         if isinstance(locator,vtkLocator):
             self._locator = locator
+
+
+    def get_center_of_mass(self,use_scal = False):
+        com = vtkCenterOfMass()
+        com.SetInputData(self)
+        com.SetUseScalarsAsWeights(use_scal)
+        return np_array(com.GetCenter())
+
+    def center_scale(self,scale_factors):
+
+
+        temp = pv_PolyData()
+        temp.DeepCopy(self)
+
+        tran = temp.points[0].copy()
+        # temp.points -= tran
+        # print(tran)
+
+        t1 = temp.translate(tran*-1)
+        t2 = t1.scale(scale_factors)
+        t3 = t2.translate(tran)
+        # t1.points += tran
+
+        # print(t1.points[0])
+
+
+
+        # transform1 = vtkTransform()
+        # transform1.Translate(center*-1)
+        # tr1 = vtkTransformPolyDataFilter()
+        # tr1.SetInputData(self)
+        # tr1.SetTransform(transform1)
+        # tr1.Update()
+        # print(tr1.GetOutput())
+        #
+        # transform2 = vtkTransform()
+        # transform2.Scale(scale_factors)
+        # tr2 = vtkTransformPolyDataFilter()
+        # tr2.SetInputData(tr1.GetOutput())
+        # tr2.SetTransform(transform2)
+        # tr2.Update()
+        #
+        # print(tr2.GetOutput())
+        #
+        # transform3 = vtkTransform()
+        # transform3.Translate(center)
+        # tr3 = vtkTransformPolyDataFilter()
+        # tr3.SetInputData(tr2.GetOutput())
+        # tr3.SetTransform(transform3)
+        #
+        # tr3.Update()
+        #
+        # print(tr3.GetOutput())
+        return t3
+
+
 
 
 

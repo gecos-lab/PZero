@@ -280,6 +280,78 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         elif self.shown_table == "tabTerminal":
             pass
 
+    def selected_uids_all(self):
+        """Returns a list of all uids selected in every table view."""
+        tab_list = ["tabDOMs","tabGeology","tabXSections","tabMeshes3D","tabImages","tabBoundaries","tabWells"]
+
+
+        selected_uids = []
+        for tab in tab_list:
+            selected_idxs = []
+            if tab == "tabGeology":
+                selected_idxs_proxy = self.GeologyTableView.selectionModel().selectedRows()
+
+                for idx_proxy in selected_idxs_proxy:
+                    selected_idxs.append(self.proxy_geol_coll.mapToSource(idx_proxy))
+                for idx in selected_idxs:
+                    selected_uids.append(self.geol_coll.data(index=idx, role=Qt.DisplayRole))
+
+
+            elif tab == "tabXSections":
+                selected_idxs_proxy = self.XSectionsTableView.selectionModel().selectedRows()
+
+                for idx_proxy in selected_idxs_proxy:
+                    selected_idxs.append(self.proxy_xsect_coll.mapToSource(idx_proxy))
+
+                for idx in selected_idxs:
+                    selected_uids.append(self.xsect_coll.data(index=idx, role=Qt.DisplayRole))
+
+            elif tab == "tabMeshes3D":
+                selected_idxs_proxy = self.Meshes3DTableView.selectionModel().selectedRows()
+
+                for idx_proxy in selected_idxs_proxy:
+                    selected_idxs.append(self.proxy_mesh3d_coll.mapToSource(idx_proxy))
+
+                for idx in selected_idxs:
+                    selected_uids.append(self.mesh3d_coll.data(index=idx, role=Qt.DisplayRole))
+
+            elif tab == "tabDOMs":
+                selected_idxs_proxy = self.DOMsTableView.selectionModel().selectedRows()
+
+                for idx_proxy in selected_idxs_proxy:
+                    selected_idxs.append(self.proxy_dom_coll.mapToSource(idx_proxy))
+
+                for idx in selected_idxs:
+                    selected_uids.append(self.dom_coll.data(index=idx, role=Qt.DisplayRole))
+
+            elif tab == "tabImages":
+                selected_idxs_proxy = self.ImagesTableView.selectionModel().selectedRows()
+
+                for idx_proxy in selected_idxs_proxy:
+                    selected_idxs.append(self.proxy_image_coll.mapToSource(idx_proxy))
+
+                for idx in selected_idxs:
+                    selected_uids.append(self.image_coll.data(index=idx, role=Qt.DisplayRole))
+
+            elif tab == "tabBoundaries":
+                selected_idxs_proxy = self.BoundariesTableView.selectionModel().selectedRows()
+
+                for idx_proxy in selected_idxs_proxy:
+                    selected_idxs.append(self.proxy_boundary_coll.mapToSource(idx_proxy))
+
+                for idx in selected_idxs:
+                    selected_uids.append(self.boundary_coll.data(index=idx, role=Qt.DisplayRole))
+
+            elif tab == "tabWells":
+                selected_idxs_proxy = self.WellsTableView.selectionModel().selectedRows()
+
+                for idx_proxy in selected_idxs_proxy:
+                    selected_idxs.append(self.proxy_well_coll.mapToSource(idx_proxy))
+
+                for idx in selected_idxs:
+                    selected_uids.append(self.well_coll.data(index=idx, role=Qt.DisplayRole))
+        return selected_uids
+
     def entity_remove(self):
         """Remove entities selected in an attribute table. Just rows completely selected are removed."""
 
