@@ -4254,12 +4254,11 @@ class ViewStereoplot(BaseView):
                             this_actor = self.ax.plane(self.dip_az-90,self.dip,color=color_RGB)[0]
                         else:
                             if filled is not None and visible is True:
-
                                 if filled:
                                     self.ax.density_contourf(self.dip_az-90, self.dip,measurement='poles')
                                 else:
                                     self.ax.density_contour(self.dip_az-90, self.dip,measurement='poles')
-                            this_actor = self.ax.pole(self.dip_az-90, self.dip, color=color_RGB)[0]
+                            this_actor = self.ax.pole(self.dip_az, self.dip, color=color_RGB)[0]
                         if this_actor:
                             this_actor.set_visible(visible)
                 else:

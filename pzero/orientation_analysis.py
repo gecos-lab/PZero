@@ -38,7 +38,7 @@ def plunge_trends2lineations(plunges=None, trends=None):
     to lineation unit vectors pointing downwards if Plunge > 0.
     Accepts single values, lists or Numpy arrays and
     returns Numpy arrays."""
-    if isinstance(plunges, (float, int, list)) and isinstance(trends, (float, int, list)):
+    if isinstance(plunges, (float, int, list,np.number)) and isinstance(trends, (float, int, list,np.number)):
         plunges_array = np.asarray(plunges)
         trends_array = np.asarray(trends)
     elif isinstance(plunges, np.ndarray) and isinstance(trends, np.ndarray):

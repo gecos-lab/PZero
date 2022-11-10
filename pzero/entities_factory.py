@@ -515,17 +515,18 @@ class PolyData(vtkPolyData):
 
     def center_scale(self,scale_factors):
 
-
+        #[Gabriele] This should be written with VTK
         temp = pv_PolyData()
         temp.DeepCopy(self)
 
-        tran = temp.points[0].copy()
+        tran = np_array(temp.points[0])
         # temp.points -= tran
         # print(tran)
 
-        t1 = temp.translate(tran*-1)
-        t2 = t1.scale(scale_factors)
-        t3 = t2.translate(tran)
+        t1 = temp.translate(tran*-1,inplace=False)
+        t1.scale(scale_factors,inplace=True)
+        t1.translate(tran,inplace=True)
+        del temp
         # t1.points += tran
 
         # print(t1.points[0])
@@ -558,7 +559,7 @@ class PolyData(vtkPolyData):
         # tr3.Update()
         #
         # print(tr3.GetOutput())
-        return t3
+        return t1
 
 
 
