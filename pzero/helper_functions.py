@@ -1,6 +1,21 @@
+from csv import Sniffer
+import datetime
+import os
+import pandas as pd
+from numpy import mean as np_mean
+from numpy import std as np_std
+from numpy import corrcoef as np_corrcoef
+from numpy import cov as np_cov
+from numpy import linalg as np_linalg
+from numpy import dot as np_dot
+from numpy import pi as np_pi
+
+from PIL import Image
+
+
 
 def auto_sep(filename):
-    from csv import Sniffer
+    
     with open(filename,'r') as IN:
         separator = Sniffer().sniff(IN.readline()).delimiter
     return separator
@@ -22,10 +37,7 @@ def profiler(path,iter):
         dostuff
 
     '''
-    import datetime
-    import os
-    import pandas as pd
-    import numpy as np
+
     root,base = os.path.split(path)
     diff_list = []
     def secondary(func):
@@ -43,8 +55,8 @@ def profiler(path,iter):
                 print(f'cycle {i+1} completed. It took {diff} seconds')
             raw_time_diff = pd.DataFrame(diff_list,columns=['time diff [s]'])
             raw_time_diff.to_csv(os.path.join(root,f'{title}_raw{date.strftime("%d_%m_%Y-%H%M%S")}.csv'),sep=';',mode='w')
-            mean = np.mean(diff_list)
-            std = np.std(diff_list)
+            mean = np_mean(diff_list)
+            std = np_std(diff_list)
 
             if os.path.exists(path):
                 with open(path,'a') as f:
@@ -59,57 +71,13 @@ def profiler(path,iter):
         return inner
     return secondary
 
-
-
 def angle_wrapper(angle):
     '''[Gabriele] Simple function to wrap a [pi;-pi] angle in [0;2pi]'''
-    from numpy import pi
 
-    return angle%(2*pi)
-
-def add_vtk_obj(self,vtk_obj,type,name=None):
-    from copy import deepcopy
-    from uuid import uuid4
-    from .geological_collection import GeologicalCollection
-    import numpy as np
-    from vtk import vtkAppendPolyData
-    from .entities_factory import Attitude
-
-    if type == 'measurement':
-
-        if name in self.parent.geol_coll.df['name'].values:
-            appender = vtkAppendPolyData()
-            uid = self.parent.geol_coll.get_name_uid(name)
-            old_vtk_obj = self.parent.geol_coll.get_uid_vtk_obj(uid)
-            appender.AddInputData(old_vtk_obj)
-            appender.AddInputData(vtk_obj)
-
-            appender.Update()
-            new_vtk_obj = Attitude()
-            new_vtk_obj.ShallowCopy(appender.GetOutput())
-
-            self.parent.geol_coll.replace_vtk(uid,new_vtk_obj,const_color=True)
-
-
-        else:
-            curr_obj_dict = deepcopy(GeologicalCollection.geological_entity_dict)
-            properties_name = vtk_obj.point_data_keys
-            properties_components = [vtk_obj.get_point_data_shape(i)[1] for i in properties_name]
-            curr_obj_dict['uid'] = str(uuid4())
-            curr_obj_dict['name'] = name
-            curr_obj_dict['scenario'] = name
-            curr_obj_dict['topological_type'] = "VertexSet"
-            curr_obj_dict['properties_names'] = properties_name
-            curr_obj_dict['properties_components'] = properties_components
-            curr_obj_dict['vtk_obj'] = vtk_obj
-            """Add to entity collection."""
-            self.parent.geol_coll.add_entity_from_dict(entity_dict=curr_obj_dict)
+    return angle%(2*np_pi)
 
 def PCA(data, correlation = False, sort = True):
-    from numpy import mean as np_mean
-    from numpy import corrcoef as np_corrcoef
-    from numpy import cov as np_cov
-    from numpy import linalg as np_linalg
+
     ''' PCA code taken from https://stackoverflow.com/a/38770513/19331382'''
     """ Applies Principal Component Analysis to the data
 
@@ -170,10 +138,8 @@ def PCA(data, correlation = False, sort = True):
 
     return eigenvalues, eigenvectors
 
-
 def best_fitting_plane(points, equation=False):
-    from numpy import mean as np_mean
-    from numpy import dot as np_dot
+
 
     ''' code from https://stackoverflow.com/a/38770513/19331382'''
     """ Computes the best fitting plane of the given points
@@ -221,3 +187,23 @@ def best_fitting_plane(points, equation=False):
 
     else:
         return point, normal
+
+def gen_frame(arr):
+    '''[Gabriele] Function used to generate transparent PIL frames to create gifs.
+    Code modified from https://stackoverflow.com/questions/46850318/transparent-background-in-gif-using-python-imageio'''
+    im = Image.fromarray(arr)
+    alpha = im.getchannel('A')
+
+    # Convert the image into P mode but only use 255 colors in the palette out of 256
+    im = im.convert('RGB').convert('P', palette=Image.ADAPTIVE, colors=255)
+
+    # Set all pixel values below 128 to 255 , and the rest to 0
+    mask = Image.eval(alpha, lambda a: 255 if a <=128 else 0)
+
+    # Paste the color of index 255 and use alpha as a mask
+    im.paste(255, mask)
+
+    # The transparency index is 255
+    im.info['transparency'] = 255
+
+    return im

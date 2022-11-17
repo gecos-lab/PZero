@@ -221,7 +221,6 @@ def implicit_model_loop_structural(self):
         """Append dataframe for this input entity to the general input dataframe."""
         all_input_data_df = all_input_data_df.append(entity_input_data_df, ignore_index=True)
         prgs_bar.add_one()
-        print(prgs_bar)
     toc()
     prgs_bar.close()
     """Drop columns with no valid value (i.e. all NaNs)."""
@@ -1180,6 +1179,8 @@ def project_2_xs(self):
         entity_dict['x_section'] = xs_uid
         if self.geol_coll.get_uid_topological_type(uid) == "VertexSet":
             entity_dict['topological_type'] = "XsVertexSet"
+            out_vtk = XsVertexSet(x_section_uid=xs_uid, parent=self)
+            out_vtk.DeepCopy(self.geol_coll.get_uid_vtk_obj(uid))
         elif self.geol_coll.get_uid_topological_type(uid) == "PolyLine":
             entity_dict['topological_type'] = "XsPolyLine"
             out_vtk = XsPolyLine(x_section_uid=xs_uid, parent=self)
@@ -1191,20 +1192,18 @@ def project_2_xs(self):
          np.float64 is needed to calculate "t" with a good precision
          when X and Y are in UTM coordinates with very large values,
          then the result is cast to float32 that is the VTK standard."""
+        xo = out_vtk.points_X.astype(np.float64)
+        yo = out_vtk.points_Y.astype(np.float64)
+        zo = out_vtk.points_Z.astype(np.float64)
+        t = (-xo*(yb-ya) - yo*(xa-xb) - ya*xb + yb*xa) / (alpha*(yb-ya) + beta*(xa-xb))
 
-        if entity_dict['topological_type'] == "XsVertexSet":
-            out_vtk = XsVertexSet(x_section_uid=xs_uid, parent=self)
-            out_vtk.DeepCopy(self.geol_coll.get_uid_vtk_obj(uid))
-            xo = out_vtk.points_X.astype(np.float64)
-            yo = out_vtk.points_Y.astype(np.float64)
-            zo = out_vtk.points_Z.astype(np.float64)
-            t = (-xo*(yb-ya) - yo*(xa-xb) - ya*xb + yb*xa) / (alpha*(yb-ya) + beta*(xa-xb))
+        out_vtk.points_X[:] = (xo + alpha * t).astype(np.float32)
+        out_vtk.points_Y[:] = (yo + beta * t).astype(np.float32)
+        out_vtk.points_Z[:] = (zo + gamma * t).astype(np.float32)
 
-            out_vtk.points_X[:] = (xo + alpha * t).astype(np.float32)
-            out_vtk.points_Y[:] = (yo + beta * t).astype(np.float32)
-            out_vtk.points_Z[:] = (zo + gamma * t).astype(np.float32)
+        out_vtk.set_point_data('distance',np.abs(t))
 
-            out_vtk.set_point_data('distance',np.abs(t))
+        if entity_dict['topological_type'] == "XsVertexSet":           
             # print(out_vtk.get_point_data('distance'))
             if xs_dist <= 0:
                 entity_dict['vtk_obj'] = out_vtk

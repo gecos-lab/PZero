@@ -358,7 +358,11 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         if not self.selected_uids:
             return
         """Confirm removal dialog."""
-        check = QMessageBox.question(self, "Remove Entities", ("Do you really want to remove entities\n" + str(self.selected_uids) + "\nPlease confirm."), QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+        if len(self.selected_uids) > 10:
+            msg = f'{self.selected_uids[:10]} and {len(self.selected_uids[10:])} more'
+        else:
+            msg = f'{self.selected_uids}'
+        check = QMessageBox.question(self, "Remove Entities", (f"Do you really want to remove entities\n{msg}\nPlease confirm."), QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
         if check == QMessageBox.No:
             return
         """Remove entities."""
