@@ -9,11 +9,12 @@ from PyQt5.QtGui import QCloseEvent,QFont
 """PZero imports"""
 from .base_view_window_ui import Ui_BaseViewWindow
 from .entities_factory import VertexSet, PolyLine, TriSurf, TetraSolid, XsVertexSet, XsPolyLine, DEM, PCDom, MapImage, Voxet, XsVoxet, Plane, Seismics, XsTriSurf, XsImage, PolyData, Wells, WellMarker,Attitude
-from .helper_dialogs import input_one_value_dialog, input_text_dialog, input_combo_dialog, message_dialog, options_dialog, multiple_input_dialog, tic, toc,open_file_dialog
+from .helper_dialogs import input_one_value_dialog, input_text_dialog, input_combo_dialog, message_dialog, options_dialog, multiple_input_dialog, tic, toc,open_file_dialog,progress_dialog
 from .geological_collection import GeologicalCollection
 from copy import deepcopy
 from uuid import uuid4
-from .helper_functions import angle_wrapper,PCA,best_fitting_plane
+from .helper_functions import best_fitting_plane,gen_frame
+from time import sleep
 
 """Maths imports"""
 from math import degrees, sqrt, atan2
@@ -36,6 +37,7 @@ from pyvista import read_texture
 from pyvista import Disc as pvDisc
 from pyvista import PolyData as pvPolyData
 from pyvista import PointSet as pvPointSet
+from pyvista import Plotter as pv_plot
 
 """2D plotting imports"""
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
@@ -2016,11 +2018,6 @@ class View3D(BaseView):
     """Create 3D view and import UI created with Qt Designer by subclassing base view"""
     """parent is the QT object that is launching this one, hence the ProjectWindow() instance in this case"""
 
-    # [Gabriele] Set the default 3D view as x +ve. Maybe there is a better place to put this variable
-    # _____________________________________________________________________________________________________________SOLVE THIS
-    default_view = [(554532.4159059974, 5063817.5, 0.0),
-                    (548273.0, 5063817.5, 0.0),
-                    (0.0, 0.0, 1.0)]
 
     def __init__(self, *args, **kwargs):
         super(View3D, self).__init__(*args, **kwargs)
@@ -2034,9 +2031,14 @@ class View3D(BaseView):
     """Re-implementations of functions that appear in all views - see placeholders in BaseView()"""
     def show_qt_canvas(self):
         """Show the Qt Window"""
+        
         self.show()
+
+        self.init_zoom = self.plotter.camera.distance
+        print(self.init_zoom)
         self.cam_orient_widget.On() # [Gabriele] The orientation widget needs to be turned on AFTER the canvas is shown
-        self.plotter.enable_mesh_picking(callback=lambda mesh: self.pkd_mesh(mesh),show_message=False)
+        self.picker = self.plotter.enable_mesh_picking(callback= self.pkd_mesh,show_message=False)
+    
     def closeEvent(self, event):
         """Override the standard closeEvent method since self.plotter.close() is needed to cleanly close the vtk plotter."""
         reply = QMessageBox.question(self, 'Closing window', 'Close this window?', QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
@@ -2068,6 +2070,12 @@ class View3D(BaseView):
         # self.showOct.triggered.connect(self.show_octree)
         # self.menuWindow.addAction(self.showOct)
 
+        self.menuOrbit = QMenu('Orbit around',self)
+
+        self.actionOrbitEntity = QAction('Entity',self)
+        self.actionOrbitEntity.triggered.connect(lambda: self.orbit_entity())
+        self.menuOrbit.addAction(self.actionOrbitEntity)
+
         self.menuEdit = QMenu('Edit point cloud',self)
         # self.actionCalculateNormalsPC = QAction('Calculate normals for point clouds',self)
         self.actionNormals2dd = QAction('Convert normals to Dip/Direction',self)
@@ -2077,6 +2085,7 @@ class View3D(BaseView):
         self.menuEdit.addAction(self.actionNormals2dd)
         self.menuEdit.addAction(self.actionFilter)
         self.menuTools.addMenu(self.menuEdit)
+        self.menuTools.addMenu(self.menuOrbit)
 
         self.menuPicker = QMenu('Pickers',self)
 
@@ -2130,28 +2139,29 @@ class View3D(BaseView):
             picker = self.plotter.picker
             #print(picker)
             picker.RemoveObservers(_vtk.vtkCommand.EndPickEvent)
-            self.plotter.enable_mesh_picking(callback=lambda mesh: self.pkd_mesh(mesh),show_message=False)
+            self.picker = self.plotter.enable_mesh_picking(callback=lambda mesh: self.pkd_mesh(mesh),show_message=False)
             self.tog_att *= -1
             print('Picking disabled')
 
     def act_pmesh(self):
         '''[Gabriele] Not the best solution but for now it works'''
         if self.tog_att == -1:
-            self.plotter.enable_mesh_picking(callback=lambda mesh: self.pkd_mesh(mesh),show_message=False)
+            self.picker = self.plotter.enable_mesh_picking(callback=lambda mesh: self.pkd_mesh(mesh),show_message=False)
             print('Mesh picking enabled')
         else:
-            picker = self.plotter.picker
+            # picker = self.plotter.picker
             #print(picker)
-            picker.RemoveObservers(_vtk.vtkCommand.EndPickEvent)
-            self.plotter.enable_mesh_picking(callback=lambda mesh: self.pkd_mesh(mesh),show_message=False)
+            self.picker.RemoveObservers(_vtk.vtkCommand.EndPickEvent)
+            self.picker = self.plotter.enable_mesh_picking(callback=lambda mesh: self.pkd_mesh(mesh),show_message=False)
             self.tog_att *= -1
             print('Picking disabled')
 
     def pkd_point(self,mesh,pid,set_opt):
+        
+        actor = self.picker.GetActor()
+        sel_uid = self.actors_df.loc[self.actors_df['actor'] == actor,'uid'].values[0]
 
-        uid = [i for i in mesh.array_names if 'tag_' in i][0][4:]
-
-        obj = self.parent.dom_coll.get_uid_vtk_obj(uid)
+        obj = self.parent.dom_coll.get_uid_vtk_obj(sel_uid)
         # locator = vtkStaticPointLocator()
         # locator.SetDataSet(obj)
         # locator.BuildLocator()
@@ -2256,19 +2266,12 @@ class View3D(BaseView):
 
     def pkd_mesh(self,mesh):
 
-
-        ''' Very basic function to pick a mesh and select the corresponding item
-            in the legend. The item is selected by comparing the selected mesh center and boundary with all of the centers and boundaries of the available object.
-            THIS IS NOT OPTIMAL FOR LARGE PROJECTS. It could be usefull to calculate
-            the parameters at startup (when loading the objects) or when creating new
-            objects and save them in a specific file/list.
-
-            Another solution could be to define a new empty attribute called tag_uid that
-            is set when a new entity is created. The tag can be extracted when an entity is selected and searched for in the entity list. This way there is no need to compare the centers and boudaries.
-            '''
-        uid = [i for i in mesh.array_names if 'tag_' in i][0][4:]
-
-        idx = self.actors_df.loc[self.actors_df['uid'] == uid].index[0]
+        '''[Gabriele] To select the mesh in the entity list we compare the actors of the actors_df dataframe
+        with the picker.GetActor() result'''
+        
+        actor = self.picker.GetActor()
+        sel_uid = self.actors_df.loc[self.actors_df['actor'] == actor,'uid'].values[0]        
+        idx = self.actors_df.loc[self.actors_df['uid'] == sel_uid].index[0]
         self.parent.GeologyTableView.selectRow(idx)
         return
 
@@ -2819,6 +2822,70 @@ class View3D(BaseView):
 
 
             # print(normals)
+    
+    '''[Gabriele] Orbit object ----------------------------------------------------'''
+    
+    def orbit_entity(self):
+        uid_list = list(self.actors_df['uid'].values)
+
+        dict = {'uid':['Actor uid',uid_list],
+                'up_x':['Orbital plane (Nx)',0.0],
+                'up_y':['Orbital plane (Ny)',0.0],
+                'up_z':['Orbital plane (Nz)',1.0],
+                'fac': ['Zoom factor',1.0],
+                'ele': ['Elevation above surface',0],
+                'fps':['Fps',60],
+                'length':['Movie length [sec]:', 60],
+                'name':['gif name','test']}
+        
+        opt_dict = multiple_input_dialog(title='Orbiting options',input_dict=dict,return_widget=False)
+        
+        uid = opt_dict['uid']
+        entity = self.actors_df.loc[self.actors_df['uid']==uid,'actor'].values[0]
+        
+        focus = entity.GetCenter()
+        view_up = [float(opt_dict['up_x']),float(opt_dict['up_y']),float(opt_dict['up_z'])]
+        factor = float(opt_dict['fac'])
+
+        # time = int(opt_dict['length']/60)
+
+        # print(factor)
+
+        off_screen_plot = pv_plot(off_screen=True)
+        # off_screen_plot.set_background('Green')
+
+        visible_actors = self.actors_df.loc[self.actors_df['show']==True,'actor'].values
+        for actor in visible_actors:
+            off_screen_plot.add_actor(actor)
+        
+
+        # off_screen_plot.show(auto_close=False)
+        n_points = int(opt_dict['fps']*opt_dict['length'])
+        path = off_screen_plot.generate_orbital_path(n_points=n_points,factor=factor,viewup=view_up,shift=float(opt_dict['ele']))
+
+        # off_screen_plot.store_image = True
+        # off_screen_plot.open_gif(f'{opt_dict["name"]}.gif')
+       
+        points = path.points
+        off_screen_plot.set_focus(focus)
+        off_screen_plot.set_viewup(view_up)
+        images = []
+        prgs= progress_dialog(max_value=n_points,title_txt='Writing gif',label_txt='Saving frames',parent=self)
+        # print('Creating gif')
+        for point in range(n_points):
+            # print(f'{point}/{n_points}',end='\r')
+            off_screen_plot.set_position(points[point])
+
+            # off_screen_plot.write_frame()
+            img = off_screen_plot.screenshot(transparent_background=True)
+            images.append(gen_frame(img))
+            prgs.add_one()
+        duration = 1000/opt_dict['fps']
+        images[0].save(f'{opt_dict["name"]}.gif',save_all=True,append_images=images,loop=0,duration=duration,disposal=2)
+        # off_screen_plot.orbit_on_path(path=path,focus=focus, write_frames=True,progress_bar=True,threaded=False)
+        # off_screen_plot.close()
+
+
 
 class View2D(BaseView):
     """Create 2D view and import UI created with Qt Designer by subclassing base view"""
