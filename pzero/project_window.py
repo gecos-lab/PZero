@@ -19,6 +19,7 @@ from .image_collection import ImageCollection
 from .mesh3d_collection import Mesh3DCollection
 from .boundary_collection import BoundaryCollection
 from .well_collection import WellCollection
+from .fluid_collection import FluidsCollection
 from .legend_manager import Legend
 from .properties_manager import PropertiesCMaps
 from .gocad2vtk import gocad2vtk, vtk2gocad, gocad2vtk_section, gocad2vtk_boundary
@@ -100,6 +101,15 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
     well_metadata_modified_signal = pyqtSignal(list)
     well_legend_color_modified_signal = pyqtSignal(list)
     well_legend_thick_modified_signal = pyqtSignal(list)
+    
+    fluid_added_signal = pyqtSignal(list)
+    fluid_removed_signal = pyqtSignal(list)
+    fluid_geom_modified_signal = pyqtSignal(list)  # this includes topology modified
+    fluid_data_keys_removed_signal = pyqtSignal(list)
+    fluid_data_val_modified_signal = pyqtSignal(list)
+    fluid_metadata_modified_signal = pyqtSignal(list)
+    fluid_legend_color_modified_signal = pyqtSignal(list)
+    fluid_legend_thick_modified_signal = pyqtSignal(list)
 
     prop_legend_cmap_modified_signal = pyqtSignal(str)
 
@@ -273,30 +283,37 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             for idx in selected_idxs:
                 selected_uids.append(self.well_coll.data(index=idx, role=Qt.DisplayRole))
             return selected_uids
+        elif self.shown_table == "tabFluids":
+            selected_idxs_proxy = self.FluidsTableView.selectionModel().selectedRows()
+            selected_idxs = []
+            for idx_proxy in selected_idxs_proxy:
+                selected_idxs.append(self.proxy_well_coll.mapToSource(idx_proxy))
+            selected_uids = []
+            for idx in selected_idxs:
+                selected_uids.append(self.well_coll.data(index=idx, role=Qt.DisplayRole))
+            return selected_uids
         elif self.shown_table == "tabLegend":
             pass
         elif self.shown_table == "tabProperties":
             pass
         elif self.shown_table == "tabTerminal":
             pass
-
+        
+    #[Gabriele] This is should be used for cross collection operations (e.g. cut surfaces in the geology table with the DEM). 
+    # We could use this instead of selected_uids but we should impose validity checks for the different functions  
+    @property
     def selected_uids_all(self):
         """Returns a list of all uids selected in every table view."""
-        tab_list = ["tabDOMs","tabGeology","tabXSections","tabMeshes3D","tabImages","tabBoundaries","tabWells"]
-
-
+        tab_list = ["tabDOMs","tabGeology","tabXSections","tabMeshes3D","tabImages","tabBoundaries","tabWells","tabFluids"]
         selected_uids = []
         for tab in tab_list:
             selected_idxs = []
             if tab == "tabGeology":
                 selected_idxs_proxy = self.GeologyTableView.selectionModel().selectedRows()
-
                 for idx_proxy in selected_idxs_proxy:
                     selected_idxs.append(self.proxy_geol_coll.mapToSource(idx_proxy))
                 for idx in selected_idxs:
                     selected_uids.append(self.geol_coll.data(index=idx, role=Qt.DisplayRole))
-
-
             elif tab == "tabXSections":
                 selected_idxs_proxy = self.XSectionsTableView.selectionModel().selectedRows()
 
@@ -350,6 +367,14 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
 
                 for idx in selected_idxs:
                     selected_uids.append(self.well_coll.data(index=idx, role=Qt.DisplayRole))
+            elif tab == "tabFluids":
+                selected_idxs_proxy = self.FluidsTableView.selectionModel().selectedRows()
+
+                for idx_proxy in selected_idxs_proxy:
+                    selected_idxs.append(self.proxy_well_coll.mapToSource(idx_proxy))
+
+                for idx in selected_idxs:
+                    selected_uids.append(self.well_coll.data(index=idx, role=Qt.DisplayRole))
         return selected_uids
 
     def entity_remove(self):
@@ -381,6 +406,8 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 self.boundary_coll.remove_entity(uid=uid)
             elif self.shown_table == "tabWells":
                 self.well_coll.remove_entity(uid=uid)
+            elif self.shown_table == "tabFluids":
+                self.fluid_coll.remove_entity(uid=uid)
 
     def entities_merge(self):  # ____________________________________________________ CHECK (1) HOW PROPERTIES AND TEXTURES ARE AFFECTED BY MERGING, (2) HOW IT WORKS FOR DOMs
         """Merge entities of the same type - VertexSet, PolyLine, TriSurf, ..."""
@@ -594,6 +621,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
     def lineations_calculate(self):  # ____________________________________________________ IMPLEMENT THIS FOR POINTS WITH PLUNGE/TREND AND FOR POLYLINES
         """Calculate lineations on geological entities."""
         pass
+    
     def build_octree(self):
         if self.selected_uids:
             for uid in self.selected_uids:
@@ -805,11 +833,21 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.proxy_well_coll.setSourceModel(self.well_coll)
         self.WellsTableView.setModel(self.proxy_well_coll)
 
+        '''[Gabriele]  Create the fluids_coll FluidsCollection (a Qt QAbstractTableModel with a Pandas dataframe as attribute)
+        and connect the model to FluidTableView (a Qt QTableView created with QTDesigner and provided by
+        Ui_ProjectWindow). Setting the model also updates the view.'''
+        self.fluids_coll = FluidsCollection(parent=self)
+        self.proxy_fluids_coll = QSortFilterProxyModel(self)
+        self.proxy_fluids_coll.setSourceModel(self.fluids_coll)
+        self.FluidsTableView.setModel(self.proxy_fluids_coll)
+
         """Create the geol_legend_df legend table (a Pandas dataframe), create the corresponding QT
         Legend self.legend (a Qt QTreeWidget that is internally connected to its data source),
         and update the widget."""
         self.geol_legend_df = pd.DataFrame(columns=list(Legend.geol_legend_dict.keys()))
         self.well_legend_df = pd.DataFrame(columns=list(Legend.well_legend_dict.keys()))
+        self.fluids_legend_df = pd.DataFrame(columns=list(Legend.fluids_legend_dict.keys()))
+        
         self.others_legend_df = pd.DataFrame(deepcopy(Legend.others_legend_dict))
         self.legend = Legend()
         self.legend.update_widget(parent=self)
@@ -858,6 +896,8 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         # self.prop_legend_df.to_csv(out_dir_name + '/prop_legend_df.csv', encoding='utf-8', index=False)
 
         self.well_legend_df.to_json(out_dir_name + '/well_legend_table.json', orient='index')
+        
+        self.fluids_legend_df.to_json(out_dir_name + '/fluids_legend_table.json', orient='index')
 
         """--------------------- SAVE tables ---------------------"""
 
@@ -968,6 +1008,19 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             pd_writer.Write()
             prgs_bar.add_one()
 
+        """Save fluids collection table to JSON file and entities as VTK."""
+        out_cols = list(self.fluids_coll.df.columns)
+        out_cols.remove('vtk_obj')
+        self.fluids_coll.df[out_cols].to_json(out_dir_name + '/fluids_table.json', orient='index')
+        # self.geol_coll.df[out_cols].to_csv(out_dir_name + '/geological_table.csv', encoding='utf-8', index=False)
+        prgs_bar = progress_dialog(max_value=self.fluids_coll.df.shape[0], title_txt="Save fluids", label_txt="Saving fluid objects...", cancel_txt=None, parent=self)
+        for uid in self.fluids_coll.df['uid'].to_list():
+            pd_writer = vtk.vtkXMLPolyDataWriter()
+            pd_writer.SetFileName(out_dir_name + "/" + uid + ".vtp")
+            pd_writer.SetInputData(self.fluids_coll.get_uid_vtk_obj(uid))
+            pd_writer.Write()
+            prgs_bar.add_one()
+
 
     def new_project(self):
         """Creates a new empty project, after having cleared all variables."""
@@ -1046,6 +1099,15 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             if not new_well_legend_df.empty:
                 self.well_legend_df = new_well_legend_df
             self.well_legend_df.sort_values(by='Loc ID', ascending=True, inplace=True)
+
+        if os.path.isfile((in_dir_name + '/fluids_legend_table.csv')) or os.path.isfile((in_dir_name + '/fluids_legend_table.json')):
+            if os.path.isfile((in_dir_name + '/fluids_legend_table.json')):
+                new_fluids_legend_df = pd.read_json(in_dir_name + '/fluids_legend_table.json', orient='index', dtype=Legend.legend_type_dict)
+            else:
+                new_fluids_legend_df = pd.read_csv(in_dir_name + '/fluids_legend_table.csv', encoding='utf-8', dtype=Legend.legend_type_dict, keep_default_na=False)
+            if not new_fluids_legend_df.empty:
+                self.fluids_legend_df = new_fluids_legend_df
+            self.fluids_legend_df.sort_values(by='fluid_time', ascending=True, inplace=True)
 
 
         if os.path.isfile((in_dir_name + '/prop_legend_df.csv')) or os.path.isfile((in_dir_name + '/prop_legend_df.json')):
@@ -1280,6 +1342,44 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             self.geol_coll.endResetModel()
         """Update legend."""
         self.prop_legend.update_widget(parent=self)
+        
+        """Read fluids table and files. Note beginResetModel() and endResetModel()."""
+        if os.path.isfile((in_dir_name + '/fluids_table.csv')) or os.path.isfile((in_dir_name + '/fluids_table.json')):
+            self.fluids_coll.beginResetModel()
+            if os.path.isfile((in_dir_name + '/fluids_table.json')):
+                new_fluids_coll_df = pd.read_json(in_dir_name + '/fluids_table.json', orient='index', dtype=FluidsCollection.fluid_entity_type_dict)
+                if not new_fluids_coll_df.empty:
+                    self.fluids_coll.df = new_fluids_coll_df
+            else:
+                self.fluids_coll.df = pd.read_csv(in_dir_name + '/fluids_table.csv', encoding='utf-8', dtype=FluidsCollection.fluid_entity_type_dict, keep_default_na=False)
+            prgs_bar = progress_dialog(max_value=self.fluids_coll.df.shape[0], title_txt="Open fluids", label_txt="Opening fluid objects...", cancel_txt=None, parent=self)
+            for uid in self.fluids_coll.df['uid'].to_list():
+                if not os.path.isfile((in_dir_name + "/" + uid + ".vtp")):
+                    print("error: missing VTK file")
+                    return
+                if self.fluids_coll.get_uid_topological_type(uid) == 'VertexSet':
+                    if 'dip' in self.geol_coll.get_uid_properties_names(uid):
+                        vtk_object=Attitude()
+                    else:
+                        vtk_object = VertexSet()
+                elif self.fluids_coll.get_uid_topological_type(uid) == 'PolyLine':
+                    vtk_object = PolyLine()
+                elif self.fluids_coll.get_uid_topological_type(uid) == 'TriSurf':
+                    vtk_object = TriSurf()
+                elif self.fluids_coll.get_uid_topological_type(uid) == 'XsVertexSet':
+                    vtk_object = XsVertexSet(self.geol_coll.get_uid_x_section(uid), parent=self)
+                elif self.fluids_coll.get_uid_topological_type(uid) == 'XsPolyLine':
+                    vtk_object = XsPolyLine(self.geol_coll.get_uid_x_section(uid), parent=self)
+                pd_reader = vtk.vtkXMLPolyDataReader()
+                pd_reader.SetFileName(in_dir_name + "/" + uid + ".vtp")
+                pd_reader.Update()
+                vtk_object.ShallowCopy(pd_reader.GetOutput())
+                vtk_object.Modified()
+                self.fluids_coll.set_uid_vtk_obj(uid=uid, vtk_obj=vtk_object)
+                prgs_bar.add_one()
+            self.fluids_coll.endResetModel()
+        """Update legend."""
+        self.prop_legend.update_widget(parent=self)
 
     """Methods used to import entities from other file formats."""
 
@@ -1341,20 +1441,25 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
     def import_SHP(self):  # __________________________________________________________________ UPDATE IN shp2vtk.py OR DUPLICATE THIS TO IMPORT SHP GEOLOGY OR BOUNDARY
         """Import SHP file and update geological collection."""
         self.TextTerminal.appendPlainText("Importing SHP file")
+        list = ['Geology','Fluid contacts']
         """Select and open input file"""
         in_file_name = open_file_dialog(parent=self, caption='Import SHP file', filter="shp (*.shp)")
+        coll = input_combo_dialog(parent=self,title='Collection',label='Assign collection',choice_list=list)
         if in_file_name:
             self.TextTerminal.appendPlainText('in_file_name: ' + in_file_name)
-            shp2vtk(self=self, in_file_name=in_file_name)
+            shp2vtk(self=self, in_file_name=in_file_name,collection=coll)
 
     def import_DEM(self):
         """Import DEM file and update DEM collection."""
         self.TextTerminal.appendPlainText("Importing DEM in supported format (geotiff)")
+        list = ['DEMs and DOMs','Fluid contacts']
+
         """Select and open input file"""
         in_file_name = open_file_dialog(parent=self, caption='Import DEM from file', filter="Geotiff (*.tif)")
+        coll = input_combo_dialog(parent=self,title='Collection',label='Assign collection',choice_list=list)
         if in_file_name:
             self.TextTerminal.appendPlainText('in_file_name: ' + in_file_name)
-            dem2vtk(self=self, in_file_name=in_file_name)
+            dem2vtk(self=self, in_file_name=in_file_name,collection='DEMs and DOMs')
 
     def import_mapimage(self):
         """Import map image and update image collection."""

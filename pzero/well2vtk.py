@@ -16,6 +16,7 @@ from uuid import uuid4
 from .helper_functions import auto_sep
 from .well_collection import WellCollection
 from .geological_collection import GeologicalCollection
+from .fluid_collection import FluidsCollection
 import pandas as pd
 
 def well2vtk(in_file_name=None,col_names=None,row_range=None,header_row=None,usecols=None,delimiter=None,self=None):
@@ -121,46 +122,46 @@ def well2vtk(in_file_name=None,col_names=None,row_range=None,header_row=None,use
         test = pv.PolyData()
         test.ShallowCopy(well_line)
         test.plot()
-            #
-            #
-            # well_marker.points = np.array([top])
-            # well_marker.auto_cells()
-            #
-            # top = np.array([x_bottom,y_bottom,z_bottom])
-            #
-            # geo_code = data.loc[i,"GeologyCode"]
-            #
-            # curr_obj_attributes = deepcopy(WellCollection.well_entity_dict)
-            # curr_obj_attributes['uid'] = str(uuid4())
-            # curr_obj_attributes['Loc ID'] = f'{unique_id[0]}'
-            # curr_obj_attributes['geological_feature'] = f'{geo_code}'
-            # curr_obj_attributes['properties_names'] = []
-            # curr_obj_attributes['properties_components'] = []
-            # curr_obj_attributes['properties_types'] = []
-            # curr_obj_attributes['vtk_obj'] = well_line
-            #
-            # marker_obj_attributes = deepcopy(GeologicalCollection.geological_entity_dict)
-            # marker_obj_attributes['uid'] = str(uuid4())
-            # marker_obj_attributes['name'] = f'{data.loc[i,"GeologyCode"]}_marker'
-            # marker_obj_attributes["topological_type"] = "VertexSet"
-            # marker_obj_attributes['geological_type'] = 'top'
-            # marker_obj_attributes['geological_feature'] = f'{geo_code}'
-            # marker_obj_attributes['scenario'] = f'{unique_id[0]}'
-            # marker_obj_attributes['properties_names'] = []
-            # marker_obj_attributes['properties_components'] = []
-            # marker_obj_attributes['properties_types'] = []
-            # marker_obj_attributes['x_section'] = curr_obj_attributes['uid']
-            # marker_obj_attributes['vtk_obj'] = well_marker
-            #
-            # self.geol_coll.add_entity_from_dict(entity_dict=marker_obj_attributes)
-            #
-            #
-            #
-            # self.well_coll.add_entity_from_dict(entity_dict=curr_obj_attributes)
-            #
-            # del well_line
-            # del well_marker
-        #
+        
+        
+        # well_marker.points = np.array([top])
+        # well_marker.auto_cells()
+        
+        # top = np.array([x_bottom,y_bottom,z_bottom])
+        
+        # geo_code = data.loc[i,"GeologyCode"]
+        
+        # curr_obj_attributes = deepcopy(WellCollection.well_entity_dict)
+        # curr_obj_attributes['uid'] = str(uuid4())
+        # curr_obj_attributes['Loc ID'] = f'{unique_id[0]}'
+        # curr_obj_attributes['geological_feature'] = f'{geo_code}'
+        # curr_obj_attributes['properties_names'] = []
+        # curr_obj_attributes['properties_components'] = []
+        # curr_obj_attributes['properties_types'] = []
+        # curr_obj_attributes['vtk_obj'] = well_line
+        
+        # marker_obj_attributes = deepcopy(GeologicalCollection.geological_entity_dict)
+        # marker_obj_attributes['uid'] = str(uuid4())
+        # marker_obj_attributes['name'] = f'{data.loc[i,"GeologyCode"]}_marker'
+        # marker_obj_attributes["topological_type"] = "VertexSet"
+        # marker_obj_attributes['geological_type'] = 'top'
+        # marker_obj_attributes['geological_feature'] = f'{geo_code}'
+        # marker_obj_attributes['scenario'] = f'{unique_id[0]}'
+        # marker_obj_attributes['properties_names'] = []
+        # marker_obj_attributes['properties_components'] = []
+        # marker_obj_attributes['properties_types'] = []
+        # marker_obj_attributes['x_section'] = curr_obj_attributes['uid']
+        # marker_obj_attributes['vtk_obj'] = well_marker
+        
+        # self.geol_coll.add_entity_from_dict(entity_dict=marker_obj_attributes)
+        
+        
+        
+        # self.well_coll.add_entity_from_dict(entity_dict=curr_obj_attributes)
+        
+        # del well_line
+        # del well_marker
+    
     # basename = os.path.basename(in_file_name)
     # _,ext = os.path.splitext(basename)
     # if ext == '.csv':

@@ -264,6 +264,22 @@
         </item>
        </layout>
       </widget>
+      <widget class="QWidget" name="tabFluids">
+       <property name="enabled">
+        <bool>true</bool>
+       </property>
+       <property name="contextMenuPolicy">
+        <enum>Qt::DefaultContextMenu</enum>
+       </property>
+       <attribute name="title">
+        <string>Fluid contacts</string>
+       </attribute>
+       <layout class="QVBoxLayout" name="verticalLayout_21">
+        <item>
+         <widget class="QTableView" name="FluidsTableView"/>
+        </item>
+       </layout>
+      </widget>
       <widget class="QWidget" name="tabLegend">
        <property name="sizePolicy">
         <sizepolicy hsizetype="MinimumExpanding" vsizetype="MinimumExpanding">

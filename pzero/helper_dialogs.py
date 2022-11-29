@@ -6,7 +6,7 @@ from PyQt5.QtWidgets import QMessageBox, QInputDialog, QLineEdit, QPushButton, Q
 from PyQt5.QtGui import QColor
 from PyQt5.QtCore import QEventLoop, Qt, QAbstractTableModel
 from .import_window_ui import Ui_ImportOptionsWindow
-from .navigator_window import Ui_NavWindow
+from .navigator_window_ui import Ui_NavWindow
 from .preview_window_ui import Ui_PreviewWindow
 # from .assign_ui import Ui_AssignWindow
 # from .helper_functions import profiler

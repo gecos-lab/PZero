@@ -119,6 +119,8 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             self.create_dom_list()
             self.create_image_list()
             self.create_well_tree()
+            self.create_fluids_tree()
+            self.create_fluids_topology_tree()
 
         """Build and show other widgets, icons, tools - TO BE DONE_________________________________"""
 
@@ -175,7 +177,16 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.parent.well_metadata_modified_signal.connect(lambda updated_list: self.well_metadata_modified_update_views(updated_list=updated_list))
         self.parent.well_legend_color_modified_signal.connect(lambda updated_list: self.well_legend_color_modified_update_views(updated_list=updated_list))
         self.parent.well_legend_thick_modified_signal.connect(lambda updated_list: self.well_legend_thick_modified_update_views(updated_list=updated_list))
-
+        
+        self.parent.fluid_added_signal.connect(lambda updated_list: self.fluid_added_update_views(updated_list=updated_list))
+        self.parent.fluid_removed_signal.connect(lambda updated_list: self.fluid_removed_update_views(updated_list=updated_list))
+        self.parent.fluid_geom_modified_signal.connect(lambda updated_list: self.fluid_geom_modified_update_views(updated_list=updated_list))
+        self.parent.fluid_data_keys_removed_signal.connect(lambda updated_list: self.fluid_data_keys_modified_update_views(updated_list=updated_list))
+        self.parent.fluid_data_val_modified_signal.connect(lambda updated_list: self.fluid_data_val_modified_update_views(updated_list=updated_list))
+        self.parent.fluid_metadata_modified_signal.connect(lambda updated_list: self.fluid_metadata_modified_update_views(updated_list=updated_list))
+        self.parent.fluid_legend_color_modified_signal.connect(lambda updated_list: self.fluid_legend_color_modified_update_views(updated_list=updated_list))
+        self.parent.fluid_legend_thick_modified_signal.connect(lambda updated_list: self.fluid_legend_thick_modified_update_views(updated_list=updated_list))
+        
         self.parent.prop_legend_cmap_modified_signal.connect(lambda this_property: self.prop_legend_cmap_modified_update_views(this_property=this_property))
 
     def show_qt_canvas(self):
@@ -185,6 +196,8 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             """Turn on the orientation widget AFTER the canvas is shown."""
             self.cam_orient_widget.On()
 
+# ================================  build and update ================================
+    
     """Methods used to build and update the geology and topology trees."""
 
     def create_geology_tree(self, sec_uid=None):
@@ -605,19 +618,6 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             self.update_topology_checkboxes(uid=uid, uid_checkState=uid_checkState)
             self.GeologyTreeWidget.itemChanged.connect(self.toggle_geology_topology_visibility)
             self.TopologyTreeWidget.itemChanged.connect(self.toggle_geology_topology_visibility)
-
-    def toggle_property(self):
-        """Generic method to toggle the property shown by an actor that is already present in the view."""
-        combo = self.sender()
-        show_property = combo.currentText()
-        uid = combo.uid
-        show = self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]
-        collection = self.actors_df.loc[self.actors_df['uid'] == uid, 'collection'].values[0]
-        """This removes the previous copy of the actor with the same uid, then calls the viewer-specific function that shows an actor with a property.
-        IN THE FUTURE see if it is possible and more efficient to keep the actor and just change the property shown."""
-        self.remove_actor_in_view(uid=uid)
-        this_actor = self.show_actor_with_property(uid=uid, collection=collection, show_property=show_property, visible=show)
-        self.actors_df = self.actors_df.append({'uid': uid, 'actor': this_actor, 'show': show, 'collection': collection, 'show_prop': show_property}, ignore_index=True) # self.set_actor_visible(uid=uid, visible=show)
 
     """Methods used to build and update the cross-section table."""
 
@@ -1193,6 +1193,8 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         this_actor = self.show_actor_with_property(uid=uid, collection=collection, show_property=show_property, visible=show)
         self.actors_df = self.actors_df.append({'uid': uid, 'actor': this_actor, 'show': show, 'collection': collection, 'show_prop': show_property}, ignore_index=True)  # self.set_actor_visible(uid=uid, visible=show)
 
+    """Methods used to build and update the Wells table."""
+
     def create_well_tree(self):
         """Create topology tree with checkboxes and properties"""
         self.WellsTreeWidget.clear()
@@ -1232,7 +1234,6 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         changed item, but upper levels do not broadcast uid's so they are filtered in the toggle method."""
         self.WellsTreeWidget.itemChanged.connect(self.toggle_well_visibility)
         self.WellsTreeWidget.expandAll()
-
 
     def update_well_tree_added(self, new_list=None):
         """Update geology tree without creating a new model"""
@@ -1293,8 +1294,6 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.WellsTreeWidget.itemChanged.connect(self.toggle_well_visibility)
         self.WellsTreeWidget.expandAll()
 
-
-
     def update_well_tree_removed(self, removed_list=None):
         """When geological entity is removed, update Geology Tree without building a new model"""
         success = 0
@@ -1341,86 +1340,430 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             self.update_well_checkboxes(uid=uid, uid_checkState=uid_checkState)
             self.WellsTreeWidget.itemChanged.connect(self.toggle_well_visibility)
 
+    """Methods used to build and update the fluid and fluid topology trees."""
 
-    def well_added_update_views(self, updated_list=None):
-        """This is called when an entity is added to the geological collection.
-        Disconnect signals to geology and topology tree, if they are set, to avoid a nasty loop
-        that disrupts the trees, then they are reconnected when the trees are rebuilt"""
-        self.WellsTreeWidget.itemChanged.disconnect()
-        """Create pandas dataframe as list of "new" actors"""
-        actors_df_new = pd.DataFrame(columns=['uid', 'actor', 'show', 'collection', 'show_prop'])
-        for uid in updated_list:
-            this_actor = self.show_actor_with_property(uid=uid, collection='well_coll', show_property=None, visible=True)
-            self.actors_df = self.actors_df.append({'uid': uid, 'actor': this_actor, 'show': True, 'collection': 'well_coll', 'show_prop': None}, ignore_index=True)
-            actors_df_new = actors_df_new.append({'uid': uid, 'actor': this_actor, 'show': True, 'collection': 'well_coll', 'show_prop': None}, ignore_index=True)
-            self.update_well_tree_added(actors_df_new)
-        """Re-connect signals."""
-        self.WellsTreeWidget.itemChanged.connect(self.toggle_well_visibility)
+    def create_fluids_tree(self, sec_uid=None):
+        """Create fluids tree with checkboxes and properties"""
+        self.FluidsTreeWidget.clear()
+        self.FluidsTreeWidget.setColumnCount(3)
+        self.FluidsTreeWidget.setHeaderLabels(['Type > Feature > Scenario > Name', 'uid', 'property'])
+        self.FluidsTreeWidget.hideColumn(1)  # hide the uid column
+        self.FluidsTreeWidget.setItemsExpandable(True)
+        if sec_uid:
+            fluid_types = pd.unique(self.parent.fluids_coll.df.loc[(self.parent.fluids_coll.df['x_section'] == sec_uid), 'fluid_type'])
+        else:
+            fluid_types = pd.unique(self.parent.fluids_coll.df['fluid_type'])
+        for fluid_type in fluid_types:
+            flevel_1 = QTreeWidgetItem(self.FluidsTreeWidget, [fluid_type])  # self.FluidsTreeWidget as parent -> top level
+            flevel_1.setFlags(flevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
+            if sec_uid:
+                fluid_features = pd.unique(self.parent.fluids_coll.df.loc[(self.parent.fluids_coll.df['fluid_type'] == fluid_type) & (self.parent.fluids_coll.df['x_section'] == sec_uid), 'fluid_feature'])
+            else:
+                fluid_features = pd.unique(self.parent.fluids_coll.df.loc[self.parent.fluids_coll.df['fluid_type'] == fluid_type, 'fluid_feature'])
+            for feature in fluid_features:
+                flevel_2 = QTreeWidgetItem(flevel_1, [feature])  # flevel_1 as parent -> 1st middle level
+                flevel_2.setFlags(flevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
+                if sec_uid:
+                    fluid_scenario = pd.unique(self.parent.fluids_coll.df.loc[(self.parent.fluids_coll.df['fluid_type'] == fluid_type) & (self.parent.fluids_coll.df['fluid_feature'] == feature) & (self.parent.fluids_coll.df['x_section'] == sec_uid), 'scenario'])
+                else:
+                    fluid_scenario = pd.unique(self.parent.fluids_coll.df.loc[(self.parent.fluids_coll.df['fluid_type'] == fluid_type) & (self.parent.fluids_coll.df['fluid_feature'] == feature),'scenario'])
+                for scenario in fluid_scenario:
+                    flevel_3 = QTreeWidgetItem(flevel_2, [scenario])  # flevel_2 as parent -> 2nd middle level
+                    flevel_3.setFlags(flevel_3.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
+                    if sec_uid:
+                        uids = self.parent.fluids_coll.df.loc[(self.parent.fluids_coll.df['fluid_type'] == fluid_type) & (self.parent.fluids_coll.df['fluid_feature'] == feature) & (self.parent.fluids_coll.df['scenario'] == scenario) & (self.parent.fluids_coll.df['x_section'] == sec_uid), 'uid'].to_list()
+                    else:
+                        uids= self.parent.fluids_coll.df.loc[(self.parent.fluids_coll.df['fluid_type'] == fluid_type) & (self.parent.fluids_coll.df['fluid_feature'] == feature) & (self.parent.fluids_coll.df['scenario'] == scenario), 'uid'].to_list()
+                    for uid in uids:
+                        property_combo = QComboBox()
+                        property_combo.uid = uid
+                        property_combo.addItem("none")
+                        property_combo.addItem("X")
+                        property_combo.addItem("Y")
+                        property_combo.addItem("Z")
+                        for prop in self.parent.fluids_coll.get_uid_properties_names(uid):
+                            property_combo.addItem(prop)
+                        name = self.parent.fluids_coll.df.loc[(self.parent.fluids_coll.df['uid'] == uid), 'name'].values[0]
+                        flevel_4 = QTreeWidgetItem(flevel_3, [name, uid])  # flevel_3 as parent -> lower level
+                        self.FluidsTreeWidget.setItemWidget(flevel_4, 2, property_combo)
+                        property_combo.currentIndexChanged.connect(lambda: self.toggle_property())
+                        flevel_4.setFlags(flevel_4.flags() | Qt.ItemIsUserCheckable)
+                        if self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]:
+                            flevel_4.setCheckState(0, Qt.Checked)
+                        elif not self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]:
+                            flevel_4.setCheckState(0, Qt.Unchecked)
+        """Send messages. Note that with tristate several signals are emitted in a sequence, one for each
+        changed item, but upper levels do not broadcast uid's so they are filtered in the toggle method."""
+        self.FluidsTreeWidget.itemChanged.connect(self.toggle_fluids_topology_visibility)
+        self.FluidsTreeWidget.expandAll()
 
-    def well_removed_update_views(self, updated_list=None):
-        """This is called when an entity is removed from the geological collection.
-        Disconnect signals to geology and topology tree, if they are set, to avoid a nasty loop
-        that disrupts the trees, then they are reconnected when the trees are rebuilt"""
-        self.WellsTreeWidget.itemChanged.disconnect()
-        for uid in updated_list:
-            self.remove_actor_in_view(uid=uid, redraw=True)
-        self.update_well_tree_removed(removed_list=updated_list)
-        """Re-connect signals."""
-        self.WellsTreeWidget.itemChanged.connect(self.toggle_well_visibility)
+    def create_fluids_topology_tree(self,sec_uid=None):
+        """Create topology tree with checkboxes and properties"""
+        self.FluidsTopologyTreeWidget.clear()
+        self.FluidsTopologyTreeWidget.setColumnCount(3)
+        self.FluidsTopologyTreeWidget.setHeaderLabels(['Type > Scenario > Name', 'uid', 'property'])
+        self.FluidsTopologyTreeWidget.hideColumn(1)  # hide the uid column
+        self.FluidsTopologyTreeWidget.setItemsExpandable(True)
 
-    def well_data_keys_modified_update_views(self, updated_list=None):
-        """This is called when entity point or cell data are modified.
-        Disconnect signals to geology and topology tree, if they are set, to avoid a nasty loop
-        that disrupts the trees, then they are reconnected when the trees are rebuilt"""
-        self.WellsTreeWidget.itemChanged.disconnect()
-        for uid in updated_list:
-            if not self.actors_df.loc[self.actors_df['uid'] == uid, 'show_prop'].to_list() == []:
-                if not self.actors_df.loc[self.actors_df['uid'] == uid, 'show_prop'].values[0] in self.parent.geol_coll.get_uid_properties_names(uid):
-                    show = self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].to_list()[0]
-                    self.remove_actor_in_view(uid=uid)
-                    this_actor = self.show_actor_with_property(uid=uid, collection='geol_coll', show_property=None, visible=show)
-                    self.actors_df = self.actors_df.append({'uid': uid, 'actor': this_actor, 'show': show, 'collection': 'well_coll', 'show_prop': None}, ignore_index=True)  # self.actors_df.loc[self.actors_df["uid"] == uid, 'actor'] = this_actor
-                    self.create_well_tree()
-        """Re-connect signals."""
-        self.WellsTreeWidget.itemChanged.connect(self.toggle_well_visibility)
+        if sec_uid:
+            filtered_topo = self.parent.fluids_coll.df.loc[(self.parent.fluids_coll.df['x_section'] == sec_uid), 'topological_type']
+            topo_types = pd.unique(filtered_topo)
+        else:
+            topo_types = pd.unique(self.parent.fluids_coll.df['topological_type'])
 
-    def well_data_val_modified_update_views(self, updated_list=None):
-        ...
+        for topo_type in topo_types:
+            tlevel_1 = QTreeWidgetItem(self.FluidsTopologyTreeWidget, [topo_type])  # self.GeologyTreeWidget as parent -> top level
+            tlevel_1.setFlags(tlevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
+            for scenario in pd.unique(self.parent.fluids_coll.df.loc[self.parent.fluids_coll.df['topological_type'] == topo_type, 'scenario']):
+                tlevel_2 = QTreeWidgetItem(tlevel_1, [scenario])  # tlevel_1 as parent -> middle level
+                tlevel_2.setFlags(tlevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
+                if sec_uid:
+                    uids = self.parent.fluids_coll.df.loc[(self.parent.fluids_coll.df['topological_type'] == topo_type) & (self.parent.fluids_coll.df['scenario'] == scenario) & (self.parent.fluids_coll.df['x_section'] == sec_uid), 'uid'].to_list()
+                else:
+                    uids = self.parent.fluids_coll.df.loc[(self.parent.fluids_coll.df['topological_type'] == topo_type) & (self.parent.fluids_coll.df['scenario'] == scenario), 'uid'].to_list()
+                for uid in uids:
+                    property_combo = QComboBox()
+                    property_combo.uid = uid
+                    property_combo.addItem("none")
+                    property_combo.addItem("X")
+                    property_combo.addItem("Y")
+                    property_combo.addItem("Z")
+                    for prop in self.parent.fluids_coll.get_uid_properties_names(uid):
+                        property_combo.addItem(prop)
+                    name = self.parent.fluids_coll.df.loc[self.parent.fluids_coll.df['uid'] == uid, 'name'].values[0]
+                    tlevel_3 = QTreeWidgetItem(tlevel_2, [name, uid])  # tlevel_2 as parent -> lower level
+                    self.FluidsTopologyTreeWidget.setItemWidget(tlevel_3, 2, property_combo)
+                    property_combo.currentIndexChanged.connect(lambda: self.toggle_property())
+                    tlevel_3.setFlags(tlevel_3.flags() | Qt.ItemIsUserCheckable)
+                    if self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]:
+                        tlevel_3.setCheckState(0, Qt.Checked)
+                    elif not self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]:
+                        tlevel_3.setCheckState(0, Qt.Unchecked)
+        """Send messages. Note that with tristate several signals are emitted in a sequence, one for each
+        changed item, but upper levels do not broadcast uid's so they are filtered in the toggle method."""
+        self.FluidsTopologyTreeWidget.itemChanged.connect(self.toggle_fluids_topology_visibility)
+        self.FluidsTopologyTreeWidget.expandAll()
 
-    def well_metadata_modified_update_views(self, updated_list=None):
-        """This is called when entity metadata are modified, and the legend is automatically updated.
-        Disconnect signals to geology and topology tree, if they are set, to avoid a nasty loop
-        that disrupts the trees, then they are reconnected when the trees are rebuilt"""
-        self.WellsTreeWidget.itemChanged.disconnect()
-        for uid in updated_list:
-            """Case for entities modified"""
-            self.change_actor_color(uid=uid, collection='well_coll')
-            self.change_actor_line_thick(uid=uid, collection='well_coll')
-            self.create_well_tree()
-        """Re-connect signals."""
-        self.WellsTreeWidget.itemChanged.connect(self.toggle_well_visibility)
+    def update_fluids_tree_added(self, new_list=None,sec_uid=None):
+        """Update fluid tree without creating a new model"""
+        uid_list = list(new_list['uid'])
+        if sec_uid:
+            for i,uid in enumerate(new_list['uid']):
+                if sec_uid != self.parent.fluids_coll.df.loc[self.parent.fluids_coll.df['uid'] == uid, 'x_section'].values[0]:
+                    del uid_list[i]
+        for uid in uid_list:
+            if self.FluidsTreeWidget.findItems(self.parent.fluids_coll.get_uid_fluid_type(uid), Qt.MatchExactly, 0) != []:
+                """Already exists a TreeItem (1 level) for the fluid type"""
+                counter_1 = 0
+                for child_1 in range(self.FluidsTreeWidget.findItems(self.parent.fluids_coll.get_uid_fluid_type(uid), Qt.MatchExactly, 0)[0].childCount()):
+                    """for cycle that loops n times as the number of subItems in the specific fluid type branch"""
+                    if self.FluidsTreeWidget.findItems(self.parent.fluids_coll.get_uid_fluid_type(uid), Qt.MatchExactly, 0)[0].child(child_1).text(0) == self.parent.fluids_coll.get_uid_fluid_feature(uid):
+                        counter_1 += 1
+                if counter_1 != 0:
+                    for child_1 in range(self.FluidsTreeWidget.findItems(self.parent.fluids_coll.get_uid_fluid_type(uid), Qt.MatchExactly, 0)[0].childCount()):
+                        if self.FluidsTreeWidget.findItems(self.parent.fluids_coll.get_uid_fluid_type(uid), Qt.MatchExactly, 0)[0].child(child_1).text(0) == self.parent.fluids_coll.get_uid_fluid_feature(uid):
+                            """Already exists a TreeItem (2 level) for the fluid feature"""
+                            counter_2 = 0
+                            for child_2 in range(self.FluidsTreeWidget.itemBelow(self.FluidsTreeWidget.findItems(self.parent.fluids_coll.get_uid_fluid_type(uid), Qt.MatchExactly, 0)[0]).childCount()):
+                                """for cycle that loops n times as the number of sub-subItems in the specific fluid type and fluid feature branch"""
+                                if self.FluidsTreeWidget.itemBelow(self.FluidsTreeWidget.findItems(self.parent.fluids_coll.get_uid_fluid_type(uid), Qt.MatchExactly, 0)[0]).child(child_2).text(0) == self.parent.fluids_coll.get_uid_scenario(uid):
+                                    counter_2 += 1
+                            if counter_2 != 0:
+                                for child_2 in range(self.FluidsTreeWidget.itemBelow(self.FluidsTreeWidget.findItems(self.parent.fluids_coll.get_uid_fluid_type(uid),Qt.MatchExactly, 0)[0]).childCount()):
+                                    if self.FluidsTreeWidget.itemBelow(self.FluidsTreeWidget.findItems(self.parent.fluids_coll.get_uid_fluid_type(uid), Qt.MatchExactly, 0)[0]).child(child_2).text(0) == self.parent.fluids_coll.get_uid_scenario(uid):
+                                        """Same fluid type, fluid feature and scenario"""
+                                        property_combo = QComboBox()
+                                        property_combo.uid = uid
+                                        property_combo.addItem("none")
+                                        property_combo.addItem("X")
+                                        property_combo.addItem("Y")
+                                        property_combo.addItem("Z")
+                                        for prop in self.parent.fluids_coll.get_uid_properties_names(uid):
+                                            property_combo.addItem(prop)
+                                        name = self.parent.fluids_coll.get_uid_name(uid)
+                                        flevel_4 = QTreeWidgetItem(self.FluidsTreeWidget.findItems(self.parent.fluids_coll.get_uid_fluid_type(uid), Qt.MatchExactly, 0)[0].child(child_1).child(child_2), [name, uid])
+                                        self.FluidsTreeWidget.setItemWidget(flevel_4, 2, property_combo)
+                                        property_combo.currentIndexChanged.connect(lambda: self.toggle_property())
+                                        flevel_4.setFlags(flevel_4.flags() | Qt.ItemIsUserCheckable)
+                                        if self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]:
+                                            flevel_4.setCheckState(0, Qt.Checked)
+                                        elif not self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]:
+                                            flevel_4.setCheckState(0, Qt.Unchecked)
+                                        self.FluidsTreeWidget.insertTopLevelItem(0, flevel_4)
+                                        break
+                            else:
+                                """Same fluid type and fluid feature, different scenario"""
+                                flevel_3 = QTreeWidgetItem(self.FluidsTreeWidget.findItems(self.parent.fluids_coll.get_uid_fluid_type(uid), Qt.MatchExactly, 0)[0].child(child_1), [self.parent.fluids_coll.get_uid_scenario(uid)])
+                                flevel_3.setFlags(flevel_3.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
+                                self.FluidsTreeWidget.insertTopLevelItem(0, flevel_3)
+                                property_combo = QComboBox()
+                                property_combo.uid = uid
+                                property_combo.addItem("none")
+                                property_combo.addItem("X")
+                                property_combo.addItem("Y")
+                                property_combo.addItem("Z")
+                                for prop in self.parent.fluids_coll.get_uid_properties_names(uid):
+                                    property_combo.addItem(prop)
+                                name = self.parent.fluids_coll.get_uid_name(uid)
+                                flevel_4 = QTreeWidgetItem(flevel_3, [name, uid])
+                                self.FluidsTreeWidget.setItemWidget(flevel_4, 2, property_combo)
+                                property_combo.currentIndexChanged.connect(lambda: self.toggle_property())
+                                flevel_4.setFlags(flevel_4.flags() | Qt.ItemIsUserCheckable)
+                                if self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]:
+                                    flevel_4.setCheckState(0, Qt.Checked)
+                                elif not self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]:
+                                    flevel_4.setCheckState(0, Qt.Unchecked)
+                                self.FluidsTreeWidget.insertTopLevelItem(0, flevel_4)
+                                break
+                else:
+                    """Same fluid type, different fluid feature and scenario"""
+                    flevel_2 = QTreeWidgetItem(self.FluidsTreeWidget.findItems(self.parent.fluids_coll.get_uid_fluid_type(uid), Qt.MatchExactly, 0)[0], [self.parent.fluids_coll.get_uid_fluid_feature(uid)])
+                    flevel_2.setFlags(flevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
+                    self.FluidsTreeWidget.insertTopLevelItem(0, flevel_2)
+                    flevel_3 = QTreeWidgetItem(flevel_2, [self.parent.fluids_coll.get_uid_scenario(uid)])
+                    flevel_3.setFlags(flevel_3.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
+                    self.FluidsTreeWidget.insertTopLevelItem(0, flevel_3)
+                    property_combo = QComboBox()
+                    property_combo.uid = uid
+                    property_combo.addItem("none")
+                    property_combo.addItem("X")
+                    property_combo.addItem("Y")
+                    property_combo.addItem("Z")
+                    for prop in self.parent.fluids_coll.get_uid_properties_names(uid):
+                        property_combo.addItem(prop)
+                    name = self.parent.fluids_coll.get_uid_name(uid)
+                    flevel_4 = QTreeWidgetItem(flevel_3, [name, uid])
+                    self.FluidsTreeWidget.setItemWidget(flevel_4, 2, property_combo)
+                    property_combo.currentIndexChanged.connect(lambda: self.toggle_property())
+                    flevel_4.setFlags(flevel_4.flags() | Qt.ItemIsUserCheckable)
+                    if self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]:
+                        flevel_4.setCheckState(0, Qt.Checked)
+                    elif not self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]:
+                        flevel_4.setCheckState(0, Qt.Unchecked)
+                    self.FluidsTreeWidget.insertTopLevelItem(0, flevel_4)
+                    break
+            else:
+                """Different fluid type, fluid feature and scenario"""
+                flevel_1 = QTreeWidgetItem(self.FluidsTreeWidget, [self.parent.fluids_coll.get_uid_fluid_type(uid)])
+                flevel_1.setFlags(flevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
+                self.FluidsTreeWidget.insertTopLevelItem(0, flevel_1)
+                flevel_2 = QTreeWidgetItem(flevel_1, [self.parent.fluids_coll.get_uid_fluid_feature(uid)])
+                flevel_2.setFlags(flevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
+                self.FluidsTreeWidget.insertTopLevelItem(0, flevel_2)
+                flevel_3 = QTreeWidgetItem(flevel_2, [self.parent.fluids_coll.get_uid_scenario(uid)])
+                flevel_3.setFlags(flevel_3.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
+                self.FluidsTreeWidget.insertTopLevelItem(0, flevel_3)
+                property_combo = QComboBox()
+                property_combo.uid = uid
+                property_combo.addItem("none")
+                property_combo.addItem("X")
+                property_combo.addItem("Y")
+                property_combo.addItem("Z")
+                for prop in self.parent.fluids_coll.get_uid_properties_names(uid):
+                    property_combo.addItem(prop)
+                name = self.parent.fluids_coll.get_uid_name(uid)
+                flevel_4 = QTreeWidgetItem(flevel_3, [name, uid])
+                self.FluidsTreeWidget.setItemWidget(flevel_4, 2, property_combo)
+                property_combo.currentIndexChanged.connect(lambda: self.toggle_property())
+                flevel_4.setFlags(flevel_4.flags() | Qt.ItemIsUserCheckable)
+                if self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]:
+                    flevel_4.setCheckState(0, Qt.Checked)
+                elif not self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]:
+                    flevel_4.setCheckState(0, Qt.Unchecked)
+                self.FluidsTreeWidget.insertTopLevelItem(0, flevel_4)
+                break
+        self.FluidsTreeWidget.itemChanged.connect(self.toggle_fluids_topology_visibility)
+        self.FluidsTreeWidget.expandAll()
 
-    def well_legend_color_modified_update_views(self, updated_list=None):
-        """This is called when the color in the geological legend is modified.
-        Disconnect signals to geology and topology tree, if they are set, to avoid a nasty loop
-        that disrupts the trees, then they are reconnected when the trees are rebuilt"""
-        self.WellsTreeWidget.itemChanged.disconnect()
-        for uid in updated_list:
-            """Case for color changed"""
-            self.change_actor_color(uid=uid, collection='well_coll')
-        """Re-connect signals."""
-        self.WellsTreeWidget.itemChanged.connect(self.toggle_well_visibility)
+    def update_fluids_tree_removed(self, removed_list=None): # second attchild_fluid_featempt
+        """When fluid entity is removed, update Geology Tree without building a new model"""
+        success = 0
+        for uid in removed_list:
+            for top_fluid_type in range(self.FluidsTreeWidget.topLevelItemCount()):
+                """Iterate through every fluid Type top level"""
+                for child_fluid_feat in range(self.FluidsTreeWidget.topLevelItem(top_fluid_type).childCount()):
+                    """Iterate through every fluid Feature child"""
+                    for child_scenario in range(self.FluidsTreeWidget.topLevelItem(top_fluid_type).child(child_fluid_feat).childCount()):
+                        """Iterate through every Scenario child"""
+                        for child_entity in range(self.FluidsTreeWidget.topLevelItem(top_fluid_type).child(child_fluid_feat).child(child_scenario).childCount()):
+                            """Iterate through every Entity child"""
+                            if self.FluidsTreeWidget.topLevelItem(top_fluid_type).child(child_fluid_feat).child(child_scenario).child(child_entity).text(1) == uid:
+                                """Complete check: entity found has the uid of the entity we need to remove. Delete child, then ensure no Child or Top Level remain empty"""
+                                success = 1
+                                self.FluidsTreeWidget.topLevelItem(top_fluid_type).child(child_fluid_feat).child(child_scenario).removeChild(self.FluidsTreeWidget.topLevelItem(top_fluid_type).child(child_fluid_feat).child(child_scenario).child(child_entity))
+                                if self.FluidsTreeWidget.topLevelItem(top_fluid_type).child(child_fluid_feat).child(child_scenario).childCount() == 0:
+                                    self.FluidsTreeWidget.topLevelItem(top_fluid_type).child(child_fluid_feat).removeChild(self.FluidsTreeWidget.topLevelItem(top_fluid_type).child(child_fluid_feat).child(child_scenario))
+                                    if self.FluidsTreeWidget.topLevelItem(top_fluid_type).child(child_fluid_feat).childCount() == 0:
+                                        self.FluidsTreeWidget.topLevelItem(top_fluid_type).removeChild(self.FluidsTreeWidget.topLevelItem(top_fluid_type).child(child_fluid_feat))
+                                        if self.FluidsTreeWidget.topLevelItem(top_fluid_type).childCount() == 0:
+                                            self.FluidsTreeWidget.takeTopLevelItem(top_fluid_type)
+                                break
+                        if success == 1:
+                            break
+                    if success == 1:
+                        break
+                if success == 1:
+                    break
 
-    def well_legend_thick_modified_update_views(self, updated_list=None):
-        """This is called when the line thickness in the geological legend is modified.
-        Disconnect signals to geology and topology tree, if they are set, to avoid a nasty loop
-        that disrupts the trees, then they are reconnected when the trees are rebuilt"""
-        self.WellsTreeWidget.itemChanged.disconnect()
-        for uid in updated_list:
-            """Case for line_thick changed"""
-            self.change_actor_line_thick(uid=uid, collection='well_coll')
-        """Re-connect signals."""
-        self.WellsTreeWidget.itemChanged.connect(self.toggle_well_visibility)
+    def update_fluids_topology_tree_added(self, new_list=None,sec_uid=None):
+        """Update topology tree without creating a new model"""
+        uid_list = list(new_list['uid'])
+        if sec_uid:
+            for i,uid in enumerate(new_list['uid']):
+                if sec_uid != self.parent.geol_coll.df.loc[self.parent.geol_coll.df['uid'] == uid, 'x_section'].values[0]:
+                    del uid_list[i]
+        for uid in uid_list:
+            if self.TopologyTreeWidget.findItems(self.parent.geol_coll.get_uid_topological_type(uid), Qt.MatchExactly, 0) != []:
+                """Already exists a TreeItem (1 level) for the topological type"""
+                counter_1 = 0
+                for child_1 in range(self.TopologyTreeWidget.findItems(self.parent.geol_coll.get_uid_topological_type(uid), Qt.MatchExactly, 0)[0].childCount()):
+                    """for cycle that loops n times as the number of subItems in the specific topological type branch"""
+                    if self.TopologyTreeWidget.findItems(self.parent.geol_coll.get_uid_topological_type(uid), Qt.MatchExactly, 0)[0].child(child_1).text(0) == self.parent.geol_coll.get_uid_scenario(uid):
+                        counter_1 += 1
+                if counter_1 != 0:
+                    for child_1 in range(self.TopologyTreeWidget.findItems(self.parent.geol_coll.get_uid_topological_type(uid), Qt.MatchExactly, 0)[0].childCount()):
+                        if self.TopologyTreeWidget.findItems(self.parent.geol_coll.get_uid_topological_type(uid), Qt.MatchExactly, 0)[0].child(child_1).text(0) == self.parent.geol_coll.get_uid_scenario(uid):
+                            """Same topological type and scenario"""
+                            property_combo = QComboBox()
+                            property_combo.uid = uid
+                            property_combo.addItem("none")
+                            property_combo.addItem("X")
+                            property_combo.addItem("Y")
+                            property_combo.addItem("Z")
+                            for prop in self.parent.geol_coll.get_uid_properties_names(uid):
+                                property_combo.addItem(prop)
+                            name = self.parent.geol_coll.get_uid_name(uid)
+                            tlevel_3 = QTreeWidgetItem(self.TopologyTreeWidget.findItems(self.parent.geol_coll.get_uid_topological_type(uid), Qt.MatchExactly, 0)[0].child(child_1), [name, uid])
+                            self.TopologyTreeWidget.setItemWidget(tlevel_3, 2, property_combo)
+                            property_combo.currentIndexChanged.connect(lambda: self.toggle_property())
+                            tlevel_3.setFlags(tlevel_3.flags() | Qt.ItemIsUserCheckable)
+                            if self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]:
+                                tlevel_3.setCheckState(0, Qt.Checked)
+                            elif not self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]:
+                                tlevel_3.setCheckState(0, Qt.Unchecked)
+                            self.TopologyTreeWidget.insertTopLevelItem(0, tlevel_3)
+                            break
+                else:
+                    """Same topological type, different scenario"""
+                    tlevel_2 = QTreeWidgetItem(self.TopologyTreeWidget.findItems(self.parent.geol_coll.get_uid_topological_type(uid), Qt.MatchExactly, 0)[0], [self.parent.geol_coll.get_uid_scenario(uid)])
+                    tlevel_2.setFlags(tlevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
+                    self.TopologyTreeWidget.insertTopLevelItem(0, tlevel_2)
+                    property_combo = QComboBox()
+                    property_combo.uid = uid
+                    property_combo.addItem("none")
+                    property_combo.addItem("X")
+                    property_combo.addItem("Y")
+                    property_combo.addItem("Z")
+                    for prop in self.parent.geol_coll.get_uid_properties_names(uid):
+                        property_combo.addItem(prop)
+                    name = self.parent.geol_coll.get_uid_name(uid)
+                    tlevel_3 = QTreeWidgetItem(tlevel_2, [name, uid])
+                    self.TopologyTreeWidget.setItemWidget(tlevel_3, 2, property_combo)
+                    property_combo.currentIndexChanged.connect(lambda: self.toggle_property())
+                    tlevel_3.setFlags(tlevel_3.flags() | Qt.ItemIsUserCheckable)
+                    if self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]:
+                        tlevel_3.setCheckState(0, Qt.Checked)
+                    elif not self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]:
+                        tlevel_3.setCheckState(0, Qt.Unchecked)
+                    self.TopologyTreeWidget.insertTopLevelItem(0, tlevel_3)
+                    break
+            else:
+                """Different topological type and scenario"""
+                tlevel_1 = QTreeWidgetItem(self.TopologyTreeWidget, [self.parent.geol_coll.get_uid_topological_type(uid)])
+                tlevel_1.setFlags(tlevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
+                self.TopologyTreeWidget.insertTopLevelItem(0, tlevel_1)
+                tlevel_2 = QTreeWidgetItem(tlevel_1, [self.parent.geol_coll.get_uid_scenario(uid)])
+                tlevel_2.setFlags(tlevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
+                self.TopologyTreeWidget.insertTopLevelItem(0, tlevel_2)
+                property_combo = QComboBox()
+                property_combo.uid = uid
+                property_combo.addItem("none")
+                property_combo.addItem("X")
+                property_combo.addItem("Y")
+                property_combo.addItem("Z")
+                for prop in self.parent.geol_coll.get_uid_properties_names(uid):
+                    property_combo.addItem(prop)
+                name = self.parent.geol_coll.get_uid_name(uid)
+                tlevel_3 = QTreeWidgetItem(tlevel_2, [name, uid])
+                self.TopologyTreeWidget.setItemWidget(tlevel_3, 2, property_combo)
+                property_combo.currentIndexChanged.connect(lambda: self.toggle_property())
+                tlevel_3.setFlags(tlevel_3.flags() | Qt.ItemIsUserCheckable)
+                if self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]:
+                    tlevel_3.setCheckState(0, Qt.Checked)
+                elif not self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]:
+                    tlevel_3.setCheckState(0, Qt.Unchecked)
+                self.TopologyTreeWidget.insertTopLevelItem(0, tlevel_3)
+                break
+        self.TopologyTreeWidget.itemChanged.connect(self.toggle_geology_topology_visibility)
+        self.TopologyTreeWidget.expandAll()
+
+    def update_fluids_topology_tree_removed(self, removed_list=None):
+        """When fluid entity is removed, update Topology Tree without building a new model"""
+        success = 0
+        for uid in removed_list:
+            for top_topo_type in range(self.FluidsTopologyTreeWidget.topLevelItemCount()):
+                """Iterate through every Topological Type top level"""
+                for child_scenario in range(self.FluidsTopologyTreeWidget.topLevelItem(top_topo_type).childCount()):
+                    """Iterate through every Scenario child"""
+                    for child_entity in range(self.FluidsTopologyTreeWidget.topLevelItem(top_topo_type).child(child_scenario).childCount()):
+                        """Iterate through every Entity child"""
+                        if self.FluidsTopologyTreeWidget.topLevelItem(top_topo_type).child(child_scenario).child(child_entity).text(1) == uid:
+                            """Complete check: entity found has the uid of the entity we need to remove. Delete child, then ensure no Child or Top Level remain empty"""
+                            success = 1
+                            self.FluidsTopologyTreeWidget.topLevelItem(top_topo_type).child(child_scenario).removeChild(self.FluidsTopologyTreeWidget.topLevelItem(top_topo_type).child(child_scenario).child(child_entity))
+                            if self.FluidsTopologyTreeWidget.topLevelItem(top_topo_type).child(child_scenario).childCount() == 0:
+                                self.FluidsTopologyTreeWidget.topLevelItem(top_topo_type).removeChild(self.FluidsTopologyTreeWidget.topLevelItem(top_topo_type).child(child_scenario))
+                                if self.FluidsTopologyTreeWidget.topLevelItem(top_topo_type).childCount() == 0:
+                                    self.FluidsTopologyTreeWidget.takeTopLevelItem(top_topo_type)
+                            break
+                    if success == 1:
+                        break
+                if success == 1:
+                    break
+
+    def update_fluids_checkboxes(self, uid=None, uid_checkState=None):
+        """Update checkboxes in fluid tree, called when state changed in topology tree."""
+        item = self.FluidsTreeWidget.findItems(uid, Qt.MatchFixedString | Qt.MatchRecursive, 1)[0]
+        if uid_checkState == Qt.Checked:
+            item.setCheckState(0, Qt.Checked)
+        elif uid_checkState == Qt.Unchecked:
+            item.setCheckState(0, Qt.Unchecked)
+
+    def update_fluids_topology_checkboxes(self, uid=None, uid_checkState=None):
+        """Update checkboxes in topology tree, called when state changed in geology tree."""
+        item = self.FluidsTopologyTreeWidget.findItems(uid, Qt.MatchFixedString | Qt.MatchRecursive, 1)[0]
+        if uid_checkState == Qt.Checked:
+            item.setCheckState(0, Qt.Checked)
+        elif uid_checkState == Qt.Unchecked:
+            item.setCheckState(0, Qt.Unchecked)
+
+    def toggle_fluids_topology_visibility(self, item, column):
+        """Called by self.FluidsTreeWidget.itemChanged.connect(self.toggle_fluids_topology_visibility) and self.FluidsTopologyTreeWidget.itemChanged.connect(self.toggle_fluids_topology_visibility)"""
+        name = item.text(0)  # not used
+        uid = item.text(1)
+        uid_checkState = item.checkState(0)
+        if uid:  # needed to skip messages from upper levels of tree that do not broadcast uid's
+            if uid_checkState == Qt.Checked:
+                if not self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]:
+                    self.actors_df.loc[self.actors_df['uid'] == uid, 'show'] = True
+                    self.set_actor_visible(uid=uid, visible=True)
+            elif uid_checkState == Qt.Unchecked:
+                if self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]:
+                    self.actors_df.loc[self.actors_df['uid'] == uid, 'show'] = False
+                    self.set_actor_visible(uid=uid, visible=False)
+            """Before updating checkboxes, disconnect signals to fluid and topology tree, if they are set,
+            to avoid a nasty loop that disrupts the trees, then reconnect them (it is also possible that
+            they are automatically reconnected whe the trees are rebuilt."""
+            self.FluidsTreeWidget.itemChanged.disconnect()
+            self.FluidsTopologyTreeWidget.itemChanged.disconnect()
+            self.update_fluids_checkboxes(uid=uid, uid_checkState=uid_checkState)
+            self.update_fluids_topology_checkboxes(uid=uid, uid_checkState=uid_checkState)
+            self.FluidsTreeWidget.itemChanged.connect(self.toggle_fluids_topology_visibility)
+            self.FluidsTopologyTreeWidget.itemChanged.connect(self.toggle_fluids_topology_visibility)
+
+    
+# ================================  add, remove, and update actors ================================
+    
     """Methods used to add, remove, and update actors from the geological collection."""
 
     def geology_added_update_views(self, updated_list=None):
@@ -1910,8 +2253,232 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             self.create_image_list()
         """Re-connect signals."""
         self.ImagesTableWidget.itemChanged.connect(self.toggle_image_visibility)
+    
+    """Methods used to add, remove, and update actors from the wells collection."""
+    
+    def well_added_update_views(self, updated_list=None):
+        """This is called when an entity is added to the geological collection.
+        Disconnect signals to geology and topology tree, if they are set, to avoid a nasty loop
+        that disrupts the trees, then they are reconnected when the trees are rebuilt"""
+        self.WellsTreeWidget.itemChanged.disconnect()
+        """Create pandas dataframe as list of "new" actors"""
+        actors_df_new = pd.DataFrame(columns=['uid', 'actor', 'show', 'collection', 'show_prop'])
+        for uid in updated_list:
+            this_actor = self.show_actor_with_property(uid=uid, collection='well_coll', show_property=None, visible=True)
+            self.actors_df = self.actors_df.append({'uid': uid, 'actor': this_actor, 'show': True, 'collection': 'well_coll', 'show_prop': None}, ignore_index=True)
+            actors_df_new = actors_df_new.append({'uid': uid, 'actor': this_actor, 'show': True, 'collection': 'well_coll', 'show_prop': None}, ignore_index=True)
+            self.update_well_tree_added(actors_df_new)
+        """Re-connect signals."""
+        self.WellsTreeWidget.itemChanged.connect(self.toggle_well_visibility)
+
+    def well_removed_update_views(self, updated_list=None):
+        """This is called when an entity is removed from the geological collection.
+        Disconnect signals to geology and topology tree, if they are set, to avoid a nasty loop
+        that disrupts the trees, then they are reconnected when the trees are rebuilt"""
+        self.WellsTreeWidget.itemChanged.disconnect()
+        for uid in updated_list:
+            self.remove_actor_in_view(uid=uid, redraw=True)
+        self.update_well_tree_removed(removed_list=updated_list)
+        """Re-connect signals."""
+        self.WellsTreeWidget.itemChanged.connect(self.toggle_well_visibility)
+
+    def well_data_keys_modified_update_views(self, updated_list=None):
+        """This is called when entity point or cell data are modified.
+        Disconnect signals to geology and topology tree, if they are set, to avoid a nasty loop
+        that disrupts the trees, then they are reconnected when the trees are rebuilt"""
+        self.WellsTreeWidget.itemChanged.disconnect()
+        for uid in updated_list:
+            if not self.actors_df.loc[self.actors_df['uid'] == uid, 'show_prop'].to_list() == []:
+                if not self.actors_df.loc[self.actors_df['uid'] == uid, 'show_prop'].values[0] in self.parent.geol_coll.get_uid_properties_names(uid):
+                    show = self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].to_list()[0]
+                    self.remove_actor_in_view(uid=uid)
+                    this_actor = self.show_actor_with_property(uid=uid, collection='geol_coll', show_property=None, visible=show)
+                    self.actors_df = self.actors_df.append({'uid': uid, 'actor': this_actor, 'show': show, 'collection': 'well_coll', 'show_prop': None}, ignore_index=True)  # self.actors_df.loc[self.actors_df["uid"] == uid, 'actor'] = this_actor
+                    self.create_well_tree()
+        """Re-connect signals."""
+        self.WellsTreeWidget.itemChanged.connect(self.toggle_well_visibility)
+
+    def well_data_val_modified_update_views(self, updated_list=None):
+        ...
+
+    def well_metadata_modified_update_views(self, updated_list=None):
+        """This is called when entity metadata are modified, and the legend is automatically updated.
+        Disconnect signals to geology and topology tree, if they are set, to avoid a nasty loop
+        that disrupts the trees, then they are reconnected when the trees are rebuilt"""
+        self.WellsTreeWidget.itemChanged.disconnect()
+        for uid in updated_list:
+            """Case for entities modified"""
+            self.change_actor_color(uid=uid, collection='well_coll')
+            self.change_actor_line_thick(uid=uid, collection='well_coll')
+            self.create_well_tree()
+        """Re-connect signals."""
+        self.WellsTreeWidget.itemChanged.connect(self.toggle_well_visibility)
+
+    def well_legend_color_modified_update_views(self, updated_list=None):
+        """This is called when the color in the geological legend is modified.
+        Disconnect signals to geology and topology tree, if they are set, to avoid a nasty loop
+        that disrupts the trees, then they are reconnected when the trees are rebuilt"""
+        self.WellsTreeWidget.itemChanged.disconnect()
+        for uid in updated_list:
+            """Case for color changed"""
+            self.change_actor_color(uid=uid, collection='well_coll')
+        """Re-connect signals."""
+        self.WellsTreeWidget.itemChanged.connect(self.toggle_well_visibility)
+
+    def well_legend_thick_modified_update_views(self, updated_list=None):
+        """This is called when the line thickness in the geological legend is modified.
+        Disconnect signals to geology and topology tree, if they are set, to avoid a nasty loop
+        that disrupts the trees, then they are reconnected when the trees are rebuilt"""
+        self.WellsTreeWidget.itemChanged.disconnect()
+        for uid in updated_list:
+            """Case for line_thick changed"""
+            self.change_actor_line_thick(uid=uid, collection='well_coll')
+        """Re-connect signals."""
+        self.WellsTreeWidget.itemChanged.connect(self.toggle_well_visibility)
+
+    """Methods used to add, remove, and update actors from the fluid collection."""
+
+    def fluid_added_update_views(self, updated_list=None):
+        """This is called when an entity is added to the fluid collection.
+        Disconnect signals to fluid and topology tree, if they are set, to avoid a nasty loop
+        that disrupts the trees, then they are reconnected when the trees are rebuilt"""
+        self.FluidsTreeWidget.itemChanged.disconnect()
+        self.FluidsTopologyTreeWidget.itemChanged.disconnect()
+        """Create pandas dataframe as list of "new" actors"""
+        actors_df_new = pd.DataFrame(columns=['uid', 'actor', 'show', 'collection', 'show_prop'])
+        for uid in updated_list:
+            this_actor = self.show_actor_with_property(uid=uid, collection='fluids_coll', show_property=None, visible=True)
+            self.actors_df = self.actors_df.append({'uid': uid, 'actor': this_actor, 'show': True, 'collection': 'fluids_coll', 'show_prop': None}, ignore_index=True)
+            actors_df_new = actors_df_new.append({'uid': uid, 'actor': this_actor, 'show': True, 'collection': 'fluids_coll', 'show_prop': None}, ignore_index=True)
+            self.update_fluids_tree_added(actors_df_new)
+            self.update_fluids_topology_tree_added(actors_df_new)
+        """Re-connect signals."""
+        self.FluidsTreeWidget.itemChanged.connect(self.toggle_fluids_topology_visibility)
+        self.FluidsTopologyTreeWidget.itemChanged.connect(self.toggle_fluids_topology_visibility)
+
+    def fluid_removed_update_views(self, updated_list=None):
+        """This is called when an entity is removed from the fluid collection.
+        Disconnect signals to fluid and topology tree, if they are set, to avoid a nasty loop
+        that disrupts the trees, then they are reconnected when the trees are rebuilt"""
+        self.FluidsTreeWidget.itemChanged.disconnect()
+        self.FluidsTopologyTreeWidget.itemChanged.disconnect()
+        for uid in updated_list:
+            self.remove_actor_in_view(uid=uid, redraw=True)
+        self.update_fluid_tree_removed(removed_list=updated_list)
+        self.update_topology_tree_removed(removed_list=updated_list)
+        """Re-connect signals."""
+        self.FluidsTreeWidget.itemChanged.connect(self.toggle_fluids_topology_visibility)
+        self.FluidsTopologyTreeWidget.itemChanged.connect(self.toggle_fluids_topology_visibility)
+
+    def fluid_geom_modified_update_views(self, updated_list=None):
+        """This is called when an entity geometry or topology is modified (i.e. the vtk object is modified).
+        Disconnect signals to fluid and topology tree, if they are set, to avoid a nasty loop
+        that disrupts the trees, then they are reconnected when the trees are rebuilt"""
+        self.FluidsTreeWidget.itemChanged.disconnect()
+        self.FluidsTopologyTreeWidget.itemChanged.disconnect()
+        for uid in updated_list:
+            """This calls the viewer-specific function that shows an actor with property = None.
+            IN THE FUTURE update required to keep the current property shown.____________"""
+            self.remove_actor_in_view(uid=uid)
+            this_actor = self.show_actor_with_property(uid=uid, collection='fluids_coll', show_property=None, visible=True)
+            self.actors_df = self.actors_df.append({'uid': uid, 'actor': this_actor, 'show': True, 'collection': 'fluids_coll', 'show_prop': None}, ignore_index=True)  # self.actors_df.loc[self.actors_df["uid"] == uid, 'actor'] = this_actor
+        """Re-connect signals."""
+        self.FluidsTreeWidget.itemChanged.connect(self.toggle_fluids_topology_visibility)
+        self.FluidsTopologyTreeWidget.itemChanged.connect(self.toggle_fluids_topology_visibility)
+
+    def fluid_data_keys_modified_update_views(self, updated_list=None):
+        """This is called when entity point or cell data are modified.
+        Disconnect signals to fluid and topology tree, if they are set, to avoid a nasty loop
+        that disrupts the trees, then they are reconnected when the trees are rebuilt"""
+        self.FluidsTreeWidget.itemChanged.disconnect()
+        self.FluidsTopologyTreeWidget.itemChanged.disconnect()
+        for uid in updated_list:
+            if not self.actors_df.loc[self.actors_df['uid'] == uid, 'show_prop'].to_list() == []:
+                if not self.actors_df.loc[self.actors_df['uid'] == uid, 'show_prop'].values[0] in self.parent.fluids_coll.get_uid_properties_names(uid):
+                    show = self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].to_list()[0]
+                    self.remove_actor_in_view(uid=uid)
+                    this_actor = self.show_actor_with_property(uid=uid, collection='fluids_coll', show_property=None, visible=show)
+                    self.actors_df = self.actors_df.append({'uid': uid, 'actor': this_actor, 'show': show, 'collection': 'fluids_coll', 'show_prop': None}, ignore_index=True)  # self.actors_df.loc[self.actors_df["uid"] == uid, 'actor'] = this_actor
+                    self.create_fluid_tree()
+                    self.create_fluids_topology_tree()
+        """Re-connect signals."""
+        self.FluidsTreeWidget.itemChanged.connect(self.toggle_fluids_topology_visibility)
+        self.FluidsTopologyTreeWidget.itemChanged.connect(self.toggle_fluids_topology_visibility)
+
+    def fluid_data_val_modified_update_views(self, updated_list=None):
+        """This is called when entity point or cell data are modified.
+        Disconnect signals to fluid and topology tree, if they are set, to avoid a nasty loop
+        that disrupts the trees, then they are reconnected when the trees are rebuilt"""
+        self.FluidsTreeWidget.itemChanged.disconnect()
+        self.FluidsTopologyTreeWidget.itemChanged.disconnect()
+        """IN THE FUTURE - generally just update the properties list - more complicate if we modify or delete the property that is shown_____________________"""
+        """Re-connect signals."""
+        self.FluidsTreeWidget.itemChanged.connect(self.toggle_fluids_topology_visibility)
+        self.FluidsTopologyTreeWidget.itemChanged.connect(self.toggle_fluids_topology_visibility)
+
+    def fluid_metadata_modified_update_views(self, updated_list=None):
+        """This is called when entity metadata are modified, and the legend is automatically updated.
+        Disconnect signals to fluid and topology tree, if they are set, to avoid a nasty loop
+        that disrupts the trees, then they are reconnected when the trees are rebuilt"""
+        self.FluidsTreeWidget.itemChanged.disconnect()
+        self.FluidsTopologyTreeWidget.itemChanged.disconnect()
+        for uid in updated_list:
+            """Case for entities modified"""
+            self.change_actor_color(uid=uid, collection='fluids_coll')
+            self.change_actor_line_thick(uid=uid, collection='fluids_coll')
+            self.create_fluid_tree()
+            self.create_fluids_topology_tree()
+        """Re-connect signals."""
+        self.FluidsTreeWidget.itemChanged.connect(self.toggle_fluids_topology_visibility)
+        self.FluidsTopologyTreeWidget.itemChanged.connect(self.toggle_fluids_topology_visibility)
+
+    def fluid_legend_color_modified_update_views(self, updated_list=None):
+        # print(updated_list)
+        """This is called when the color in the fluid legend is modified.
+        Disconnect signals to fluid and topology tree, if they are set, to avoid a nasty loop
+        that disrupts the trees, then they are reconnected when the trees are rebuilt"""
+        self.FluidsTreeWidget.itemChanged.disconnect()
+        self.FluidsTopologyTreeWidget.itemChanged.disconnect()
+        for uid in updated_list:
+            """Case for color changed"""
+            wells_list = self.parent.well_coll.get_uids()
+            if self.parent.fluids_coll.get_uid_x_section(uid) in wells_list:
+                self.change_actor_color(uid=self.parent.fluids_coll.get_uid_x_section(uid), collection='well_coll')
+            self.change_actor_color(uid=uid, collection='fluids_coll')
+
+        """Re-connect signals."""
+        self.FluidsTreeWidget.itemChanged.connect(self.toggle_fluids_topology_visibility)
+        self.FluidsTopologyTreeWidget.itemChanged.connect(self.toggle_fluids_topology_visibility)
+
+    def fluid_legend_thick_modified_update_views(self, updated_list=None):
+        """This is called when the line thickness in the fluid legend is modified.
+        Disconnect signals to fluid and topology tree, if they are set, to avoid a nasty loop
+        that disrupts the trees, then they are reconnected when the trees are rebuilt"""
+        self.FluidsTreeWidget.itemChanged.disconnect()
+        self.FluidsTopologyTreeWidget.itemChanged.disconnect()
+        for uid in updated_list:
+            """Case for line_thick changed"""
+            self.change_actor_line_thick(uid=uid, collection='fluids_coll')
+        """Re-connect signals."""
+        self.FluidsTreeWidget.itemChanged.connect(self.toggle_fluids_topology_visibility)
+        self.FluidsTopologyTreeWidget.itemChanged.connect(self.toggle_fluids_topology_visibility)
+
+
 
     """General methods shared by all views."""
+
+    def toggle_property(self):
+        """Generic method to toggle the property shown by an actor that is already present in the view."""
+        combo = self.sender()
+        show_property = combo.currentText()
+        uid = combo.uid
+        show = self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]
+        collection = self.actors_df.loc[self.actors_df['uid'] == uid, 'collection'].values[0]
+        """This removes the previous copy of the actor with the same uid, then calls the viewer-specific function that shows an actor with a property.
+        IN THE FUTURE see if it is possible and more efficient to keep the actor and just change the property shown."""
+        self.remove_actor_in_view(uid=uid)
+        this_actor = self.show_actor_with_property(uid=uid, collection=collection, show_property=show_property, visible=show)
+        self.actors_df = self.actors_df.append({'uid': uid, 'actor': this_actor, 'show': show, 'collection': collection, 'show_prop': show_property}, ignore_index=True) # self.set_actor_visible(uid=uid, visible=show)
 
     def add_all_entities(self):
         """Add all entities in project collections. This must be reimplemented for cross-sections in order
@@ -1937,7 +2504,10 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         for uid in self.parent.well_coll.df['uid'].tolist():
             this_actor = self.show_actor_with_property(uid=uid, collection='well_coll', show_property=None, visible=False)
             self.actors_df = self.actors_df.append({'uid': uid, 'actor': this_actor, 'show': False, 'collection': 'well_coll', 'show_prop': None}, ignore_index=True)
-
+        for uid in self.parent.fluids_coll.df['uid'].tolist():
+            this_actor = self.show_actor_with_property(uid=uid, collection='fluids_coll', show_property=None, visible=False)
+            self.actors_df = self.actors_df.append({'uid': uid, 'actor': this_actor, 'show': False, 'collection': 'fluids_coll', 'show_prop': None}, ignore_index=True)
+    
     def prop_legend_cmap_modified_update_views(self, this_property=None):
         """Redraw all actors that are currently shown with a property whose colormap has been changed."""
         for uid in self.actors_df['uid'].to_list():
@@ -2396,6 +2966,13 @@ class View3D(BaseView):
             color_RGB = [color_R / 255, color_G / 255, color_B / 255]
             line_thick = self.parent.well_coll.get_uid_legend(uid=uid)['line_thick']
             plot_entity = self.parent.well_coll.get_uid_vtk_obj(uid)
+        elif collection == 'fluids_coll':
+            color_R = self.parent.fluids_coll.get_uid_legend(uid=uid)['color_R']
+            color_G = self.parent.fluids_coll.get_uid_legend(uid=uid)['color_G']
+            color_B = self.parent.fluids_coll.get_uid_legend(uid=uid)['color_B']
+            color_RGB = [color_R / 255, color_G / 255, color_B / 255]
+            line_thick = self.parent.fluids_coll.get_uid_legend(uid=uid)['line_thick']
+            plot_entity = self.parent.fluids_coll.get_uid_vtk_obj(uid) 
         else:
             print("no collection")
             this_actor = None

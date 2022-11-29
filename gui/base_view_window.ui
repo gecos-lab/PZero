@@ -111,7 +111,7 @@
           <x>0</x>
           <y>0</y>
           <width>278</width>
-          <height>416</height>
+          <height>344</height>
          </rect>
         </property>
         <property name="sizePolicy">
@@ -177,7 +177,7 @@
           <x>0</x>
           <y>0</y>
           <width>278</width>
-          <height>416</height>
+          <height>344</height>
          </rect>
         </property>
         <property name="sizePolicy">
@@ -237,7 +237,7 @@
           <x>0</x>
           <y>0</y>
           <width>278</width>
-          <height>416</height>
+          <height>344</height>
          </rect>
         </property>
         <property name="sizePolicy">
@@ -312,7 +312,7 @@
           <x>0</x>
           <y>0</y>
           <width>278</width>
-          <height>416</height>
+          <height>344</height>
          </rect>
         </property>
         <property name="sizePolicy">
@@ -355,7 +355,7 @@
           <x>0</x>
           <y>0</y>
           <width>278</width>
-          <height>416</height>
+          <height>344</height>
          </rect>
         </property>
         <property name="sizePolicy">
@@ -410,7 +410,7 @@
           <x>0</x>
           <y>0</y>
           <width>278</width>
-          <height>416</height>
+          <height>344</height>
          </rect>
         </property>
         <property name="sizePolicy">
@@ -465,7 +465,7 @@
           <x>0</x>
           <y>0</y>
           <width>278</width>
-          <height>416</height>
+          <height>344</height>
          </rect>
         </property>
         <attribute name="label">
@@ -483,13 +483,45 @@
          </item>
         </layout>
        </widget>
+       <widget class="QWidget" name="FluidsTreePage">
+        <attribute name="label">
+         <string>Fluids &gt; Fluids Tree</string>
+        </attribute>
+        <layout class="QVBoxLayout" name="verticalLayout_10">
+         <item>
+          <widget class="QTreeWidget" name="FluidsTreeWidget">
+           <column>
+            <property name="text">
+             <string notr="true">1</string>
+            </property>
+           </column>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+       <widget class="QWidget" name="FluidsTopologyTree">
+        <attribute name="label">
+         <string>Fluids &gt; Topology Tree</string>
+        </attribute>
+        <layout class="QVBoxLayout" name="verticalLayout_11">
+         <item>
+          <widget class="QTreeWidget" name="FluidsTopologyTreeWidget">
+           <column>
+            <property name="text">
+             <string notr="true">1</string>
+            </property>
+           </column>
+          </widget>
+         </item>
+        </layout>
+       </widget>
        <widget class="QWidget" name="ImagesPage">
         <property name="geometry">
          <rect>
           <x>0</x>
           <y>0</y>
           <width>278</width>
-          <height>416</height>
+          <height>344</height>
          </rect>
         </property>
         <property name="sizePolicy">
