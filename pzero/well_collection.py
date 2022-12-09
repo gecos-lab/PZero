@@ -7,36 +7,36 @@ from PyQt5.QtCore import QAbstractTableModel, Qt, QVariant
 
 class WellCollection(QAbstractTableModel):
     """
-    Initialize GeologicalCollection table.
-    Column headers are taken from GeologicalCollection.geological_entity_dict.keys()
+    Initialize WellCollection table.
+    Column headers are taken from WellCollection.well_entity_dict.keys()
     parent is supposed to be the project_window
     """
 
-    """geological_entity_dict is a dictionary of entity metadata used throughout the project.
-    Keys define both the geological and topological meaning of entities and values are default values that
-    implicitly define types. Always use deepcopy(GeologicalCollection.geological_entity_dict) to
+    """well_entity_dict is a dictionary of entity metadata used throughout the project.
+    Keys define both the well and topological meaning of entities and values are default values that
+    implicitly define types. Always use deepcopy(WellCollection.well_entity_dict) to
     copy this dictionary without altering the original."""
     well_entity_dict = {'uid': "",
                               'Loc ID': "undef",
-                              'geological_feature': [],
                               'properties_names': [],
                               'properties_components': [],
                               'properties_types': [],
-                              'vtk_obj': None}
+                              'vtk_head': None,
+                              'vtk_trace':None}
 
     well_entity_type_dict = {'uid': str,
                                    'Loc ID': str,
-                                   'geological_feature': list,
                                    'properties_names': list,
                                    'properties_components': list,
                                    'properties_types': list,
                                    'x_section': str,  # this is the uid of the cross section for "XsVertexSet", "XsPolyLine", and "XsImage", empty for all others
-                                   'vtk_obj': object}
+                                   'vtk_head': object,
+                                   'vtk_trace':object}
 
 
 
-    """Initialize GeologicalCollection table. Column headers are taken from
-    GeologicalCollection.geological_entity_dict.keys(), and parent is supposed to be the project_window."""
+    """Initialize WellCollection table. Column headers are taken from
+    WellCollection.well_entity_dict.keys(), and parent is supposed to be the project_window."""
     """IN THE FUTURE the edit dialog should be able to edit metadata of multiple entities (and selecting "None" will not change them)."""
 
     def __init__(self, parent=None, *args, **kwargs):
@@ -46,7 +46,7 @@ class WellCollection(QAbstractTableModel):
         """Initialize Pandas dataframe."""
         self.df = pd.DataFrame(columns=list(self.well_entity_dict.keys()))
         """Here we use .columns.get_indexer to get indexes of the columns that we would like to be editable in the QTableView"""
-        self.editable_columns = self.df.columns.get_indexer(["name","geological_feature"])
+        self.editable_columns = self.df.columns.get_indexer(["name"])
 
     """Custom methods used to add or remove entities, query the dataframe, etc."""
 
@@ -63,18 +63,13 @@ class WellCollection(QAbstractTableModel):
         self.parent.prop_legend.update_widget(self.parent)
         """Then emit signal to update the views."""
         locid = entity_dict['Loc ID']
-        feature = entity_dict["geological_feature"]
-        if self.parent.well_legend_df.loc[(self.parent.well_legend_df['Loc ID'] == locid) & (self.parent.well_legend_df['geological_feature'] == feature)].empty:
-            R = self.parent.geol_legend_df.loc[(self.parent.geol_legend_df['geological_feature'] == feature),'color_R'].values[0]
-            G = self.parent.geol_legend_df.loc[(self.parent.geol_legend_df['geological_feature'] == feature),'color_G'].values[0]
-            B = self.parent.geol_legend_df.loc[(self.parent.geol_legend_df['geological_feature'] == feature),'color_B'].values[0]
-            
+        if self.parent.well_legend_df.loc[self.parent.well_legend_df['Loc ID'] == locid].empty:
+            R,G,B = np.round(np.random.random(3) * 255)
             self.parent.well_legend_df = self.parent.well_legend_df.append({'Loc ID': locid,
-                                                                            'geological_feature': feature,
                                                                             'color_R': R,
                                                                             'color_G': G,
                                                                             'color_B': B,
-                                                                            'line_thick': 15.0},
+                                                                            'line_thick': 2.0},
                                                                             ignore_index=True)
             self.parent.legend.update_widget(self.parent)
             self.parent.prop_legend.update_widget(self.parent)
@@ -150,9 +145,8 @@ class WellCollection(QAbstractTableModel):
     def get_uid_legend(self, uid=None):
         """Get legend as dictionary from uid."""
         locid = self.df.loc[self.df['uid'] == uid, 'Loc ID'].values[0]
-        feature = self.df.loc[self.df['uid'] == uid, 'geological_feature'].values[0]
 
-        legend_dict = self.parent.well_legend_df.loc[(self.parent.well_legend_df['Loc ID'] == locid) & (self.parent.well_legend_df['geological_feature'] == feature)].to_dict('records')
+        legend_dict = self.parent.well_legend_df.loc[self.parent.well_legend_df['Loc ID'] == locid].to_dict('records')
         # print(legend_dict[0])
         return legend_dict[0]  # the '[0]' is needed since .to_dict('records') returns a list of dictionaries (with just one element in this case)
 
@@ -209,7 +203,7 @@ class WellCollection(QAbstractTableModel):
 
     def get_uid_vtk_obj(self, uid=None):
         """Get value(s) stored in dataframe (as pointer) from uid."""
-        return self.df.loc[self.df['uid'] == uid, 'vtk_obj'].values[0]
+        return self.df.loc[self.df['uid'] == uid, 'vtk_trace'].values[0]
 
     def set_uid_vtk_obj(self, uid=None, vtk_obj=None):
         """Set value(s) stored in dataframe (as pointer) from uid."""

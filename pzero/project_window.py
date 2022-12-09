@@ -11,7 +11,7 @@ from PyQt5.QtCore import Qt, QSortFilterProxyModel, pyqtSignal
 import vtk
 import pandas as pd
 from .project_window_ui import Ui_ProjectWindow
-from .entities_factory import Plane, VertexSet, PolyLine, TriSurf, XsVertexSet, XsPolyLine, DEM, MapImage, Voxet, Seismics, XsVoxet, TetraSolid, PCDom, TSDom, Wells,Attitude
+from .entities_factory import Plane, VertexSet, PolyLine, TriSurf, XsVertexSet, XsPolyLine, DEM, MapImage, Voxet, Seismics, XsVoxet, TetraSolid, PCDom, TSDom, Well,Attitude
 from .geological_collection import GeologicalCollection
 from .xsection_collection import XSectionCollection
 from .dom_collection import DomCollection
@@ -45,6 +45,7 @@ from .orientation_analysis import set_normals
 from .point_clouds import decimate_pc
 
 from uuid import uuid4
+
 
 class ProjectWindow(QMainWindow, Ui_ProjectWindow):
     """Create project window and import UI created with Qt Designer by subclassing both"""
@@ -1490,36 +1491,30 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
 
     def import_welldata(self):
 
-        loc_attr_list = ['As is','LocationID', 'LocationType', 'Easting', 'Northing', 'GroundLevel', 'FinalDepth', 'Trend', 'Plunge','N.a.']
+        path = open_file_dialog(parent=self,caption='Import well data',filter="XLXS files (*.xlsx)")
 
-        data_attr_list = ['As is','LocationID','DepthTop', 'DepthBase','DepthPoint','GeologyCode','N.a.']
+        well2vtk(self, path=path)
+        
+        # loc_attr_list = ['As is','LocationID', 'LocationType', 'Easting', 'Northing', 'GroundLevel', 'FinalDepth', 'Trend', 'Plunge','N.a.']
 
-        ext_filter = "All supported (*.txt *.csv *.xyz *.asc *.ags);;Text files (*.txt *.csv *.xyz *.asc);;AGS files (*.ags)"
+        # data_attr_list = ['As is','LocationID','DepthTop', 'DepthBase','DepthPoint','GeologyCode','N.a.']
 
+        # ext_filter = "All supported (*.txt *.csv *.xyz *.asc *.las);;Text files (*.txt *.csv *.xyz *.asc);;LAS files (*.las)"
 
-        # in_dict = {'well_loc':['LocPushButton','Import well location data','QPushButton'],'well_data':['DataPushButton','Import well data','QPushButton']}
-        #
-        # input_dialog = general_input_dialog(title='Import well data',input_dict=in_dict)
-        # print(input_dialog.findChildren(QPushButton))
+        # locargs = import_dialog(parent=self,default_attr_list=loc_attr_list,ext_filter=ext_filter,caption='Import well location data').args
 
-        # input_dialog.LocPushButton.clicked.connect(lambda: print('ciao'))
-        # input_dialog.DataPushButton.clicked.connect(lambda: print('ciao'))
-
-
-        locargs = import_dialog(parent=self,default_attr_list=loc_attr_list,ext_filter=ext_filter,caption='Import well location data').args
-
-        dataargs = import_dialog(parent=self,default_attr_list=data_attr_list,ext_filter=ext_filter,caption='Import well data',multiple=True).args
+        # dataargs = import_dialog(parent=self,default_attr_list=data_attr_list,ext_filter=ext_filter,caption='Import well data',multiple=True).args
 
 
-        if locargs and dataargs:
-            in_file_name = [locargs[0],dataargs[0]]
-            col_names = [locargs[1],dataargs[1]]
-            index_list = [locargs[3],dataargs[3]]
-            delimiter = [locargs[4],dataargs[4]]
-            origin = [locargs[5],dataargs[5]]
-            # self.TextTerminal.appendPlainText('in_file_name: ' + in_file_name)
-            well2vtk(in_file_name=in_file_name, col_names=col_names, usecols=index_list, delimiter=delimiter, self=self, header_row=0)
-        # well2vtk(self=self)
+        # if locargs and dataargs:
+        #     in_file_name = [locargs[0],dataargs[0]]
+        #     col_names = [locargs[1],dataargs[1]]
+        #     index_list = [locargs[3],dataargs[3]]
+        #     delimiter = [locargs[4],dataargs[4]]
+        #     origin = [locargs[5],dataargs[5]]
+        #     # self.TextTerminal.appendPlainText('in_file_name: ' + in_file_name)
+        #     well2vtk(in_file_name=in_file_name, col_names=col_names, usecols=index_list, delimiter=delimiter, self=self, header_row=0)
+
 
     def import_SEGY(self):  # ___________________________________________________________ TO BE REVIEWED AND UPDATED IN MODULE segy2vtk
         """Import SEGY file and update Mesh3D collection."""

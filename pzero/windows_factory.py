@@ -8,7 +8,7 @@ from PyQt5.QtGui import QCloseEvent,QFont
 
 """PZero imports"""
 from .base_view_window_ui import Ui_BaseViewWindow
-from .entities_factory import VertexSet, PolyLine, TriSurf, TetraSolid, XsVertexSet, XsPolyLine, DEM, PCDom, MapImage, Voxet, XsVoxet, Plane, Seismics, XsTriSurf, XsImage, PolyData, Wells, WellMarker,Attitude
+from .entities_factory import VertexSet, PolyLine, TriSurf, TetraSolid, XsVertexSet, XsPolyLine, DEM, PCDom, MapImage, Voxet, XsVoxet, Plane, Seismics, XsTriSurf, XsImage, PolyData, Well, WellMarker,WellTrace,Attitude
 from .helper_dialogs import input_one_value_dialog, input_text_dialog, input_combo_dialog, message_dialog, options_dialog, multiple_input_dialog, tic, toc,open_file_dialog,progress_dialog
 from .geological_collection import GeologicalCollection
 from copy import deepcopy
@@ -1199,7 +1199,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         """Create topology tree with checkboxes and properties"""
         self.WellsTreeWidget.clear()
         self.WellsTreeWidget.setColumnCount(3)
-        self.WellsTreeWidget.setHeaderLabels(['Loc ID > Unit name', 'uid', 'property'])
+        self.WellsTreeWidget.setHeaderLabels(['Loc ID > Component', 'uid', 'property'])
         self.WellsTreeWidget.hideColumn(1)  # hide the uid column
         self.WellsTreeWidget.setItemsExpandable(True)
 
@@ -1207,42 +1207,43 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         locids = pd.unique(self.parent.well_coll.df['Loc ID'])
 
         for locid in locids:
+            uid = self.parent.well_coll.df.loc[(self.parent.well_coll.df['Loc ID'] == locid), 'uid'].values[0]
             tlevel_1 = QTreeWidgetItem(self.WellsTreeWidget, [locid])  # self.GeologyTreeWidget as parent -> top level
             tlevel_1.setFlags(tlevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
-            for geological_feature in pd.unique(self.parent.well_coll.df.loc[self.parent.well_coll.df['Loc ID'] == locid, 'geological_feature']):
-                uid = self.parent.well_coll.df.loc[(self.parent.well_coll.df['Loc ID'] == locid)&(self.parent.well_coll.df['geological_feature'] == geological_feature), 'uid'].values[0]
-                tlevel_2 = QTreeWidgetItem(tlevel_1, [geological_feature, uid])  # tlevel_1 as parent -> middle level
-                tlevel_2.setFlags(tlevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
 
-                property_combo = QComboBox()
-                property_combo.uid = uid
-                property_combo.addItem("none")
-                property_combo.addItem("X")
-                property_combo.addItem("Y")
-                property_combo.addItem("Z")
-                for prop in self.parent.well_coll.get_uid_properties_names(uid):
+            tlevel_2 = QTreeWidgetItem(tlevel_1, ['Trace', uid])  # tlevel_1 as parent -> middle level
+            tlevel_2.setFlags(tlevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
+
+            property_combo = QComboBox()
+            property_combo.uid = uid
+            property_combo.addItem("none")
+            property_combo.addItem("X")
+            property_combo.addItem("Y")
+            property_combo.addItem("Z")
+            for prop in self.parent.well_coll.get_uid_properties_names(uid):
+                if prop != 'LITHOLOGY':
                     property_combo.addItem(prop)
 
-                self.WellsTreeWidget.setItemWidget(tlevel_2, 2, property_combo)
-                property_combo.currentIndexChanged.connect(lambda: self.toggle_property())
-                tlevel_2.setFlags(tlevel_2.flags() | Qt.ItemIsUserCheckable)
-                if self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]:
-                    tlevel_2.setCheckState(0, Qt.Checked)
-                elif not self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]:
-                    tlevel_2.setCheckState(0, Qt.Unchecked)
+            self.WellsTreeWidget.setItemWidget(tlevel_2, 2, property_combo)
+            property_combo.currentIndexChanged.connect(lambda: self.toggle_property())
+            tlevel_2.setFlags(tlevel_2.flags() | Qt.ItemIsUserCheckable)
+            if self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]:
+                tlevel_2.setCheckState(0, Qt.Checked)
+            elif not self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]:
+                tlevel_2.setCheckState(0, Qt.Unchecked)
         """Send messages. Note that with tristate several signals are emitted in a sequence, one for each
         changed item, but upper levels do not broadcast uid's so they are filtered in the toggle method."""
         self.WellsTreeWidget.itemChanged.connect(self.toggle_well_visibility)
         self.WellsTreeWidget.expandAll()
 
     def update_well_tree_added(self, new_list=None):
-        """Update geology tree without creating a new model"""
+        """Update well tree without creating a new model"""
         for uid in new_list['uid']:
             if self.WellsTreeWidget.findItems(self.parent.well_coll.get_uid_well_locid(uid), Qt.MatchExactly, 0) != []:
                 """Already exists a TreeItem (1 level) for the geological type"""
                 counter_1 = 0
                 for child_1 in range(self.WellsTreeWidget.findItems(self.parent.well_coll.get_uid_well_locid(uid), Qt.MatchExactly, 0)[0].childCount()):
-                    glevel_2 = QTreeWidgetItem(self.WellsTreeWidget.findItems(self.parent.well_coll.get_uid_well_locid(uid), Qt.MatchExactly, 0)[0], [self.parent.well_coll.get_uid_geological_feature(uid),uid])
+                    glevel_2 = QTreeWidgetItem(self.WellsTreeWidget.findItems(self.parent.well_coll.get_uid_well_locid(uid), Qt.MatchExactly, 0)[0])
                     glevel_2.setFlags(glevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
                     self.WellsTreeWidget.insertTopLevelItem(0, glevel_2)
 
@@ -1279,8 +1280,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                 for prop in self.parent.well_coll.get_uid_properties_names(uid):
                     property_combo.addItem(prop)
 
-                name = self.parent.well_coll.get_uid_geological_feature(uid)
-                glevel_2 = QTreeWidgetItem(glevel_1, [name, uid])
+                glevel_2 = QTreeWidgetItem(glevel_1, ['Trace', uid])
                 self.WellsTreeWidget.setItemWidget(glevel_2, 2, property_combo)
                 property_combo.currentIndexChanged.connect(lambda: self.toggle_property())
                 glevel_2.setFlags(glevel_2.flags() | Qt.ItemIsUserCheckable)
@@ -1325,6 +1325,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         """Called by self.WellsTreeWidget.itemChanged.connect(self.toggle_boundary_visibility)."""
         name = item.text(0)  # not used
         uid = item.text(1)
+        print(uid)
         uid_checkState = item.checkState(0)
         if uid:  # needed to skip messages from upper levels of tree that do not broadcast uid's
             if uid_checkState == Qt.Checked:
@@ -2257,8 +2258,8 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
     """Methods used to add, remove, and update actors from the wells collection."""
     
     def well_added_update_views(self, updated_list=None):
-        """This is called when an entity is added to the geological collection.
-        Disconnect signals to geology and topology tree, if they are set, to avoid a nasty loop
+        """This is called when an entity is added to the well collection.
+        Disconnect signals to well tree, if they are set, to avoid a nasty loop
         that disrupts the trees, then they are reconnected when the trees are rebuilt"""
         self.WellsTreeWidget.itemChanged.disconnect()
         """Create pandas dataframe as list of "new" actors"""
@@ -2597,7 +2598,8 @@ class View3D(BaseView):
         """Rename Base View, Menu and Tool"""
         self.setWindowTitle("3D View")
         self.tog_att = -1 #Attitude picker disabled
-
+        self.trace_method = 'trace' #visualization method for boreholes properties (trace or cylinder)
+        self.toggle_bore_geo = 1
     """Re-implementations of functions that appear in all views - see placeholders in BaseView()"""
     def show_qt_canvas(self):
         """Show the Qt Window"""
@@ -2622,6 +2624,25 @@ class View3D(BaseView):
         """Customize menus and tools for this view"""
         self.menuBaseView.setTitle("Edit")
         self.actionBase_Tool.setText("Edit")
+
+        self.menuBoreTraceVis = QMenu('Borehole visualization methods',self)
+        self.actionBoreTrace = QAction('Trace',self)
+
+        self.actionBoreTrace.triggered.connect(lambda: self.change_bore_vis('trace'))
+
+        self.actionBoreCylinder = QAction('Cylinder',self)
+        self.actionBoreCylinder.triggered.connect(lambda: self.change_bore_vis('cylinder'))
+        self.actionToggleLithology = QAction('Toggle lithology',self)
+        self.actionToggleLithology.triggered.connect(lambda: self.change_bore_vis('litho'))
+        
+        self.menuBoreTraceVis.addAction(self.actionBoreTrace)
+        self.menuBoreTraceVis.addAction(self.actionBoreCylinder)
+        self.menuBoreTraceVis.addAction(self.actionToggleLithology)
+
+        self.menuBaseView.addMenu(self.menuBoreTraceVis)
+
+
+
 
         """Manage home view"""
         self.saveHomeView = QAction("Save home view", self)
@@ -2977,7 +2998,7 @@ class View3D(BaseView):
             print("no collection")
             this_actor = None
         """Then plot the vtk object with proper options."""
-        if isinstance(plot_entity, (PolyLine, TriSurf, XsPolyLine)):
+        if isinstance(plot_entity, (PolyLine, TriSurf, XsPolyLine)) and not isinstance(plot_entity,WellTrace):
             plot_rgb_option = None
             if isinstance(plot_entity.points, np.ndarray):
                 """This  check is needed to avoid errors when trying to plot an empty
@@ -2998,8 +3019,8 @@ class View3D(BaseView):
                     if plot_entity.get_point_data_shape(show_property)[-1] == 3:
                         plot_rgb_option = True
                 this_actor = self.plot_mesh_3D(uid=uid, plot_entity=plot_entity, color_RGB=color_RGB, show_property=show_property, show_scalar_bar=show_scalar_bar,
-                                               color_bar_range=None, show_property_title=show_property_title, line_thick=line_thick,
-                                               plot_texture_option=False, plot_rgb_option=plot_rgb_option, visible=visible)
+                                            color_bar_range=None, show_property_title=show_property_title, line_thick=line_thick,
+                                            plot_texture_option=False, plot_rgb_option=plot_rgb_option, visible=visible)
             else:
                 this_actor = None
         elif isinstance(plot_entity, (VertexSet, XsVertexSet,WellMarker,Attitude)):
@@ -3049,9 +3070,9 @@ class View3D(BaseView):
                     if plot_entity.get_point_data_shape(show_property)[-1] == 3:
                         plot_rgb_option = True
                 this_actor = self.plot_mesh_3D(uid=uid, plot_entity=plot_entity, color_RGB=color_RGB, show_property=show_property, show_scalar_bar=show_scalar_bar,
-                                               color_bar_range=None, show_property_title=show_property_title, line_thick=line_thick,
-                                               plot_texture_option=texture, plot_rgb_option=plot_rgb_option, visible=visible,
-                                               style=style, point_size=line_thick*10.0, points_as_spheres=True, pickable=pickable)
+                                            color_bar_range=None, show_property_title=show_property_title, line_thick=line_thick,
+                                            plot_texture_option=texture, plot_rgb_option=plot_rgb_option, visible=visible,
+                                            style=style, point_size=line_thick*10.0, points_as_spheres=True, pickable=pickable)
             else:
                 this_actor = None
         elif isinstance(plot_entity, DEM):
@@ -3061,8 +3082,8 @@ class View3D(BaseView):
                 active_image_texture = active_image.texture
                 # active_image_properties_components = active_image.properties_components[0]  # IF USED THIS MUST BE FIXED FOR TEXTURES WITH MORE THAN 3 COMPONENTS
                 this_actor = self.plot_mesh_3D(uid=uid, plot_entity=plot_entity, color_RGB=None, show_property=None, show_scalar_bar=None,
-                                               color_bar_range=None, show_property_title=None, line_thick=None,
-                                               plot_texture_option=active_image_texture, plot_rgb_option=False, visible=visible)
+                                            color_bar_range=None, show_property_title=None, line_thick=None,
+                                            plot_texture_option=active_image_texture, plot_rgb_option=False, visible=visible)
             else:
                 plot_rgb_option = None
                 if show_property is None:
@@ -3084,8 +3105,8 @@ class View3D(BaseView):
                     if plot_entity.get_point_data_shape(show_property)[-1] == 3:
                         plot_rgb_option = True
                 this_actor = self.plot_mesh_3D(uid=uid, plot_entity=plot_entity, color_RGB=color_RGB, show_property=show_property, show_scalar_bar=show_scalar_bar,
-                                               color_bar_range=None, show_property_title=show_property_title, line_thick=line_thick,
-                                               plot_texture_option=False, plot_rgb_option=plot_rgb_option, visible=visible)
+                                            color_bar_range=None, show_property_title=show_property_title, line_thick=line_thick,
+                                            plot_texture_option=False, plot_rgb_option=plot_rgb_option, visible=visible)
         elif isinstance(plot_entity, PCDom):
             plot_rgb_option = None
             new_plot = pvPointSet()
@@ -3139,8 +3160,8 @@ class View3D(BaseView):
             else:
                 plot_texture_option = plot_entity.texture
             this_actor = self.plot_mesh_3D(uid=uid, plot_entity=plot_entity.frame, color_RGB=None, show_property=None, show_scalar_bar=None,
-                                           color_bar_range=None, show_property_title=None, line_thick=line_thick,
-                                           plot_texture_option=plot_texture_option, plot_rgb_option=False, visible=visible)
+                                        color_bar_range=None, show_property_title=None, line_thick=line_thick,
+                                        plot_texture_option=plot_texture_option, plot_rgb_option=False, visible=visible)
         elif isinstance(plot_entity, Seismics):
             plot_rgb_option = None
             if isinstance(plot_entity.points, np.ndarray):
@@ -3162,8 +3183,8 @@ class View3D(BaseView):
                     if plot_entity.get_point_data_shape(show_property)[-1] == 3:
                         plot_rgb_option = True
                 this_actor = self.plot_mesh_3D(uid=uid, plot_entity=plot_entity, color_RGB=color_RGB, show_property=show_property, show_scalar_bar=show_scalar_bar,
-                                               color_bar_range=None, show_property_title=show_property_title, line_thick=line_thick,
-                                               plot_texture_option=False, plot_rgb_option=plot_rgb_option, visible=visible)
+                                            color_bar_range=None, show_property_title=show_property_title, line_thick=line_thick,
+                                            plot_texture_option=False, plot_rgb_option=plot_rgb_option, visible=visible)
             else:
                 this_actor = None
         elif isinstance(plot_entity, Voxet):
@@ -3179,11 +3200,11 @@ class View3D(BaseView):
                     if plot_entity.get_point_data_shape(show_property)[-1] == 3:
                         plot_rgb_option = True
                 this_actor = self.plot_mesh_3D(uid=uid, plot_entity=plot_entity, color_RGB=None, show_property=show_property, show_scalar_bar=show_scalar_bar,
-                                               color_bar_range=None, show_property_title=show_property_title, line_thick=line_thick,
-                                               plot_texture_option=False, plot_rgb_option=plot_rgb_option, visible=visible)
+                                            color_bar_range=None, show_property_title=show_property_title, line_thick=line_thick,
+                                            plot_texture_option=False, plot_rgb_option=plot_rgb_option, visible=visible)
             else:
                 this_actor = None
-        elif isinstance(plot_entity, Wells):
+        elif isinstance(plot_entity, WellTrace):
             plot_rgb_option = None
             if show_property is None:
                 show_scalar_bar = False
@@ -3191,19 +3212,31 @@ class View3D(BaseView):
             elif show_property == 'none':
                 show_scalar_bar = False
                 show_property = None
+                self.plotter.remove_actor(f'{uid}_prop')
+                self.plotter.remove_actor(f'{uid}_geo')
             elif show_property == 'X':
                 show_property = plot_entity.points_X
+                self.plotter.remove_actor(f'{uid}_geo')
             elif show_property == 'Y':
                 show_property = plot_entity.points_Y
+                self.plotter.remove_actor(f'{uid}_geo')
             elif show_property == 'Z':
                 show_property = plot_entity.points_Z
+                self.plotter.remove_actor(f'{uid}_geo')
             else:
-                if plot_entity.get_point_data_shape(show_property)[-1] == 3:
-                    plot_rgb_option = True
+                prop = plot_entity.plot_along_trace(show_property,method=self.trace_method,camera=self.plotter.camera)
+                if self.toggle_bore_geo == 1:
+                    geo = plot_entity.plot_geology()
+                    self.plotter.add_mesh(geo,name=f'{uid}_geo',rgb=True)
+                else:
+                    self.plotter.remove_actor(f'{uid}_geo')
+                self.plotter.add_actor(prop,name=f'{uid}_prop')
+                show_property=None
+                show_property_title = None
             this_actor = self.plot_mesh_3D(uid=uid, plot_entity=plot_entity, color_RGB=color_RGB, show_property=show_property, show_scalar_bar=show_scalar_bar,
-                                           color_bar_range=None, show_property_title=show_property_title, line_thick=line_thick,
-                                           plot_texture_option=False, plot_rgb_option=plot_rgb_option, visible=visible,
-                                           render_lines_as_tubes=True)
+                                        color_bar_range=None, show_property_title=show_property_title, line_thick=line_thick,
+                                        plot_texture_option=False, plot_rgb_option=plot_rgb_option, visible=visible,
+                                        render_lines_as_tubes=False)
         else:
             print("[Windows factory]: actor with no class")
             this_actor = None
@@ -3337,9 +3370,13 @@ class View3D(BaseView):
 
             self.plotter.add_mesh(oct,style='wireframe',color='red')
 
-
-
-
+    def change_bore_vis(self,method):
+        if method == 'trace':
+            self.trace_method = method
+        elif method == 'cylinder':
+            self.trace_method = method
+        elif method == 'litho':
+            self.toggle_bore_geo *= -1
     '''[Gabriele] PC Filters ----------------------------------------------------'''
 
     def radial_filt(self):

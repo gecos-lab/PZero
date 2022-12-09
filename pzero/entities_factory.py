@@ -1,10 +1,13 @@
 """entities_factory.py
 PZero© Andrea Bistacchi"""
 
-from vtk import vtkPolyData, vtkPoints, vtkCellCenters, vtkIdFilter, vtkCleanPolyData, vtkPolyDataNormals, vtkPlane, vtkCellArray, vtkLine, vtkIdList, vtkTriangleFilter, vtkTriangle, vtkFeatureEdges, vtkCleanPolyData, vtkStripper, vtkPolygon, vtkUnstructuredGrid, vtkTetra, vtkImageData, vtkStructuredGrid, vtkPolyDataConnectivityFilter, vtkCylinderSource,vtkThreshold,vtkDataObject,vtkThresholdPoints,vtkDelaunay2D,vtkPolyDataMapper,vtkQuadricDecimation,vtkSmoothPolyDataFilter,vtkLinearSubdivisionFilter,vtkPCANormalEstimation,vtkPointSet,vtkRadiusOutlierRemoval,vtkAppendPolyData,vtkStatisticalOutlierRemoval,vtkEuclideanClusterExtraction, vtkCenterOfMass,vtkTransform,vtkTransformPolyDataFilter
+from vtk import vtkPolyData, vtkPoints, vtkCellCenters, vtkIdFilter, vtkCleanPolyData, vtkPolyDataNormals, vtkPlane, vtkCellArray, vtkLine, vtkIdList, vtkTriangleFilter, vtkTriangle, vtkFeatureEdges, vtkCleanPolyData, vtkStripper, vtkPolygon, vtkUnstructuredGrid, vtkTetra, vtkImageData, vtkStructuredGrid, vtkPolyDataConnectivityFilter, vtkCylinderSource,vtkThreshold,vtkDataObject,vtkThresholdPoints,vtkDelaunay2D,vtkPolyDataMapper,vtkQuadricDecimation,vtkSmoothPolyDataFilter,vtkLinearSubdivisionFilter,vtkPCANormalEstimation,vtkPointSet,vtkRadiusOutlierRemoval,vtkAppendPolyData,vtkStatisticalOutlierRemoval,vtkEuclideanClusterExtraction, vtkCenterOfMass,vtkTransform,vtkTransformPolyDataFilter,vtkArcPlotter,vtkTubeFilter,vtkActor
 from vtk.util.numpy_support import vtk_to_numpy
 from vtk.numpy_interface.dataset_adapter import WrapDataObject, vtkDataArrayToVTKArray
-from pyvista import PolyData as pv_PolyData
+from pyvista import helpers as pv_helpers # very usefull. Can be used when dsa fails
+from pyvista import PolyData as pv_PolyData #this should be removed
+from pyvista import Spline #this should be removed
+from pyvista import Plotter #this should be removed
 from pyvista import image_to_texture as pv_image_to_texture
 from pyvista.core.filters import _get_output, _update_alg
 from numpy import shape as np_shape
@@ -194,7 +197,7 @@ class PolyData(vtkPolyData):
     def points_Z(self):
         """Returns Z point coordinates as Numpy array"""
         return self.points[:, 2]
-
+  
     def append_point(self, point_vector=None):
         """Appends a single point from Numpy point_vector at the end of the VTK point array."""
         """Check that point_vector is a row vector."""
@@ -309,6 +312,7 @@ class PolyData(vtkPolyData):
         self.GetCellData().SetNormals(normals_filter.GetOutput().GetCellData().GetNormals())
         self.Modified()
 
+
     @property
     def points_map_dip_azimuth(self):
         """Returns dip azimuth (in grad) as Numpy array for map plotting if points have Normals property."""
@@ -353,6 +357,7 @@ class PolyData(vtkPolyData):
         else:
             return None
 
+    # ==================== POINT DATA ====================
     @property
     def point_data_keys(self):
         """Lists point data keys, if present (except handles the case of objects with no properties)."""
@@ -420,6 +425,8 @@ class PolyData(vtkPolyData):
         for col in range(np_size(point_data_array)):
             WrapDataObject(self).PointData[data_key][point_id, col] = point_data_array[col]
 
+    # ==================== CELL DATA ====================
+
     def list_cell_data(self):  # _______________________ TO BE IMPLEMENTED IF WE WANT TO WORK WITH CELL DATA
         """Lists cell attribute names"""
         pass
@@ -444,6 +451,34 @@ class PolyData(vtkPolyData):
     def edit_cell_data(self, parent=None, data_key=None, cell_id=None, cell_data_array=None):  # _______________________ TO BE IMPLEMENTED IF WE WANT TO WORK WITH CELL DATA
         """Sets cell attribute from Numpy array"""
         pass
+    
+    # ==================== FIELD DATA ====================
+
+    def set_field_data(self,name=None,data=None):
+        ''' [Gabriele] for field data pv_helpers is usefull since we can have arrays of strings
+        that are not well managed by dsa'''
+        
+        arr = pv_helpers.convert_array(data,name=name)
+        WrapDataObject(self).GetFieldData().AddArray(arr)
+
+    def get_field_data_keys(self):
+        return WrapDataObject(self).GetFieldData().keys()
+    
+    def get_field_data(self,key=None):
+        field_data = WrapDataObject(self).FieldData[key]
+        values = np_array([field_data.GetValue(i) for i in range(field_data.GetNumberOfValues())])
+        return values    
+    
+    def get_field_data_shape(self, data_key=None):
+        field_data = WrapDataObject(self).FieldData[data_key]
+        n_values = field_data.GetNumberOfValues()
+        n_components = field_data.GetNumberOfComponents()
+        return [n_values, n_components]
+
+    def get_field_data_type(self, data_key=None):
+        """Get point data type."""
+        return WrapDataObject(self).FieldData[data_key].GetDataTypeAsString()
+    
     @property
     def topological_type(self):
         for topological_type in valid_topological_types:
@@ -560,10 +595,6 @@ class PolyData(vtkPolyData):
         #
         # print(tr3.GetOutput())
         return t1
-
-
-
-
 
 
 class Plane(vtkPlane):  # _______________________ AT THE MOMENT THIS DOES NOT EXPOSE ANY OTHER METHOD - SEE IF IT IS USEFUL
@@ -866,6 +897,7 @@ class TriSurf(PolyData):
             trisurf_copy.points_Z[point_idx] = trisurf_copy.points_Z[point_idx] + row[3]
         trisurf_copy.Modified()
         return trisurf_copy
+
 
 class XSectionBaseEntity:
     """This abstract class is used just to implement the method to calculate the W coordinate for all geometrical/topological entities belonging to a XSection.
@@ -2172,25 +2204,171 @@ class Image3D(Image):  # _______________________________________________________
         return frame
 
 
-class Wells(PolyLine):
+class Well:
     # [Gabriele] vtkCylinderSource could be used but it is not supported by pyvista
 
     def __init__(self, *args, **kwargs):
-        super(Wells, self).__init__(*args, **kwargs)
+        super(Well, self).__init__(*args, **kwargs)
+
     #
     def deep_copy(self):
-        well_copy = Wells()
+        well_copy = Well()
         well_copy.DeepCopy(self)
         return well_copy
+
+    def preview(self):
+        p = Plotter()
+        p.add_mesh(self.trace)
+        p.add_mesh(self.head,render_points_as_spheres=True)
+        p.show()
+
+    @property
+    def ID(self):
+        id = self._head.get_field_data('name')[0]
+        return id
+    
+    @property
+    def head(self):
+        return self._head
+    
+    @head.setter
+    def head(self,vals):
+        xyz = vals[0]
+        name = vals[1]
+        self._head = WellMarker()
+        self._head.create_marker(xyz,name)
+
+    
+    @property
+    def trace(self):
+        return self._trace
+
+    @trace.setter
+    def trace(self,xyz):
+        self._trace = WellTrace()
+        name = f'trace_{self.ID}' 
+        self._trace.create_trace(xyz,name)
+    
+    @property
+    def components(self):
+        return [self.head,self.trace]
+    
+    @components.setter
+    def components(self,head,trace):
+        self._head = head
+        self._trace = trace    
+    
+    def add_trace_data(self,name=None,tr_data=None):
+        self._trace.set_field_data(name=name,data=tr_data)
+    
+    
+    # def get_properties_types(self):
+    #     return [data.ndim for data in list(self.prop_trace_dict.values())]
+    # def set_marker(self,xyz):
+    #     self.head.points = xyz
+    #     self.head.auto_cells()
+    #     self.head.name = f'head_{self.ID}'
+
+    # def get_head(self):
+    #     return self.head
+    
+    # def set_trace(self,trace):
+    #     spline = Spline(trace)
+    #     self.trace.ShallowCopy(spline)
+    #     self.trace.name = f'trace_{self.ID}'
+
+    # def get_trace(self):
+    #     return self.trace
+
+
+class WellTrace(PolyLine):
+    def __init__(self, *args, **kwargs):
+        super(WellTrace, self).__init__(*args, **kwargs)
+
+    def deep_copy(self):
+        well_trace_copy = WellTrace()
+        well_trace_copy.DeepCopy(self)
+        return well_trace_copy
+
+    def create_trace(self,xyz_trace,name=None):
+        # lines = pv_helpers.lines_from_points(xyz_trace)
+        lines = Spline(xyz_trace)
+        # lines = lines.compute_arc_length()
+        lines.field_data['name'] = [name]
+        self.ShallowCopy(lines)
+    
+    def plot_along_trace(self,prop=None,method='trace',camera=None):
+
+        prop_trace = self.points
+        prop_data = self.get_field_data(f'{prop}')
+        
+        # temp = pv_helpers.lines_from_points(prop_trace)
+        temp = Spline(prop_trace)
+        temp[prop] = prop_data
+
+        # temp.plot()
+        if method == 'trace':
+            # camera = self.parent.plotter.camera
+            filter = vtkArcPlotter()
+            filter.SetInputData(temp)
+            # arc_p.SetCamera(camera)
+            filter.SetRadius(200)
+            filter.SetHeight(250)
+            # filter.UseDefaultNormalOn()
+            filter.SetCamera(camera)
+            filter.SetDefaultNormal(0,1,0)
+            # filter.Update()
+        elif method == 'cylinder':
+            filter = vtkTubeFilter()
+            filter.SetInputData(temp)
+            # filter.SetInputArrayToProcess(1,0,0,vtk.vtkDataObject.FIELD_ASSOCIATION_POINTS,'Fs')
+            filter.SetRadius(5)
+            filter.SetNumberOfSides(100)
+            filter.SetVaryRadiusToVaryRadiusByScalar()
+            # filter.Update()
+        mapper = vtkPolyDataMapper()
+        mapper.SetInputConnection(filter.GetOutputPort())
+
+        actor = vtkActor()
+        actor.SetMapper(mapper)
+
+        del temp
+        return actor
+    
+    def plot_geology(self):
+
+        prop_trace = self.points
+        prop_data = self.get_field_data('LITHOLOGY').reshape(-1,3)
+        
+        # temp = pv_helpers.lines_from_points(prop_trace)
+        temp = Spline(prop_trace)
+        temp['LITHOLOGY'] = prop_data
+
+        filter = vtkTubeFilter()
+        filter.SetInputData(temp)
+        # filter.SetInputArrayToProcess(1,0,0,vtk.vtkDataObject.FIELD_ASSOCIATION_POINTS,'Fs')
+        filter.SetRadius(20)
+        filter.SetNumberOfSides(40)
+        filter.Update()
+        out = filter.GetOutput()
+        del temp
+        return out
+
 
 class WellMarker(VertexSet):
     def __init__(self, *args, **kwargs):
         super(WellMarker, self).__init__(*args, **kwargs)
     #
     def deep_copy(self):
-        well_copy = WellMarker()
-        well_copy.DeepCopy(self)
-        return well_copy
+        well_marker_copy = WellMarker()
+        well_marker_copy.DeepCopy(self)
+        return well_marker_copy
+    
+    def create_marker(self,xyz,name=None):
+        self.points = xyz
+        self.auto_cells()
+        self.set_field_data(name='name',data=[name])
+        
 
 class Attitude(VertexSet):
     def __init__(self, *args, **kwargs):
