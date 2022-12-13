@@ -455,7 +455,7 @@ class PolyData(vtkPolyData):
     # ==================== FIELD DATA ====================
 
     def set_field_data(self,name=None,data=None):
-        ''' [Gabriele] for field data pv_helpers is usefull since we can have arrays of strings
+        ''' [Gabriele] for field data pv_helpers is useful since we can have arrays of strings
         that are not well managed by dsa'''
         
         arr = pv_helpers.convert_array(data,name=name)
@@ -2259,9 +2259,12 @@ class Well:
         self._trace = trace    
     
     def add_trace_data(self,name=None,tr_data=None):
-        self._trace.set_field_data(name=name,data=tr_data)
+        self._trace.set_field_data(name=f'trace_{name}',data=tr_data)
     
-    
+    def add_marker_data(self,name=None,mrk_pos = None, mrk_data=None):
+        self._trace.set_field_data(name=f'pmarker_{name}',data=mrk_pos) 
+        self._trace.set_field_data(name=f'marker_{name}',data=mrk_data) 
+       
     # def get_properties_types(self):
     #     return [data.ndim for data in list(self.prop_trace_dict.values())]
     # def set_marker(self,xyz):
@@ -2298,9 +2301,9 @@ class WellTrace(PolyLine):
         self.ShallowCopy(lines)
     
     def plot_along_trace(self,prop=None,method='trace',camera=None):
-
+        
         prop_trace = self.points
-        prop_data = self.get_field_data(f'{prop}')
+        prop_data = self.get_field_data(prop)
         
         # temp = pv_helpers.lines_from_points(prop_trace)
         temp = Spline(prop_trace)
@@ -2321,7 +2324,6 @@ class WellTrace(PolyLine):
         elif method == 'cylinder':
             filter = vtkTubeFilter()
             filter.SetInputData(temp)
-            # filter.SetInputArrayToProcess(1,0,0,vtk.vtkDataObject.FIELD_ASSOCIATION_POINTS,'Fs')
             filter.SetRadius(5)
             filter.SetNumberOfSides(100)
             filter.SetVaryRadiusToVaryRadiusByScalar()
@@ -2335,26 +2337,29 @@ class WellTrace(PolyLine):
         del temp
         return actor
     
-    def plot_geology(self):
+    def plot_tube(self,prop):
 
         prop_trace = self.points
-        prop_data = self.get_field_data('LITHOLOGY').reshape(-1,3)
+        prop_data = self.get_field_data(prop).reshape(-1,3)
         
         # temp = pv_helpers.lines_from_points(prop_trace)
         temp = Spline(prop_trace)
-        temp['LITHOLOGY'] = prop_data
+        temp[prop] = prop_data
 
         filter = vtkTubeFilter()
         filter.SetInputData(temp)
-        # filter.SetInputArrayToProcess(1,0,0,vtk.vtkDataObject.FIELD_ASSOCIATION_POINTS,'Fs')
         filter.SetRadius(20)
-        filter.SetNumberOfSides(40)
+        filter.SetNumberOfSides(100)
         filter.Update()
         out = filter.GetOutput()
         del temp
         return out
 
+    def plot_markers(self,prop):
+        prop_pos = self.get_field_data(f'p{prop}').reshape(-1,3)
+        prop_data = self.get_field_data(prop)
 
+        return [prop_pos,prop_data]
 class WellMarker(VertexSet):
     def __init__(self, *args, **kwargs):
         super(WellMarker, self).__init__(*args, **kwargs)

@@ -1211,26 +1211,63 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             tlevel_1 = QTreeWidgetItem(self.WellsTreeWidget, [locid])  # self.GeologyTreeWidget as parent -> top level
             tlevel_1.setFlags(tlevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
 
-            tlevel_2 = QTreeWidgetItem(tlevel_1, ['Trace', uid])  # tlevel_1 as parent -> middle level
-            tlevel_2.setFlags(tlevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
+            property_combo = QComboBox()
+            property_combo.uid = uid
+            property_combo.name = 'General'
+            property_combo.addItem("none")
+            for prop in self.parent.well_coll.get_uid_properties_names(uid):
+                if prop == 'name':
+                        property_combo.addItem(prop)
+            self.WellsTreeWidget.setItemWidget(tlevel_1, 2, property_combo)
+            property_combo.currentIndexChanged.connect(lambda: self.toggle_property())
+
+
+        # ======================================= TRACE =======================================
+
+            tlevel_2_trace = QTreeWidgetItem(tlevel_1, ['Trace', uid])  # tlevel_1 as parent -> middle level
+            tlevel_2_trace.setFlags(tlevel_2_trace.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
 
             property_combo = QComboBox()
             property_combo.uid = uid
+            property_combo.name = 'Trace'
             property_combo.addItem("none")
             property_combo.addItem("X")
             property_combo.addItem("Y")
             property_combo.addItem("Z")
             for prop in self.parent.well_coll.get_uid_properties_names(uid):
-                if prop != 'LITHOLOGY':
+                if 'trace_' in prop:
+                    if 'GEOLOGY' not in prop:
+                        property_combo.addItem(prop)
+            
+
+            self.WellsTreeWidget.setItemWidget(tlevel_2_trace, 2, property_combo)
+            property_combo.currentIndexChanged.connect(lambda: self.toggle_property())
+            tlevel_2_trace.setFlags(tlevel_2_trace.flags() | Qt.ItemIsUserCheckable)
+            if self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]:
+                tlevel_2_trace.setCheckState(0, Qt.Checked)
+            elif not self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]:
+                tlevel_2_trace.setCheckState(0, Qt.Unchecked)
+            
+        # ======================================= MARKER =======================================
+
+            tlevel_2_mark = QTreeWidgetItem(tlevel_1, ['Markers', uid])  # tlevel_1 as parent -> middle level
+            tlevel_2_mark.setFlags(tlevel_2_mark.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
+
+            property_combo = QComboBox()
+            property_combo.uid = uid
+            property_combo.name = 'Marker'
+            property_combo.addItem("none")
+            for prop in self.parent.well_coll.get_uid_properties_names(uid):
+                if 'marker_' in prop:
                     property_combo.addItem(prop)
 
-            self.WellsTreeWidget.setItemWidget(tlevel_2, 2, property_combo)
+            self.WellsTreeWidget.setItemWidget(tlevel_2_mark, 2, property_combo)
             property_combo.currentIndexChanged.connect(lambda: self.toggle_property())
-            tlevel_2.setFlags(tlevel_2.flags() | Qt.ItemIsUserCheckable)
+            tlevel_2_mark.setFlags(tlevel_2_mark.flags() | Qt.ItemIsUserCheckable)
             if self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]:
-                tlevel_2.setCheckState(0, Qt.Checked)
+                tlevel_2_mark.setCheckState(0, Qt.Checked)
             elif not self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]:
-                tlevel_2.setCheckState(0, Qt.Unchecked)
+                tlevel_2_mark.setCheckState(0, Qt.Unchecked)
         """Send messages. Note that with tristate several signals are emitted in a sequence, one for each
         changed item, but upper levels do not broadcast uid's so they are filtered in the toggle method."""
         self.WellsTreeWidget.itemChanged.connect(self.toggle_well_visibility)
@@ -1254,7 +1291,8 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                     property_combo.addItem("Y")
                     property_combo.addItem("Z")
                     for prop in self.parent.well_coll.get_uid_properties_names(uid):
-                        property_combo.addItem(prop)
+                        if prop != 'GEOLOGY':
+                            property_combo.addItem(prop)
 
                     self.WellsTreeWidget.setItemWidget(glevel_2, 2, property_combo)
                     property_combo.currentIndexChanged.connect(lambda: self.toggle_property())
@@ -1313,32 +1351,25 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                 if success == 1:
                     break
 
-    def update_well_checkboxes(self, uid=None, uid_checkState=None):
-        """Update checkboxes in geology tree, called when state changed in topology tree."""
-        item = self.WellsTreeWidget.findItems(uid, Qt.MatchFixedString | Qt.MatchRecursive, 1)[0]
-        if uid_checkState == Qt.Checked:
-            item.setCheckState(0, Qt.Checked)
-        elif uid_checkState == Qt.Unchecked:
-            item.setCheckState(0, Qt.Unchecked)
-
     def toggle_well_visibility(self, item, column):
         """Called by self.WellsTreeWidget.itemChanged.connect(self.toggle_boundary_visibility)."""
+        
         name = item.text(0)  # not used
         uid = item.text(1)
-        print(uid)
         uid_checkState = item.checkState(0)
         if uid:  # needed to skip messages from upper levels of tree that do not broadcast uid's
             if uid_checkState == Qt.Checked:
                 if not self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]:
-                    self.actors_df.loc[self.actors_df['uid'] == uid, 'show'] = True
-                    self.set_actor_visible(uid=uid, visible=True)
+                    if name == 'Trace':
+                        self.actors_df.loc[self.actors_df['uid'] == uid, 'show'] = True
+                self.set_actor_visible(uid=uid, visible=True,name=name)
             elif uid_checkState == Qt.Unchecked:
                 if self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]:
-                    self.actors_df.loc[self.actors_df['uid'] == uid, 'show'] = False
-                    self.set_actor_visible(uid=uid, visible=False)
+                    if name == 'Trace':
+                        self.actors_df.loc[self.actors_df['uid'] == uid, 'show'] = False
+                self.set_actor_visible(uid=uid, visible=False,name=name)
 
             self.WellsTreeWidget.itemChanged.disconnect()
-            self.update_well_checkboxes(uid=uid, uid_checkState=uid_checkState)
             self.WellsTreeWidget.itemChanged.connect(self.toggle_well_visibility)
 
     """Methods used to build and update the fluid and fluid topology trees."""
@@ -2473,6 +2504,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         combo = self.sender()
         show_property = combo.currentText()
         uid = combo.uid
+        name = combo.name
         show = self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]
         collection = self.actors_df.loc[self.actors_df['uid'] == uid, 'collection'].values[0]
         """This removes the previous copy of the actor with the same uid, then calls the viewer-specific function that shows an actor with a property.
@@ -2599,7 +2631,7 @@ class View3D(BaseView):
         self.setWindowTitle("3D View")
         self.tog_att = -1 #Attitude picker disabled
         self.trace_method = 'trace' #visualization method for boreholes properties (trace or cylinder)
-        self.toggle_bore_geo = 1
+        self.toggle_bore_geo = -1
     """Re-implementations of functions that appear in all views - see placeholders in BaseView()"""
     def show_qt_canvas(self):
         """Show the Qt Window"""
@@ -2632,8 +2664,8 @@ class View3D(BaseView):
 
         self.actionBoreCylinder = QAction('Cylinder',self)
         self.actionBoreCylinder.triggered.connect(lambda: self.change_bore_vis('cylinder'))
-        self.actionToggleLithology = QAction('Toggle lithology',self)
-        self.actionToggleLithology.triggered.connect(lambda: self.change_bore_vis('litho'))
+        self.actionToggleLithology = QAction('Toggle geology',self)
+        self.actionToggleLithology.triggered.connect(lambda: self.change_bore_vis('geo'))
         
         self.menuBoreTraceVis.addAction(self.actionBoreTrace)
         self.menuBoreTraceVis.addAction(self.actionBoreCylinder)
@@ -2715,8 +2747,7 @@ class View3D(BaseView):
         """Set default orientation horizontal because vertical colorbars interfere with the widget."""
         pv_global_theme.colorbar_orientation = 'horizontal'
 
-    #     # [Gabriele] Add picking functionality (this should be put in a menu to enable or disable)
-    #
+    # [Gabriele] Add picking functionality (this should be put in a menu to enable or disable)
     def act_att(self):
 
         if self.tog_att == -1:
@@ -2921,10 +2952,34 @@ class View3D(BaseView):
             line_thick = self.parent.well_coll.get_uid_legend(uid=uid)['line_thick']
             self.actors_df.loc[self.actors_df['uid'] == uid, 'actor'].values[0].GetProperty().SetLineWidth(line_thick)
 
-    def set_actor_visible(self, uid=None, visible=None):
+    def set_actor_visible(self, uid=None, visible=None,name=None):
         """Set actor uid visible or invisible (visible = True or False)"""
         this_actor = self.actors_df.loc[self.actors_df['uid'] == uid, 'actor'].values[0]
-        this_actor.SetVisibility(visible)
+        collection = self.actors_df.loc[self.actors_df['uid'] == uid, 'collection'].values[0]
+
+
+        if collection == 'well_coll':
+            actors = self.plotter.renderer.actors
+            if name == 'Trace':
+                if f'{uid}_prop' in actors.keys():
+                    prop_actor = actors[f'{uid}_prop']
+                    prop_actor.SetVisibility(visible)
+
+                if f'{uid}_geo' in actors:
+                    geo_actor = actors[f'{uid}_geo']
+                    geo_actor.SetVisibility(visible)
+                # self.plotter.remove_actor(f'{uid}_prop')
+                # self.plotter.remove_actor(f'{uid}_geo')
+                this_actor.SetVisibility(visible)
+            elif name == 'Markers':
+                if f'{uid}_marker-labels' in actors.keys():
+                    marker_actor_labels = actors[f'{uid}_marker-labels']
+                    marker_actor_points = actors[f'{uid}_marker-points']
+                    marker_actor_labels.SetVisibility(visible)
+                    marker_actor_points.SetVisibility(visible)
+
+        else:
+            this_actor.SetVisibility(visible)
 
     def remove_actor_in_view(self, uid=None, redraw=False):
         """"Remove actor from plotter"""
@@ -3214,6 +3269,7 @@ class View3D(BaseView):
                 show_property = None
                 self.plotter.remove_actor(f'{uid}_prop')
                 self.plotter.remove_actor(f'{uid}_geo')
+                self.plotter.remove_actor(f'{uid}_tag')
             elif show_property == 'X':
                 show_property = plot_entity.points_X
                 self.plotter.remove_actor(f'{uid}_geo')
@@ -3223,13 +3279,25 @@ class View3D(BaseView):
             elif show_property == 'Z':
                 show_property = plot_entity.points_Z
                 self.plotter.remove_actor(f'{uid}_geo')
+            elif show_property == 'name':
+                point = plot_entity.points[0]
+                name_value = plot_entity.get_field_data('name')
+                self.plotter.add_point_labels(point,name_value,always_visible=True,show_points=False,font_size=15,shape_opacity=0.5,name=f'{uid}_name')
+                show_property=None
+                show_property_title = None
+            elif 'LITHOLOGY' in show_property:
+                prop = plot_entity.plot_tube(prop=show_property)
+                self.plotter.add_mesh(prop,name=f'{uid}_prop',rgb=True)
+                show_property=None
+                show_property_title = None
+            elif 'marker_' in show_property:
+                points_pos,points_labels = plot_entity.plot_markers(show_property)
+                # print(points_pos,points_labels)
+                self.plotter.add_point_labels(points_pos,points_labels,always_visible=True,show_points=True,render_points_as_spheres=True,point_size=15,font_size=30,shape_opacity=0.5,name=f'{uid}_marker')
+                show_property=None
+                show_property_title = None
             else:
                 prop = plot_entity.plot_along_trace(show_property,method=self.trace_method,camera=self.plotter.camera)
-                if self.toggle_bore_geo == 1:
-                    geo = plot_entity.plot_geology()
-                    self.plotter.add_mesh(geo,name=f'{uid}_geo',rgb=True)
-                else:
-                    self.plotter.remove_actor(f'{uid}_geo')
                 self.plotter.add_actor(prop,name=f'{uid}_prop')
                 show_property=None
                 show_property_title = None
@@ -3371,11 +3439,23 @@ class View3D(BaseView):
             self.plotter.add_mesh(oct,style='wireframe',color='red')
 
     def change_bore_vis(self,method):
+        actors = self.plotter.renderer.actors.copy()
         if method == 'trace':
             self.trace_method = method
         elif method == 'cylinder':
             self.trace_method = method
-        elif method == 'litho':
+        elif method == 'geo':
+            for uid in actors:
+                if '_geo' in uid:
+                    pass
+                else:
+                    plot_entity = self.parent.well_coll.get_uid_vtk_obj(uid)
+                    if self.toggle_bore_geo == 1:
+                        self.plotter.remove_actor(f'{uid}_geo')
+                    elif self.toggle_bore_geo == -1:
+                        geo = plot_entity.plot_tube('GEOLOGY')
+                        self.plotter.add_mesh(geo,name=f'{uid}_geo',rgb=True)
+
             self.toggle_bore_geo *= -1
     '''[Gabriele] PC Filters ----------------------------------------------------'''
 

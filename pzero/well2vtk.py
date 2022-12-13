@@ -49,17 +49,17 @@ def well2vtk(self,path=None):
     del prop_df['INFO']
     del prop_df['GEOMETRY']
 
-    arr = well_obj.trace.get_point_data(data_key='arc_length')+well_obj.head.points_Z
+    arr = well_obj.trace.get_point_data(data_key='arc_length')
     # print(arr)
     points = well_obj.trace.points_number
     for key in prop_df:
         prop = prop_df[key]
 
         if 'START' in prop.columns:
-            if key == 'LITHOLOGY':
-                tr_data = np.zeros(shape=(points,3))
+            if key == 'LITHOLOGY' or key == 'GEOLOGY':
+                tr_data = np.full(shape=(points,3),fill_value=np.nan)
 
-                color_dict = {key: np.random.randint(255,size=3) for key in pd.unique(prop['LITHO'])}
+                color_dict = {k: np.random.randint(255,size=3) for k in pd.unique(prop[key])}
                 for row,(start,end,value) in prop.iterrows():
 
                         start_idx = np.argmin(np.abs(arr - start))
@@ -69,70 +69,39 @@ def well2vtk(self,path=None):
                         color_val = color_dict[value]
                         tr_data[start_idx:end_idx] = color_val
             else:
-                tr_data = np.zeros(shape=points)
+                tr_data = np.full(shape=points,fill_value=np.nan)
                 for row,(start,end,value) in prop.iterrows():
-
                     start_idx = np.argmin(np.abs(arr - start))
                     end_idx = np.argmin(np.abs(arr - end))
                     # print(key)
                     # print(len(curve_copy.points[start_idx:end_idx]))
                     tr_data[start_idx:end_idx] = value
             well_obj.add_trace_data(name=f'{key}',tr_data=tr_data)
+        elif 'MD_point' in prop.columns:
+                prop = prop.set_index('MD_point')
+                for col in prop.columns:
+                    mrk_pos = []
+                    mrk_data = []
+                    for row in prop.index:
+                        idx = np.argmin(np.abs(arr - row))
+                        value = prop.loc[row,col]
+                        mrk_data.append(value)
+                        mrk_pos.append(well_obj.trace.points[idx,:])
+                    well_obj.add_marker_data(name=f'{col}',mrk_pos=mrk_pos,mrk_data=mrk_data)
         else:
                 prop = prop.set_index('MD')
                 for col in prop.columns:
-                    tr_data = np.zeros(shape=points)
+                    tr_data = np.full(shape=points,fill_value=np.nan)
                     for row in prop.index:
                         idx = np.argmin(np.abs(arr - row))
                         value = prop.loc[row,col]
                         tr_data[idx] = value
-                        
 
-                        # # print(prop[col])
-                        # for row,value in prop[col].iteritems():
-                        #     # print(row,value)
                     well_obj.add_trace_data(name=f'{col}',tr_data=tr_data)
-
-    # for curve in curves:
-    #     name = curve.mnemonic
-    #     idx_list = []
-    #     for z in lasio_data.index:
-    #         idx = np.argmin(np.abs(arr - z))
-    #         idx_list.append(idx)
-    #     print(arr[-1],z)
-    #     print(well_obj.trace.points[idx_list[-1]])
-    #     points = well_obj.trace.points[idx_list]
-    #     data = curve.data
-    #     well_obj.add_trace_data(name=f'{name}_trace',tr_data=points)
-    #     well_obj.add_trace_data(name=f'{name}_data',tr_data=data)
-
-
-    # print(well_obj.trace.get_field_data_keys())
-
-    # for i,curve in enumerate(curve_data):
-    #     trace = WellTrace()
-    #     name = curve.mnemonic
-    #     arr = trace_data['MD']
-    #     idx_list = []
-    #     for z in lasio_data.index:
-    #         idx = (np.abs(arr - z)).argmin()
-    #         idx_list.append(idx)
-
-    #     trace.create_trace(xyz_trace[idx_list],name)
-    #     data = curve.data
-    #     dim = data.ndim
-
-    #     trace.init_point_data(data_key=name,dimension=dim)
-    #     trace.set_point_data(data_key=name,attribute_matrix=data)
-
-
-
-        
-    # well_obj.trace.trace_data = curve_data
-
 
 
     keys = well_obj.trace.get_field_data_keys()
+    keys = [key for key in keys if 'pmarker' not in key]
     components = []
     types = []
     for key in keys:
