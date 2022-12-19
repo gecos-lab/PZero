@@ -1280,19 +1280,12 @@ def split_surf(self):
 
         targ_surfs = [self.geol_coll.get_uid_vtk_obj(uid) for uid in input_uids[1:]]
         extend = input_one_value_dialog(title='Cut entire surface?',label='Yes[1]/No[0]',default_value=1)
-        if isinstance(ref_surf,TriSurf):
-            if extend:
-                ref_surf_mod = ref_surf.center_scale(scale_factors=[10.0,10.0,10.0])
-            else:
-                ref_surf_mod = ref_surf
-        else:
-            ref_surf_mod = pld
 
         for i,targ_surf in enumerate(targ_surfs): #for every target surface
 
             temp_surf = pv.PolyData()
             temp_surf.ShallowCopy(targ_surf)
-            implicit_dist = temp_surf.compute_implicit_distance(ref_surf_mod)
+            implicit_dist = temp_surf.compute_implicit_distance(ref_surf)
             intersect = vtk.vtkClipPolyData()
             intersect.SetInputData(implicit_dist)
             intersect.GenerateClippedOutputOn()

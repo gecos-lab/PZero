@@ -1294,13 +1294,17 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 if not os.path.isfile((in_dir_name + "/" + uid + ".vtp")):
                     print("error: missing VTK file")
                     return
-                vtk_object = PolyLine()
+                vtk_object = Well()
                 pd_reader = vtk.vtkXMLPolyDataReader()
                 pd_reader.SetFileName(in_dir_name + "/" + uid + ".vtp")
                 pd_reader.Update()
-                vtk_object.ShallowCopy(pd_reader.GetOutput())
-                vtk_object.Modified()
-                self.well_coll.set_uid_vtk_obj(uid=uid, vtk_obj=vtk_object)
+                vtk_object.trace = pd_reader.GetOutput()
+
+
+                self.well_coll.set_uid_vtk_obj(uid=uid, vtk_obj=vtk_object.trace) 
+                #Don't know if I like it. 
+                #Maybe it's better to always add to the vtkobject column the 
+                # Well and not the WellTrace instance and then call well.trace/head where needed 
                 prgs_bar.add_one()
             self.well_coll.endResetModel()
         self.prop_legend.update_widget(parent=self)
@@ -1494,6 +1498,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         path = open_file_dialog(parent=self,caption='Import well data',filter="XLXS files (*.xlsx)")
 
         well2vtk(self, path=path)
+        self.prop_legend.update_widget(parent=self)
         
         # loc_attr_list = ['As is','LocationID', 'LocationType', 'Easting', 'Northing', 'GroundLevel', 'FinalDepth', 'Trend', 'Plunge','N.a.']
 

@@ -21,17 +21,17 @@ class WellCollection(QAbstractTableModel):
                               'properties_names': [],
                               'properties_components': [],
                               'properties_types': [],
-                              'vtk_head': None,
-                              'vtk_trace':None}
+                              'markers': [],
+                              'vtk_obj':None}
 
     well_entity_type_dict = {'uid': str,
                                    'Loc ID': str,
                                    'properties_names': list,
                                    'properties_components': list,
                                    'properties_types': list,
+                                   'markers': list,
                                    'x_section': str,  # this is the uid of the cross section for "XsVertexSet", "XsPolyLine", and "XsImage", empty for all others
-                                   'vtk_head': object,
-                                   'vtk_trace':object}
+                                   'vtk_obj':object}
 
 
 
@@ -200,10 +200,13 @@ class WellCollection(QAbstractTableModel):
         """Set value(s) stored in dataframe (as pointer) from uid. This is a LIST and "at" must be used!"""
         row = self.df[self.df['uid'] == uid].index.values[0]
         self.df.at[row, 'properties_components'] = properties_components
+    
+    def get_uid_marker_names(self,uid=None):
+        return self.df.loc[self.df['uid'] == uid, 'markers'].values[0]
 
     def get_uid_vtk_obj(self, uid=None):
         """Get value(s) stored in dataframe (as pointer) from uid."""
-        return self.df.loc[self.df['uid'] == uid, 'vtk_trace'].values[0]
+        return self.df.loc[self.df['uid'] == uid, 'vtk_obj'].values[0]
 
     def set_uid_vtk_obj(self, uid=None, vtk_obj=None):
         """Set value(s) stored in dataframe (as pointer) from uid."""

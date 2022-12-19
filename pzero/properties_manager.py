@@ -76,6 +76,11 @@ class PropertiesCMaps(QObject):
                     add_props = add_props + [coll_props[i] + "[0]"] + [coll_props[i] + "[1]"] + [coll_props[i] + "[2]"]
                 elif coll_prop_comps[i] == 1:
                     add_props = add_props + [coll_props[i]]
+        
+        if parent.well_coll.df['properties_names'].to_list():
+            add_props.append('MD')
+
+        
         add_props = list(set(add_props))  # a set is composed of unique values from a list
         add_props = list(filter(None, add_props))  # eliminate empty elements
         all_props = all_props + add_props

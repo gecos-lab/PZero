@@ -2207,8 +2207,18 @@ class Image3D(Image):  # _______________________________________________________
 class Well:
     # [Gabriele] vtkCylinderSource could be used but it is not supported by pyvista
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self,ID=None,trace_xyz=None,head_xyz=None, *args, **kwargs):
         super(Well, self).__init__(*args, **kwargs)
+        
+        self._ID = ID
+        self._trace = WellTrace()
+        self._head = WellMarker()
+
+        if trace_xyz is not None:
+            self._trace.create_trace(trace_xyz)
+        if head_xyz is not None:
+            # self._head.create_marker(head_xyz) #this may be useful in case we want to display the head as an entity 
+            self.trace.set_head(head_xyz)
 
     #
     def deep_copy(self):
@@ -2224,19 +2234,19 @@ class Well:
 
     @property
     def ID(self):
-        id = self._head.get_field_data('name')[0]
-        return id
+        return self._ID
+    
+    @ID.setter
+    def ID(self,ID):
+        self._ID = ID
     
     @property
     def head(self):
         return self._head
     
     @head.setter
-    def head(self,vals):
-        xyz = vals[0]
-        name = vals[1]
-        self._head = WellMarker()
-        self._head.create_marker(xyz,name)
+    def head(self,head_xyz):
+        self._head.create_marker(head_xyz)
 
     
     @property
@@ -2244,10 +2254,13 @@ class Well:
         return self._trace
 
     @trace.setter
-    def trace(self,xyz):
-        self._trace = WellTrace()
-        name = f'trace_{self.ID}' 
-        self._trace.create_trace(xyz,name)
+    def trace(self,trace):
+        
+        self._trace.ShallowCopy(trace)
+        head_p = self._trace.get_field_data('pmarker_head').reshape(-1,3)
+        print(head_p)
+        self.head = head_p
+
     
     @property
     def components(self):
@@ -2258,13 +2271,44 @@ class Well:
         self._head = head
         self._trace = trace    
     
-    def add_trace_data(self,name=None,tr_data=None):
-        self._trace.set_field_data(name=f'trace_{name}',data=tr_data)
+    def add_trace_data(self,name=None,tr_data=None,xyz=None):
+        if xyz is None:
+            self._trace.set_point_data(data_key=name,attribute_matrix=tr_data)
+        else:
+            self._trace.set_field_data(name=name,data=tr_data)
+            self._trace.set_field_data(name=f'p{name}',data=xyz)
+
     
     def add_marker_data(self,name=None,mrk_pos = None, mrk_data=None):
         self._trace.set_field_data(name=f'pmarker_{name}',data=mrk_pos) 
         self._trace.set_field_data(name=f'marker_{name}',data=mrk_data) 
-       
+    
+    def get_marker_names(self):
+        field_data = self._trace.get_field_data_keys()
+        name_list = []
+        for data in field_data:
+            if 'marker' in data:
+                if 'pmarker' in data:
+                    pass
+                else:
+                    name = data.split('_',1)[1]
+                    name_list.append(name)
+        return name_list
+
+    def get_trace_names(self):
+        field_data = self._trace.get_field_data_keys()
+        name_list = []
+        for data in field_data:
+            if 'marker' in data:
+                pass
+            elif 'p' in data:
+                pass
+            elif 'name' in data:
+                pass
+            else:
+                name_list.append(data)
+        return name_list       
+        
     # def get_properties_types(self):
     #     return [data.ndim for data in list(self.prop_trace_dict.values())]
     # def set_marker(self,xyz):
@@ -2296,13 +2340,19 @@ class WellTrace(PolyLine):
     def create_trace(self,xyz_trace,name=None):
         # lines = pv_helpers.lines_from_points(xyz_trace)
         lines = Spline(xyz_trace)
+        lines.rename_array('arc_length','MD')
         # lines = lines.compute_arc_length()
         lines.field_data['name'] = [name]
+        lines.field_data['MD'] = lines['MD']
         self.ShallowCopy(lines)
     
+    def set_head(self,xyz_head=None):
+        self.set_field_data(name='pmarker_head',data=xyz_head)
     def plot_along_trace(self,prop=None,method='trace',camera=None):
         
-        prop_trace = self.points
+
+        prop_trace = self.get_field_data(f'p{prop}').reshape(-1,3)
+        
         prop_data = self.get_field_data(prop)
         
         # temp = pv_helpers.lines_from_points(prop_trace)
@@ -2315,7 +2365,7 @@ class WellTrace(PolyLine):
             filter = vtkArcPlotter()
             filter.SetInputData(temp)
             # arc_p.SetCamera(camera)
-            filter.SetRadius(200)
+            filter.SetRadius(130)
             filter.SetHeight(250)
             # filter.UseDefaultNormalOn()
             filter.SetCamera(camera)
@@ -2339,7 +2389,7 @@ class WellTrace(PolyLine):
     
     def plot_tube(self,prop):
 
-        prop_trace = self.points
+        prop_trace = self.get_field_data(f'p{prop}').reshape(-1,3)
         prop_data = self.get_field_data(prop).reshape(-1,3)
         
         # temp = pv_helpers.lines_from_points(prop_trace)
@@ -2356,10 +2406,12 @@ class WellTrace(PolyLine):
         return out
 
     def plot_markers(self,prop):
-        prop_pos = self.get_field_data(f'p{prop}').reshape(-1,3)
-        prop_data = self.get_field_data(prop)
-
+        print(self.get_field_data_keys())
+        prop_pos = self.get_field_data(f'pmarker_{prop}').reshape(-1,3)
+        prop_data = self.get_field_data(f'marker_{prop}')
+        
         return [prop_pos,prop_data]
+
 class WellMarker(VertexSet):
     def __init__(self, *args, **kwargs):
         super(WellMarker, self).__init__(*args, **kwargs)

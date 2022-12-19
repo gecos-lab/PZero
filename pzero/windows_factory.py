@@ -1215,9 +1215,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             property_combo.uid = uid
             property_combo.name = 'General'
             property_combo.addItem("none")
-            for prop in self.parent.well_coll.get_uid_properties_names(uid):
-                if prop == 'name':
-                        property_combo.addItem(prop)
+            property_combo.addItem("name")
             self.WellsTreeWidget.setItemWidget(tlevel_1, 2, property_combo)
             property_combo.currentIndexChanged.connect(lambda: self.toggle_property())
 
@@ -1235,9 +1233,8 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             property_combo.addItem("Y")
             property_combo.addItem("Z")
             for prop in self.parent.well_coll.get_uid_properties_names(uid):
-                if 'trace_' in prop:
-                    if 'GEOLOGY' not in prop:
-                        property_combo.addItem(prop)
+                if prop!= ('LITHOLOGY' or 'GEOLOGY'):
+                    property_combo.addItem(prop)
             
 
             self.WellsTreeWidget.setItemWidget(tlevel_2_trace, 2, property_combo)
@@ -1257,9 +1254,8 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             property_combo.uid = uid
             property_combo.name = 'Marker'
             property_combo.addItem("none")
-            for prop in self.parent.well_coll.get_uid_properties_names(uid):
-                if 'marker_' in prop:
-                    property_combo.addItem(prop)
+            for prop in self.parent.well_coll.get_uid_marker_names(uid):
+                property_combo.addItem(prop)
 
             self.WellsTreeWidget.setItemWidget(tlevel_2_mark, 2, property_combo)
             property_combo.currentIndexChanged.connect(lambda: self.toggle_property())
@@ -2509,9 +2505,15 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         collection = self.actors_df.loc[self.actors_df['uid'] == uid, 'collection'].values[0]
         """This removes the previous copy of the actor with the same uid, then calls the viewer-specific function that shows an actor with a property.
         IN THE FUTURE see if it is possible and more efficient to keep the actor and just change the property shown."""
-        self.remove_actor_in_view(uid=uid)
-        this_actor = self.show_actor_with_property(uid=uid, collection=collection, show_property=show_property, visible=show)
-        self.actors_df = self.actors_df.append({'uid': uid, 'actor': this_actor, 'show': show, 'collection': collection, 'show_prop': show_property}, ignore_index=True) # self.set_actor_visible(uid=uid, visible=show)
+        if name == 'Marker':
+            self.show_markers(uid=uid, show_property=show_property)
+        elif name == 'General':
+            self.show_labels(uid=uid, show_property=show_property,collection=collection)
+        else:
+            self.remove_actor_in_view(uid=uid)
+
+            this_actor = self.show_actor_with_property(uid=uid, collection=collection, show_property=show_property, visible=show)
+            self.actors_df = self.actors_df.append({'uid': uid, 'actor': this_actor, 'show': show, 'collection': collection, 'show_prop': show_property}, ignore_index=True) # self.set_actor_visible(uid=uid, visible=show)
 
     def add_all_entities(self):
         """Add all entities in project collections. This must be reimplemented for cross-sections in order
@@ -2632,6 +2634,7 @@ class View3D(BaseView):
         self.tog_att = -1 #Attitude picker disabled
         self.trace_method = 'trace' #visualization method for boreholes properties (trace or cylinder)
         self.toggle_bore_geo = -1
+        self.toggle_bore_litho = -1
     """Re-implementations of functions that appear in all views - see placeholders in BaseView()"""
     def show_qt_canvas(self):
         """Show the Qt Window"""
@@ -2664,12 +2667,16 @@ class View3D(BaseView):
 
         self.actionBoreCylinder = QAction('Cylinder',self)
         self.actionBoreCylinder.triggered.connect(lambda: self.change_bore_vis('cylinder'))
-        self.actionToggleLithology = QAction('Toggle geology',self)
-        self.actionToggleLithology.triggered.connect(lambda: self.change_bore_vis('geo'))
+        self.actionToggleGeology = QAction('Toggle geology',self)
+        self.actionToggleGeology.triggered.connect(lambda: self.change_bore_vis('geo'))
+        self.actionToggleLithology = QAction('Toggle lithology',self)
+        self.actionToggleLithology.triggered.connect(lambda: self.change_bore_vis('litho'))
         
         self.menuBoreTraceVis.addAction(self.actionBoreTrace)
         self.menuBoreTraceVis.addAction(self.actionBoreCylinder)
         self.menuBoreTraceVis.addAction(self.actionToggleLithology)
+        self.menuBoreTraceVis.addAction(self.actionToggleGeology)
+
 
         self.menuBaseView.addMenu(self.menuBoreTraceVis)
 
@@ -3268,32 +3275,18 @@ class View3D(BaseView):
                 show_scalar_bar = False
                 show_property = None
                 self.plotter.remove_actor(f'{uid}_prop')
-                self.plotter.remove_actor(f'{uid}_geo')
-                self.plotter.remove_actor(f'{uid}_tag')
             elif show_property == 'X':
                 show_property = plot_entity.points_X
-                self.plotter.remove_actor(f'{uid}_geo')
             elif show_property == 'Y':
                 show_property = plot_entity.points_Y
-                self.plotter.remove_actor(f'{uid}_geo')
             elif show_property == 'Z':
                 show_property = plot_entity.points_Z
-                self.plotter.remove_actor(f'{uid}_geo')
+            elif show_property == 'MD':
+                show_property = plot_entity.get_point_data(data_key='MD')
             elif show_property == 'name':
                 point = plot_entity.points[0]
-                name_value = plot_entity.get_field_data('name')
+                name_value = self.parent.well_coll.get_uid_well_locid(uid)
                 self.plotter.add_point_labels(point,name_value,always_visible=True,show_points=False,font_size=15,shape_opacity=0.5,name=f'{uid}_name')
-                show_property=None
-                show_property_title = None
-            elif 'LITHOLOGY' in show_property:
-                prop = plot_entity.plot_tube(prop=show_property)
-                self.plotter.add_mesh(prop,name=f'{uid}_prop',rgb=True)
-                show_property=None
-                show_property_title = None
-            elif 'marker_' in show_property:
-                points_pos,points_labels = plot_entity.plot_markers(show_property)
-                # print(points_pos,points_labels)
-                self.plotter.add_point_labels(points_pos,points_labels,always_visible=True,show_points=True,render_points_as_spheres=True,point_size=15,font_size=30,shape_opacity=0.5,name=f'{uid}_marker')
                 show_property=None
                 show_property_title = None
             else:
@@ -3309,6 +3302,71 @@ class View3D(BaseView):
             print("[Windows factory]: actor with no class")
             this_actor = None
         return this_actor
+
+    def show_markers(self, uid=None, show_property=None):
+        plot_entity = self.parent.well_coll.get_uid_vtk_obj(uid)
+        marker_data = self.parent.well_coll.get_uid_marker_names(uid)
+
+        if show_property is None:
+                show_scalar_bar = False
+                pass
+        elif show_property == 'none':
+            show_scalar_bar = False
+            show_property = None
+            self.plotter.remove_actor(f'{uid}_marker-labels')
+            self.plotter.remove_actor(f'{uid}_marker-points')
+            
+        elif show_property in marker_data:
+            points_pos,points_labels = plot_entity.plot_markers(show_property)
+            # print(points_pos,points_labels)
+            this_actor = self.plotter.add_point_labels(points_pos,points_labels,always_visible=True,show_points=True,render_points_as_spheres=True,point_size=15,font_size=30,shape_opacity=0.5,name=f'{uid}_marker')
+            show_property = None
+            show_property_title = None
+
+    def show_labels(self,uid=None,collection=None,show_property=None):
+        if collection == 'geol_coll':
+            plot_entity = self.parent.geol_coll.get_uid_vtk_obj(uid)
+            point = plot_entity.GetCenter()
+            name_value = self.parent.geol_coll.get_uid_name(uid)
+        elif collection == 'xsect_coll':
+            plot_entity = self.parent.xsect_coll.get_uid_vtk_frame(uid)
+            point = plot_entity.GetCenter()
+            name_value = self.parent.xsect_coll.get_uid_name(uid)
+        elif collection == 'boundary_coll':
+            plot_entity = self.parent.boundary_coll.get_uid_vtk_obj(uid)
+            point = plot_entity.GetCenter()
+            name_value = self.parent.boundary_coll.get_uid_name(uid)
+        elif collection == 'mesh3d_coll':
+            plot_entity = self.parent.mesh3d_coll.get_uid_vtk_obj(uid)
+            point = plot_entity.GetCenter()
+            name_value = self.parent.mesh3d_coll.get_uid_name(uid)
+        elif collection == 'dom_coll':
+            plot_entity = self.parent.dom_coll.get_uid_vtk_obj(uid)
+            point = plot_entity.GetCenter()
+            name_value = self.parent.dom_coll.get_uid_name(uid)
+        elif collection == 'image_coll':
+            plot_entity = self.parent.image_coll.get_uid_vtk_obj(uid)
+            point = plot_entity.GetCenter()
+            name_value = self.parent.image_coll.get_uid_name(uid)
+        elif collection == 'well_coll':
+            plot_entity = self.parent.well_coll.get_uid_vtk_obj(uid)
+            point = plot_entity.points[0].reshape(-1,3)
+            name_value = self.parent.well_coll.get_uid_well_locid(uid)
+            print(point,name_value)
+        elif collection == 'fluids_coll':
+            plot_entity = self.parent.fluids_coll.get_uid_vtk_obj(uid)
+            point = plot_entity.GetCenter()
+            name_value = self.parent.fluids_coll.get_uid_name(uid)
+
+        if show_property is None:
+            show_scalar_bar = False
+            pass
+        elif show_property == 'none':
+            show_scalar_bar = False
+            show_property = None
+            self.plotter.remove_actor(f'{uid}_name-labels')
+        else:
+            self.plotter.add_point_labels(point,[name_value],always_visible=True,show_points=False,font_size=15,shape_opacity=0.5,name=f'{uid}_name')
 
     def plot_mesh_3D(self, uid=None, plot_entity=None, color_RGB=None, show_property=None, show_scalar_bar=None,
                      color_bar_range=None, show_property_title=None, line_thick=None,
@@ -3453,10 +3511,25 @@ class View3D(BaseView):
                     if self.toggle_bore_geo == 1:
                         self.plotter.remove_actor(f'{uid}_geo')
                     elif self.toggle_bore_geo == -1:
+                        self.plotter.remove_actor(f'{uid}_litho')
                         geo = plot_entity.plot_tube('GEOLOGY')
                         self.plotter.add_mesh(geo,name=f'{uid}_geo',rgb=True)
 
             self.toggle_bore_geo *= -1
+        elif method == 'litho':
+            for uid in actors:
+                if '_litho' in uid:
+                    pass
+                else:
+                    plot_entity = self.parent.well_coll.get_uid_vtk_obj(uid)
+                    if self.toggle_bore_litho == 1:
+                        self.plotter.remove_actor(f'{uid}_litho')
+                    elif self.toggle_bore_litho == -1:
+                        self.plotter.remove_actor(f'{uid}_geo')
+                        litho = plot_entity.plot_tube('LITHOLOGY')
+                        self.plotter.add_mesh(litho,name=f'{uid}_litho',rgb=True)
+
+            self.toggle_bore_litho *= -1
     '''[Gabriele] PC Filters ----------------------------------------------------'''
 
     def radial_filt(self):

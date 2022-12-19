@@ -22,25 +22,28 @@ import pandas as pd
 
 def well2vtk(self,path=None):
 
-    well_obj = Well()
+    
     data = pd.read_excel(path,sheet_name=None)
     well_data = data['INFO']
+    well_id = well_data['WELL'].values[0]
 
     # Get and set well head data
 
     xyz_head = np.array([well_data['EASTING'].values,well_data['NORTHING'].values,well_data['ELEV'].values]).reshape(-1,3)
-    well_obj.head = [xyz_head,well_data['WELL'].values[0]]
+    well_head = xyz_head
 
     # Get and set well trace data
-    dir = os.path.dirname(path)
     trace_data = data['GEOMETRY']
     
-    x = well_obj.head.points_X-trace_data['DX']
-    y = well_obj.head.points_Y-trace_data['DY']
-    z = well_obj.head.points_Z-trace_data['DZ']
+    print(xyz_head[0])
+    x = xyz_head[0,0]-trace_data['DX']
+    y = xyz_head[0,1]-trace_data['DY']
+    z = xyz_head[0,2]-trace_data['DZ']
 
     xyz_trace = np.vstack([x,y,z]).T.reshape(-1,3)
-    well_obj.trace = xyz_trace
+
+
+    well_obj = Well(ID=well_id,trace_xyz=xyz_trace,head_xyz=xyz_head)
 
     #Get and set curve data
 
@@ -49,7 +52,7 @@ def well2vtk(self,path=None):
     del prop_df['INFO']
     del prop_df['GEOMETRY']
 
-    arr = well_obj.trace.get_point_data(data_key='arc_length')
+    arr = well_obj.trace.get_point_data(data_key='MD')
     # print(arr)
     points = well_obj.trace.points_number
     for key in prop_df:
@@ -69,14 +72,15 @@ def well2vtk(self,path=None):
                         color_val = color_dict[value]
                         tr_data[start_idx:end_idx] = color_val
             else:
-                tr_data = np.full(shape=points,fill_value=np.nan)
+                tr_data = np.zeros(shape=points)
                 for row,(start,end,value) in prop.iterrows():
                     start_idx = np.argmin(np.abs(arr - start))
                     end_idx = np.argmin(np.abs(arr - end))
                     # print(key)
                     # print(len(curve_copy.points[start_idx:end_idx]))
                     tr_data[start_idx:end_idx] = value
-            well_obj.add_trace_data(name=f'{key}',tr_data=tr_data)
+                    # tr_data.insert(0,0)
+            well_obj.add_trace_data(name=f'{key}',tr_data=tr_data,xyz=well_obj.trace.points)
         elif 'MD_point' in prop.columns:
                 prop = prop.set_index('MD_point')
                 for col in prop.columns:
@@ -91,30 +95,34 @@ def well2vtk(self,path=None):
         else:
                 prop = prop.set_index('MD')
                 for col in prop.columns:
-                    tr_data = np.full(shape=points,fill_value=np.nan)
-                    for row in prop.index:
+                    prop_clean = prop[col].dropna()
+
+                    points_arr = well_obj.trace.points
+                    tr_data = prop_clean.values
+                    xyz = np.zeros(shape=(len(prop_clean),3))
+
+                    for i,row in enumerate(prop_clean.index):
                         idx = np.argmin(np.abs(arr - row))
-                        value = prop.loc[row,col]
-                        tr_data[idx] = value
+                        # value = prop_clean.loc[row]
+                        xyz[i,:] = points_arr[idx,:]
+                    well_obj.add_trace_data(name=f'{col}',tr_data=tr_data,xyz=xyz)
 
-                    well_obj.add_trace_data(name=f'{col}',tr_data=tr_data)
 
-
-    keys = well_obj.trace.get_field_data_keys()
-    keys = [key for key in keys if 'pmarker' not in key]
+    trace_keys = well_obj.get_trace_names()
+    markers = well_obj.get_marker_names()
     components = []
     types = []
-    for key in keys:
+    for key in trace_keys:
         components.append(well_obj.trace.get_field_data_shape(key)[1])
         types.append(well_obj.trace.get_field_data_type(key))
     curr_obj_attributes = deepcopy(WellCollection.well_entity_dict)
     curr_obj_attributes['uid'] = str(uuid4())
     curr_obj_attributes['Loc ID'] = well_obj.ID
-    curr_obj_attributes['properties_names'] = keys
+    curr_obj_attributes['properties_names'] = trace_keys
     curr_obj_attributes['properties_components'] = components
     curr_obj_attributes['properties_types'] = types
-    curr_obj_attributes['vtk_head'] = well_obj.head
-    curr_obj_attributes['vtk_trace'] = well_obj.trace
+    curr_obj_attributes['markers'] = markers
+    curr_obj_attributes['vtk_obj'] = well_obj.trace
     self.well_coll.add_entity_from_dict(entity_dict=curr_obj_attributes)
 
 
