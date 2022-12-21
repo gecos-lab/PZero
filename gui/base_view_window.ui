@@ -103,7 +103,7 @@
         <enum>QFrame::Raised</enum>
        </property>
        <property name="currentIndex">
-        <number>0</number>
+        <number>9</number>
        </property>
        <widget class="QWidget" name="GeologyTreePage">
         <property name="geometry">
@@ -111,7 +111,7 @@
           <x>0</x>
           <y>0</y>
           <width>278</width>
-          <height>344</height>
+          <height>272</height>
          </rect>
         </property>
         <property name="sizePolicy">
@@ -177,7 +177,7 @@
           <x>0</x>
           <y>0</y>
           <width>278</width>
-          <height>344</height>
+          <height>272</height>
          </rect>
         </property>
         <property name="sizePolicy">
@@ -237,7 +237,7 @@
           <x>0</x>
           <y>0</y>
           <width>278</width>
-          <height>344</height>
+          <height>272</height>
          </rect>
         </property>
         <property name="sizePolicy">
@@ -312,7 +312,7 @@
           <x>0</x>
           <y>0</y>
           <width>278</width>
-          <height>344</height>
+          <height>272</height>
          </rect>
         </property>
         <property name="sizePolicy">
@@ -355,7 +355,7 @@
           <x>0</x>
           <y>0</y>
           <width>278</width>
-          <height>344</height>
+          <height>272</height>
          </rect>
         </property>
         <property name="sizePolicy">
@@ -410,7 +410,7 @@
           <x>0</x>
           <y>0</y>
           <width>278</width>
-          <height>344</height>
+          <height>272</height>
          </rect>
         </property>
         <property name="sizePolicy">
@@ -465,7 +465,7 @@
           <x>0</x>
           <y>0</y>
           <width>278</width>
-          <height>344</height>
+          <height>272</height>
          </rect>
         </property>
         <attribute name="label">
@@ -484,6 +484,14 @@
         </layout>
        </widget>
        <widget class="QWidget" name="FluidsTreePage">
+        <property name="geometry">
+         <rect>
+          <x>0</x>
+          <y>0</y>
+          <width>278</width>
+          <height>272</height>
+         </rect>
+        </property>
         <attribute name="label">
          <string>Fluids &gt; Fluids Tree</string>
         </attribute>
@@ -500,6 +508,14 @@
         </layout>
        </widget>
        <widget class="QWidget" name="FluidsTopologyTree">
+        <property name="geometry">
+         <rect>
+          <x>0</x>
+          <y>0</y>
+          <width>278</width>
+          <height>272</height>
+         </rect>
+        </property>
         <attribute name="label">
          <string>Fluids &gt; Topology Tree</string>
         </attribute>
@@ -515,13 +531,45 @@
          </item>
         </layout>
        </widget>
+       <widget class="QWidget" name="FrittiTreePage">
+        <attribute name="label">
+         <string>Fritti Misti &gt; Fritti tree</string>
+        </attribute>
+        <layout class="QVBoxLayout" name="verticalLayout_12">
+         <item>
+          <widget class="QTreeWidget" name="FrittiTreeWidget">
+           <column>
+            <property name="text">
+             <string notr="true">1</string>
+            </property>
+           </column>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+       <widget class="QWidget" name="FrittiTopologyTree">
+        <attribute name="label">
+         <string>Fritti Misti &gt; Topology tree</string>
+        </attribute>
+        <layout class="QVBoxLayout" name="verticalLayout_13">
+         <item>
+          <widget class="QTreeWidget" name="FrittiTopologyTreeWidget">
+           <column>
+            <property name="text">
+             <string notr="true">1</string>
+            </property>
+           </column>
+          </widget>
+         </item>
+        </layout>
+       </widget>
        <widget class="QWidget" name="ImagesPage">
         <property name="geometry">
          <rect>
           <x>0</x>
           <y>0</y>
           <width>278</width>
-          <height>344</height>
+          <height>272</height>
          </rect>
         </property>
         <property name="sizePolicy">

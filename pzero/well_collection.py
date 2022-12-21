@@ -161,7 +161,7 @@ class WellCollection(QAbstractTableModel):
 
     def get_uid_name(self, uid=None):
         """Get value(s) stored in dataframe (as pointer) from uid."""
-        return self.df.loc[self.df['uid'] == uid, 'name'].values[0]
+        return self.df.loc[self.df['uid'] == uid, 'Loc ID'].values[0]
 
     def set_uid_name(self, uid=None, name=None):
         """Set value(s) stored in dataframe (as pointer) from uid.."""

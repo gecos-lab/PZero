@@ -10,13 +10,14 @@ import os
 from copy import deepcopy
 import vtk
 import pyvista as pv
-from .entities_factory import Well,WellTrace,WellMarker
+from .entities_factory import Attitude, Well,WellTrace,Fritti
 from uuid import uuid4
 # from .entities_factory import WellData
 from .helper_functions import auto_sep
 from .well_collection import WellCollection
 from .geological_collection import GeologicalCollection
 from .fluid_collection import FluidsCollection
+from .frittura_collection import FrittoMistoCollection
 import pandas as pd
 # import lasio as ls
 
@@ -55,6 +56,7 @@ def well2vtk(self,path=None):
     arr = well_obj.trace.get_point_data(data_key='MD')
     # print(arr)
     points = well_obj.trace.points_number
+    ann_list = []
     for key in prop_df:
         prop = prop_df[key]
 
@@ -82,8 +84,10 @@ def well2vtk(self,path=None):
                     # tr_data.insert(0,0)
             well_obj.add_trace_data(name=f'{key}',tr_data=tr_data,xyz=well_obj.trace.points)
         elif 'MD_point' in prop.columns:
+            
                 prop = prop.set_index('MD_point')
                 for col in prop.columns:
+                    annotation_obj = Fritti()
                     mrk_pos = []
                     mrk_data = []
                     for row in prop.index:
@@ -91,7 +95,8 @@ def well2vtk(self,path=None):
                         value = prop.loc[row,col]
                         mrk_data.append(value)
                         mrk_pos.append(well_obj.trace.points[idx,:])
-                    well_obj.add_marker_data(name=f'{col}',mrk_pos=mrk_pos,mrk_data=mrk_data)
+                    annotation_obj.create_fritto(name=col,annotation=mrk_data,xyz=mrk_pos)
+                    ann_list.append(annotation_obj)   
         else:
                 prop = prop.set_index('MD')
                 for col in prop.columns:
@@ -109,23 +114,44 @@ def well2vtk(self,path=None):
 
 
     trace_keys = well_obj.get_trace_names()
-    markers = well_obj.get_marker_names()
     components = []
     types = []
     for key in trace_keys:
         components.append(well_obj.trace.get_field_data_shape(key)[1])
         types.append(well_obj.trace.get_field_data_type(key))
-    curr_obj_attributes = deepcopy(WellCollection.well_entity_dict)
-    curr_obj_attributes['uid'] = str(uuid4())
-    curr_obj_attributes['Loc ID'] = well_obj.ID
-    curr_obj_attributes['properties_names'] = trace_keys
-    curr_obj_attributes['properties_components'] = components
-    curr_obj_attributes['properties_types'] = types
-    curr_obj_attributes['markers'] = markers
-    curr_obj_attributes['vtk_obj'] = well_obj.trace
-    self.well_coll.add_entity_from_dict(entity_dict=curr_obj_attributes)
+    
+    bore_obj_attributes = deepcopy(WellCollection.well_entity_dict)
+    bore_obj_attributes['uid'] = str(uuid4())
+    bore_obj_attributes['Loc ID'] = well_obj.ID
+    bore_obj_attributes['properties_names'] = trace_keys
+    bore_obj_attributes['properties_components'] = components
+    bore_obj_attributes['properties_types'] = types
+    bore_obj_attributes['vtk_obj'] = well_obj.trace
+    self.well_coll.add_entity_from_dict(entity_dict=bore_obj_attributes)
 
+    for annotation in ann_list:
+        ann_keys = annotation.point_data_keys
+        name = annotation.get_field_data_keys()[0]
+        components = []
+        types = []
+        for key in ann_keys:
+            components.append(annotation.trace.get_point_data_shape(key)[1])
+            types.append(annotation.trace.get_point_data_type(key))
 
+        annotation_obj_attributes = deepcopy(FrittoMistoCollection.fritto_entity_dict)
+        annotation_obj_attributes['uid'] = str(uuid4())
+        annotation_obj_attributes['name'] = name
+        annotation_obj_attributes['topological_type'] = 'VertexSet'
+        annotation_obj_attributes['fritto_type'] = 'Annotations'
+        annotation_obj_attributes['fritto_feature'] = well_obj.ID
+
+        annotation_obj_attributes['properties_names'] = ann_keys
+        annotation_obj_attributes['properties_components'] = components
+        annotation_obj_attributes['properties_types'] = types
+        annotation_obj_attributes['borehole'] = bore_obj_attributes['uid']
+
+        annotation_obj_attributes['vtk_obj'] = annotation
+        self.fritti_coll.add_entity_from_dict(entity_dict=annotation_obj_attributes)
     # paths = in_file_name
 
     # data_paths = paths[1]

@@ -280,6 +280,16 @@
         </item>
        </layout>
       </widget>
+      <widget class="QWidget" name="tabFritti">
+       <attribute name="title">
+        <string>Fritti misti</string>
+       </attribute>
+       <layout class="QVBoxLayout" name="verticalLayout_11">
+        <item>
+         <widget class="QTableView" name="FrittiTableView"/>
+        </item>
+       </layout>
+      </widget>
       <widget class="QWidget" name="tabLegend">
        <property name="sizePolicy">
         <sizepolicy hsizetype="MinimumExpanding" vsizetype="MinimumExpanding">

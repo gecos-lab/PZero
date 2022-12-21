@@ -11,7 +11,7 @@ from PyQt5.QtCore import Qt, QSortFilterProxyModel, pyqtSignal
 import vtk
 import pandas as pd
 from .project_window_ui import Ui_ProjectWindow
-from .entities_factory import Plane, VertexSet, PolyLine, TriSurf, XsVertexSet, XsPolyLine, DEM, MapImage, Voxet, Seismics, XsVoxet, TetraSolid, PCDom, TSDom, Well,Attitude
+from .entities_factory import Plane, VertexSet, PolyLine, TriSurf, XsVertexSet, XsPolyLine, DEM, MapImage, Voxet, Seismics, XsVoxet, TetraSolid, PCDom, TSDom, Well,Attitude,Fritti
 from .geological_collection import GeologicalCollection
 from .xsection_collection import XSectionCollection
 from .dom_collection import DomCollection
@@ -20,6 +20,7 @@ from .mesh3d_collection import Mesh3DCollection
 from .boundary_collection import BoundaryCollection
 from .well_collection import WellCollection
 from .fluid_collection import FluidsCollection
+from .frittura_collection import FrittoMistoCollection
 from .legend_manager import Legend
 from .properties_manager import PropertiesCMaps
 from .gocad2vtk import gocad2vtk, vtk2gocad, gocad2vtk_section, gocad2vtk_boundary
@@ -111,6 +112,15 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
     fluid_metadata_modified_signal = pyqtSignal(list)
     fluid_legend_color_modified_signal = pyqtSignal(list)
     fluid_legend_thick_modified_signal = pyqtSignal(list)
+
+    fritto_added_signal = pyqtSignal(list)
+    fritto_removed_signal = pyqtSignal(list)
+    fritto_geom_modified_signal = pyqtSignal(list)  # this includes topology modified
+    fritto_data_keys_removed_signal = pyqtSignal(list)
+    fritto_data_val_modified_signal = pyqtSignal(list)
+    fritto_metadata_modified_signal = pyqtSignal(list)
+    fritto_legend_color_modified_signal = pyqtSignal(list)
+    fritto_legend_thick_modified_signal = pyqtSignal(list)
 
     prop_legend_cmap_modified_signal = pyqtSignal(str)
 
@@ -288,10 +298,19 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             selected_idxs_proxy = self.FluidsTableView.selectionModel().selectedRows()
             selected_idxs = []
             for idx_proxy in selected_idxs_proxy:
-                selected_idxs.append(self.proxy_well_coll.mapToSource(idx_proxy))
+                selected_idxs.append(self.proxy_fluids_coll.mapToSource(idx_proxy))
             selected_uids = []
             for idx in selected_idxs:
-                selected_uids.append(self.well_coll.data(index=idx, role=Qt.DisplayRole))
+                selected_uids.append(self.fluids_coll.data(index=idx, role=Qt.DisplayRole))
+            return selected_uids
+        elif self.shown_table == "tabFritti":
+            selected_idxs_proxy = self.FrittiTableView.selectionModel().selectedRows()
+            selected_idxs = []
+            for idx_proxy in selected_idxs_proxy:
+                selected_idxs.append(self.proxy_fritti_coll.mapToSource(idx_proxy))
+            selected_uids = []
+            for idx in selected_idxs:
+                selected_uids.append(self.fritti_coll.data(index=idx, role=Qt.DisplayRole))
             return selected_uids
         elif self.shown_table == "tabLegend":
             pass
@@ -375,12 +394,19 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     selected_idxs.append(self.proxy_well_coll.mapToSource(idx_proxy))
 
                 for idx in selected_idxs:
-                    selected_uids.append(self.well_coll.data(index=idx, role=Qt.DisplayRole))
+                    selected_uids.append(self.fluids_coll.data(index=idx, role=Qt.DisplayRole))
+            elif tab == "tabFritti":
+                selected_idxs_proxy = self.FrittiTableView.selectionModel().selectedRows()
+
+                for idx_proxy in selected_idxs_proxy:
+                    selected_idxs.append(self.proxy_well_coll.mapToSource(idx_proxy))
+
+                for idx in selected_idxs:
+                    selected_uids.append(self.fritti_coll.data(index=idx, role=Qt.DisplayRole))
         return selected_uids
 
     def entity_remove(self):
         """Remove entities selected in an attribute table. Just rows completely selected are removed."""
-
         if not self.selected_uids:
             return
         """Confirm removal dialog."""
@@ -408,7 +434,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             elif self.shown_table == "tabWells":
                 self.well_coll.remove_entity(uid=uid)
             elif self.shown_table == "tabFluids":
-                self.fluid_coll.remove_entity(uid=uid)
+                self.fluids_coll.remove_entity(uid=uid)
+            elif self.shown_table == "tabFritti":
+                self.fritti_coll.remove_entity(uid=uid)
 
     def entities_merge(self):  # ____________________________________________________ CHECK (1) HOW PROPERTIES AND TEXTURES ARE AFFECTED BY MERGING, (2) HOW IT WORKS FOR DOMs
         """Merge entities of the same type - VertexSet, PolyLine, TriSurf, ..."""
@@ -842,12 +870,21 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.proxy_fluids_coll.setSourceModel(self.fluids_coll)
         self.FluidsTableView.setModel(self.proxy_fluids_coll)
 
+        '''[Gabriele]  Create the fritti_coll FrittoMistoCollection (a Qt QAbstractTableModel with a Pandas dataframe as attribute)
+        and connect the model to FluidTableView (a Qt QTableView created with QTDesigner and provided by
+        Ui_ProjectWindow). Setting the model also updates the view.'''
+        self.fritti_coll = FrittoMistoCollection(parent=self)
+        self.proxy_fritti_coll = QSortFilterProxyModel(self)
+        self.proxy_fritti_coll.setSourceModel(self.fritti_coll)
+        self.FrittiTableView.setModel(self.proxy_fritti_coll)
+
         """Create the geol_legend_df legend table (a Pandas dataframe), create the corresponding QT
         Legend self.legend (a Qt QTreeWidget that is internally connected to its data source),
         and update the widget."""
         self.geol_legend_df = pd.DataFrame(columns=list(Legend.geol_legend_dict.keys()))
         self.well_legend_df = pd.DataFrame(columns=list(Legend.well_legend_dict.keys()))
         self.fluids_legend_df = pd.DataFrame(columns=list(Legend.fluids_legend_dict.keys()))
+        self.fritti_legend_df = pd.DataFrame(columns=list(Legend.fritti_legend_dict.keys()))
         
         self.others_legend_df = pd.DataFrame(deepcopy(Legend.others_legend_dict))
         self.legend = Legend()
@@ -899,6 +936,8 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.well_legend_df.to_json(out_dir_name + '/well_legend_table.json', orient='index')
         
         self.fluids_legend_df.to_json(out_dir_name + '/fluids_legend_table.json', orient='index')
+
+        self.fritti_legend_df.to_json(out_dir_name + '/fritti_legend_table.json', orient='index')
 
         """--------------------- SAVE tables ---------------------"""
 
@@ -1021,6 +1060,19 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             pd_writer.SetInputData(self.fluids_coll.get_uid_vtk_obj(uid))
             pd_writer.Write()
             prgs_bar.add_one()
+        
+        """Save fritti collection table to JSON file and entities as VTK."""
+        out_cols = list(self.fritti_coll.df.columns)
+        out_cols.remove('vtk_obj')
+        self.fritti_coll.df[out_cols].to_json(out_dir_name + '/fritti_table.json', orient='index')
+        # self.geol_coll.df[out_cols].to_csv(out_dir_name + '/geological_table.csv', encoding='utf-8', index=False)
+        prgs_bar = progress_dialog(max_value=self.fritti_coll.df.shape[0], title_txt="Save fritti", label_txt="Saving fritti objects...", cancel_txt=None, parent=self)
+        for uid in self.fritti_coll.df['uid'].to_list():
+            pd_writer = vtk.vtkXMLPolyDataWriter()
+            pd_writer.SetFileName(out_dir_name + "/" + uid + ".vtp")
+            pd_writer.SetInputData(self.fritti_coll.get_uid_vtk_obj(uid))
+            pd_writer.Write()
+            prgs_bar.add_one()
 
 
     def new_project(self):
@@ -1070,7 +1122,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
 
         """--------------------- READ LEGENDS ---------------------"""
 
-        """First read geological and others legend tables."""
+        """Read geological legend tables."""
         if os.path.isfile((in_dir_name + '/geol_legend_table.csv')) or os.path.isfile((in_dir_name + '/geol_legend_table.json')):
             if os.path.isfile((in_dir_name + '/geol_legend_table.json')):
                 new_geol_legend_df = pd.read_json(in_dir_name + '/geol_legend_table.json', orient='index', dtype=Legend.legend_type_dict)
@@ -1079,6 +1131,40 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             if not new_geol_legend_df.empty:
                 self.geol_legend_df = new_geol_legend_df
             self.geol_legend_df.sort_values(by='geological_time', ascending=True, inplace=True)
+
+        """Read well legend tables."""
+
+        if os.path.isfile((in_dir_name + '/well_legend_table.csv')) or os.path.isfile((in_dir_name + '/well_legend_table.json')):
+            if os.path.isfile((in_dir_name + '/well_legend_table.json')):
+                new_well_legend_df = pd.read_json(in_dir_name + '/well_legend_table.json', orient='index', dtype=Legend.legend_type_dict)
+            else:
+                new_well_legend_df = pd.read_csv(in_dir_name + '/well_legend_table.csv', encoding='utf-8', dtype=Legend.legend_type_dict, keep_default_na=False)
+            if not new_well_legend_df.empty:
+                self.well_legend_df = new_well_legend_df
+            self.well_legend_df.sort_values(by='Loc ID', ascending=True, inplace=True)
+
+        """Read fluids legend tables."""
+
+        if os.path.isfile((in_dir_name + '/fluids_legend_table.csv')) or os.path.isfile((in_dir_name + '/fluids_legend_table.json')):
+            if os.path.isfile((in_dir_name + '/fluids_legend_table.json')):
+                new_fluids_legend_df = pd.read_json(in_dir_name + '/fluids_legend_table.json', orient='index', dtype=Legend.legend_type_dict)
+            else:
+                new_fluids_legend_df = pd.read_csv(in_dir_name + '/fluids_legend_table.csv', encoding='utf-8', dtype=Legend.legend_type_dict, keep_default_na=False)
+            if not new_fluids_legend_df.empty:
+                self.fluids_legend_df = new_fluids_legend_df
+            self.fluids_legend_df.sort_values(by='fluid_time', ascending=True, inplace=True)
+
+        """Read fritti legend tables."""
+
+        if os.path.isfile((in_dir_name + '/fritti_legend_table.csv')) or os.path.isfile((in_dir_name + '/fritti_legend_table.json')):
+            if os.path.isfile((in_dir_name + '/fritti_legend_table.json')):
+                new_fritti_legend_df = pd.read_json(in_dir_name + '/fritti_legend_table.json', orient='index', dtype=Legend.legend_type_dict)
+            else:
+                new_fritti_legend_df = pd.read_csv(in_dir_name + '/fritti_legend_table.csv', encoding='utf-8', dtype=Legend.legend_type_dict, keep_default_na=False)
+            if not new_fritti_legend_df.empty:
+                self.fritti_legend_df = new_fritti_legend_df
+
+        """Read other legend tables."""
 
         if os.path.isfile((in_dir_name + '/others_legend_table.csv')) or os.path.isfile((in_dir_name + '/others_legend_table.json')):
             if os.path.isfile((in_dir_name + '/others_legend_table.json')):
@@ -1090,26 +1176,6 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 for type in self.others_legend_df['other_type'].values:
                     if type in new_others_legend_df['other_type'].values:
                         self.others_legend_df[self.others_legend_df['other_type'] == type] = new_others_legend_df[new_others_legend_df['other_type'] == type].values
-
-
-        if os.path.isfile((in_dir_name + '/well_legend_table.csv')) or os.path.isfile((in_dir_name + '/well_legend_table.json')):
-            if os.path.isfile((in_dir_name + '/well_legend_table.json')):
-                new_well_legend_df = pd.read_json(in_dir_name + '/well_legend_table.json', orient='index', dtype=Legend.legend_type_dict)
-            else:
-                new_well_legend_df = pd.read_csv(in_dir_name + '/well_legend_table.csv', encoding='utf-8', dtype=Legend.legend_type_dict, keep_default_na=False)
-            if not new_well_legend_df.empty:
-                self.well_legend_df = new_well_legend_df
-            self.well_legend_df.sort_values(by='Loc ID', ascending=True, inplace=True)
-
-        if os.path.isfile((in_dir_name + '/fluids_legend_table.csv')) or os.path.isfile((in_dir_name + '/fluids_legend_table.json')):
-            if os.path.isfile((in_dir_name + '/fluids_legend_table.json')):
-                new_fluids_legend_df = pd.read_json(in_dir_name + '/fluids_legend_table.json', orient='index', dtype=Legend.legend_type_dict)
-            else:
-                new_fluids_legend_df = pd.read_csv(in_dir_name + '/fluids_legend_table.csv', encoding='utf-8', dtype=Legend.legend_type_dict, keep_default_na=False)
-            if not new_fluids_legend_df.empty:
-                self.fluids_legend_df = new_fluids_legend_df
-            self.fluids_legend_df.sort_values(by='fluid_time', ascending=True, inplace=True)
-
 
         if os.path.isfile((in_dir_name + '/prop_legend_df.csv')) or os.path.isfile((in_dir_name + '/prop_legend_df.json')):
             if os.path.isfile((in_dir_name + '/prop_legend_df.json')):
@@ -1363,18 +1429,15 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     print("error: missing VTK file")
                     return
                 if self.fluids_coll.get_uid_topological_type(uid) == 'VertexSet':
-                    if 'dip' in self.geol_coll.get_uid_properties_names(uid):
-                        vtk_object=Attitude()
-                    else:
-                        vtk_object = VertexSet()
+                    vtk_object = VertexSet()
                 elif self.fluids_coll.get_uid_topological_type(uid) == 'PolyLine':
                     vtk_object = PolyLine()
                 elif self.fluids_coll.get_uid_topological_type(uid) == 'TriSurf':
                     vtk_object = TriSurf()
                 elif self.fluids_coll.get_uid_topological_type(uid) == 'XsVertexSet':
-                    vtk_object = XsVertexSet(self.geol_coll.get_uid_x_section(uid), parent=self)
+                    vtk_object = XsVertexSet(self.fluids_coll.get_uid_x_section(uid), parent=self)
                 elif self.fluids_coll.get_uid_topological_type(uid) == 'XsPolyLine':
-                    vtk_object = XsPolyLine(self.geol_coll.get_uid_x_section(uid), parent=self)
+                    vtk_object = XsPolyLine(self.fluids_coll.get_uid_x_section(uid), parent=self)
                 pd_reader = vtk.vtkXMLPolyDataReader()
                 pd_reader.SetFileName(in_dir_name + "/" + uid + ".vtp")
                 pd_reader.Update()
@@ -1385,7 +1448,42 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             self.fluids_coll.endResetModel()
         """Update legend."""
         self.prop_legend.update_widget(parent=self)
-
+        
+        """Read fritti table and files. Note beginResetModel() and endResetModel()."""
+        if os.path.isfile((in_dir_name + '/fritti_table.csv')) or os.path.isfile((in_dir_name + '/fritti_table.json')):
+            self.fritti_coll.beginResetModel()
+            if os.path.isfile((in_dir_name + '/fritti_table.json')):
+                new_fritti_coll_df = pd.read_json(in_dir_name + '/fritti_table.json', orient='index', dtype=FluidsCollection.fluid_entity_type_dict)
+                if not new_fritti_coll_df.empty:
+                    self.fritti_coll.df = new_fritti_coll_df
+            else:
+                self.fritti_coll.df = pd.read_csv(in_dir_name + '/fritti_table.csv', encoding='utf-8', dtype=FluidsCollection.fluid_entity_type_dict, keep_default_na=False)
+            prgs_bar = progress_dialog(max_value=self.fritti_coll.df.shape[0], title_txt="Open fluids", label_txt="Opening fluid objects...", cancel_txt=None, parent=self)
+            for uid in self.fritti_coll.df['uid'].to_list():
+                if not os.path.isfile((in_dir_name + "/" + uid + ".vtp")):
+                    print("error: missing VTK file")
+                    return
+                vtk_object = Fritti()
+                # if self.fritti_coll.get_uid_topological_type(uid) == 'VertexSet':
+                #     vtk_object = VertexSet()
+                # elif self.fritti_coll.get_uid_topological_type(uid) == 'PolyLine':
+                #     vtk_object = PolyLine()
+                # elif self.fritti_coll.get_uid_topological_type(uid) == 'TriSurf':
+                #     vtk_object = TriSurf()
+                # elif self.fritti_coll.get_uid_topological_type(uid) == 'XsVertexSet':
+                #     vtk_object = XsVertexSet(self.fritti_coll.get_uid_x_section(uid), parent=self)
+                # elif self.fritti_coll.get_uid_topological_type(uid) == 'XsPolyLine':
+                #     vtk_object = XsPolyLine(self.fritti_coll.get_uid_x_section(uid), parent=self)
+                pd_reader = vtk.vtkXMLPolyDataReader()
+                pd_reader.SetFileName(in_dir_name + "/" + uid + ".vtp")
+                pd_reader.Update()
+                vtk_object.ShallowCopy(pd_reader.GetOutput())
+                vtk_object.Modified()
+                self.fritti_coll.set_uid_vtk_obj(uid=uid, vtk_obj=vtk_object)
+                prgs_bar.add_one()
+            self.fritti_coll.endResetModel()
+        """Update legend."""
+        self.prop_legend.update_widget(parent=self)
     """Methods used to import entities from other file formats."""
 
     def import_gocad(self):
@@ -1446,7 +1544,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
     def import_SHP(self):  # __________________________________________________________________ UPDATE IN shp2vtk.py OR DUPLICATE THIS TO IMPORT SHP GEOLOGY OR BOUNDARY
         """Import SHP file and update geological collection."""
         self.TextTerminal.appendPlainText("Importing SHP file")
-        list = ['Geology','Fluid contacts']
+        list = ['Geology','Fluid contacts','Fritto misto']
         """Select and open input file"""
         in_file_name = open_file_dialog(parent=self, caption='Import SHP file', filter="shp (*.shp)")
         coll = input_combo_dialog(parent=self,title='Collection',label='Assign collection',choice_list=list)
@@ -1497,8 +1595,11 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
 
         path = open_file_dialog(parent=self,caption='Import well data',filter="XLXS files (*.xlsx)")
 
-        well2vtk(self, path=path)
-        self.prop_legend.update_widget(parent=self)
+        if path:
+            well2vtk(self, path=path)
+            self.prop_legend.update_widget(parent=self)
+        else:
+            return
         
         # loc_attr_list = ['As is','LocationID', 'LocationType', 'Easting', 'Northing', 'GroundLevel', 'FinalDepth', 'Trend', 'Plunge','N.a.']
 

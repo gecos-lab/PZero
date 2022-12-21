@@ -8,7 +8,7 @@ from PyQt5.QtGui import QCloseEvent,QFont
 
 """PZero imports"""
 from .base_view_window_ui import Ui_BaseViewWindow
-from .entities_factory import VertexSet, PolyLine, TriSurf, TetraSolid, XsVertexSet, XsPolyLine, DEM, PCDom, MapImage, Voxet, XsVoxet, Plane, Seismics, XsTriSurf, XsImage, PolyData, Well, WellMarker,WellTrace,Attitude
+from .entities_factory import VertexSet, PolyLine, TriSurf, TetraSolid, XsVertexSet, XsPolyLine, DEM, PCDom, MapImage, Voxet, XsVoxet, Plane, Seismics, XsTriSurf, XsImage, PolyData, Well, WellMarker,WellTrace,Attitude,Fritti
 from .helper_dialogs import input_one_value_dialog, input_text_dialog, input_combo_dialog, message_dialog, options_dialog, multiple_input_dialog, tic, toc,open_file_dialog,progress_dialog
 from .geological_collection import GeologicalCollection
 from copy import deepcopy
@@ -121,6 +121,8 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             self.create_well_tree()
             self.create_fluids_tree()
             self.create_fluids_topology_tree()
+            self.create_fritti_tree()
+            self.create_fritti_topology_tree()
 
         """Build and show other widgets, icons, tools - TO BE DONE_________________________________"""
 
@@ -186,7 +188,17 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.parent.fluid_metadata_modified_signal.connect(lambda updated_list: self.fluid_metadata_modified_update_views(updated_list=updated_list))
         self.parent.fluid_legend_color_modified_signal.connect(lambda updated_list: self.fluid_legend_color_modified_update_views(updated_list=updated_list))
         self.parent.fluid_legend_thick_modified_signal.connect(lambda updated_list: self.fluid_legend_thick_modified_update_views(updated_list=updated_list))
-        
+
+
+        self.parent.fritto_added_signal.connect(lambda updated_list: self.fritto_added_update_views(updated_list=updated_list))
+        self.parent.fritto_removed_signal.connect(lambda updated_list: self.fritto_removed_update_views(updated_list=updated_list))
+        self.parent.fritto_geom_modified_signal.connect(lambda updated_list: self.fritto_geom_modified_update_views(updated_list=updated_list))
+        self.parent.fritto_data_keys_removed_signal.connect(lambda updated_list: self.fritto_data_keys_modified_update_views(updated_list=updated_list))
+        self.parent.fritto_data_val_modified_signal.connect(lambda updated_list: self.fritto_data_val_modified_update_views(updated_list=updated_list))
+        self.parent.fritto_metadata_modified_signal.connect(lambda updated_list: self.fritto_metadata_modified_update_views(updated_list=updated_list))
+        self.parent.fritto_legend_color_modified_signal.connect(lambda updated_list: self.fritto_legend_color_modified_update_views(updated_list=updated_list))
+        self.parent.fritto_legend_thick_modified_signal.connect(lambda updated_list: self.fritto_legend_thick_modified_update_views(updated_list=updated_list))
+
         self.parent.prop_legend_cmap_modified_signal.connect(lambda this_property: self.prop_legend_cmap_modified_update_views(this_property=this_property))
 
     def show_qt_canvas(self):
@@ -1247,23 +1259,45 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             
         # ======================================= MARKER =======================================
 
-            tlevel_2_mark = QTreeWidgetItem(tlevel_1, ['Markers', uid])  # tlevel_1 as parent -> middle level
-            tlevel_2_mark.setFlags(tlevel_2_mark.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
+            # tlevel_2_mark = QTreeWidgetItem(tlevel_1, ['Markers', uid])  # tlevel_1 as parent -> middle level
+            # tlevel_2_mark.setFlags(tlevel_2_mark.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
 
-            property_combo = QComboBox()
-            property_combo.uid = uid
-            property_combo.name = 'Marker'
-            property_combo.addItem("none")
-            for prop in self.parent.well_coll.get_uid_marker_names(uid):
-                property_combo.addItem(prop)
+            # property_combo = QComboBox()
+            # property_combo.uid = uid
+            # property_combo.name = 'Marker'
+            # property_combo.addItem("none")
+            # for prop in self.parent.well_coll.get_uid_marker_names(uid):
+            #     property_combo.addItem(prop)
 
-            self.WellsTreeWidget.setItemWidget(tlevel_2_mark, 2, property_combo)
-            property_combo.currentIndexChanged.connect(lambda: self.toggle_property())
-            tlevel_2_mark.setFlags(tlevel_2_mark.flags() | Qt.ItemIsUserCheckable)
-            if self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]:
-                tlevel_2_mark.setCheckState(0, Qt.Checked)
-            elif not self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]:
-                tlevel_2_mark.setCheckState(0, Qt.Unchecked)
+            # self.WellsTreeWidget.setItemWidget(tlevel_2_mark, 2, property_combo)
+            # property_combo.currentIndexChanged.connect(lambda: self.toggle_property())
+            # tlevel_2_mark.setFlags(tlevel_2_mark.flags() | Qt.ItemIsUserCheckable)
+            # if self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]:
+            #     tlevel_2_mark.setCheckState(0, Qt.Checked)
+            # elif not self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]:
+            #     tlevel_2_mark.setCheckState(0, Qt.Unchecked)
+        
+        # ======================================= ANNOTATIONS =======================================
+            
+            # tlevel_2_mark = QTreeWidgetItem(tlevel_1, ['Annotations', uid])  # tlevel_1 as parent -> middle level
+            # tlevel_2_mark.setFlags(tlevel_2_mark.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
+
+            # property_combo = QComboBox()
+            # property_combo.uid = uid
+            # property_combo.name = 'Annotations'
+            # property_combo.addItem("none")
+            # for annotation_uid in self.parent.fritti_coll.get_buid_uid(uid):
+            #     name = self.parent.fritti_coll.get_uid_name(annotation_uid)
+            #     property_combo.addItem(name)
+
+            # self.WellsTreeWidget.setItemWidget(tlevel_2_mark, 2, property_combo)
+            # property_combo.currentIndexChanged.connect(lambda: self.toggle_property())
+            # tlevel_2_mark.setFlags(tlevel_2_mark.flags() | Qt.ItemIsUserCheckable)
+            # if self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]:
+            #     tlevel_2_mark.setCheckState(0, Qt.Checked)
+            # elif not self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]:
+            #     tlevel_2_mark.setCheckState(0, Qt.Unchecked)
+        
         """Send messages. Note that with tristate several signals are emitted in a sequence, one for each
         changed item, but upper levels do not broadcast uid's so they are filtered in the toggle method."""
         self.WellsTreeWidget.itemChanged.connect(self.toggle_well_visibility)
@@ -1641,16 +1675,16 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                 if sec_uid != self.parent.geol_coll.df.loc[self.parent.geol_coll.df['uid'] == uid, 'x_section'].values[0]:
                     del uid_list[i]
         for uid in uid_list:
-            if self.TopologyTreeWidget.findItems(self.parent.geol_coll.get_uid_topological_type(uid), Qt.MatchExactly, 0) != []:
+            if self.FluidsTopologyTreeWidget.findItems(self.parent.fluids_coll.get_uid_topological_type(uid), Qt.MatchExactly, 0) != []:
                 """Already exists a TreeItem (1 level) for the topological type"""
                 counter_1 = 0
-                for child_1 in range(self.TopologyTreeWidget.findItems(self.parent.geol_coll.get_uid_topological_type(uid), Qt.MatchExactly, 0)[0].childCount()):
+                for child_1 in range(self.FluidsTopologyTreeWidget.findItems(self.parent.fluids_coll.get_uid_topological_type(uid), Qt.MatchExactly, 0)[0].childCount()):
                     """for cycle that loops n times as the number of subItems in the specific topological type branch"""
-                    if self.TopologyTreeWidget.findItems(self.parent.geol_coll.get_uid_topological_type(uid), Qt.MatchExactly, 0)[0].child(child_1).text(0) == self.parent.geol_coll.get_uid_scenario(uid):
+                    if self.FluidsTopologyTreeWidget.findItems(self.parent.fluids_coll.get_uid_topological_type(uid), Qt.MatchExactly, 0)[0].child(child_1).text(0) == self.parent.fluids_coll.get_uid_scenario(uid):
                         counter_1 += 1
                 if counter_1 != 0:
-                    for child_1 in range(self.TopologyTreeWidget.findItems(self.parent.geol_coll.get_uid_topological_type(uid), Qt.MatchExactly, 0)[0].childCount()):
-                        if self.TopologyTreeWidget.findItems(self.parent.geol_coll.get_uid_topological_type(uid), Qt.MatchExactly, 0)[0].child(child_1).text(0) == self.parent.geol_coll.get_uid_scenario(uid):
+                    for child_1 in range(self.FluidsTopologyTreeWidget.findItems(self.parent.fluids_coll.get_uid_topological_type(uid), Qt.MatchExactly, 0)[0].childCount()):
+                        if self.FluidsTopologyTreeWidget.findItems(self.parent.fluids_coll.get_uid_topological_type(uid), Qt.MatchExactly, 0)[0].child(child_1).text(0) == self.parent.fluids_coll.get_uid_scenario(uid):
                             """Same topological type and scenario"""
                             property_combo = QComboBox()
                             property_combo.uid = uid
@@ -1658,11 +1692,11 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                             property_combo.addItem("X")
                             property_combo.addItem("Y")
                             property_combo.addItem("Z")
-                            for prop in self.parent.geol_coll.get_uid_properties_names(uid):
+                            for prop in self.parent.fluids_coll.get_uid_properties_names(uid):
                                 property_combo.addItem(prop)
-                            name = self.parent.geol_coll.get_uid_name(uid)
-                            tlevel_3 = QTreeWidgetItem(self.TopologyTreeWidget.findItems(self.parent.geol_coll.get_uid_topological_type(uid), Qt.MatchExactly, 0)[0].child(child_1), [name, uid])
-                            self.TopologyTreeWidget.setItemWidget(tlevel_3, 2, property_combo)
+                            name = self.parent.fluids_coll.get_uid_name(uid)
+                            tlevel_3 = QTreeWidgetItem(self.FluidsTopologyTreeWidget.findItems(self.parent.fluids_coll.get_uid_topological_type(uid), Qt.MatchExactly, 0)[0].child(child_1), [name, uid])
+                            self.FluidsTopologyTreeWidget.setItemWidget(tlevel_3, 2, property_combo)
                             property_combo.currentIndexChanged.connect(lambda: self.toggle_property())
                             tlevel_3.setFlags(tlevel_3.flags() | Qt.ItemIsUserCheckable)
                             if self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]:
@@ -1673,57 +1707,57 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                             break
                 else:
                     """Same topological type, different scenario"""
-                    tlevel_2 = QTreeWidgetItem(self.TopologyTreeWidget.findItems(self.parent.geol_coll.get_uid_topological_type(uid), Qt.MatchExactly, 0)[0], [self.parent.geol_coll.get_uid_scenario(uid)])
+                    tlevel_2 = QTreeWidgetItem(self.FluidsTopologyTreeWidget.findItems(self.parent.fluids_coll.get_uid_topological_type(uid), Qt.MatchExactly, 0)[0], [self.parent.fluids_coll.get_uid_scenario(uid)])
                     tlevel_2.setFlags(tlevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
-                    self.TopologyTreeWidget.insertTopLevelItem(0, tlevel_2)
+                    self.FluidsTopologyTreeWidget.insertTopLevelItem(0, tlevel_2)
                     property_combo = QComboBox()
                     property_combo.uid = uid
                     property_combo.addItem("none")
                     property_combo.addItem("X")
                     property_combo.addItem("Y")
                     property_combo.addItem("Z")
-                    for prop in self.parent.geol_coll.get_uid_properties_names(uid):
+                    for prop in self.parent.fluids_coll.get_uid_properties_names(uid):
                         property_combo.addItem(prop)
-                    name = self.parent.geol_coll.get_uid_name(uid)
+                    name = self.parent.fluids_coll.get_uid_name(uid)
                     tlevel_3 = QTreeWidgetItem(tlevel_2, [name, uid])
-                    self.TopologyTreeWidget.setItemWidget(tlevel_3, 2, property_combo)
+                    self.FluidsTopologyTreeWidget.setItemWidget(tlevel_3, 2, property_combo)
                     property_combo.currentIndexChanged.connect(lambda: self.toggle_property())
                     tlevel_3.setFlags(tlevel_3.flags() | Qt.ItemIsUserCheckable)
                     if self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]:
                         tlevel_3.setCheckState(0, Qt.Checked)
                     elif not self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]:
                         tlevel_3.setCheckState(0, Qt.Unchecked)
-                    self.TopologyTreeWidget.insertTopLevelItem(0, tlevel_3)
+                    self.FluidsTopologyTreeWidget.insertTopLevelItem(0, tlevel_3)
                     break
             else:
                 """Different topological type and scenario"""
-                tlevel_1 = QTreeWidgetItem(self.TopologyTreeWidget, [self.parent.geol_coll.get_uid_topological_type(uid)])
+                tlevel_1 = QTreeWidgetItem(self.FluidsTopologyTreeWidget, [self.parent.fluids_coll.get_uid_topological_type(uid)])
                 tlevel_1.setFlags(tlevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
-                self.TopologyTreeWidget.insertTopLevelItem(0, tlevel_1)
-                tlevel_2 = QTreeWidgetItem(tlevel_1, [self.parent.geol_coll.get_uid_scenario(uid)])
+                self.FluidsTopologyTreeWidget.insertTopLevelItem(0, tlevel_1)
+                tlevel_2 = QTreeWidgetItem(tlevel_1, [self.parent.fluids_coll.get_uid_scenario(uid)])
                 tlevel_2.setFlags(tlevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
-                self.TopologyTreeWidget.insertTopLevelItem(0, tlevel_2)
+                self.FluidsTopologyTreeWidget.insertTopLevelItem(0, tlevel_2)
                 property_combo = QComboBox()
                 property_combo.uid = uid
                 property_combo.addItem("none")
                 property_combo.addItem("X")
                 property_combo.addItem("Y")
                 property_combo.addItem("Z")
-                for prop in self.parent.geol_coll.get_uid_properties_names(uid):
+                for prop in self.parent.fluids_coll.get_uid_properties_names(uid):
                     property_combo.addItem(prop)
-                name = self.parent.geol_coll.get_uid_name(uid)
+                name = self.parent.fluids_coll.get_uid_name(uid)
                 tlevel_3 = QTreeWidgetItem(tlevel_2, [name, uid])
-                self.TopologyTreeWidget.setItemWidget(tlevel_3, 2, property_combo)
+                self.FluidsTopologyTreeWidget.setItemWidget(tlevel_3, 2, property_combo)
                 property_combo.currentIndexChanged.connect(lambda: self.toggle_property())
                 tlevel_3.setFlags(tlevel_3.flags() | Qt.ItemIsUserCheckable)
                 if self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]:
                     tlevel_3.setCheckState(0, Qt.Checked)
                 elif not self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]:
                     tlevel_3.setCheckState(0, Qt.Unchecked)
-                self.TopologyTreeWidget.insertTopLevelItem(0, tlevel_3)
+                self.FluidsTopologyTreeWidget.insertTopLevelItem(0, tlevel_3)
                 break
-        self.TopologyTreeWidget.itemChanged.connect(self.toggle_geology_topology_visibility)
-        self.TopologyTreeWidget.expandAll()
+        self.FluidsTopologyTreeWidget.itemChanged.connect(self.toggle_fluids_topology_visibility)
+        self.FluidsTopologyTreeWidget.expandAll()
 
     def update_fluids_topology_tree_removed(self, removed_list=None):
         """When fluid entity is removed, update Topology Tree without building a new model"""
@@ -1789,7 +1823,376 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             self.FluidsTreeWidget.itemChanged.connect(self.toggle_fluids_topology_visibility)
             self.FluidsTopologyTreeWidget.itemChanged.connect(self.toggle_fluids_topology_visibility)
 
+    """Methods used to build and update the fritti_misti tree."""
+
+    def create_fritti_tree(self, sec_uid=None):
+        """Create fritti tree with checkboxes and properties"""
+        self.FrittiTreeWidget.clear()
+        self.FrittiTreeWidget.setColumnCount(3)
+        self.FrittiTreeWidget.setHeaderLabels(['Type > Feature > Name', 'uid', 'property'])
+        self.FrittiTreeWidget.hideColumn(1)  # hide the uid column
+        self.FrittiTreeWidget.setItemsExpandable(True)
+        if sec_uid:
+            fritto_types = pd.unique(self.parent.fritti_coll.df.loc[(self.parent.fritti_coll.df['x_section'] == sec_uid), 'fritto_type'])
+        else:
+            fritto_types = pd.unique(self.parent.fritti_coll.df['fritto_type'])
+        for fritto_type in fritto_types:
+            flevel_1 = QTreeWidgetItem(self.FrittiTreeWidget, [fritto_type])  # self.FrittiTreeWidget as parent -> top level
+            flevel_1.setFlags(flevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
+            if sec_uid:
+                fritto_features = pd.unique(self.parent.fritti_coll.df.loc[(self.parent.fritti_coll.df['fritto_type'] == fritto_type) & (self.parent.fritti_coll.df['x_section'] == sec_uid), 'fritto_feature'])
+            else:
+                fritto_features = pd.unique(self.parent.fritti_coll.df.loc[self.parent.fritti_coll.df['fritto_type'] == fritto_type, 'fritto_feature'])
+            for feature in fritto_features:
+                flevel_2 = QTreeWidgetItem(flevel_1, [feature])  # flevel_1 as parent -> 1st middle level
+                flevel_2.setFlags(flevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
+                if sec_uid:
+                    uids = self.parent.fritti_coll.df.loc[(self.parent.fritti_coll.df['fritto_type'] == fritto_type) & (self.parent.fritti_coll.df['fritto_feature']==feature) &(self.parent.fritti_coll.df['x_section'] == sec_uid), 'uid'].to_list()
+                else:
+                    uids = self.parent.fritti_coll.df.loc[(self.parent.fritti_coll.df['fritto_type'] == fritto_type) & (self.parent.fritti_coll.df['fritto_feature']==feature), 'uid'].to_list()
+                for uid in uids:
+                    property_combo = QComboBox()
+                    property_combo.uid = uid
+                    property_combo.name = 'Annotations'
+                    property_combo.addItem("none")
+                    property_combo.addItem("name")
+                    for prop in self.parent.fritti_coll.get_uid_properties_names(uid):
+                        property_combo.addItem(prop)
+                    name = self.parent.fritti_coll.df.loc[(self.parent.fritti_coll.df['uid'] == uid), 'name'].values[0]
+                    flevel_3 = QTreeWidgetItem(flevel_2, [name,uid])  # flevel_3 as parent -> lower level
+                    self.FrittiTreeWidget.setItemWidget(flevel_3, 2, property_combo)
+                    property_combo.currentIndexChanged.connect(lambda: self.toggle_property())
+                    flevel_3.setFlags(flevel_3.flags() | Qt.ItemIsUserCheckable)
+                    if self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]:
+                        flevel_3.setCheckState(0, Qt.Checked)
+                    elif not self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]:
+                        flevel_3.setCheckState(0, Qt.Unchecked)
+        """Send messages. Note that with tristate several signals are emitted in a sequence, one for each
+        changed item, but upper levels do not broadcast uid's so they are filtered in the toggle method."""
+        self.FrittiTreeWidget.itemChanged.connect(self.toggle_fritti_topology_visibility)
+        self.FrittiTreeWidget.expandAll()
+
+    def create_fritti_topology_tree(self,sec_uid=None):
+        """Create topology tree with checkboxes and properties"""
+        self.FrittiTopologyTreeWidget.clear()
+        self.FrittiTopologyTreeWidget.setColumnCount(3)
+        self.FrittiTreeWidget.setHeaderLabels(['Type > Feature > Name', 'uid', 'property'])
+
+        self.FrittiTopologyTreeWidget.hideColumn(1)  # hide the uid column
+        self.FrittiTopologyTreeWidget.setItemsExpandable(True)
+
+        if sec_uid:
+            filtered_topo = self.parent.fritti_coll.df.loc[(self.parent.fritti_coll.df['x_section'] == sec_uid), 'topological_type']
+            topo_types = pd.unique(filtered_topo)
+        else:
+            topo_types = pd.unique(self.parent.fritti_coll.df['topological_type'])
+
+        for topo_type in topo_types:
+            tlevel_1 = QTreeWidgetItem(self.FrittiTopologyTreeWidget, [topo_type])  # self.GeologyTreeWidget as parent -> top level
+            tlevel_1.setFlags(tlevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
+            for fritto_type in pd.unique(self.parent.fritti_coll.df.loc[self.parent.fritti_coll.df['topological_type'] == topo_type, 'fritto_type']):
+                tlevel_2 = QTreeWidgetItem(tlevel_1, [fritto_type])  # tlevel_1 as parent -> middle level
+                tlevel_2.setFlags(tlevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
+                if sec_uid:
+                    uids = self.parent.fritti_coll.df.loc[(self.parent.fritti_coll.df['topological_type'] == topo_type) & (self.parent.fritti_coll.df['fritto_type'] == fritto_type) & (self.parent.fritti_coll.df['x_section'] == sec_uid), 'uid'].to_list()
+                else:
+                    uids = self.parent.fritti_coll.df.loc[(self.parent.fritti_coll.df['topological_type'] == topo_type) & (self.parent.fritti_coll.df['fritto_type'] == fritto_type), 'uid'].to_list()
+                for uid in uids:
+                    property_combo = QComboBox()
+                    property_combo.uid = uid
+                    property_combo.name = 'Annotations'
+                    property_combo.addItem("none")
+                    property_combo.addItem("name")
+                    for prop in self.parent.fritti_coll.get_uid_properties_names(uid):
+                        property_combo.addItem(prop)
+                    name = self.parent.fritti_coll.df.loc[self.parent.fritti_coll.df['uid'] == uid, 'name'].values[0]
+                    tlevel_3 = QTreeWidgetItem(tlevel_2, [name, uid])  # tlevel_2 as parent -> lower level
+                    self.FrittiTopologyTreeWidget.setItemWidget(tlevel_3, 2, property_combo)
+                    property_combo.currentIndexChanged.connect(lambda: self.toggle_property())
+                    tlevel_3.setFlags(tlevel_3.flags() | Qt.ItemIsUserCheckable)
+                    if self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]:
+                        tlevel_3.setCheckState(0, Qt.Checked)
+                    elif not self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]:
+                        tlevel_3.setCheckState(0, Qt.Unchecked)
+        """Send messages. Note that with tristate several signals are emitted in a sequence, one for each
+        changed item, but upper levels do not broadcast uid's so they are filtered in the toggle method."""
+        self.FrittiTopologyTreeWidget.itemChanged.connect(self.toggle_fritti_topology_visibility)
+        self.FrittiTopologyTreeWidget.expandAll()
+
+    def update_fritti_tree_added(self, new_list=None,sec_uid=None):
+        """Update fritto tree without creating a new model"""
+        uid_list = list(new_list['uid'])
+        if sec_uid:
+            for i,uid in enumerate(new_list['uid']):
+                if sec_uid != self.parent.fritti_coll.df.loc[self.parent.fritti_coll.df['uid'] == uid, 'x_section'].values[0]:
+                    del uid_list[i]
+        for uid in uid_list:
+            if self.FrittiTreeWidget.findItems(self.parent.fritti_coll.get_uid_fritto_type(uid), Qt.MatchExactly, 0) != []:
+                """Already exists a TreeItem (1 level) for the fritto type"""
+                counter_1 = 0
+                for child_1 in range(self.FrittiTreeWidget.findItems(self.parent.fritti_coll.get_uid_fritto_type(uid), Qt.MatchExactly, 0)[0].childCount()):
+                    """for cycle that loops n times as the number of subItems in the specific fritto type branch"""
+                    if self.FrittiTreeWidget.findItems(self.parent.fritti_coll.get_uid_fritto_type(uid), Qt.MatchExactly, 0)[0].child(child_1).text(0) == self.parent.fritti_coll.get_uid_fritto_feature(uid):
+                        counter_1 += 1
+                if counter_1 != 0:
+                    for child_1 in range(self.FrittiTreeWidget.findItems(self.parent.fritti_coll.get_uid_fritto_type(uid), Qt.MatchExactly, 0)[0].childCount()):
+                        if self.FrittiTreeWidget.findItems(self.parent.fritti_coll.get_uid_fritto_type(uid), Qt.MatchExactly, 0)[0].child(child_1).text(0) == self.parent.fritti_coll.get_uid_fritto_feature(uid):
+                            """Already exists a TreeItem (2 level) for the fritto feature"""
     
+                            """Same fritto type and fritto feature"""
+                            property_combo = QComboBox()
+                            property_combo.uid = uid
+                            property_combo.name = 'Annotations'
+                            property_combo.addItem("none")
+                            property_combo.addItem("name")
+                            for prop in self.parent.fritti_coll.get_uid_properties_names(uid):
+                                property_combo.addItem(prop)
+                            name = self.parent.fritti_coll.get_uid_name(uid)
+                            flevel_3 = QTreeWidgetItem(self.FrittiTreeWidget.findItems(self.parent.fritti_coll.get_uid_fritto_type(uid), Qt.MatchExactly, 0)[0].child(child_1), [name, uid])
+                            self.FrittiTreeWidget.setItemWidget(flevel_3, 2, property_combo)
+                            property_combo.currentIndexChanged.connect(lambda: self.toggle_property())
+                            flevel_3.setFlags(flevel_3.flags() | Qt.ItemIsUserCheckable)
+                            if self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]:
+                                flevel_3.setCheckState(0, Qt.Checked)
+                            elif not self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]:
+                                flevel_3.setCheckState(0, Qt.Unchecked)
+                            self.FrittiTreeWidget.insertTopLevelItem(0, flevel_3)
+                            break
+                else:
+                    """Same fritto type, different fritto feature"""
+                    flevel_2 = QTreeWidgetItem(self.FrittiTreeWidget.findItems(self.parent.fritti_coll.get_uid_fritto_type(uid), Qt.MatchExactly, 0)[0], [self.parent.fritti_coll.get_uid_fritto_feature(uid)])
+                    flevel_2.setFlags(flevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
+                    self.FrittiTreeWidget.insertTopLevelItem(0, flevel_2)
+                    property_combo = QComboBox()
+                    property_combo.uid = uid
+                    property_combo.name = 'Annotations'
+                    property_combo.addItem("none")
+                    property_combo.addItem("name")
+                    for prop in self.parent.fritti_coll.get_uid_properties_names(uid):
+                        property_combo.addItem(prop)
+                    name = self.parent.fritti_coll.get_uid_name(uid)
+                    
+                    flevel_3 = QTreeWidgetItem(flevel_2, [name, uid])
+                    self.FrittiTreeWidget.setItemWidget(flevel_3, 2, property_combo)
+                    property_combo.currentIndexChanged.connect(lambda: self.toggle_property())
+                    flevel_3.setFlags(flevel_3.flags() | Qt.ItemIsUserCheckable)
+                    if self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]:
+                        flevel_3.setCheckState(0, Qt.Checked)
+                    elif not self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]:
+                        flevel_3.setCheckState(0, Qt.Unchecked)
+                    self.FrittiTreeWidget.insertTopLevelItem(0, flevel_3)
+                    break
+            else:
+                """Different fritto type and fritto feature"""
+                flevel_1 = QTreeWidgetItem(self.FrittiTreeWidget, [self.parent.fritti_coll.get_uid_fritto_type(uid)])
+                flevel_1.setFlags(flevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
+                self.FrittiTreeWidget.insertTopLevelItem(0, flevel_1)
+                flevel_2 = QTreeWidgetItem(flevel_1, [self.parent.fritti_coll.get_uid_fritto_feature(uid)])
+                flevel_2.setFlags(flevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
+                self.FrittiTreeWidget.insertTopLevelItem(0, flevel_2)
+                property_combo = QComboBox()
+                property_combo.uid = uid
+                property_combo.name = 'Annotations'
+                property_combo.addItem("none")
+                property_combo.addItem("name")
+                for prop in self.parent.fritti_coll.get_uid_properties_names(uid):
+                    property_combo.addItem(prop)
+                name = self.parent.fritti_coll.get_uid_name(uid)
+                flevel_3 = QTreeWidgetItem(flevel_2, [name, uid])
+                self.FrittiTreeWidget.setItemWidget(flevel_3, 2, property_combo)
+                property_combo.currentIndexChanged.connect(lambda: self.toggle_property())
+                flevel_3.setFlags(flevel_3.flags() | Qt.ItemIsUserCheckable)
+                if self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]:
+                    flevel_3.setCheckState(0, Qt.Checked)
+                elif not self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]:
+                    flevel_3.setCheckState(0, Qt.Unchecked)
+                self.FrittiTreeWidget.insertTopLevelItem(0, flevel_3)
+                break
+        self.FrittiTreeWidget.itemChanged.connect(self.toggle_fritti_topology_visibility)
+        self.FrittiTreeWidget.expandAll()
+
+    def update_fritti_tree_removed(self, removed_list=None): # second attchild_fritto_featempt
+        """When fritto entity is removed, update Geology Tree without building a new model"""
+        success = 0
+        for uid in removed_list:
+            for top_fritto_type in range(self.FrittiTreeWidget.topLevelItemCount()):
+                """Iterate through every fritto Type top level"""
+
+                for child_fritto_feat in range(self.FrittiTreeWidget.topLevelItem(top_fritto_type).childCount()):
+                    """Iterate through every fritto Feature child"""
+
+                    for child_entity in range(self.FrittiTreeWidget.topLevelItem(top_fritto_type).child(child_fritto_feat).childCount()):
+                        """Iterate through every Entity child"""
+
+                        if self.FrittiTreeWidget.topLevelItem(top_fritto_type).child(child_fritto_feat).child(child_entity).text(1) == uid:
+                            """Complete check: entity found has the uid of the entity we need to remove. Delete child, then ensure no Child or Top Level remain empty"""
+                            success = 1
+                            self.FrittiTreeWidget.topLevelItem(top_fritto_type).child(child_fritto_feat).removeChild(self.FrittiTreeWidget.topLevelItem(top_fritto_type).child(child_fritto_feat).child(child_entity))
+                            if self.FrittiTreeWidget.topLevelItem(top_fritto_type).child(child_fritto_feat).childCount() == 0:
+                                self.FrittiTreeWidget.topLevelItem(top_fritto_type).child(child_fritto_feat).removeChild(self.FrittiTreeWidget.topLevelItem(top_fritto_type).child(child_fritto_feat))
+                                if self.FrittiTreeWidget.topLevelItem(top_fritto_type).childCount() == 0:
+                                    self.FrittiTreeWidget.takeTopLevelItem(top_fritto_type)
+                            break
+                    if success == 1:
+                        break
+                if success == 1:
+                    break
+            if success == 1:
+                break
+
+    def update_fritti_topology_tree_added(self, new_list=None,sec_uid=None):
+        """Update topology tree without creating a new model"""
+        uid_list = list(new_list['uid'])
+        if sec_uid:
+            for i,uid in enumerate(new_list['uid']):
+                if sec_uid != self.parent.fritti_coll.df.loc[self.parent.fritti_coll.df['uid'] == uid, 'x_section'].values[0]:
+                    del uid_list[i]
+        for uid in uid_list:
+            if self.FrittiTopologyTreeWidget.findItems(self.parent.fritti_coll.get_uid_topological_type(uid), Qt.MatchExactly, 0) != []:
+                """Already exists a TreeItem (1 level) for the topological type"""
+                counter_1 = 0
+                for child_1 in range(self.FrittiTopologyTreeWidget.findItems(self.parent.fritti_coll.get_uid_topological_type(uid), Qt.MatchExactly, 0)[0].childCount()):
+                    """for cycle that loops n times as the number of subItems in the specific topological type branch"""
+                    if self.FrittiTopologyTreeWidget.findItems(self.parent.fritti_coll.get_uid_topological_type(uid), Qt.MatchExactly, 0)[0].child(child_1).text(0) == self.parent.fritti_coll.get_uid_fritto_feature(uid):
+                        counter_1 += 1
+                if counter_1 != 0:
+                    for child_1 in range(self.FrittiTopologyTreeWidget.findItems(self.parent.fritti_coll.get_uid_topological_type(uid), Qt.MatchExactly, 0)[0].childCount()):
+                        if self.FrittiTopologyTreeWidget.findItems(self.parent.fritti_coll.get_uid_topological_type(uid), Qt.MatchExactly, 0)[0].child(child_1).text(0) == self.parent.fritti_coll.get_uid_fritto_feature(uid):
+                            """Same topological type and feature"""
+                            property_combo = QComboBox()
+                            property_combo.uid = uid
+                            property_combo.name = 'Annotations'
+                            property_combo.addItem("none")
+                            property_combo.addItem("name")
+                            for prop in self.parent.fritti_coll.get_uid_properties_names(uid):
+                                property_combo.addItem(prop)
+                            name = self.parent.fritti_coll.get_uid_name(uid)
+                            tlevel_3 = QTreeWidgetItem(self.FrittiTopologyTreeWidget.findItems(self.parent.fritti_coll.get_uid_topological_type(uid), Qt.MatchExactly, 0)[0].child(child_1), [name, uid])
+                            self.FrittiTopologyTreeWidget.setItemWidget(tlevel_3, 2, property_combo)
+                            property_combo.currentIndexChanged.connect(lambda: self.toggle_property())
+                            tlevel_3.setFlags(tlevel_3.flags() | Qt.ItemIsUserCheckable)
+                            if self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]:
+                                tlevel_3.setCheckState(0, Qt.Checked)
+                            elif not self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]:
+                                tlevel_3.setCheckState(0, Qt.Unchecked)
+                            self.FrittiTopologyTreeWidget.insertTopLevelItem(0, tlevel_3)
+                            break
+                else:
+                    """Same topological type, different feature"""
+                    tlevel_2 = QTreeWidgetItem(self.FrittiTopologyTreeWidget.findItems(self.parent.fritti_coll.get_uid_topological_type(uid), Qt.MatchExactly, 0)[0], [self.parent.fritti_coll.get_uid_fritto_feature(uid)])
+                    tlevel_2.setFlags(tlevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
+                    self.FrittiTopologyTreeWidget.insertTopLevelItem(0, tlevel_2)
+                    property_combo = QComboBox()
+                    property_combo.uid = uid
+                    property_combo.name = 'Annotations'
+                    property_combo.addItem("none")
+                    property_combo.addItem("name")
+                    for prop in self.parent.fritti_coll.get_uid_properties_names(uid):
+                        property_combo.addItem(prop)
+                    name = self.parent.fritti_coll.get_uid_name(uid)
+                    tlevel_3 = QTreeWidgetItem(tlevel_2, [name, uid])
+                    self.FrittiTopologyTreeWidget.setItemWidget(tlevel_3, 2, property_combo)
+                    property_combo.currentIndexChanged.connect(lambda: self.toggle_property())
+                    tlevel_3.setFlags(tlevel_3.flags() | Qt.ItemIsUserCheckable)
+                    if self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]:
+                        tlevel_3.setCheckState(0, Qt.Checked)
+                    elif not self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]:
+                        tlevel_3.setCheckState(0, Qt.Unchecked)
+                    self.FrittiTopologyTreeWidget.insertTopLevelItem(0, tlevel_3)
+                    break
+            else:
+                """Different topological type and feature"""
+                tlevel_1 = QTreeWidgetItem(self.FrittiTopologyTreeWidget, [self.parent.fritti_coll.get_uid_topological_type(uid)])
+                tlevel_1.setFlags(tlevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
+                self.FrittiTopologyTreeWidget.insertTopLevelItem(0, tlevel_1)
+                tlevel_2 = QTreeWidgetItem(tlevel_1, [self.parent.fritti_coll.get_uid_fritto_feature(uid)])
+                tlevel_2.setFlags(tlevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
+                self.FrittiTopologyTreeWidget.insertTopLevelItem(0, tlevel_2)
+                property_combo = QComboBox()
+                property_combo.uid = uid
+                property_combo.name = 'Annotations'
+                property_combo.addItem("none")
+                property_combo.addItem("name")
+                for prop in self.parent.fritti_coll.get_uid_properties_names(uid):
+                    property_combo.addItem(prop)
+                name = self.parent.fritti_coll.get_uid_name(uid)
+                tlevel_3 = QTreeWidgetItem(tlevel_2, [name, uid])
+                self.FrittiTopologyTreeWidget.setItemWidget(tlevel_3, 2, property_combo)
+                property_combo.currentIndexChanged.connect(lambda: self.toggle_property())
+                tlevel_3.setFlags(tlevel_3.flags() | Qt.ItemIsUserCheckable)
+                if self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]:
+                    tlevel_3.setCheckState(0, Qt.Checked)
+                elif not self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]:
+                    tlevel_3.setCheckState(0, Qt.Unchecked)
+                self.FrittiTopologyTreeWidget.insertTopLevelItem(0, tlevel_3)
+                break
+        self.FrittiTopologyTreeWidget.itemChanged.connect(self.toggle_geology_topology_visibility)
+        self.FrittiTopologyTreeWidget.expandAll()
+
+    def update_fritti_topology_tree_removed(self, removed_list=None):
+        """When fritto entity is removed, update Topology Tree without building a new model"""
+        success = 0
+        for uid in removed_list:
+            for top_topo_type in range(self.FrittiTopologyTreeWidget.topLevelItemCount()):
+                """Iterate through every Topological Type top level"""
+                for child_scenario in range(self.FrittiTopologyTreeWidget.topLevelItem(top_topo_type).childCount()):
+                    """Iterate through every Scenario child"""
+                    for child_entity in range(self.FrittiTopologyTreeWidget.topLevelItem(top_topo_type).child(child_scenario).childCount()):
+                        """Iterate through every Entity child"""
+                        if self.FrittiTopologyTreeWidget.topLevelItem(top_topo_type).child(child_scenario).child(child_entity).text(1) == uid:
+                            """Complete check: entity found has the uid of the entity we need to remove. Delete child, then ensure no Child or Top Level remain empty"""
+                            success = 1
+                            self.FrittiTopologyTreeWidget.topLevelItem(top_topo_type).child(child_scenario).removeChild(self.FrittiTopologyTreeWidget.topLevelItem(top_topo_type).child(child_scenario).child(child_entity))
+                            if self.FrittiTopologyTreeWidget.topLevelItem(top_topo_type).child(child_scenario).childCount() == 0:
+                                self.FrittiTopologyTreeWidget.topLevelItem(top_topo_type).removeChild(self.FrittiTopologyTreeWidget.topLevelItem(top_topo_type).child(child_scenario))
+                                if self.FrittiTopologyTreeWidget.topLevelItem(top_topo_type).childCount() == 0:
+                                    self.FrittiTopologyTreeWidget.takeTopLevelItem(top_topo_type)
+                            break
+                    if success == 1:
+                        break
+                if success == 1:
+                    break
+
+    def update_fritti_checkboxes(self, uid=None, uid_checkState=None):
+        """Update checkboxes in fritto tree, called when state changed in topology tree."""
+        item = self.FrittiTreeWidget.findItems(uid, Qt.MatchFixedString | Qt.MatchRecursive, 1)[0]
+        if uid_checkState == Qt.Checked:
+            item.setCheckState(0, Qt.Checked)
+        elif uid_checkState == Qt.Unchecked:
+            item.setCheckState(0, Qt.Unchecked)
+
+    def update_fritti_topology_checkboxes(self, uid=None, uid_checkState=None):
+        """Update checkboxes in topology tree, called when state changed in geology tree."""
+        item = self.FrittiTopologyTreeWidget.findItems(uid, Qt.MatchFixedString | Qt.MatchRecursive, 1)[0]
+        if uid_checkState == Qt.Checked:
+            item.setCheckState(0, Qt.Checked)
+        elif uid_checkState == Qt.Unchecked:
+            item.setCheckState(0, Qt.Unchecked)
+
+    def toggle_fritti_topology_visibility(self, item, column):
+        """Called by self.FrittiTreeWidget.itemChanged.connect(self.toggle_fritti_topology_visibility) and self.FrittiTopologyTreeWidget.itemChanged.connect(self.toggle_fritti_topology_visibility)"""
+        name = item.text(0)  # not used
+        uid = item.text(1)
+        uid_checkState = item.checkState(0)
+        if uid:  # needed to skip messages from upper levels of tree that do not broadcast uid's
+            if uid_checkState == Qt.Checked:
+                if not self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]:
+                    self.actors_df.loc[self.actors_df['uid'] == uid, 'show'] = True
+                    self.set_actor_visible(uid=uid, visible=True,name=name)
+            elif uid_checkState == Qt.Unchecked:
+                if self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]:
+                    self.actors_df.loc[self.actors_df['uid'] == uid, 'show'] = False
+                    self.set_actor_visible(uid=uid, visible=False,name=name)
+            """Before updating checkboxes, disconnect signals to fritto and topology tree, if they are set,
+            to avoid a nasty loop that disrupts the trees, then reconnect them (it is also possible that
+            they are automatically reconnected whe the trees are rebuilt."""
+            self.FrittiTreeWidget.itemChanged.disconnect()
+            self.FrittiTopologyTreeWidget.itemChanged.disconnect()
+            self.update_fritti_checkboxes(uid=uid, uid_checkState=uid_checkState)
+            self.update_fritti_topology_checkboxes(uid=uid, uid_checkState=uid_checkState)
+            self.FrittiTreeWidget.itemChanged.connect(self.toggle_fritti_topology_visibility)
+            self.FrittiTopologyTreeWidget.itemChanged.connect(self.toggle_fritti_topology_visibility)
+  
 # ================================  add, remove, and update actors ================================
     
     """Methods used to add, remove, and update actors from the geological collection."""
@@ -2392,8 +2795,8 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.FluidsTopologyTreeWidget.itemChanged.disconnect()
         for uid in updated_list:
             self.remove_actor_in_view(uid=uid, redraw=True)
-        self.update_fluid_tree_removed(removed_list=updated_list)
-        self.update_topology_tree_removed(removed_list=updated_list)
+        self.update_fluids_tree_removed(removed_list=updated_list)
+        self.update_fluids_topology_tree_removed(removed_list=updated_list)
         """Re-connect signals."""
         self.FluidsTreeWidget.itemChanged.connect(self.toggle_fluids_topology_visibility)
         self.FluidsTopologyTreeWidget.itemChanged.connect(self.toggle_fluids_topology_visibility)
@@ -2491,8 +2894,134 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.FluidsTreeWidget.itemChanged.connect(self.toggle_fluids_topology_visibility)
         self.FluidsTopologyTreeWidget.itemChanged.connect(self.toggle_fluids_topology_visibility)
 
+    """Methods used to add, remove, and update actors from the fritti_misti collection."""
 
+    def fritto_added_update_views(self, updated_list=None):
+        """This is called when an entity is added to the fluid collection.
+        Disconnect signals to fluid and topology tree, if they are set, to avoid a nasty loop
+        that disrupts the trees, then they are reconnected when the trees are rebuilt"""
+        self.FrittiTreeWidget.itemChanged.disconnect()
+        self.FrittiTopologyTreeWidget.itemChanged.disconnect()
+        """Create pandas dataframe as list of "new" actors"""
+        actors_df_new = pd.DataFrame(columns=['uid', 'actor', 'show', 'collection', 'show_prop'])
+        for uid in updated_list:
+            this_actor = self.show_actor_with_property(uid=uid, collection='fritti_coll', show_property=None, visible=True)
+            self.actors_df = self.actors_df.append({'uid': uid, 'actor': this_actor, 'show': True, 'collection': 'fritti_coll', 'show_prop': None}, ignore_index=True)
+            actors_df_new = actors_df_new.append({'uid': uid, 'actor': this_actor, 'show': True, 'collection': 'fritti_coll', 'show_prop': None}, ignore_index=True)
+            self.update_fritti_tree_added(actors_df_new)
+            self.update_fritti_topology_tree_added(actors_df_new)
+        """Re-connect signals."""
+        self.FrittiTreeWidget.itemChanged.connect(self.toggle_fritti_topology_visibility)
+        self.FrittiTopologyTreeWidget.itemChanged.connect(self.toggle_fritti_topology_visibility)
 
+    def fritto_removed_update_views(self, updated_list=None):
+        """This is called when an entity is removed from the fluid collection.
+        Disconnect signals to fluid and topology tree, if they are set, to avoid a nasty loop
+        that disrupts the trees, then they are reconnected when the trees are rebuilt"""
+        self.FrittiTreeWidget.itemChanged.disconnect()
+        self.FrittiTopologyTreeWidget.itemChanged.disconnect()
+        for uid in updated_list:
+            self.remove_actor_in_view(uid=uid, redraw=True)
+        self.update_fritti_tree_removed(removed_list=updated_list)
+        self.update_fritti_topology_tree_removed(removed_list=updated_list)
+        """Re-connect signals."""
+        self.FrittiTreeWidget.itemChanged.connect(self.toggle_fritti_topology_visibility)
+        self.FrittiTopologyTreeWidget.itemChanged.connect(self.toggle_fritti_topology_visibility)
+
+    def fritto_geom_modified_update_views(self, updated_list=None):
+        """This is called when an entity geometry or topology is modified (i.e. the vtk object is modified).
+        Disconnect signals to fluid and topology tree, if they are set, to avoid a nasty loop
+        that disrupts the trees, then they are reconnected when the trees are rebuilt"""
+        self.FrittiTreeWidget.itemChanged.disconnect()
+        self.FrittiTopologyTreeWidget.itemChanged.disconnect()
+        for uid in updated_list:
+            """This calls the viewer-specific function that shows an actor with property = None.
+            IN THE FUTURE update required to keep the current property shown.____________"""
+            self.remove_actor_in_view(uid=uid)
+            this_actor = self.show_actor_with_property(uid=uid, collection='fritti_coll', show_property=None, visible=True)
+            self.actors_df = self.actors_df.append({'uid': uid, 'actor': this_actor, 'show': True, 'collection': 'fritti_coll', 'show_prop': None}, ignore_index=True)  # self.actors_df.loc[self.actors_df["uid"] == uid, 'actor'] = this_actor
+        """Re-connect signals."""
+        self.FrittiTreeWidget.itemChanged.connect(self.toggle_fritti_topology_visibility)
+        self.FrittiTopologyTreeWidget.itemChanged.connect(self.toggle_fritti_topology_visibility)
+
+    def fritto_data_keys_modified_update_views(self, updated_list=None):
+        """This is called when entity point or cell data are modified.
+        Disconnect signals to fluid and topology tree, if they are set, to avoid a nasty loop
+        that disrupts the trees, then they are reconnected when the trees are rebuilt"""
+        self.FrittiTreeWidget.itemChanged.disconnect()
+        self.FrittiTopologyTreeWidget.itemChanged.disconnect()
+        for uid in updated_list:
+            if not self.actors_df.loc[self.actors_df['uid'] == uid, 'show_prop'].to_list() == []:
+                if not self.actors_df.loc[self.actors_df['uid'] == uid, 'show_prop'].values[0] in self.parent.fritti_coll.get_uid_properties_names(uid):
+                    show = self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].to_list()[0]
+                    self.remove_actor_in_view(uid=uid)
+                    this_actor = self.show_actor_with_property(uid=uid, collection='fritti_coll', show_property=None, visible=show)
+                    self.actors_df = self.actors_df.append({'uid': uid, 'actor': this_actor, 'show': show, 'collection': 'fritti_coll', 'show_prop': None}, ignore_index=True)  # self.actors_df.loc[self.actors_df["uid"] == uid, 'actor'] = this_actor
+                    self.create_fluid_tree()
+                    self.create_fluids_topology_tree()
+        """Re-connect signals."""
+        self.FrittiTreeWidget.itemChanged.connect(self.toggle_fritti_topology_visibility)
+        self.FrittiTopologyTreeWidget.itemChanged.connect(self.toggle_fritti_topology_visibility)
+
+    def fritto_data_val_modified_update_views(self, updated_list=None):
+        """This is called when entity point or cell data are modified.
+        Disconnect signals to fluid and topology tree, if they are set, to avoid a nasty loop
+        that disrupts the trees, then they are reconnected when the trees are rebuilt"""
+        self.FrittiTreeWidget.itemChanged.disconnect()
+        self.FrittiTopologyTreeWidget.itemChanged.disconnect()
+        """IN THE FUTURE - generally just update the properties list - more complicate if we modify or delete the property that is shown_____________________"""
+        """Re-connect signals."""
+        self.FrittiTreeWidget.itemChanged.connect(self.toggle_fritti_topology_visibility)
+        self.FrittiTopologyTreeWidget.itemChanged.connect(self.toggle_fritti_topology_visibility)
+
+    def fritto_metadata_modified_update_views(self, updated_list=None):
+        """This is called when entity metadata are modified, and the legend is automatically updated.
+        Disconnect signals to fluid and topology tree, if they are set, to avoid a nasty loop
+        that disrupts the trees, then they are reconnected when the trees are rebuilt"""
+        self.FrittiTreeWidget.itemChanged.disconnect()
+        self.FrittiTopologyTreeWidget.itemChanged.disconnect()
+        for uid in updated_list:
+            """Case for entities modified"""
+            self.change_actor_color(uid=uid, collection='fritti_coll')
+            self.change_actor_line_thick(uid=uid, collection='fritti_coll')
+            self.create_fluid_tree()
+            self.create_fluids_topology_tree()
+        """Re-connect signals."""
+        self.FrittiTreeWidget.itemChanged.connect(self.toggle_fritti_topology_visibility)
+        self.FrittiTopologyTreeWidget.itemChanged.connect(self.toggle_fritti_topology_visibility)
+
+    def fritto_legend_color_modified_update_views(self, updated_list=None):
+        # print(updated_list)
+        """This is called when the color in the fluid legend is modified.
+        Disconnect signals to fluid and topology tree, if they are set, to avoid a nasty loop
+        that disrupts the trees, then they are reconnected when the trees are rebuilt"""
+        self.FrittiTreeWidget.itemChanged.disconnect()
+        self.FrittiTopologyTreeWidget.itemChanged.disconnect()
+        for uid in updated_list:
+            """Case for color changed"""
+            wells_list = self.parent.well_coll.get_uids()
+            if self.parent.fritti_coll.get_uid_x_section(uid) in wells_list:
+                self.change_actor_color(uid=self.parent.fritti_coll.get_uid_x_section(uid), collection='well_coll')
+            self.change_actor_color(uid=uid, collection='fritti_coll')
+
+        """Re-connect signals."""
+        self.FrittiTreeWidget.itemChanged.connect(self.toggle_fritti_topology_visibility)
+        self.FrittiTopologyTreeWidget.itemChanged.connect(self.toggle_fritti_topology_visibility)
+
+    def fritto_legend_thick_modified_update_views(self, updated_list=None):
+        """This is called when the line thickness in the fluid legend is modified.
+        Disconnect signals to fluid and topology tree, if they are set, to avoid a nasty loop
+        that disrupts the trees, then they are reconnected when the trees are rebuilt"""
+        self.FrittiTreeWidget.itemChanged.disconnect()
+        self.FrittiTopologyTreeWidget.itemChanged.disconnect()
+        for uid in updated_list:
+            """Case for line_thick changed"""
+            self.change_actor_line_thick(uid=uid, collection='fritti_coll')
+        """Re-connect signals."""
+        self.FrittiTreeWidget.itemChanged.connect(self.toggle_fritti_topology_visibility)
+        self.FrittiTopologyTreeWidget.itemChanged.connect(self.toggle_fritti_topology_visibility)
+
+   
     """General methods shared by all views."""
 
     def toggle_property(self):
@@ -2500,14 +3029,17 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         combo = self.sender()
         show_property = combo.currentText()
         uid = combo.uid
-        name = combo.name
+        try:
+            name = combo.name
+        except AttributeError:
+            name = None
         show = self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]
         collection = self.actors_df.loc[self.actors_df['uid'] == uid, 'collection'].values[0]
         """This removes the previous copy of the actor with the same uid, then calls the viewer-specific function that shows an actor with a property.
         IN THE FUTURE see if it is possible and more efficient to keep the actor and just change the property shown."""
         if name == 'Marker':
             self.show_markers(uid=uid, show_property=show_property)
-        elif name == 'General':
+        elif name == 'Annotations':
             self.show_labels(uid=uid, show_property=show_property,collection=collection)
         else:
             self.remove_actor_in_view(uid=uid)
@@ -2542,6 +3074,9 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         for uid in self.parent.fluids_coll.df['uid'].tolist():
             this_actor = self.show_actor_with_property(uid=uid, collection='fluids_coll', show_property=None, visible=False)
             self.actors_df = self.actors_df.append({'uid': uid, 'actor': this_actor, 'show': False, 'collection': 'fluids_coll', 'show_prop': None}, ignore_index=True)
+        for uid in self.parent.fritti_coll.df['uid'].tolist():
+            this_actor = self.show_actor_with_property(uid=uid, collection='fritti_coll', show_property=None, visible=False)
+            self.actors_df = self.actors_df.append({'uid': uid, 'actor': this_actor, 'show': False, 'collection': 'fritti_coll', 'show_prop': None}, ignore_index=True)     
     
     def prop_legend_cmap_modified_update_views(self, this_property=None):
         """Redraw all actors that are currently shown with a property whose colormap has been changed."""
@@ -2642,7 +3177,6 @@ class View3D(BaseView):
         self.show()
 
         self.init_zoom = self.plotter.camera.distance
-        print(self.init_zoom)
         self.cam_orient_widget.On() # [Gabriele] The orientation widget needs to be turned on AFTER the canvas is shown
         self.picker = self.plotter.enable_mesh_picking(callback= self.pkd_mesh,show_message=False)
     
@@ -2929,6 +3463,14 @@ class View3D(BaseView):
             color_R = self.parent.well_coll.get_uid_legend(uid=uid)['color_R']
             color_G = self.parent.well_coll.get_uid_legend(uid=uid)['color_G']
             color_B = self.parent.well_coll.get_uid_legend(uid=uid)['color_B']
+        elif collection == 'fluids_coll':
+            color_R = self.parent.fluids_coll.get_uid_legend(uid=uid)['color_R']
+            color_G = self.parent.fluids_coll.get_uid_legend(uid=uid)['color_G']
+            color_B = self.parent.fluids_coll.get_uid_legend(uid=uid)['color_B']            
+        elif collection == 'fritti_coll':
+            color_R = self.parent.fritti_coll.get_uid_legend(uid=uid)['color_R']
+            color_G = self.parent.fritti_coll.get_uid_legend(uid=uid)['color_G']
+            color_B = self.parent.fritti_coll.get_uid_legend(uid=uid)['color_B']        
         """Note: no legend for image."""
         """Update color for actor uid"""
         color_RGB = [color_R / 255, color_G / 255, color_B / 255]
@@ -2940,6 +3482,9 @@ class View3D(BaseView):
             line_thick = self.parent.geol_coll.get_uid_legend(uid=uid)['line_thick']
             if isinstance(self.parent.geol_coll.get_uid_vtk_obj(uid),VertexSet):
                 self.actors_df.loc[self.actors_df['uid'] == uid, 'actor'].values[0].GetProperty().SetPointSize(line_thick)
+            else:
+                self.actors_df.loc[self.actors_df['uid'] == uid, 'actor'].values[0].GetProperty().SetLineWidth(line_thick)
+
 
         elif collection == 'xsect_coll':
             line_thick = self.parent.xsect_coll.get_legend()['line_thick']
@@ -2958,15 +3503,29 @@ class View3D(BaseView):
         elif collection == 'well_coll':
             line_thick = self.parent.well_coll.get_uid_legend(uid=uid)['line_thick']
             self.actors_df.loc[self.actors_df['uid'] == uid, 'actor'].values[0].GetProperty().SetLineWidth(line_thick)
-
+        elif collection == 'fluids_coll':
+            line_thick = self.parent.fluids_coll.get_uid_legend(uid=uid)['line_thick']
+            
+            if isinstance(self.parent.fluids_coll.get_uid_vtk_obj(uid),VertexSet):
+                self.actors_df.loc[self.actors_df['uid'] == uid, 'actor'].values[0].GetProperty().SetPointSize(line_thick)
+            else:
+                self.actors_df.loc[self.actors_df['uid'] == uid, 'actor'].values[0].GetProperty().SetLineWidth(line_thick)
+        
+        elif collection == 'fritti_coll':
+            line_thick = self.parent.fritti_coll.get_uid_legend(uid=uid)['line_thick']
+           
+            if isinstance(self.parent.fritti_coll.get_uid_vtk_obj(uid),VertexSet):
+                self.actors_df.loc[self.actors_df['uid'] == uid, 'actor'].values[0].GetProperty().SetPointSize(line_thick)
+            else:
+                self.actors_df.loc[self.actors_df['uid'] == uid, 'actor'].values[0].GetProperty().SetLineWidth(line_thick)    
     def set_actor_visible(self, uid=None, visible=None,name=None):
+        
         """Set actor uid visible or invisible (visible = True or False)"""
         this_actor = self.actors_df.loc[self.actors_df['uid'] == uid, 'actor'].values[0]
         collection = self.actors_df.loc[self.actors_df['uid'] == uid, 'collection'].values[0]
-
+        actors = self.plotter.renderer.actors
 
         if collection == 'well_coll':
-            actors = self.plotter.renderer.actors
             if name == 'Trace':
                 if f'{uid}_prop' in actors.keys():
                     prop_actor = actors[f'{uid}_prop']
@@ -2984,6 +3543,12 @@ class View3D(BaseView):
                     marker_actor_points = actors[f'{uid}_marker-points']
                     marker_actor_labels.SetVisibility(visible)
                     marker_actor_points.SetVisibility(visible)
+        
+        elif collection == 'fritti_coll':
+            if f'{uid}_name-labels' in actors.keys():
+                marker_actor_labels = actors[f'{uid}_name-labels']
+                marker_actor_labels.SetVisibility(visible)
+            this_actor.SetVisibility(visible)
 
         else:
             this_actor.SetVisibility(visible)
@@ -3056,6 +3621,13 @@ class View3D(BaseView):
             color_RGB = [color_R / 255, color_G / 255, color_B / 255]
             line_thick = self.parent.fluids_coll.get_uid_legend(uid=uid)['line_thick']
             plot_entity = self.parent.fluids_coll.get_uid_vtk_obj(uid) 
+        elif collection == 'fritti_coll':
+            color_R = self.parent.fritti_coll.get_uid_legend(uid=uid)['color_R']
+            color_G = self.parent.fritti_coll.get_uid_legend(uid=uid)['color_G']
+            color_B = self.parent.fritti_coll.get_uid_legend(uid=uid)['color_B']
+            color_RGB = [color_R / 255, color_G / 255, color_B / 255]
+            line_thick = self.parent.fritti_coll.get_uid_legend(uid=uid)['line_thick']
+            plot_entity = self.parent.fritti_coll.get_uid_vtk_obj(uid) 
         else:
             print("no collection")
             this_actor = None
@@ -3125,7 +3697,12 @@ class View3D(BaseView):
                     # print(pv_downcast['Normals'])
                     plot_entity = pv_downcast.glyph(orient='Normals',geom=disk)
                     # print('Normals not available for now in 3D view')
-
+                elif show_property == 'name':
+                    point = plot_entity.points
+                    name_value = plot_entity.get_field_data('name')
+                    self.plotter.add_point_labels(point,name_value,always_visible=True,show_points=False,font_size=15,shape_opacity=0.5,name=f'{uid}_name')
+                    show_property=None
+                    show_property_title = None
 
 
                 else:
@@ -3283,17 +3860,23 @@ class View3D(BaseView):
                 show_property = plot_entity.points_Z
             elif show_property == 'MD':
                 show_property = plot_entity.get_point_data(data_key='MD')
-            elif show_property == 'name':
-                point = plot_entity.points[0]
-                name_value = self.parent.well_coll.get_uid_well_locid(uid)
-                self.plotter.add_point_labels(point,name_value,always_visible=True,show_points=False,font_size=15,shape_opacity=0.5,name=f'{uid}_name')
-                show_property=None
-                show_property_title = None
             else:
                 prop = plot_entity.plot_along_trace(show_property,method=self.trace_method,camera=self.plotter.camera)
                 self.plotter.add_actor(prop,name=f'{uid}_prop')
                 show_property=None
                 show_property_title = None
+            this_actor = self.plot_mesh_3D(uid=uid, plot_entity=plot_entity, color_RGB=color_RGB, show_property=show_property, show_scalar_bar=show_scalar_bar,
+                                        color_bar_range=None, show_property_title=show_property_title, line_thick=line_thick,
+                                        plot_texture_option=False, plot_rgb_option=plot_rgb_option, visible=visible,
+                                        render_lines_as_tubes=False)
+        elif isinstance(plot_entity,Fritti):
+            plot_rgb_option = None
+            if show_property is None:
+                show_scalar_bar = False
+                pass
+            elif show_property == 'none':
+                show_scalar_bar = False
+                show_property = None
             this_actor = self.plot_mesh_3D(uid=uid, plot_entity=plot_entity, color_RGB=color_RGB, show_property=show_property, show_scalar_bar=show_scalar_bar,
                                         color_bar_range=None, show_property_title=show_property_title, line_thick=line_thick,
                                         plot_texture_option=False, plot_rgb_option=plot_rgb_option, visible=visible,
@@ -3352,12 +3935,21 @@ class View3D(BaseView):
             plot_entity = self.parent.well_coll.get_uid_vtk_obj(uid)
             point = plot_entity.points[0].reshape(-1,3)
             name_value = self.parent.well_coll.get_uid_well_locid(uid)
-            print(point,name_value)
         elif collection == 'fluids_coll':
             plot_entity = self.parent.fluids_coll.get_uid_vtk_obj(uid)
             point = plot_entity.GetCenter()
             name_value = self.parent.fluids_coll.get_uid_name(uid)
+        elif collection == 'fritti_coll':
+            plot_entity = self.parent.fritti_coll.get_uid_vtk_obj(uid)
+            if self.parent.fritti_coll.get_uid_topological_type(uid) == 'PolyLine':
+                point = plot_entity.GetCenter()
+            else:
+                point = plot_entity.points
+            name = plot_entity.get_field_data_keys()[0]
+            name_value = plot_entity.get_field_data(name)
+        
 
+        
         if show_property is None:
             show_scalar_bar = False
             pass
@@ -3366,7 +3958,7 @@ class View3D(BaseView):
             show_property = None
             self.plotter.remove_actor(f'{uid}_name-labels')
         else:
-            self.plotter.add_point_labels(point,[name_value],always_visible=True,show_points=False,font_size=15,shape_opacity=0.5,name=f'{uid}_name')
+            self.plotter.add_point_labels(point,name_value,always_visible=True,show_points=False,font_size=15,shape_opacity=0.5,name=f'{uid}_name')
 
     def plot_mesh_3D(self, uid=None, plot_entity=None, color_RGB=None, show_property=None, show_scalar_bar=None,
                      color_bar_range=None, show_property_title=None, line_thick=None,

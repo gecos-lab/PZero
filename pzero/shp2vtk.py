@@ -2,7 +2,10 @@
 PZero© Andrea Bistacchi"""
 
 from copy import deepcopy
-from .entities_factory import PolyLine, VertexSet, Attitude
+
+from matplotlib.text import Annotation
+from sqlalchemy import column
+from .entities_factory import Fritti, PolyLine, VertexSet, Attitude
 from numpy import array as np_array
 from numpy import shape as np_shape
 from numpy import zeros as np_zeros
@@ -12,6 +15,7 @@ from geopandas import read_file as gpd_read_file
 from vtk import vtkAppendPolyData
 from .geological_collection import GeologicalCollection
 from .fluid_collection import FluidsCollection
+from .frittura_collection import FrittoMistoCollection
 from .two_d_lines import left_right
 from shapely import affinity
 from shapely.geometry import asLineString, LineString, Point, asPoint, MultiLineString
@@ -195,6 +199,7 @@ def shp2vtk(self=None, in_file_name=None,collection=None):
             print("Only Point and Line geometries can be imported - aborting.")
             return  # except:  #     self.TextTerminal.appendPlainText("SHP file not recognized ERROR.")
     elif collection == 'Fluid contacts':
+        print(gdf.geom_type[0])
         if (gdf.geom_type[0] == "LineString") or (gdf.geom_type[0] == "MultiLineString"):
             for row in range(gdf.shape[0]):
                 # print("____ROW: ", row)
@@ -214,9 +219,10 @@ def shp2vtk(self=None, in_file_name=None,collection=None):
                     curr_obj_dict["scenario"] = gdf.loc[row, "scenario"]
                 curr_obj_dict["topological_type"] = "PolyLine"
                 curr_obj_dict["vtk_obj"] = PolyLine()
+                
                 if gdf.geom_type[row] == "LineString":
                     outXYZ = np_array(gdf.loc[row].geometry)
-                    # print("outXYZ:\n", outXYZ)
+
                     if np_shape(outXYZ)[1] == 2:
                         outZ = np_zeros((np_shape(outXYZ)[0], 1))
                         # print("outZ:\n", outZ)
@@ -224,13 +230,12 @@ def shp2vtk(self=None, in_file_name=None,collection=None):
                     # print("outXYZ:\n", outXYZ)
                     curr_obj_dict["vtk_obj"].points = outXYZ
                     curr_obj_dict["vtk_obj"].auto_cells()
+                
                 elif gdf.geom_type[row] == "MultiLineString":
                     outXYZ_list = np_array(gdf.loc[row].geometry)
                     vtkappend = vtkAppendPolyData()
                     for outXYZ in outXYZ_list:
                         temp_vtk = PolyLine()
-                        # print("outXYZ:\n", outXYZ)
-                        # print("np_shape(outXYZ):\n", np_shape(outXYZ))
                         if np_shape(outXYZ)[1] == 2:
                             outZ = np_zeros((np_shape(outXYZ)[0], 1))
                             # print("outZ:\n", outZ)
@@ -316,6 +321,143 @@ def shp2vtk(self=None, in_file_name=None,collection=None):
                         del curr_obj_dict
             else:
                 print('Incomplete data. At least the fluid_feature property must be present')
+        else:
+            print("Only Point and Line geometries can be imported - aborting.")
+            return  # except:  #     self.TextTerminal.appendPlainText("SHP file not recognized ERROR.")
+    elif collection == 'Fritto misto':
+        if (gdf.geom_type[0] == "LineString") or (gdf.geom_type[0] == "MultiLineString"):
+            for row in range(gdf.shape[0]):
+                # print("____ROW: ", row)
+                # print("geometry type: ", gdf.geom_type[row])
+                curr_obj_dict = deepcopy(FrittoMistoCollection.fritto_entity_dict)
+                # if gdf.is_valid[row] and not gdf.is_empty[row]:
+                # try:
+                if "name" in column_names:
+                    curr_obj_dict["name"] = gdf.loc[row, "name"]
+                if "frit_type" in column_names:
+                    curr_obj_dict["fritto_type"] = gdf.loc[row, "frit_type"]
+                if "fritto_feature" in column_names:
+                    curr_obj_dict["fritto_feature"] = gdf.loc[row, "fritto_feature"]
+                if "frit_feat" in column_names:
+                    curr_obj_dict["fritto_feature"] = gdf.loc[row, "frit_feat"]
+                
+                curr_obj_dict["topological_type"] = "PolyLine"
+                curr_obj_dict["vtk_obj"] = Fritti()
+                
+                if gdf.geom_type[row] == "LineString":
+                    outXYZ = np_array(gdf.loc[row].geometry)
+                    # print("outXYZ:\n", outXYZ)
+                    if np_shape(outXYZ)[1] == 2:
+                        outZ = np_zeros((np_shape(outXYZ)[0], 1))
+                        # print("outZ:\n", outZ)
+                        outXYZ = np_column_stack((outXYZ, outZ))
+                    # print("outXYZ:\n", outXYZ)
+                    if 'label' in column_names:
+                        curr_obj_dict["vtk_obj"].create_fritto(name='name',annotation=gdf['label'].values,xyz=outXYZ,ann_type='line')
+                    else:
+                        curr_obj_dict["vtk_obj"].create_fritto(name='name',xyz=outXYZ,ann_type='line')
+               
+                elif gdf.geom_type[row] == "MultiLineString":
+                    outXYZ_list = np_array(gdf.loc[row].geometry)
+                    vtkappend = vtkAppendPolyData()
+                    for outXYZ in outXYZ_list:
+                        temp_vtk = PolyLine()
+                        # print("outXYZ:\n", outXYZ)
+                        # print("np_shape(outXYZ):\n", np_shape(outXYZ))
+                        if np_shape(outXYZ)[1] == 2:
+                            outZ = np_zeros((np_shape(outXYZ)[0], 1))
+                            # print("outZ:\n", outZ)
+                            outXYZ = np_column_stack((outXYZ, outZ))
+                        # print("outXYZ:\n", outXYZ)
+                        temp_vtk.points = outXYZ
+                        temp_vtk.auto_cells()
+                        
+                        vtkappend.AddInputData(temp_vtk)
+                    vtkappend.Update()
+
+                    if 'label' in column_names:
+                        out_vtk = PolyLine()
+                        out_vtk.ShallowCopy(vtkappend.GetOutput())
+                        out_vtk.set_field_data(name='name',data=gdf['label'].values)
+                        curr_obj_dict["vtk_obj"].ShallowCopy(out_vtk)
+                    else:
+                        curr_obj_dict["vtk_obj"].ShallowCopy(vtkappend.GetOutput())
+                """Create entity from the dictionary and run left_right."""
+                
+
+
+                if curr_obj_dict["vtk_obj"].points_number > 0:
+                    self.fritti_coll.add_entity_from_dict(curr_obj_dict)
+                else:
+                    print("Empty object")
+                # else:
+                # except:
+                #     print("Invalid object")
+                del curr_obj_dict
+        elif gdf.geom_type[0] == "Point":
+            if "frit_feat" in column_names:
+                gdf_index = gdf.set_index("frit_feat")
+                feat_list = set(gdf_index.index)
+
+
+
+                for i in feat_list:
+                    curr_obj_dict = deepcopy(FrittoMistoCollection.fritto_entity_dict)
+                    
+                    vtk_obj = Fritti()
+
+                    if "name" in column_names:
+                        curr_obj_dict["name"] = pd_series(gdf_index.loc[i, "name"])[0]
+                    if "frit_type" in column_names:
+                        curr_obj_dict["fritto_type"] = pd_series(gdf_index.loc[i, "frit_type"])[0]
+                    if "fritto_feature" in column_names:
+                        curr_obj_dict["fritto_feature"] = i
+                    if "frit_feat" in column_names:
+                        curr_obj_dict["fritto_feature"] = i
+                    
+
+
+                    curr_obj_dict["topological_type"] = "VertexSet"
+                    curr_obj_dict["vtk_obj"] = vtk_obj
+
+                    gdf_index['coords'] = gdf_index.geometry.apply(lambda x: np_array(x)) # [Gabriele] add a coordinate column in the gdf_index dataframe
+                    outXYZ = np_array([p for p in gdf_index.loc[i, 'coords']])
+
+                    if outXYZ.ndim == 1:
+                        outXYZ = outXYZ.reshape(-1,np_shape(outXYZ)[0])
+
+                    if np_shape(outXYZ)[1] == 2:
+                        outZ = np_zeros((np_shape(outXYZ)[0], 1))
+                        # print("outZ:\n", outZ)
+                        outXYZ = np_column_stack((outXYZ, outZ))
+                    
+                    if "label" in column_names:
+                        curr_obj_dict["vtk_obj"].create_fritto(name='name',xyz=outXYZ,annotation=gdf['label'].values)
+                    else:
+                        curr_obj_dict["vtk_obj"].create_fritto(name='name',xyz=outXYZ)
+
+                    if curr_obj_dict["vtk_obj"].points_number > 1:
+                        # curr_obj_dict["vtk_obj"].auto_cells()
+                        # print(curr_obj_dict["vtk_obj"].point_data_keys)
+                        properties_names = curr_obj_dict["vtk_obj"].point_data_keys
+                        properties_components = [curr_obj_dict["vtk_obj"].get_point_data_shape(key)[1] for key in properties_names]
+                        curr_obj_dict['properties_names'] = properties_names
+                        curr_obj_dict['properties_components'] = properties_components
+                        
+                        
+                        self.fritti_coll.add_entity_from_dict(curr_obj_dict)
+                        del curr_obj_dict
+                    elif curr_obj_dict["vtk_obj"].points_number > 0:
+                        # curr_obj_dict["vtk_obj"].auto_cells()
+                        # print(curr_obj_dict["vtk_obj"].point_data_keys)
+                        properties_names = curr_obj_dict["vtk_obj"].point_data_keys
+                        properties_components = [curr_obj_dict["vtk_obj"].get_point_data_shape(key)[1] for key in properties_names]
+                        curr_obj_dict['properties_names'] = properties_names
+                        curr_obj_dict['properties_components'] = properties_components
+                        self.fritti_coll.add_entity_from_dict(curr_obj_dict)
+                        del curr_obj_dict
+            else:
+                print('Incomplete data. At least the frit_feature property must be present')
         else:
             print("Only Point and Line geometries can be imported - aborting.")
             return  # except:  #     self.TextTerminal.appendPlainText("SHP file not recognized ERROR.")

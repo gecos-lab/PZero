@@ -2258,7 +2258,6 @@ class Well:
         
         self._trace.ShallowCopy(trace)
         head_p = self._trace.get_field_data('pmarker_head').reshape(-1,3)
-        print(head_p)
         self.head = head_p
 
     
@@ -2435,3 +2434,23 @@ class Attitude(VertexSet):
         att_copy = Attitude()
         att_copy.DeepCopy(self)
         return att_copy
+
+
+class Fritti(PolyData):
+    def __init__(self, *args, **kwargs):
+        super(Fritti, self).__init__(*args, **kwargs)
+    
+    def deep_copy(self):
+        annotation_copy = Fritti()
+        annotation_copy.DeepCopy(self)
+        return annotation_copy
+    
+    def create_fritto(self,name,xyz,annotation=None,ann_type='point'):
+        if ann_type == 'point':
+            fritto = VertexSet()
+        elif ann_type == 'line':
+            fritto = PolyLine()
+        fritto.points = xyz
+        fritto.auto_cells()
+        fritto.set_field_data(name=name,data=annotation)
+        self.ShallowCopy(fritto)
