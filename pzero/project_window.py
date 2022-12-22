@@ -41,6 +41,7 @@ from .image2vtk import geo_image2vtk, xs_image2vtk
 from .stl2vtk import vtk2stl, vtk2stl_dilation
 from .obj2vtk import vtk2obj
 from .ply2vtk import vtk2ply
+from .lxml2vtk import vtk2lxml
 from .three_d_surfaces import interpolation_delaunay_2d, poisson_interpolation, implicit_model_loop_structural, surface_smoothing, linear_extrusion, decimation_pro_resampling, decimation_quadric_resampling, subdivision_resampling, intersection_xs, project_2_dem, project_2_xs, split_surf,retopo
 from .orientation_analysis import set_normals
 from .point_clouds import decimate_pc
@@ -1635,7 +1636,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
 
     def export_cad(self):  # ________________________________________________________________ IMPLEMENT GOCAD EXPORT
         """Base method to choose a CAD format for exporting geological entities."""
-        cad_format = input_combo_dialog(parent=self, title="CAD format", label="Choose CAD format", choice_list=["DXF", "GOCAD", "OBJ", "PLY", "STL", "STL with 1m dilation"])
+        cad_format = input_combo_dialog(parent=self, title="CAD format", label="Choose CAD format", choice_list=["DXF", "GOCAD", "OBJ", "PLY", "STL", "STL with 1m dilation","LandXML"])
         out_dir_name = save_file_dialog(parent=self, caption="Export geological entities as CAD meshes.")
         if not out_dir_name:
             return
@@ -1659,6 +1660,8 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             vtk2stl(self=self, out_dir_name=out_dir_name)
         elif cad_format == "STL with 1m dilation":
             vtk2stl_dilation(self=self, out_dir_name=out_dir_name, tol=1)
+        elif cad_format == "LandXML":
+            vtk2lxml(self=self,out_dir_name=out_dir_name)
         else:
             return
         """Save geological legend table to CSV and JSON files."""

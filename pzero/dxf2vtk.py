@@ -12,7 +12,6 @@ def vtk2dxf(self=None, out_dir_name=None):
     """Exports all triangulated surfaces to a collection of DXF 3DFACE objects and border polyline3d."""
     """Create DXF container."""
     """Add entities."""
-    print(self.geol_coll.df.loc[:,['uid','geological_feature']])
     list_uids = []
     list_names = []
     for uid in self.geol_coll.df['uid']:
