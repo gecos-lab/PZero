@@ -21,3 +21,5 @@ dependencies:
   - colorcet
   - mplstereonet
   - pythreejs
+  - pyinstaller
+  - mplstereonet

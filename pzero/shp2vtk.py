@@ -10,10 +10,7 @@ from numpy import column_stack as np_column_stack
 from geopandas import read_file as gpd_read_file
 from vtk import vtkAppendPolyData
 from .geological_collection import GeologicalCollection
-from .two_d_lines import left_right
-from shapely import affinity
-from shapely.geometry import asLineString, LineString, Point, asPoint, MultiLineString
-from shapely.ops import split, snap
+from shapely.ops import split
 
 from .orientation_analysis import dip_directions2normals
 """Importer for SHP files and other GIS formats, to be improved IN THE FUTURE.

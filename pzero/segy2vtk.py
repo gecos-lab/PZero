@@ -4,7 +4,7 @@ PZero© Andrea Bistacchi"""
 import os
 from copy import deepcopy
 import uuid
-import vtk
+from vtk import vtkSegYReader
 from .entities_factory import Seismics
 from .image_collection import ImageCollection
 
@@ -17,7 +17,7 @@ def segy2vtk(self=None, in_file_name=None):
         """Do not use the StructuredGridOff() option, this causes problems.
         https://vtk.org/doc/nightly/html/classvtkSegYReader.html#aa1e0a8e126958a91b3106159a2680041"""
         curr_object = Seismics()  #________________________________________
-        segy_reader = vtk.vtkSegYReader()
+        segy_reader = vtkSegYReader()
         segy_reader.SetFileName(in_file_name)
         segy_reader.Update()
         curr_object.ShallowCopy(segy_reader.GetOutput())

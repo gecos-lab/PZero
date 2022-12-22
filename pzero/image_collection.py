@@ -2,7 +2,8 @@
 PZero© Andrea Bistacchi"""
 
 import numpy as np
-import pandas as pd
+from pandas import set_option as pd_set_option
+from pandas import DataFrame as pd_DataFrame
 import uuid
 from copy import deepcopy
 from PyQt5.QtCore import QAbstractTableModel, Qt, QVariant
@@ -13,11 +14,11 @@ pd_desired_width = 800
 pd_max_columns = 20
 pd_show_precision = 4
 pd_max_colwidth = 80
-pd.set_option('display.width', pd_desired_width)
+pd_set_option('display.width', pd_desired_width)
 np.set_printoptions(linewidth=pd_desired_width)
-pd.set_option('display.max_columns', pd_max_columns)
-pd.set_option('display.precision', pd_show_precision)
-pd.set_option('display.max_colwidth', pd_max_colwidth)
+pd_set_option('display.max_columns', pd_max_columns)
+pd_set_option('display.precision', pd_show_precision)
+pd_set_option('display.max_colwidth', pd_max_colwidth)
 
 
 class ImageCollection(QAbstractTableModel):
@@ -60,7 +61,7 @@ class ImageCollection(QAbstractTableModel):
         self.parent = parent
 
         """Initialize Pandas dataframe."""
-        self.df = pd.DataFrame(columns=list(self.image_entity_dict.keys()))
+        self.df = pd_DataFrame(columns=list(self.image_entity_dict.keys()))
 
         """Here we use .columns.get_indexer to get indexes of the columns that we would like to be editable in the QTableView"""
         self.editable_columns = self.df.columns.get_indexer(["name"])

@@ -1,8 +1,14 @@
 """geological_collection.py
 PZero© Andrea Bistacchi"""
 
-import numpy as np
-import pandas as pd
+
+from numpy import set_printoptions as np_set_set_printoptions
+from numpy import random as np_random
+from numpy import round as np_round
+
+from pandas import set_option as pd_set_option
+from pandas import DataFrame as pd_DataFrame
+from pandas import unique as pd_unique
 import uuid
 from copy import deepcopy
 from PyQt5.QtCore import QAbstractTableModel, Qt, QVariant
@@ -12,11 +18,11 @@ pd_desired_width = 800
 pd_max_columns = 20
 pd_show_precision = 4
 pd_max_colwidth = 80
-pd.set_option('display.width', pd_desired_width)
-np.set_printoptions(linewidth=pd_desired_width)
-pd.set_option('display.max_columns', pd_max_columns)
-pd.set_option('display.precision', pd_show_precision)
-pd.set_option('display.max_colwidth', pd_max_colwidth)
+pd_set_option('display.width', pd_desired_width)
+np_set_set_printoptions(linewidth=pd_desired_width)
+pd_set_option('display.max_columns', pd_max_columns)
+pd_set_option('display.precision', pd_show_precision)
+pd_set_option('display.max_colwidth', pd_max_colwidth)
 
 
 class GeologicalCollection(QAbstractTableModel):
@@ -77,7 +83,7 @@ class GeologicalCollection(QAbstractTableModel):
         self.parent = parent
 
         """Initialize Pandas dataframe."""
-        self.df = pd.DataFrame(columns=list(self.geological_entity_dict.keys()))
+        self.df = pd_DataFrame(columns=list(self.geological_entity_dict.keys()))
 
         """Here we use .columns.get_indexer to get indexes of the columns that we would like to be editable in the QTableView"""
         self.editable_columns = self.df.columns.get_indexer(["name", "geological_type", "geological_feature", "scenario"])
@@ -103,7 +109,7 @@ class GeologicalCollection(QAbstractTableModel):
                 print(color)
                 R,G,B = color
             else:
-                R,G,B = np.round(np.random.random(3) * 255)
+                R,G,B = np_round(np_random.random(3) * 255)
             self.parent.geol_legend_df = self.parent.geol_legend_df.append({'geological_type': geo_type,
                                                                             'geological_feature': feature,
                                                                             'scenario': scenario,
@@ -130,9 +136,9 @@ class GeologicalCollection(QAbstractTableModel):
         """Then remove geo_type / feature / scenario from legend if needed."""
         """table_updated is used to record if the table is updated or not"""
         table_updated = False
-        geo_types_in_legend = pd.unique(self.parent.geol_legend_df['geological_type'])
-        features_in_legend = pd.unique(self.parent.geol_legend_df['geological_feature'])
-        scenarios_in_legend = pd.unique(self.parent.geol_legend_df['scenario'])
+        geo_types_in_legend = pd_unique(self.parent.geol_legend_df['geological_type'])
+        features_in_legend = pd_unique(self.parent.geol_legend_df['geological_feature'])
+        scenarios_in_legend = pd_unique(self.parent.geol_legend_df['scenario'])
         for geo_type in geo_types_in_legend:
             if self.parent.geol_coll.df.loc[self.parent.geol_coll.df['geological_type'] == geo_type].empty:
                 """Get index of row to be removed, then remove it in place with .drop()."""
@@ -216,9 +222,9 @@ class GeologicalCollection(QAbstractTableModel):
         """table_updated is used to record if the table is updated or not"""
         table_updated = False
         """First remove unused geo_type / feature"""
-        geo_types_in_legend = pd.unique(self.parent.geol_legend_df['geological_type'])
-        features_in_legend = pd.unique(self.parent.geol_legend_df['geological_feature'])
-        scenarios_in_legend = pd.unique(self.parent.geol_legend_df['scenario'])
+        geo_types_in_legend = pd_unique(self.parent.geol_legend_df['geological_type'])
+        features_in_legend = pd_unique(self.parent.geol_legend_df['geological_feature'])
+        scenarios_in_legend = pd_unique(self.parent.geol_legend_df['scenario'])
         for geo_type in geo_types_in_legend:
             if self.parent.geol_coll.df.loc[self.parent.geol_coll.df['geological_type'] == geo_type].empty:
                 """Get index of row to be removed, then remove it in place with .drop()."""
@@ -264,9 +270,9 @@ class GeologicalCollection(QAbstractTableModel):
                 self.parent.geol_legend_df = self.parent.geol_legend_df.append({'geological_type': geo_type,
                                                                                 'geological_feature': feature,
                                                                                 'scenario': scenario,
-                                                                                'color_R': round(np.random.random() * 255),
-                                                                                'color_G': round(np.random.random() * 255),
-                                                                                'color_B': round(np.random.random() * 255),
+                                                                                'color_R': round(np_random.random() * 255),
+                                                                                'color_G': round(np_random.random() * 255),
+                                                                                'color_B': round(np_random.random() * 255),
                                                                                 'line_thick': 2.0,
                                                                                 'geological_time': 0.0,
                                                                                 'geological_sequence': "strati_0"},

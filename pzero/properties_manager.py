@@ -1,25 +1,26 @@
 """properties_manager.py
 PZero© Andrea Bistacchi"""
 
-import numpy as np
+from numpy import linspace as np_linspace
 import matplotlib.pyplot as plt
 import colorcet as cc
 import cmocean as cmo
-from PyQt5.QtWidgets import QTreeWidgetItem, QTableWidgetItem, QLabel, QComboBox, QColorDialog, QPushButton, QSpinBox, QDoubleSpinBox
+from PyQt5.QtWidgets import QTableWidgetItem, QLabel, QComboBox
 from PyQt5.QtGui import QColor, QImage, QPixmap
 from PyQt5.QtCore import QObject
-import pandas as pd
-import pyvista as pv
+from pandas.core.common import flatten as pd_flatten
+
+from pyvista import get_cmap_safe as pv_get_cmap_safe
 
 
 def cmap2qpixmap(cmap=None, steps=50):
     """Takes a maplotlib, colorcet, or cmocean colormap and returns a QPixmap,
     modified after
     https://gist.github.com/ChrisBeaumont/4025831
-    using pv.get_cmap_safe from PyVista
+    using pv_get_cmap_safe from PyVista
     https://github.com/pyvista/pyvista/blob/6777a6a5fb4f3691b829edf6103401537faeb3cb/pyvista/plotting/colors.py#L397"""
-    inds = np.linspace(0, 1, steps)
-    colormap = pv.get_cmap_safe(cmap)
+    inds = np_linspace(0, 1, steps)
+    colormap = pv_get_cmap_safe(cmap) #maybe this is the problem with pyinstaller
     rgbas = colormap(inds)
     q_rgbas = [QColor(int(r * 255), int(g * 255), int(b * 255), int(a * 255)).rgba() for r, g, b, a in rgbas]
     im = QImage(steps, 1, QImage.Format_Indexed8)
@@ -68,9 +69,9 @@ class PropertiesCMaps(QObject):
         """Make a list of all properties (unique values)."""
         for collection in [parent.geol_coll, parent.dom_coll, parent.mesh3d_coll, parent.image_coll]:
             coll_props = collection.df['properties_names'].to_list()
-            coll_props = list(pd.core.common.flatten(coll_props))
+            coll_props = list(pd_flatten(coll_props))
             coll_prop_comps = collection.df['properties_components'].to_list()
-            coll_prop_comps = list(pd.core.common.flatten(coll_prop_comps))
+            coll_prop_comps = list(pd_flatten(coll_prop_comps))
             for i in range(len(coll_props)):
                 if coll_prop_comps[i] == 3:
                     add_props = add_props + [coll_props[i] + "[0]"] + [coll_props[i] + "[1]"] + [coll_props[i] + "[2]"]

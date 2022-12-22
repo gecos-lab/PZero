@@ -1,14 +1,14 @@
-"""stl2vtk.py
+"""stl2py
 PZero© Andrea Bistacchi"""
 
-import vtk
-from .entities_factory import TriSurf, DEM
+from vtk import vtkSTLWriter
+from .entities_factory import TriSurf
 
 
 def vtk2stl(self=None, out_dir_name=None):
     """Exports all triangulated surfaces to a collection of STL surfaces."""
     """Create STL writer."""
-    stl_writer = vtk.vtkSTLWriter()
+    stl_writer = vtkSTLWriter()
     stl_writer.SetFileTypeToASCII()
     """Loop for each entity."""
     for uid in self.geol_coll.df['uid']:
@@ -35,7 +35,7 @@ def vtk2stl(self=None, out_dir_name=None):
 def vtk2stl_dilation(self=None, out_dir_name=None, tol=1.0):
     """Apply dilation then exports all triangulated surfaces to a collection of STL surfaces."""
     """Create STL writer."""
-    stl_writer = vtk.vtkSTLWriter()
+    stl_writer = vtkSTLWriter()
     stl_writer.SetFileTypeToASCII()
     """Loop for each entity."""
     for uid in self.geol_coll.df['uid']:

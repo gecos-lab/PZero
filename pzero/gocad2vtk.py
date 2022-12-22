@@ -2,13 +2,14 @@
 PZero© Andrea Bistacchi"""
 
 from copy import deepcopy
-import numpy as np
-import vtk
+from numpy import column_stack as np_column_stack
+from numpy import shape as np_shape
+from vtk import vtkPoints, vtkCellArray, vtkDataArrayCollection, vtkFloatArray, vtkLine, vtkTriangle, vtkVertex 
 import uuid
-from .entities_factory import VertexSet, PolyLine, TriSurf, TetraSolid, XsVertexSet, XsPolyLine
+from .entities_factory import VertexSet, PolyLine, TriSurf, XsVertexSet, XsPolyLine
 from .geological_collection import GeologicalCollection
 from .boundary_collection import BoundaryCollection
-from .helper_dialogs import input_text_dialog, input_combo_dialog, options_dialog, message_dialog
+from .helper_dialogs import input_text_dialog, input_combo_dialog, options_dialog
 
 """We import only come Gocad object attributes.
 Other Gocad ASCII properties/fields/keys not implemented in PZero are:
@@ -130,9 +131,9 @@ def gocad2vtk(self=None, in_file_name=None, uid_from_name=None):
                 self.TextTerminal.appendPlainText("gocad2vtk - entity type not recognized ERROR.")
 
             """Create empty arrays for coordinates and topology and a counter for properties."""
-            curr_obj_points = vtk.vtkPoints()
-            curr_obj_cells = vtk.vtkCellArray()
-            curr_obj_properties_collection = vtk.vtkDataArrayCollection()
+            curr_obj_points = vtkPoints()
+            curr_obj_cells = vtkCellArray()
+            curr_obj_properties_collection = vtkDataArrayCollection()
             properties_number = 0
 
         elif 'name:' in clean_line[0]:
@@ -171,7 +172,7 @@ def gocad2vtk(self=None, in_file_name=None, uid_from_name=None):
                 curr_obj_dict['properties_names'].append(prop)
             properties_number = len(curr_obj_dict['properties_names'])
             for i in range(properties_number):
-                new_prop = vtk.vtkFloatArray()
+                new_prop = vtkFloatArray()
                 curr_obj_properties_collection.AddItem(new_prop)
                 curr_obj_properties_collection.GetItem(i).SetName(curr_obj_dict['properties_names'][i])
 
@@ -259,13 +260,13 @@ def gocad2vtk(self=None, in_file_name=None, uid_from_name=None):
             pass
 
         elif clean_line[0] == 'SEG':
-            line = vtk.vtkLine()
+            line = vtkLine()
             line.GetPointIds().SetId(0, int(clean_line[1]) - 1)  # "-1" since first vertex has index 0 in VTK
             line.GetPointIds().SetId(1, int(clean_line[2]) - 1)
             curr_obj_cells.InsertNextCell(line)
 
         elif clean_line[0] == 'TRGL':
-            triangle = vtk.vtkTriangle()
+            triangle = vtkTriangle()
             triangle.GetPointIds().SetId(0, int(clean_line[1]) - 1)  # "-1" since first vertex has index 0 in VTK
             triangle.GetPointIds().SetId(1, int(clean_line[2]) - 1)
             triangle.GetPointIds().SetId(2, int(clean_line[3]) - 1)
@@ -281,7 +282,7 @@ def gocad2vtk(self=None, in_file_name=None, uid_from_name=None):
                 curr_obj_dict['vtk_obj'].SetPoints(curr_obj_points)
                 """Vertex cells, one for each point, are added here."""
                 for pid in range(curr_obj_dict['vtk_obj'].GetNumberOfPoints()):
-                    vertex = vtk.vtkVertex()
+                    vertex = vtkVertex()
                     vertex.GetPointIds().SetId(0, pid)
                     curr_obj_cells.InsertNextCell(vertex)
                 curr_obj_dict['vtk_obj'].SetVerts(curr_obj_cells)
@@ -378,9 +379,9 @@ def gocad2vtk_section(self=None, in_file_name=None, uid_from_name=None, x_sectio
                 self.TextTerminal.appendPlainText("gocad2vtk - entity type not recognized ERROR.")
 
             """Create empty arrays for coordinates and topology and a counter for properties."""
-            curr_obj_points = vtk.vtkPoints()
-            curr_obj_cells = vtk.vtkCellArray()
-            curr_obj_properties_collection = vtk.vtkDataArrayCollection()
+            curr_obj_points = vtkPoints()
+            curr_obj_cells = vtkCellArray()
+            curr_obj_properties_collection = vtkDataArrayCollection()
             properties_number = 0
 
         elif 'name:' in clean_line[0]:
@@ -419,7 +420,7 @@ def gocad2vtk_section(self=None, in_file_name=None, uid_from_name=None, x_sectio
                 curr_obj_dict['properties_names'].append(prop)
             properties_number = len(curr_obj_dict['properties_names'])
             for i in range(properties_number):
-                new_prop = vtk.vtkFloatArray()
+                new_prop = vtkFloatArray()
                 curr_obj_properties_collection.AddItem(new_prop)
                 curr_obj_properties_collection.GetItem(i).SetName(curr_obj_dict['properties_names'][i])
 
@@ -503,7 +504,7 @@ def gocad2vtk_section(self=None, in_file_name=None, uid_from_name=None, x_sectio
             pass
 
         elif clean_line[0] == 'SEG':
-            line = vtk.vtkLine()
+            line = vtkLine()
             line.GetPointIds().SetId(0, int(clean_line[1]) - 1)  # "-1" since first vertex has index 0 in VTK
             line.GetPointIds().SetId(1, int(clean_line[2]) - 1)
             curr_obj_cells.InsertNextCell(line)
@@ -518,7 +519,7 @@ def gocad2vtk_section(self=None, in_file_name=None, uid_from_name=None, x_sectio
                 curr_obj_dict['vtk_obj'].SetPoints(curr_obj_points)
                 """Vertex cells, one for each point, are added here."""
                 for pid in range(curr_obj_dict['vtk_obj'].GetNumberOfPoints()):
-                    vertex = vtk.vtkVertex()
+                    vertex = vtkVertex()
                     vertex.GetPointIds().SetId(0, pid)
                     curr_obj_cells.InsertNextCell(vertex)
                 curr_obj_dict['vtk_obj'].SetVerts(curr_obj_cells)
@@ -610,9 +611,9 @@ def gocad2vtk_boundary(self=None, in_file_name=None, uid_from_name=None):
                 self.TextTerminal.appendPlainText("gocad2vtk - entity type not recognized ERROR.")
 
             """Create empty arrays for coordinates and topology and a counter for properties."""
-            curr_obj_points = vtk.vtkPoints()
-            curr_obj_cells = vtk.vtkCellArray()
-            # curr_obj_properties_collection = vtk.vtkDataArrayCollection()
+            curr_obj_points = vtkPoints()
+            curr_obj_cells = vtkCellArray()
+            # curr_obj_properties_collection = vtkDataArrayCollection()
             # properties_number = 0
 
         elif 'name:' in clean_line[0]:
@@ -651,7 +652,7 @@ def gocad2vtk_boundary(self=None, in_file_name=None, uid_from_name=None):
         #         curr_obj_dict['properties_names'].append(prop)
         #     properties_number = len(curr_obj_dict['properties_names'])
         #     for i in range(properties_number):
-        #         new_prop = vtk.vtkFloatArray()
+        #         new_prop = vtkFloatArray()
         #         curr_obj_properties_collection.AddItem(new_prop)
         #         curr_obj_properties_collection.GetItem(i).SetName(curr_obj_dict['properties_names'][i])
         #
@@ -740,13 +741,13 @@ def gocad2vtk_boundary(self=None, in_file_name=None, uid_from_name=None):
             pass
 
         elif clean_line[0] == 'SEG':
-            line = vtk.vtkLine()
+            line = vtkLine()
             line.GetPointIds().SetId(0, int(clean_line[1]) - 1)  # "-1" since first vertex has index 0 in VTK
             line.GetPointIds().SetId(1, int(clean_line[2]) - 1)
             curr_obj_cells.InsertNextCell(line)
 
         elif clean_line[0] == 'TRGL':
-            triangle = vtk.vtkTriangle()
+            triangle = vtkTriangle()
             triangle.GetPointIds().SetId(0, int(clean_line[1]) - 1)  # "-1" since first vertex has index 0 in VTK
             triangle.GetPointIds().SetId(1, int(clean_line[2]) - 1)
             triangle.GetPointIds().SetId(2, int(clean_line[3]) - 1)
@@ -762,7 +763,7 @@ def gocad2vtk_boundary(self=None, in_file_name=None, uid_from_name=None):
             #     curr_obj_dict['vtk_obj'].SetPoints(curr_obj_points)
             #     """Vertex cells, one for each point, are added here."""
             #     for pid in range(curr_obj_dict['vtk_obj'].GetNumberOfPoints()):
-            #         vertex = vtk.vtkVertex()
+            #         vertex = vtkVertex()
             #         vertex.GetPointIds().SetId(0, pid)
             #         curr_obj_cells.InsertNextCell(vertex)
             #     curr_obj_dict['vtk_obj'].SetVerts(curr_obj_cells)
@@ -843,7 +844,7 @@ def vtk2gocad(self=None, out_file_name=None):
                 """_____________Check if there is an error here with vector properties_________________________________________________"""
                 pvrtx_mtx = self.geol_coll.get_uid_vtk_obj(uid).points
                 for property_name in properties_names:
-                    pvrtx_mtx = np.column_stack([pvrtx_mtx, self.geol_coll.get_uid_vtk_obj(uid).get_point_data(property_name)])
+                    pvrtx_mtx = np_column_stack([pvrtx_mtx, self.geol_coll.get_uid_vtk_obj(uid).get_point_data(property_name)])
             else:
                 """Build VRTX matrix here"""
                 vrtx_mtx = self.geol_coll.get_uid_vtk_obj(uid).points
@@ -865,13 +866,13 @@ def vtk2gocad(self=None, out_file_name=None):
                 connectivity = self.geol_coll.get_uid_vtk_obj(uid).cells
             """Write VRTX or PVRTX"""
             if properties_names:
-                for row in range(np.shape(pvrtx_mtx)[0]):
+                for row in range(np_shape(pvrtx_mtx)[0]):
                     data_row = ' '.join(['{}'.format(cell) for cell in pvrtx_mtx[row, :]])
                     fout.write('PVRTX ' + str(
                         row + 1) + ' ' + data_row + '\n')  # row+1 since indexes in Gocad Ascii start from 1
                 del pvrtx_mtx
             else:
-                for row in range(np.shape(vrtx_mtx)[0]):
+                for row in range(np_shape(vrtx_mtx)[0]):
                     data_row = ' '.join(['{}'.format(cell) for cell in vrtx_mtx[row, :]])
                     fout.write('VRTX ' + str(
                         row + 1) + ' ' + data_row + '\n')  # row+1 since indexes in Gocad Ascii start from 1
@@ -880,17 +881,17 @@ def vtk2gocad(self=None, out_file_name=None):
             if topological_type in ['VertexSet', 'XsVertexSet']:
                 pass
             elif topological_type in ['PolyLine', 'XsPolyLine']:
-                for row in range(np.shape(connectivity)[0]):
+                for row in range(np_shape(connectivity)[0]):
                     data_row = ' '.join(['{}'.format(cell + 1) for cell in connectivity[row,:]])  # cell+1 since indexes in Gocad Ascii start from 1 - do not alter connectivity that is a shallow copy
                     fout.write("SEG " + data_row + "\n")
                 del connectivity
             elif topological_type in ['TriSurf']:
-                for row in range(np.shape(connectivity)[0]):
+                for row in range(np_shape(connectivity)[0]):
                     data_row = ' '.join(['{}'.format(cell + 1) for cell in connectivity[row,:]])  # cell+1 since indexes in Gocad Ascii start from 1 - do not alter connectivity that is a shallow copy
                     fout.write("TRGL " + data_row + "\n")
                 del connectivity
             elif topological_type in ['TetraSolid']:
-                for row in range(np.shape(connectivity)[0]):
+                for row in range(np_shape(connectivity)[0]):
                     data_row = ' '.join(['{}'.format(cell + 1) for cell in connectivity[row,:]])  # cell+1 since indexes in Gocad Ascii start from 1 - do not alter connectivity that is a shallow copy
                     fout.write("TETRA " + data_row + "\n")
                 del connectivity

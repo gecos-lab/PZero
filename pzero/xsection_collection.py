@@ -1,17 +1,25 @@
 """xsection_collection.py
 PZero© Andrea Bistacchi"""
 
-import vtk
-# import vtk.numpy_interface.dataset_adapter as dsa
-# import vtk.numpy_interface.algorithms as algs
+from vtk import vtkPoints, vtkCellArray, vtkLine
+# import numpy_interface.dataset_adapter as dsa
+# import numpy_interface.algorithms as algs
 from copy import deepcopy
 import uuid
-import numpy as np
+
+from numpy import cos as np_cos
+from numpy import sin as np_sin
+from numpy import pi as np_pi
+from numpy import arctan2 as np_arctan2
+from numpy import sqrt as np_sqrt
+from numpy import set_printoptions as np_set_printoptions
+
+
 import pandas as pd
-from PyQt5.QtCore import QAbstractTableModel, Qt, pyqtSignal, QObject, QVariant, QAbstractItemModel
+from PyQt5.QtCore import QAbstractTableModel, Qt, QVariant
 # from PyQt5.QtGui import QStandardItem, QImage
-from .entities_factory import PolyData, Plane, VertexSet, PolyLine, TriSurf, TetraSolid, XsVertexSet, XsPolyLine, DEM, MapImage, Voxet
-from .helper_dialogs import multiple_input_dialog, general_input_dialog, open_file_dialog
+from .entities_factory import Plane, XsPolyLine
+from .helper_dialogs import general_input_dialog, open_file_dialog
 from .helper_functions import auto_sep
 from .windows_factory import NavigationToolbar
 from PyQt5.QtWidgets import QAction
@@ -22,7 +30,7 @@ pd_max_columns = 20
 pd_show_precision = 4
 pd_max_colwidth = 80
 pd.set_option('display.width', pd_desired_width)
-np.set_printoptions(linewidth=pd_desired_width)
+np_set_printoptions(linewidth=pd_desired_width)
 pd.set_option('display.max_columns', pd_max_columns)
 pd.set_option('display.precision', pd_show_precision)
 pd.set_option('display.max_colwidth', pd_max_colwidth)
@@ -63,10 +71,10 @@ def section_from_azimuth(self):
         section_dict[key] = section_dict_updt[key]
     section_dict['base_z'] = 0.0
     section_dict['end_z'] = 0.0
-    section_dict['end_x'] = section_dict['base_x'] + section_dict['length'] * np.sin(section_dict['azimuth'] * np.pi / 180)
-    section_dict['end_y'] = section_dict['base_y'] + section_dict['length'] * np.cos(section_dict['azimuth'] * np.pi / 180)
-    section_dict['normal_x'] = np.sin((section_dict['azimuth'] + 90) * np.pi / 180)
-    section_dict['normal_y'] = np.cos((section_dict['azimuth'] + 90) * np.pi / 180)
+    section_dict['end_x'] = section_dict['base_x'] + section_dict['length'] * np_sin(section_dict['azimuth'] * np_pi / 180)
+    section_dict['end_y'] = section_dict['base_y'] + section_dict['length'] * np_cos(section_dict['azimuth'] * np_pi / 180)
+    section_dict['normal_x'] = np_sin((section_dict['azimuth'] + 90) * np_pi / 180)
+    section_dict['normal_y'] = np_cos((section_dict['azimuth'] + 90) * np_pi / 180)
     section_dict['normal_z'] = 0.0
     uid = self.parent.xsect_coll.add_entity_from_dict(entity_dict=section_dict)
     """Once the original XSection has been drawn, ask if a set of XSections is needed."""
@@ -92,10 +100,10 @@ def section_from_azimuth(self):
                 section_dict['name'] = section_dict['name'] + '_0'
             else:
                 break
-        section_dict['base_x'] = section_dict['base_x'] - (section_dict_updt_set['spacing'] * np.cos(section_dict_updt['azimuth'] * np.pi / 180))
-        section_dict['base_y'] = section_dict['base_y'] + (section_dict_updt_set['spacing'] * np.sin(section_dict_updt['azimuth'] * np.pi / 180))
-        section_dict['end_x'] = section_dict['base_x'] + section_dict['length'] * np.sin(section_dict['azimuth'] * np.pi / 180)
-        section_dict['end_y'] = section_dict['base_y'] + section_dict['length'] * np.cos(section_dict['azimuth'] * np.pi / 180)
+        section_dict['base_x'] = section_dict['base_x'] - (section_dict_updt_set['spacing'] * np_cos(section_dict_updt['azimuth'] * np_pi / 180))
+        section_dict['base_y'] = section_dict['base_y'] + (section_dict_updt_set['spacing'] * np_sin(section_dict_updt['azimuth'] * np_pi / 180))
+        section_dict['end_x'] = section_dict['base_x'] + section_dict['length'] * np_sin(section_dict['azimuth'] * np_pi / 180)
+        section_dict['end_y'] = section_dict['base_y'] + section_dict['length'] * np_cos(section_dict['azimuth'] * np_pi / 180)
         section_dict['uid'] = None
         uid = self.parent.xsect_coll.add_entity_from_dict(entity_dict=section_dict)
     """Un-Freeze QT interface"""
@@ -137,12 +145,12 @@ def section_from_points(self, drawn = True, section_dict_updt=None):
         section_dict[key] = section_dict_updt[key]
     section_dict['base_z'] = 0.0
     section_dict['end_z'] = 0.0
-    section_dict['azimuth'] = np.arctan2((section_dict['end_x'] - section_dict['base_x']), (section_dict['end_y'] - section_dict['base_y'])) * 180 / np.pi
+    section_dict['azimuth'] = np_arctan2((section_dict['end_x'] - section_dict['base_x']), (section_dict['end_y'] - section_dict['base_y'])) * 180 / np_pi
     if section_dict['azimuth'] < 0:
         section_dict['azimuth'] += 360
-    section_dict['length'] = np.sqrt((section_dict['end_x'] - section_dict['base_x']) ** 2 + (section_dict['end_y'] - section_dict['base_y']) ** 2)
-    section_dict['normal_x'] = np.sin((section_dict['azimuth'] + 90) * np.pi / 180)
-    section_dict['normal_y'] = np.cos((section_dict['azimuth'] + 90) * np.pi / 180)
+    section_dict['length'] = np_sqrt((section_dict['end_x'] - section_dict['base_x']) ** 2 + (section_dict['end_y'] - section_dict['base_y']) ** 2)
+    section_dict['normal_x'] = np_sin((section_dict['azimuth'] + 90) * np_pi / 180)
+    section_dict['normal_y'] = np_cos((section_dict['azimuth'] + 90) * np_pi / 180)
     section_dict['normal_z'] = 0.0
     uid = self.parent.xsect_coll.add_entity_from_dict(entity_dict=section_dict)
 
@@ -170,12 +178,12 @@ def section_from_points(self, drawn = True, section_dict_updt=None):
                     section_dict['name'] = section_dict['name'] + '_0'
                 else:
                     break
-            section_dict['base_x'] = section_dict['base_x'] - (section_dict_updt_set['spacing'] * np.cos(section_dict['azimuth'] * np.pi / 180))
-            section_dict['base_y'] = section_dict['base_y'] + (section_dict_updt_set['spacing'] * np.sin(section_dict['azimuth'] * np.pi / 180))
-            section_dict['end_x'] = section_dict['end_x'] - (section_dict_updt_set['spacing'] * np.cos(section_dict['azimuth'] * np.pi / 180))
-            section_dict['end_y'] = section_dict['end_y'] + (section_dict_updt_set['spacing'] * np.sin(section_dict['azimuth'] * np.pi / 180))
-            section_dict['normal_x'] = np.sin((section_dict['azimuth'] + 90) * np.pi / 180)
-            section_dict['normal_y'] = np.cos((section_dict['azimuth'] + 90) * np.pi / 180)
+            section_dict['base_x'] = section_dict['base_x'] - (section_dict_updt_set['spacing'] * np_cos(section_dict['azimuth'] * np_pi / 180))
+            section_dict['base_y'] = section_dict['base_y'] + (section_dict_updt_set['spacing'] * np_sin(section_dict['azimuth'] * np_pi / 180))
+            section_dict['end_x'] = section_dict['end_x'] - (section_dict_updt_set['spacing'] * np_cos(section_dict['azimuth'] * np_pi / 180))
+            section_dict['end_y'] = section_dict['end_y'] + (section_dict_updt_set['spacing'] * np_sin(section_dict['azimuth'] * np_pi / 180))
+            section_dict['normal_x'] = np_sin((section_dict['azimuth'] + 90) * np_pi / 180)
+            section_dict['normal_y'] = np_cos((section_dict['azimuth'] + 90) * np_pi / 180)
             section_dict['uid'] = None
             uid = self.parent.xsect_coll.add_entity_from_dict(entity_dict=section_dict)
     """Un-Freeze QT interface"""
@@ -480,15 +488,15 @@ class XSectionCollection(QAbstractTableModel):
         azimuth = self.df.loc[self.df['uid'] == section_uid, 'azimuth'].values[0]
         base_x = self.df.loc[self.df['uid'] == section_uid, 'base_x'].values[0]
         base_y = self.df.loc[self.df['uid'] == section_uid, 'base_y'].values[0]
-        X = W * np.sin(azimuth * np.pi / 180) + base_x
-        Y = W * np.cos(azimuth * np.pi / 180) + base_y
+        X = W * np_sin(azimuth * np_pi / 180) + base_x
+        Y = W * np_cos(azimuth * np_pi / 180) + base_y
         return X, Y
 
     def get_deltaXY_from_deltaW(self, section_uid=None, deltaW=None):
         """Gets X, Y coordinates from W coordinate (distance along the Xsection horizontal axis)"""
         azimuth = self.df.loc[self.df['uid'] == section_uid, 'azimuth'].values[0]
-        deltaX = deltaW * np.sin(azimuth * np.pi / 180)
-        deltaY = deltaW * np.cos(azimuth * np.pi / 180)
+        deltaX = deltaW * np_sin(azimuth * np_pi / 180)
+        deltaY = deltaW * np_cos(azimuth * np_pi / 180)
         return deltaX, deltaY
 
     def set_geometry(self, uid=None):
@@ -502,13 +510,13 @@ class XSectionCollection(QAbstractTableModel):
         vtk_frame = XsPolyLine(x_section_uid=uid, parent=self.parent)
         vtk_plane.SetOrigin(base_point)
         vtk_plane.SetNormal(normal)
-        frame_points = vtk.vtkPoints()
-        frame_cells = vtk.vtkCellArray()
+        frame_points = vtkPoints()
+        frame_cells = vtkCellArray()
         frame_points.InsertPoint(0, base_point[0], base_point[1], bottom)
         frame_points.InsertPoint(1, base_point[0], base_point[1], top)
         frame_points.InsertPoint(2, end_point[0], end_point[1], top)
         frame_points.InsertPoint(3, end_point[0], end_point[1], bottom)
-        line = vtk.vtkLine()
+        line = vtkLine()
         line.GetPointIds().SetId(0, 0)
         line.GetPointIds().SetId(1, 1)
         frame_cells.InsertNextCell(line)

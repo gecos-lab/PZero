@@ -4,8 +4,7 @@ PZero© Andrea Bistacchi"""
 from .entities_factory import TriSurf
 import ezdxf
 from vtk.util import numpy_support
-import pandas as pd
-import pyvista as pv
+from pandas import DataFrame as pd_DataFrame 
 
 
 def vtk2dxf(self=None, out_dir_name=None):
@@ -27,8 +26,8 @@ def vtk2dxf(self=None, out_dir_name=None):
                 dxf_out = ezdxf.new()
                 dxf_model = dxf_out.modelspace()
                 # print(part)
-                df = pd.DataFrame()
-                dfb = pd.DataFrame()
+                df = pd_DataFrame()
+                dfb = pd_DataFrame()
                 vtk_entity = part
                 # test_pc = pv.PolyData()
                 #
@@ -134,7 +133,7 @@ def vtk2dxf(self=None, out_dir_name=None):
         dxf_out = ezdxf.new()
         dxf_model = dxf_out.modelspace()
         # print(part)
-        df = pd.DataFrame()
+        df = pd_DataFrame()
         layer = f'{self.well_coll.df.loc[self.well_coll.df["uid"] == uid, "geological_feature"].values[0]}'
 
         xyz = numpy_support.vtk_to_numpy(vtk_entity.GetPoints().GetData())
@@ -167,7 +166,7 @@ def vtk2dxf(self=None, out_dir_name=None):
         dxf_out.saveas(f'{out_dir_name}/dxf/{out_file_name}.dxf')
 
 
-    complete_list = pd.DataFrame({'uids':list_uids,'geological_features':list_names})
+    complete_list = pd_DataFrame({'uids':list_uids,'geological_features':list_names})
     complete_list.to_csv(f'{out_dir_name}/exported_object_list.csv',index=False)
     """Save DXF file."""
     # out_file_name = (str(out_dir_name) + "/3dface_border.dxf")

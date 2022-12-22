@@ -17,16 +17,22 @@ from .helper_functions import angle_wrapper, PCA, best_fitting_plane
 
 """Maths imports"""
 from math import degrees, sqrt, atan2
-import numpy as np
-import pandas as pd
+from numpy import append as np_append
+from numpy import ndarray as np_ndarray
+from numpy import abs as np_abs
+from numpy import sin as np_sin
+from numpy import cos as np_cos
+from numpy import pi as np_pi
+
+from pandas import DataFrame as pd_DataFrame
+from pandas import unique as pd_unique
 
 """"VTK imports"""
 """"VTK Numpy interface imports"""
 # import vtk.numpy_interface.dataset_adapter as dsa
 from vtk.util import numpy_support
 from vtkmodules.vtkInteractionWidgets import vtkCameraOrientationWidget
-from vtk import vtkAppendPolyData,vtkExtractPoints,vtkIdList,vtkStaticPointLocator
-from vtk import vtkSphere
+from vtk import vtkExtractPoints,vtkSphere
 
 """3D plotting imports"""
 from pyvista import global_theme as pv_global_theme
@@ -95,7 +101,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         actor = the actor
         show = a boolean to show (True) or hide (false) the actor
         collection = the original collection of the actor, e.g. geol_coll, xsect_coll, etc."""
-        self.actors_df = pd.DataFrame(columns=['uid', 'actor', 'show', 'collection'])
+        self.actors_df = pd_DataFrame(columns=['uid', 'actor', 'show', 'collection'])
 
         """Create list of selected uid's."""
         self.selected_uids = []
@@ -193,23 +199,23 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.GeologyTreeWidget.hideColumn(1)  # hide the uid column
         self.GeologyTreeWidget.setItemsExpandable(True)
         if sec_uid:
-            geo_types = pd.unique(self.parent.geol_coll.df.loc[(self.parent.geol_coll.df['x_section'] == sec_uid), 'geological_type'])
+            geo_types = pd_unique(self.parent.geol_coll.df.loc[(self.parent.geol_coll.df['x_section'] == sec_uid), 'geological_type'])
         else:
-            geo_types = pd.unique(self.parent.geol_coll.df['geological_type'])
+            geo_types = pd_unique(self.parent.geol_coll.df['geological_type'])
         for geo_type in geo_types:
             glevel_1 = QTreeWidgetItem(self.GeologyTreeWidget, [geo_type])  # self.GeologyTreeWidget as parent -> top level
             glevel_1.setFlags(glevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
             if sec_uid:
-                geo_features = pd.unique(self.parent.geol_coll.df.loc[(self.parent.geol_coll.df['geological_type'] == geo_type) & (self.parent.geol_coll.df['x_section'] == sec_uid), 'geological_feature'])
+                geo_features = pd_unique(self.parent.geol_coll.df.loc[(self.parent.geol_coll.df['geological_type'] == geo_type) & (self.parent.geol_coll.df['x_section'] == sec_uid), 'geological_feature'])
             else:
-                geo_features = pd.unique(self.parent.geol_coll.df.loc[self.parent.geol_coll.df['geological_type'] == geo_type, 'geological_feature'])
+                geo_features = pd_unique(self.parent.geol_coll.df.loc[self.parent.geol_coll.df['geological_type'] == geo_type, 'geological_feature'])
             for feature in geo_features:
                 glevel_2 = QTreeWidgetItem(glevel_1, [feature])  # glevel_1 as parent -> 1st middle level
                 glevel_2.setFlags(glevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
                 if sec_uid:
-                    geo_scenario = pd.unique(self.parent.geol_coll.df.loc[(self.parent.geol_coll.df['geological_type'] == geo_type) & (self.parent.geol_coll.df['geological_feature'] == feature) & (self.parent.geol_coll.df['x_section'] == sec_uid), 'scenario'])
+                    geo_scenario = pd_unique(self.parent.geol_coll.df.loc[(self.parent.geol_coll.df['geological_type'] == geo_type) & (self.parent.geol_coll.df['geological_feature'] == feature) & (self.parent.geol_coll.df['x_section'] == sec_uid), 'scenario'])
                 else:
-                    geo_scenario = pd.unique(self.parent.geol_coll.df.loc[(self.parent.geol_coll.df['geological_type'] == geo_type) & (self.parent.geol_coll.df['geological_feature'] == feature),'scenario'])
+                    geo_scenario = pd_unique(self.parent.geol_coll.df.loc[(self.parent.geol_coll.df['geological_type'] == geo_type) & (self.parent.geol_coll.df['geological_feature'] == feature),'scenario'])
                 for scenario in geo_scenario:
                     glevel_3 = QTreeWidgetItem(glevel_2, [scenario])  # glevel_2 as parent -> 2nd middle level
                     glevel_3.setFlags(glevel_3.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
@@ -250,14 +256,14 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
 
         if sec_uid:
             filtered_topo = self.parent.geol_coll.df.loc[(self.parent.geol_coll.df['x_section'] == sec_uid), 'topological_type']
-            topo_types = pd.unique(filtered_topo)
+            topo_types = pd_unique(filtered_topo)
         else:
-            topo_types = pd.unique(self.parent.geol_coll.df['topological_type'])
+            topo_types = pd_unique(self.parent.geol_coll.df['topological_type'])
 
         for topo_type in topo_types:
             tlevel_1 = QTreeWidgetItem(self.TopologyTreeWidget, [topo_type])  # self.GeologyTreeWidget as parent -> top level
             tlevel_1.setFlags(tlevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
-            for scenario in pd.unique(self.parent.geol_coll.df.loc[self.parent.geol_coll.df['topological_type'] == topo_type, 'scenario']):
+            for scenario in pd_unique(self.parent.geol_coll.df.loc[self.parent.geol_coll.df['topological_type'] == topo_type, 'scenario']):
                 tlevel_2 = QTreeWidgetItem(tlevel_1, [scenario])  # tlevel_1 as parent -> middle level
                 tlevel_2.setFlags(tlevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
                 if sec_uid:
@@ -1200,12 +1206,12 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.WellsTreeWidget.setItemsExpandable(True)
 
 
-        locids = pd.unique(self.parent.well_coll.df['Loc ID'])
+        locids = pd_unique(self.parent.well_coll.df['Loc ID'])
 
         for locid in locids:
             tlevel_1 = QTreeWidgetItem(self.WellsTreeWidget, [locid])  # self.GeologyTreeWidget as parent -> top level
             tlevel_1.setFlags(tlevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
-            for geological_feature in pd.unique(self.parent.well_coll.df.loc[self.parent.well_coll.df['Loc ID'] == locid, 'geological_feature']):
+            for geological_feature in pd_unique(self.parent.well_coll.df.loc[self.parent.well_coll.df['Loc ID'] == locid, 'geological_feature']):
                 uid = self.parent.well_coll.df.loc[(self.parent.well_coll.df['Loc ID'] == locid)&(self.parent.well_coll.df['geological_feature'] == geological_feature), 'uid'].values[0]
                 tlevel_2 = QTreeWidgetItem(tlevel_1, [geological_feature, uid])  # tlevel_1 as parent -> middle level
                 tlevel_2.setFlags(tlevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
@@ -1346,7 +1352,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         that disrupts the trees, then they are reconnected when the trees are rebuilt"""
         self.WellsTreeWidget.itemChanged.disconnect()
         """Create pandas dataframe as list of "new" actors"""
-        actors_df_new = pd.DataFrame(columns=['uid', 'actor', 'show', 'collection', 'show_prop'])
+        actors_df_new = pd_DataFrame(columns=['uid', 'actor', 'show', 'collection', 'show_prop'])
         for uid in updated_list:
             this_actor = self.show_actor_with_property(uid=uid, collection='well_coll', show_property=None, visible=True)
             self.actors_df = self.actors_df.append({'uid': uid, 'actor': this_actor, 'show': True, 'collection': 'well_coll', 'show_prop': None}, ignore_index=True)
@@ -1428,7 +1434,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.GeologyTreeWidget.itemChanged.disconnect()
         self.TopologyTreeWidget.itemChanged.disconnect()
         """Create pandas dataframe as list of "new" actors"""
-        actors_df_new = pd.DataFrame(columns=['uid', 'actor', 'show', 'collection', 'show_prop'])
+        actors_df_new = pd_DataFrame(columns=['uid', 'actor', 'show', 'collection', 'show_prop'])
         for uid in updated_list:
             this_actor = self.show_actor_with_property(uid=uid, collection='geol_coll', show_property=None, visible=True)
             self.actors_df = self.actors_df.append({'uid': uid, 'actor': this_actor, 'show': True, 'collection': 'geol_coll', 'show_prop': None}, ignore_index=True)
@@ -1553,7 +1559,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         Disconnect signals to xsect list, if they are set, then they are
         reconnected when the list is rebuilt"""
         self.XSectionTreeWidget.itemChanged.disconnect()
-        actors_df_new = pd.DataFrame(columns=['uid', 'actor', 'show', 'collection', 'show_prop'])
+        actors_df_new = pd_DataFrame(columns=['uid', 'actor', 'show', 'collection', 'show_prop'])
         for uid in updated_list:
             this_actor = self.show_actor_with_property(uid=uid, collection='xsect_coll', show_property=None, visible=True)
             self.actors_df = self.actors_df.append({'uid': uid, 'actor': this_actor, 'show': True, 'collection': 'xsect_coll', 'show_prop': None}, ignore_index=True)
@@ -1629,7 +1635,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         Disconnect signals to boundary list, if they are set, then they are
         reconnected when the list is rebuilt"""
         self.BoundariesTableWidget.itemChanged.disconnect()
-        actors_df_new = pd.DataFrame(columns=['uid', 'actor', 'show', 'collection', 'show_prop'])
+        actors_df_new = pd_DataFrame(columns=['uid', 'actor', 'show', 'collection', 'show_prop'])
         for uid in updated_list:
             this_actor = self.show_actor_with_property(uid=uid, collection='boundary_coll', show_property=None, visible=False)
             self.actors_df = self.actors_df.append({'uid': uid, 'actor': this_actor, 'show': False, 'collection': 'boundary_coll', 'show_prop': None}, ignore_index=True)
@@ -1704,7 +1710,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         Disconnect signals to mesh3d list, if they are set, then they are
         reconnected when the list is rebuilt"""
         self.Mesh3DTableWidget.itemChanged.disconnect()
-        actors_df_new = pd.DataFrame(columns=['uid', 'actor', 'show', 'collection', 'show_prop'])
+        actors_df_new = pd_DataFrame(columns=['uid', 'actor', 'show', 'collection', 'show_prop'])
         for uid in updated_list:
             this_actor = self.show_actor_with_property(uid=uid, collection='mesh3d_coll', show_property=None, visible=False)
             self.actors_df = self.actors_df.append({'uid': uid, 'actor': this_actor, 'show': False, 'collection': 'mesh3d_coll', 'show_prop': None}, ignore_index=True)
@@ -1791,7 +1797,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         Disconnect signals to dom list, if they are set, then they are
         reconnected when the list is rebuilt"""
         self.DOMsTableWidget.itemChanged.disconnect()
-        actors_df_new = pd.DataFrame(columns=['uid', 'actor', 'show', 'collection', 'show_prop'])
+        actors_df_new = pd_DataFrame(columns=['uid', 'actor', 'show', 'collection', 'show_prop'])
         for uid in updated_list:
             this_actor = self.show_actor_with_property(uid=uid, collection='dom_coll', show_property=None, visible=False)
             self.actors_df = self.actors_df.append({'uid': uid, 'actor': this_actor, 'show': False, 'collection': 'dom_coll', 'show_prop': None}, ignore_index=True)
@@ -1878,7 +1884,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         Disconnect signals to image list, if they are set, then they are
         reconnected when the list is rebuilt"""   """________________________________________________________________________"""
         self.ImagesTableWidget.itemChanged.disconnect()
-        actors_df_new = pd.DataFrame(columns=['uid', 'actor', 'show', 'collection', 'show_prop'])
+        actors_df_new = pd_DataFrame(columns=['uid', 'actor', 'show', 'collection', 'show_prop'])
         for uid in updated_list:
             this_actor = self.show_actor_with_property(uid=uid, collection='image_coll', show_property=None, visible=False)
             self.actors_df = self.actors_df.append({'uid': uid, 'actor': this_actor, 'show': False, 'collection': 'image_coll', 'show_prop': None}, ignore_index=True)
@@ -2245,7 +2251,7 @@ class View3D(BaseView):
 
             old_vtk_obj.append_point(point_vector=plane_c)
             old_plane_n = old_vtk_obj.get_point_data('Normals')
-            old_plane_n = np.append(old_plane_n,plane_n).reshape(-1,3)
+            old_plane_n = np_append(old_plane_n,plane_n).reshape(-1,3)
             old_vtk_obj.set_point_data('Normals',old_plane_n)
             old_vtk_obj.auto_cells()
             self.parent.geol_coll.replace_vtk(uid,old_vtk_obj,const_color=True)
@@ -2432,7 +2438,7 @@ class View3D(BaseView):
         """Then plot the vtk object with proper options."""
         if isinstance(plot_entity, (PolyLine, TriSurf, XsPolyLine)):
             plot_rgb_option = None
-            if isinstance(plot_entity.points, np.ndarray):
+            if isinstance(plot_entity.points, np_ndarray):
                 """This  check is needed to avoid errors when trying to plot an empty
                 PolyData, just created at the beginning of a digitizing session."""
                 if show_property is None:
@@ -2463,7 +2469,7 @@ class View3D(BaseView):
             style = 'points'
             plot_rgb_option = None
             texture=False
-            if isinstance(plot_entity.points, np.ndarray):
+            if isinstance(plot_entity.points, np_ndarray):
                 """This  check is needed to avoid errors when trying to plot an empty
                 PolyData, just created at the beginning of a digitizing session."""
                 if show_property is None:
@@ -2544,7 +2550,7 @@ class View3D(BaseView):
             new_plot = pvPointSet()
             new_plot.ShallowCopy(plot_entity)#this is temporary
             file = self.parent.dom_coll.df.loc[self.parent.dom_coll.df['uid'] == uid, "name"].values[0]
-            if isinstance(plot_entity.points, np.ndarray):
+            if isinstance(plot_entity.points, np_ndarray):
                 """This check is needed to avoid errors when trying to plot an empty
                 PolyData, just created at the beginning of a digitizing session."""
                 if show_property is None:
@@ -2596,7 +2602,7 @@ class View3D(BaseView):
                                            plot_texture_option=plot_texture_option, plot_rgb_option=False, visible=visible)
         elif isinstance(plot_entity, Seismics):
             plot_rgb_option = None
-            if isinstance(plot_entity.points, np.ndarray):
+            if isinstance(plot_entity.points, np_ndarray):
                 """This  check is needed to avoid errors when trying to plot an empty
                 PolyData, just created at the beginning of a digitizing session."""
                 if show_property is None:
@@ -2698,7 +2704,7 @@ class View3D(BaseView):
                                            show_scalar_bar=show_scalar_bar,  # bool (default True)
                                            multi_colors=False,  # for MultiBlock datasets
                                            name=uid,  # actor name
-                                           texture=plot_texture_option,  # ________________________________ vtk.vtkTexture or np.ndarray or boolean, will work if input mesh has texture coordinates. True > first available texture. String > texture with that name already associated to mesh.
+                                           texture=plot_texture_option,  # ________________________________ vtk.vtkTexture or np_ndarray or boolean, will work if input mesh has texture coordinates. True > first available texture. String > texture with that name already associated to mesh.
                                            render_points_as_spheres=points_as_spheres,
                                            render_lines_as_tubes=render_lines_as_tubes,
                                            smooth_shading=False,
@@ -2828,7 +2834,7 @@ class View3D(BaseView):
             else:
                 # normals = vtk_obj.get_point_data('Normals')
                 # nx,ny,nz = normals[:,0],normals[:,1],normals[:,2]
-                # dip = np.arccos(np.abs(nz))
+                # dip = np.arccos(np_abs(nz))
                 # dir = np.arctan2(nx, ny)-np.deg2rad(90))
                 dip = vtk_obj.points_map_dip
                 dip_az = vtk_obj.points_map_dip_azimuth
@@ -2838,7 +2844,7 @@ class View3D(BaseView):
                 vtk_obj.init_point_data('dip direction',1)
 
                 vtk_obj.set_point_data('dip',dip)
-                vtk_obj.set_point_data('dip direction',np.abs(dip_az))
+                vtk_obj.set_point_data('dip direction',np_abs(dip_az))
 
                 self.parent.dom_coll.replace_vtk(uid,vtk_obj)
             # print(normals)
@@ -3418,7 +3424,7 @@ class ViewMap(View2D):
             plot_entity = self.parent.image_coll.get_uid_vtk_obj(uid)
         """Then plot."""
         if isinstance(plot_entity, (VertexSet, PolyLine, XsVertexSet, XsPolyLine, Attitude)):
-            if isinstance(plot_entity.points, np.ndarray):
+            if isinstance(plot_entity.points, np_ndarray):
                 if plot_entity.points_number > 0:
                     """This  check is needed to avoid errors when trying to plot an empty
                     PolyData, just created at the beginning of a digitizing session.
@@ -3428,8 +3434,8 @@ class ViewMap(View2D):
                     if isinstance(plot_entity, (VertexSet,Attitude)):
                         if uid in self.selected_uids:
                             if show_property == "Normals":
-                                U = np.sin((plot_entity.points_map_dip_azimuth+90) * np.pi / 180)
-                                V = np.cos((plot_entity.points_map_dip_azimuth+90) * np.pi / 180)
+                                U = np_sin((plot_entity.points_map_dip_azimuth+90) * np_pi / 180)
+                                V = np_cos((plot_entity.points_map_dip_azimuth+90) * np_pi / 180)
                                 # in quiver scale=40 means arrow is 1/40 of figure width, (shaft) width is scaled to figure width, head length and width are scaled to shaft
                                 this_actor = self.ax.quiver(X, Y, U, V, pivot='mid', scale=40, width=0.005, headlength=3, headaxislength=3, facecolor=color_RGB, edgecolor='white', linewidth=1)
                             else:
@@ -3437,8 +3443,8 @@ class ViewMap(View2D):
                             this_actor.set_visible(visible)
                         else:
                             if show_property == "Normals":
-                                U = np.sin((plot_entity.points_map_dip_azimuth+90) * np.pi / 180)
-                                V = np.cos((plot_entity.points_map_dip_azimuth+90) * np.pi / 180)
+                                U = np_sin((plot_entity.points_map_dip_azimuth+90) * np_pi / 180)
+                                V = np_cos((plot_entity.points_map_dip_azimuth+90) * np_pi / 180)
                                 # in quiver scale=40 means arrow is 1/40 of figure width, (shaft) width is scaled to figure width, head length and width are scaled to shaft
                                 this_actor = self.ax.quiver(X, Y, U, V, pivot='mid', scale=40, width=0.005, headlength=3, headaxislength=3, facecolor=color_RGB, edgecolor='white', linewidth=1)
                                 for i,x in enumerate(X):
@@ -3460,7 +3466,7 @@ class ViewMap(View2D):
             else:
                 this_actor = None
         elif isinstance(plot_entity, TriSurf):
-            if isinstance(plot_entity.points, np.ndarray):
+            if isinstance(plot_entity.points, np_ndarray):
                 if plot_entity.points_number > 0:
                     """This  check is needed to avoid errors when trying to plot an empty
                     PolyData, just created at the beginning of a digitizing session.
@@ -3482,7 +3488,7 @@ class ViewMap(View2D):
             else:
                 this_actor = None
         elif isinstance(plot_entity, DEM):
-            if isinstance(plot_entity.points, np.ndarray):
+            if isinstance(plot_entity.points, np_ndarray):
                 if plot_entity.points_number > 0:
                     """This  check is needed to avoid errors when trying to plot an empty
                     PolyData, just created at the beginning of a digitizing session.
@@ -3521,7 +3527,7 @@ class ViewMap(View2D):
             else:
                 this_actor = None
         elif isinstance(plot_entity, Seismics):
-            if isinstance(plot_entity.points, np.ndarray):
+            if isinstance(plot_entity.points, np_ndarray):
                 if plot_entity.points_number > 0:
                     """This  check is needed to avoid errors when trying to plot an empty
                     object, just created at the beginning of a digitizing session.
@@ -3727,7 +3733,7 @@ class ViewXsection(View2D):
                 else:
                     this_actor = None
             else:
-                if isinstance(plot_entity.points, np.ndarray):
+                if isinstance(plot_entity.points, np_ndarray):
                     if plot_entity.points_number > 0:
                         """These  checks are needed to avoid errors when trying to plot an empty
                         PolyData, just created at the beginning of a digitizing session.
@@ -3737,8 +3743,8 @@ class ViewXsection(View2D):
                         if isinstance(plot_entity, XsVertexSet):
                             if uid in self.selected_uids:
                                 if show_property == "Normals":
-                                    U = np.cos(plot_entity.points_xs_app_dip * np.pi / 180)
-                                    V = np.sin(plot_entity.points_xs_app_dip * np.pi / 180)
+                                    U = np_cos(plot_entity.points_xs_app_dip * np_pi / 180)
+                                    V = np_sin(plot_entity.points_xs_app_dip * np_pi / 180)
                                     """In quiver scale=40 means arrow is 1/40 of figure width, (shaft) width is scaled to figure width, head length and width are scaled to shaft."""
                                     this_actor = self.ax.quiver(W, Z, U, V, pivot='mid', scale=50, width=0.002, headwidth=1, headlength=0.01, headaxislength=0.01, facecolor=color_RGB, edgecolor='white', linewidth=1)
 
@@ -3747,8 +3753,8 @@ class ViewXsection(View2D):
                                 this_actor.set_visible(visible)
                             else:
                                 if show_property == "Normals":
-                                    U = np.cos(plot_entity.points_xs_app_dip * np.pi / 180)
-                                    V = -np.sin(plot_entity.points_xs_app_dip * np.pi / 180)
+                                    U = np_cos(plot_entity.points_xs_app_dip * np_pi / 180)
+                                    V = -np_sin(plot_entity.points_xs_app_dip * np_pi / 180)
                                     """In quiver scale=40 means arrow is 1/40 of figure width, (shaft) width is scaled to figure width, head length and width are scaled to shaft."""
                                     this_actor = self.ax.quiver(W,Z,U,V,pivot='mid', scale=50, width=0.002, headwidth=1, headlength=0.01, headaxislength=0.01, facecolor=color_RGB, edgecolor='white', linewidth=1)
                                 else:
@@ -3781,7 +3787,7 @@ class ViewXsection(View2D):
         self.GeologyTreeWidget.itemChanged.disconnect()
         self.TopologyTreeWidget.itemChanged.disconnect()
         """Create pandas dataframe as list of "new" actors"""
-        actors_df_new = pd.DataFrame(columns=['uid', 'actor', 'show', 'collection', 'show_prop'])
+        actors_df_new = pd_DataFrame(columns=['uid', 'actor', 'show', 'collection', 'show_prop'])
         for uid in updated_list:
             this_actor = self.show_actor_with_property(uid=uid, collection='geol_coll', show_property=None, visible=True)
             self.actors_df = self.actors_df.append({'uid': uid, 'actor': this_actor, 'show': True, 'collection': 'geol_coll', 'show_prop': None}, ignore_index=True)
@@ -3797,7 +3803,7 @@ class ViewXsection(View2D):
         Disconnect signals to mesh3d list, if they are set, then they are
         reconnected when the list is rebuilt"""
         self.Mesh3DTableWidget.itemChanged.disconnect()
-        actors_df_new = pd.DataFrame(columns=['uid', 'actor', 'show', 'collection', 'show_prop'])
+        actors_df_new = pd_DataFrame(columns=['uid', 'actor', 'show', 'collection', 'show_prop'])
         for uid in updated_list:
             this_actor = self.show_actor_with_property(uid=uid, collection='mesh3d_coll', show_property=None, visible=False)
             self.actors_df = self.actors_df.append({'uid': uid, 'actor': this_actor, 'show': False, 'collection': 'mesh3d_coll', 'show_prop': None}, ignore_index=True)
@@ -3811,7 +3817,7 @@ class ViewXsection(View2D):
         Disconnect signals to dom list, if they are set, then they are
         reconnected when the list is rebuilt"""
         self.DOMsTableWidget.itemChanged.disconnect()
-        actors_df_new = pd.DataFrame(columns=['uid', 'actor', 'show', 'collection', 'show_prop'])
+        actors_df_new = pd_DataFrame(columns=['uid', 'actor', 'show', 'collection', 'show_prop'])
         for uid in updated_list:
             this_actor = self.show_actor_with_property(uid=uid, collection='dom_coll', show_property=None, visible=False)
             self.actors_df = self.actors_df.append({'uid': uid, 'actor': this_actor, 'show': False, 'collection': 'dom_coll', 'show_prop': None}, ignore_index=True)
@@ -3825,7 +3831,7 @@ class ViewXsection(View2D):
         Disconnect signals to xsect list, if they are set, then they are
         reconnected when the list is rebuilt"""
         self.XSectionTreeWidget.itemChanged.disconnect()
-        actors_df_new = pd.DataFrame(columns=['uid', 'actor', 'show', 'collection', 'show_prop'])
+        actors_df_new = pd_DataFrame(columns=['uid', 'actor', 'show', 'collection', 'show_prop'])
         for uid in updated_list:
             this_actor = self.show_actor_with_property(uid=uid, collection='xsect_coll', show_property=None, visible=True)
             self.actors_df = self.actors_df.append({'uid': uid, 'actor': this_actor, 'show': True, 'collection': 'xsect_coll', 'show_prop': None}, ignore_index=True)
@@ -3913,7 +3919,7 @@ class ViewStereoplot(BaseView):
         self.GeologyTreeWidget.setItemsExpandable(True)
 
         filtered_geo = self.parent.geol_coll.df.loc[(self.parent.geol_coll.df['topological_type'] == 'VertexSet'), 'geological_type']
-        geo_types = pd.unique(filtered_geo)
+        geo_types = pd_unique(filtered_geo)
 
         for geo_type in geo_types:
             glevel_1 = QTreeWidgetItem(self.GeologyTreeWidget, [geo_type])  # self.GeologyTreeWidget as parent -> top level
@@ -3921,14 +3927,14 @@ class ViewStereoplot(BaseView):
 
 
             filtered_geo_feat = self.parent.geol_coll.df.loc[(self.parent.geol_coll.df['geological_type'] == geo_type) & (self.parent.geol_coll.df['topological_type'] == 'VertexSet'), 'geological_feature']
-            geo_features = pd.unique(filtered_geo_feat)
+            geo_features = pd_unique(filtered_geo_feat)
 
 
             for feature in geo_features:
                 glevel_2 = QTreeWidgetItem(glevel_1, [feature])  # glevel_1 as parent -> 1st middle level
                 glevel_2.setFlags(glevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
 
-                geo_scenario = pd.unique(self.parent.geol_coll.df.loc[(self.parent.geol_coll.df['geological_type'] == geo_type) & (self.parent.geol_coll.df['geological_feature'] == feature),'scenario'])
+                geo_scenario = pd_unique(self.parent.geol_coll.df.loc[(self.parent.geol_coll.df['geological_type'] == geo_type) & (self.parent.geol_coll.df['geological_feature'] == feature),'scenario'])
 
                 for scenario in geo_scenario:
                     glevel_3 = QTreeWidgetItem(glevel_2, [scenario])  # glevel_2 as parent -> 2nd middle level
@@ -3966,12 +3972,12 @@ class ViewStereoplot(BaseView):
         self.TopologyTreeWidget.setItemsExpandable(True)
 
         filtered_topo = self.parent.geol_coll.df.loc[(self.parent.geol_coll.df['topological_type'] == 'VertexSet'), 'topological_type']
-        topo_types = pd.unique(filtered_topo)
+        topo_types = pd_unique(filtered_topo)
 
         for topo_type in topo_types:
             tlevel_1 = QTreeWidgetItem(self.TopologyTreeWidget, [topo_type])  # self.GeologyTreeWidget as parent -> top level
             tlevel_1.setFlags(tlevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
-            for scenario in pd.unique(self.parent.geol_coll.df.loc[self.parent.geol_coll.df['topological_type'] == topo_type, 'scenario']):
+            for scenario in pd_unique(self.parent.geol_coll.df.loc[self.parent.geol_coll.df['topological_type'] == topo_type, 'scenario']):
                 tlevel_2 = QTreeWidgetItem(tlevel_1, [scenario])  # tlevel_1 as parent -> middle level
                 tlevel_2.setFlags(tlevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
 
@@ -4264,7 +4270,7 @@ class ViewStereoplot(BaseView):
             plot_entity = None
         """Then plot."""
         if isinstance(plot_entity, (VertexSet, Attitude)):
-            if isinstance(plot_entity.points, np.ndarray):
+            if isinstance(plot_entity.points, np_ndarray):
                 if plot_entity.points_number > 0:
                     """This check is needed to avoid errors when trying to plot an empty
                     PolyData, just created at the beginning of a digitizing session.

@@ -6,9 +6,12 @@ from copy import deepcopy
 import uuid
 from .entities_factory import DEM
 from .dom_collection import DomCollection
-import pyvista as pv
+from pyvista import StructuredGrid as pv_StructuredGrid
 import xarray as xr
-import numpy as np
+from numpy import asarray as np_asarray
+from numpy import any as np_any
+from numpy import nan as np_nan
+from numpy import meshgrid as np_meshgrid
 
 
 def dem2vtk(self=None, in_file_name=None):
@@ -19,15 +22,15 @@ def dem2vtk(self=None, in_file_name=None):
         Helpful: http://xarray.pydata.org/en/stable/auto_gallery/plot_rasterio.html
         https://github.com/pyvista/pyvista-support/issues/205, thanks to Bane Sullivan"""
         data = xr.open_rasterio(in_file_name)
-        values = np.asarray(data)
+        values = np_asarray(data)
         nans = values == data.nodatavals
-        if np.any(nans):
-            values[nans] = np.nan
-        xx, yy = np.meshgrid(data['x'], data['y'])
+        if np_any(nans):
+            values[nans] = np_nan
+        xx, yy = np_meshgrid(data['x'], data['y'])
         zz = values.reshape(xx.shape)
         """Convert to DEM() instance."""
         curr_obj = DEM()
-        temp_obj = pv.StructuredGrid(xx, yy, zz)
+        temp_obj = pv_StructuredGrid(xx, yy, zz)
         temp_obj['elevation'] = zz.ravel(order='F')
         curr_obj.ShallowCopy(temp_obj)
         curr_obj.Modified()
