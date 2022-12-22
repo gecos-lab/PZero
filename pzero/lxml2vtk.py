@@ -1,6 +1,7 @@
 from datetime import datetime
 import lxml.etree as et
-import numpy as np
+from numpy import shape as np_shape
+from numpy import zeros as np_zeros
 from vtk.util import numpy_support
 
 from pzero.entities_factory import TriSurf
@@ -42,8 +43,8 @@ def vtk2lxml(self,out_dir_name=None):
             for i,part in enumerate(parts):
                 n_cells = part.GetNumberOfCells()
 
-                cell_shape = np.shape(numpy_support.vtk_to_numpy(part.GetCell(0).GetPoints().GetData()))
-                point_arr = np.zeros((n_cells,cell_shape[0],cell_shape[1]))
+                cell_shape = np_shape(numpy_support.vtk_to_numpy(part.GetCell(0).GetPoints().GetData()))
+                point_arr = np_zeros((n_cells,cell_shape[0],cell_shape[1]))
 
 
                 if cell_shape[0] == 3:
