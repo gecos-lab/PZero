@@ -7,7 +7,7 @@ from datetime import datetime
 
 from PyQt5.QtWidgets import QMainWindow, QMessageBox
 from PyQt5.QtCore import Qt, QSortFilterProxyModel, pyqtSignal
-from vtk import vtkAppendPolyData, vtkOctreePointLocator, vtkXMLPolyDataWriter, vtkXMLStructuredGridWriter, vtkXMLImageDataWriter, vtkXMLStructuredGridReader, vtkXMLPolyDataReader, vtkXMLImageDataReader
+from vtk import vtkPolyData,vtkAppendPolyData, vtkOctreePointLocator, vtkXMLPolyDataWriter, vtkXMLStructuredGridWriter, vtkXMLImageDataWriter, vtkXMLStructuredGridReader, vtkXMLPolyDataReader, vtkXMLImageDataReader
 from pandas import DataFrame as pd_DataFrame
 from pandas import read_json as pd_read_json
 from pandas import read_csv as pd_read_csv

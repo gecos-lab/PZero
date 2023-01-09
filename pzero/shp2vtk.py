@@ -4,7 +4,6 @@ PZero© Andrea Bistacchi"""
 from copy import deepcopy
 
 from matplotlib.text import Annotation
-from sqlalchemy import column
 from .entities_factory import Fritti, PolyLine, VertexSet, Attitude
 from numpy import array as np_array
 from numpy import shape as np_shape
