@@ -9,7 +9,7 @@ from pyvista import PolyData as pv_PolyData #this should be removed
 from pyvista import Spline #this should be removed
 from pyvista import Plotter #this should be removed
 from pyvista import image_to_texture as pv_image_to_texture
-from pyvista.core.filters import _get_output, _update_alg
+from pyvista.core.filters import _update_alg
 from numpy import shape as np_shape
 from numpy import arctan2 as np_arctan2
 from numpy import arctan as np_arctan

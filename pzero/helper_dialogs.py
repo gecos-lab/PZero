@@ -21,10 +21,6 @@ from numpy import c_ as np_c_
 from difflib import SequenceMatcher
 from .helper_functions import auto_sep
 
-
-from vtk import vtkCameraOrientationWidget
-from pyvista import global_theme as pv_global_theme
-from pyvista import examples
 from pyvistaqt import QtInteractor as pvQtInteractor
 
 def options_dialog(title=None, message=None, yes_role=None, no_role=None, reject_role=None):

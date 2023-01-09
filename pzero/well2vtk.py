@@ -5,15 +5,25 @@ Convert well data (csv, ags ...) in vtk objects.
 
 """
 
-import numpy as np
-import os
+from numpy import array as np_array
+from numpy import deg2rad as np_deg2rad
+from numpy import cos as np_cos
+from numpy import sin as np_sin
+from numpy import vstack as np_vstack
+from numpy import zeros as np_zeros
+from numpy import argmin as np_argmin
+from numpy import abs as np_abs
+from numpy import full as np_full
+from numpy import nan as np_nan
+from numpy import random as np_random
+
 from copy import deepcopy
 import vtk
 import pyvista as pv
 from .entities_factory import Attitude, Well,WellTrace,Fritti
 from uuid import uuid4
 # from .entities_factory import WellData
-from .helper_functions import auto_sep
+
 from .well_collection import WellCollection
 from .geological_collection import GeologicalCollection
 from .fluid_collection import FluidsCollection
@@ -30,7 +40,7 @@ def well2vtk(self,path=None):
 
     # Get and set well head data
 
-    xyz_head = np.array([well_data['EASTING'].values,well_data['NORTHING'].values,well_data['ELEV'].values]).reshape(-1,3)
+    xyz_head = np_array([well_data['EASTING'].values,well_data['NORTHING'].values,well_data['ELEV'].values]).reshape(-1,3)
     well_head = xyz_head
 
     # Get and set well trace data
@@ -41,7 +51,7 @@ def well2vtk(self,path=None):
     y = xyz_head[0,1]-trace_data['DY']
     z = xyz_head[0,2]-trace_data['DZ']
 
-    xyz_trace = np.vstack([x,y,z]).T.reshape(-1,3)
+    xyz_trace = np_vstack([x,y,z]).T.reshape(-1,3)
 
 
     well_obj = Well(ID=well_id,trace_xyz=xyz_trace,head_xyz=xyz_head)
@@ -62,22 +72,22 @@ def well2vtk(self,path=None):
 
         if 'START' in prop.columns:
             if key == 'LITHOLOGY' or key == 'GEOLOGY':
-                tr_data = np.full(shape=(points,3),fill_value=np.nan)
+                tr_data = np_full(shape=(points,3),fill_value=np_nan)
 
-                color_dict = {k: np.random.randint(255,size=3) for k in pd.unique(prop[key])}
+                color_dict = {k: np_random.randint(255,size=3) for k in pd.unique(prop[key])}
                 for row,(start,end,value) in prop.iterrows():
 
-                        start_idx = np.argmin(np.abs(arr - start))
-                        end_idx = np.argmin(np.abs(arr - end))
+                        start_idx = np_argmin(np_abs(arr - start))
+                        end_idx = np_argmin(np_abs(arr - end))
                         # print(key)
                         # print(len(curve_copy.points[start_idx:end_idx]))
                         color_val = color_dict[value]
                         tr_data[start_idx:end_idx] = color_val
             else:
-                tr_data = np.zeros(shape=points)
+                tr_data = np_zeros(shape=points)
                 for row,(start,end,value) in prop.iterrows():
-                    start_idx = np.argmin(np.abs(arr - start))
-                    end_idx = np.argmin(np.abs(arr - end))
+                    start_idx = np_argmin(np_abs(arr - start))
+                    end_idx = np_argmin(np_abs(arr - end))
                     # print(key)
                     # print(len(curve_copy.points[start_idx:end_idx]))
                     tr_data[start_idx:end_idx] = value
@@ -91,7 +101,7 @@ def well2vtk(self,path=None):
                     mrk_pos = []
                     mrk_data = []
                     for row in prop.index:
-                        idx = np.argmin(np.abs(arr - row))
+                        idx = np_argmin(np_abs(arr - row))
                         value = prop.loc[row,col]
                         mrk_data.append(value)
                         mrk_pos.append(well_obj.trace.points[idx,:])
@@ -104,10 +114,10 @@ def well2vtk(self,path=None):
 
                     points_arr = well_obj.trace.points
                     tr_data = prop_clean.values
-                    xyz = np.zeros(shape=(len(prop_clean),3))
+                    xyz = np_zeros(shape=(len(prop_clean),3))
 
                     for i,row in enumerate(prop_clean.index):
-                        idx = np.argmin(np.abs(arr - row))
+                        idx = np_argmin(np_abs(arr - row))
                         # value = prop_clean.loc[row]
                         xyz[i,:] = points_arr[idx,:]
                     well_obj.add_trace_data(name=f'{col}',tr_data=tr_data,xyz=xyz)
@@ -188,15 +198,15 @@ def well2vtk(self,path=None):
     #     unique_id = pd.unique(data['LocationID'])
     #     location = loc.loc[loc['LocationID'].values==unique_id[0],['LocationID','Easting','Northing','GroundLevel']]
 
-    #     top = np.array(location[['Easting','Northing','GroundLevel']].values[0])
+    #     top = np_array(location[['Easting','Northing','GroundLevel']].values[0])
 
     #     if ('Trend' or 'Plunge') not in list(loc.keys()) or (pd.isna(loc.loc[loc['LocationID'].values==unique_id[0],'Trend'].values) or pd.isna(loc.loc[loc['LocationID'].values==unique_id[0],'Plunge'].values)) :
     #         print('Trend or plunge value not specified. Assuming vertical borehole')
     #         trend = 0
-    #         plunge = np.deg2rad(90)
+    #         plunge = np_deg2rad(90)
     #     else:
-    #         trend = np.deg2rad(loc.loc[loc['LocationID'].values==unique_id[0],'Trend'].values[0])
-    #         plunge = np.deg2rad(loc.loc[loc['LocationID'].values==unique_id[0],'Plunge'].values[0])
+    #         trend = np_deg2rad(loc.loc[loc['LocationID'].values==unique_id[0],'Trend'].values[0])
+    #         plunge = np_deg2rad(loc.loc[loc['LocationID'].values==unique_id[0],'Plunge'].values[0])
 
     #     legs = [0]
     #     for i,v in enumerate(data['DepthTop'][1:]):
@@ -216,13 +226,13 @@ def well2vtk(self,path=None):
     #                     length = legs[i+1]
 
     #                     # top[2] -= l
-    #                     x_bottom = top[0]+(length*np.cos(plunge)*np.sin(trend))
-    #                     y_bottom = top[1]+(length*np.cos(plunge)*np.cos(trend))
-    #                     z_bottom = top[2]-(length*np.sin(plunge))
+    #                     x_bottom = top[0]+(length*np_cos(plunge)*np_sin(trend))
+    #                     y_bottom = top[1]+(length*np_cos(plunge)*np_cos(trend))
+    #                     z_bottom = top[2]-(length*np_sin(plunge))
 
-    #                     bottom = np.array([x_bottom,y_bottom,z_bottom])
+    #                     bottom = np_array([x_bottom,y_bottom,z_bottom])
 
-    #                     points = np.array([top,bottom])
+    #                     points = np_array([top,bottom])
 
     #                     seg = pv.Spline(points)
     #                     seg.cell_data[c] = cell_data.values
@@ -255,10 +265,10 @@ def well2vtk(self,path=None):
     #     test.plot()
         
         
-    #     # well_marker.points = np.array([top])
+    #     # well_marker.points = np_array([top])
     #     # well_marker.auto_cells()
         
-    #     # top = np.array([x_bottom,y_bottom,z_bottom])
+    #     # top = np_array([x_bottom,y_bottom,z_bottom])
         
     #     # geo_code = data.loc[i,"GeologyCode"]
         

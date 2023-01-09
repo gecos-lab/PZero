@@ -196,7 +196,8 @@ To save the **Conda** environment in the ```environment.yml``` file (in ```conda
 
 ```
 conda activate pzero
-conda env export > environment.yml
+conda env export --from-history | findstr  -v "prefix" > environment.yml   (Windows)
+conda env export --from-history | grep  -v "prefix" > environment.yml      (Linux or macOS)
 ```
 
 In case you need to remove the pzero **Conda** environment, e.g. to build a clean new one (in ```conda terminal```):

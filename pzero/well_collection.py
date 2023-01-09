@@ -1,5 +1,7 @@
-import numpy as np
-import pandas as pd
+from numpy import random as np_random
+from numpy import round as np_round
+from pandas import DataFrame as pd_DataFrame
+from pandas import unique as pd_unique
 import uuid
 from copy import deepcopy
 from PyQt5.QtCore import QAbstractTableModel, Qt, QVariant
@@ -44,7 +46,7 @@ class WellCollection(QAbstractTableModel):
         """Import reference to parent, otherwise it is difficult to reference them in SetData() that has a standard list of inputs."""
         self.parent = parent
         """Initialize Pandas dataframe."""
-        self.df = pd.DataFrame(columns=list(self.well_entity_dict.keys()))
+        self.df = pd_DataFrame(columns=list(self.well_entity_dict.keys()))
         """Here we use .columns.get_indexer to get indexes of the columns that we would like to be editable in the QTableView"""
         self.editable_columns = self.df.columns.get_indexer(["name"])
 
@@ -64,7 +66,7 @@ class WellCollection(QAbstractTableModel):
         """Then emit signal to update the views."""
         locid = entity_dict['Loc ID']
         if self.parent.well_legend_df.loc[self.parent.well_legend_df['Loc ID'] == locid].empty:
-            R,G,B = np.round(np.random.random(3) * 255)
+            R,G,B = np_round(np_random.random(3) * 255)
             self.parent.well_legend_df = self.parent.well_legend_df.append({'Loc ID': locid,
                                                                             'color_R': R,
                                                                             'color_G': G,
@@ -98,8 +100,8 @@ class WellCollection(QAbstractTableModel):
     def well_attr_modified_update_legend_table(self):
         able_updated = False
         """First remove unused locid / feature"""
-        locid_in_legend = pd.unique(self.parent.well_legend_df['Loc ID'])
-        features_in_legend = pd.unique(self.parent.well_legend_df['geological_feature'])
+        locid_in_legend = pd_unique(self.parent.well_legend_df['Loc ID'])
+        features_in_legend = pd_unique(self.parent.well_legend_df['geological_feature'])
         for loc_id in locid_in_legend:
             if self.parent.well_coll.df.loc[self.parent.well_coll.df['Loc ID'] == loc_id].empty:
                 """Get index of row to be removed, then remove it in place with .drop()."""
@@ -127,9 +129,9 @@ class WellCollection(QAbstractTableModel):
             if self.parent.well_legend_df.loc[(self.parent.well_legend_df['Loc ID'] == locid) & (self.parent.well_legend_df['geological_feature'] == feature)].empty:
                 self.parent.well_legend_df = self.parent.well_legend_df.append({'Loc ID': locid,
                                                                                 'geological_feature': feature,
-                                                                                'color_R': round(np.random.random() * 255),
-                                                                                'color_G': round(np.random.random() * 255),
-                                                                                'color_B': round(np.random.random() * 255),
+                                                                                'color_R': round(np_random.random() * 255),
+                                                                                'color_G': round(np_random.random() * 255),
+                                                                                'color_B': round(np_random.random() * 255),
                                                                                 'line_thick': 2.0,
                                                                                 },
                                                                                ignore_index=True)

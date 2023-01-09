@@ -1,11 +1,23 @@
 from copy import deepcopy
-import numpy as np
+
+
+from numpy import asarray as np_asarray
+from numpy import vstack as np_vstack
+from numpy import column_stack as np_column_stack
+from numpy import array as np_array
+from numpy import zeros as np_zeros
+from numpy import shape as np_shape
+from numpy import sqrt as np_sqrt
+from numpy import flip as np_flip
+from numpy import arange as np_arange
+
+
 from .geological_collection import GeologicalCollection
 from .helper_dialogs import multiple_input_dialog, input_one_value_dialog, message_dialog, tic, toc
-from .windows_factory import ViewMap, ViewXsection, View2D, NavigationToolbar
+from .windows_factory import ViewMap, ViewXsection, NavigationToolbar
 from .entities_factory import PolyLine, XsPolyLine
 from shapely import affinity
-from shapely.geometry import asLineString, LineString, Point, asPoint, MultiLineString
+from shapely.geometry import asLineString, LineString, Point, MultiLineString
 from shapely.ops import split, snap
 from PyQt5.QtWidgets import QAction
 
@@ -65,10 +77,10 @@ def draw_line(self):
             newU = self.pick_with_mouse_U_data
             newV = self.pick_with_mouse_V_data
             if isinstance(self, ViewMap):
-                new_point = np.asarray([[newU, newV, 0.0]])
+                new_point = np_asarray([[newU, newV, 0.0]])
             elif isinstance(self, ViewXsection):
                 X, Y = self.parent.xsect_coll.get_XY_from_W(section_uid=self.this_x_section_uid, W=newU)
-                new_point = np.asarray([[X, Y, newV]])
+                new_point = np_asarray([[X, Y, newV]])
             if point_n <= 0:  # <= 0 handles cases where multiple middle clicks may have resulted in negative point_n
                 if isinstance(self, ViewMap):
                     line_dict['vtk_obj'] = PolyLine()
@@ -80,7 +92,7 @@ def draw_line(self):
                 self.selected_uids = [uid]
                 self.parent.geology_geom_modified_signal.emit([uid])  # emit uid as list to force redraw
             elif point_n >= 1:
-                new_cell = np.asarray([[point_n - 1, point_n]])
+                new_cell = np_asarray([[point_n - 1, point_n]])
                 self.parent.geol_coll.get_uid_vtk_obj(uid).append_point(point_vector=new_point)
                 self.parent.geol_coll.get_uid_vtk_obj(uid).append_cell(cell_array=new_cell)
                 self.parent.geology_geom_modified_signal.emit([uid])  # emit uid as list
@@ -157,7 +169,7 @@ def edit_line(self):
         """get_data() returns the coordinates in the original "true" units (e.g. metres)"""
         current_line_U_true, current_line_V_true = current_line.get_data()
         """ax.transData.transform() returns the coordinates in pixels"""
-        current_line_UV_px = self.ax.transData.transform(np.vstack([current_line_U_true, current_line_V_true]).T)
+        current_line_UV_px = self.ax.transData.transform(np_vstack([current_line_U_true, current_line_V_true]).T)
         current_line_U_px, current_line_V_px = current_line_UV_px.T
         """Select draggable vertex."""
         self.pick_with_mouse()
@@ -166,7 +178,7 @@ def edit_line(self):
             break
         vertex_U_px = self.pick_with_mouse_U_pixels
         vertex_V_px = self.pick_with_mouse_V_pixels
-        dist_px = np.sqrt((current_line_U_px - vertex_U_px) ** 2 + (current_line_V_px - vertex_V_px) ** 2)  # calculate distance
+        dist_px = np_sqrt((current_line_U_px - vertex_U_px) ** 2 + (current_line_V_px - vertex_V_px) ** 2)  # calculate distance
         vertex_ind = dist_px.argmin()  # find index of closest vertex and select it
         if dist_px[vertex_ind] >= epsilon:  # if distance larger than epsilon, deselect vertex and exit
             print("Picking too far from any vertex. Retry.")
@@ -299,11 +311,11 @@ def rotate_line(self):
         inU = self.parent.geol_coll.get_uid_vtk_obj(current_uid).points_W
         inV = self.parent.geol_coll.get_uid_vtk_obj(current_uid).points_Z
     """Stack coordinates in two-columns matrix"""
-    inUV = np.column_stack((inU, inV))
+    inUV = np_column_stack((inU, inV))
     """Run the Shapely function."""
     shp_line_in = asLineString(inUV)
     shp_line_out = affinity.rotate(shp_line_in, angle, origin='centroid', use_radians=False)  # Use Shapely to rotate
-    outUV = np.array(shp_line_out)
+    outUV = np_array(shp_line_out)
     """Un-stack output coordinates and write them to the empty dictionary."""
     outU = outUV[:, 0]
     outV = outUV[:, 1]
@@ -356,7 +368,7 @@ def extend_line(self):
     end_to_extend.set_marker('D')
     end_to_extend.figure.canvas.draw()
     """Stack coordinates in two-columns matrix"""
-    inUV = np.column_stack((inU, inV))
+    inUV = np_column_stack((inU, inV))
     """Obtain number of vertices from the numpy array. It is used in the editing loop for an incremental var."""
     point_n = inUV.shape[0]
     while 1:
@@ -371,10 +383,10 @@ def extend_line(self):
             newU = self.pick_with_mouse_U_data
             newV = self.pick_with_mouse_V_data
             if isinstance(self, ViewMap):
-                new_point = np.asarray([[newU, newV, 0.0]])
+                new_point = np_asarray([[newU, newV, 0.0]])
             elif isinstance(self, ViewXsection):
                 X, Y = self.parent.xsect_coll.get_XY_from_W(section_uid=self.this_x_section_uid, W=newU)
-                new_point = np.asarray([[X, Y, newV]])
+                new_point = np_asarray([[X, Y, newV]])
             if point_n <= 0:  # <= 0 handles cases where multiple middle clicks may have resulted in negative point_n
                 if isinstance(self, ViewMap):
                     line_dict['vtk_obj'] = PolyLine()
@@ -386,7 +398,7 @@ def extend_line(self):
                 self.selected_uids = [current_uid]
                 self.parent.geology_geom_modified_signal.emit([current_uid])  # emit uid as list to force redraw
             elif point_n >= 1:  # with multiple points, creates cells
-                new_cell = np.asarray([[point_n - 1, point_n]])
+                new_cell = np_asarray([[point_n - 1, point_n]])
                 self.parent.geol_coll.get_uid_vtk_obj(current_uid).append_point(point_vector=new_point)
                 self.parent.geol_coll.get_uid_vtk_obj(current_uid).append_cell(cell_array=new_cell)
                 self.parent.geology_geom_modified_signal.emit([current_uid])  # emit uid as list
@@ -483,8 +495,8 @@ def split_line_line(self):
         inU_scissors = deepcopy(self.parent.geol_coll.get_uid_vtk_obj(current_uid_scissors).points_W)
         inV_scissors = deepcopy(self.parent.geol_coll.get_uid_vtk_obj(current_uid_scissors).points_Z)
     """Stack coordinates in two-columns matrix"""
-    inUV_paper = np.column_stack((inU_paper, inV_paper))
-    inUV_scissors = np.column_stack((inU_scissors, inV_scissors))
+    inUV_paper = np_column_stack((inU_paper, inV_paper))
+    inUV_scissors = np_column_stack((inU_scissors, inV_scissors))
     """Run the Shapely function."""
     shp_line_in_paper = asLineString(inUV_paper)
     shp_line_in_scissors = asLineString(inUV_scissors)
@@ -513,7 +525,7 @@ def split_line_line(self):
         elif isinstance(self, ViewXsection):
             new_line['x_section'] = self.this_x_section_uid
             new_line['vtk_obj'] = XsPolyLine(self.this_x_section_uid, parent=self.parent)
-        outUV = deepcopy(np.array(line))
+        outUV = deepcopy(np_array(line))
         """Un-stack output coordinates and write them to the empty dictionary."""
         outU = outUV[:, 0]
         outV = outUV[:, 1]
@@ -521,12 +533,12 @@ def split_line_line(self):
         if isinstance(self, ViewMap):
             outX = outU
             outY = outV
-            outZ = np.zeros(np.shape(outX))
+            outZ = np_zeros(np_shape(outX))
         elif isinstance(self, ViewXsection):
             outX, outY = self.parent.xsect_coll.get_XY_from_W(section_uid=self.this_x_section_uid, W=outU)
             outZ = outV
         """Create new vtk objects"""
-        new_points = np.column_stack((outX, outY, outZ))
+        new_points = np_column_stack((outX, outY, outZ))
         new_line['vtk_obj'].points = new_points
         new_line['vtk_obj'].auto_cells()
         if new_line['vtk_obj'].points_number > 0:
@@ -574,7 +586,7 @@ def split_line_existing_point(self):
     """get_data() returns the coordinates in the original "true" units (e.g. metres)"""
     current_line_U_true, current_line_V_true = current_line.get_data()
     """ax.transData.transform() returns the coordinates in pixels"""
-    current_line_UV_px = self.ax.transData.transform(np.vstack([current_line_U_true, current_line_V_true]).T)
+    current_line_UV_px = self.ax.transData.transform(np_vstack([current_line_U_true, current_line_V_true]).T)
     current_line_U_px, current_line_V_px = current_line_UV_px.T
     """Select editable vertex."""
     self.pick_with_mouse()
@@ -586,7 +598,7 @@ def split_line_existing_point(self):
         return
     vertex_U_px = self.pick_with_mouse_U_pixels
     vertex_V_px = self.pick_with_mouse_V_pixels
-    dist_px = np.sqrt((current_line_U_px - vertex_U_px) ** 2 + (current_line_V_px - vertex_V_px) ** 2)  # calculate distance
+    dist_px = np_sqrt((current_line_U_px - vertex_U_px) ** 2 + (current_line_V_px - vertex_V_px) ** 2)  # calculate distance
     vertex_ind = dist_px.argmin()  # find index of closest vertex and select it
     if dist_px[vertex_ind] >= epsilon:  # if distance is larger than epsilon, deselect vertex and exit
         print("Picking too far from any vertex. Retry.")
@@ -612,7 +624,7 @@ def split_line_existing_point(self):
             inV_line = deepcopy(self.parent.geol_coll.get_uid_vtk_obj(current_uid).points_Z)
             new_line_2['x_section'] = self.this_x_section_uid
         """Stack coordinates in two-columns matrix"""
-        inUV_line = np.column_stack((inU_line, inV_line))
+        inUV_line = np_column_stack((inU_line, inV_line))
         """Run the Shapely function."""
         shp_line_in = asLineString(inUV_line)
         x_vertex_unit = deepcopy(current_line_U_true[vertex_ind])
@@ -623,8 +635,8 @@ def split_line_existing_point(self):
         line1_out = LineString(line1)
         line2_out = LineString(line2)
         """Convert shapely lines to UV objects"""
-        outUV_1 = deepcopy(np.array(line1_out))
-        outUV_2 = deepcopy(np.array(line2_out))
+        outUV_1 = deepcopy(np_array(line1_out))
+        outUV_2 = deepcopy(np_array(line2_out))
         """Un-stack output coordinates and write them to the empty dictionary."""
         outU_1 = outUV_1[:, 0]
         outV_1 = outUV_1[:, 1]
@@ -633,17 +645,17 @@ def split_line_existing_point(self):
         if isinstance(self, ViewMap):
             outX_1 = outU_1
             outY_1 = outV_1
-            outZ_1 = np.zeros(np.shape(outX_1))
+            outZ_1 = np_zeros(np_shape(outX_1))
             outX_2 = outU_2
             outY_2 = outV_2
-            outZ_2 = np.zeros(np.shape(outX_2))
+            outZ_2 = np_zeros(np_shape(outX_2))
         elif isinstance(self, ViewXsection):
             outX_1, outY_1 = self.parent.xsect_coll.get_XY_from_W(section_uid=self.this_x_section_uid, W=outU_1)
             outZ_1 = outV_1
             outX_2, outY_2 = self.parent.xsect_coll.get_XY_from_W(section_uid=self.this_x_section_uid, W=outU_2)
             outZ_2 = outV_2
-        new_points_1 = np.column_stack((outX_1, outY_1, outZ_1))
-        new_points_2 = np.column_stack((outX_2, outY_2, outZ_2))
+        new_points_1 = np_column_stack((outX_1, outY_1, outZ_1))
+        new_points_2 = np_column_stack((outX_2, outY_2, outZ_2))
         if isinstance(self, ViewMap):
             new_line_1['vtk_obj'] = PolyLine()
             new_line_2['vtk_obj'] = PolyLine()
@@ -717,23 +729,23 @@ def merge_lines(self):
         inU_two = deepcopy(self.parent.geol_coll.get_uid_vtk_obj(current_uid_two).points_W)
         inV_two = deepcopy(self.parent.geol_coll.get_uid_vtk_obj(current_uid_two).points_Z)
     """Calculate distances"""
-    dist_start_start = np.sqrt((inU_one[0] - inU_two[0]) ** 2 + (inV_one[0] - inV_two[0]) ** 2)
-    dist_end_end = np.sqrt((inU_one[-1] - inU_two[-1]) ** 2 + (inV_one[-1] - inV_two[-1]) ** 2)
-    dist_start_end = np.sqrt((inU_one[0] - inU_two[-1]) ** 2 + (inV_one[0] - inV_two[-1]) ** 2)
-    dist_end_start = np.sqrt((inU_one[-1] - inU_two[0]) ** 2 + (inV_one[-1] - inV_two[0]) ** 2)
+    dist_start_start = np_sqrt((inU_one[0] - inU_two[0]) ** 2 + (inV_one[0] - inV_two[0]) ** 2)
+    dist_end_end = np_sqrt((inU_one[-1] - inU_two[-1]) ** 2 + (inV_one[-1] - inV_two[-1]) ** 2)
+    dist_start_end = np_sqrt((inU_one[0] - inU_two[-1]) ** 2 + (inV_one[0] - inV_two[-1]) ** 2)
+    dist_end_start = np_sqrt((inU_one[-1] - inU_two[0]) ** 2 + (inV_one[-1] - inV_two[0]) ** 2)
     if min(dist_start_start, dist_end_end, dist_start_end, dist_end_start) == dist_start_start: # flip line 1
-        inU_one = np.flip(inU_one, 0)
-        inV_one = np.flip(inV_one, 0)
+        inU_one = np_flip(inU_one, 0)
+        inV_one = np_flip(inV_one, 0)
     elif min(dist_start_start, dist_end_end, dist_start_end, dist_end_start) == dist_end_end:  # flip line 2
-        inU_two = np.flip(inU_two, 0)
-        inV_two = np.flip(inV_two, 0)
+        inU_two = np_flip(inU_two, 0)
+        inV_two = np_flip(inV_two, 0)
     elif min(dist_start_start, dist_end_end, dist_start_end, dist_end_start) == dist_start_end:  # flip both line 1 and line 2
-        inU_one = np.flip(inU_one, 0)
-        inV_one = np.flip(inV_one, 0)
-        inU_two = np.flip(inU_two, 0)
-        inV_two = np.flip(inV_two, 0)
-    inUV_one = np.column_stack((inU_one, inV_one))
-    inUV_two = np.column_stack((inU_two, inV_two))
+        inU_one = np_flip(inU_one, 0)
+        inV_one = np_flip(inV_one, 0)
+        inU_two = np_flip(inU_two, 0)
+        inV_two = np_flip(inV_two, 0)
+    inUV_one = np_column_stack((inU_one, inV_one))
+    inUV_two = np_column_stack((inU_two, inV_two))
     """Run the Shapely function."""
     shp_line_in_one = asLineString(inUV_one)
     shp_line_in_two = asLineString(inUV_two)
@@ -744,7 +756,7 @@ def merge_lines(self):
         inlines = MultiLineString([shp_line_out_diff, shp_line_in_two])
         outcoords = [list(i.coords) for i in inlines]
         shp_line_out = LineString([i for sublist in outcoords for i in sublist])
-        outUV = deepcopy(np.array(shp_line_out))
+        outUV = deepcopy(np_array(shp_line_out))
     else:
         print("Polyline is not simple, it self-intersects")
         """Un-Freeze QT interface"""
@@ -757,11 +769,11 @@ def merge_lines(self):
     if isinstance(self, ViewMap):
         outX = outU
         outY = outV
-        outZ = np.zeros(np.shape(outX))
+        outZ = np_zeros(np_shape(outX))
     elif isinstance(self, ViewXsection):
         outX, outY = self.parent.xsect_coll.get_XY_from_W(section_uid=self.this_x_section_uid, W=outU)
         outZ = outV
-    new_points = np.column_stack((outX, outY, outZ))
+    new_points = np_column_stack((outX, outY, outZ))
     new_line['vtk_obj'].points = new_points
     new_line['vtk_obj'].auto_cells()
     """Replace VTK object"""
@@ -819,8 +831,8 @@ def snap_line(self):
         inU_goal = deepcopy(self.parent.geol_coll.get_uid_vtk_obj(current_uid_goal).points_W)
         inV_goal = deepcopy(self.parent.geol_coll.get_uid_vtk_obj(current_uid_goal).points_Z)
     """Stack coordinates in two-columns matrix"""
-    inUV_snap = np.column_stack((inU_snap, inV_snap))
-    inUV_goal = np.column_stack((inU_goal, inV_goal))
+    inUV_snap = np_column_stack((inU_snap, inV_snap))
+    inUV_goal = np_column_stack((inU_goal, inV_goal))
     """Run the Shapely function."""
     shp_line_in_snap = asLineString(inUV_snap)
     shp_line_in_goal = asLineString(inUV_goal)
@@ -836,7 +848,7 @@ def snap_line(self):
             action.setEnabled(True)
         return
     shp_line_out_diff = shp_line_out_snap.difference(shp_line_in_goal)  # eliminate the shared path that Snap may create
-    outUV = deepcopy(np.array(shp_line_out_diff))
+    outUV = deepcopy(np_array(shp_line_out_diff))
     """Un-stack output coordinates and write them to the empty dictionary."""
     outU = outUV[:, 0]
     outV = outUV[:, 1]
@@ -844,12 +856,12 @@ def snap_line(self):
     if isinstance(self, ViewMap):
         outX = outU
         outY = outV
-        outZ = np.zeros(np.shape(outX))
+        outZ = np_zeros(np_shape(outX))
     elif isinstance(self, ViewXsection):
         outX, outY = self.parent.xsect_coll.get_XY_from_W(section_uid=self.this_x_section_uid, W=outU)
         outZ = outV
     """Create new vtk objects"""
-    new_points = np.column_stack((outX, outY, outZ))
+    new_points = np_column_stack((outX, outY, outZ))
     new_line['vtk_obj'].points = new_points
     new_line['vtk_obj'].auto_cells()
     """Replace VTK object"""
@@ -908,29 +920,29 @@ def resample_line_distance(self):  # this must be done per-part_________________
         inU = deepcopy(self.parent.geol_coll.get_uid_vtk_obj(current_uid).points_W)
         inV = deepcopy(self.parent.geol_coll.get_uid_vtk_obj(current_uid).points_Z)
     """Stack coordinates in two-columns matrix"""
-    inUV = np.column_stack((inU, inV))
+    inUV = np_column_stack((inU, inV))
     """Run the Shapely function."""
     shp_line_in = asLineString(inUV)
     if distance_delta >= shp_line_in.length:
         while distance_delta >= shp_line_in.length:
             distance_delta = distance_delta / 2
-    distances = np.arange(0, shp_line_in.length, distance_delta)
+    distances = np_arange(0, shp_line_in.length, distance_delta)
     points = [shp_line_in.interpolate(distance) for distance in distances] + [shp_line_in.boundary[1]]
     shp_line_out = LineString(points)
-    outUV = deepcopy(np.array(shp_line_out))
+    outUV = deepcopy(np_array(shp_line_out))
     """Un-stack output coordinates and write them to the empty dictionary."""
     outU = outUV[:, 0]
     outV = outUV[:, 1]
     if isinstance(self, ViewMap):
         outX = outU
         outY = outV
-        outZ = np.zeros(np.shape(outX))
+        outZ = np_zeros(np_shape(outX))
         new_line['vtk_obj'] = PolyLine()
     elif isinstance(self, ViewXsection):
         outX, outY = self.parent.xsect_coll.get_XY_from_W(section_uid=self.this_x_section_uid, W=outU)
         outZ = outV
         new_line['vtk_obj'] = XsPolyLine(self.this_x_section_uid, parent=self.parent)
-    new_points = np.column_stack((outX, outY, outZ))
+    new_points = np_column_stack((outX, outY, outZ))
     new_line['vtk_obj'].points = new_points
     new_line['vtk_obj'].auto_cells()
     """Replace VTK object"""
@@ -991,26 +1003,26 @@ def resample_line_number_points(self):  # this must be done per-part____________
         inU = deepcopy(self.parent.geol_coll.get_uid_vtk_obj(current_uid).points_W)
         inV = deepcopy(self.parent.geol_coll.get_uid_vtk_obj(current_uid).points_Z)
     """Stack coordinates in two-columns matrix"""
-    inUV = np.column_stack((inU, inV))
+    inUV = np_column_stack((inU, inV))
     """Run the Shapely function."""
     shp_line_in = asLineString(inUV)
     distances = (shp_line_in.length * i / (number_of_points - 1) for i in range(number_of_points))
     points = [shp_line_in.interpolate(distance) for distance in distances]
     shp_line_out = LineString(points)
-    outUV = deepcopy(np.array(shp_line_out))
+    outUV = deepcopy(np_array(shp_line_out))
     """Un-stack output coordinates and write them to the empty dictionary."""
     outU = outUV[:, 0]
     outV = outUV[:, 1]
     if isinstance(self, ViewMap):
         outX = outU
         outY = outV
-        outZ = np.zeros(np.shape(outX))
+        outZ = np_zeros(np_shape(outX))
         new_line['vtk_obj'] = PolyLine()
     elif isinstance(self, ViewXsection):
         outX, outY = self.parent.xsect_coll.get_XY_from_W(section_uid=self.this_x_section_uid, W=outU)
         outZ = outV
         new_line['vtk_obj'] = XsPolyLine(self.this_x_section_uid, parent=self.parent)
-    new_points = np.column_stack((outX, outY, outZ))
+    new_points = np_column_stack((outX, outY, outZ))
     new_line['vtk_obj'].points = new_points
     new_line['vtk_obj'].auto_cells()
     """Replace VTK object"""
@@ -1068,25 +1080,25 @@ def simplify_line(self):  # this must be done per-part__________________________
         inU = deepcopy(self.parent.geol_coll.get_uid_vtk_obj(current_uid).points_W)
         inV = deepcopy(self.parent.geol_coll.get_uid_vtk_obj(current_uid).points_Z)
     """Stack coordinates in two-columns matrix"""
-    inUV = np.column_stack((inU, inV))
+    inUV = np_column_stack((inU, inV))
     """Run the Shapely function."""
     shp_line_in = asLineString(inUV)
     shp_line_out = shp_line_in.simplify(tolerance_p, preserve_topology=False)
-    outUV = deepcopy(np.array(shp_line_out))
+    outUV = deepcopy(np_array(shp_line_out))
     """Un-stack output coordinates and write them to the empty dictionary."""
     outU = outUV[:, 0]
     outV = outUV[:, 1]
     if isinstance(self, ViewMap):
         outX = outU
         outY = outV
-        outZ = np.zeros(np.shape(outX))
+        outZ = np_zeros(np_shape(outX))
         new_line['vtk_obj'] = PolyLine()
     elif isinstance(self, ViewXsection):
         outX, outY = self.parent.xsect_coll.get_XY_from_W(section_uid=self.this_x_section_uid, W=outU)
         outZ = outV
         new_line['vtk_obj'] = XsPolyLine(self.this_x_section_uid, parent=self.parent)
     """Create new vtk"""
-    new_points = np.column_stack((outX, outY, outZ))
+    new_points = np_column_stack((outX, outY, outZ))
     new_line['vtk_obj'].points = new_points
     new_line['vtk_obj'].auto_cells()
     """Replace VTK object"""
@@ -1157,9 +1169,9 @@ def copy_parallel(self):  # this must be done per-part__________________________
         inU = self.parent.geol_coll.get_uid_vtk_obj(input_uid).points_W
         inV = self.parent.geol_coll.get_uid_vtk_obj(input_uid).points_Z
     """Stack coordinates in two-columns matrix"""
-    print("np.column_stack((inU, inV))")
+    print("np_column_stack((inU, inV))")
     tic()
-    inUV = np.column_stack((inU, inV))
+    inUV = np_column_stack((inU, inV))
     toc()
     """Deselect input line."""
     self.selected_uids = []
@@ -1174,7 +1186,7 @@ def copy_parallel(self):  # this must be done per-part__________________________
         tic()
         shp_line_out = shp_line_in.parallel_offset(distance, 'left', resolution=16, join_style=1)  # parallel folds are obtained with join_style=1
         toc()
-        outUV = np.array(shp_line_out)
+        outUV = np_array(shp_line_out)
         """Un-stack output coordinates and write them to the empty dictionary."""
         outU = outUV[:, 0]
         outV = outUV[:, 1]
@@ -1187,14 +1199,14 @@ def copy_parallel(self):  # this must be done per-part__________________________
     if isinstance(self, ViewMap):
         outX = outU
         outY = outV
-        outZ = np.zeros(np.shape(outX))
+        outZ = np_zeros(np_shape(outX))
     elif isinstance(self, ViewXsection):
         outX, outY = self.parent.xsect_coll.get_XY_from_W(section_uid=self.this_x_section_uid, W=outU)
         outZ = outV
     """Stack coordinates in two-columns matrix and write to vtk object."""
-    print("outXYZ = np.column_stack((outX, outY, outZ))")
+    print("outXYZ = np_column_stack((outX, outY, outZ))")
     tic()
-    outXYZ = np.column_stack((outX, outY, outZ))
+    outXYZ = np_column_stack((outX, outY, outZ))
     toc()
     line_dict['vtk_obj'].points = outXYZ
     line_dict['vtk_obj'].auto_cells()
@@ -1263,7 +1275,7 @@ def copy_kink(self):  # this must be done per-part______________________________
         inU = self.parent.geol_coll.get_uid_vtk_obj(input_uid).points_W
         inV = self.parent.geol_coll.get_uid_vtk_obj(input_uid).points_Z
     """Stack coordinates in two-columns matrix"""
-    inUV = np.column_stack((inU, inV))
+    inUV = np_column_stack((inU, inV))
     """Deselect input line."""
     self.selected_uids = []
     self.parent.geology_geom_modified_signal.emit([input_uid])  # emit uid as list to force redraw()
@@ -1271,7 +1283,7 @@ def copy_kink(self):  # this must be done per-part______________________________
     shp_line_in = asLineString(inUV)
     if shp_line_in.is_simple:
         shp_line_out = shp_line_in.parallel_offset(distance, 'left', resolution=16, join_style=2, mitre_limit=10.0)  # kink folds are obtained with join_style=2, mitre_limit=10.0
-        outUV = np.array(shp_line_out)
+        outUV = np_array(shp_line_out)
         """Un-stack output coordinates and write them to the empty dictionary."""
         outU = outUV[:, 0]
         outV = outUV[:, 1]
@@ -1284,12 +1296,12 @@ def copy_kink(self):  # this must be done per-part______________________________
     if isinstance(self, ViewMap):
         outX = outU
         outY = outV
-        outZ = np.zeros(np.shape(outX))
+        outZ = np_zeros(np_shape(outX))
     elif isinstance(self, ViewXsection):
         outX, outY = self.parent.xsect_coll.get_XY_from_W(section_uid=self.this_x_section_uid, W=outU)
         outZ = outV
     """Stack coordinates in two-columns matrix and write to vtk object."""
-    outXYZ = np.column_stack((outX, outY, outZ))
+    outXYZ = np_column_stack((outX, outY, outZ))
     line_dict['vtk_obj'].points = outXYZ
     line_dict['vtk_obj'].auto_cells()
     """Create entity from the dictionary and run left_right."""
@@ -1345,14 +1357,14 @@ def copy_similar(self):  # this must be done per-part___________________________
     if isinstance(self, ViewMap):
         outX = inX + self.vector_by_mouse_dU
         outY = inY + self.vector_by_mouse_dV
-        outZ = np.zeros(np.shape(outX))
+        outZ = np_zeros(np_shape(outX))
     elif isinstance(self, ViewXsection):
         vector_by_mouse_dX, vector_by_mouse_dY = self.parent.xsect_coll.get_deltaXY_from_deltaW(section_uid=self.this_x_section_uid, deltaW=self.vector_by_mouse_dU)
         outX = inX + vector_by_mouse_dX
         outY = inY + vector_by_mouse_dY
         outZ = inZ + self.vector_by_mouse_dV
     """Stack coordinates in two-columns matrix and write to vtk object."""
-    outXYZ = np.column_stack((outX, outY, outZ))
+    outXYZ = np_column_stack((outX, outY, outZ))
     line_dict['vtk_obj'].points = outXYZ
     line_dict['vtk_obj'].auto_cells()
     """Set output line name."""
@@ -1396,8 +1408,8 @@ def measure_distance(self):
 
 def flip_line(self, uid=None):
     """Ensures lines are oriented left-to-right and bottom-to-top"""
-    # self.parent.geol_coll.get_uid_vtk_obj(uid).points = np.flip(self.parent.geol_coll.get_uid_vtk_obj(uid).points, 0)
-    self.parent.geol_coll.get_uid_vtk_obj(uid).points = np.flip(self.parent.geol_coll.get_uid_vtk_obj(uid).points, 0)
+    # self.parent.geol_coll.get_uid_vtk_obj(uid).points = np_flip(self.parent.geol_coll.get_uid_vtk_obj(uid).points, 0)
+    self.parent.geol_coll.get_uid_vtk_obj(uid).points = np_flip(self.parent.geol_coll.get_uid_vtk_obj(uid).points, 0)
 
 
 def left_right(self, uid=None):

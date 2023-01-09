@@ -4,12 +4,16 @@ PZero© Andrea Bistacchi"""
 from copy import deepcopy
 import uuid
 import os
-import vtk
 from vtk.util import numpy_support
 from .entities_factory import MapImage, XsImage
 from .image_collection import ImageCollection
 from .helper_dialogs import multiple_input_dialog
-import numpy as np
+
+from numpy import pi as np_pi
+from numpy import sin as np_sin
+from numpy import cos as np_cos
+from numpy import dstack as np_dstack
+
 import rasterio as rio
 import rasterio.plot as rio_plt
 
@@ -40,7 +44,7 @@ def geo_image2vtk(self=None, in_file_name=None):
             vtk_r_property = geo_image.read(1)
             vtk_g_property = geo_image.read(2)
             vtk_b_property = geo_image.read(3)
-            numpy_array = np.dstack((vtk_r_property, vtk_g_property, vtk_b_property))
+            numpy_array = np_dstack((vtk_r_property, vtk_g_property, vtk_b_property))
             # vtk_array = numpy_support.numpy_to_vtk(np.flip(numpy_array.swapaxes(0, 1), axis=1).reshape((-1, 3), order='F'), deep=True)
             vtk_array = numpy_support.numpy_to_vtk(numpy_array.swapaxes(0, 1).reshape((-1, 3), order='F'), deep=True)
             vtk_array.SetName('RGB')
@@ -124,8 +128,8 @@ def xs_image2vtk(self=None, in_file_name=None, x_section_uid=None):
     double  	e21,
     double  	e22)"""
     """CHECK THIS FOR VARIOUS SECTION ORIENTATIONS______________________________________________________________"""
-    direction_matrix = [np.sin(azimuth * np.pi / 180), 0, -(np.cos(azimuth * np.pi / 180)),
-                        np.cos(azimuth * np.pi / 180), 0, np.sin(azimuth * np.pi / 180),
+    direction_matrix = [np_sin(azimuth * np_pi / 180), 0, -(np_cos(azimuth * np_pi / 180)),
+                        np_cos(azimuth * np_pi / 180), 0, np_sin(azimuth * np_pi / 180),
                         0, 1, 0]
     """Read the image and convert to vtk array.
     Deep copy used since the image is read now from file.
@@ -137,7 +141,7 @@ def xs_image2vtk(self=None, in_file_name=None, x_section_uid=None):
         vtk_r_property = xs_image.read(1)
         vtk_g_property = xs_image.read(2)
         vtk_b_property = xs_image.read(3)
-        numpy_array = np.dstack((vtk_r_property, vtk_g_property, vtk_b_property))
+        numpy_array = np_dstack((vtk_r_property, vtk_g_property, vtk_b_property))
         # vtk_array = numpy_support.numpy_to_vtk(np.flip(numpy_array.swapaxes(0, 1), axis=1).reshape((-1, 3), order='F'), deep=True)
         vtk_array = numpy_support.numpy_to_vtk(numpy_array.swapaxes(0, 1).reshape((-1, 3), order='F'), deep=True)
         vtk_array.SetName('RGB')

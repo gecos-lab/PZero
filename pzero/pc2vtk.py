@@ -8,16 +8,19 @@ Convert point cloud data (txt, csv, xyz, las ...) in vtk objects.
 """
 
 
-import numpy as np
+from numpy import c_ as np_c_
+from numpy import column_stack as np_column_stack
+from numpy import array as np_array
+from numpy import uint8 as np_uint8
+from numpy import shape as np_shape
+
 import os
 from copy import deepcopy
-from vtk import vtkPoints, vtkPointSet
+from vtk import vtkPoints
 from vtk.util.numpy_support import numpy_to_vtk
 from uuid import uuid4
 from .entities_factory import PCDom
 from .dom_collection import DomCollection
-from pyvista import PointSet
-from pyvista import vtk_points
 # import pyvista as pv
 from pandas import DataFrame as pd_df
 from pandas import to_numeric as pd_to_numeric
@@ -65,9 +68,9 @@ def pc2vtk(in_file_name,col_names,row_range,header_row,usecols,delimiter,self=No
         for dim in dim_names:
             if dim == 'X' or dim == 'Y' or dim == 'Z':
                 attr = dim.lower()
-                prop_dict[attr] = np.c_[las_data[attr]].flatten()
+                prop_dict[attr] = np_c_[las_data[attr]].flatten()
             else:
-                prop_dict[dim] = np.c_[las_data[dim]].flatten()
+                prop_dict[dim] = np_c_[las_data[dim]].flatten()
         if row_range:
             input_df = pd_df.from_dict(prop_dict).iloc[row_range,usecols]
         else:
@@ -99,7 +102,7 @@ def pc2vtk(in_file_name,col_names,row_range,header_row,usecols,delimiter,self=No
         input_df['X'] -= offset[0]
         input_df['Y'] -= offset[1]
 
-        XYZ = numpy_to_vtk(np.column_stack((input_df['X'].values,input_df['Y'].values,input_df['Z'].values)))
+        XYZ = numpy_to_vtk(np_column_stack((input_df['X'].values,input_df['Y'].values,input_df['Z'].values)))
 
 
         # [Gabriele] Create pyvista PolyData using XYZ data
@@ -116,9 +119,9 @@ def pc2vtk(in_file_name,col_names,row_range,header_row,usecols,delimiter,self=No
                 point_cloud.init_point_data('RGB',3)
                 # print(properties_df)
                 if self.check255Box.isChecked():
-                    RGB = np.array([input_df['Red'],input_df['Green'],input_df['Blue']]).T.astype(np.uint8)
+                    RGB = np_array([input_df['Red'],input_df['Green'],input_df['Blue']]).T.astype(np_uint8)
                 else:
-                    RGB = np.array([input_df['Red'],input_df['Green'],input_df['Blue']]).T
+                    RGB = np_array([input_df['Red'],input_df['Green'],input_df['Blue']]).T
 
                 point_cloud.set_point_data('RGB',RGB)
 
@@ -126,14 +129,14 @@ def pc2vtk(in_file_name,col_names,row_range,header_row,usecols,delimiter,self=No
 
             if 'Nx' in input_df.columns:
                 point_cloud.init_point_data('Normals',3)
-                normals = np.array([input_df['Nx'],input_df['Ny'],input_df['Nz']]).T
+                normals = np_array([input_df['Nx'],input_df['Ny'],input_df['Nz']]).T
 
                 point_cloud.set_point_data('Normals',normals)
 
                 input_df.drop(['Nx','Ny','Nz'],axis=1,inplace=True)
 
             for property in input_df.columns:
-                n_components = np.shape(input_df[property].values)
+                n_components = np_shape(input_df[property].values)
                 if len(n_components):
                     n_components = 1
                 else:

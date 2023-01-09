@@ -6,12 +6,26 @@ from vtk.util import numpy_support
 from scipy.interpolate import griddata
 from uuid import uuid4
 import vtk
-import numpy as np
-import pandas as pd
+
+
+from numpy import cbrt as np_cbrt
+from numpy import around as np_around
+from numpy import flip as np_flip
+from numpy import ndarray as np_ndarray
+from numpy import abs as np_abs
+from numpy import sin as np_sin
+from numpy import cos as np_cos
+from numpy import tan as np_tan
+from numpy import pi as np_pi
+from numpy import float64 as np_float64
+from numpy import sqrt as np_sqrt
+from numpy import zeros as np_zeros
+
+
+from pandas import DataFrame as pd_DataFrame
 from .geological_collection import GeologicalCollection
-from .mesh3d_collection import Mesh3DCollection
-from .helper_dialogs import multiple_input_dialog, input_one_value_dialog, input_text_dialog, input_combo_dialog, input_checkbox_dialog, tic, toc, progress_dialog, general_input_dialog,PreviewWidget
-from .entities_factory import TriSurf, XsPolyLine, PolyLine, VertexSet, Voxet, XsVoxet, XsTriSurf, XsVertexSet, MapImage, DEM
+from .helper_dialogs import multiple_input_dialog, input_one_value_dialog, input_text_dialog, input_combo_dialog, input_checkbox_dialog, tic, toc, progress_dialog, general_input_dialog
+from .entities_factory import TriSurf, XsPolyLine, PolyLine, VertexSet, Voxet, XsVoxet, XsVertexSet
 
 import pyvista as pv
 
@@ -197,12 +211,12 @@ def implicit_model_loop_structural(self):
     """Create empty dataframe to collect all input data."""
     print("-> creating input dataframe...")
     tic()
-    all_input_data_df = pd.DataFrame(columns=list(loop_input_dict.keys()))
+    all_input_data_df = pd_DataFrame(columns=list(loop_input_dict.keys()))
     """For every selected item extract interesting data: XYZ, feature_name, val, etc."""
     prgs_bar = progress_dialog(max_value=len(input_uids), title_txt="Input dataframe", label_txt="Adding geological objects to input dataframe...", cancel_txt=None, parent=self)
     for uid in input_uids:
         """Create empty dataframe to collect input data for this object."""
-        entity_input_data_df = pd.DataFrame(columns=list(loop_input_dict.keys()))
+        entity_input_data_df = pd_DataFrame(columns=list(loop_input_dict.keys()))
         """XYZ data for every selected entity.
         Adding all columns at once is about 10% faster than adding them separately, but still slow."""
         entity_input_data_df[['X', 'Y', 'Z']] = self.geol_coll.get_uid_vtk_obj(uid).points
@@ -276,17 +290,17 @@ def implicit_model_loop_structural(self):
     if (all_input_data_df['X'].min() > maximum_x) or (all_input_data_df['X'].max() < origin_x) or (all_input_data_df['Y'].min() > maximum_y) or (all_input_data_df['Y'].max() < origin_y) or (all_input_data_df['Z'].min() > maximum_z) or (all_input_data_df['Z'].max() < origin_z):
         print("Exit tool: Bounding Box does not intersect input data")
         return
-    default_spacing = np.cbrt(edge_x * edge_y * edge_z / (50 * 50 * 25))  # default dimension in Loop is 50 x 50 x 25
+    default_spacing = np_cbrt(edge_x * edge_y * edge_z / (50 * 50 * 25))  # default dimension in Loop is 50 x 50 x 25
     target_spacing = input_one_value_dialog(title='Implicit Modelling - LoopStructural algorithms', label='Grid target spacing in model units\n (yields a 62500 cells model)', default_value=default_spacing)
     if target_spacing is None or target_spacing <= 0:
         target_spacing = default_spacing
-    dimension_x = int(np.around(edge_x / target_spacing))
+    dimension_x = int(np_around(edge_x / target_spacing))
     if dimension_x == 0:
         dimension_x = 1
-    dimension_y = int(np.around(edge_y / target_spacing))
+    dimension_y = int(np_around(edge_y / target_spacing))
     if dimension_y == 0:
         dimension_y = 1
-    dimension_z = int(np.around(edge_z / target_spacing))
+    dimension_z = int(np_around(edge_z / target_spacing))
     if dimension_z == 0:
         dimension_z = 1
     dimensions = [dimension_x, dimension_y, dimension_z]
@@ -342,7 +356,7 @@ def implicit_model_loop_structural(self):
     https://discourse.vtk.org/t/numpy-tensor-to-vtkimagedata/5154/3
     https://discourse.vtk.org/t/the-direction-of-vtkimagedata-make-something-wrong/4997"""
     # scalar_field = scalar_field[:, :, ::-1]
-    scalar_field = np.flip(scalar_field, 2)
+    scalar_field = np_flip(scalar_field, 2)
     scalar_field = scalar_field.transpose(2, 1, 0)
     scalar_field = scalar_field.ravel()  # flatten returns a copy
     # """Evaluate scalar field gradient."""
@@ -415,7 +429,7 @@ def implicit_model_loop_structural(self):
         surf_dict['vtk_obj'] = TriSurf()
         surf_dict['vtk_obj'].ShallowCopy(iso_surface.GetOutput())
         surf_dict['vtk_obj'].Modified()
-        if isinstance(surf_dict['vtk_obj'].points, np.ndarray):
+        if isinstance(surf_dict['vtk_obj'].points, np_ndarray):
             if len(surf_dict['vtk_obj'].points) > 0:
                 """Add entity to geological collection only if it is not empty"""
                 self.geol_coll.add_entity_from_dict(surf_dict)
@@ -578,14 +592,14 @@ def linear_extrusion(self):
         print('Wrong extrusion parameters, please check the top and bottom values')
         return
 
-    total_extrusion = vertical_extrusion['top']+np.abs(vertical_extrusion['bottom'])
+    total_extrusion = vertical_extrusion['top']+np_abs(vertical_extrusion['bottom'])
     linear_extrusion = vtk.vtkLinearExtrusionFilter()
     linear_extrusion.CappingOn()  # yes or no?
     linear_extrusion.SetExtrusionTypeToVectorExtrusion()
     """Trigonometric formulas to calculate vector"""
-    x_vector = np.sin(np.pi * (trend + 180) / 180)
-    y_vector = np.cos(np.pi * (trend + 180) / 180)
-    z_vector = np.tan(np.pi * (plunge + 180) / 180)
+    x_vector = np_sin(np_pi * (trend + 180) / 180)
+    y_vector = np_cos(np_pi * (trend + 180) / 180)
+    z_vector = np_tan(np_pi * (plunge + 180) / 180)
     linear_extrusion.SetVector(x_vector, y_vector, z_vector)  # double,double,double format
     linear_extrusion.SetScaleFactor(total_extrusion)  # double format
     linear_extrusion.SetInputData(self.geol_coll.get_uid_vtk_obj(input_uids[0]))
@@ -927,14 +941,14 @@ def intersection_xs(self):
                     cutter.Update()
                     if cutter.GetOutput().GetNumberOfPoints() > 0:
                         cutter.GetOutput().GetPointData().SetActiveScalars(self.mesh3d_coll.get_uid_properties_names(uid)[0])
-                        cutter_bounds = np.float64(cutter.GetOutput().GetBounds())
+                        cutter_bounds = np_float64(cutter.GetOutput().GetBounds())
                         dim_Z = self.mesh3d_coll.get_uid_vtk_obj(uid).W_n
                         spacing_Z = self.mesh3d_coll.get_uid_vtk_obj(uid).W_step
                         if spacing_Z < 0:
                             spacing_Z *= -1
                         cutter_n_points = cutter.GetOutput().GetNumberOfPoints()
                         dim_W = int(cutter_n_points / dim_Z)
-                        spacing_W = np.sqrt((cutter_bounds[1] - cutter_bounds[0])**2 + (cutter_bounds[3] - cutter_bounds[2])**2) / (dim_W - 1)
+                        spacing_W = np_sqrt((cutter_bounds[1] - cutter_bounds[0])**2 + (cutter_bounds[3] - cutter_bounds[2])**2) / (dim_W - 1)
                         azimuth = self.xsect_coll.get_uid_azimuth(xsect_uid)
                         """The direction matrix is a 3x3 transformation matrix supporting scaling and rotation.
                         (double  	e00,
@@ -948,16 +962,16 @@ def intersection_xs(self):
                         double  	e22)"""
                         if azimuth <= 90:
                             origin = [cutter_bounds[0], cutter_bounds[2], cutter_bounds[4]]
-                            direction_matrix = [np.sin(azimuth * np.pi / 180), 0, -(np.cos(azimuth * np.pi / 180)), np.cos(azimuth * np.pi / 180), 0, np.sin(azimuth * np.pi / 180), 0, 1, 0]
+                            direction_matrix = [np_sin(azimuth * np_pi / 180), 0, -(np_cos(azimuth * np_pi / 180)), np_cos(azimuth * np_pi / 180), 0, np_sin(azimuth * np_pi / 180), 0, 1, 0]
                         elif azimuth <= 180:
                             origin = [cutter_bounds[1], cutter_bounds[2], cutter_bounds[4]]
-                            direction_matrix = [-(np.sin(azimuth * np.pi / 180)), 0, -(np.cos(azimuth * np.pi / 180)), -(np.cos(azimuth * np.pi / 180)), 0, np.sin(azimuth * np.pi / 180), 0, 1, 0]
+                            direction_matrix = [-(np_sin(azimuth * np_pi / 180)), 0, -(np_cos(azimuth * np_pi / 180)), -(np_cos(azimuth * np_pi / 180)), 0, np_sin(azimuth * np_pi / 180), 0, 1, 0]
                         elif azimuth <= 270:
                             origin = [cutter_bounds[0], cutter_bounds[2], cutter_bounds[4]]
-                            direction_matrix = [-(np.sin(azimuth * np.pi / 180)), 0, -(np.cos(azimuth * np.pi / 180)), -(np.cos(azimuth * np.pi / 180)), 0, np.sin(azimuth * np.pi / 180), 0, 1, 0]
+                            direction_matrix = [-(np_sin(azimuth * np_pi / 180)), 0, -(np_cos(azimuth * np_pi / 180)), -(np_cos(azimuth * np_pi / 180)), 0, np_sin(azimuth * np_pi / 180), 0, 1, 0]
                         else:
                             origin = [cutter_bounds[1], cutter_bounds[2], cutter_bounds[4]]
-                            direction_matrix = [np.sin(azimuth * np.pi / 180), 0, -(np.cos(azimuth * np.pi / 180)), np.cos(azimuth * np.pi / 180), 0, np.sin(azimuth * np.pi / 180), 0, 1, 0]
+                            direction_matrix = [np_sin(azimuth * np_pi / 180), 0, -(np_cos(azimuth * np_pi / 180)), np_cos(azimuth * np_pi / 180), 0, np_sin(azimuth * np_pi / 180), 0, 1, 0]
                         """Create vtkImageData with the geometry to fit data from cutter"""
                         probe_image = vtk.vtkImageData()
                         probe_image.SetOrigin(origin)
@@ -969,7 +983,7 @@ def intersection_xs(self):
                         calculate point coordinates for probe_image, the final regular grid. Then, execute griddata"""
                         XYZ_cutter = numpy_support.vtk_to_numpy(cutter.GetOutput().GetPoints().GetData())
                         values = numpy_support.vtk_to_numpy(cutter.GetOutput().GetPointData().GetArray(0)).reshape((dim_Z*dim_W, ))
-                        XYZ_probe = np.zeros((probe_n_points, 3))
+                        XYZ_probe = np_zeros((probe_n_points, 3))
                         for point in range(probe_n_points):
                             XYZ_probe[point, :] = probe_image.GetPoint(point)
                         regular_values = griddata(points=XYZ_cutter, values=values, xi=XYZ_probe, method='nearest')
@@ -1146,8 +1160,8 @@ def project_2_xs(self):
     xs_name = options_dict['xs_name']
     xs_dist = options_dict['dist_sec']
     xs_uid = self.xsect_coll.df.loc[self.xsect_coll.df['name'] == xs_name, 'uid'].values[0]
-    proj_plunge = np.float64(options_dict['proj_plunge'])
-    proj_trend = np.float64(options_dict['proj_trend'])
+    proj_plunge = np_float64(options_dict['proj_plunge'])
+    proj_trend = np_float64(options_dict['proj_trend'])
     """Constrain to 0-180."""
     if proj_trend > 180.0:
         proj_trend -= 180.0
@@ -1157,15 +1171,15 @@ def project_2_xs(self):
         print("Plunge too close to being parallel to XSection (angle < 10°)")
         return
     """Get cross section start and end points (float64 needed for "t" afterwards)."""
-    xa = np.float64(self.xsect_coll.get_uid_base_x(xs_uid))
-    ya = np.float64(self.xsect_coll.get_uid_base_y(xs_uid))
-    xb = np.float64(self.xsect_coll.get_uid_end_x(xs_uid))
-    yb = np.float64(self.xsect_coll.get_uid_end_y(xs_uid))
+    xa = np_float64(self.xsect_coll.get_uid_base_x(xs_uid))
+    ya = np_float64(self.xsect_coll.get_uid_base_y(xs_uid))
+    xb = np_float64(self.xsect_coll.get_uid_end_x(xs_uid))
+    yb = np_float64(self.xsect_coll.get_uid_end_y(xs_uid))
 
     """Calculate projection direction cosines (float64 needed for "t" afterwards)."""
-    alpha = np.float64(np.sin(proj_trend * np.pi / 180.0) * np.cos(proj_plunge * np.pi / 180.0))
-    beta = np.float64(np.cos(proj_trend * np.pi / 180.0) * np.cos(proj_plunge * np.pi / 180.0))
-    gamma = np.float64(-np.sin(proj_plunge * np.pi / 180.0))
+    alpha = np_float64(np_sin(proj_trend * np_pi / 180.0) * np_cos(proj_plunge * np_pi / 180.0))
+    beta = np_float64(np_cos(proj_trend * np_pi / 180.0) * np_cos(proj_plunge * np_pi / 180.0))
+    gamma = np_float64(-np_sin(proj_plunge * np_pi / 180.0))
     """Project each entity."""
     for uid in input_uids:
         """Clone entity."""
@@ -1189,7 +1203,7 @@ def project_2_xs(self):
             entity_dict['topological_type'] = self.geol_coll.get_uid_topological_type(uid)
             out_vtk = self.geol_coll.get_uid_vtk_obj(uid).deep_copy()
         """Perform projection on clone (the last two steps could be merged).
-         np.float64 is needed to calculate "t" with a good precision
+         np_float64 is needed to calculate "t" with a good precision
          when X and Y are in UTM coordinates with very large values,
          then the result is cast to float32 that is the VTK standard."""
         xo = out_vtk.points_X.astype(np.float64)

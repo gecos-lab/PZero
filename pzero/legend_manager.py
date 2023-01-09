@@ -3,8 +3,9 @@ PZero© Andrea Bistacchi"""
 
 from PyQt5.QtWidgets import QTreeWidgetItem, QColorDialog, QPushButton, QSpinBox, QDoubleSpinBox, QComboBox
 from PyQt5.QtGui import QColor
-from PyQt5.QtCore import QObject, Qt
-import pandas as pd
+from PyQt5.QtCore import QObject
+
+from pandas import unique as pd_unique
 
 
 class Legend(QObject):
@@ -80,14 +81,14 @@ class Legend(QObject):
         - a boolean indexing series (i.e. a sequence of True and False values) obtained by one or more conditions applied on the dataframe
         - a numeric index or a range of indexes as used by iloc (i.e. 3 or 3:5)
         The method values[] applied at the end returns the cell value(s) at specified cell(s), otherwise a dataframe would be returned
-        The function pd.unique() used above returns a list of unique values from a set of cells.
+        The function pd_unique() used above returns a list of unique values from a set of cells.
         TO ADD MORE PROPERTIES TO THE LEGEND, SIMPLY ADD MORE COLUMNS TO THE legend AND NEW WIDGETS HERE POINTING TO THE NEW COLUMNS
         Note that at and iat can be used to access a single value in a cell directly (so values[] is not required), but do not work with conditional indexing."""
         parent.LegendTreeWidget.clear()
         parent.LegendTreeWidget.setColumnCount(10)
         parent.LegendTreeWidget.setHeaderLabels(['Type > Feature > Scenario', 'R', 'G', 'B', 'Color', 'Line thickness', 'Geological Time', 'Stratigraphic sequence', 'Show edges', 'Show nodes'])
         parent.LegendTreeWidget.setItemsExpandable(True)
-        for other_type in pd.unique(parent.others_legend_df['other_type']):
+        for other_type in pd_unique(parent.others_legend_df['other_type']):
             color_R = parent.others_legend_df.loc[parent.others_legend_df['other_type'] == other_type, "color_R"].values[0]
             color_G = parent.others_legend_df.loc[parent.others_legend_df['other_type'] == other_type, "color_G"].values[0]
             color_B = parent.others_legend_df.loc[parent.others_legend_df['other_type'] == other_type, "color_B"].values[0]
@@ -109,11 +110,11 @@ class Legend(QObject):
             "Set signals for the widgets below"
             other_color_dialog_btn.clicked.connect(lambda: self.change_other_feature_color(parent=parent))
             other_line_thick_spn.valueChanged.connect(lambda: self.change_other_feature_line_thick(parent=parent))
-        for geo_type in pd.unique(parent.geol_legend_df['geological_type']):
+        for geo_type in pd_unique(parent.geol_legend_df['geological_type']):
             llevel_1 = QTreeWidgetItem(parent.LegendTreeWidget, [geo_type])  # self.GeologyTreeWidget as parent -> top level
-            for feature in pd.unique(parent.geol_legend_df.loc[parent.geol_legend_df['geological_type'] == geo_type, 'geological_feature']):
+            for feature in pd_unique(parent.geol_legend_df.loc[parent.geol_legend_df['geological_type'] == geo_type, 'geological_feature']):
                 llevel_2 = QTreeWidgetItem(llevel_1, [feature])  # llevel_1 as parent -> 2nd level
-                for scenario in pd.unique(parent.geol_legend_df.loc[(parent.geol_legend_df['geological_type'] == geo_type) & (parent.geol_legend_df['geological_feature'] == feature), 'scenario']):
+                for scenario in pd_unique(parent.geol_legend_df.loc[(parent.geol_legend_df['geological_type'] == geo_type) & (parent.geol_legend_df['geological_feature'] == feature), 'scenario']):
                     color_R = parent.geol_legend_df.loc[(parent.geol_legend_df['geological_type'] == geo_type) & (parent.geol_legend_df['geological_feature'] == feature) & (parent.geol_legend_df['scenario'] == scenario), "color_R"].values[0]
                     color_G = parent.geol_legend_df.loc[(parent.geol_legend_df['geological_type'] == geo_type) & (parent.geol_legend_df['geological_feature'] == feature) & (parent.geol_legend_df['scenario'] == scenario), "color_G"].values[0]
                     color_B = parent.geol_legend_df.loc[(parent.geol_legend_df['geological_type'] == geo_type) & (parent.geol_legend_df['geological_feature'] == feature) & (parent.geol_legend_df['scenario'] == scenario), "color_B"].values[0]
@@ -179,7 +180,7 @@ class Legend(QObject):
                     geol_time_spn.editingFinished.connect(lambda: self.change_geological_time(parent=parent))
                     # geol_time_combo.currentTextChanged.connect(lambda: self.change_geological_time(parent=parent))
                     geol_sequence_combo.currentTextChanged.connect(lambda: self.change_geological_sequence(parent=parent))
-        for locid in pd.unique(parent.well_legend_df['Loc ID']):
+        for locid in pd_unique(parent.well_legend_df['Loc ID']):
             llevel_1 = QTreeWidgetItem(parent.LegendTreeWidget, ['Wells'])  # self.GeologyTreeWidget as parent -> top level
         
             llevel_2 = QTreeWidgetItem(llevel_1, [locid])  # llevel_1 as parent -> 2nd level
@@ -212,11 +213,11 @@ class Legend(QObject):
             "Set signals for the widgets below"
             well_color_dialog_btn.clicked.connect(lambda: self.change_well_color(parent=parent))
             well_line_thick_spn.valueChanged.connect(lambda: self.change_well_line_thick(parent=parent))
-        for fluid_type in pd.unique(parent.fluids_legend_df['fluid_type']):
+        for fluid_type in pd_unique(parent.fluids_legend_df['fluid_type']):
                     llevel_1 = QTreeWidgetItem(parent.LegendTreeWidget, [fluid_type])  # self.GeologyTreeWidget as parent -> top level
-                    for feature in pd.unique(parent.fluids_legend_df.loc[parent.fluids_legend_df['fluid_type'] == fluid_type, 'fluid_feature']):
+                    for feature in pd_unique(parent.fluids_legend_df.loc[parent.fluids_legend_df['fluid_type'] == fluid_type, 'fluid_feature']):
                         llevel_2 = QTreeWidgetItem(llevel_1, [feature])  # llevel_1 as parent -> 2nd level
-                        for scenario in pd.unique(parent.fluids_legend_df.loc[(parent.fluids_legend_df['fluid_type'] == fluid_type) & (parent.fluids_legend_df['fluid_feature'] == feature), 'scenario']):
+                        for scenario in pd_unique(parent.fluids_legend_df.loc[(parent.fluids_legend_df['fluid_type'] == fluid_type) & (parent.fluids_legend_df['fluid_feature'] == feature), 'scenario']):
                             color_R = parent.fluids_legend_df.loc[(parent.fluids_legend_df['fluid_type'] == fluid_type) & (parent.fluids_legend_df['fluid_feature'] == feature) & (parent.fluids_legend_df['scenario'] == scenario), "color_R"].values[0]
                             color_G = parent.fluids_legend_df.loc[(parent.fluids_legend_df['fluid_type'] == fluid_type) & (parent.fluids_legend_df['fluid_feature'] == feature) & (parent.fluids_legend_df['scenario'] == scenario), "color_G"].values[0]
                             color_B = parent.fluids_legend_df.loc[(parent.fluids_legend_df['fluid_type'] == fluid_type) & (parent.fluids_legend_df['fluid_feature'] == feature) & (parent.fluids_legend_df['scenario'] == scenario), "color_B"].values[0]
@@ -282,9 +283,9 @@ class Legend(QObject):
                             fluid_time_spn.editingFinished.connect(lambda: self.change_fluid_time(parent=parent))
                             # geol_time_combo.currentTextChanged.connect(lambda: self.change_geological_time(parent=parent))
                             # fluid_sequence_combo.currentTextChanged.connect(lambda: self.change_fluid_sequence(parent=parent))
-        for fritto_type in pd.unique(parent.fritti_legend_df['fritto_type']):
+        for fritto_type in pd_unique(parent.fritti_legend_df['fritto_type']):
                     llevel_1 = QTreeWidgetItem(parent.LegendTreeWidget, [fritto_type])  # self.GeologyTreeWidget as parent -> top level
-                    for feature in pd.unique(parent.fritti_legend_df.loc[parent.fritti_legend_df['fritto_type'] == fritto_type, 'fritto_feature']):
+                    for feature in pd_unique(parent.fritti_legend_df.loc[parent.fritti_legend_df['fritto_type'] == fritto_type, 'fritto_feature']):
                         llevel_2 = QTreeWidgetItem(llevel_1, [feature])  # llevel_1 as parent -> 2nd level
                         color_R = parent.fritti_legend_df.loc[(parent.fritti_legend_df['fritto_type'] == fritto_type) & (parent.fritti_legend_df['fritto_feature'] == feature), "color_R"].values[0]
                         color_G = parent.fritti_legend_df.loc[(parent.fritti_legend_df['fritto_type'] == fritto_type) & (parent.fritti_legend_df['fritto_feature'] == feature), "color_G"].values[0]

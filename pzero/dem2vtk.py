@@ -7,9 +7,12 @@ import uuid
 from .entities_factory import DEM
 from .dom_collection import DomCollection
 from .fluid_collection import FluidsCollection
-import pyvista as pv
+from pyvista import StructuredGrid as pv_StructuredGrid
 import xarray as xr
-import numpy as np
+from numpy import asarray as np_asarray
+from numpy import any as np_any
+from numpy import nan as np_nan
+from numpy import meshgrid as np_meshgrid
 
 
 def dem2vtk(self=None, in_file_name=None,collection=None):
@@ -25,10 +28,9 @@ def dem2vtk(self=None, in_file_name=None,collection=None):
         values[nans] = np.nan
     xx, yy = np.meshgrid(data['x'], data['y'])
     zz = values.reshape(xx.shape)
-    print(zz)
     """Convert to DEM() instance."""
     curr_obj = DEM()
-    temp_obj = pv.StructuredGrid(xx, yy, zz)
+    temp_obj = pv_StructuredGrid(xx, yy, zz)
     temp_obj['elevation'] = zz.ravel(order='F')
     curr_obj.ShallowCopy(temp_obj)
     curr_obj.Modified()

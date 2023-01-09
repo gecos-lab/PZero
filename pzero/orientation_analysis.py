@@ -1,10 +1,18 @@
 """orientation_analysis.py
 PZero© Andrea Bistacchi"""
 
-import numpy as np
-import pandas as pd
-from .helper_dialogs import multiple_input_dialog, input_one_value_dialog, input_text_dialog, input_combo_dialog
-from .entities_factory import TriSurf, XsPolyLine, PolyLine, VertexSet, Voxet, XsTriSurf, XsVertexSet
+
+from numpy import ndarray as np_ndarray
+from numpy import less_equal as np_less_equal
+from numpy import greater as np_greater
+from numpy import asarray as np_asarray 
+from numpy import deg2rad as np_deg2rad
+from numpy import sin as np_sin
+from numpy import cos as np_cos
+from numpy import squeeze as np_squeeze
+
+from .helper_dialogs import multiple_input_dialog
+from .entities_factory import TriSurf, VertexSet, XsVertexSet
 
 """IN THE FUTURE add functions for ortientation analysis."""
 
@@ -13,14 +21,14 @@ def strikes2dip_directions(strikes=None):
     """Convert Strike to Dip-Direction according to right-hand rule,
     all in degrees. Accepts single values, lists or Numpy arrays and
     returns the same types."""
-    if isinstance(strikes, np.ndarray):
+    if isinstance(strikes, np_ndarray):
         strikes_array = strikes
-        directions_array = (strikes_array + 90) * np.less_equal(strikes_array, 270) + (strikes_array - 270) * np.greater(strikes_array, 270)
+        directions_array = (strikes_array + 90) * np_less_equal(strikes_array, 270) + (strikes_array - 270) * np_greater(strikes_array, 270)
         directions = directions_array
         return directions
     elif isinstance(strikes, list):
-        strikes_array = np.asarray(strikes)
-        directions_array = (strikes_array + 90) * np.less_equal(strikes_array, 270) + (strikes_array - 270) * np.greater(strikes_array, 270)
+        strikes_array = np_asarray(strikes)
+        directions_array = (strikes_array + 90) * np_less_equal(strikes_array, 270) + (strikes_array - 270) * np_greater(strikes_array, 270)
         directions = list(directions_array)
         return directions
     elif isinstance(strikes, (float, int)):
@@ -46,9 +54,9 @@ def plunge_trends2lineations(plunges=None, trends=None):
         trends_array = trends
     else:
         print("Plunge/Trend type not recognized.")
-    plunges_array = np.deg2rad(plunges_array)
-    trends_array = np.deg2rad(trends_array)
-    lineations = np.asarray([np.sin(trends_array) * np.cos(plunges_array), np.cos(trends_array) * np.cos(plunges_array), -np.sin(plunges_array)])
+    plunges_array = np_deg2rad(plunges_array)
+    trends_array = np_deg2rad(trends_array)
+    lineations = np_asarray([np_sin(trends_array) * np_cos(plunges_array), np_cos(trends_array) * np_cos(plunges_array), -np_sin(plunges_array)])
     return lineations.T
 
 
@@ -56,19 +64,19 @@ def dip_directions2normals(dips=None, directions=None):
     """Convert Dip/Direction measurements in degrees (single or list)
     to normal unit vectors pointing downwards if Dip > 0.
     Accepts single values, lists or Numpy arrays and
-    returns Numpy arrays. We use np.squeeze to avoid having multi-dimensional arrays"""
+    returns Numpy arrays. We use np_squeeze to avoid having multi-dimensional arrays"""
     if isinstance(dips, (float, int, list)) and isinstance(directions, (float, int, list)):
-        dips_array = np.squeeze(np.asarray(dips))
-        directions_array = np.squeeze(np.asarray(directions))
-    elif isinstance(dips, np.ndarray) and isinstance(directions, np.ndarray):
-        dips_array = np.squeeze(dips)
-        directions_array = np.squeeze(directions)
+        dips_array = np_squeeze(np_asarray(dips))
+        directions_array = np_squeeze(np_asarray(directions))
+    elif isinstance(dips, np_ndarray) and isinstance(directions, np_ndarray):
+        dips_array = np_squeeze(dips)
+        directions_array = np_squeeze(directions)
     else:
         print("Dip/Direction type not recognized.")
-    dips_array = np.squeeze(dips_array)
-    directions_array = np.squeeze(directions_array)
+    dips_array = np_squeeze(dips_array)
+    directions_array = np_squeeze(directions_array)
     plunges_array = 90 - dips_array
-    trends_array = (directions_array + 180) * np.less_equal(directions_array, 180) + (directions_array - 180) * np.greater(directions_array, 180)
+    trends_array = (directions_array + 180) * np_less_equal(directions_array, 180) + (directions_array - 180) * np_greater(directions_array, 180)
     normals = plunge_trends2lineations(plunges=plunges_array, trends=trends_array)
     return normals
 

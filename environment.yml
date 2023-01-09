@@ -19,3 +19,7 @@ dependencies:
   - loopstructural
   - cmocean
   - colorcet
+  - mplstereonet
+  - pythreejs
+  - pyinstaller
+  - mplstereonet
