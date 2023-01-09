@@ -17,7 +17,7 @@ from .helper_dialogs import multiple_input_dialog, input_one_value_dialog, messa
 from .windows_factory import ViewMap, ViewXsection, NavigationToolbar
 from .entities_factory import PolyLine, XsPolyLine
 from shapely import affinity
-from shapely.geometry import asLineString, LineString, Point, MultiLineString
+from shapely.geometry import LineString, Point, MultiLineString
 from shapely.ops import split, snap
 from PyQt5.QtWidgets import QAction
 
@@ -313,7 +313,7 @@ def rotate_line(self):
     """Stack coordinates in two-columns matrix"""
     inUV = np_column_stack((inU, inV))
     """Run the Shapely function."""
-    shp_line_in = asLineString(inUV)
+    shp_line_in = LineString(inUV)
     shp_line_out = affinity.rotate(shp_line_in, angle, origin='centroid', use_radians=False)  # Use Shapely to rotate
     outUV = np_array(shp_line_out)
     """Un-stack output coordinates and write them to the empty dictionary."""
@@ -498,8 +498,8 @@ def split_line_line(self):
     inUV_paper = np_column_stack((inU_paper, inV_paper))
     inUV_scissors = np_column_stack((inU_scissors, inV_scissors))
     """Run the Shapely function."""
-    shp_line_in_paper = asLineString(inUV_paper)
-    shp_line_in_scissors = asLineString(inUV_scissors)
+    shp_line_in_paper = LineString(inUV_paper)
+    shp_line_in_scissors = LineString(inUV_scissors)
     """Check if the two lineal geometries have shared path with dimension 1 (= they share a line-type object)"""
     if shp_line_in_paper.crosses(shp_line_in_scissors) == True:
         """Run the split shapely function."""
@@ -626,7 +626,7 @@ def split_line_existing_point(self):
         """Stack coordinates in two-columns matrix"""
         inUV_line = np_column_stack((inU_line, inV_line))
         """Run the Shapely function."""
-        shp_line_in = asLineString(inUV_line)
+        shp_line_in = LineString(inUV_line)
         x_vertex_unit = deepcopy(current_line_U_true[vertex_ind])
         y_vertex_unit = deepcopy(current_line_V_true[vertex_ind])
         shp_point_in = Point(x_vertex_unit, y_vertex_unit)
@@ -747,8 +747,8 @@ def merge_lines(self):
     inUV_one = np_column_stack((inU_one, inV_one))
     inUV_two = np_column_stack((inU_two, inV_two))
     """Run the Shapely function."""
-    shp_line_in_one = asLineString(inUV_one)
-    shp_line_in_two = asLineString(inUV_two)
+    shp_line_in_one = LineString(inUV_one)
+    shp_line_in_two = LineString(inUV_two)
     """Remove the path that lines may share"""
     shp_line_out_diff = shp_line_in_one.difference(shp_line_in_two)
     """Extract coordinates of the two lines to create a new LineString"""
@@ -834,8 +834,8 @@ def snap_line(self):
     inUV_snap = np_column_stack((inU_snap, inV_snap))
     inUV_goal = np_column_stack((inU_goal, inV_goal))
     """Run the Shapely function."""
-    shp_line_in_snap = asLineString(inUV_snap)
-    shp_line_in_goal = asLineString(inUV_goal)
+    shp_line_in_snap = LineString(inUV_snap)
+    shp_line_in_goal = LineString(inUV_goal)
     """In the snapping tool, the last input value is called Tolerance. Can be modified, do some checks.
     Little tolerance risks of not snapping distant lines, while too big tolerance snaps to the wrong vertex and
     not to the nearest one"""
@@ -922,7 +922,7 @@ def resample_line_distance(self):  # this must be done per-part_________________
     """Stack coordinates in two-columns matrix"""
     inUV = np_column_stack((inU, inV))
     """Run the Shapely function."""
-    shp_line_in = asLineString(inUV)
+    shp_line_in = LineString(inUV)
     if distance_delta >= shp_line_in.length:
         while distance_delta >= shp_line_in.length:
             distance_delta = distance_delta / 2
@@ -1005,7 +1005,7 @@ def resample_line_number_points(self):  # this must be done per-part____________
     """Stack coordinates in two-columns matrix"""
     inUV = np_column_stack((inU, inV))
     """Run the Shapely function."""
-    shp_line_in = asLineString(inUV)
+    shp_line_in = LineString(inUV)
     distances = (shp_line_in.length * i / (number_of_points - 1) for i in range(number_of_points))
     points = [shp_line_in.interpolate(distance) for distance in distances]
     shp_line_out = LineString(points)
@@ -1082,7 +1082,7 @@ def simplify_line(self):  # this must be done per-part__________________________
     """Stack coordinates in two-columns matrix"""
     inUV = np_column_stack((inU, inV))
     """Run the Shapely function."""
-    shp_line_in = asLineString(inUV)
+    shp_line_in = LineString(inUV)
     shp_line_out = shp_line_in.simplify(tolerance_p, preserve_topology=False)
     outUV = deepcopy(np_array(shp_line_out))
     """Un-stack output coordinates and write them to the empty dictionary."""
@@ -1180,7 +1180,7 @@ def copy_parallel(self):  # this must be done per-part__________________________
     self.parent.geology_geom_modified_signal.emit([input_uid])  # emit uid as list to force redraw()
     toc()
     """Run the Shapely function."""
-    shp_line_in = asLineString(inUV)
+    shp_line_in = LineString(inUV)
     print("shp_line_in.parallel_offset")
     if shp_line_in.is_simple:
         tic()
@@ -1280,7 +1280,7 @@ def copy_kink(self):  # this must be done per-part______________________________
     self.selected_uids = []
     self.parent.geology_geom_modified_signal.emit([input_uid])  # emit uid as list to force redraw()
     """Run the Shapely function."""
-    shp_line_in = asLineString(inUV)
+    shp_line_in = LineString(inUV)
     if shp_line_in.is_simple:
         shp_line_out = shp_line_in.parallel_offset(distance, 'left', resolution=16, join_style=2, mitre_limit=10.0)  # kink folds are obtained with join_style=2, mitre_limit=10.0
         outUV = np_array(shp_line_out)

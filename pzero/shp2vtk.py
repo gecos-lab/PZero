@@ -17,7 +17,7 @@ from .fluid_collection import FluidsCollection
 from .frittura_collection import FrittoMistoCollection
 from .two_d_lines import left_right
 from shapely import affinity
-from shapely.geometry import asLineString, LineString, Point, asPoint, MultiLineString
+from shapely.geometry import LineString, Point, MultiLineString
 from shapely.ops import split, snap
 
 from .orientation_analysis import dip_directions2normals
