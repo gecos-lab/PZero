@@ -9,7 +9,7 @@ from PyQt5.QtGui import QCloseEvent,QFont
 """PZero imports"""
 from .base_view_window_ui import Ui_BaseViewWindow
 from .entities_factory import VertexSet, PolyLine, TriSurf, TetraSolid, XsVertexSet, XsPolyLine, DEM, PCDom, MapImage, Voxet, XsVoxet, Plane, Seismics, XsTriSurf, XsImage, PolyData, Well, WellMarker,WellTrace,Attitude,Fritti
-from .helper_dialogs import input_one_value_dialog, input_text_dialog, input_combo_dialog, message_dialog, options_dialog, multiple_input_dialog, tic, toc,open_file_dialog,progress_dialog
+from .helper_dialogs import input_one_value_dialog, input_text_dialog, input_combo_dialog, message_dialog, options_dialog, multiple_input_dialog, tic, toc,open_file_dialog,progress_dialog,general_input_dialog
 from .geological_collection import GeologicalCollection
 from copy import deepcopy
 from uuid import uuid4
@@ -23,7 +23,10 @@ from numpy import ndarray as np_ndarray
 from numpy import abs as np_abs
 from numpy import sin as np_sin
 from numpy import cos as np_cos
+from numpy import arctan2 as np_arctan2
+from numpy import sqrt as np_sqrt
 from numpy import pi as np_pi
+from numpy import array as np_array
 
 from pandas import DataFrame as pd_DataFrame
 from pandas import unique as pd_unique
@@ -33,7 +36,7 @@ from pandas import unique as pd_unique
 # import vtk.numpy_interface.dataset_adapter as dsa
 from vtk.util import numpy_support
 from vtkmodules.vtkInteractionWidgets import vtkCameraOrientationWidget
-from vtk import vtkExtractPoints,vtkSphere
+from vtk import vtkExtractPoints,vtkSphere,vtkAreaPicker,vtkPropPicker
 
 """3D plotting imports"""
 from pyvista import global_theme as pv_global_theme
@@ -44,6 +47,7 @@ from pyvista import Disc as pvDisc
 from pyvista import PolyData as pvPolyData
 from pyvista import PointSet as pvPointSet
 from pyvista import Plotter as pv_plot
+from pyvista import lines_from_points as pv_lines_from_points
 
 """2D plotting imports"""
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
@@ -114,7 +118,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.add_all_entities()
         self.show_qt_canvas()
 
-        if not isinstance(self, ViewXsection):
+        if not isinstance(self, newViewXsection):
             """Build and show geology and topology trees, and cross-section, DOM, image, lists.
             Reimplemented for ViewXsection with entities limited to those belonging to the Xsection."""
             self.create_geology_tree()
@@ -1054,8 +1058,10 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         """Called by self.DOMsTableWidget.itemChanged.connect(self.toggle_dom_visibility)."""
         check_state = self.DOMsTableWidget.item(cell.row(), 0).checkState()  # this is the check state of cell "name"
 
-        uid = self.DOMsTableWidget.item(cell.row(), 1).text()  # this is the text of cell "uid"
-        # print(uid)
+        if self.DOMsTableWidget.item(cell.row(), 1):
+            uid = self.DOMsTableWidget.item(cell.row(), 1).text()  # this is the text of cell "uid"
+        else:
+            return
         if check_state == Qt.Checked:
             if not self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]:
                 self.actors_df.loc[self.actors_df['uid'] == uid, 'show'] = True
@@ -2196,7 +2202,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             self.update_fritti_topology_checkboxes(uid=uid, uid_checkState=uid_checkState)
             self.FrittiTreeWidget.itemChanged.connect(self.toggle_fritti_topology_visibility)
             self.FrittiTopologyTreeWidget.itemChanged.connect(self.toggle_fritti_topology_visibility)
-  
+
 # ================================  add, remove, and update actors ================================
     
     """Methods used to add, remove, and update actors from the geological collection."""
@@ -3025,8 +3031,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.FrittiTreeWidget.itemChanged.connect(self.toggle_fritti_topology_visibility)
         self.FrittiTopologyTreeWidget.itemChanged.connect(self.toggle_fritti_topology_visibility)
 
-   
-    """General methods shared by all views."""
+# ================================  General methods shared by all views ================================
 
     def toggle_property(self):
         """Generic method to toggle the property shown by an actor that is already present in the view."""
@@ -3094,394 +3099,6 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                 this_actor = self.show_actor_with_property(uid=uid, collection=collection, show_property=this_property, visible=show)
                 self.actors_df = self.actors_df.append({'uid': uid, 'actor': this_actor, 'show': show, 'collection': collection, 'show_prop': this_property}, ignore_index=True)
 
-    """All following functions must be re-implemented in derived classes - they appear here just as placeholders"""
-
-    def closeEvent(self, event):
-        """Override the closeEvent method of QWidget, close the plotter and ask for confirmation.
-        This can be reimplemented for some particular kind of view, such as the 3D view."""
-        reply = QMessageBox.question(self, 'Closing window', 'Close this window?', QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
-        if reply == QMessageBox.Yes:
-            event.accept()  # SEE ABOVE ON THE CLOSED WINDOW REFERENCE PROBLEM___________________________  # self.close()  # self = None
-        else:
-            event.ignore()
-
-    def initialize_menu_tools(self):
-        """placeholder to be superseded by specific method in subclass"""
-        pass
-
-    def initialize_interactor(self):
-        """placeholder to be superseded by specific method in subclass"""
-        pass
-
-    def change_actor_color(self, uid=None, collection=None):
-        """placeholder to be superseded by specific method in subclass"""
-        pass
-
-    def change_actor_line_thick(self, uid=None, collection=None):
-        """placeholder to be superseded by specific method in subclass"""
-        pass
-
-    def set_actor_visible(self, uid=None, visible=None):
-        """placeholder to be superseded by specific method in subclass"""
-        pass
-
-    def show_actor_with_property(self, uid=None, collection=None, show_property=None, visible=None):
-        """placeholder to be superseded by specific method in subclass"""
-        pass
-
-    def entity_remove_selected(self):
-        """Remove entities selected in View"""
-
-        if not self.selected_uids:
-            return
-        """Confirm removal dialog."""
-        check = QMessageBox.question(self, "Remove Entities", ("Do you really want to remove entities\n" + str(self.selected_uids) + "\nPlease confirm."), QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
-        if check == QMessageBox.No:
-            return
-        """Remove entities."""
-        for uid in self.selected_uids:
-            if self.actors_df.loc[self.actors_df['uid'] == uid, 'collection'].values[0] == 'geol_coll':
-                self.parent.geol_coll.remove_entity(uid=uid)
-            elif self.actors_df.loc[self.actors_df['uid'] == uid, 'collection'].values[0] == 'xsect_coll':
-                self.parent.xsect_coll.remove_entity(uid=uid)
-            elif self.actors_df.loc[self.actors_df['uid'] == uid, 'collection'].values[0] == 'boundary_coll':
-                self.parent.boundary_coll.remove_entity(uid=uid)
-            elif self.actors_df.loc[self.actors_df['uid'] == uid, 'collection'].values[0] == 'mesh3d_coll':
-                self.parent.mesh3d_coll.remove_entity(uid=uid)
-            elif self.actors_df.loc[self.actors_df['uid'] == uid, 'collection'].values[0] == 'dom_coll':
-                self.parent.dom_coll.remove_entity(uid=uid)
-            elif self.actors_df.loc[self.actors_df['uid'] == uid, 'collection'].values[0] == 'image_coll':
-                self.parent.image_coll.remove_entity(uid=uid)
-            elif self.actors_df.loc[self.actors_df['uid'] == uid, 'collection'].values[0] == 'well_coll':
-                self.parent.well_coll.remove_entity(uid=uid)
-        """List of selected_uids is cleared"""
-        self.selected_uids = []
-
-
-class View3D(BaseView):
-    """Create 3D view and import UI created with Qt Designer by subclassing base view"""
-    """parent is the QT object that is launching this one, hence the ProjectWindow() instance in this case"""
-
-
-    def __init__(self, *args, **kwargs):
-        super(View3D, self).__init__(*args, **kwargs)
-
-        self.act_list = []
-
-        """Rename Base View, Menu and Tool"""
-        self.setWindowTitle("3D View")
-        self.tog_att = -1 #Attitude picker disabled
-        self.trace_method = 'trace' #visualization method for boreholes properties (trace or cylinder)
-        self.toggle_bore_geo = -1
-        self.toggle_bore_litho = -1
-    """Re-implementations of functions that appear in all views - see placeholders in BaseView()"""
-    def show_qt_canvas(self):
-        """Show the Qt Window"""
-        
-        self.show()
-
-        self.init_zoom = self.plotter.camera.distance
-        self.cam_orient_widget.On() # [Gabriele] The orientation widget needs to be turned on AFTER the canvas is shown
-        self.picker = self.plotter.enable_mesh_picking(callback= self.pkd_mesh,show_message=False)
-    
-    def closeEvent(self, event):
-        """Override the standard closeEvent method since self.plotter.close() is needed to cleanly close the vtk plotter."""
-        reply = QMessageBox.question(self, 'Closing window', 'Close this window?', QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
-        if reply == QMessageBox.Yes:
-            self.plotter.close()  # needed to cleanly close the vtk plotter
-            event.accept()
-        else:
-            event.ignore()
-
-    def initialize_menu_tools(self):
-        """Customize menus and tools for this view"""
-        self.menuBaseView.setTitle("Edit")
-        self.actionBase_Tool.setText("Edit")
-
-        self.menuBoreTraceVis = QMenu('Borehole visualization methods',self)
-        self.actionBoreTrace = QAction('Trace',self)
-
-        self.actionBoreTrace.triggered.connect(lambda: self.change_bore_vis('trace'))
-
-        self.actionBoreCylinder = QAction('Cylinder',self)
-        self.actionBoreCylinder.triggered.connect(lambda: self.change_bore_vis('cylinder'))
-        self.actionToggleGeology = QAction('Toggle geology',self)
-        self.actionToggleGeology.triggered.connect(lambda: self.change_bore_vis('geo'))
-        self.actionToggleLithology = QAction('Toggle lithology',self)
-        self.actionToggleLithology.triggered.connect(lambda: self.change_bore_vis('litho'))
-        
-        self.menuBoreTraceVis.addAction(self.actionBoreTrace)
-        self.menuBoreTraceVis.addAction(self.actionBoreCylinder)
-        self.menuBoreTraceVis.addAction(self.actionToggleLithology)
-        self.menuBoreTraceVis.addAction(self.actionToggleGeology)
-
-
-        self.menuBaseView.addMenu(self.menuBoreTraceVis)
-
-
-
-
-        """Manage home view"""
-        self.saveHomeView = QAction("Save home view", self)  # create action
-        self.saveHomeView.triggered.connect(self.save_home_view)  # connect action to function
-        self.menuBaseView.addAction(self.saveHomeView)  # add action to menu
-        self.toolBarBase.addAction(self.saveHomeView)  # add action to toolbar
-
-        self.zoomHomeView = QAction("Zoom to home", self)
-        self.zoomHomeView.triggered.connect(self.zoom_home_view)
-        self.menuBaseView.addAction(self.zoomHomeView)
-        self.toolBarBase.addAction(self.zoomHomeView)
-
-        self.zoomActive = QAction("Zoom to active", self)
-        self.zoomActive.triggered.connect(self.zoom_active)
-        self.menuBaseView.addAction(self.zoomActive)
-        self.toolBarBase.addAction(self.zoomActive)
-
-        # self.showOct = QAction("Show octree structure", self)
-        # self.showOct.triggered.connect(self.show_octree)
-        # self.menuBaseView.addAction(self.showOct)
-        # self.toolBarBase.addAction(self.showOct)
-
-        self.menuOrbit = QMenu('Orbit around',self)
-
-        self.actionOrbitEntity = QAction('Entity',self)
-        self.actionOrbitEntity.triggered.connect(lambda: self.orbit_entity())
-        self.menuOrbit.addAction(self.actionOrbitEntity)
-
-        self.menuEdit = QMenu('Edit point cloud',self)
-        # self.actionCalculateNormalsPC = QAction('Calculate normals for point clouds',self)
-        self.actionNormals2dd = QAction('Convert normals to Dip/Direction',self)
-        self.actionNormals2dd.triggered.connect(lambda: self.normals2dd())
-        self.actionFilter = QAction('Filter',self)
-        self.actionFilter.triggered.connect(lambda: self.radial_filt())
-        self.menuEdit.addAction(self.actionNormals2dd)
-        self.menuEdit.addAction(self.actionFilter)
-        self.menuTools.addMenu(self.menuEdit)
-        self.menuTools.addMenu(self.menuOrbit)
-
-        """______________THIS MUST BE MOVED TO MAIN WINDOW AND NAME MUST BE MORE SPECIFIC_________________"""
-        self.actionFilter = QAction('Filter', self)
-        self.actionFilter.triggered.connect(self.radial_filt)
-        self.menuBaseView.addAction(self.actionFilter)
-        self.toolBarBase.addAction(self.actionFilter)
-
-        self.actionPickAttitude = QAction('Measure attitude', self)
-        self.actionPickAttitude.triggered.connect(self.act_att)
-        self.menuBaseView.addAction(self.actionPickAttitude)
-        self.toolBarBase.addAction(self.actionPickAttitude)
-
-        self.actionPickMesh = QAction('Mesh picking', self)
-        self.actionPickMesh.triggered.connect(lambda: self.act_pmesh())
-        self.menuBaseView.addAction(self.actionPickMesh)
-        self.toolBarBase.addAction(self.actionPickMesh)
-
-        self.actionExportGltf = QAction('Export as GLTF', self)
-        self.actionExportGltf.triggered.connect(self.export_gltf)
-        self.menuBaseView.addAction(self.actionExportGltf)
-        self.toolBarBase.addAction(self.actionExportGltf)
-
-        self.actionExportHtml = QAction('Export as HTML', self)
-        self.actionExportHtml.triggered.connect(self.export_html)
-        self.menuBaseView.addAction(self.actionExportHtml)
-        self.toolBarBase.addAction(self.actionExportHtml)
-
-        self.actionExportObj = QAction('Export as OBJ', self)
-        self.actionExportObj.triggered.connect(self.export_obj)
-        self.menuBaseView.addAction(self.actionExportObj)
-        self.toolBarBase.addAction(self.actionExportObj)
-
-        self.actionExportVtkjs = QAction('Export as VTKjs', self)
-        self.actionExportVtkjs.triggered.connect(self.export_vtkjs)
-        self.menuBaseView.addAction(self.actionExportVtkjs)
-        self.toolBarBase.addAction(self.actionExportVtkjs)
-
-    def save_home_view(self):
-        self.default_view = self.plotter.camera_position
-
-    def zoom_home_view(self):
-        self.plotter.camera_position = self.default_view
-
-    def zoom_active(self):
-        self.plotter.reset_camera()
-
-    def export_html(self):
-        out_file_name = save_file_dialog(parent=self, caption="Export 3D view as HTML.", filter="html (*.html)")
-        self.plotter.export_html(out_file_name)
-
-    def export_vtkjs(self):
-        out_file_name = save_file_dialog(parent=self, caption="Export 3D view as VTKjs.", filter="vtkjs (*.vtkjs)").removesuffix(".vtkjs")
-        self.plotter.export_vtkjs(out_file_name)
-
-    def export_obj(self):
-        out_file_name = save_file_dialog(parent=self, caption="Export 3D view as OBJ.", filter="obj (*.obj)").removesuffix(".obj")
-        self.plotter.export_obj(out_file_name)
-
-    def export_gltf(self):
-        out_file_name = save_file_dialog(parent=self, caption="Export 3D view as GLTF.", filter="gltf (*.gltf)")
-        self.plotter.export_gltf(out_file_name)
-
-    def initialize_interactor(self):
-        """Add the pyvista interactor object to self.ViewFrameLayout ->
-        the layout of an empty frame generated with Qt Designer"""
-        # print(self.ViewFrame)
-        self.plotter = pvQtInteractor(self.ViewFrame)
-        self.plotter.set_background('black')  # background color - could be made interactive in the future
-        self.ViewFrameLayout.addWidget(self.plotter.interactor)
-        # self.plotter.show_axes_all()
-        """Set orientation widget (turned on after the qt canvas is shown)"""
-        self.cam_orient_widget = vtkCameraOrientationWidget()
-        self.cam_orient_widget.SetParentRenderer(self.plotter.renderer)
-        """Set default orientation horizontal because vertical colorbars interfere with the widget."""
-        pv_global_theme.colorbar_orientation = 'horizontal'
-
-    def act_att(self):
-
-        if self.tog_att == -1:
-            input_dict = {'name': ['Set name: ', 'Set_0'], 'geological_type': ['Geological type: ', GeologicalCollection.valid_geological_types]}
-            set_opt = multiple_input_dialog(title="Create measure set", input_dict=input_dict)
-            self.plotter.enable_point_picking(callback=lambda mesh, pid: self.pkd_point(mesh, pid, set_opt),show_message=False, color='yellow', use_mesh=True)
-            self.tog_att *= -1
-            print('Picking enabled')
-        else:
-            picker = self.plotter.picker
-            #print(picker)
-            picker.RemoveObservers(_vtk.vtkCommand.EndPickEvent)
-            self.picker = self.plotter.enable_mesh_picking(callback=lambda mesh: self.pkd_mesh(mesh),show_message=False)
-            self.tog_att *= -1
-            print('Picking disabled')
-
-    def act_pmesh(self):
-        """[Gabriele] Not the best solution but for now it works"""
-        if self.tog_att == -1:
-            self.picker = self.plotter.enable_mesh_picking(callback=lambda mesh: self.pkd_mesh(mesh),show_message=False)
-            print('Mesh picking enabled')
-        else:
-            # picker = self.plotter.picker
-            #print(picker)
-            self.picker.RemoveObservers(_vtk.vtkCommand.EndPickEvent)
-            self.picker = self.plotter.enable_mesh_picking(callback=lambda mesh: self.pkd_mesh(mesh),show_message=False)
-            self.tog_att *= -1
-            print('Picking disabled')
-
-    def pkd_point(self,mesh,pid,set_opt):
-        
-        actor = self.picker.GetActor()
-        sel_uid = self.actors_df.loc[self.actors_df['actor'] == actor,'uid'].values[0]
-
-        obj = self.parent.dom_coll.get_uid_vtk_obj(sel_uid)
-        # locator = vtkStaticPointLocator()
-        # locator.SetDataSet(obj)
-        # locator.BuildLocator()
-        # id_list = vtkIdList()
-        # print(center)
-        #
-        # locator.FindClosestNPoints(30,center,id_list)
-        # print(obj.GetPoints().GetPoints(id_list).GetData())
-        #
-        sph_r = 0.2 #radius of the selection sphere
-        center = mesh.points[pid]
-
-        sphere = vtkSphere()
-        sphere.SetCenter(center)
-        sphere.SetRadius(sph_r)
-
-        extr = vtkExtractPoints()
-
-        extr.SetImplicitFunction(sphere)
-        extr.SetInputData(obj)
-        extr.ExtractInsideOn()
-        extr.Update()
-        # [Gabriele] We could try to do this with vtkPCANormalEstimation
-        points = numpy_support.vtk_to_numpy(extr.GetOutput().GetPoints().GetData())
-        plane_c,plane_n = best_fitting_plane(points)
-
-
-        if plane_n[2]>0: #If Z is positive flip the normals
-            plane_n *=-1
-        #sel_p = PolyData(points)
-
-        # range = sel_p.points[:,0].max() - sel_p.points[:,0].min()
-        # surf = sel_p.reconstruct_surface()
-        # norm_mean = np.mean(surf.point_normals,axis=0)
-        # std = np.std(surf.cell_normals,axis=0)
-        # print(std)
-        # if norm_mean[2]<0:
-        #     norm_mean *= -1
-
-
-        # temp_point = PolyData(plane_c)
-        # #temp_point['Normals'] = [plane_n]
-        # # temp_plane = pvPlane(center=plane_c,direction = plane_n, i_size=dim,j_size=dim,i_resolution=1,j_resolution=1)
-        #
-        # nx,ny,nz = plane_n
-        # dip = np.arccos(nz)
-        # dir = angle_wrapper(np.arctan2(nx, ny)-np.deg2rad(90))
-        # temp_point['dip'] = [np.rad2deg(dip)]
-        # temp_point['dir'] = [np.rad2deg(dir)]
-
-
-
-        # print(att_point)
-
-        if set_opt['name'] in self.parent.geol_coll.df['name'].values:
-            uid = self.parent.geol_coll.get_name_uid(set_opt['name'])
-            old_vtk_obj = self.parent.geol_coll.get_uid_vtk_obj(uid)
-
-            old_vtk_obj.append_point(point_vector=plane_c)
-            old_plane_n = old_vtk_obj.get_point_data('Normals')
-            old_plane_n = np_append(old_plane_n,plane_n).reshape(-1,3)
-            old_vtk_obj.set_point_data('Normals',old_plane_n)
-            old_vtk_obj.auto_cells()
-            self.parent.geol_coll.replace_vtk(uid,old_vtk_obj,const_color=True)
-        else:
-            att_point = Attitude()
-
-            att_point.append_point(point_vector=plane_c)
-            att_point.auto_cells()
-
-            att_point.init_point_data(data_key='Normals',dimension=3)
-
-            att_point.set_point_data(data_key='Normals',attribute_matrix=plane_n)
-
-
-            properties_name = att_point.point_data_keys
-            properties_components = [att_point.get_point_data_shape(i)[1] for i in properties_name]
-
-            curr_obj_dict = deepcopy(GeologicalCollection.geological_entity_dict)
-            curr_obj_dict['uid'] = str(uuid4())
-            curr_obj_dict['name'] = set_opt['name']
-            curr_obj_dict['geological_type'] = set_opt['geological_type']
-            curr_obj_dict['topological_type'] = "VertexSet"
-            curr_obj_dict['geological_feature'] = set_opt['name']
-            curr_obj_dict['properties_names'] = properties_name
-            curr_obj_dict['properties_components'] = properties_components
-            curr_obj_dict['vtk_obj'] = att_point
-            """Add to entity collection."""
-            self.parent.geol_coll.add_entity_from_dict(entity_dict=curr_obj_dict)
-
-            del extr
-            del sphere
-
-
-        #self.plotter.add_mesh(temp_plane,color='r',pickable =False)
-        # print(plane)
-
-        # pts = mesh.extract_points(sel_points['SelectedPoints'].view(bool), adjacent_cells=False)
-        # pts_act = plt.add_mesh(sel_p,color='r',pickable =False)
-        # act_list.append(pts_act)
-        # self.act_list.append(actor)
-
-    def pkd_mesh(self,mesh):
-
-        '''[Gabriele] To select the mesh in the entity list we compare the actors of the actors_df dataframe
-        with the picker.GetActor() result'''
-        
-        actor = self.picker.GetActor()
-        sel_uid = self.actors_df.loc[self.actors_df['actor'] == actor,'uid'].values[0]        
-        idx = self.actors_df.loc[self.actors_df['uid'] == sel_uid].index[0]
-        self.parent.GeologyTableView.selectRow(idx)
-        return
-
     def change_actor_color(self, uid=None, collection=None):
         if collection == 'geol_coll':
             color_R = self.parent.geol_coll.get_uid_legend(uid=uid)['color_R']
@@ -3522,9 +3139,10 @@ class View3D(BaseView):
 
     def change_actor_line_thick(self, uid=None, collection=None):
         """Update line thickness for actor uid"""
+
         if collection == 'geol_coll':
             line_thick = self.parent.geol_coll.get_uid_legend(uid=uid)['line_thick']
-            if isinstance(self.parent.geol_coll.get_uid_vtk_obj(uid),VertexSet):
+            if isinstance(self.parent.geol_coll.get_uid_vtk_obj(uid),VertexSet) or isinstance(self.parent.geol_coll.get_uid_vtk_obj(uid),XsVertexSet):
                 self.actors_df.loc[self.actors_df['uid'] == uid, 'actor'].values[0].GetProperty().SetPointSize(line_thick)
             else:
                 self.actors_df.loc[self.actors_df['uid'] == uid, 'actor'].values[0].GetProperty().SetLineWidth(line_thick)
@@ -3557,11 +3175,12 @@ class View3D(BaseView):
         
         elif collection == 'fritti_coll':
             line_thick = self.parent.fritti_coll.get_uid_legend(uid=uid)['line_thick']
-           
+        
             if isinstance(self.parent.fritti_coll.get_uid_vtk_obj(uid),VertexSet):
                 self.actors_df.loc[self.actors_df['uid'] == uid, 'actor'].values[0].GetProperty().SetPointSize(line_thick)
             else:
                 self.actors_df.loc[self.actors_df['uid'] == uid, 'actor'].values[0].GetProperty().SetLineWidth(line_thick)    
+    
     def set_actor_visible(self, uid=None, visible=None,name=None):
         
         """Set actor uid visible or invisible (visible = True or False)"""
@@ -3696,7 +3315,7 @@ class View3D(BaseView):
                 else:
                     if plot_entity.get_point_data_shape(show_property)[-1] == 3:
                         plot_rgb_option = True
-                this_actor = self.plot_mesh_3D(uid=uid, plot_entity=plot_entity, color_RGB=color_RGB, show_property=show_property, show_scalar_bar=show_scalar_bar,
+                this_actor = self.plot_mesh(uid=uid, plot_entity=plot_entity, color_RGB=color_RGB, show_property=show_property, show_scalar_bar=show_scalar_bar,
                                             color_bar_range=None, show_property_title=show_property_title, line_thick=line_thick,
                                             plot_texture_option=False, plot_rgb_option=plot_rgb_option, visible=visible)
             else:
@@ -3752,10 +3371,10 @@ class View3D(BaseView):
                 else:
                     if plot_entity.get_point_data_shape(show_property)[-1] == 3:
                         plot_rgb_option = True
-                this_actor = self.plot_mesh_3D(uid=uid, plot_entity=plot_entity, color_RGB=color_RGB, show_property=show_property, show_scalar_bar=show_scalar_bar,
+                this_actor = self.plot_mesh(uid=uid, plot_entity=plot_entity, color_RGB=color_RGB, show_property=show_property, show_scalar_bar=show_scalar_bar,
                                             color_bar_range=None, show_property_title=show_property_title, line_thick=line_thick,
                                             plot_texture_option=texture, plot_rgb_option=plot_rgb_option, visible=visible,
-                                            style=style, point_size=line_thick*10.0, points_as_spheres=True, pickable=pickable)
+                                            style=style, point_size=line_thick, points_as_spheres=True, pickable=pickable)
             else:
                 this_actor = None
         elif isinstance(plot_entity, DEM):
@@ -3764,7 +3383,7 @@ class View3D(BaseView):
                 active_image = self.parent.image_coll.get_uid_vtk_obj(show_property)
                 active_image_texture = active_image.texture
                 # active_image_properties_components = active_image.properties_components[0]  # IF USED THIS MUST BE FIXED FOR TEXTURES WITH MORE THAN 3 COMPONENTS
-                this_actor = self.plot_mesh_3D(uid=uid, plot_entity=plot_entity, color_RGB=None, show_property=None, show_scalar_bar=None,
+                this_actor = self.plot_mesh(uid=uid, plot_entity=plot_entity, color_RGB=None, show_property=None, show_scalar_bar=None,
                                             color_bar_range=None, show_property_title=None, line_thick=None,
                                             plot_texture_option=active_image_texture, plot_rgb_option=False, visible=visible)
             else:
@@ -3787,7 +3406,7 @@ class View3D(BaseView):
                 else:
                     if plot_entity.get_point_data_shape(show_property)[-1] == 3:
                         plot_rgb_option = True
-                this_actor = self.plot_mesh_3D(uid=uid, plot_entity=plot_entity, color_RGB=color_RGB, show_property=show_property, show_scalar_bar=show_scalar_bar,
+                this_actor = self.plot_mesh(uid=uid, plot_entity=plot_entity, color_RGB=color_RGB, show_property=show_property, show_scalar_bar=show_scalar_bar,
                                             color_bar_range=None, show_property_title=show_property_title, line_thick=line_thick,
                                             plot_texture_option=False, plot_rgb_option=plot_rgb_option, visible=visible)
         elif isinstance(plot_entity, PCDom):
@@ -3842,7 +3461,7 @@ class View3D(BaseView):
                 plot_texture_option = None
             else:
                 plot_texture_option = plot_entity.texture
-            this_actor = self.plot_mesh_3D(uid=uid, plot_entity=plot_entity.frame, color_RGB=None, show_property=None, show_scalar_bar=None,
+            this_actor = self.plot_mesh(uid=uid, plot_entity=plot_entity.frame, color_RGB=None, show_property=None, show_scalar_bar=None,
                                         color_bar_range=None, show_property_title=None, line_thick=line_thick,
                                         plot_texture_option=plot_texture_option, plot_rgb_option=False, visible=visible)
         elif isinstance(plot_entity, Seismics):
@@ -3865,7 +3484,7 @@ class View3D(BaseView):
                 else:
                     if plot_entity.get_point_data_shape(show_property)[-1] == 3:
                         plot_rgb_option = True
-                this_actor = self.plot_mesh_3D(uid=uid, plot_entity=plot_entity, color_RGB=color_RGB, show_property=show_property, show_scalar_bar=show_scalar_bar,
+                this_actor = self.plot_mesh(uid=uid, plot_entity=plot_entity, color_RGB=color_RGB, show_property=show_property, show_scalar_bar=show_scalar_bar,
                                             color_bar_range=None, show_property_title=show_property_title, line_thick=line_thick,
                                             plot_texture_option=False, plot_rgb_option=plot_rgb_option, visible=visible)
             else:
@@ -3882,7 +3501,7 @@ class View3D(BaseView):
                 else:
                     if plot_entity.get_point_data_shape(show_property)[-1] == 3:
                         plot_rgb_option = True
-                this_actor = self.plot_mesh_3D(uid=uid, plot_entity=plot_entity, color_RGB=None, show_property=show_property, show_scalar_bar=show_scalar_bar,
+                this_actor = self.plot_mesh(uid=uid, plot_entity=plot_entity, color_RGB=None, show_property=show_property, show_scalar_bar=show_scalar_bar,
                                             color_bar_range=None, show_property_title=show_property_title, line_thick=line_thick,
                                             plot_texture_option=False, plot_rgb_option=plot_rgb_option, visible=visible)
             else:
@@ -3909,7 +3528,7 @@ class View3D(BaseView):
                 self.plotter.add_actor(prop,name=f'{uid}_prop')
                 show_property=None
                 show_property_title = None
-            this_actor = self.plot_mesh_3D(uid=uid, plot_entity=plot_entity, color_RGB=color_RGB, show_property=show_property, show_scalar_bar=show_scalar_bar,
+            this_actor = self.plot_mesh(uid=uid, plot_entity=plot_entity, color_RGB=color_RGB, show_property=show_property, show_scalar_bar=show_scalar_bar,
                                         color_bar_range=None, show_property_title=show_property_title, line_thick=line_thick,
                                         plot_texture_option=False, plot_rgb_option=plot_rgb_option, visible=visible,
                                         render_lines_as_tubes=False)
@@ -3921,7 +3540,7 @@ class View3D(BaseView):
             elif show_property == 'none':
                 show_scalar_bar = False
                 show_property = None
-            this_actor = self.plot_mesh_3D(uid=uid, plot_entity=plot_entity, color_RGB=color_RGB, show_property=show_property, show_scalar_bar=show_scalar_bar,
+            this_actor = self.plot_mesh(uid=uid, plot_entity=plot_entity, color_RGB=color_RGB, show_property=show_property, show_scalar_bar=show_scalar_bar,
                                         color_bar_range=None, show_property_title=show_property_title, line_thick=line_thick,
                                         plot_texture_option=False, plot_rgb_option=plot_rgb_option, visible=visible,
                                         render_lines_as_tubes=False)
@@ -4004,10 +3623,84 @@ class View3D(BaseView):
         else:
             self.plotter.add_point_labels(point,name_value,always_visible=True,show_points=False,font_size=15,shape_opacity=0.5,name=f'{uid}_name')
 
-    def plot_mesh_3D(self, uid=None, plot_entity=None, color_RGB=None, show_property=None, show_scalar_bar=None,
-                     color_bar_range=None, show_property_title=None, line_thick=None,
-                     plot_texture_option=None, plot_rgb_option=None, visible=None,
-                     style='surface', point_size=5.0, points_as_spheres=False,render_lines_as_tubes=False,pickable = True):
+    def save_home_view(self):
+        self.default_view = self.plotter.camera_position
+
+    def zoom_home_view(self):
+        self.plotter.camera_position = self.default_view
+
+    def zoom_active(self):
+        self.plotter.reset_camera()
+
+    def initialize_interactor(self):
+        """Add the pyvista interactor object to self.ViewFrameLayout ->
+        the layout of an empty frame generated with Qt Designer"""
+        # print(self.ViewFrame)
+        self.plotter = pvQtInteractor(self.ViewFrame)
+        self.plotter.set_background('black')  # background color - could be made interactive in the future
+        self.ViewFrameLayout.addWidget(self.plotter.interactor)
+        # self.plotter.show_axes_all()
+        """Set orientation widget (turned on after the qt canvas is shown)"""
+        self.cam_orient_widget = vtkCameraOrientationWidget()
+        self.cam_orient_widget.SetParentRenderer(self.plotter.renderer)
+        """Set default orientation horizontal because vertical colorbars interfere with the widget."""
+        pv_global_theme.colorbar_orientation = 'horizontal'
+
+        """Manage home view"""
+
+    def initialize_menu_tools(self):
+        self.saveHomeView = QAction("Save home view", self)  # create action
+        self.saveHomeView.triggered.connect(self.save_home_view)  # connect action to function
+        self.menuBaseView.addAction(self.saveHomeView)  # add action to menu
+        self.toolBarBase.addAction(self.saveHomeView)  # add action to toolbar
+
+        self.zoomHomeView = QAction("Zoom to home", self)
+        self.zoomHomeView.triggered.connect(self.zoom_home_view)
+        self.menuBaseView.addAction(self.zoomHomeView)
+        self.toolBarBase.addAction(self.zoomHomeView)
+
+        self.zoomActive = QAction("Zoom to active", self)
+        self.zoomActive.triggered.connect(self.zoom_active)
+        self.menuBaseView.addAction(self.zoomActive)
+        self.toolBarBase.addAction(self.zoomActive)
+
+        self.selectLineButton = QAction('Select entity', self)  # create action
+        self.selectLineButton.triggered.connect(self.select_actor_with_mouse)  # connect action to function
+        self.menuBaseView.addAction(self.selectLineButton)  # add action to menu
+        self.toolBarBase.addAction(self.selectLineButton)  # add action to toolbar
+        
+        self.removeEntityButton = QAction('Remove Entity', self)  # create action
+        self.removeEntityButton.triggered.connect(self.remove_entity)  # connect action to function
+        self.menuBaseView.addAction(self.removeEntityButton)  # add action to menu
+        self.toolBarBase.addAction(self.removeEntityButton)  # add action to toolbar
+        
+        self.clearSelectionButton = QAction('Clear Selection', self)  # create action
+        self.clearSelectionButton.triggered.connect(self.clear_selected)  # connect action to function
+        self.menuBaseView.addAction(self.clearSelectionButton)  # add action to menu
+        self.toolBarBase.addAction(self.clearSelectionButton)  # add action to toolbar
+
+    def show_qt_canvas(self):
+        """Show the Qt Window"""
+        
+        self.show()
+
+        self.init_zoom = self.plotter.camera.distance
+        self.cam_orient_widget.On() # [Gabriele] The orientation widget needs to be turned on AFTER the canvas is shown
+        # self.picker = self.plotter.enable_mesh_picking(callback= self.pkd_mesh,show_message=False)
+    
+    def closeEvent(self, event):
+        """Override the standard closeEvent method since self.plotter.close() is needed to cleanly close the vtk plotter."""
+        reply = QMessageBox.question(self, 'Closing window', 'Close this window?', QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+        if reply == QMessageBox.Yes:
+            self.plotter.close()  # needed to cleanly close the vtk plotter
+            event.accept()
+        else:
+            event.ignore()
+
+    def plot_mesh(self, uid=None, plot_entity=None, color_RGB=None, show_property=None, show_scalar_bar=None,
+                    color_bar_range=None, show_property_title=None, line_thick=None,
+                    plot_texture_option=None, plot_rgb_option=None, visible=None,
+                    style='surface', point_size=None, points_as_spheres=False,render_lines_as_tubes=False,pickable = True):
         if not self.actors_df.empty:
             """This stores the camera position before redrawing the actor.
             Added to avoid a bug that sometimes sends the scene to a very distant place.
@@ -4020,52 +3713,464 @@ class View3D(BaseView):
         else:
             show_property_cmap = None
         this_actor = self.plotter.add_mesh(plot_entity,
-                                           color=color_RGB,  # string, RGB list, or hex string, overridden if scalars are specified
-                                           style=style,  # 'surface' (default), 'wireframe', or 'points'
-                                           scalars=show_property,  # str pointing to vtk property or numpy.ndarray
-                                           clim=color_bar_range,  # color bar range for scalars, e.g. [-1, 2]
-                                           show_edges=None,  # bool
-                                           edge_color=None,  # default black
-                                           point_size=point_size,  # was 5.0
-                                           line_width=line_thick,
-                                           opacity=1.0,  # ___________________ single value > uniform opacity. A string can be specified to map the scalars range to opacity.
-                                           flip_scalars=False,  # flip direction of cmap
-                                           lighting=None,  # bool to enable view-direction lighting
-                                           n_colors=256,  # number of colors to use when displaying scalars
-                                           interpolate_before_map=True,  # bool for smoother scalars display (default True)
-                                           cmap=show_property_cmap,  # ____________________________ name of the Matplotlib colormap, includes 'colorcet' and 'cmocean', and custom colormaps like ['green', 'red', 'blue']
-                                           label=None,  # string label for legend with pyvista.BasePlotter.add_legend
-                                           reset_camera=None,
-                                           scalar_bar_args={'title': show_property_title, 'title_font_size': 10, 'label_font_size': 8, 'shadow': True, 'interactive': True},  # keyword arguments for scalar bar, see pyvista.BasePlotter.add_scalar_bar
-                                           show_scalar_bar=show_scalar_bar,  # bool (default True)
-                                           multi_colors=False,  # for MultiBlock datasets
-                                           name=uid,  # actor name
-                                           texture=plot_texture_option,  # ________________________________ vtk.vtkTexture or np_ndarray or boolean, will work if input mesh has texture coordinates. True > first available texture. String > texture with that name already associated to mesh.
-                                           render_points_as_spheres=points_as_spheres,
-                                           render_lines_as_tubes=render_lines_as_tubes,
-                                           smooth_shading=False,
-                                           ambient=0.0,
-                                           diffuse=1.0,
-                                           specular=0.0,
-                                           specular_power=100.0,
-                                           nan_color=None,  # color to use for all NaN values
-                                           nan_opacity=1.0,  # opacity to use for all NaN values
-                                           culling=None,  # 'front', 'back', 'false' (default) > does not render faces that are culled
-                                           rgb=plot_rgb_option,  # True > plot array values as RGB(A) colors
-                                           categories=False,  # True > number of unique values in the scalar used as 'n_colors' argument
-                                           use_transparency=False,  # _______________________ invert the opacity mapping as transparency mapping
-                                           below_color=None,  # solid color for values below the scalars range in 'clim'
-                                           above_color=None,  # solid color for values above the scalars range in 'clim'
-                                           annotations=None,  # dictionary of annotations for scale bar witor 'points'h keys = float values and values = string annotations
-                                           pickable=pickable,  # bool
-                                           preference="point",
-                                           log_scale=False)
+                                        color=color_RGB,  # string, RGB list, or hex string, overridden if scalars are specified
+                                        style=style,  # 'surface' (default), 'wireframe', or 'points'
+                                        scalars=show_property,  # str pointing to vtk property or numpy.ndarray
+                                        clim=color_bar_range,  # color bar range for scalars, e.g. [-1, 2]
+                                        show_edges=None,  # bool
+                                        edge_color=None,  # default black
+                                        point_size=point_size,  # was 5.0
+                                        line_width=line_thick,
+                                        opacity=1.0,  # ___________________ single value > uniform opacity. A string can be specified to map the scalars range to opacity.
+                                        flip_scalars=False,  # flip direction of cmap
+                                        lighting=None,  # bool to enable view-direction lighting
+                                        n_colors=256,  # number of colors to use when displaying scalars
+                                        interpolate_before_map=True,  # bool for smoother scalars display (default True)
+                                        cmap=show_property_cmap,  # ____________________________ name of the Matplotlib colormap, includes 'colorcet' and 'cmocean', and custom colormaps like ['green', 'red', 'blue']
+                                        label=None,  # string label for legend with pyvista.BasePlotter.add_legend
+                                        reset_camera=None,
+                                        scalar_bar_args={'title': show_property_title, 'title_font_size': 10, 'label_font_size': 8, 'shadow': True, 'interactive': True},  # keyword arguments for scalar bar, see pyvista.BasePlotter.add_scalar_bar
+                                        show_scalar_bar=show_scalar_bar,  # bool (default True)
+                                        multi_colors=False,  # for MultiBlock datasets
+                                        name=uid,  # actor name
+                                        texture=plot_texture_option,  # ________________________________ vtk.vtkTexture or np_ndarray or boolean, will work if input mesh has texture coordinates. True > first available texture. String > texture with that name already associated to mesh.
+                                        render_points_as_spheres=points_as_spheres,
+                                        render_lines_as_tubes=render_lines_as_tubes,
+                                        smooth_shading=False,
+                                        ambient=0.0,
+                                        diffuse=1.0,
+                                        specular=0.0,
+                                        specular_power=100.0,
+                                        nan_color=None,  # color to use for all NaN values
+                                        nan_opacity=1.0,  # opacity to use for all NaN values
+                                        culling=None,  # 'front', 'back', 'false' (default) > does not render faces that are culled
+                                        rgb=plot_rgb_option,  # True > plot array values as RGB(A) colors
+                                        categories=False,  # True > number of unique values in the scalar used as 'n_colors' argument
+                                        use_transparency=False,  # _______________________ invert the opacity mapping as transparency mapping
+                                        below_color=None,  # solid color for values below the scalars range in 'clim'
+                                        above_color=None,  # solid color for values above the scalars range in 'clim'
+                                        annotations=None,  # dictionary of annotations for scale bar witor 'points'h keys = float values and values = string annotations
+                                        pickable=pickable,  # bool
+                                        preference="point",
+                                        log_scale=False)
         if not visible:
             this_actor.SetVisibility(False)
         if not self.actors_df.empty:
             """See above."""
             self.plotter.camera_position = camera_position
         return this_actor
+
+    def disable_actions(self):
+        for action in self.findChildren(QAction):
+            if isinstance(action.parentWidget(), NavigationToolbar) is False:
+                action.setDisabled(True)
+    
+    def enable_actions(self):
+        for action in self.findChildren(QAction):
+            action.setEnabled(True)
+    
+    def remove_entity(self):
+        self.parent.entity_remove()
+        self.clear_selected()
+        
+    
+    ''' Picking general functions '''
+
+    def actor_in_table(self,sel_actors=None):
+        ''' Function used to highlight in the table view a list of selected actors'''
+        if sel_actors:
+            '''[Gabriele] To select the mesh in the entity list we compare the actors of the actors_df dataframe
+            with the picker.GetActor() result'''
+            self.parent.GeologyTableView.clearSelection()
+            if len(sel_actors) > 1:
+                self.parent.GeologyTableView.setSelectionMode(QAbstractItemView.MultiSelection)
+            
+            for actor in sel_actors:
+                sel_uid = self.actors_df.loc[self.actors_df['actor'] == actor,'uid'].values[0]        
+                idx = self.actors_df.loc[self.actors_df['uid'] == sel_uid].index[0]
+                self.parent.GeologyTableView.selectRow(idx)
+                # return
+        else:
+            self.parent.GeologyTableView.clearSelection()
+    
+    def select_actor_with_mouse(self):
+        ''' Function used to initiate actor selection'''
+        self.selected_actors = []
+        self.disable_actions()
+        self.plotter.iren.interactor.AddObserver('LeftButtonPressEvent', self.select_actor)
+        # self.plotter.iren.interactor.AddObserver('KeyPressEvent',self.clear_selected)
+        self.plotter.track_click_position(self.end_pick)
+        self.plotter.add_key_event('c',self.clear_selected)   
+
+    def end_pick(self,pos):
+        '''Function used to disable actor picking'''
+
+        self.plotter.iren.interactor.RemoveObservers('LeftButtonPressEvent')
+        self.plotter.untrack_click_position()
+        if isinstance(self,View3D):
+            self.plotter.enable_trackball_style()
+        elif isinstance(self,newView2D):
+            self.plotter.enable_image_style()
+        
+        self.plotter.reset_key_events()
+        self.enable_actions()
+    
+    def clear_selected(self):
+        for av_actor in self.plotter.renderer.actors.copy():
+            if '_silh' in av_actor:
+                self.plotter.remove_actor(av_actor)
+        self.actor_in_table()
+    
+    def select_actor(self,obj,event):
+        style = obj.GetInteractorStyle()
+        style.SetDefaultRenderer(self.plotter.renderer)
+        pos = obj.GetEventPosition()
+        shift = obj.GetShiftKey()
+        name_list = set()
+        # end_pos = style.GetEndPosition()
+
+        picker = vtkPropPicker()
+        picker.PickProp(pos[0], pos[1], style.GetDefaultRenderer())
+
+        actors = set(self.plotter.renderer.actors)
+        
+        actor = picker.GetActor()
+        if shift:
+            self.selected_actors.append(actor)
+        else:
+            self.selected_actors = [actor]
+        
+        for sel_actor in self.selected_actors:
+            mesh = sel_actor.GetMapper().GetInput()
+            addr = mesh.GetAddressAsString('')
+            name = f'{addr}_silh'
+            name_list.add(name)
+
+            self.plotter.add_mesh(mesh,pickable=False,name=name,color='Yellow',style='wireframe',line_width=5)
+
+            
+            for av_actor in actors.difference(name_list):
+                if '_silh' in av_actor:
+                    self.plotter.remove_actor(av_actor)
+        
+        self.actor_in_table(self.selected_actors)
+    
+    # """All following functions must be re-implemented in derived classes - they appear here just as placeholders"""
+
+    # def closeEvent(self, event):
+    #     """Override the closeEvent method of QWidget, close the plotter and ask for confirmation.
+    #     This can be reimplemented for some particular kind of view, such as the 3D view."""
+    #     reply = QMessageBox.question(self, 'Closing window', 'Close this window?', QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+    #     if reply == QMessageBox.Yes:
+    #         event.accept()  # SEE ABOVE ON THE CLOSED WINDOW REFERENCE PROBLEM___________________________  # self.close()  # self = None
+    #     else:
+    #         event.ignore()
+
+    # def initialize_menu_tools(self):
+    #     """placeholder to be superseded by specific method in subclass"""
+    #     pass
+
+    # def initialize_interactor(self):
+    #     """placeholder to be superseded by specific method in subclass"""
+    #     pass
+
+    # def change_actor_color(self, uid=None, collection=None):
+    #     """placeholder to be superseded by specific method in subclass"""
+    #     pass
+
+    # def change_actor_line_thick(self, uid=None, collection=None):
+    #     """placeholder to be superseded by specific method in subclass"""
+    #     pass
+
+    # def set_actor_visible(self, uid=None, visible=None):
+    #     """placeholder to be superseded by specific method in subclass"""
+    #     pass
+
+    # def show_actor_with_property(self, uid=None, collection=None, show_property=None, visible=None):
+    #     """placeholder to be superseded by specific method in subclass"""
+    #     pass
+
+    # def entity_remove_selected(self):
+    #     """Remove entities selected in View"""
+
+    #     if not self.selected_uids:
+    #         return
+    #     """Confirm removal dialog."""
+    #     check = QMessageBox.question(self, "Remove Entities", ("Do you really want to remove entities\n" + str(self.selected_uids) + "\nPlease confirm."), QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+    #     if check == QMessageBox.No:
+    #         return
+    #     """Remove entities."""
+    #     for uid in self.selected_uids:
+    #         if self.actors_df.loc[self.actors_df['uid'] == uid, 'collection'].values[0] == 'geol_coll':
+    #             self.parent.geol_coll.remove_entity(uid=uid)
+    #         elif self.actors_df.loc[self.actors_df['uid'] == uid, 'collection'].values[0] == 'xsect_coll':
+    #             self.parent.xsect_coll.remove_entity(uid=uid)
+    #         elif self.actors_df.loc[self.actors_df['uid'] == uid, 'collection'].values[0] == 'boundary_coll':
+    #             self.parent.boundary_coll.remove_entity(uid=uid)
+    #         elif self.actors_df.loc[self.actors_df['uid'] == uid, 'collection'].values[0] == 'mesh3d_coll':
+    #             self.parent.mesh3d_coll.remove_entity(uid=uid)
+    #         elif self.actors_df.loc[self.actors_df['uid'] == uid, 'collection'].values[0] == 'dom_coll':
+    #             self.parent.dom_coll.remove_entity(uid=uid)
+    #         elif self.actors_df.loc[self.actors_df['uid'] == uid, 'collection'].values[0] == 'image_coll':
+    #             self.parent.image_coll.remove_entity(uid=uid)
+    #         elif self.actors_df.loc[self.actors_df['uid'] == uid, 'collection'].values[0] == 'well_coll':
+    #             self.parent.well_coll.remove_entity(uid=uid)
+    #     """List of selected_uids is cleared"""
+    #     self.selected_uids = []
+
+
+class View3D(BaseView):
+    """Create 3D view and import UI created with Qt Designer by subclassing base view"""
+    """parent is the QT object that is launching this one, hence the ProjectWindow() instance in this case"""
+
+
+    def __init__(self, *args, **kwargs):
+        super(View3D, self).__init__(*args, **kwargs)
+
+        self.plotter.enable_trackball_style()
+        self.plotter.disable_parallel_projection()
+        """Rename Base View, Menu and Tool"""
+        self.setWindowTitle("3D View")
+        self.tog_att = -1 #Attitude picker disabled
+        self.trace_method = 'trace' #visualization method for boreholes properties (trace or cylinder)
+        self.toggle_bore_geo = -1
+        self.toggle_bore_litho = -1
+
+        self.trigger_event = 'LeftButtonPressEvent'
+    """Re-implementations of functions that appear in all views - see placeholders in BaseView()"""
+
+    def initialize_menu_tools(self):
+        """Customize menus and tools for this view"""
+        super().initialize_menu_tools()
+        self.menuBaseView.setTitle("Edit")
+        self.actionBase_Tool.setText("Edit")
+
+        self.menuBoreTraceVis = QMenu('Borehole visualization methods',self)
+        self.actionBoreTrace = QAction('Trace',self)
+
+        self.actionBoreTrace.triggered.connect(lambda: self.change_bore_vis('trace'))
+
+        self.actionBoreCylinder = QAction('Cylinder',self)
+        self.actionBoreCylinder.triggered.connect(lambda: self.change_bore_vis('cylinder'))
+        self.actionToggleGeology = QAction('Toggle geology',self)
+        self.actionToggleGeology.triggered.connect(lambda: self.change_bore_vis('geo'))
+        self.actionToggleLithology = QAction('Toggle lithology',self)
+        self.actionToggleLithology.triggered.connect(lambda: self.change_bore_vis('litho'))
+        
+        self.menuBoreTraceVis.addAction(self.actionBoreTrace)
+        self.menuBoreTraceVis.addAction(self.actionBoreCylinder)
+        self.menuBoreTraceVis.addAction(self.actionToggleLithology)
+        self.menuBoreTraceVis.addAction(self.actionToggleGeology)
+
+
+        self.menuBaseView.addMenu(self.menuBoreTraceVis)
+
+
+        # self.showOct = QAction("Show octree structure", self)
+        # self.showOct.triggered.connect(self.show_octree)
+        # self.menuBaseView.addAction(self.showOct)
+        # self.toolBarBase.addAction(self.showOct)
+
+        self.menuOrbit = QMenu('Orbit around',self)
+
+        self.actionOrbitEntity = QAction('Entity',self)
+        self.actionOrbitEntity.triggered.connect(lambda: self.orbit_entity())
+        self.menuOrbit.addAction(self.actionOrbitEntity)
+
+        self.menuEdit = QMenu('Edit point cloud',self)
+        # self.actionCalculateNormalsPC = QAction('Calculate normals for point clouds',self)
+        self.actionNormals2dd = QAction('Convert normals to Dip/Direction',self)
+        self.actionNormals2dd.triggered.connect(lambda: self.normals2dd())
+        self.actionFilter = QAction('Filter',self)
+        self.actionFilter.triggered.connect(lambda: self.radial_filt())
+        self.menuEdit.addAction(self.actionNormals2dd)
+        self.menuEdit.addAction(self.actionFilter)
+        self.menuTools.addMenu(self.menuEdit)
+        self.menuTools.addMenu(self.menuOrbit)
+
+        """______________THIS MUST BE MOVED TO MAIN WINDOW AND NAME MUST BE MORE SPECIFIC_________________"""
+        self.actionFilter = QAction('Filter', self)
+        self.actionFilter.triggered.connect(self.radial_filt)
+        self.menuBaseView.addAction(self.actionFilter)
+        self.toolBarBase.addAction(self.actionFilter)
+
+        self.actionPickAttitude = QAction('Measure attitude', self)
+        self.actionPickAttitude.triggered.connect(self.act_att)
+        self.menuBaseView.addAction(self.actionPickAttitude)
+        self.toolBarBase.addAction(self.actionPickAttitude)
+
+        self.actionExportGltf = QAction('Export as GLTF', self)
+        self.actionExportGltf.triggered.connect(self.export_gltf)
+        self.menuBaseView.addAction(self.actionExportGltf)
+        self.toolBarBase.addAction(self.actionExportGltf)
+
+        self.actionExportHtml = QAction('Export as HTML', self)
+        self.actionExportHtml.triggered.connect(self.export_html)
+        self.menuBaseView.addAction(self.actionExportHtml)
+        self.toolBarBase.addAction(self.actionExportHtml)
+
+        self.actionExportObj = QAction('Export as OBJ', self)
+        self.actionExportObj.triggered.connect(self.export_obj)
+        self.menuBaseView.addAction(self.actionExportObj)
+        self.toolBarBase.addAction(self.actionExportObj)
+
+        self.actionExportVtkjs = QAction('Export as VTKjs', self)
+        self.actionExportVtkjs.triggered.connect(self.export_vtkjs)
+        self.menuBaseView.addAction(self.actionExportVtkjs)
+        self.toolBarBase.addAction(self.actionExportVtkjs)
+
+    def export_html(self):
+        out_file_name = save_file_dialog(parent=self, caption="Export 3D view as HTML.", filter="html (*.html)")
+        self.plotter.export_html(out_file_name)
+
+    def export_vtkjs(self):
+        out_file_name = save_file_dialog(parent=self, caption="Export 3D view as VTKjs.", filter="vtkjs (*.vtkjs)").removesuffix(".vtkjs")
+        self.plotter.export_vtkjs(out_file_name)
+
+    def export_obj(self):
+        out_file_name = save_file_dialog(parent=self, caption="Export 3D view as OBJ.", filter="obj (*.obj)").removesuffix(".obj")
+        self.plotter.export_obj(out_file_name)
+
+    def export_gltf(self):
+        out_file_name = save_file_dialog(parent=self, caption="Export 3D view as GLTF.", filter="gltf (*.gltf)")
+        self.plotter.export_gltf(out_file_name)
+
+    def act_att(self):
+
+        if self.tog_att == -1:
+            input_dict = {'name': ['Set name: ', 'Set_0'], 'geological_type': ['Geological type: ', GeologicalCollection.valid_geological_types]}
+            set_opt = multiple_input_dialog(title="Create measure set", input_dict=input_dict)
+            self.plotter.enable_point_picking(callback=lambda mesh, pid: self.pkd_point(mesh, pid, set_opt),show_message=False, color='yellow', use_mesh=True)
+            self.tog_att *= -1
+            print('Picking enabled')
+        else:
+            picker = self.plotter.picker
+            #print(picker)
+            picker.RemoveObservers(_vtk.vtkCommand.EndPickEvent)
+            self.picker = self.plotter.enable_mesh_picking(callback=lambda mesh: self.pkd_mesh(mesh),show_message=False)
+            self.tog_att *= -1
+            print('Picking disabled')
+
+    def act_pmesh(self):
+        """[Gabriele] Not the best solution but for now it works"""
+        if self.tog_att == -1:
+            self.select_actor_with_mouse()
+            print('Mesh picking enabled')
+        else:
+            picker = self.plotter.picker
+            #print(picker)
+            self.picker.RemoveObservers(_vtk.vtkCommand.EndPickEvent)
+            self.select_actor_with_mouse()
+            self.tog_att *= -1
+            print('Picking disabled')
+
+    def pkd_point(self,mesh,pid,set_opt):
+        
+        actor = self.picker.GetActor()
+        sel_uid = self.actors_df.loc[self.actors_df['actor'] == actor,'uid'].values[0]
+
+        obj = self.parent.dom_coll.get_uid_vtk_obj(sel_uid)
+        # locator = vtkStaticPointLocator()
+        # locator.SetDataSet(obj)
+        # locator.BuildLocator()
+        # id_list = vtkIdList()
+        # print(center)
+        #
+        # locator.FindClosestNPoints(30,center,id_list)
+        # print(obj.GetPoints().GetPoints(id_list).GetData())
+        #
+        sph_r = 0.2 #radius of the selection sphere
+        center = mesh.points[pid]
+
+        sphere = vtkSphere()
+        sphere.SetCenter(center)
+        sphere.SetRadius(sph_r)
+
+        extr = vtkExtractPoints()
+
+        extr.SetImplicitFunction(sphere)
+        extr.SetInputData(obj)
+        extr.ExtractInsideOn()
+        extr.Update()
+        # [Gabriele] We could try to do this with vtkPCANormalEstimation
+        points = numpy_support.vtk_to_numpy(extr.GetOutput().GetPoints().GetData())
+        plane_c,plane_n = best_fitting_plane(points)
+
+
+        if plane_n[2]>0: #If Z is positive flip the normals
+            plane_n *=-1
+        #sel_p = PolyData(points)
+
+        # range = sel_p.points[:,0].max() - sel_p.points[:,0].min()
+        # surf = sel_p.reconstruct_surface()
+        # norm_mean = np.mean(surf.point_normals,axis=0)
+        # std = np.std(surf.cell_normals,axis=0)
+        # print(std)
+        # if norm_mean[2]<0:
+        #     norm_mean *= -1
+
+
+        # temp_point = PolyData(plane_c)
+        # #temp_point['Normals'] = [plane_n]
+        # # temp_plane = pvPlane(center=plane_c,direction = plane_n, i_size=dim,j_size=dim,i_resolution=1,j_resolution=1)
+        #
+        # nx,ny,nz = plane_n
+        # dip = np.arccos(nz)
+        # dir = angle_wrapper(np.arctan2(nx, ny)-np.deg2rad(90))
+        # temp_point['dip'] = [np.rad2deg(dip)]
+        # temp_point['dir'] = [np.rad2deg(dir)]
+
+
+
+        # print(att_point)
+
+        if set_opt['name'] in self.parent.geol_coll.df['name'].values:
+            uid = self.parent.geol_coll.get_name_uid(set_opt['name'])
+            old_vtk_obj = self.parent.geol_coll.get_uid_vtk_obj(uid)
+
+            old_vtk_obj.append_point(point_vector=plane_c)
+            old_plane_n = old_vtk_obj.get_point_data('Normals')
+            old_plane_n = np_append(old_plane_n,plane_n).reshape(-1,3)
+            old_vtk_obj.set_point_data('Normals',old_plane_n)
+            old_vtk_obj.auto_cells()
+            self.parent.geol_coll.replace_vtk(uid,old_vtk_obj,const_color=True)
+        else:
+            att_point = Attitude()
+
+            att_point.append_point(point_vector=plane_c)
+            att_point.auto_cells()
+
+            att_point.init_point_data(data_key='Normals',dimension=3)
+
+            att_point.set_point_data(data_key='Normals',attribute_matrix=plane_n)
+
+
+            properties_name = att_point.point_data_keys
+            properties_components = [att_point.get_point_data_shape(i)[1] for i in properties_name]
+
+            curr_obj_dict = deepcopy(GeologicalCollection.geological_entity_dict)
+            curr_obj_dict['uid'] = str(uuid4())
+            curr_obj_dict['name'] = set_opt['name']
+            curr_obj_dict['geological_type'] = set_opt['geological_type']
+            curr_obj_dict['topological_type'] = "VertexSet"
+            curr_obj_dict['geological_feature'] = set_opt['name']
+            curr_obj_dict['properties_names'] = properties_name
+            curr_obj_dict['properties_components'] = properties_components
+            curr_obj_dict['vtk_obj'] = att_point
+            """Add to entity collection."""
+            self.parent.geol_coll.add_entity_from_dict(entity_dict=curr_obj_dict)
+
+            del extr
+            del sphere
+
+
+        #self.plotter.add_mesh(temp_plane,color='r',pickable =False)
+        # print(plane)
+
+        # pts = mesh.extract_points(sel_points['SelectedPoints'].view(bool), adjacent_cells=False)
+        # pts_act = plt.add_mesh(sel_p,color='r',pickable =False)
+        # act_list.append(pts_act)
+        # self.act_list.append(actor)
 
     def plot_volume_3D(self, uid=None, plot_entity=None):
         if not self.actors_df.empty:
@@ -4119,8 +4224,6 @@ class View3D(BaseView):
             """See above."""
             self.plotter.camera_position = camera_position
         return this_actor
-
-
 
     def show_octree(self):
         vis_uids =  self.actors_df.loc[self.actors_df['show'] == True,'uid']
@@ -4287,7 +4390,6 @@ class View3D(BaseView):
         images[0].save(f'{opt_dict["name"]}.gif',save_all=True,append_images=images,loop=0,duration=duration,disposal=2)
         # off_screen_plot.orbit_on_path(path=path,focus=focus, write_frames=True,progress_bar=True,threaded=False)
         # off_screen_plot.close()
-
 
 
 class View2D(BaseView):
@@ -5811,3 +5913,557 @@ class ViewStereoplot(BaseView):
 
             this_actor=self.show_actor_with_property(uid,'geol_coll',visible=show,filled=filled_opt)
             self.actors_df = self.actors_df.append({'uid': uid, 'actor': this_actor, 'show': show, 'collection': 'geol_collection', 'show_prop': 'poles'}, ignore_index=True)
+
+
+
+class newView2D(BaseView):
+    """Create 2D view using pyvista. This should be more efficient than matplotlib"""
+
+    def __init__(self, *args, **kwargs):
+        super(newView2D, self).__init__(*args, **kwargs)
+        self.plotter.enable_image_style()
+        self.plotter.enable_parallel_projection()
+        self.trigger_event = 'LeftButtonReleaseEvent'
+
+    """Re-implementations of functions that appear in all views - see placeholders in BaseView()"""
+
+    def initialize_menu_tools(self):
+        """Imports for this view."""
+        from .two_d_lines import draw_line, edit_line, sort_line_nodes, move_line, rotate_line, extend_line, split_line_line, split_line_existing_point, merge_lines, snap_line, resample_line_distance, resample_line_number_points, simplify_line, copy_parallel, copy_kink, copy_similar, measure_distance
+        """Customize menus and tools for this view"""
+        super().initialize_menu_tools()
+        self.menuBaseView.setTitle("Edit")
+        self.actionBase_Tool.setText("Edit")
+
+        self.drawLineButton = QAction('Draw line', self)  # create action
+        self.drawLineButton.triggered.connect(self.draw_line)  # connect action to function with additional argument parent
+        self.menuBaseView.addAction(self.drawLineButton)  # add action to menu
+        self.toolBarBase.addAction(self.drawLineButton)  # add action to toolbar
+
+        self.editLineButton = QAction('Edit line', self)  # create action
+        self.editLineButton.triggered.connect(lambda: edit_line(self))  # connect action to function
+        self.menuBaseView.addAction(self.editLineButton)  # add action to menu
+        self.toolBarBase.addAction(self.editLineButton)  # add action to toolbar
+
+        self.sortLineButton = QAction('Sort line nodes', self)  # create action
+        self.sortLineButton.triggered.connect(lambda: sort_line_nodes(self))  # connect action to function
+        self.menuBaseView.addAction(self.sortLineButton)  # add action to menu
+        self.toolBarBase.addAction(self.sortLineButton)  # add action to toolbar
+
+        self.moveLineButton = QAction('Move line', self)  # create action
+        self.moveLineButton.triggered.connect(lambda: move_line(self))  # connect action to function
+        self.menuBaseView.addAction(self.moveLineButton)  # add action to menu
+        self.toolBarBase.addAction(self.moveLineButton)  # add action to toolbar
+
+        self.rotateLineButton = QAction('Rotate line', self)  # create action
+        self.rotateLineButton.triggered.connect(lambda: rotate_line(self))  # connect action to function
+        self.menuBaseView.addAction(self.rotateLineButton)  # add action to menu
+        self.toolBarBase.addAction(self.rotateLineButton)  # add action to toolbar
+
+        self.extendButton = QAction('Extend line', self)  # create action
+        self.extendButton.triggered.connect(lambda: extend_line(self))  # connect action to function
+        self.menuBaseView.addAction(self.extendButton)  # add action to menu
+        self.toolBarBase.addAction(self.extendButton)  # add action to toolbar
+
+        self.splitLineByLineButton = QAction('Split line-line', self)  # create action
+        self.splitLineByLineButton.triggered.connect(lambda: split_line_line(self))  # connect action to function
+        self.menuBaseView.addAction(self.splitLineByLineButton)  # add action to menu
+        self.toolBarBase.addAction(self.splitLineByLineButton)  # add action to toolbar
+
+        self.splitLineByPointButton = QAction('Split line-point', self)  # create action
+        self.splitLineByPointButton.triggered.connect(lambda: split_line_existing_point(self))  # connect action to function
+        self.menuBaseView.addAction(self.splitLineByPointButton)  # add action to menu
+        self.toolBarBase.addAction(self.splitLineByPointButton)  # add action to toolbar
+
+        self.mergeLineButton = QAction('Merge lines', self)  # create action
+        self.mergeLineButton.triggered.connect(lambda: merge_lines(self))  # connect action to function
+        self.menuBaseView.addAction(self.mergeLineButton)  # add action to menu
+        self.toolBarBase.addAction(self.mergeLineButton)  # add action to toolbar
+
+        self.snapLineButton = QAction('Snap line', self)  # create action
+        self.snapLineButton.triggered.connect(lambda: snap_line(self))  # connect action to function
+        self.menuBaseView.addAction(self.snapLineButton)  # add action to menu
+        self.toolBarBase.addAction(self.snapLineButton)  # add action to toolbar
+
+        self.resampleDistanceButton = QAction('Resample distance', self)  # create action
+        self.resampleDistanceButton.triggered.connect(lambda: resample_line_distance(self))  # connect action to function
+        self.menuBaseView.addAction(self.resampleDistanceButton)  # add action to menu
+        self.toolBarBase.addAction(self.resampleDistanceButton)  # add action to toolbar
+
+        self.resampleNumberButton = QAction('Resample number', self)  # create action
+        self.resampleNumberButton.triggered.connect(lambda: resample_line_number_points(self))  # connect action to function
+        self.menuBaseView.addAction(self.resampleNumberButton)  # add action to menu
+        self.toolBarBase.addAction(self.resampleNumberButton)  # add action to toolbar
+
+        self.simplifyButton = QAction('Simplify line', self)  # create action
+        self.simplifyButton.triggered.connect(lambda: simplify_line(self))  # connect action to function
+        self.menuBaseView.addAction(self.simplifyButton)  # add action to menu
+        self.toolBarBase.addAction(self.simplifyButton)  # add action to toolbar
+
+        self.copyParallelButton = QAction('Copy parallel', self)  # create action
+        self.copyParallelButton.triggered.connect(lambda: copy_parallel(self))  # connect action to function
+        self.menuBaseView.addAction(self.copyParallelButton)  # add action to menu
+        self.toolBarBase.addAction(self.copyParallelButton)  # add action to toolbar
+
+        self.copyKinkButton = QAction('Copy kink', self)  # create action
+        self.copyKinkButton.triggered.connect(lambda: copy_kink(self))  # connect action to function
+        self.menuBaseView.addAction(self.copyKinkButton)  # add action to menu
+        self.toolBarBase.addAction(self.copyKinkButton)  # add action to toolbar
+
+        self.copySimilarButton = QAction('Copy similar', self)  # create action
+        self.copySimilarButton.triggered.connect(lambda: copy_similar(self))  # connect action to function
+        self.menuBaseView.addAction(self.copySimilarButton)  # add action to menu
+        self.toolBarBase.addAction(self.copySimilarButton)  # add action to toolbar
+
+        self.measureDistanceButton = QAction('Measure', self)  # cline_thickreate action
+        self.measureDistanceButton.triggered.connect(lambda: measure_distance(self))  # connect action to function
+        self.menuBaseView.addAction(self.measureDistanceButton)  # add action to menu
+        self.toolBarBase.addAction(self.measureDistanceButton)  # add action to toolbar
+    
+    def clear_selection(self):
+        """Clear all possible selected elements in view. Resets selection."""
+        if not self.selected_uids == []:
+            deselected_uids = self.selected_uids
+            self.selected_uids = []
+            self.parent.geology_geom_modified_signal.emit(deselected_uids)  # emit uid as list to force redraw
+
+    def draw_line(self):
+        xyz = []
+        
+        def digitize(event):
+            xyz.append(list(event))
+            points = np_array(xyz).reshape(-1,3)
+            points[:,2] += 0.01 #without this the final line coincides exactly with the map thus giving visualization problems in map view.
+            poly = pv_lines_from_points(points)
+            
+            name = line_dict['name']
+            # plotter.add_points(np.array(xyz))
+            self.plotter.add_mesh(poly,name=f'line_{name}')
+            self.plotter.add_points(np_array(xyz),name=f'point_{name}')
+        
+        def end_digitize(event):
+
+            ''' Strange backfiring signal that triggers n times this function depending on the number of entitites
+            To avoid this we can filter already existing objects by checking if the line_dict has the uid or not.'''
+            self.plotter.untrack_click_position(side='left')
+            self.plotter.untrack_click_position(side='right')
+
+            self.enable_actions()
+            
+            actor_name = line_dict['name']
+            if line_dict['uid']:
+                return
+            else:
+                vtk_obj = self.plotter.renderer.actors[f'line_{actor_name}'].mapper.dataset
+                old_vtk_obj = line_dict['vtk_obj']
+                old_vtk_obj.ShallowCopy(vtk_obj)
+                line_dict['vtk_obj'] = old_vtk_obj
+                self.parent.geol_coll.add_entity_from_dict(line_dict)
+                self.plotter.remove_actor(f'line_{actor_name}')
+                self.plotter.remove_actor(f'point_{actor_name}')
+                
+
+        
+        """Freeze QT interface"""
+        self.disable_actions()
+        """Deselect all previously selected actors."""
+        if not self.selected_uids == []:
+            deselected_uids = self.selected_uids
+            self.selected_uids = []
+            self.parent.geology_geom_modified_signal.emit(deselected_uids)  # emit uid as list to force redraw
+        """Create deepcopy of the geological entity dictionary."""
+        line_dict = deepcopy(self.parent.geol_coll.geological_entity_dict)
+
+        """One dictionary is set as input for a general widget of multiple-value-input"""
+        line_dict_in = {'name': ['PolyLine name: ', 'new_pline'], 'geological_type': ['Geological type: ', GeologicalCollection.valid_geological_types], 'geological_feature': ['Geological feature: ', self.parent.geol_legend_df['geological_feature'].tolist()], 'scenario': ['Scenario: ', list(set(self.parent.geol_legend_df['scenario'].tolist()))]}
+        line_dict_updt = multiple_input_dialog(title='Digitize new PolyLine', input_dict=line_dict_in)
+        """Check if the output of the widget is empty or not. If the Cancel button was clicked, the tool quits"""
+        
+        if line_dict_updt is None:
+            """Un-Freeze QT interface"""
+            for action in self.findChildren(QAction):
+                action.setEnabled(True)
+            return
+        """Getting the values that have been typed by the user through the widget"""
+        for key in line_dict_updt:
+            line_dict[key] = line_dict_updt[key]
+        if isinstance(self, newViewMap):
+            line_dict['topological_type'] = 'PolyLine'
+            line_dict['vtk_obj'] = PolyLine()
+            line_dict['x_section'] = None
+        elif isinstance(self, newViewXsection):
+            line_dict['topological_type'] = 'XsPolyLine'
+            line_dict['x_section'] = self.this_x_section_uid
+            line_dict['vtk_obj'] = XsPolyLine()
+        else:
+            """Un-Freeze QT interface"""
+            for action in self.findChildren(QAction):
+                action.setEnabled(True)
+            return
+    
+        self.plotter.track_click_position(callback=lambda event: digitize(event),side='left')
+        self.plotter.track_click_position(callback=lambda event: end_digitize(event),side='right')
+
+
+class newViewMap(newView2D):
+    def __init__(self, *args, **kwargs):
+        super(newViewMap, self).__init__(*args, **kwargs)
+        self.setWindowTitle("Map View")
+        self.plotter.view_xy()
+    
+    def initialize_menu_tools(self):
+        super().initialize_menu_tools()
+        self.sectionFromAzimuthButton = QAction('Section from Azimuth', self)  # create action
+        self.sectionFromAzimuthButton.triggered.connect(self.section_from_azimuth)  # connect action to function with additional argument parent
+        self.menuBaseView.addAction(self.sectionFromAzimuthButton)  # add action to menu
+        self.toolBarBase.addAction(self.sectionFromAzimuthButton)  # add action to toolbar
+
+        self.sectionFromPointsButton = QAction('Section from 2 points', self)  # create action
+        self.sectionFromPointsButton.triggered.connect(self.section_from_points)  # connect action to function with additional argument parent
+        self.menuBaseView.addAction(self.sectionFromPointsButton)  # add action to menu
+        self.toolBarBase.addAction(self.sectionFromPointsButton)  # add action to toolbar
+
+        self.sectionFromFileButton = QAction('Sections from file', self)
+        self.sectionFromFileButton.triggered.connect(self.sections_from_file)
+
+        self.menuBaseView.addAction(self.sectionFromFileButton)  # add action to menu
+        self.toolBarBase.addAction(self.sectionFromFileButton)  # add action to toolbar
+
+        self.boundaryFromPointsButton = QAction('Boundary from 2 points', self)  # create action
+        self.boundaryFromPointsButton.triggered.connect(self.boundary_from_points)  # connect action to function with additional argument parent
+        self.menuBaseView.addAction(self.boundaryFromPointsButton)  # add action to menu
+        self.toolBarBase.addAction(self.boundaryFromPointsButton)  # add action to toolbar
+
+    def section_from_azimuth(self):
+        print('ciao')
+    
+    def section_from_points(self):
+        
+        xyz = []
+        section_dict = deepcopy(self.parent.xsect_coll.section_dict)
+        
+        def digitize(event):
+            xyz.append(list(event))    
+            poly = pv_lines_from_points(xyz)
+            
+            name = 'section_trace'
+            # plotter.add_points(np.array(xyz))
+            self.plotter.add_mesh(poly,name=f'line_{name}')
+            self.plotter.add_points(np_array(xyz),name=f'point_{name}')
+        
+        def end_digitize(event):
+
+            self.plotter.untrack_click_position(side='left')
+            self.plotter.untrack_click_position(side='right')
+            
+            
+            actor_name = 'section_trace'
+
+            vtk_obj = self.plotter.renderer.actors[f'line_{actor_name}'].mapper.dataset
+            points = vtk_obj.points
+
+
+
+            section_dict_in = {'warning': ['XSection from points', 'Build new XSection from a user-drawn line.\nOnce drawn, values can be modified from keyboard\nor by drawing another vector.', 'QLabel'],
+                                    'name': ['Insert Xsection name', 'new_section', 'QLineEdit'],
+                                    'base_x': ['Insert origin X coord', points[0,0], 'QLineEdit'],
+                                    'base_y': ['Insert origin Y coord', points[0,1], 'QLineEdit'],
+                                    'end_x': ['Insert end-point X coord', points[1,0], 'QLineEdit'],
+                                    'end_y': ['Insert end-point Y coord', points[1,1], 'QLineEdit'],
+                                    'top': ['Insert top', 0.0, 'QLineEdit'],
+                                    'bottom': ['Insert bottom', 0.0, 'QLineEdit']}
+            section_dict_updt = general_input_dialog(title='New XSection from points', input_dict=section_dict_in)
+            if section_dict_updt is None:
+                return
+            
+            while True:
+                if section_dict_updt['name'] in self.parent.xsect_coll.get_names():
+                    section_dict_updt['name'] = section_dict_updt['name'] + '_0'
+                else:
+                    break
+
+            for key in section_dict_updt:
+                section_dict[key] = section_dict_updt[key]
+            
+            section_dict['base_z'] = 0.0
+            section_dict['end_z'] = 0.0
+            section_dict['azimuth'] = np_arctan2((section_dict['end_x'] - section_dict['base_x']), (section_dict['end_y'] - section_dict['base_y'])) * 180 / np_pi
+            if section_dict['azimuth'] < 0:
+                section_dict['azimuth'] += 360
+            section_dict['length'] = np_sqrt((section_dict['end_x'] - section_dict['base_x']) ** 2 + (section_dict['end_y'] - section_dict['base_y']) ** 2)
+            section_dict['normal_x'] = np_sin((section_dict['azimuth'] + 90) * np_pi / 180)
+            section_dict['normal_y'] = np_cos((section_dict['azimuth'] + 90) * np_pi / 180)
+            section_dict['normal_z'] = 0.0
+            self.plotter.remove_actor(f'line_{actor_name}')
+            self.plotter.remove_actor(f'point_{actor_name}')
+            uid = self.parent.xsect_coll.add_entity_from_dict(entity_dict=section_dict)
+
+            """Once the original XSection has been drawn, ask if a set of XSections is needed."""
+            section_dict_in_set = {'activate': ['Multiple XSections', 'Draw a set of parallel XSections', 'QCheckBox'],
+                                'spacing': ['Spacing', 1000.0, 'QLineEdit'],
+                                'num_xs': ['Number of XSections', 5, 'QLineEdit']}
+            section_dict_updt_set = general_input_dialog(title='XSection from Azimuth', input_dict=section_dict_in_set)
+            
+            if section_dict_updt_set is None:
+                """Un-Freeze QT interface"""
+                for action in self.findChildren(QAction):
+                    action.setEnabled(True)
+                return
+            if section_dict_updt_set['activate'] == "uncheck":
+                """Un-Freeze QT interface"""
+                for action in self.findChildren(QAction):
+                    action.setEnabled(True)
+                return
+
+            name_original_xs = section_dict['name']
+            
+            for xsect in range(section_dict_updt_set['num_xs'] - 1):
+                section_dict['name'] = name_original_xs + '_' + str(xsect)
+                while True:
+                    if section_dict['name'] in self.parent.xsect_coll.get_names():
+                        section_dict['name'] = section_dict['name'] + '_0'
+                    else:
+                        break
+                section_dict['base_x'] = section_dict['base_x'] - (section_dict_updt_set['spacing'] * np_cos(section_dict['azimuth'] * np_pi / 180))
+                section_dict['base_y'] = section_dict['base_y'] + (section_dict_updt_set['spacing'] * np_sin(section_dict['azimuth'] * np_pi / 180))
+                section_dict['end_x'] = section_dict['end_x'] - (section_dict_updt_set['spacing'] * np_cos(section_dict['azimuth'] * np_pi / 180))
+                section_dict['end_y'] = section_dict['end_y'] + (section_dict_updt_set['spacing'] * np_sin(section_dict['azimuth'] * np_pi / 180))
+                section_dict['normal_x'] = np_sin((section_dict['azimuth'] + 90) * np_pi / 180)
+                section_dict['normal_y'] = np_cos((section_dict['azimuth'] + 90) * np_pi / 180)
+                section_dict['uid'] = None
+                uid = self.parent.xsect_coll.add_entity_from_dict(entity_dict=section_dict)
+            
+            self.enable_actions()
+
+
+
+        self.disable_actions()
+        # """Freeze QT interface"""
+        # for action in self.findChildren(QAction):
+        #     if isinstance(action.parentWidget(), NavigationToolbar) is False:
+        #         action.setDisabled(True)
+        # """Deselect all previously selected actors."""
+        # if not self.selected_uids == []:
+        #     deselected_uids = self.selected_uids
+        #     self.selected_uids = []
+        #     self.parent.geology_geom_modified_signal.emit(deselected_uids)  # emit uid as list to force redraw
+        # """Create deepcopy of the geological entity dictionary."""
+        # line_dict = deepcopy(self.parent.geol_coll.geological_entity_dict)
+
+        # """One dictionary is set as input for a general widget of multiple-value-input"""
+        # line_dict_in = {'name': ['PolyLine name: ', 'new_pline'], 'geological_type': ['Geological type: ', GeologicalCollection.valid_geological_types], 'geological_feature': ['Geological feature: ', self.parent.geol_legend_df['geological_feature'].tolist()], 'scenario': ['Scenario: ', list(set(self.parent.geol_legend_df['scenario'].tolist()))]}
+        # line_dict_updt = multiple_input_dialog(title='Digitize new PolyLine', input_dict=line_dict_in)
+        # """Check if the output of the widget is empty or not. If the Cancel button was clicked, the tool quits"""
+        
+        # if line_dict_updt is None:
+        #     """Un-Freeze QT interface"""
+        #     for action in self.findChildren(QAction):
+        #         action.setEnabled(True)
+        #     return
+        # """Getting the values that have been typed by the user through the widget"""
+        # for key in line_dict_updt:
+        #     line_dict[key] = line_dict_updt[key]
+        # if isinstance(self, newViewMap):
+        #     line_dict['topological_type'] = 'PolyLine'
+        #     line_dict['vtk_obj'] = PolyLine()
+        #     line_dict['x_section'] = None
+        # elif isinstance(self, newViewXsection):
+        #     line_dict['topological_type'] = 'XsPolyLine'
+        #     line_dict['x_section'] = self.this_x_section_uid
+        #     line_dict['vtk_obj'] = XsPolyLine()
+        # else:
+        #     """Un-Freeze QT interface"""
+        #     for action in self.findChildren(QAction):
+        #         action.setEnabled(True)
+        #     return
+    
+        self.plotter.track_click_position(callback=digitize,side='left')
+        self.plotter.track_click_position(callback=end_digitize,side='right')        
+    
+    def sections_from_file(self):
+        print('ciao')
+    def boundary_from_points(self):
+        print('ciao')
+    
+class newViewXsection(newView2D):
+    
+    def __init__(self,parent=None, *args, **kwargs):
+
+        if parent.xsect_coll.get_names():
+            self.this_x_section_name = input_combo_dialog(parent=None, title="Xsection", label="Choose Xsection", choice_list=parent.xsect_coll.get_names())
+        else:
+            message_dialog(title="Xsection", message="No Xsection in project")
+            return
+        if self.this_x_section_name:
+            self.this_x_section_uid = parent.xsect_coll.df.loc[parent.xsect_coll.df['name'] == self.this_x_section_name, 'uid'].values[0]
+        else:
+            return
+
+        """super here after having set the x_section_uid and _name"""
+        super(newViewXsection, self).__init__(parent, *args, **kwargs)
+
+        """Rename Base View, Menu and Tool"""
+        self.setWindowTitle("Xsection View")
+
+        self.create_geology_tree(sec_uid=self.this_x_section_uid)
+        self.create_topology_tree(sec_uid=self.this_x_section_uid)
+        self.create_xsections_tree(sec_uid=self.this_x_section_uid)
+        self.create_boundary_list(sec_uid=self.this_x_section_uid)
+        self.create_mesh3d_list(sec_uid=self.this_x_section_uid)
+        self.create_dom_list(sec_uid=self.this_x_section_uid)
+        self.create_image_list(sec_uid=self.this_x_section_uid)
+
+        #We should add something to programmatically set the visibility of entities via UID
+        #Don't know if it is already implemented or not
+        self.set_actor_visible(uid=self.this_x_section_uid, visible=True)
+        self.update_xsection_checkboxes(uid=self.this_x_section_uid,uid_checkState=Qt.Checked) 
+        
+        section_plane = parent.xsect_coll.get_uid_vtk_plane(self.this_x_section_uid)
+        center = np_array(section_plane.GetOrigin())
+        direction = np_array(section_plane.GetNormal())
+
+        self.plotter.camera.focal_point = center
+        self.plotter.camera.position = center + direction
+        self.plotter.reset_camera()
+    
+    def add_all_entities(self):
+        sec_uid = self.this_x_section_uid
+        """Add all entities in project collections. This must be reimplemented for cross-sections in order
+        to show entities belonging to the section only. All objects are visible by default -> show = True"""
+        for uid in self.parent.geol_coll.df['uid'].tolist():
+            if self.parent.geol_coll.get_uid_x_section(uid) == sec_uid:
+                this_actor = self.show_actor_with_property(uid=uid, collection='geol_coll', show_property=None, visible=True)
+                self.actors_df = self.actors_df.append({'uid': uid, 'actor': this_actor, 'show': True, 'collection': 'geol_coll', 'show_prop': None}, ignore_index=True)
+        for uid in self.parent.xsect_coll.df['uid'].tolist():
+            if uid == sec_uid:
+                this_actor = self.show_actor_with_property(uid=uid, collection='xsect_coll', show_property=None, visible=False)
+                self.actors_df = self.actors_df.append({'uid': uid, 'actor': this_actor, 'show': False, 'collection': 'xsect_coll', 'show_prop': None}, ignore_index=True)
+        for uid in self.parent.boundary_coll.df['uid'].tolist():
+            if self.parent.boundary_coll.get_uid_x_section(uid) == sec_uid:
+                this_actor = self.show_actor_with_property(uid=uid, collection='boundary_coll', show_property=None, visible=False)
+                self.actors_df = self.actors_df.append({'uid': uid, 'actor': this_actor, 'show': False, 'collection': 'boundary_coll', 'show_prop': None}, ignore_index=True)
+        for uid in self.parent.mesh3d_coll.df['uid'].tolist():
+            if self.parent.mesh3d_coll.get_uid_x_section(uid) == sec_uid:
+                this_actor = self.show_actor_with_property(uid=uid, collection='mesh3d_coll', show_property=None, visible=False)
+                self.actors_df = self.actors_df.append({'uid': uid, 'actor': this_actor, 'show': False, 'collection': 'mesh3d_coll', 'show_prop': None}, ignore_index=True)
+        for uid in self.parent.dom_coll.df['uid'].tolist():
+            if self.parent.dom_coll.get_uid_x_section(uid) == sec_uid:
+                this_actor = self.show_actor_with_property(uid=uid, collection='dom_coll', show_property=None, visible=False)
+                self.actors_df = self.actors_df.append({'uid': uid, 'actor': this_actor, 'show': False, 'collection': 'dom_coll', 'show_prop': None}, ignore_index=True)
+        for uid in self.parent.image_coll.df['uid'].tolist():
+            if self.parent.image_coll.get_uid_x_section(uid) == sec_uid:
+            
+                this_actor = self.show_actor_with_property(uid=uid, collection='image_coll', show_property=None, visible=False)
+                self.actors_df = self.actors_df.append({'uid': uid, 'actor': this_actor, 'show': False, 'collection': 'image_coll', 'show_prop': None}, ignore_index=True)
+        for uid in self.parent.well_coll.df['uid'].tolist():
+            this_actor = self.show_actor_with_property(uid=uid, collection='well_coll', show_property=None, visible=False)
+            self.actors_df = self.actors_df.append({'uid': uid, 'actor': this_actor, 'show': False, 'collection': 'well_coll', 'show_prop': None}, ignore_index=True)
+        for uid in self.parent.fluids_coll.df['uid'].tolist():
+            if self.parent.fluids_coll.get_uid_x_section(uid) == sec_uid:
+                this_actor = self.show_actor_with_property(uid=uid, collection='fluids_coll', show_property=None, visible=False)
+                self.actors_df = self.actors_df.append({'uid': uid, 'actor': this_actor, 'show': False, 'collection': 'fluids_coll', 'show_prop': None}, ignore_index=True)
+        for uid in self.parent.fritti_coll.df['uid'].tolist():
+            if self.parent.fritti_coll.get_uid_x_section(uid) == sec_uid:
+                this_actor = self.show_actor_with_property(uid=uid, collection='fritti_coll', show_property=None, visible=False)
+                self.actors_df = self.actors_df.append({'uid': uid, 'actor': this_actor, 'show': False, 'collection': 'fritti_coll', 'show_prop': None}, ignore_index=True)     
+
+    def change_actor_color(self, uid=None, collection=None):
+        sec_uid = self.this_x_section_uid
+        attr = getattr(self.parent,collection)
+        # if attr.get_uid_x_section(uid=uid) == sec_uid:
+        #     color_R = attr.get_uid_legend(uid=uid)['color_R']
+        #     color_G = attr.get_uid_legend(uid=uid)['color_G']
+        #     color_B = attr.get_uid_legend(uid=uid)['color_B']
+
+        if attr.get_uid_x_section(uid=uid) == sec_uid:
+            if collection == 'geol_coll':
+                color_R = self.parent.geol_coll.get_uid_legend(uid=uid)['color_R']
+                color_G = self.parent.geol_coll.get_uid_legend(uid=uid)['color_G']
+                color_B = self.parent.geol_coll.get_uid_legend(uid=uid)['color_B']
+            elif collection == 'xsect_coll':
+                color_R = self.parent.xsect_coll.get_legend()['color_R']
+                color_G = self.parent.xsect_coll.get_legend()['color_G']
+                color_B = self.parent.xsect_coll.get_legend()['color_B']
+            elif collection == 'boundary_coll':
+                color_R = self.parent.boundary_coll.get_legend()['color_R']
+                color_G = self.parent.boundary_coll.get_legend()['color_G']
+                color_B = self.parent.boundary_coll.get_legend()['color_B']
+            elif collection == 'mesh3d_coll':
+                color_R = self.parent.mesh3d_coll.get_legend()['color_R']
+                color_G = self.parent.mesh3d_coll.get_legend()['color_G']
+                color_B = self.parent.mesh3d_coll.get_legend()['color_B']
+            elif collection == 'dom_coll':
+                color_R = self.parent.dom_coll.get_legend()['color_R']
+                color_G = self.parent.dom_coll.get_legend()['color_G']
+                color_B = self.parent.dom_coll.get_legend()['color_B']
+            elif collection == 'well_coll':
+                color_R = self.parent.well_coll.get_uid_legend(uid=uid)['color_R']
+                color_G = self.parent.well_coll.get_uid_legend(uid=uid)['color_G']
+                color_B = self.parent.well_coll.get_uid_legend(uid=uid)['color_B']
+            elif collection == 'fluids_coll':
+                color_R = self.parent.fluids_coll.get_uid_legend(uid=uid)['color_R']
+                color_G = self.parent.fluids_coll.get_uid_legend(uid=uid)['color_G']
+                color_B = self.parent.fluids_coll.get_uid_legend(uid=uid)['color_B']            
+            elif collection == 'fritti_coll':
+                color_R = self.parent.fritti_coll.get_uid_legend(uid=uid)['color_R']
+                color_G = self.parent.fritti_coll.get_uid_legend(uid=uid)['color_G']
+                color_B = self.parent.fritti_coll.get_uid_legend(uid=uid)['color_B']        
+            """Note: no legend for image."""
+            """Update color for actor uid"""
+            color_RGB = [color_R / 255, color_G / 255, color_B / 255]
+            self.actors_df.loc[self.actors_df['uid'] == uid, 'actor'].values[0].GetProperty().SetColor(color_RGB)
+            
+
+    def change_actor_line_thick(self, uid=None, collection=None):
+        """Update line thickness for actor uid"""
+
+        sec_uid = self.this_x_section_uid
+        attr = getattr(self.parent,collection)
+
+        if collection == 'geol_coll':
+            if attr.get_uid_x_section(uid) == sec_uid:
+                line_thick = self.parent.geol_coll.get_uid_legend(uid=uid)['line_thick']
+                if isinstance(self.parent.geol_coll.get_uid_vtk_obj(uid),VertexSet) or isinstance(self.parent.geol_coll.get_uid_vtk_obj(uid),XsVertexSet):
+                    self.actors_df.loc[self.actors_df['uid'] == uid, 'actor'].values[0].GetProperty().SetPointSize(line_thick)
+                else:
+                    self.actors_df.loc[self.actors_df['uid'] == uid, 'actor'].values[0].GetProperty().SetLineWidth(line_thick)
+        
+        elif collection == 'xsect_coll':
+            if attr.get_uid_x_section(uid) == sec_uid:
+                line_thick = self.parent.xsect_coll.get_legend()['line_thick']
+        elif collection == 'boundary_coll':
+            if attr.get_uid_x_section(uid) == sec_uid:
+                line_thick = self.parent.boundary_coll.get_legend()['line_thick']
+        elif collection == 'mesh3d_coll':
+            if attr.get_uid_x_section(uid) == sec_uid:
+                line_thick = self.parent.mesh3d_coll.get_legend()['line_thick']
+        elif collection == 'dom_coll':
+            if attr.get_uid_x_section(uid) == sec_uid:
+                line_thick = self.parent.dom_coll.get_legend()['line_thick']
+                """Note: no legend for image."""
+                if isinstance(self.parent.dom_coll.get_uid_vtk_obj(uid), PCDom):
+                    """Use line_thick to set point size here."""
+                    self.actors_df.loc[self.actors_df['uid'] == uid, 'actor'].values[0].GetProperty().SetPointSize(line_thick)
+                else:
+                    self.actors_df.loc[self.actors_df['uid'] == uid, 'actor'].values[0].GetProperty().SetLineWidth(line_thick)
+        elif collection == 'well_coll':
+            if attr.get_uid_x_section(uid) == sec_uid:
+                line_thick = self.parent.well_coll.get_uid_legend(uid=uid)['line_thick']
+                self.actors_df.loc[self.actors_df['uid'] == uid, 'actor'].values[0].GetProperty().SetLineWidth(line_thick)
+        elif collection == 'fluids_coll':
+            if attr.get_uid_x_section(uid) == sec_uid:
+                line_thick = self.parent.fluids_coll.get_uid_legend(uid=uid)['line_thick']
+                
+                if isinstance(self.parent.fluids_coll.get_uid_vtk_obj(uid),VertexSet):
+                    self.actors_df.loc[self.actors_df['uid'] == uid, 'actor'].values[0].GetProperty().SetPointSize(line_thick)
+                else:
+                    self.actors_df.loc[self.actors_df['uid'] == uid, 'actor'].values[0].GetProperty().SetLineWidth(line_thick)
+            
+        elif collection == 'fritti_coll':
+            if attr.get_uid_x_section(uid) == sec_uid:
+                line_thick = self.parent.fritti_coll.get_uid_legend(uid=uid)['line_thick']
+            
+                if isinstance(self.parent.fritti_coll.get_uid_vtk_obj(uid),VertexSet):
+                    self.actors_df.loc[self.actors_df['uid'] == uid, 'actor'].values[0].GetProperty().SetPointSize(line_thick)
+                else:
+                    self.actors_df.loc[self.actors_df['uid'] == uid, 'actor'].values[0].GetProperty().SetLineWidth(line_thick)    

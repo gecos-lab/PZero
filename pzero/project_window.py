@@ -34,8 +34,8 @@ from .dxf2vtk import vtk2dxf
 from .well2vtk import well2vtk
 from .segy2vtk import segy2vtk
 from .windows_factory import View3D
-from .windows_factory import ViewMap
-from .windows_factory import ViewXsection
+from .windows_factory import ViewMap,newViewMap
+from .windows_factory import ViewXsection,newViewXsection
 from .windows_factory import ViewStereoplot
 from .helper_dialogs import options_dialog, save_file_dialog, open_file_dialog, input_combo_dialog, message_dialog, multiple_input_dialog, input_one_value_dialog, progress_dialog, import_dialog,PreviewWidget
 from .image2vtk import geo_image2vtk, xs_image2vtk
@@ -208,8 +208,8 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
 
         """View actions -> slots"""
         self.actionView3D.triggered.connect(lambda: View3D(parent=self))
-        self.actionViewMap.triggered.connect(lambda: ViewMap(parent=self))
-        self.actionViewPlaneXsection.triggered.connect(lambda: ViewXsection(parent=self))
+        self.actionViewMap.triggered.connect(lambda: newViewMap(parent=self))
+        self.actionViewPlaneXsection.triggered.connect(lambda: newViewXsection(parent=self))
         self.actionViewStereoplot.triggered.connect(lambda: ViewStereoplot(parent=self))
 
     def closeEvent(self, event):
