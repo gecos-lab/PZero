@@ -10,7 +10,7 @@ dependencies:
   - scipy
   - matplotlib
   - geopandas
-  - shapely
+  - shapely=1.8
   - vedo
   - pyvistaqt
   - pyvista
@@ -22,5 +22,4 @@ dependencies:
   - mplstereonet
   - pythreejs
   - pyinstaller
-  - mplstereonet
   - lxml
