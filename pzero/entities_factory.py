@@ -458,7 +458,7 @@ class PolyData(vtkPolyData):
         ''' [Gabriele] for field data pv_helpers is useful since we can have arrays of strings
         that are not well managed by dsa'''
         
-        arr = pv_helpers.convert_array(data,name=name)
+        arr = pv_helpers.convert_array(np_array(data),name=name)
         WrapDataObject(self).GetFieldData().AddArray(arr)
 
     def get_field_data_keys(self):
