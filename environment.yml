@@ -5,21 +5,30 @@ channels:
   - defaults
 dependencies:
   - python=3.9
-  - rasterio
-  - xarray
-  - scipy
-  - matplotlib
-  - geopandas
+  
+  - geopandas=0.10
+  - pyqt=5.12
+  - rasterio=1.2
   - shapely=1.8
-  - vedo
-  - pyvistaqt
+  - vtk=9.1
+  
+  - xarray
   - pyvista
-  - laspy
-  - ezdxf
+  - pyvistaqt
+  - vedo
+  
   - loopstructural
+  
   - cmocean
   - colorcet
   - mplstereonet
+  
+  - laspy
+  - ezdxf  
+  - lxml
+  - openpyxl  
   - pythreejs
   - pyinstaller
-  - lxml
+  
+  - scipy
+  - matplotlib
