@@ -55,8 +55,9 @@ class FluidsCollection(QAbstractTableModel):
     """List of valid fluid types."""
     valid_fluid_types = ["undef",
                               "water table",
+                              "idrography",
+                              "piezometry",
                               "oil",
-                              "raster"
                               "other",
                               ]
 

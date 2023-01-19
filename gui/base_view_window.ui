@@ -103,15 +103,15 @@
         <enum>QFrame::Raised</enum>
        </property>
        <property name="currentIndex">
-        <number>9</number>
+        <number>0</number>
        </property>
        <widget class="QWidget" name="GeologyTreePage">
         <property name="geometry">
          <rect>
           <x>0</x>
           <y>0</y>
-          <width>278</width>
-          <height>272</height>
+          <width>274</width>
+          <height>384</height>
          </rect>
         </property>
         <property name="sizePolicy">
@@ -176,8 +176,8 @@
          <rect>
           <x>0</x>
           <y>0</y>
-          <width>278</width>
-          <height>272</height>
+          <width>274</width>
+          <height>384</height>
          </rect>
         </property>
         <property name="sizePolicy">
@@ -236,8 +236,8 @@
          <rect>
           <x>0</x>
           <y>0</y>
-          <width>278</width>
-          <height>272</height>
+          <width>274</width>
+          <height>384</height>
          </rect>
         </property>
         <property name="sizePolicy">
@@ -311,8 +311,8 @@
          <rect>
           <x>0</x>
           <y>0</y>
-          <width>278</width>
-          <height>272</height>
+          <width>274</width>
+          <height>384</height>
          </rect>
         </property>
         <property name="sizePolicy">
@@ -354,8 +354,8 @@
          <rect>
           <x>0</x>
           <y>0</y>
-          <width>278</width>
-          <height>272</height>
+          <width>274</width>
+          <height>384</height>
          </rect>
         </property>
         <property name="sizePolicy">
@@ -409,8 +409,8 @@
          <rect>
           <x>0</x>
           <y>0</y>
-          <width>278</width>
-          <height>272</height>
+          <width>274</width>
+          <height>384</height>
          </rect>
         </property>
         <property name="sizePolicy">
@@ -464,8 +464,8 @@
          <rect>
           <x>0</x>
           <y>0</y>
-          <width>278</width>
-          <height>272</height>
+          <width>274</width>
+          <height>384</height>
          </rect>
         </property>
         <attribute name="label">
@@ -488,8 +488,8 @@
          <rect>
           <x>0</x>
           <y>0</y>
-          <width>278</width>
-          <height>272</height>
+          <width>274</width>
+          <height>384</height>
          </rect>
         </property>
         <attribute name="label">
@@ -512,8 +512,8 @@
          <rect>
           <x>0</x>
           <y>0</y>
-          <width>278</width>
-          <height>272</height>
+          <width>274</width>
+          <height>384</height>
          </rect>
         </property>
         <attribute name="label">
@@ -531,13 +531,21 @@
          </item>
         </layout>
        </widget>
-       <widget class="QWidget" name="FrittiTreePage">
+       <widget class="QWidget" name="BackgroundsTreePage">
+        <property name="geometry">
+         <rect>
+          <x>0</x>
+          <y>0</y>
+          <width>274</width>
+          <height>384</height>
+         </rect>
+        </property>
         <attribute name="label">
-         <string>Fritti Misti &gt; Fritti tree</string>
+         <string>Background data &gt; Backgrounds tree</string>
         </attribute>
         <layout class="QVBoxLayout" name="verticalLayout_12">
          <item>
-          <widget class="QTreeWidget" name="FrittiTreeWidget">
+          <widget class="QTreeWidget" name="BackgroundsTreeWidget">
            <column>
             <property name="text">
              <string notr="true">1</string>
@@ -547,13 +555,21 @@
          </item>
         </layout>
        </widget>
-       <widget class="QWidget" name="FrittiTopologyTree">
+       <widget class="QWidget" name="BackgroundsTopologyTree">
+        <property name="geometry">
+         <rect>
+          <x>0</x>
+          <y>0</y>
+          <width>274</width>
+          <height>384</height>
+         </rect>
+        </property>
         <attribute name="label">
-         <string>Fritti Misti &gt; Topology tree</string>
+         <string>Background data &gt; Topology tree</string>
         </attribute>
         <layout class="QVBoxLayout" name="verticalLayout_13">
          <item>
-          <widget class="QTreeWidget" name="FrittiTopologyTreeWidget">
+          <widget class="QTreeWidget" name="BackgroundsTopologyTreeWidget">
            <column>
             <property name="text">
              <string notr="true">1</string>
@@ -568,8 +584,8 @@
          <rect>
           <x>0</x>
           <y>0</y>
-          <width>278</width>
-          <height>272</height>
+          <width>274</width>
+          <height>384</height>
          </rect>
         </property>
         <property name="sizePolicy">
