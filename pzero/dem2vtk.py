@@ -22,11 +22,11 @@ def dem2vtk(self=None, in_file_name=None,collection=None):
     Helpful: http://xarray.pydata.org/en/stable/auto_gallery/plot_rasterio.html
     https://github.com/pyvista/pyvista-support/issues/205, thanks to Bane Sullivan"""
     data = xr.open_rasterio(in_file_name)
-    values = np.asarray(data)
+    values = np_asarray(data)
     nans = values == data.nodatavals
-    if np.any(nans):
-        values[nans] = np.nan
-    xx, yy = np.meshgrid(data['x'], data['y'])
+    if np_any(nans):
+        values[nans] = np_nan
+    xx, yy = np_meshgrid(data['x'], data['y'])
     zz = values.reshape(xx.shape)
     """Convert to DEM() instance."""
     curr_obj = DEM()

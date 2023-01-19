@@ -20,6 +20,7 @@ from numpy import pi as np_pi
 from numpy import float64 as np_float64
 from numpy import sqrt as np_sqrt
 from numpy import zeros as np_zeros
+from numpy import float32 as np_float32
 
 
 from pandas import DataFrame as pd_DataFrame
@@ -1206,16 +1207,16 @@ def project_2_xs(self):
          np_float64 is needed to calculate "t" with a good precision
          when X and Y are in UTM coordinates with very large values,
          then the result is cast to float32 that is the VTK standard."""
-        xo = out_vtk.points_X.astype(np.float64)
-        yo = out_vtk.points_Y.astype(np.float64)
-        zo = out_vtk.points_Z.astype(np.float64)
+        xo = out_vtk.points_X.astype(np_float64)
+        yo = out_vtk.points_Y.astype(np_float64)
+        zo = out_vtk.points_Z.astype(np_float64)
         t = (-xo*(yb-ya) - yo*(xa-xb) - ya*xb + yb*xa) / (alpha*(yb-ya) + beta*(xa-xb))
 
-        out_vtk.points_X[:] = (xo + alpha * t).astype(np.float32)
-        out_vtk.points_Y[:] = (yo + beta * t).astype(np.float32)
-        out_vtk.points_Z[:] = (zo + gamma * t).astype(np.float32)
+        out_vtk.points_X[:] = (xo + alpha * t).astype(np_float32)
+        out_vtk.points_Y[:] = (yo + beta * t).astype(np_float32)
+        out_vtk.points_Z[:] = (zo + gamma * t).astype(np_float32)
 
-        out_vtk.set_point_data('distance',np.abs(t))
+        out_vtk.set_point_data('distance',np_abs(t))
 
         if entity_dict['topological_type'] == "XsVertexSet":           
             # print(out_vtk.get_point_data('distance'))

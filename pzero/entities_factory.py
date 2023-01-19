@@ -2436,21 +2436,21 @@ class Attitude(VertexSet):
         return att_copy
 
 
-class Fritti(PolyData):
+class Backgrounds(PolyData):
     def __init__(self, *args, **kwargs):
-        super(Fritti, self).__init__(*args, **kwargs)
+        super(Backgrounds, self).__init__(*args, **kwargs)
     
     def deep_copy(self):
-        annotation_copy = Fritti()
+        annotation_copy = Backgrounds()
         annotation_copy.DeepCopy(self)
         return annotation_copy
     
-    def create_fritto(self,name,xyz,annotation=None,ann_type='point'):
+    def create_background(self,name,xyz,annotation=None,ann_type='point'):
         if ann_type == 'point':
-            fritto = VertexSet()
+            background = VertexSet()
         elif ann_type == 'line':
-            fritto = PolyLine()
-        fritto.points = xyz
-        fritto.auto_cells()
-        fritto.set_field_data(name=name,data=annotation)
-        self.ShallowCopy(fritto)
+            background = PolyLine()
+        background.points = xyz
+        background.auto_cells()
+        background.set_field_data(name=name,data=annotation)
+        self.ShallowCopy(background)

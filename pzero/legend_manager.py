@@ -38,8 +38,8 @@ class Legend(QObject):
                         'color_G': int(255),
                         'color_B': int(255),
                         'line_thick': 2.0}
-    fritti_legend_dict = {'fritto_type': "undef",
-                        'fritto_feature': "undef",
+    backgrounds_legend_dict = {'background_type': "undef",
+                        'background_feature': "undef",
                         # 'geological_sequence': "strati_0",
                         'color_R': int(255),
                         'color_G': int(255),
@@ -56,8 +56,8 @@ class Legend(QObject):
                         'fluid_feature': str,
                         'fluid_age': str,
                         'fluid_time': float,
-                        'fritto_type': str,
-                        'fritto_feature': str,
+                        'background_type': str,
+                        'background_feature': str,
                         'scenario': str,
                         'color_R': int,
                         'color_G': int,
@@ -283,35 +283,35 @@ class Legend(QObject):
                             fluid_time_spn.editingFinished.connect(lambda: self.change_fluid_time(parent=parent))
                             # geol_time_combo.currentTextChanged.connect(lambda: self.change_geological_time(parent=parent))
                             # fluid_sequence_combo.currentTextChanged.connect(lambda: self.change_fluid_sequence(parent=parent))
-        for fritto_type in pd_unique(parent.fritti_legend_df['fritto_type']):
-                    llevel_1 = QTreeWidgetItem(parent.LegendTreeWidget, [fritto_type])  # self.GeologyTreeWidget as parent -> top level
-                    for feature in pd_unique(parent.fritti_legend_df.loc[parent.fritti_legend_df['fritto_type'] == fritto_type, 'fritto_feature']):
+        for background_type in pd_unique(parent.backgrounds_legend_df['background_type']):
+                    llevel_1 = QTreeWidgetItem(parent.LegendTreeWidget, [background_type])  # self.GeologyTreeWidget as parent -> top level
+                    for feature in pd_unique(parent.backgrounds_legend_df.loc[parent.backgrounds_legend_df['background_type'] == background_type, 'background_feature']):
                         llevel_2 = QTreeWidgetItem(llevel_1, [feature])  # llevel_1 as parent -> 2nd level
-                        color_R = parent.fritti_legend_df.loc[(parent.fritti_legend_df['fritto_type'] == fritto_type) & (parent.fritti_legend_df['fritto_feature'] == feature), "color_R"].values[0]
-                        color_G = parent.fritti_legend_df.loc[(parent.fritti_legend_df['fritto_type'] == fritto_type) & (parent.fritti_legend_df['fritto_feature'] == feature), "color_G"].values[0]
-                        color_B = parent.fritti_legend_df.loc[(parent.fritti_legend_df['fritto_type'] == fritto_type) & (parent.fritti_legend_df['fritto_feature'] == feature), "color_B"].values[0]
-                        line_thick = parent.fritti_legend_df.loc[(parent.fritti_legend_df['fritto_type'] == fritto_type) & (parent.fritti_legend_df['fritto_feature'] == feature), "line_thick"].values[0]
+                        color_R = parent.backgrounds_legend_df.loc[(parent.backgrounds_legend_df['background_type'] == background_type) & (parent.backgrounds_legend_df['background_feature'] == feature), "color_R"].values[0]
+                        color_G = parent.backgrounds_legend_df.loc[(parent.backgrounds_legend_df['background_type'] == background_type) & (parent.backgrounds_legend_df['background_feature'] == feature), "color_G"].values[0]
+                        color_B = parent.backgrounds_legend_df.loc[(parent.backgrounds_legend_df['background_type'] == background_type) & (parent.backgrounds_legend_df['background_feature'] == feature), "color_B"].values[0]
+                        line_thick = parent.backgrounds_legend_df.loc[(parent.backgrounds_legend_df['background_type'] == background_type) & (parent.backgrounds_legend_df['background_feature'] == feature), "line_thick"].values[0]
 
                         "geol_color_dialog_btn > QPushButton used to select color"
-                        fritti_color_dialog_btn = QPushButton()
-                        fritti_color_dialog_btn.fritto_type = fritto_type  # this is to pass these values to the update function below
-                        fritti_color_dialog_btn.feature = feature
+                        backgrounds_color_dialog_btn = QPushButton()
+                        backgrounds_color_dialog_btn.background_type = background_type  # this is to pass these values to the update function below
+                        backgrounds_color_dialog_btn.feature = feature
 
-                        fritti_color_dialog_btn.setStyleSheet("background-color:rgb({},{},{})".format(color_R, color_G, color_B))
+                        backgrounds_color_dialog_btn.setStyleSheet("background-color:rgb({},{},{})".format(color_R, color_G, color_B))
                         "geol_line_thick_spn > QSpinBox used to select line thickness"
-                        fritto_line_thick_spn = QSpinBox()
-                        fritto_line_thick_spn.fritto_type = fritto_type  # this is to pass these values to the update function below
-                        fritto_line_thick_spn.feature = feature
+                        background_line_thick_spn = QSpinBox()
+                        background_line_thick_spn.background_type = background_type  # this is to pass these values to the update function below
+                        background_line_thick_spn.feature = feature
 
-                        fritto_line_thick_spn.setValue(line_thick)
+                        background_line_thick_spn.setValue(line_thick)
 
                         "Create items"
                         # llevel_3 = QTreeWidgetItem(llevel_2, [scenario, str(color_R), str(color_G), str(color_B)])  # llevel_2 as parent -> 3rd level
-                        parent.LegendTreeWidget.setItemWidget(llevel_2, 4, fritti_color_dialog_btn)
-                        parent.LegendTreeWidget.setItemWidget(llevel_2, 5, fritto_line_thick_spn)
+                        parent.LegendTreeWidget.setItemWidget(llevel_2, 4, backgrounds_color_dialog_btn)
+                        parent.LegendTreeWidget.setItemWidget(llevel_2, 5, background_line_thick_spn)
                         "Set signals for the widgets below"
-                        fritti_color_dialog_btn.clicked.connect(lambda: self.change_fritto_feature_color(parent=parent))
-                        fritto_line_thick_spn.valueChanged.connect(lambda: self.change_fritto_feature_line_thick(parent=parent))
+                        backgrounds_color_dialog_btn.clicked.connect(lambda: self.change_background_feature_color(parent=parent))
+                        background_line_thick_spn.valueChanged.connect(lambda: self.change_background_feature_line_thick(parent=parent))
 
         parent.LegendTreeWidget.expandAll()
 
@@ -534,13 +534,13 @@ class Legend(QObject):
         #     parent.geol_legend_df.sort_values(by='geological_time', ascending=True, inplace=True)
         #     self.update_widget(parent=parent)
 
-    def change_fritto_feature_color(self, parent=None):
-        fritto_type = self.sender().fritto_type
+    def change_background_feature_color(self, parent=None):
+        background_type = self.sender().background_type
         feature = self.sender().feature
         """Here we use the same query as above to GET the color from the legend"""
-        old_color_R = parent.fritti_legend_df.loc[(parent.fritti_legend_df['fritto_type'] == fritto_type) & (parent.fritti_legend_df['fritto_feature'] == feature), "color_R"].values[0]
-        old_color_G = parent.fritti_legend_df.loc[(parent.fritti_legend_df['fritto_type'] == fritto_type) & (parent.fritti_legend_df['fritto_feature'] == feature), "color_G"].values[0]
-        old_color_B = parent.fritti_legend_df.loc[(parent.fritti_legend_df['fritto_type'] == fritto_type) & (parent.fritti_legend_df['fritto_feature'] == feature), "color_B"].values[0]
+        old_color_R = parent.backgrounds_legend_df.loc[(parent.backgrounds_legend_df['background_type'] == background_type) & (parent.backgrounds_legend_df['background_feature'] == feature), "color_R"].values[0]
+        old_color_G = parent.backgrounds_legend_df.loc[(parent.backgrounds_legend_df['background_type'] == background_type) & (parent.backgrounds_legend_df['background_feature'] == feature), "color_G"].values[0]
+        old_color_B = parent.backgrounds_legend_df.loc[(parent.backgrounds_legend_df['background_type'] == background_type) & (parent.backgrounds_legend_df['background_feature'] == feature), "color_B"].values[0]
         color_in = QColor(old_color_R, old_color_G, old_color_B)  # https://doc.qt.io/qtforpython/PySide2/QtGui/QColor.html#PySide2.QtGui.QColor
         color_out = QColorDialog.getColor(initial=color_in, title="Select color")  # https://doc.qt.io/qtforpython/PySide2/QtWidgets/QColorDialog.html#PySide2.QtWidgets.PySide2.QtWidgets.QColorDialog.getColor
         if not color_out.isValid():
@@ -549,24 +549,24 @@ class Legend(QObject):
         new_color_G = color_out.green()
         new_color_B = color_out.blue()
         """Here the query is reversed and modified, dropping the values() method, to allow SETTING the color in the legend."""
-        parent.fritti_legend_df.loc[(parent.fritti_legend_df['fritto_type'] == fritto_type) & (parent.fritti_legend_df['fritto_feature'] == feature), "color_R"] = new_color_R
-        parent.fritti_legend_df.loc[(parent.fritti_legend_df['fritto_type'] == fritto_type) & (parent.fritti_legend_df['fritto_feature'] == feature), "color_G"] = new_color_G
-        parent.fritti_legend_df.loc[(parent.fritti_legend_df['fritto_type'] == fritto_type) & (parent.fritti_legend_df['fritto_feature'] == feature), "color_B"] = new_color_B
+        parent.backgrounds_legend_df.loc[(parent.backgrounds_legend_df['background_type'] == background_type) & (parent.backgrounds_legend_df['background_feature'] == feature), "color_R"] = new_color_R
+        parent.backgrounds_legend_df.loc[(parent.backgrounds_legend_df['background_type'] == background_type) & (parent.backgrounds_legend_df['background_feature'] == feature), "color_G"] = new_color_G
+        parent.backgrounds_legend_df.loc[(parent.backgrounds_legend_df['background_type'] == background_type) & (parent.backgrounds_legend_df['background_feature'] == feature), "color_B"] = new_color_B
         """Update button color."""
         self.sender().setStyleSheet("background-color:rgb({},{},{})".format(new_color_R, new_color_G, new_color_B))
         """Signal to update actors in windows. This is emitted only for the modified uid under the 'color' key."""
-        updated_list = parent.fritti_coll.df.loc[(parent.fritti_coll.df['fritto_type'] == fritto_type) & (parent.fritti_coll.df['fritto_feature'] == feature), "uid"].to_list()
-        parent.fritto_legend_color_modified_signal.emit(updated_list)
+        updated_list = parent.backgrounds_coll.df.loc[(parent.backgrounds_coll.df['background_type'] == background_type) & (parent.backgrounds_coll.df['background_feature'] == feature), "uid"].to_list()
+        parent.background_legend_color_modified_signal.emit(updated_list)
 
-    def change_fritto_feature_line_thick(self, parent=None):
-        fritto_type = self.sender().fritto_type
+    def change_background_feature_line_thick(self, parent=None):
+        background_type = self.sender().background_type
         feature = self.sender().feature
         line_thick = self.sender().value()
         "Here the query is reversed and modified, dropping the values() method, to allow SETTING the line thickness in the legend"
-        parent.fritti_legend_df.loc[(parent.fritti_legend_df['fritto_type'] == fritto_type) & (parent.fritti_legend_df['fritto_feature'] == feature), "line_thick"] = line_thick
+        parent.backgrounds_legend_df.loc[(parent.backgrounds_legend_df['background_type'] == background_type) & (parent.backgrounds_legend_df['background_feature'] == feature), "line_thick"] = line_thick
         """Signal to update actors in windows. This is emitted only for the modified uid under the 'line_thick' key."""
-        updated_list = parent.fritti_coll.df.loc[(parent.fritti_coll.df['fritto_type'] == fritto_type) & (parent.fritti_coll.df['fritto_feature'] == feature), "uid"].to_list()
-        parent.fritto_legend_thick_modified_signal.emit(updated_list)
+        updated_list = parent.backgrounds_coll.df.loc[(parent.backgrounds_coll.df['background_type'] == background_type) & (parent.backgrounds_coll.df['background_feature'] == feature), "uid"].to_list()
+        parent.background_legend_thick_modified_signal.emit(updated_list)
 
 
     # def change_geological_sequence(self, parent=None):
