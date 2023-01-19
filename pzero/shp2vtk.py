@@ -4,8 +4,9 @@ PZero© Andrea Bistacchi"""
 from copy import deepcopy
 
 from matplotlib.text import Annotation
-from .entities_factory import Backgrounds, PolyLine, VertexSet, Attitude
+from .entities_factory import PolyLine, VertexSet, Attitude
 from numpy import array as np_array
+from numpy import asarray as np_asarray
 from numpy import shape as np_shape
 from numpy import zeros as np_zeros
 from numpy import column_stack as np_column_stack
@@ -341,8 +342,7 @@ def shp2vtk(self=None, in_file_name=None,collection=None):
                     curr_obj_dict["background_feature"] = gdf.loc[row, "bkg_feat"]
                 
                 curr_obj_dict["topological_type"] = "PolyLine"
-                curr_obj_dict["vtk_obj"] = Backgrounds()
-                
+                curr_obj_dict["vtk_obj"] = PolyLine()
                 if gdf.geom_type[row] == "LineString":
                     outXYZ = np_array(gdf.loc[row].geometry)
                     # print("outXYZ:\n", outXYZ)
@@ -351,10 +351,9 @@ def shp2vtk(self=None, in_file_name=None,collection=None):
                         # print("outZ:\n", outZ)
                         outXYZ = np_column_stack((outXYZ, outZ))
                     # print("outXYZ:\n", outXYZ)
-                    if 'label' in column_names:
-                        curr_obj_dict["vtk_obj"].create_background(name='name',annotation=gdf['label'].values,xyz=outXYZ,ann_type='line')
-                    else:
-                        curr_obj_dict["vtk_obj"].create_background(name='name',xyz=outXYZ,ann_type='line')
+                    curr_obj_dict["vtk_obj"].points = outXYZ
+                    curr_obj_dict["vtk_obj"].auto_cells()
+                    curr_obj_dict["vtk_obj"].set_field_data(name='name',data=gdf['label'].values)
                
                 elif gdf.geom_type[row] == "MultiLineString":
                     outXYZ_list = np_array(gdf.loc[row].geometry)
@@ -398,12 +397,10 @@ def shp2vtk(self=None, in_file_name=None,collection=None):
                 gdf_index = gdf.set_index("bkg_feat")
                 feat_list = set(gdf_index.index)
 
-
-
                 for i in feat_list:
                     curr_obj_dict = deepcopy(BackgroundCollection.background_entity_dict)
                     
-                    vtk_obj = Backgrounds()
+                    vtk_obj = VertexSet()
 
                     if "name" in column_names:
                         curr_obj_dict["name"] = pd_series(gdf_index.loc[i, "name"])[0]
@@ -429,11 +426,14 @@ def shp2vtk(self=None, in_file_name=None,collection=None):
                         outZ = np_zeros((np_shape(outXYZ)[0], 1))
                         # print("outZ:\n", outZ)
                         outXYZ = np_column_stack((outXYZ, outZ))
+                   
+                    curr_obj_dict["vtk_obj"].points = outXYZ
+                    curr_obj_dict["vtk_obj"].auto_cells()
                     
                     if "label" in column_names:
-                        curr_obj_dict["vtk_obj"].create_background(name='name',xyz=outXYZ,annotation=gdf['label'].values)
+                        curr_obj_dict["vtk_obj"].set_field_data(name='name',data=np_asarray(gdf_index.loc[i,'label']))
                     else:
-                        curr_obj_dict["vtk_obj"].create_background(name='name',xyz=outXYZ)
+                        curr_obj_dict["vtk_obj"].set_field_data(name='name')
 
                     if curr_obj_dict["vtk_obj"].points_number > 1:
                         # curr_obj_dict["vtk_obj"].auto_cells()

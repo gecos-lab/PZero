@@ -12,7 +12,7 @@ from pandas import DataFrame as pd_DataFrame
 from pandas import read_json as pd_read_json
 from pandas import read_csv as pd_read_csv
 from .project_window_ui import Ui_ProjectWindow
-from .entities_factory import Plane, VertexSet, PolyLine, TriSurf, XsVertexSet, XsPolyLine, DEM, MapImage, Voxet, Seismics, XsVoxet, TetraSolid, PCDom, TSDom, Well,Attitude,Backgrounds
+from .entities_factory import Plane, VertexSet, PolyLine, TriSurf, XsVertexSet, XsPolyLine, DEM, MapImage, Voxet, Seismics, XsVoxet, TetraSolid, PCDom, TSDom, Well,Attitude,XsImage,Image
 from .geological_collection import GeologicalCollection
 from .xsection_collection import XSectionCollection
 from .dom_collection import DomCollection
@@ -1262,11 +1262,21 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 self.image_coll.df = pd_read_csv(in_dir_name + '/image_table.csv', encoding='utf-8', dtype=ImageCollection.image_entity_type_dict, keep_default_na=False)
             prgs_bar = progress_dialog(max_value=self.image_coll.df.shape[0], title_txt="Open image", label_txt="Opening image objects...", cancel_txt=None, parent=self)
             for uid in self.image_coll.df['uid'].to_list():
-                if self.image_coll.df.loc[self.image_coll.df['uid'] == uid, 'image_type'].values[0] in ["MapImage", "XsImage", "TSDomImage"]:
+                if self.image_coll.df.loc[self.image_coll.df['uid'] == uid, 'image_type'].values[0] in ["MapImage", "TSDomImage"]:
                     if not os.path.isfile((in_dir_name + "/" + uid + ".vti")):
                         print("error: missing image file")
                         return
                     vtk_object = MapImage()
+                    im_reader = vtkXMLImageDataReader()
+                    im_reader.SetFileName(in_dir_name + "/" + uid + ".vti")
+                    im_reader.Update()
+                    vtk_object.ShallowCopy(im_reader.GetOutput())
+                    vtk_object.Modified()
+                elif self.image_coll.df.loc[self.image_coll.df['uid'] == uid, 'image_type'].values[0] in ["XsImage"]:
+                    if not os.path.isfile((in_dir_name + "/" + uid + ".vti")):
+                        print("error: missing image file")
+                        return
+                    vtk_object = XsImage(parent=self,x_section_uid=self.image_coll.df.loc[self.image_coll.df['uid'] == uid, 'x_section'].values[0])
                     im_reader = vtkXMLImageDataReader()
                     im_reader.SetFileName(in_dir_name + "/" + uid + ".vti")
                     im_reader.Update()
@@ -1465,11 +1475,10 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 if not os.path.isfile((in_dir_name + "/" + uid + ".vtp")):
                     print("error: missing VTK file")
                     return
-                vtk_object = Backgrounds()
-                # if self.backgrounds_coll.get_uid_topological_type(uid) == 'VertexSet':
-                #     vtk_object = VertexSet()
-                # elif self.backgrounds_coll.get_uid_topological_type(uid) == 'PolyLine':
-                #     vtk_object = PolyLine()
+                if self.backgrounds_coll.get_uid_topological_type(uid) == 'VertexSet':
+                    vtk_object = VertexSet()
+                elif self.backgrounds_coll.get_uid_topological_type(uid) == 'PolyLine':
+                    vtk_object = PolyLine()
                 # elif self.backgrounds_coll.get_uid_topological_type(uid) == 'TriSurf':
                 #     vtk_object = TriSurf()
                 # elif self.backgrounds_coll.get_uid_topological_type(uid) == 'XsVertexSet':

@@ -1,7 +1,7 @@
 """entities_factory.py
 PZero© Andrea Bistacchi"""
 
-from vtk import vtkPolyData, vtkPoints, vtkCellCenters, vtkIdFilter, vtkCleanPolyData, vtkPolyDataNormals, vtkPlane, vtkCellArray, vtkLine, vtkIdList, vtkTriangleFilter, vtkTriangle, vtkFeatureEdges, vtkCleanPolyData, vtkStripper, vtkPolygon, vtkUnstructuredGrid, vtkTetra, vtkImageData, vtkStructuredGrid, vtkPolyDataConnectivityFilter, vtkCylinderSource,vtkThreshold,vtkDataObject,vtkThresholdPoints,vtkDelaunay2D,vtkPolyDataMapper,vtkQuadricDecimation,vtkSmoothPolyDataFilter,vtkLinearSubdivisionFilter,vtkPCANormalEstimation,vtkPointSet,vtkRadiusOutlierRemoval,vtkAppendPolyData,vtkStatisticalOutlierRemoval,vtkEuclideanClusterExtraction, vtkCenterOfMass,vtkTransform,vtkTransformPolyDataFilter,vtkArcPlotter,vtkTubeFilter,vtkActor
+from vtk import vtkPolyData, vtkPoints, vtkCellCenters, vtkIdFilter, vtkCleanPolyData, vtkPolyDataNormals, vtkPlane, vtkCellArray, vtkLine, vtkIdList, vtkTriangleFilter, vtkTriangle, vtkFeatureEdges, vtkCleanPolyData, vtkStripper, vtkPolygon, vtkUnstructuredGrid, vtkTetra, vtkImageData, vtkStructuredGrid, vtkPolyDataConnectivityFilter,vtkPolyDataMapper,vtkPCANormalEstimation,vtkEuclideanClusterExtraction, vtkCenterOfMass,vtkArcPlotter,vtkTubeFilter,vtkActor,vtkLocator,vtkPointSet
 from vtk.util.numpy_support import vtk_to_numpy
 from vtk.numpy_interface.dataset_adapter import WrapDataObject, vtkDataArrayToVTKArray
 from pyvista import helpers as pv_helpers # very usefull. Can be used when dsa fails
@@ -32,7 +32,7 @@ from numpy import sqrt as np_sqrt
 from numpy import hstack as np_hstack
 from numpy import column_stack as np_column_stack
 from numpy import where as np_where
-from numpy import repeat as np_repeat
+from numpy import zeros as np_zeros
 
 from .helper_functions import profiler
 """
@@ -458,7 +458,7 @@ class PolyData(vtkPolyData):
         ''' [Gabriele] for field data pv_helpers is useful since we can have arrays of strings
         that are not well managed by dsa'''
         
-        arr = pv_helpers.convert_array(np_array(data),name=name)
+        arr = pv_helpers.convert_array(data,name=name)
         WrapDataObject(self).GetFieldData().AddArray(arr)
 
     def get_field_data_keys(self):
@@ -2083,6 +2083,8 @@ class XsImage(Image):
     def __init__(self, x_section_uid=None, parent=None, *args, **kwargs):
         self.x_section_uid = x_section_uid
         self.parent = parent  # we store a reference to parent - the project - in order to be able to use property methods below
+        print(self.parent)
+        print(self.parent.xsect_coll)
         super(XsImage, self).__init__(*args, **kwargs)
 
     def deep_copy(self):
@@ -2364,8 +2366,8 @@ class WellTrace(PolyLine):
             filter = vtkArcPlotter()
             filter.SetInputData(temp)
             # arc_p.SetCamera(camera)
-            filter.SetRadius(130)
-            filter.SetHeight(250)
+            filter.SetRadius(1.30)
+            filter.SetHeight(2.50)
             # filter.UseDefaultNormalOn()
             filter.SetCamera(camera)
             filter.SetDefaultNormal(0,1,0)
@@ -2373,7 +2375,7 @@ class WellTrace(PolyLine):
         elif method == 'cylinder':
             filter = vtkTubeFilter()
             filter.SetInputData(temp)
-            filter.SetRadius(5)
+            filter.SetRadius(0.5)
             filter.SetNumberOfSides(100)
             filter.SetVaryRadiusToVaryRadiusByScalar()
             # filter.Update()
@@ -2397,8 +2399,8 @@ class WellTrace(PolyLine):
 
         filter = vtkTubeFilter()
         filter.SetInputData(temp)
-        filter.SetRadius(20)
-        filter.SetNumberOfSides(100)
+        filter.SetRadius(1)
+        filter.SetNumberOfSides(10)
         filter.Update()
         out = filter.GetOutput()
         del temp
@@ -2423,7 +2425,7 @@ class WellMarker(VertexSet):
     def create_marker(self,xyz,name=None):
         self.points = xyz
         self.auto_cells()
-        self.set_field_data(name='name',data=[name])
+        self.set_field_data(name='name',data=np_array(name))
         
 
 class Attitude(VertexSet):
@@ -2434,23 +2436,3 @@ class Attitude(VertexSet):
         att_copy = Attitude()
         att_copy.DeepCopy(self)
         return att_copy
-
-
-class Backgrounds(PolyData):
-    def __init__(self, *args, **kwargs):
-        super(Backgrounds, self).__init__(*args, **kwargs)
-    
-    def deep_copy(self):
-        annotation_copy = Backgrounds()
-        annotation_copy.DeepCopy(self)
-        return annotation_copy
-    
-    def create_background(self,name,xyz,annotation=None,ann_type='point'):
-        if ann_type == 'point':
-            background = VertexSet()
-        elif ann_type == 'line':
-            background = PolyLine()
-        background.points = xyz
-        background.auto_cells()
-        background.set_field_data(name=name,data=annotation)
-        self.ShallowCopy(background)

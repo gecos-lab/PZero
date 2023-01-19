@@ -6,7 +6,7 @@ Convert well data (csv, ags ...) in vtk objects.
 """
 
 from numpy import array as np_array
-from numpy import deg2rad as np_deg2rad
+from numpy import append as np_append
 from numpy import cos as np_cos
 from numpy import sin as np_sin
 from numpy import vstack as np_vstack
@@ -20,7 +20,7 @@ from numpy import random as np_random
 from copy import deepcopy
 import vtk
 import pyvista as pv
-from .entities_factory import Attitude, Well,WellTrace,Backgrounds
+from .entities_factory import Attitude, Well,WellTrace,VertexSet
 from uuid import uuid4
 # from .entities_factory import WellData
 
@@ -97,15 +97,17 @@ def well2vtk(self,path=None):
             
                 prop = prop.set_index('MD_point')
                 for col in prop.columns:
-                    annotation_obj = Backgrounds()
-                    mrk_pos = []
-                    mrk_data = []
+                    annotation_obj = VertexSet()
+                    mrk_pos = np_array([])
+                    mrk_data = np_array([])
                     for row in prop.index:
                         idx = np_argmin(np_abs(arr - row))
                         value = prop.loc[row,col]
-                        mrk_data.append(value)
-                        mrk_pos.append(well_obj.trace.points[idx,:])
-                    annotation_obj.create_background(name=col,annotation=mrk_data,xyz=mrk_pos)
+                        mrk_data = np_append(mrk_data,value)
+                        mrk_pos = np_append(mrk_pos,well_obj.trace.points[idx,:])
+                    annotation_obj.points = mrk_pos.reshape(-1,3)
+                    annotation_obj.auto_cells()
+                    annotation_obj.set_field_data(name=col,data=mrk_data)
                     ann_list.append(annotation_obj)   
         else:
                 prop = prop.set_index('MD')

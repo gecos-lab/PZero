@@ -8,7 +8,7 @@ from PyQt5.QtGui import QCloseEvent,QFont
 
 """PZero imports"""
 from .base_view_window_ui import Ui_BaseViewWindow
-from .entities_factory import VertexSet, PolyLine, TriSurf, TetraSolid, XsVertexSet, XsPolyLine, DEM, PCDom, MapImage, Voxet, XsVoxet, Plane, Seismics, XsTriSurf, XsImage, PolyData, Well, WellMarker,WellTrace,Attitude,Backgrounds
+from .entities_factory import VertexSet, PolyLine, TriSurf, TetraSolid, XsVertexSet, XsPolyLine, DEM, PCDom, MapImage, Voxet, XsVoxet, Plane, Seismics, XsTriSurf, XsImage, PolyData, Well, WellMarker,WellTrace,Attitude
 from .helper_dialogs import input_one_value_dialog, input_text_dialog, input_combo_dialog, message_dialog, options_dialog, multiple_input_dialog, tic, toc,open_file_dialog,progress_dialog
 from .geological_collection import GeologicalCollection
 from copy import deepcopy
@@ -3913,18 +3913,6 @@ class View3D(BaseView):
                                         color_bar_range=None, show_property_title=show_property_title, line_thick=line_thick,
                                         plot_texture_option=False, plot_rgb_option=plot_rgb_option, visible=visible,
                                         render_lines_as_tubes=False)
-        elif isinstance(plot_entity,Backgrounds):
-            plot_rgb_option = None
-            if show_property is None:
-                show_scalar_bar = False
-                pass
-            elif show_property == 'none':
-                show_scalar_bar = False
-                show_property = None
-            this_actor = self.plot_mesh_3D(uid=uid, plot_entity=plot_entity, color_RGB=color_RGB, show_property=show_property, show_scalar_bar=show_scalar_bar,
-                                        color_bar_range=None, show_property_title=show_property_title, line_thick=line_thick,
-                                        plot_texture_option=False, plot_rgb_option=plot_rgb_option, visible=visible,
-                                        render_lines_as_tubes=False)
         else:
             print("[Windows factory]: actor with no class")
             this_actor = None
@@ -4133,13 +4121,16 @@ class View3D(BaseView):
             self.plotter.add_mesh(oct,style='wireframe',color='red')
 
     def change_bore_vis(self,method):
-        actors = self.plotter.renderer.actors.copy()
+        actors = set(self.plotter.renderer.actors.copy())
+        wells = set(self.parent.well_coll.get_uids())
+
+        well_actors = actors.intersection(wells)
         if method == 'trace':
             self.trace_method = method
         elif method == 'cylinder':
             self.trace_method = method
         elif method == 'geo':
-            for uid in actors:
+            for uid in well_actors:
                 if '_geo' in uid:
                     pass
                 else:
@@ -4153,7 +4144,7 @@ class View3D(BaseView):
 
             self.toggle_bore_geo *= -1
         elif method == 'litho':
-            for uid in actors:
+            for uid in well_actors:
                 if '_litho' in uid:
                     pass
                 else:
@@ -4521,7 +4512,7 @@ class View2D(BaseView):
             "Do-nothing option to avoid errors, but it does not update color."
             pass
 
-    def set_actor_visible(self, uid=None, visible=None):
+    def set_actor_visible(self, uid=None, visible=None,name=None):
         """Set actor uid visible or invisible (visible = True or False)"""
         if isinstance(self.actors_df.loc[self.actors_df['uid'] == uid, 'actor'].values[0], Line2D):
             "Case for Line2D"
@@ -4853,6 +4844,23 @@ class ViewMap(View2D):
             color_RGB = [color_R / 255, color_G / 255, color_B / 255]
             line_thick = self.parent.image_coll.get_legend()['line_thick']
             plot_entity = self.parent.image_coll.get_uid_vtk_obj(uid)
+        elif collection == 'well_coll':
+            color_R = self.parent.well_coll.get_uid_legend(uid=uid)['color_R']
+            color_G = self.parent.well_coll.get_uid_legend(uid=uid)['color_G']
+            color_B = self.parent.well_coll.get_uid_legend(uid=uid)['color_B']
+            color_RGB = [color_R / 255, color_G / 255, color_B / 255]
+            line_thick = self.parent.well_coll.get_uid_legend(uid=uid)['line_thick']
+            plot_entity = self.parent.well_coll.get_uid_vtk_obj(uid)
+        elif collection == 'backgrounds_coll':
+            color_R = self.parent.backgrounds_coll.get_uid_legend(uid=uid)['color_R']
+            color_G = self.parent.backgrounds_coll.get_uid_legend(uid=uid)['color_G']
+            color_B = self.parent.backgrounds_coll.get_uid_legend(uid=uid)['color_B']
+            color_RGB = [color_R / 255, color_G / 255, color_B / 255]
+            line_thick = self.parent.backgrounds_coll.get_uid_legend(uid=uid)['line_thick']
+            plot_entity = self.parent.backgrounds_coll.get_uid_vtk_obj(uid)
+        else:
+            plot_entity = None
+        
         """Then plot."""
         if isinstance(plot_entity, (VertexSet, PolyLine, XsVertexSet, XsPolyLine, Attitude)):
             if isinstance(plot_entity.points, np_ndarray):
@@ -4986,6 +4994,8 @@ class ViewMap(View2D):
                     this_actor = None
             else:
                 this_actor = None
+        else:
+            this_actor = None
         if this_actor:
             this_actor.figure.canvas.draw()
             return this_actor
@@ -5109,6 +5119,22 @@ class ViewXsection(View2D):
                     plot_entity = self.parent.image_coll.get_uid_vtk_obj(uid)
             else:
                 plot_entity = None
+        elif collection == 'well_coll':
+            color_R = self.parent.well_coll.get_uid_legend(uid=uid)['color_R']
+            color_G = self.parent.well_coll.get_uid_legend(uid=uid)['color_G']
+            color_B = self.parent.well_coll.get_uid_legend(uid=uid)['color_B']
+            color_RGB = [color_R / 255, color_G / 255, color_B / 255]
+            line_thick = self.parent.well_coll.get_uid_legend(uid=uid)['line_thick']
+            plot_entity = self.parent.well_coll.get_uid_vtk_obj(uid)
+        elif collection == 'backgrounds_coll':
+            color_R = self.parent.backgrounds_coll.get_uid_legend(uid=uid)['color_R']
+            color_G = self.parent.backgrounds_coll.get_uid_legend(uid=uid)['color_G']
+            color_B = self.parent.backgrounds_coll.get_uid_legend(uid=uid)['color_B']
+            color_RGB = [color_R / 255, color_G / 255, color_B / 255]
+            line_thick = self.parent.backgrounds_coll.get_uid_legend(uid=uid)['line_thick']
+            plot_entity = self.parent.backgrounds_coll.get_uid_vtk_obj(uid)
+        else:
+            plot_entity = None
         if plot_entity:
             if isinstance(plot_entity, XsVoxet):
                 if plot_entity.bounds:
@@ -5163,6 +5189,8 @@ class ViewXsection(View2D):
                         this_actor = None
                 else:
                     this_actor = None
+            elif isinstance(plot_entity, (Well,WellTrace,WellMarker)) or collection == 'backgrounds_coll':
+                this_actor = None
             else:
                 if isinstance(plot_entity.points, np_ndarray):
                     if plot_entity.points_number > 0:
@@ -5204,7 +5232,8 @@ class ViewXsection(View2D):
                 else:
                     print(uid, " Entity is None.")
                     this_actor = None
-            this_actor.figure.canvas.draw()
+            if this_actor:
+                this_actor.figure.canvas.draw()
         else:
             this_actor = None
         return this_actor
