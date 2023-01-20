@@ -6,7 +6,7 @@ Convert well data (csv, ags ...) in vtk objects.
 """
 
 from numpy import array as np_array
-from numpy import deg2rad as np_deg2rad
+from numpy import append as np_append
 from numpy import cos as np_cos
 from numpy import sin as np_sin
 from numpy import vstack as np_vstack
@@ -20,14 +20,14 @@ from numpy import random as np_random
 from copy import deepcopy
 import vtk
 import pyvista as pv
-from .entities_factory import Attitude, Well,WellTrace,Fritti
+from .entities_factory import Attitude, Well,WellTrace,VertexSet
 from uuid import uuid4
 # from .entities_factory import WellData
 
 from .well_collection import WellCollection
 from .geological_collection import GeologicalCollection
 from .fluid_collection import FluidsCollection
-from .frittura_collection import FrittoMistoCollection
+from .background_collection import BackgroundCollection
 import pandas as pd
 # import lasio as ls
 
@@ -97,15 +97,17 @@ def well2vtk(self,path=None):
             
                 prop = prop.set_index('MD_point')
                 for col in prop.columns:
-                    annotation_obj = Fritti()
-                    mrk_pos = []
-                    mrk_data = []
+                    annotation_obj = VertexSet()
+                    mrk_pos = np_array([])
+                    mrk_data = np_array([])
                     for row in prop.index:
                         idx = np_argmin(np_abs(arr - row))
                         value = prop.loc[row,col]
-                        mrk_data.append(value)
-                        mrk_pos.append(well_obj.trace.points[idx,:])
-                    annotation_obj.create_fritto(name=col,annotation=mrk_data,xyz=mrk_pos)
+                        mrk_data = np_append(mrk_data,value)
+                        mrk_pos = np_append(mrk_pos,well_obj.trace.points[idx,:])
+                    annotation_obj.points = mrk_pos.reshape(-1,3)
+                    annotation_obj.auto_cells()
+                    annotation_obj.set_field_data(name=col,data=mrk_data)
                     ann_list.append(annotation_obj)   
         else:
                 prop = prop.set_index('MD')
@@ -148,12 +150,12 @@ def well2vtk(self,path=None):
             components.append(annotation.trace.get_point_data_shape(key)[1])
             types.append(annotation.trace.get_point_data_type(key))
 
-        annotation_obj_attributes = deepcopy(FrittoMistoCollection.fritto_entity_dict)
+        annotation_obj_attributes = deepcopy(BackgroundCollection.background_entity_dict)
         annotation_obj_attributes['uid'] = str(uuid4())
         annotation_obj_attributes['name'] = name
         annotation_obj_attributes['topological_type'] = 'VertexSet'
-        annotation_obj_attributes['fritto_type'] = 'Annotations'
-        annotation_obj_attributes['fritto_feature'] = well_obj.ID
+        annotation_obj_attributes['background_type'] = 'Annotations'
+        annotation_obj_attributes['background_feature'] = well_obj.ID
 
         annotation_obj_attributes['properties_names'] = ann_keys
         annotation_obj_attributes['properties_components'] = components
@@ -161,7 +163,7 @@ def well2vtk(self,path=None):
         annotation_obj_attributes['borehole'] = bore_obj_attributes['uid']
 
         annotation_obj_attributes['vtk_obj'] = annotation
-        self.fritti_coll.add_entity_from_dict(entity_dict=annotation_obj_attributes)
+        self.backgrounds_coll.add_entity_from_dict(entity_dict=annotation_obj_attributes)
     # paths = in_file_name
 
     # data_paths = paths[1]

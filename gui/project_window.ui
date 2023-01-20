@@ -280,13 +280,13 @@
         </item>
        </layout>
       </widget>
-      <widget class="QWidget" name="tabFritti">
+      <widget class="QWidget" name="tabBackgrounds">
        <attribute name="title">
-        <string>Fritti misti</string>
+        <string>Background data</string>
        </attribute>
        <layout class="QVBoxLayout" name="verticalLayout_11">
         <item>
-         <widget class="QTableView" name="FrittiTableView"/>
+         <widget class="QTableView" name="BackgroundsTableView"/>
         </item>
        </layout>
       </widget>

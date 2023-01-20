@@ -10,6 +10,7 @@ from numpy import deg2rad as np_deg2rad
 from numpy import sin as np_sin
 from numpy import cos as np_cos
 from numpy import squeeze as np_squeeze
+from numpy import number as np_number
 
 from .helper_dialogs import multiple_input_dialog
 from .entities_factory import TriSurf, VertexSet, XsVertexSet
@@ -46,10 +47,10 @@ def plunge_trends2lineations(plunges=None, trends=None):
     to lineation unit vectors pointing downwards if Plunge > 0.
     Accepts single values, lists or Numpy arrays and
     returns Numpy arrays."""
-    if isinstance(plunges, (float, int, list,np.number)) and isinstance(trends, (float, int, list,np.number)):
-        plunges_array = np.asarray(plunges)
-        trends_array = np.asarray(trends)
-    elif isinstance(plunges, np.ndarray) and isinstance(trends, np.ndarray):
+    if isinstance(plunges, (float, int, list,np_number)) and isinstance(trends, (float, int, list,np_number)):
+        plunges_array = np_asarray(plunges)
+        trends_array = np_asarray(trends)
+    elif isinstance(plunges, np_ndarray) and isinstance(trends, np_ndarray):
         plunges_array = plunges
         trends_array = trends
     else:
