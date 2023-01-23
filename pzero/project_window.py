@@ -105,7 +105,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
     well_metadata_modified_signal = pyqtSignal(list)
     well_legend_color_modified_signal = pyqtSignal(list)
     well_legend_thick_modified_signal = pyqtSignal(list)
-    
+
     fluid_added_signal = pyqtSignal(list)
     fluid_removed_signal = pyqtSignal(list)
     fluid_geom_modified_signal = pyqtSignal(list)  # this includes topology modified
@@ -233,179 +233,128 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
     @property
     def selected_uids(self):
         """Returns a list of uids selected in the table view. Just rows completely selected are returned."""
+        selected_idxs = []
+        selected_uids = []
         if self.shown_table == "tabGeology":
             selected_idxs_proxy = self.GeologyTableView.selectionModel().selectedRows()
-            selected_idxs = []
             for idx_proxy in selected_idxs_proxy:
                 selected_idxs.append(self.proxy_geol_coll.mapToSource(idx_proxy))
-            selected_uids = []
             for idx in selected_idxs:
                 selected_uids.append(self.geol_coll.data(index=idx, role=Qt.DisplayRole))
-            return selected_uids
         elif self.shown_table == "tabXSections":
             selected_idxs_proxy = self.XSectionsTableView.selectionModel().selectedRows()
-            selected_idxs = []
             for idx_proxy in selected_idxs_proxy:
                 selected_idxs.append(self.proxy_xsect_coll.mapToSource(idx_proxy))
-            selected_uids = []
             for idx in selected_idxs:
                 selected_uids.append(self.xsect_coll.data(index=idx, role=Qt.DisplayRole))
-            return selected_uids
         elif self.shown_table == "tabMeshes3D":
             selected_idxs_proxy = self.Meshes3DTableView.selectionModel().selectedRows()
-            selected_idxs = []
             for idx_proxy in selected_idxs_proxy:
                 selected_idxs.append(self.proxy_mesh3d_coll.mapToSource(idx_proxy))
-            selected_uids = []
             for idx in selected_idxs:
                 selected_uids.append(self.mesh3d_coll.data(index=idx, role=Qt.DisplayRole))
-            return selected_uids
         elif self.shown_table == "tabDOMs":
             selected_idxs_proxy = self.DOMsTableView.selectionModel().selectedRows()
-            selected_idxs = []
             for idx_proxy in selected_idxs_proxy:
                 selected_idxs.append(self.proxy_dom_coll.mapToSource(idx_proxy))
-            selected_uids = []
             for idx in selected_idxs:
                 selected_uids.append(self.dom_coll.data(index=idx, role=Qt.DisplayRole))
-            return selected_uids
         elif self.shown_table == "tabImages":
             selected_idxs_proxy = self.ImagesTableView.selectionModel().selectedRows()
-            selected_idxs = []
             for idx_proxy in selected_idxs_proxy:
                 selected_idxs.append(self.proxy_image_coll.mapToSource(idx_proxy))
-            selected_uids = []
             for idx in selected_idxs:
                 selected_uids.append(self.image_coll.data(index=idx, role=Qt.DisplayRole))
-            return selected_uids
         elif self.shown_table == "tabBoundaries":
             selected_idxs_proxy = self.BoundariesTableView.selectionModel().selectedRows()
-            selected_idxs = []
             for idx_proxy in selected_idxs_proxy:
                 selected_idxs.append(self.proxy_boundary_coll.mapToSource(idx_proxy))
-            selected_uids = []
             for idx in selected_idxs:
                 selected_uids.append(self.boundary_coll.data(index=idx, role=Qt.DisplayRole))
-            return selected_uids
-        elif self.shown_table == "tabWells":
-            selected_idxs_proxy = self.WellsTableView.selectionModel().selectedRows()
-            selected_idxs = []
-            for idx_proxy in selected_idxs_proxy:
-                selected_idxs.append(self.proxy_well_coll.mapToSource(idx_proxy))
-            selected_uids = []
-            for idx in selected_idxs:
-                selected_uids.append(self.well_coll.data(index=idx, role=Qt.DisplayRole))
-            return selected_uids
-        elif self.shown_table == "tabFluids":
-            selected_idxs_proxy = self.FluidsTableView.selectionModel().selectedRows()
-            selected_idxs = []
-            for idx_proxy in selected_idxs_proxy:
-                selected_idxs.append(self.proxy_fluids_coll.mapToSource(idx_proxy))
-            selected_uids = []
-            for idx in selected_idxs:
-                selected_uids.append(self.fluids_coll.data(index=idx, role=Qt.DisplayRole))
-            return selected_uids
-        elif self.shown_table == "tabBackgrounds":
-            selected_idxs_proxy = self.BackgroundsTableView.selectionModel().selectedRows()
-            selected_idxs = []
-            for idx_proxy in selected_idxs_proxy:
-                selected_idxs.append(self.proxy_backgrounds_coll.mapToSource(idx_proxy))
-            selected_uids = []
-            for idx in selected_idxs:
-                selected_uids.append(self.backgrounds_coll.data(index=idx, role=Qt.DisplayRole))
-            return selected_uids
-        elif self.shown_table == "tabLegend":
-            pass
-        elif self.shown_table == "tabProperties":
-            pass
-        elif self.shown_table == "tabTerminal":
-            pass
-        
-    #[Gabriele] This is should be used for cross collection operations (e.g. cut surfaces in the geology table with the DEM). 
-    # We could use this instead of selected_uids but we should impose validity checks for the different functions  
-    @property
-    def selected_uids_all(self):
-        """Returns a list of all uids selected in every table view."""
-        tab_list = ["tabDOMs","tabGeology","tabXSections","tabMeshes3D","tabImages","tabBoundaries","tabWells","tabFluids"]
-        selected_uids = []
-        for tab in tab_list:
-            selected_idxs = []
-            if tab == "tabGeology":
-                selected_idxs_proxy = self.GeologyTableView.selectionModel().selectedRows()
-                for idx_proxy in selected_idxs_proxy:
-                    selected_idxs.append(self.proxy_geol_coll.mapToSource(idx_proxy))
-                for idx in selected_idxs:
-                    selected_uids.append(self.geol_coll.data(index=idx, role=Qt.DisplayRole))
-            elif tab == "tabXSections":
-                selected_idxs_proxy = self.XSectionsTableView.selectionModel().selectedRows()
-
-                for idx_proxy in selected_idxs_proxy:
-                    selected_idxs.append(self.proxy_xsect_coll.mapToSource(idx_proxy))
-
-                for idx in selected_idxs:
-                    selected_uids.append(self.xsect_coll.data(index=idx, role=Qt.DisplayRole))
-
-            elif tab == "tabMeshes3D":
-                selected_idxs_proxy = self.Meshes3DTableView.selectionModel().selectedRows()
-
-                for idx_proxy in selected_idxs_proxy:
-                    selected_idxs.append(self.proxy_mesh3d_coll.mapToSource(idx_proxy))
-
-                for idx in selected_idxs:
-                    selected_uids.append(self.mesh3d_coll.data(index=idx, role=Qt.DisplayRole))
-
-            elif tab == "tabDOMs":
-                selected_idxs_proxy = self.DOMsTableView.selectionModel().selectedRows()
-
-                for idx_proxy in selected_idxs_proxy:
-                    selected_idxs.append(self.proxy_dom_coll.mapToSource(idx_proxy))
-
-                for idx in selected_idxs:
-                    selected_uids.append(self.dom_coll.data(index=idx, role=Qt.DisplayRole))
-
-            elif tab == "tabImages":
-                selected_idxs_proxy = self.ImagesTableView.selectionModel().selectedRows()
-
-                for idx_proxy in selected_idxs_proxy:
-                    selected_idxs.append(self.proxy_image_coll.mapToSource(idx_proxy))
-
-                for idx in selected_idxs:
-                    selected_uids.append(self.image_coll.data(index=idx, role=Qt.DisplayRole))
-
-            elif tab == "tabBoundaries":
-                selected_idxs_proxy = self.BoundariesTableView.selectionModel().selectedRows()
-
-                for idx_proxy in selected_idxs_proxy:
-                    selected_idxs.append(self.proxy_boundary_coll.mapToSource(idx_proxy))
-
-                for idx in selected_idxs:
-                    selected_uids.append(self.boundary_coll.data(index=idx, role=Qt.DisplayRole))
-
-            elif tab == "tabWells":
-                selected_idxs_proxy = self.WellsTableView.selectionModel().selectedRows()
-
-                for idx_proxy in selected_idxs_proxy:
-                    selected_idxs.append(self.proxy_well_coll.mapToSource(idx_proxy))
-
-                for idx in selected_idxs:
-                    selected_uids.append(self.well_coll.data(index=idx, role=Qt.DisplayRole))
-            elif tab == "tabFluids":
-                selected_idxs_proxy = self.FluidsTableView.selectionModel().selectedRows()
-
-                for idx_proxy in selected_idxs_proxy:
-                    selected_idxs.append(self.proxy_well_coll.mapToSource(idx_proxy))
-
-                for idx in selected_idxs:
-                    selected_uids.append(self.fluids_coll.data(index=idx, role=Qt.DisplayRole))
-            elif tab == "tabBackgrounds":
-                selected_idxs_proxy = self.BackgroundsTableView.selectionModel().selectedRows()
-
-                for idx_proxy in selected_idxs_proxy:
-                    selected_idxs.append(self.proxy_well_coll.mapToSource(idx_proxy))
-
-                for idx in selected_idxs:
-                    selected_uids.append(self.backgrounds_coll.data(index=idx, role=Qt.DisplayRole))
+        # elif self.shown_table == "tabWells":
+        #     selected_idxs_proxy = self.WellsTableView.selectionModel().selectedRows()
+        #     for idx_proxy in selected_idxs_proxy:
+        #         selected_idxs.append(self.proxy_well_coll.mapToSource(idx_proxy))
+        #     for idx in selected_idxs:
+        #         selected_uids.append(self.well_coll.data(index=idx, role=Qt.DisplayRole))
+        # elif self.shown_table == "tabFluids":
+        #     selected_idxs_proxy = self.FluidsTableView.selectionModel().selectedRows()
+        #     for idx_proxy in selected_idxs_proxy:
+        #         selected_idxs.append(self.proxy_fluids_coll.mapToSource(idx_proxy))
+        #     for idx in selected_idxs:
+        #         selected_uids.append(self.fluids_coll.data(index=idx, role=Qt.DisplayRole))
+        # elif self.shown_table == "tabBackgrounds":
+        #     selected_idxs_proxy = self.BackgroundsTableView.selectionModel().selectedRows()
+        #     for idx_proxy in selected_idxs_proxy:
+        #         selected_idxs.append(self.proxy_backgrounds_coll.mapToSource(idx_proxy))
+        #     for idx in selected_idxs:
+        #         selected_uids.append(self.backgrounds_coll.data(index=idx, role=Qt.DisplayRole))
         return selected_uids
+
+    #[Gabriele] This is should be used for cross collection operations (e.g. cut surfaces in the geology table with the DEM).
+    # We could use this instead of selected_uids but we should impose validity checks for the different functions
+    # @property
+    # def selected_uids_all(self):
+    #     """Returns a list of all uids selected in every table view."""
+    #     tab_list = ["tabDOMs","tabGeology","tabXSections","tabMeshes3D","tabImages","tabBoundaries","tabWells","tabFluids"]
+    #     selected_idxs = []
+    #     selected_uids_all = []
+    #     for tab in tab_list:
+    #         if tab == "tabGeology":
+    #             selected_idxs_proxy = self.GeologyTableView.selectionModel().selectedRows()
+    #             for idx_proxy in selected_idxs_proxy:
+    #                 selected_idxs.append(self.proxy_geol_coll.mapToSource(idx_proxy))
+    #             for idx in selected_idxs:
+    #                 selected_uids_all.append(self.geol_coll.data(index=idx, role=Qt.DisplayRole))
+    #         elif tab == "tabXSections":
+    #             selected_idxs_proxy = self.XSectionsTableView.selectionModel().selectedRows()
+    #             for idx_proxy in selected_idxs_proxy:
+    #                 selected_idxs.append(self.proxy_xsect_coll.mapToSource(idx_proxy))
+    #             for idx in selected_idxs:
+    #                 selected_uids_all.append(self.xsect_coll.data(index=idx, role=Qt.DisplayRole))
+    #         elif tab == "tabMeshes3D":
+    #             selected_idxs_proxy = self.Meshes3DTableView.selectionModel().selectedRows()
+    #             for idx_proxy in selected_idxs_proxy:
+    #                 selected_idxs.append(self.proxy_mesh3d_coll.mapToSource(idx_proxy))
+    #             for idx in selected_idxs:
+    #                 selected_uids_all.append(self.mesh3d_coll.data(index=idx, role=Qt.DisplayRole))
+    #         elif tab == "tabDOMs":
+    #             selected_idxs_proxy = self.DOMsTableView.selectionModel().selectedRows()
+    #             for idx_proxy in selected_idxs_proxy:
+    #                 selected_idxs.append(self.proxy_dom_coll.mapToSource(idx_proxy))
+    #             for idx in selected_idxs:
+    #                 selected_uids_all.append(self.dom_coll.data(index=idx, role=Qt.DisplayRole))
+    #         elif tab == "tabImages":
+    #             selected_idxs_proxy = self.ImagesTableView.selectionModel().selectedRows()
+    #             for idx_proxy in selected_idxs_proxy:
+    #                 selected_idxs.append(self.proxy_image_coll.mapToSource(idx_proxy))
+    #             for idx in selected_idxs:
+    #                 selected_uids_all.append(self.image_coll.data(index=idx, role=Qt.DisplayRole))
+    #         elif tab == "tabBoundaries":
+    #             selected_idxs_proxy = self.BoundariesTableView.selectionModel().selectedRows()
+    #             for idx_proxy in selected_idxs_proxy:
+    #                 selected_idxs.append(self.proxy_boundary_coll.mapToSource(idx_proxy))
+    #             for idx in selected_idxs:
+    #                 selected_uids_all.append(self.boundary_coll.data(index=idx, role=Qt.DisplayRole))
+    #         elif tab == "tabWells":
+    #             selected_idxs_proxy = self.WellsTableView.selectionModel().selectedRows()
+    #             for idx_proxy in selected_idxs_proxy:
+    #                 selected_idxs.append(self.proxy_well_coll.mapToSource(idx_proxy))
+    #             for idx in selected_idxs:
+    #                 selected_uids_all.append(self.well_coll.data(index=idx, role=Qt.DisplayRole))
+    #         elif tab == "tabFluids":
+    #             selected_idxs_proxy = self.FluidsTableView.selectionModel().selectedRows()
+    #             for idx_proxy in selected_idxs_proxy:
+    #                 selected_idxs.append(self.proxy_well_coll.mapToSource(idx_proxy))
+    #             for idx in selected_idxs:
+    #                 selected_uids_all.append(self.fluids_coll.data(index=idx, role=Qt.DisplayRole))
+    #         elif tab == "tabBackgrounds":
+    #             selected_idxs_proxy = self.BackgroundsTableView.selectionModel().selectedRows()
+    #             for idx_proxy in selected_idxs_proxy:
+    #                 selected_idxs.append(self.proxy_well_coll.mapToSource(idx_proxy))
+    #             for idx in selected_idxs:
+    #                 selected_uids_all.append(self.backgrounds_coll.data(index=idx, role=Qt.DisplayRole))
+    #     return selected_uids_all
 
     def entity_remove(self):
         """Remove entities selected in an attribute table. Just rows completely selected are removed."""
@@ -652,7 +601,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
     def lineations_calculate(self):  # ____________________________________________________ IMPLEMENT THIS FOR POINTS WITH PLUNGE/TREND AND FOR POLYLINES
         """Calculate lineations on geological entities."""
         pass
-    
+
     def build_octree(self):
         if self.selected_uids:
             for uid in self.selected_uids:
@@ -887,7 +836,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.well_legend_df = pd_DataFrame(columns=list(Legend.well_legend_dict.keys()))
         self.fluids_legend_df = pd_DataFrame(columns=list(Legend.fluids_legend_dict.keys()))
         self.backgrounds_legend_df = pd_DataFrame(columns=list(Legend.backgrounds_legend_dict.keys()))
-        
+
         self.others_legend_df = pd_DataFrame(deepcopy(Legend.others_legend_dict))
         self.legend = Legend()
         self.legend.update_widget(parent=self)
@@ -936,7 +885,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         # self.prop_legend_df.to_csv(out_dir_name + '/prop_legend_df.csv', encoding='utf-8', index=False)
 
         self.well_legend_df.to_json(out_dir_name + '/well_legend_table.json', orient='index')
-        
+
         self.fluids_legend_df.to_json(out_dir_name + '/fluids_legend_table.json', orient='index')
 
         self.backgrounds_legend_df.to_json(out_dir_name + '/backgrounds_legend_table.json', orient='index')
@@ -1062,7 +1011,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             pd_writer.SetInputData(self.fluids_coll.get_uid_vtk_obj(uid))
             pd_writer.Write()
             prgs_bar.add_one()
-        
+
         """Save Backgrounds collection table to JSON file and entities as VTK."""
         out_cols = list(self.backgrounds_coll.df.columns)
         out_cols.remove('vtk_obj')
@@ -1379,10 +1328,10 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 vtk_object.trace = pd_reader.GetOutput()
 
 
-                self.well_coll.set_uid_vtk_obj(uid=uid, vtk_obj=vtk_object.trace) 
-                #Don't know if I like it. 
-                #Maybe it's better to always add to the vtkobject column the 
-                # Well and not the WellTrace instance and then call well.trace/head where needed 
+                self.well_coll.set_uid_vtk_obj(uid=uid, vtk_obj=vtk_object.trace)
+                #Don't know if I like it.
+                #Maybe it's better to always add to the vtkobject column the
+                # Well and not the WellTrace instance and then call well.trace/head where needed
                 prgs_bar.add_one()
             self.well_coll.endResetModel()
         self.prop_legend.update_widget(parent=self)
@@ -1425,7 +1374,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             self.geol_coll.endResetModel()
         """Update legend."""
         self.prop_legend.update_widget(parent=self)
-        
+
         """Read fluids table and files. Note beginResetModel() and endResetModel()."""
         if os.path.isfile((in_dir_name + '/fluids_table.csv')) or os.path.isfile((in_dir_name + '/fluids_table.json')):
             self.fluids_coll.beginResetModel()
@@ -1460,7 +1409,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             self.fluids_coll.endResetModel()
         """Update legend."""
         self.prop_legend.update_widget(parent=self)
-        
+
         """Read Backgrounds table and files. Note beginResetModel() and endResetModel()."""
         if os.path.isfile((in_dir_name + '/backgrounds_table.csv')) or os.path.isfile((in_dir_name + '/backgrounds_table.json')):
             self.backgrounds_coll.beginResetModel()
@@ -1611,7 +1560,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             self.prop_legend.update_widget(parent=self)
         else:
             return
-        
+
         # loc_attr_list = ['As is','LocationID', 'LocationType', 'Easting', 'Northing', 'GroundLevel', 'FinalDepth', 'Trend', 'Plunge','N.a.']
 
         # data_attr_list = ['As is','LocationID','DepthTop', 'DepthBase','DepthPoint','GeologyCode','N.a.']
