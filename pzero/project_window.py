@@ -271,24 +271,24 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 selected_idxs.append(self.proxy_boundary_coll.mapToSource(idx_proxy))
             for idx in selected_idxs:
                 selected_uids.append(self.boundary_coll.data(index=idx, role=Qt.DisplayRole))
-        # elif self.shown_table == "tabWells":
-        #     selected_idxs_proxy = self.WellsTableView.selectionModel().selectedRows()
-        #     for idx_proxy in selected_idxs_proxy:
-        #         selected_idxs.append(self.proxy_well_coll.mapToSource(idx_proxy))
-        #     for idx in selected_idxs:
-        #         selected_uids.append(self.well_coll.data(index=idx, role=Qt.DisplayRole))
-        # elif self.shown_table == "tabFluids":
-        #     selected_idxs_proxy = self.FluidsTableView.selectionModel().selectedRows()
-        #     for idx_proxy in selected_idxs_proxy:
-        #         selected_idxs.append(self.proxy_fluids_coll.mapToSource(idx_proxy))
-        #     for idx in selected_idxs:
-        #         selected_uids.append(self.fluids_coll.data(index=idx, role=Qt.DisplayRole))
-        # elif self.shown_table == "tabBackgrounds":
-        #     selected_idxs_proxy = self.BackgroundsTableView.selectionModel().selectedRows()
-        #     for idx_proxy in selected_idxs_proxy:
-        #         selected_idxs.append(self.proxy_backgrounds_coll.mapToSource(idx_proxy))
-        #     for idx in selected_idxs:
-        #         selected_uids.append(self.backgrounds_coll.data(index=idx, role=Qt.DisplayRole))
+        elif self.shown_table == "tabWells":
+            selected_idxs_proxy = self.WellsTableView.selectionModel().selectedRows()
+            for idx_proxy in selected_idxs_proxy:
+                selected_idxs.append(self.proxy_well_coll.mapToSource(idx_proxy))
+            for idx in selected_idxs:
+                selected_uids.append(self.well_coll.data(index=idx, role=Qt.DisplayRole))
+        elif self.shown_table == "tabFluids":
+            selected_idxs_proxy = self.FluidsTableView.selectionModel().selectedRows()
+            for idx_proxy in selected_idxs_proxy:
+                selected_idxs.append(self.proxy_fluids_coll.mapToSource(idx_proxy))
+            for idx in selected_idxs:
+                selected_uids.append(self.fluids_coll.data(index=idx, role=Qt.DisplayRole))
+        elif self.shown_table == "tabBackgrounds":
+            selected_idxs_proxy = self.BackgroundsTableView.selectionModel().selectedRows()
+            for idx_proxy in selected_idxs_proxy:
+                selected_idxs.append(self.proxy_backgrounds_coll.mapToSource(idx_proxy))
+            for idx in selected_idxs:
+                selected_uids.append(self.backgrounds_coll.data(index=idx, role=Qt.DisplayRole))
         return selected_uids
 
     #[Gabriele] This is should be used for cross collection operations (e.g. cut surfaces in the geology table with the DEM).
