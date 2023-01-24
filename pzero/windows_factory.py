@@ -9,7 +9,7 @@ from PyQt5.QtGui import QCloseEvent,QFont
 """PZero imports"""
 from .base_view_window_ui import Ui_BaseViewWindow
 from .entities_factory import VertexSet, PolyLine, TriSurf, TetraSolid, XsVertexSet, XsPolyLine, DEM, PCDom, MapImage, Voxet, XsVoxet, Plane, Seismics, XsTriSurf, XsImage, PolyData, Well, WellMarker,WellTrace,Attitude
-from .helper_dialogs import input_one_value_dialog, input_text_dialog, input_combo_dialog, message_dialog, options_dialog, multiple_input_dialog, tic, toc,open_file_dialog,progress_dialog
+from .helper_dialogs import input_one_value_dialog, input_text_dialog, input_combo_dialog, message_dialog, options_dialog, multiple_input_dialog, tic, toc,open_file_dialog,progress_dialog,general_input_dialog
 from .geological_collection import GeologicalCollection
 from copy import deepcopy
 from uuid import uuid4
@@ -6062,7 +6062,7 @@ class newView2D(BaseView):
         def digitize(event):
             xyz.append(list(event))
             points = np_array(xyz).reshape(-1,3)
-            points[:,2] += 0.01 #without this the final line coincides exactly with the map thus giving visualization problems in map view.
+            # points[:,2] += 0.01 #without this the final line coincides exactly with the map thus giving visualization problems in map view.
             poly = pv_lines_from_points(points)
             
             name = line_dict['name']
@@ -6090,6 +6090,7 @@ class newView2D(BaseView):
                 self.parent.geol_coll.add_entity_from_dict(line_dict)
                 self.plotter.remove_actor(f'line_{actor_name}')
                 self.plotter.remove_actor(f'point_{actor_name}')
+                print(line_dict['vtk_obj'].points_W)
                 
 
         
@@ -6123,7 +6124,7 @@ class newView2D(BaseView):
         elif isinstance(self, newViewXsection):
             line_dict['topological_type'] = 'XsPolyLine'
             line_dict['x_section'] = self.this_x_section_uid
-            line_dict['vtk_obj'] = XsPolyLine()
+            line_dict['vtk_obj'] = XsPolyLine(x_section_uid=self.this_x_section_uid, parent=self.parent)
         else:
             """Un-Freeze QT interface"""
             for action in self.findChildren(QAction):
@@ -6381,7 +6382,6 @@ class newViewXsection(newView2D):
                 self.actors_df = self.actors_df.append({'uid': uid, 'actor': this_actor, 'show': False, 'collection': 'dom_coll', 'show_prop': None}, ignore_index=True)
         for uid in self.parent.image_coll.df['uid'].tolist():
             if self.parent.image_coll.get_uid_x_section(uid) == sec_uid:
-            
                 this_actor = self.show_actor_with_property(uid=uid, collection='image_coll', show_property=None, visible=False)
                 self.actors_df = self.actors_df.append({'uid': uid, 'actor': this_actor, 'show': False, 'collection': 'image_coll', 'show_prop': None}, ignore_index=True)
         for uid in self.parent.well_coll.df['uid'].tolist():
@@ -6391,10 +6391,10 @@ class newViewXsection(newView2D):
             if self.parent.fluids_coll.get_uid_x_section(uid) == sec_uid:
                 this_actor = self.show_actor_with_property(uid=uid, collection='fluids_coll', show_property=None, visible=False)
                 self.actors_df = self.actors_df.append({'uid': uid, 'actor': this_actor, 'show': False, 'collection': 'fluids_coll', 'show_prop': None}, ignore_index=True)
-        for uid in self.parent.fritti_coll.df['uid'].tolist():
-            if self.parent.fritti_coll.get_uid_x_section(uid) == sec_uid:
-                this_actor = self.show_actor_with_property(uid=uid, collection='fritti_coll', show_property=None, visible=False)
-                self.actors_df = self.actors_df.append({'uid': uid, 'actor': this_actor, 'show': False, 'collection': 'fritti_coll', 'show_prop': None}, ignore_index=True)     
+        for uid in self.parent.backgrounds_coll.df['uid'].tolist():
+            if self.parent.backgrounds_coll.get_uid_x_section(uid) == sec_uid:
+                this_actor = self.show_actor_with_property(uid=uid, collection='backgrounds_coll', show_property=None, visible=False)
+                self.actors_df = self.actors_df.append({'uid': uid, 'actor': this_actor, 'show': False, 'collection': 'backgrounds_coll', 'show_prop': None}, ignore_index=True)     
 
     def change_actor_color(self, uid=None, collection=None):
         sec_uid = self.this_x_section_uid
@@ -6433,10 +6433,10 @@ class newViewXsection(newView2D):
                 color_R = self.parent.fluids_coll.get_uid_legend(uid=uid)['color_R']
                 color_G = self.parent.fluids_coll.get_uid_legend(uid=uid)['color_G']
                 color_B = self.parent.fluids_coll.get_uid_legend(uid=uid)['color_B']            
-            elif collection == 'fritti_coll':
-                color_R = self.parent.fritti_coll.get_uid_legend(uid=uid)['color_R']
-                color_G = self.parent.fritti_coll.get_uid_legend(uid=uid)['color_G']
-                color_B = self.parent.fritti_coll.get_uid_legend(uid=uid)['color_B']        
+            elif collection == 'backgrounds_coll':
+                color_R = self.parent.backgrounds_coll.get_uid_legend(uid=uid)['color_R']
+                color_G = self.parent.backgrounds_coll.get_uid_legend(uid=uid)['color_G']
+                color_B = self.parent.backgrounds_coll.get_uid_legend(uid=uid)['color_B']        
             """Note: no legend for image."""
             """Update color for actor uid"""
             color_RGB = [color_R / 255, color_G / 255, color_B / 255]
@@ -6488,11 +6488,11 @@ class newViewXsection(newView2D):
                 else:
                     self.actors_df.loc[self.actors_df['uid'] == uid, 'actor'].values[0].GetProperty().SetLineWidth(line_thick)
             
-        elif collection == 'fritti_coll':
+        elif collection == 'backgrounds_coll':
             if attr.get_uid_x_section(uid) == sec_uid:
-                line_thick = self.parent.fritti_coll.get_uid_legend(uid=uid)['line_thick']
+                line_thick = self.parent.backgrounds_coll.get_uid_legend(uid=uid)['line_thick']
             
-                if isinstance(self.parent.fritti_coll.get_uid_vtk_obj(uid),VertexSet):
+                if isinstance(self.parent.backgrounds_coll.get_uid_vtk_obj(uid),VertexSet):
                     self.actors_df.loc[self.actors_df['uid'] == uid, 'actor'].values[0].GetProperty().SetPointSize(line_thick)
                 else:
                     self.actors_df.loc[self.actors_df['uid'] == uid, 'actor'].values[0].GetProperty().SetLineWidth(line_thick)    
