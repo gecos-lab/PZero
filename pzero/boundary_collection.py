@@ -45,6 +45,12 @@ def boundary_from_points(self):
     draw the vector multiple times if modifications are necessary"""
     while True:
         self.vector_by_mouse(verbose=True)
+        if not self.vbm_U0:
+            print("Zero-length vector")
+            """Un-Freeze QT interface"""
+            for action in self.findChildren(QAction):
+                action.setEnabled(True)
+            return
         boundary_dict_in = {'warning': ['Boundary from points', 'Build new Boundary from a user-drawn line that represents the horizontal diagonal\nof the Bounding box.\nOnce drawn, values can be modified from keyboard or by drawing another vector.', 'QLabel'],
                             'name': ['Insert Boundary name', 'new_boundary', 'QLineEdit'],
                             'origin_x': ['Insert origin X coord', self.vbm_U0, 'QLineEdit'],

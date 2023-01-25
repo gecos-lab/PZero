@@ -194,6 +194,10 @@ def edit_line(self):
                 range = 10
             """Drag vertex to edit."""
             self.vector_by_mouse(verbose=True)
+            if not self.vbm_U0:
+                print("Zero-length vector")
+                self.vector_by_mouse_dU = 0
+                self.vector_by_mouse_dV = 0
             if isinstance(self, ViewMap):
                 self.parent.geol_coll.get_uid_vtk_obj(current_uid).points_X[vertex_ind] = self.parent.geol_coll.get_uid_vtk_obj(current_uid).points_X[vertex_ind] + self.vector_by_mouse_dU
                 self.parent.geol_coll.get_uid_vtk_obj(current_uid).points_Y[vertex_ind] = self.parent.geol_coll.get_uid_vtk_obj(current_uid).points_Y[vertex_ind] + self.vector_by_mouse_dV
@@ -261,6 +265,10 @@ def move_line(self):
     current_uid = self.selected_uids[0]
     """Editing loop."""
     self.vector_by_mouse(verbose=True)
+    if not self.vbm_U0:
+        print("Zero-length vector")
+        self.vector_by_mouse_dU = 0
+        self.vector_by_mouse_dV = 0
     """For some reason in the following the [:] is needed."""
     if isinstance(self, ViewMap):
         self.parent.geol_coll.get_uid_vtk_obj(current_uid).points_X[:] = self.parent.geol_coll.get_uid_vtk_obj(current_uid).points_X[:] + self.vector_by_mouse_dU
@@ -1353,6 +1361,15 @@ def copy_similar(self):  # this must be done per-part___________________________
     inZ = self.parent.geol_coll.get_uid_vtk_obj(input_uid).points_Z
     """Get similar folding vector."""
     self.vector_by_mouse(verbose=True)
+    if not self.vbm_U0:
+        """Deselect input line."""
+        self.selected_uids = []
+        self.parent.geology_geom_modified_signal.emit([input_uid])  # emit uid as list to force redraw()
+        print("Zero-length vector")
+        """Un-Freeze QT interface"""
+        for action in self.findChildren(QAction):
+            action.setEnabled(True)
+        return
     """Create output line."""
     if isinstance(self, ViewMap):
         outX = inX + self.vector_by_mouse_dU
@@ -1397,6 +1414,10 @@ def measure_distance(self):
         if isinstance(action.parentWidget(), NavigationToolbar) is False:
             action.setDisabled(True)
     self.vector_by_mouse(verbose=True)
+    if not self.vbm_U0:
+        print("Zero-length vector")
+        self.vector_by_mouse_azimuth = 0
+        self.vector_by_mouse_length = 0
     message = "Distance (m): " + str(round(self.vector_by_mouse_length, 2)) + "\n\n" + "Azimuth: " + str(round(self.vector_by_mouse_azimuth, 2))
     out = message_dialog(title="Measure Distance", message=message)
     """Un-Freeze QT interface"""

@@ -51,6 +51,12 @@ def section_from_azimuth(self):
     It is therefore necessary in section_dict_in to implement the right type for each variable."""
     while True:
         self.vector_by_mouse(verbose=True)
+        if not self.vbm_U0:
+            print("Zero-length vector")
+            """Un-Freeze QT interface"""
+            for action in self.findChildren(QAction):
+                action.setEnabled(True)
+            return
         section_dict_in = {'warning': ['XSection from azimuth', 'Build new XSection from a user-drawn line.\nOnce drawn, values can be modified from keyboard\nor by drawing another vector.', 'QLabel'],
                                    'name': ['Insert Xsection name', 'new_section', 'QLineEdit'],
                                    'base_x': ['Insert origin X coord', self.vbm_U0, 'QLineEdit'],
@@ -127,7 +133,7 @@ def section_from_points(self, drawn = True, section_dict_updt=None):
         while True:
             self.vector_by_mouse(verbose=True)
             if not self.vbm_U0:
-                print("...")
+                print("Zero-length vector")
                 """Un-Freeze QT interface"""
                 for action in self.findChildren(QAction):
                     action.setEnabled(True)
