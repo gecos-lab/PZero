@@ -110,6 +110,7 @@ def section_from_azimuth(self):
     for action in self.findChildren(QAction):
         action.setEnabled(True)
 
+
 def section_from_points(self, drawn = True, section_dict_updt=None):
     """Create a new cross section from origin and azimuth"""
     section_dict = deepcopy(self.parent.xsect_coll.section_dict)
@@ -125,6 +126,12 @@ def section_from_points(self, drawn = True, section_dict_updt=None):
         self.text_msg.set_text("Draw a vector with mouse to represent the new XSection")
         while True:
             self.vector_by_mouse(verbose=True)
+            if not self.vbm_U0:
+                print("...")
+                """Un-Freeze QT interface"""
+                for action in self.findChildren(QAction):
+                    action.setEnabled(True)
+                return
             section_dict_in = {'warning': ['XSection from points', 'Build new XSection from a user-drawn line.\nOnce drawn, values can be modified from keyboard\nor by drawing another vector.', 'QLabel'],
                                        'name': ['Insert Xsection name', 'new_section', 'QLineEdit'],
                                        'base_x': ['Insert origin X coord', self.vbm_U0, 'QLineEdit'],
@@ -236,8 +243,7 @@ def sections_from_file(self):
                         # [Gabriele] When the END of the entry is reached create a section
                         section_dict_updt['top'] = top_bottom['top']
                         section_dict_updt['bottom'] = top_bottom['bottom']
-                        section_from_points(self,drawn = False,
-                                            section_dict_updt=section_dict_updt)
+                        section_from_points(self,drawn = False, section_dict_updt=section_dict_updt)
     elif extension == '.dat':
         for file in files:
             sep = auto_sep(file)
@@ -252,8 +258,7 @@ def sections_from_file(self):
                 section_dict_updt['end_y'] = pd_df.loc[(pd_df['Name'] == trace) & (pd_df['Vertex Index'] == 2)]['y'].values
                 section_dict_updt['top'] = top_bottom['top']
                 section_dict_updt['bottom'] = top_bottom['bottom']
-                section_from_points(self,drawn = False,
-                                    section_dict_updt=section_dict_updt)
+                section_from_points(self,drawn = False, section_dict_updt=section_dict_updt)
 
 
 
