@@ -27,6 +27,7 @@ from numpy import arctan2 as np_arctan2
 from numpy import sqrt as np_sqrt
 from numpy import pi as np_pi
 from numpy import array as np_array
+from numpy import square as np_square
 
 from pandas import DataFrame as pd_DataFrame
 from pandas import unique as pd_unique
@@ -36,7 +37,7 @@ from pandas import unique as pd_unique
 # import vtk.numpy_interface.dataset_adapter as dsa
 from vtk.util import numpy_support
 from vtkmodules.vtkInteractionWidgets import vtkCameraOrientationWidget
-from vtk import vtkExtractPoints,vtkSphere,vtkAreaPicker,vtkPropPicker
+from vtk import vtkExtractPoints,vtkSphere,vtkAreaPicker,vtkPropPicker,vtkImageTracerWidget,vtkDistanceWidget
 
 """3D plotting imports"""
 from pyvista import global_theme as pv_global_theme
@@ -48,6 +49,7 @@ from pyvista import PolyData as pvPolyData
 from pyvista import PointSet as pvPointSet
 from pyvista import Plotter as pv_plot
 from pyvista import lines_from_points as pv_lines_from_points
+import pyvista as pv
 
 """2D plotting imports"""
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
@@ -3059,7 +3061,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
     def add_all_entities(self):
         """Add all entities in project collections. This must be reimplemented for cross-sections in order
         to show entities belonging to the section only. All objects are visible by default -> show = True"""
-        for uid in self.parent.geol_coll.df['uid'].tolist():
+        for index,uid in enumerate(self.parent.geol_coll.df['uid'].tolist()):
             this_actor = self.show_actor_with_property(uid=uid, collection='geol_coll', show_property=None, visible=True)
             self.actors_df = self.actors_df.append({'uid': uid, 'actor': this_actor, 'show': True, 'collection': 'geol_coll', 'show_prop': None}, ignore_index=True)
         for uid in self.parent.xsect_coll.df['uid'].tolist():
@@ -3663,7 +3665,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.toolBarBase.addAction(self.removeEntityButton)  # add action to toolbar
         
         self.clearSelectionButton = QAction('Clear Selection', self)  # create action
-        self.clearSelectionButton.triggered.connect(self.clear_selected)  # connect action to function
+        self.clearSelectionButton.triggered.connect(self.clear_selection)  # connect action to function
         self.menuBaseView.addAction(self.clearSelectionButton)  # add action to menu
         self.toolBarBase.addAction(self.clearSelectionButton)  # add action to toolbar
 
@@ -3758,37 +3760,53 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             action.setEnabled(True)
     
     def remove_entity(self):
+        for sel_uid in self.selected_uids:
+            self.plotter.remove_actor(f'{sel_uid}_silh')
         self.parent.entity_remove()
-        self.clear_selected()
         
     
     ''' Picking general functions '''
 
-    def actor_in_table(self,sel_actors=None):
+    def actor_in_table(self,sel_uid=None):
         ''' Function used to highlight in the table view a list of selected actors'''
-        if sel_actors:
+        
+        if sel_uid:
             '''[Gabriele] To select the mesh in the entity list we compare the actors of the actors_df dataframe
             with the picker.GetActor() result'''
             self.parent.GeologyTableView.clearSelection()
-            if len(sel_actors) > 1:
+            if len(sel_uid) > 1:
                 self.parent.GeologyTableView.setSelectionMode(QAbstractItemView.MultiSelection)
             
-            for actor in sel_actors:
-                sel_uid = self.actors_df.loc[self.actors_df['actor'] == actor,'uid'].values[0]        
-                idx = self.actors_df.loc[self.actors_df['uid'] == sel_uid].index[0]
-                self.parent.GeologyTableView.selectRow(idx)
+            # In general this approach is not the best. 
+            # In the actors_df the index of the df is indipendent from the index of the table views.
+            # We could have 6 entities 5 of which are in the geology tab and 1 in the image tab.
+            # When selecting the image the actors_df index could be anything from 0 to 5 (depends on the add_all_entities order) 
+            # but in the table view is 0 thus returning nothing.
+            # To resolve this we could:
+            #   1. Create a actor_df for each collection
+            #   2. Have a general actors_df with a table_index value (that needs to be updated when adding or removing objects)
+            #   3. Have a selected_entities_df indipendent from the tables or views that collects the selected actors (both in the table or in the view)
+            
+            for uid in sel_uid:       
+                idx = self.actors_df.loc[self.actors_df['uid'] == uid].index[0]
+                coll = self.actors_df.loc[self.actors_df['uid'] == uid,'collection'].values[0]
+                
+                if coll == 'geol_coll':
+                    self.parent.GeologyTableView.selectRow(idx)
+                elif coll == 'image_coll':
+                    self.parent.ImagesTableView.selectRow(idx)
                 # return
         else:
             self.parent.GeologyTableView.clearSelection()
-    
+            self.selected_uids = []
+
     def select_actor_with_mouse(self):
         ''' Function used to initiate actor selection'''
-        self.selected_actors = []
         self.disable_actions()
         self.plotter.iren.interactor.AddObserver('LeftButtonPressEvent', self.select_actor)
         # self.plotter.iren.interactor.AddObserver('KeyPressEvent',self.clear_selected)
         self.plotter.track_click_position(self.end_pick)
-        self.plotter.add_key_event('c',self.clear_selected)   
+        self.plotter.add_key_event('c',self.clear_selection)   
 
     def end_pick(self,pos):
         '''Function used to disable actor picking'''
@@ -3801,12 +3819,18 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             self.plotter.enable_image_style()
         
         self.plotter.reset_key_events()
+        self.selected_uids = self.parent.selected_uids
         self.enable_actions()
     
-    def clear_selected(self):
+    def clear_selection(self):
         for av_actor in self.plotter.renderer.actors.copy():
             if '_silh' in av_actor:
                 self.plotter.remove_actor(av_actor)
+        
+        if not self.selected_uids == []:
+            deselected_uids = self.selected_uids
+            self.selected_uids = []
+            self.parent.geology_geom_modified_signal.emit(deselected_uids)  # emit uid as list to force redraw
         self.actor_in_table()
     
     def select_actor(self,obj,event):
@@ -3823,15 +3847,17 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         actors = set(self.plotter.renderer.actors)
         
         actor = picker.GetActor()
+
+        sel_uid = self.actors_df.loc[self.actors_df['actor']==actor,'uid'].values[0]
         if shift:
-            self.selected_actors.append(actor)
+            self.selected_uids.append(sel_uid)
         else:
-            self.selected_actors = [actor]
+            self.selected_uids = [sel_uid]
         
-        for sel_actor in self.selected_actors:
+        for sel_uid in self.selected_uids:
+            sel_actor = self.actors_df.loc[self.actors_df['uid']==sel_uid,'actor'].values[0]
             mesh = sel_actor.GetMapper().GetInput()
-            addr = mesh.GetAddressAsString('')
-            name = f'{addr}_silh'
+            name = f'{sel_uid}_silh'
             name_list.add(name)
 
             self.plotter.add_mesh(mesh,pickable=False,name=name,color='Yellow',style='wireframe',line_width=5)
@@ -3841,7 +3867,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                 if '_silh' in av_actor:
                     self.plotter.remove_actor(av_actor)
         
-        self.actor_in_table(self.selected_actors)
+        self.actor_in_table(self.selected_uids)
     
     # """All following functions must be re-implemented in derived classes - they appear here just as placeholders"""
 
@@ -3925,6 +3951,7 @@ class View3D(BaseView):
         self.toggle_bore_litho = -1
 
         self.trigger_event = 'LeftButtonPressEvent'
+        
     """Re-implementations of functions that appear in all views - see placeholders in BaseView()"""
 
     def initialize_menu_tools(self):
@@ -4430,7 +4457,7 @@ class View2D(BaseView):
         self.toolBarBase.addAction(self.sortLineButton)  # add action to toolbar
 
         self.moveLineButton = QAction('Move line', self)  # create action
-        self.moveLineButton.triggered.connect(lambda: move_line(self))  # connect action to function
+        self.moveLineButton.triggered.connect(self.vector_by_mouse)  # connect action to function
         self.menuBaseView.addAction(self.moveLineButton)  # add action to menu
         self.toolBarBase.addAction(self.moveLineButton)  # add action to toolbar
 
@@ -5954,11 +5981,19 @@ class newView2D(BaseView):
         self.plotter.enable_parallel_projection()
         self.trigger_event = 'LeftButtonReleaseEvent'
 
+        self.tracer = vtkImageTracerWidget()
+        self.tracer.SetInteractor(self.plotter.iren.interactor)
+        self.tracer.GetLineProperty().SetLineWidth(5)
+        self.tracer.AutoCloseOn()
+        self.vector_by_mouse_dU = None
+        self.vector_by_mouse_dV = None
+
     """Re-implementations of functions that appear in all views - see placeholders in BaseView()"""
 
     def initialize_menu_tools(self):
-        """Imports for this view."""
         from .two_d_lines import draw_line, edit_line, sort_line_nodes, move_line, rotate_line, extend_line, split_line_line, split_line_existing_point, merge_lines, snap_line, resample_line_distance, resample_line_number_points, simplify_line, copy_parallel, copy_kink, copy_similar, measure_distance
+
+        """Imports for this view."""
         """Customize menus and tools for this view"""
         super().initialize_menu_tools()
         self.menuBaseView.setTitle("Edit")
@@ -5970,7 +6005,7 @@ class newView2D(BaseView):
         self.toolBarBase.addAction(self.drawLineButton)  # add action to toolbar
 
         self.editLineButton = QAction('Edit line', self)  # create action
-        self.editLineButton.triggered.connect(lambda: edit_line(self))  # connect action to function
+        self.editLineButton.triggered.connect(self.edit_line)  # connect action to function
         self.menuBaseView.addAction(self.editLineButton)  # add action to menu
         self.toolBarBase.addAction(self.editLineButton)  # add action to toolbar
 
@@ -5980,7 +6015,7 @@ class newView2D(BaseView):
         self.toolBarBase.addAction(self.sortLineButton)  # add action to toolbar
 
         self.moveLineButton = QAction('Move line', self)  # create action
-        self.moveLineButton.triggered.connect(lambda: move_line(self))  # connect action to function
+        self.moveLineButton.triggered.connect(self.vector_by_mouse)  # connect action to function
         self.menuBaseView.addAction(self.moveLineButton)  # add action to menu
         self.toolBarBase.addAction(self.moveLineButton)  # add action to toolbar
 
@@ -6049,31 +6084,19 @@ class newView2D(BaseView):
         self.menuBaseView.addAction(self.measureDistanceButton)  # add action to menu
         self.toolBarBase.addAction(self.measureDistanceButton)  # add action to toolbar
     
-    def clear_selection(self):
-        """Clear all possible selected elements in view. Resets selection."""
-        if not self.selected_uids == []:
-            deselected_uids = self.selected_uids
-            self.selected_uids = []
-            self.parent.geology_geom_modified_signal.emit(deselected_uids)  # emit uid as list to force redraw
-
     def draw_line(self):
-        xyz = []
-        
-        def digitize(event):
-            xyz.append(list(event))
-            points = np_array(xyz).reshape(-1,3)
-            # points[:,2] += 0.01 #without this the final line coincides exactly with the map thus giving visualization problems in map view.
-            poly = pv_lines_from_points(points)
-            
-            name = line_dict['name']
-            # plotter.add_points(np.array(xyz))
-            self.plotter.add_mesh(poly,name=f'line_{name}')
-            self.plotter.add_points(np_array(xyz),name=f'point_{name}')
-        
+        print(self.selected_uids)
+        # if 'base_grid' not in self.plotter.renderer.actors:
+        #     grid = pv.Plane(i_size=100,j_size=100)
+        #     actor = self.plotter.add_mesh(grid,name='base_grid')
+        # else:
+        #     actor = self.plotter.renderer.actors['base_grid']
+        # actor.SetVisibility(True)
         def end_digitize(event):
 
-            ''' Strange backfiring signal that triggers n times this function depending on the number of entitites
-            To avoid this we can filter already existing objects by checking if the line_dict has the uid or not.'''
+            ''' Strange backfiring signal that triggers n times this function depending on the number of entitites (try print(line_dict['name'])). 
+            To avoid this we can filter already existing objects by checking if the line_dict has the uid or not. --> Needs to be investigated '''
+            # print(line_dict['name'])
             self.plotter.untrack_click_position(side='left')
             self.plotter.untrack_click_position(side='right')
 
@@ -6083,56 +6106,138 @@ class newView2D(BaseView):
             if line_dict['uid']:
                 return
             else:
-                vtk_obj = self.plotter.renderer.actors[f'line_{actor_name}'].mapper.dataset
-                old_vtk_obj = line_dict['vtk_obj']
-                old_vtk_obj.ShallowCopy(vtk_obj)
-                line_dict['vtk_obj'] = old_vtk_obj
+                # vtk_obj = self.plotter.renderer.actors[f'line_{actor_name}'].mapper.dataset
+                # old_vtk_obj = line_dict['vtk_obj']
+                # old_vtk_obj.ShallowCopy(vtk_obj)
+                # line_dict['vtk_obj'] = old_vtk_obj
+                self.tracer.GetPath(line_dict['vtk_obj'])
                 self.parent.geol_coll.add_entity_from_dict(line_dict)
-                self.plotter.remove_actor(f'line_{actor_name}')
-                self.plotter.remove_actor(f'point_{actor_name}')
-                print(line_dict['vtk_obj'].points_W)
-                
-
+                self.tracer.Off()
+                self.plotter.renderer.actors['base_grid'].SetVisibility(False)
+                # self.plotter.remove_actor(f'point_{actor_name}')
         
-        """Freeze QT interface"""
-        self.disable_actions()
-        """Deselect all previously selected actors."""
-        if not self.selected_uids == []:
-            deselected_uids = self.selected_uids
-            self.selected_uids = []
-            self.parent.geology_geom_modified_signal.emit(deselected_uids)  # emit uid as list to force redraw
-        """Create deepcopy of the geological entity dictionary."""
-        line_dict = deepcopy(self.parent.geol_coll.geological_entity_dict)
+        if len(self.parent.selected_uids)>0:
+            
+            sel_uid = self.selected_uids[0]
+            sel_actor = self.actors_df.loc[self.actors_df['uid']==sel_uid,'actor'].values[0]
+            coll = self.actors_df.loc[self.actors_df['uid']==sel_uid,'collection'].values[0]            
+            """Freeze QT interface"""
+            self.disable_actions()
+            """Deselect all previously selected actors."""
+            if not self.selected_uids == []:
+                deselected_uids = self.selected_uids
+                self.selected_uids = []
+                if coll == 'geol_coll':
+                    self.parent.geology_geom_modified_signal.emit(deselected_uids)  # emit uid as list to force redraw
+                    
+            """Create deepcopy of the geological entity dictionary."""
+            line_dict = deepcopy(self.parent.geol_coll.geological_entity_dict)
 
-        """One dictionary is set as input for a general widget of multiple-value-input"""
-        line_dict_in = {'name': ['PolyLine name: ', 'new_pline'], 'geological_type': ['Geological type: ', GeologicalCollection.valid_geological_types], 'geological_feature': ['Geological feature: ', self.parent.geol_legend_df['geological_feature'].tolist()], 'scenario': ['Scenario: ', list(set(self.parent.geol_legend_df['scenario'].tolist()))]}
-        line_dict_updt = multiple_input_dialog(title='Digitize new PolyLine', input_dict=line_dict_in)
-        """Check if the output of the widget is empty or not. If the Cancel button was clicked, the tool quits"""
-        
-        if line_dict_updt is None:
-            """Un-Freeze QT interface"""
-            for action in self.findChildren(QAction):
-                action.setEnabled(True)
-            return
-        """Getting the values that have been typed by the user through the widget"""
-        for key in line_dict_updt:
-            line_dict[key] = line_dict_updt[key]
-        if isinstance(self, newViewMap):
-            line_dict['topological_type'] = 'PolyLine'
-            line_dict['vtk_obj'] = PolyLine()
-            line_dict['x_section'] = None
-        elif isinstance(self, newViewXsection):
-            line_dict['topological_type'] = 'XsPolyLine'
-            line_dict['x_section'] = self.this_x_section_uid
-            line_dict['vtk_obj'] = XsPolyLine(x_section_uid=self.this_x_section_uid, parent=self.parent)
+            """One dictionary is set as input for a general widget of multiple-value-input"""
+            line_dict_in = {'name': ['PolyLine name: ', 'new_pline'], 'geological_type': ['Geological type: ', GeologicalCollection.valid_geological_types], 'geological_feature': ['Geological feature: ', self.parent.geol_legend_df['geological_feature'].tolist()], 'scenario': ['Scenario: ', list(set(self.parent.geol_legend_df['scenario'].tolist()))]}
+            line_dict_updt = multiple_input_dialog(title='Digitize new PolyLine', input_dict=line_dict_in)
+            """Check if the output of the widget is empty or not. If the Cancel button was clicked, the tool quits"""
+            
+            if line_dict_updt is None:
+                """Un-Freeze QT interface"""
+                for action in self.findChildren(QAction):
+                    action.setEnabled(True)
+                return
+            """Getting the values that have been typed by the user through the widget"""
+            for key in line_dict_updt:
+                line_dict[key] = line_dict_updt[key]
+            if isinstance(self, newViewMap):
+                line_dict['topological_type'] = 'PolyLine'
+                line_dict['vtk_obj'] = PolyLine()
+                line_dict['x_section'] = None
+            elif isinstance(self, newViewXsection):
+                line_dict['topological_type'] = 'XsPolyLine'
+                line_dict['x_section'] = self.this_x_section_uid
+                line_dict['vtk_obj'] = XsPolyLine(x_section_uid=self.this_x_section_uid, parent=self.parent)
+            else:
+                """Un-Freeze QT interface"""
+                for action in self.findChildren(QAction):
+                    action.setEnabled(True)
+                return
+            self.tracer.SetViewProp(sel_actor)
+            self.tracer.On()
+            # self.plotter.track_click_position(callback=lambda event: digitize(event),side='left')
+            self.plotter.track_click_position(callback=lambda event: end_digitize(event),side='right')
+
         else:
-            """Un-Freeze QT interface"""
-            for action in self.findChildren(QAction):
-                action.setEnabled(True)
-            return
+            print('No actor to draw on')
+        # xyz = []
+        
+        # def digitize(event):
+        #     xyz.append(list(event))
+        #     points = np_array(xyz).reshape(-1,3)
+        #     # points[:,2] += 0.01 #without this the final line coincides exactly with the map thus giving visualization problems in map view.
+        #     poly = pv_lines_from_points(points)
+            
+        #     name = line_dict['name']
+        #     # plotter.add_points(np.array(xyz))
+        #     self.plotter.add_mesh(poly,name=f'line_{name}')
+        #     self.plotter.add_points(np_array(xyz),name=f'point_{name}')
+
+    def edit_line(self):
+
+        def end_edit(event):
+
+            ''' Strange backfiring signal that triggers n times this function depending on the number of entitites (try print(line_dict['name'])). 
+            To avoid this we can filter already existing objects by checking if the line_dict has the uid or not. --> Needs to be investigated '''
+            # print(line_dict['name'])
+            self.plotter.untrack_click_position(side='left')
+            self.plotter.untrack_click_position(side='right')
+
+            self.enable_actions()
+            
+            self.tracer.GetPath(data)
+            self.tracer.Off()
+            self.plotter.renderer.actors['base_grid'].SetVisibility(False)
+
+
+        sel_uid = self.selected_uids
+        actor = self.plotter.renderer.actors[sel_uid[0]]
+        data = actor.mapper.dataset
+        # self.tracer.SetInputData(data)
+        self.tracer.InitializeHandles(data.GetPoints())
+        self.tracer.On()
+        self.plotter.track_click_position(side='left',callback=end_edit)
+
+    def vector_by_mouse(self):
+        from .two_d_lines import move_line
+        
+        ''' I want to detect left and drag but I cannot find a clear way to do it. For now this will do'''
+        xyz = []
+        self.disable_actions()
+        
+        def digitize(event):
+            xyz.append(list(event))
+            points = np_array(xyz).reshape(-1,3)
+            # points[:,2] += 0.01 #without this the final line coincides exactly with the map thus giving visualization problems in map view.
+            poly = pv_lines_from_points(points)
     
-        self.plotter.track_click_position(callback=lambda event: digitize(event),side='left')
-        self.plotter.track_click_position(callback=lambda event: end_digitize(event),side='right')
+            # plotter.add_points(np.array(xyz))
+            self.plotter.add_mesh(poly,name=f'line_vector')
+            self.plotter.add_points(points,name=f'point_vector')
+            if len(xyz) == 2:
+                self.plotter.untrack_click_position(side='left')
+                points = self.plotter.renderer.actors['line_vector'].mapper.dataset.points
+
+                deltas = points[1,:] - points[0,:]
+                length = np_sqrt(np_square(deltas[0])+np_square(deltas[1])) #there should be a numpy function that calculates length and az
+                az = degrees(np_arctan2(deltas[0],deltas[1]))
+                self.vector_by_mouse_dU = deltas[0]
+                self.vector_by_mouse_dV = deltas[1]
+                move_line(self)
+                self.plotter.remove_actor('line_vector')
+                self.plotter.remove_actor('point_vector')
+                self.enable_actions()
+                self.clear_selection()
+        
+        self.plotter.track_click_position(side='left',callback=digitize)
+
+
 
 
 class newViewMap(newView2D):

@@ -11,10 +11,12 @@ from numpy import sqrt as np_sqrt
 from numpy import flip as np_flip
 from numpy import arange as np_arange
 
+from vtk import vtkTransform,vtkTransformPolyDataFilter
+
 
 from .geological_collection import GeologicalCollection
 from .helper_dialogs import multiple_input_dialog, input_one_value_dialog, message_dialog, tic, toc
-from .windows_factory import ViewMap, ViewXsection, NavigationToolbar
+from .windows_factory import ViewMap, ViewXsection, NavigationToolbar,newViewMap,newViewXsection
 from .entities_factory import PolyLine, XsPolyLine
 from shapely import affinity
 from shapely.geometry import LineString, Point, MultiLineString
@@ -244,8 +246,9 @@ def sort_line_nodes(self):
 def move_line(self):
     """Move the whole line by rigid-body translation."""
     print("Move Line. Move the whole line by rigid-body translation.")
+    print(self.selected_uids)
     """Terminate running event loops"""
-    self.stop_event_loops()
+    # self.stop_event_loops()
     """Check if a line is selected"""
     if not self.selected_uids:
         print(" -- No input data selected -- ")
@@ -260,12 +263,23 @@ def move_line(self):
     """If more than one line is selected, keep the first."""
     current_uid = self.selected_uids[0]
     """Editing loop."""
-    self.vector_by_mouse(verbose=True)
     """For some reason in the following the [:] is needed."""
-    if isinstance(self, ViewMap):
-        self.parent.geol_coll.get_uid_vtk_obj(current_uid).points_X[:] = self.parent.geol_coll.get_uid_vtk_obj(current_uid).points_X[:] + self.vector_by_mouse_dU
-        self.parent.geol_coll.get_uid_vtk_obj(current_uid).points_Y[:] = self.parent.geol_coll.get_uid_vtk_obj(current_uid).points_Y[:] + self.vector_by_mouse_dV
-    elif isinstance(self, ViewXsection):
+    if isinstance(self, (ViewMap,newViewMap)):
+        old_obj = self.parent.geol_coll.get_uid_vtk_obj(current_uid)
+        trans = vtkTransform()
+        trans.Translate(self.vector_by_mouse_dU,self.vector_by_mouse_dV,0)
+
+        transform_filter = vtkTransformPolyDataFilter()
+        transform_filter.SetTransform(trans)
+        transform_filter.SetInputData(old_obj)
+        transform_filter.Update()
+        new_obj = PolyLine()
+        new_obj.ShallowCopy(transform_filter.GetOutput())
+        self.parent.geol_coll.replace_vtk(current_uid,new_obj,const_color=True)
+        # self.parent.geol_coll.get_uid_vtk_obj(current_uid).points_X[:] = self.parent.geol_coll.get_uid_vtk_obj(current_uid).points_X[:] + self.vector_by_mouse_dU
+        # self.parent.geol_coll.get_uid_vtk_obj(current_uid).points_Y[:] = self.parent.geol_coll.get_uid_vtk_obj(current_uid).points_Y[:] + self.vector_by_mouse_dV
+
+    elif isinstance(self, (ViewXsection,newViewXsection)):
         vector_by_mouse_dX, vector_by_mouse_dY = self.parent.xsect_coll.get_deltaXY_from_deltaW(section_uid=self.this_x_section_uid, deltaW=self.vector_by_mouse_dU)
         self.parent.geol_coll.get_uid_vtk_obj(current_uid).points_X[:] = self.parent.geol_coll.get_uid_vtk_obj(current_uid).points_X[:] + vector_by_mouse_dX
         self.parent.geol_coll.get_uid_vtk_obj(current_uid).points_Y[:] = self.parent.geol_coll.get_uid_vtk_obj(current_uid).points_Y[:] + vector_by_mouse_dY
