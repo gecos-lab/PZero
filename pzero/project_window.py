@@ -55,6 +55,8 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
 
     """Signals defined here are meant to be broadcast TO ALL views. This is why we use signals
     instead of functions that will act within a single view only. They all pass a list of uid's."""
+    project_close_signal = pyqtSignal()  # this is used to delete open windows when the current project is closed (and a new one is opened)
+
     geology_added_signal = pyqtSignal(list)
     geology_removed_signal = pyqtSignal(list)
     geology_geom_modified_signal = pyqtSignal(list)  # this includes topology modified
@@ -219,6 +221,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             self.save_project()
         reply = QMessageBox.question(self, 'Closing Pzero', 'Confirm quit?', QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
         if reply == QMessageBox.Yes:
+            self.project_close_signal.emit()  # this is used to delete open windows when the current project is closed
             event.accept()
         else:
             event.ignore()
@@ -756,6 +759,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
 
     def create_empty(self):
         """Create empty containers for a new empty project."""
+        self.project_close_signal.emit()  # this is used to delete open windows when the current project is closed (and a new one is opened)
 
         """Create the geol_coll GeologicalCollection (a Qt QAbstractTableModel with a Pandas dataframe as attribute)
         and connect the model to GeologyTableView (a Qt QTableView created with QTDesigner and provided by

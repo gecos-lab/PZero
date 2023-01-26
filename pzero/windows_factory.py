@@ -4,7 +4,7 @@ PZero© Andrea Bistacchi"""
 """QT imports"""
 from PyQt5.QtWidgets import *
 from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QCloseEvent,QFont
+from PyQt5.QtGui import QCloseEvent, QFont
 
 """PZero imports"""
 from .base_view_window_ui import Ui_BaseViewWindow
@@ -90,13 +90,19 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.setupUi(self)
         # _____________________________________________________________________________
         # THE FOLLOWING ACTUALLY DELETES ANY REFERENCE TO CLOSED WINDOWS, HENCE FREEING
-        # MEMORY, BUT CREATES PROBLEMS WITH SIGNALS THAT ARE STILL ACTIVE
+        # MEMORY, BUT COULD CREATE PROBLEMS WITH SIGNALS THAT ARE STILL ACTIVE
         # SEE DISCUSSIONS ON QPointer AND WA_DeleteOnClose ON THE INTERNET
         # self.setAttribute(Qt.WA_DeleteOnClose, True)
         self.parent = parent
 
         """Connect actionQuit.triggered SIGNAL to self.close SLOT"""
         self.actionClose.triggered.connect(self.close)
+
+        """Connect signal to delete window when the project is closed (and a new one is opened)."""
+        # see discussion on deleteLater vs. close on the Internet
+        # as above, delete results in deleted slots being still referenced from the main window signals, thus causing errors
+        # self.parent.project_close_signal.connect(self.deleteLater)
+        self.parent.project_close_signal.connect(self.close)
 
         """Create empty Pandas dataframe with actor's with columns:
         uid = actor's uid -> the same as the original object's uid
@@ -194,7 +200,6 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.parent.fluid_metadata_modified_signal.connect(lambda updated_list: self.fluid_metadata_modified_update_views(updated_list=updated_list))
         self.parent.fluid_legend_color_modified_signal.connect(lambda updated_list: self.fluid_legend_color_modified_update_views(updated_list=updated_list))
         self.parent.fluid_legend_thick_modified_signal.connect(lambda updated_list: self.fluid_legend_thick_modified_update_views(updated_list=updated_list))
-
 
         self.parent.background_added_signal.connect(lambda updated_list: self.background_added_update_views(updated_list=updated_list))
         self.parent.background_removed_signal.connect(lambda updated_list: self.background_removed_update_views(updated_list=updated_list))
@@ -3099,11 +3104,14 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
     def closeEvent(self, event):
         """Override the closeEvent method of QWidget, close the plotter and ask for confirmation.
         This can be reimplemented for some particular kind of view, such as the 3D view."""
-        reply = QMessageBox.question(self, 'Closing window', 'Close this window?', QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
-        if reply == QMessageBox.Yes:
-            event.accept()  # SEE ABOVE ON THE CLOSED WINDOW REFERENCE PROBLEM___________________________  # self.close()  # self = None
-        else:
-            event.ignore()
+        # reply = QMessageBox.question(self, 'Closing window', 'Close this window?', QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+        # if reply == QMessageBox.Yes:
+        #     event.accept()  # SEE ABOVE ON THE CLOSED WINDOW REFERENCE PROBLEM___________________________  # self.close()  # self = None
+        # else:
+        #     event.ignore()
+        # _________________________________DIALOG TO CONFIRM CLOSING COMMENTED WHILE TRYING TO SOLVE A PROBLEM WITH DELETEING WINDOWS
+        # CLOSE -> JUST HIDES A WINDOW WHILE DELETE -> FREES MEMORY
+        event.accept()
 
     def initialize_menu_tools(self):
         """placeholder to be superseded by specific method in subclass"""
@@ -3186,12 +3194,16 @@ class View3D(BaseView):
 
     def closeEvent(self, event):
         """Override the standard closeEvent method since self.plotter.close() is needed to cleanly close the vtk plotter."""
-        reply = QMessageBox.question(self, 'Closing window', 'Close this window?', QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
-        if reply == QMessageBox.Yes:
-            self.plotter.close()  # needed to cleanly close the vtk plotter
-            event.accept()
-        else:
-            event.ignore()
+        # reply = QMessageBox.question(self, 'Closing window', 'Close this window?', QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+        # if reply == QMessageBox.Yes:
+        #     self.plotter.close()  # needed to cleanly close the vtk plotter
+        #     event.accept()
+        # else:
+        #     event.ignore()
+        # _________________________________DIALOG TO CONFIRM CLOSING COMMENTED WHILE TRYING TO SOLVE A PROBLEM WITH DELETEING WINDOWS
+        # CLOSE -> JUST HIDES A WINDOW WHILE DELETE -> FREES MEMORY
+        self.plotter.close()  # needed to cleanly close the vtk plotter
+        event.accept()
 
     def initialize_menu_tools(self):
         """Customize menus and tools for this view"""
