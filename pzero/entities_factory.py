@@ -1645,8 +1645,8 @@ class DEM(vtkStructuredGrid):
             Y1 = map_image.bounds[3]
         else:
             Y1 = map_image.bounds[2]
-        U = (self.points_X - X0)/(X1 - X0)
-        V = (self.points_Y - Y0) / (Y1 - Y0)
+        U = (self.points_X - X0)/(X1 - X0) * np_where(self.points_X >= X0,1,np_NaN)* np_where(self.points_X <= X1, 1,np_NaN)
+        V = (self.points_Y - Y0) / (Y1 - Y0) * np_where(self.points_Y >= Y0, np_NaN,1)* np_where(self.points_Y <= Y1, np_NaN,1)
         UV = np_column_stack((U, V))
         """Set point data on object. Do not initialize the array before this line."""
         self.set_point_data(data_key=map_image_uid, attribute_matrix=UV)

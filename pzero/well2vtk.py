@@ -67,6 +67,7 @@ def well2vtk(self,path=None):
     # print(arr)
     points = well_obj.trace.points_number
     ann_list = []
+    well_uid = str(uuid4())
     for key in prop_df:
         prop = prop_df[key]
 
@@ -74,15 +75,39 @@ def well2vtk(self,path=None):
             if key == 'LITHOLOGY' or key == 'GEOLOGY':
                 tr_data = np_full(shape=(points,3),fill_value=np_nan)
 
-                color_dict = {k: np_random.randint(255,size=3) for k in pd.unique(prop[key])}
+                color_dict = {k: np_random.rand(3) for k in pd.unique(prop[key])}
                 for row,(start,end,value) in prop.iterrows():
-
                         start_idx = np_argmin(np_abs(arr - start))
                         end_idx = np_argmin(np_abs(arr - end))
                         # print(key)
                         # print(len(curve_copy.points[start_idx:end_idx]))
+                        
+                        if key == "GEOLOGY":
+                            marker_pos = well_obj.trace.points[start_idx,:].reshape(-1,3)
+                            marker_obj = VertexSet()
+                            marker_obj.points = marker_pos
+                            marker_obj.auto_cells()
+
+                            marker_obj_dict = deepcopy(GeologicalCollection.geological_entity_dict)
+                            marker_obj_dict["topological_type"] = "VertexSet"
+                            marker_obj_dict['uid'] = str(uuid4())
+                            marker_obj_dict['name'] = f'marker_{value}'
+                            marker_obj_dict['geological_type'] = 'top'
+                            marker_obj_dict['geological_feature'] = value
+                            marker_obj_dict['x_section'] = well_uid
+                            marker_obj_dict['vtk_obj'] = marker_obj
+                            self.geol_coll.add_entity_from_dict(marker_obj_dict)
+                            color_R = self.geol_coll.get_uid_legend(uid=marker_obj_dict['uid'])['color_R']/255
+                            color_G = self.geol_coll.get_uid_legend(uid=marker_obj_dict['uid'])['color_G']/255
+                            color_B = self.geol_coll.get_uid_legend(uid=marker_obj_dict['uid'])['color_B']/255
+                            color_dict[value] = np_array([color_R,color_G,color_B])
+                            del marker_obj_dict
                         color_val = color_dict[value]
+
                         tr_data[start_idx:end_idx] = color_val
+                        
+
+         
             else:
                 tr_data = np_zeros(shape=points)
                 for row,(start,end,value) in prop.iterrows():
@@ -123,6 +148,7 @@ def well2vtk(self,path=None):
                         # value = prop_clean.loc[row]
                         xyz[i,:] = points_arr[idx,:]
                     well_obj.add_trace_data(name=f'{col}',tr_data=tr_data,xyz=xyz)
+                    
 
 
     trace_keys = well_obj.get_trace_names()
@@ -133,7 +159,7 @@ def well2vtk(self,path=None):
         types.append(well_obj.trace.get_field_data_type(key))
     
     bore_obj_attributes = deepcopy(WellCollection.well_entity_dict)
-    bore_obj_attributes['uid'] = str(uuid4())
+    bore_obj_attributes['uid'] = well_uid
     bore_obj_attributes['Loc ID'] = well_obj.ID
     bore_obj_attributes['properties_names'] = trace_keys
     bore_obj_attributes['properties_components'] = components

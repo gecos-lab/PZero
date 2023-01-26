@@ -79,7 +79,7 @@ def shp2vtk(self=None, in_file_name=None,collection=None):
                 curr_obj_dict["topological_type"] = "PolyLine"
                 curr_obj_dict["vtk_obj"] = PolyLine()
                 if gdf.geom_type[row] == "LineString":
-                    outXYZ = np_array(gdf.loc[row].geometry)
+                    outXYZ = np_array(gdf.loc[row].geometry) # !!This does not work with shapely 2.0!!
                     # print("outXYZ:\n", outXYZ)
                     if np_shape(outXYZ)[1] == 2:
                         outZ = np_zeros((np_shape(outXYZ)[0], 1))

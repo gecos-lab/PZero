@@ -4900,10 +4900,6 @@ class ViewMap(View2D):
                                 V = np_cos((plot_entity.points_map_dip_azimuth+90) * np_pi / 180)
                                 # in quiver scale=40 means arrow is 1/40 of figure width, (shaft) width is scaled to figure width, head length and width are scaled to shaft
                                 this_actor = self.ax.quiver(X, Y, U, V, pivot='mid', scale=40, width=0.005, headlength=3, headaxislength=3, facecolor=color_RGB, edgecolor='white', linewidth=1)
-                                for i,x in enumerate(X):
-                                    y = Y[i]
-                                    dip = int(plot_entity.points_map_dip[i])
-                                    self.ax.annotate(f'{dip}',xy=(x,y))
                             else:
                                 this_actor, = self.ax.plot(X, Y, color=color_RGB, linestyle='', marker='o', markersize=8, markeredgecolor='white', label=uid, picker=True)
                             this_actor.set_visible(visible)
