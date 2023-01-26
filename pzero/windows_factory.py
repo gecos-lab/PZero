@@ -2489,7 +2489,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             this_actor = self.show_actor_with_property(uid=uid, collection='mesh3d_coll', show_property=None, visible=False)
             self.actors_df = self.actors_df.append({'uid': uid, 'actor': this_actor, 'show': False, 'collection': 'mesh3d_coll', 'show_prop': None}, ignore_index=True)
             actors_df_new = actors_df_new.append({'uid': uid, 'actor': this_actor, 'show': False, 'collection': 'mesh3d_coll', 'show_prop': None}, ignore_index=True)
-            self.update_mesh3d_list_added(actors_df_new, sec_uid=self.this_x_section_uid)
+            self.update_mesh3d_list_added(actors_df_new)
         """Re-connect signals."""
         self.Mesh3DTableWidget.itemChanged.connect(self.toggle_mesh3d_visibility)
 
@@ -5283,7 +5283,6 @@ class ViewXsection(View2D):
             self.actors_df = self.actors_df.append({'uid': uid, 'actor': this_actor, 'show': False, 'collection': 'mesh3d_coll', 'show_prop': None}, ignore_index=True)
             actors_df_new = actors_df_new.append({'uid': uid, 'actor': this_actor, 'show': False, 'collection': 'mesh3d_coll', 'show_prop': None}, ignore_index=True)
             self.update_mesh3d_list_added(actors_df_new, sec_uid=self.this_x_section_uid)
-        """Re-connect signals."""
         self.Mesh3DTableWidget.itemChanged.connect(self.toggle_mesh3d_visibility)
 
     def dom_added_update_views(self, updated_list=None):
