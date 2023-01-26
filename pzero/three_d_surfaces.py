@@ -578,14 +578,6 @@ def linear_extrusion(self):
     plunge = input_one_value_dialog(title='Linear Extrusion', label='Plunge Value', default_value=30.0)
     if plunge is None:
         plunge = 30.0
-    if plunge > 90:
-        while plunge > 90:
-            plunge -= 90
-    elif plunge < 0:
-        while plunge < 0:
-            plunge += 90
-    if plunge == 90:
-        plunge = 89
     """Ask for vertical extrusion: how extruded will the surface be?"""
     extrusion_par = {'bottom':['Lower limit:', -1000],'top':['Higher limit',1000]}
     vertical_extrusion = multiple_input_dialog(title='Vertical Extrusion', input_dict=extrusion_par)
@@ -597,10 +589,10 @@ def linear_extrusion(self):
     linear_extrusion = vtk.vtkLinearExtrusionFilter()
     linear_extrusion.CappingOn()  # yes or no?
     linear_extrusion.SetExtrusionTypeToVectorExtrusion()
-    """Trigonometric formulas to calculate vector"""
-    x_vector = np_sin(np_pi * (trend + 180) / 180)
-    y_vector = np_cos(np_pi * (trend + 180) / 180)
-    z_vector = np_tan(np_pi * (plunge + 180) / 180)
+    """Direction cosines"""
+    x_vector = - (np_cos((trend - 90) * np_pi / 180) * np_cos(plunge * np_pi / 180))
+    y_vector = np_sin((trend - 90) * np_pi / 180) * np_cos(plunge * np_pi / 180)
+    z_vector = np_sin(plunge * np_pi / 180)
     linear_extrusion.SetVector(x_vector, y_vector, z_vector)  # double,double,double format
     linear_extrusion.SetScaleFactor(total_extrusion)  # double format
     linear_extrusion.SetInputData(self.geol_coll.get_uid_vtk_obj(input_uids[0]))

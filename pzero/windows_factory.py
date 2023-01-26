@@ -848,7 +848,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         """Send message with argument = the cell being checked/unchecked."""
         self.Mesh3DTableWidget.itemChanged.connect(self.toggle_mesh3d_visibility)
 
-    def update_mesh3d_list_added(self, new_list=None):
+    def update_mesh3d_list_added(self, new_list=None, sec_uid=None):
         """Update Mesh3D list without creating a new model"""
         row = self.Mesh3DTableWidget.rowCount()
         uid_list = list(new_list['uid'])
@@ -2489,7 +2489,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             this_actor = self.show_actor_with_property(uid=uid, collection='mesh3d_coll', show_property=None, visible=False)
             self.actors_df = self.actors_df.append({'uid': uid, 'actor': this_actor, 'show': False, 'collection': 'mesh3d_coll', 'show_prop': None}, ignore_index=True)
             actors_df_new = actors_df_new.append({'uid': uid, 'actor': this_actor, 'show': False, 'collection': 'mesh3d_coll', 'show_prop': None}, ignore_index=True)
-            self.update_mesh3d_list_added(actors_df_new)
+            self.update_mesh3d_list_added(actors_df_new, sec_uid=self.this_x_section_uid)
         """Re-connect signals."""
         self.Mesh3DTableWidget.itemChanged.connect(self.toggle_mesh3d_visibility)
 
