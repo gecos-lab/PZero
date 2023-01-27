@@ -24,6 +24,7 @@ from numpy import abs as np_abs
 from numpy import sin as np_sin
 from numpy import cos as np_cos
 from numpy import pi as np_pi
+from numpy import all as np_all
 
 from pandas import DataFrame as pd_DataFrame
 from pandas import unique as pd_unique
@@ -5795,27 +5796,30 @@ class ViewStereoplot(BaseView):
                     self.dip_az = plot_entity.points_map_dip_azimuth
                     self.dip = plot_entity.points_map_dip
 
+                    if np_all(self.dip_az != None):
 
-                    # [Gabriele] Dip az needs to be converted to strike (dz-90) to plot with mplstereonet
-                    if uid in self.selected_uids:
-                        if show_property == "Planes":
-                            this_actor = self.ax.plane(self.dip_az-90,self.dip,color=color_RGB)[0]
-                        else:
-                            this_actor = self.ax.pole(self.dip_az-90, self.dip, color=color_RGB)[0]
+                        # [Gabriele] Dip az needs to be converted to strike (dz-90) to plot with mplstereonet
+                        if uid in self.selected_uids:
+                            if show_property == "Planes":
+                                this_actor = self.ax.plane(self.dip_az-90,self.dip,color=color_RGB)[0]
+                            else:
+                                this_actor = self.ax.pole(self.dip_az-90, self.dip, color=color_RGB)[0]
 
-                        this_actor.set_visible(visible)
-                    else:
-                        if show_property == "Planes":
-                            this_actor = self.ax.plane(self.dip_az-90,self.dip,color=color_RGB)[0]
-                        else:
-                            if filled is not None and visible is True:
-                                if filled:
-                                    self.ax.density_contourf(self.dip_az-90, self.dip,measurement='poles')
-                                else:
-                                    self.ax.density_contour(self.dip_az-90, self.dip,measurement='poles')
-                            this_actor = self.ax.pole(self.dip_az, self.dip, color=color_RGB)[0]
-                        if this_actor:
                             this_actor.set_visible(visible)
+                        else:
+                            if show_property == "Planes":
+                                this_actor = self.ax.plane(self.dip_az-90,self.dip,color=color_RGB)[0]
+                            else:
+                                if filled is not None and visible is True:
+                                    if filled:
+                                        self.ax.density_contourf(self.dip_az-90, self.dip,measurement='poles')
+                                    else:
+                                        self.ax.density_contour(self.dip_az-90, self.dip,measurement='poles')
+                                this_actor = self.ax.pole(self.dip_az, self.dip, color=color_RGB)[0]
+                            if this_actor:
+                                this_actor.set_visible(visible)
+                    else:
+                        this_actor=None
                 else:
                     this_actor = None
             else:
