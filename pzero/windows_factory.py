@@ -1236,7 +1236,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
 
             property_combo = QComboBox()
             property_combo.uid = uid
-            property_combo.name = 'General'
+            property_combo.name = 'Annotations'
             property_combo.addItem("none")
             property_combo.addItem("name")
             self.WellsTreeWidget.setItemWidget(tlevel_1, 2, property_combo)
@@ -1256,8 +1256,13 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             property_combo.addItem("Y")
             property_combo.addItem("Z")
             for prop in self.parent.well_coll.get_uid_properties_names(uid):
-                if prop!= ('LITHOLOGY' or 'GEOLOGY'):
+                if prop == 'LITHOLOGY':
+                    pass
+                elif prop == 'GEOLOGY':
+                    pass
+                else:
                     property_combo.addItem(prop)
+                
 
 
             self.WellsTreeWidget.setItemWidget(tlevel_2_trace, 2, property_combo)
@@ -1327,12 +1332,17 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
 
                     property_combo = QComboBox()
                     property_combo.uid = uid
+                    property_combo.name = 'Trace'
                     property_combo.addItem("none")
                     property_combo.addItem("X")
                     property_combo.addItem("Y")
                     property_combo.addItem("Z")
                     for prop in self.parent.well_coll.get_uid_properties_names(uid):
-                        if prop != 'GEOLOGY':
+                        if prop == 'LITHOLOGY':
+                            pass
+                        elif prop == 'GEOLOGY':
+                            pass
+                        else:
                             property_combo.addItem(prop)
 
                     self.WellsTreeWidget.setItemWidget(glevel_2, 2, property_combo)
@@ -1346,28 +1356,47 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                     break
             else:
                 """Different geological type, geological feature and scenario"""
-                glevel_1 = QTreeWidgetItem(self.WellsTreeWidget, [self.parent.well_coll.get_uid_well_locid(uid)])
-                glevel_1.setFlags(glevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
-                self.WellsTreeWidget.insertTopLevelItem(0, glevel_1)
+                tlevel_1 = QTreeWidgetItem(self.WellsTreeWidget, [self.parent.well_coll.get_uid_well_locid(uid)])  # self.GeologyTreeWidget as parent -> top level
+                tlevel_1.setFlags(tlevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
 
                 property_combo = QComboBox()
                 property_combo.uid = uid
+                property_combo.name = 'Annotations'
+                property_combo.addItem("none")
+                property_combo.addItem("name")
+                self.WellsTreeWidget.setItemWidget(tlevel_1, 2, property_combo)
+                property_combo.currentIndexChanged.connect(lambda: self.toggle_property())
+
+
+            # ======================================= TRACE =======================================
+
+                tlevel_2_trace = QTreeWidgetItem(tlevel_1, ['Trace', uid])  # tlevel_1 as parent -> middle level
+                tlevel_2_trace.setFlags(tlevel_2_trace.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
+
+                property_combo = QComboBox()
+                property_combo.uid = uid
+                property_combo.name = 'Trace'
                 property_combo.addItem("none")
                 property_combo.addItem("X")
                 property_combo.addItem("Y")
                 property_combo.addItem("Z")
                 for prop in self.parent.well_coll.get_uid_properties_names(uid):
-                    property_combo.addItem(prop)
+                    if prop == 'LITHOLOGY':
+                        pass
+                    elif prop == 'GEOLOGY':
+                        pass
+                    else:
+                        property_combo.addItem(prop)
+                    
 
-                glevel_2 = QTreeWidgetItem(glevel_1, ['Trace', uid])
-                self.WellsTreeWidget.setItemWidget(glevel_2, 2, property_combo)
+
+                self.WellsTreeWidget.setItemWidget(tlevel_2_trace, 2, property_combo)
                 property_combo.currentIndexChanged.connect(lambda: self.toggle_property())
-                glevel_2.setFlags(glevel_2.flags() | Qt.ItemIsUserCheckable)
+                tlevel_2_trace.setFlags(tlevel_2_trace.flags() | Qt.ItemIsUserCheckable)
                 if self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]:
-                    glevel_2.setCheckState(0, Qt.Checked)
+                    tlevel_2_trace.setCheckState(0, Qt.Checked)
                 elif not self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]:
-                    glevel_2.setCheckState(0, Qt.Unchecked)
-                self.WellsTreeWidget.insertTopLevelItem(0, glevel_2)
+                    tlevel_2_trace.setCheckState(0, Qt.Unchecked)
                 break
 
         self.WellsTreeWidget.itemChanged.connect(self.toggle_well_visibility)
@@ -3311,7 +3340,11 @@ class View3D(BaseView):
         self.default_view = self.plotter.camera_position
 
     def zoom_home_view(self):
-        self.plotter.camera_position = self.default_view
+        try:
+            self.plotter.camera_position = self.default_view
+        except AttributeError:
+            print('No default view set')
+
 
     def zoom_active(self):
         self.plotter.reset_camera()
@@ -3978,7 +4011,7 @@ class View3D(BaseView):
         elif collection == 'well_coll':
             plot_entity = self.parent.well_coll.get_uid_vtk_obj(uid)
             point = plot_entity.points[0].reshape(-1,3)
-            name_value = self.parent.well_coll.get_uid_well_locid(uid)
+            name_value = [self.parent.well_coll.get_uid_well_locid(uid)]
         elif collection == 'fluids_coll':
             plot_entity = self.parent.fluids_coll.get_uid_vtk_obj(uid)
             point = plot_entity.GetCenter()
@@ -4152,7 +4185,8 @@ class View3D(BaseView):
                     elif self.toggle_bore_geo == -1:
                         self.plotter.remove_actor(f'{uid}_litho')
                         geo = plot_entity.plot_tube('GEOLOGY')
-                        self.plotter.add_mesh(geo,name=f'{uid}_geo',rgb=True)
+                        if geo != None:
+                            self.plotter.add_mesh(geo,name=f'{uid}_geo',rgb=True)
 
             self.toggle_bore_geo *= -1
         elif method == 'litho':
@@ -4166,7 +4200,8 @@ class View3D(BaseView):
                     elif self.toggle_bore_litho == -1:
                         self.plotter.remove_actor(f'{uid}_geo')
                         litho = plot_entity.plot_tube('LITHOLOGY')
-                        self.plotter.add_mesh(litho,name=f'{uid}_litho',rgb=True)
+                        if litho != None:
+                            self.plotter.add_mesh(litho,name=f'{uid}_litho',rgb=True)
 
             self.toggle_bore_litho *= -1
     '''[Gabriele] PC Filters ----------------------------------------------------'''

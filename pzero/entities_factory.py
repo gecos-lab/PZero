@@ -2343,7 +2343,7 @@ class WellTrace(PolyLine):
         lines = Spline(xyz_trace)
         lines.rename_array('arc_length','MD')
         # lines = lines.compute_arc_length()
-        lines.field_data['name'] = [name]
+        lines.field_data['pname'] = [name]
         lines.field_data['MD'] = lines['MD']
         self.ShallowCopy(lines)
     
@@ -2389,22 +2389,27 @@ class WellTrace(PolyLine):
         return actor
     
     def plot_tube(self,prop):
-
-        prop_trace = self.get_field_data(f'p{prop}').reshape(-1,3)
-        prop_data = self.get_field_data(prop).reshape(-1,3)
         
-        # temp = pv_helpers.lines_from_points(prop_trace)
-        temp = Spline(prop_trace)
-        temp[prop] = prop_data
-
-        filter = vtkTubeFilter()
-        filter.SetInputData(temp)
-        filter.SetRadius(1)
-        filter.SetNumberOfSides(10)
-        filter.Update()
-        out = filter.GetOutput()
-        del temp
-        return out
+        try:
+            prop_trace = self.get_field_data(f'p{prop}').reshape(-1,3)
+        except AttributeError:
+            print('Data not available')
+            return None
+        else:
+            prop_data = self.get_field_data(prop).reshape(-1,3)
+            
+            # temp = pv_helpers.lines_from_points(prop_trace)
+            temp = Spline(prop_trace)
+            temp[prop] = prop_data
+            
+            filter = vtkTubeFilter()
+            filter.SetInputData(temp)
+            filter.SetRadius(1)
+            filter.SetNumberOfSides(10)
+            filter.Update()
+            out = filter.GetOutput()
+            del temp
+            return out
 
     def plot_markers(self,prop):
         print(self.get_field_data_keys())

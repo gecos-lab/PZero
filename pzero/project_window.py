@@ -1062,7 +1062,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         """Read name of last revision in project file. This opens the last revision.
         To open a different one, edit the project file."""  # _________________________________________________________________________ IN THE FUTURE an option to open a specific revision could be added
         fin = open(in_file_name, 'rt')
-        rev_name = fin.readlines()[2]
+        rev_name = fin.readlines()[2].strip()
         fin.close()
         in_dir_name = in_file_name[:-3] + '_p0/' + rev_name
         self.TextTerminal.appendPlainText(("Opening project/revision : " + in_file_name + "/" + rev_name + "\n"))
