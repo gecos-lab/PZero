@@ -1045,27 +1045,27 @@ def project_2_dem(self):
         return
     else:
         input_uids = deepcopy(self.selected_uids)
-    for uid in input_uids:
-        if isinstance(self.geol_coll.get_uid_vtk_obj(uid), PolyLine):
-            pass
-        else:
-            print(" -- Error input type: only PolyLine type -- ")
-            return
+    # for uid in input_uids:
+    #     if isinstance(self.geol_coll.get_uid_vtk_obj(uid), PolyLine):
+    #         pass
+    #     else:
+    #         print(" -- Error input type: only PolyLine type -- ")
+    #         return
     """Ask if the tool replaces the input entities, or if they shall be preserved"""
     replace_on_off = input_text_dialog(title='Project to Surface', label='Replace Original Entities? (YES/NO)', default_text='YES')
     if replace_on_off is None:
         return
-    if replace_on_off != 'YES' and replace_on_off != 'yes' and replace_on_off != 'y' and replace_on_off != 'Y' and replace_on_off != 'NO' and replace_on_off != 'no' and replace_on_off != 'n' and replace_on_off != 'N':
+    if replace_on_off.lower() != 'yes' and replace_on_off.lower() != 'y' and replace_on_off.lower() != 'no' and replace_on_off.lower() != 'n':
         return
-#     """Ask for the DOM (/DEM), source of the projection"""
-#     dom_list_uids = self.dom_coll.get_uids()
-#     dom_list_names = []
-#     for uid in dom_list_uids:
-#         dom_list_names.append(self.dom_coll.get_uid_name(uid))
-#     dom_name = input_combo_dialog(title='Project to Surface', label='Input surface for projection', choice_list=dom_list_names)
-#     if dom_name is None:
-#         return
-#     dom_uid = self.dom_coll.df.loc[self.dom_coll.df['name'] == dom_name, 'uid'].values[0]
+    """Ask for the DOM (/DEM), source of the projection"""
+    dom_list_uids = self.dom_coll.get_uids()
+    dom_list_names = []
+    for uid in dom_list_uids:
+        dom_list_names.append(self.dom_coll.get_uid_name(uid))
+    dom_name = input_combo_dialog(title='Project to Surface', label='Input surface for projection', choice_list=dom_list_names)
+    if dom_name is None:
+        return
+    dom_uid = self.dom_coll.df.loc[self.dom_coll.df['name'] == dom_name, 'uid'].values[0]
 #     print("dom_uid ", dom_uid)
 #     """Convert DEM (vtkStructuredGrid) in vtkImageData to perform the projection with vtkProjectedTerrainPath"""
 #     dem_to_image = vtk.vtkDEMReader()
@@ -1073,23 +1073,24 @@ def project_2_dem(self):
 #     dem_to_image.Update()
 #     print("dem_to_image ", dem_to_image)
 #     print("dem_to_image.GetOutput() ", dem_to_image.GetOutput())
-    """Ask for the Orthoimage, source of the projection"""
-    image_list_uids = self.image_coll.get_uids()
-    image_list_names = []
-    for uid in image_list_uids:
-        image_list_names.append(self.image_coll.get_uid_name(uid))
-    img_name = input_combo_dialog(title='Project to Surface', label='Input surface for projection', choice_list=image_list_names)
-    if img_name is None:
-        return
-    img_uid = self.image_coll.df.loc[self.image_coll.df['name'] == img_name, 'uid'].values[0]
+#     """Ask for the Orthoimage, source of the projection"""
+#     image_list_uids = self.image_coll.get_uids()
+#     image_list_names = []
+#     for uid in image_list_uids:
+#         image_list_names.append(self.image_coll.get_uid_name(uid))
+#     img_name = input_combo_dialog(title='Project to Surface', label='Input surface for projection', choice_list=image_list_names)
+#     if img_name is None:
+#         return
+#     img_uid = self.image_coll.df.loc[self.image_coll.df['name'] == img_name, 'uid'].values[0]
     """----- some check is needed here. Check if the chosen image is a 2D map with elevation values -----"""
     for uid in input_uids:
         """Create a new instance of vtkProjectedTerrainPath"""
-        projection = vtk.vtkProjectedTerrainPath()
+        projection = vtk.vtkPointInterpolator2D()
         projection.SetInputData(self.geol_coll.get_uid_vtk_obj(uid))
-        projection.SetProjectionModeToSimple()  # projects the original polyline points
-        projection.SetSourceData(self.image_coll.get_uid_vtk_obj(img_uid))  # this must be vtkImageData
-        projection.SetHeightOffset(0)
+        projection.SetSourceData(self.dom_coll.get_uid_vtk_obj(dom_uid))
+        projection.SetKernel(vtk.vtkVoronoiKernel())
+        projection.SetNullPointsStrategyToClosestPoint()
+        projection.SetZArrayName('elevation')
         projection.Update()
         """Create deepcopy of the geological entity dictionary."""
         obj_dict = deepcopy(self.geol_coll.geological_entity_dict)
@@ -1105,6 +1106,7 @@ def project_2_dem(self):
         obj_dict['vtk_obj'] = PolyLine()
         """ShallowCopy is the way to copy the new entity into the instance created at the beginning"""
         obj_dict['vtk_obj'].ShallowCopy(projection.GetOutput())
+        obj_dict['vtk_obj'].points[:, 2] = obj_dict['vtk_obj'].get_point_data('elevation')
         obj_dict['vtk_obj'].Modified()
         if obj_dict['vtk_obj'] is None:
             return
