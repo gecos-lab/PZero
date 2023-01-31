@@ -106,10 +106,9 @@ class GeologicalCollection(QAbstractTableModel):
         scenario = entity_dict["scenario"]
         if self.parent.geol_legend_df.loc[(self.parent.geol_legend_df['geological_type'] == geo_type) & (self.parent.geol_legend_df['geological_feature'] == feature) & (self.parent.geol_legend_df['scenario'] == scenario)].empty:
             if color:
-                print(color)
-                R,G,B = color
+                R, G, B = color
             else:
-                R,G,B = np_round(np_random.random(3) * 255)
+                R, G, B = np_round(np_random.random(3) * 255)
             self.parent.geol_legend_df = self.parent.geol_legend_df.append({'geological_type': geo_type,
                                                                             'geological_feature': feature,
                                                                             'scenario': scenario,
@@ -207,11 +206,11 @@ class GeologicalCollection(QAbstractTableModel):
                 R = self.get_uid_legend(uid=uid)['color_R']
                 G = self.get_uid_legend(uid=uid)['color_G']
                 B = self.get_uid_legend(uid=uid)['color_B']
-                color = [R,G,B]
+                color = [R, G, B]
             else:
                 color=None
             self.remove_entity(uid)
-            self.add_entity_from_dict(entity_dict=new_dict,color=color)
+            self.add_entity_from_dict(entity_dict=new_dict, color=color)
         else:
             print("ERROR - replace_vtk with vtk of a different type.")
 
