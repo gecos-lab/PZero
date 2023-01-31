@@ -200,7 +200,7 @@ class GeologicalCollection(QAbstractTableModel):
         out_uid = self.add_entity_from_dict(self, entity_dict=entity_dict)
         return out_uid
 
-    def replace_vtk(self, uid=None, vtk_object=None,const_color=False):
+    def replace_vtk(self, uid=None, vtk_object=None, const_color=False):
         if isinstance(vtk_object, type(self.df.loc[self.df['uid'] == uid, 'vtk_obj'].values[0])):
             new_dict = deepcopy(self.df.loc[self.df['uid'] == uid, self.df.columns != 'vtk_obj'].to_dict('records')[0])
             new_dict['vtk_obj'] = vtk_object
@@ -212,7 +212,7 @@ class GeologicalCollection(QAbstractTableModel):
             else:
                 color=None
             self.remove_entity(uid)
-            self.add_entity_from_dict(entity_dict=new_dict,color=color)
+            self.add_entity_from_dict(entity_dict=new_dict, color=color)
         else:
             print("ERROR - replace_vtk with vtk of a different type.")
 

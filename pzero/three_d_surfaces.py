@@ -26,7 +26,7 @@ from numpy import float32 as np_float32
 from pandas import DataFrame as pd_DataFrame
 from .geological_collection import GeologicalCollection
 from .helper_dialogs import multiple_input_dialog, input_one_value_dialog, input_text_dialog, input_combo_dialog, input_checkbox_dialog, tic, toc, progress_dialog, general_input_dialog
-from .entities_factory import TriSurf, XsPolyLine, PolyLine, VertexSet, Voxet, XsVoxet, XsVertexSet
+from .entities_factory import TriSurf, XsPolyLine, PolyLine, VertexSet, Voxet, XsVoxet, XsVertexSet,Attitude
 
 import pyvista as pv
 
@@ -1083,7 +1083,10 @@ def project_2_dem(self):
 #         return
 #     img_uid = self.image_coll.df.loc[self.image_coll.df['name'] == img_name, 'uid'].values[0]
     """----- some check is needed here. Check if the chosen image is a 2D map with elevation values -----"""
+    prgs_bar = progress_dialog(max_value=len(input_uids), title_txt="Input dataframe", label_txt="Projecting data to DEM...", cancel_txt=None, parent=self)
+
     for uid in input_uids:
+
         """Create a new instance of vtkProjectedTerrainPath"""
         projection = vtk.vtkPointInterpolator2D()
         projection.SetInputData(self.geol_coll.get_uid_vtk_obj(uid))
@@ -1103,7 +1106,13 @@ def project_2_dem(self):
         obj_dict['scenario'] = self.geol_coll.get_uid_scenario(uid)
         obj_dict['geological_type'] = self.geol_coll.get_uid_geological_type(uid)
         obj_dict['topological_type'] = self.geol_coll.get_uid_topological_type(uid)
-        obj_dict['vtk_obj'] = PolyLine()
+        if isinstance(self.geol_coll.get_uid_vtk_obj(uid), PolyLine):
+            obj_dict['vtk_obj'] = PolyLine()
+        elif isinstance(self.geol_coll.get_uid_vtk_obj(uid), Attitude): # Attitude class needs to go away
+            obj_dict['vtk_obj'] = Attitude()
+        elif isinstance(self.geol_coll.get_uid_vtk_obj(uid), VertexSet):
+            obj_dict['vtk_obj'] = VertexSet()
+
         """ShallowCopy is the way to copy the new entity into the instance created at the beginning"""
         obj_dict['vtk_obj'].ShallowCopy(projection.GetOutput())
         obj_dict['vtk_obj'].points[:, 2] = obj_dict['vtk_obj'].get_point_data('elevation')
@@ -1120,6 +1129,7 @@ def project_2_dem(self):
             self.geol_coll.set_uid_name(uid=uid, name=obj_dict['name'])
             self.geology_geom_modified_signal.emit([uid])  # emit uid as list to force redraw
         self.geology_metadata_modified_signal.emit([uid])
+        prgs_bar.add_one()
 
 
 def project_2_xs(self):
