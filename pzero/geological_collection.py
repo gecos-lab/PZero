@@ -117,6 +117,7 @@ class GeologicalCollection(QAbstractTableModel):
                                                                             'color_G': G,
                                                                             'color_B': B,
                                                                             'line_thick': 2.0,
+                                                                            'opacity': 100,
                                                                             'geological_time': 0.0,
                                                                             'geological_sequence': "strati_0"},
                                                                            ignore_index=True)

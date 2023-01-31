@@ -65,6 +65,8 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
     geology_metadata_modified_signal = pyqtSignal(list)
     geology_legend_color_modified_signal = pyqtSignal(list)
     geology_legend_thick_modified_signal = pyqtSignal(list)
+    geology_legend_opacity_modified_signal = pyqtSignal(list)
+
 
     xsect_added_signal = pyqtSignal(list)
     xsect_removed_signal = pyqtSignal(list)
@@ -72,6 +74,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
     xsect_metadata_modified_signal = pyqtSignal(list)
     xsect_legend_color_modified_signal = pyqtSignal(list)
     xsect_legend_thick_modified_signal = pyqtSignal(list)
+    xsect_legend_opacity_modified_signal = pyqtSignal(list)
 
     boundary_added_signal = pyqtSignal(list)
     boundary_removed_signal = pyqtSignal(list)
@@ -79,6 +82,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
     boundary_metadata_modified_signal = pyqtSignal(list)
     boundary_legend_color_modified_signal = pyqtSignal(list)
     boundary_legend_thick_modified_signal = pyqtSignal(list)
+    boundary_legend_opacity_modified_signal = pyqtSignal(list)
 
     mesh3d_added_signal = pyqtSignal(list)
     mesh3d_removed_signal = pyqtSignal(list)
@@ -87,6 +91,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
     mesh3d_metadata_modified_signal = pyqtSignal(list)
     mesh3d_legend_color_modified_signal = pyqtSignal(list)
     mesh3d_legend_thick_modified_signal = pyqtSignal(list)
+    mesh3d_legend_opacity_modified_signal = pyqtSignal(list)
 
     dom_added_signal = pyqtSignal(list)
     dom_removed_signal = pyqtSignal(list)
@@ -95,10 +100,12 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
     dom_metadata_modified_signal = pyqtSignal(list)
     dom_legend_color_modified_signal = pyqtSignal(list)
     dom_legend_thick_modified_signal = pyqtSignal(list)
+    dom_legend_opacity_modified_signal = pyqtSignal(list)
 
     image_added_signal = pyqtSignal(list)
     image_removed_signal = pyqtSignal(list)
     image_metadata_modified_signal = pyqtSignal(list)
+    image_legend_opacity_modified_signal = pyqtSignal(list)
 
     well_added_signal = pyqtSignal(list)
     well_removed_signal = pyqtSignal(list)
@@ -107,6 +114,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
     well_metadata_modified_signal = pyqtSignal(list)
     well_legend_color_modified_signal = pyqtSignal(list)
     well_legend_thick_modified_signal = pyqtSignal(list)
+    well_legend_opacity_modified_signal = pyqtSignal(list)
 
     fluid_added_signal = pyqtSignal(list)
     fluid_removed_signal = pyqtSignal(list)
@@ -116,6 +124,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
     fluid_metadata_modified_signal = pyqtSignal(list)
     fluid_legend_color_modified_signal = pyqtSignal(list)
     fluid_legend_thick_modified_signal = pyqtSignal(list)
+    fluid_legend_opacity_modified_signal = pyqtSignal(list)
 
     background_added_signal = pyqtSignal(list)
     background_removed_signal = pyqtSignal(list)
@@ -125,6 +134,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
     background_metadata_modified_signal = pyqtSignal(list)
     background_legend_color_modified_signal = pyqtSignal(list)
     background_legend_thick_modified_signal = pyqtSignal(list)
+    background_legend_opacity_modified_signal = pyqtSignal(list)
 
     prop_legend_cmap_modified_signal = pyqtSignal(str)
 
@@ -1127,9 +1137,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 new_others_legend_df = pd_read_csv(in_dir_name + '/others_legend_table.csv', encoding='utf-8', dtype=Legend.legend_type_dict, keep_default_na=False)
             if not new_others_legend_df.empty:
                 # self.others_legend_df = new_others_legend_df
-                for type in self.others_legend_df['other_type'].values:
-                    if type in new_others_legend_df['other_type'].values:
-                        self.others_legend_df[self.others_legend_df['other_type'] == type] = new_others_legend_df[new_others_legend_df['other_type'] == type].values
+                for other_type in self.others_legend_df['other_type'].values:
+                    if other_type in new_others_legend_df['other_type'].values:
+                        self.others_legend_df[self.others_legend_df['other_type'] == other_type] = new_others_legend_df[new_others_legend_df['other_type'] == other_type].values
 
 
         if os.path.isfile((in_dir_name + '/prop_legend_df.csv')) or os.path.isfile((in_dir_name + '/prop_legend_df.json')):

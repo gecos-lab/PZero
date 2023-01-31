@@ -19,23 +19,22 @@ class WellCollection(QAbstractTableModel):
     implicitly define types. Always use deepcopy(WellCollection.well_entity_dict) to
     copy this dictionary without altering the original."""
     well_entity_dict = {'uid': "",
-                              'Loc ID': "undef",
-                              'properties_names': [],
-                              'properties_components': [],
-                              'properties_types': [],
-                              'markers': [],
-                              'vtk_obj':None}
+                        'Loc ID': "undef",
+                        'properties_names': [],
+                        'properties_components': [],
+                        'properties_types': [],
+                        'markers': [],
+                        'vtk_obj': None}
 
     well_entity_type_dict = {'uid': str,
-                                   'Loc ID': str,
-                                   'properties_names': list,
-                                   'properties_components': list,
-                                   'properties_types': list,
-                                   'markers': list,
-                                   'x_section': str,  # this is the uid of the cross section for "XsVertexSet", "XsPolyLine", and "XsImage", empty for all others
-                                   'vtk_obj':object}
-
-
+                             'Loc ID': str,
+                             'properties_names': list,
+                             'properties_components': list,
+                             'properties_types': list,
+                             'markers': list,
+                             'x_section': str,
+                             # this is the uid of the cross section for "XsVertexSet", "XsPolyLine", and "XsImage", empty for all others
+                             'vtk_obj': object}
 
     """Initialize WellCollection table. Column headers are taken from
     WellCollection.well_entity_dict.keys(), and parent is supposed to be the project_window."""
@@ -52,7 +51,7 @@ class WellCollection(QAbstractTableModel):
 
     """Custom methods used to add or remove entities, query the dataframe, etc."""
 
-    def add_entity_from_dict(self, entity_dict=None,color=None):
+    def add_entity_from_dict(self, entity_dict=None, color=None):
         """Add entity to collection from dictionary.
         Create a new uid if it is not included in the dictionary."""
         if not entity_dict['uid']:
@@ -66,17 +65,19 @@ class WellCollection(QAbstractTableModel):
         """Then emit signal to update the views."""
         locid = entity_dict['Loc ID']
         if self.parent.well_legend_df.loc[self.parent.well_legend_df['Loc ID'] == locid].empty:
-            R,G,B = np_round(np_random.random(3) * 255)
+            R, G, B = np_round(np_random.random(3) * 255)
             self.parent.well_legend_df = self.parent.well_legend_df.append({'Loc ID': locid,
                                                                             'color_R': R,
                                                                             'color_G': G,
                                                                             'color_B': B,
-                                                                            'line_thick': 2.0},
-                                                                            ignore_index=True)
+                                                                            'line_thick': 2.0,
+                                                                            'opacity': 100},
+                                                                           ignore_index=True)
             self.parent.legend.update_widget(self.parent)
             self.parent.prop_legend.update_widget(self.parent)
         """Then emit signal to update the views."""
-        self.parent.well_added_signal.emit([entity_dict['uid']])  # a list of uids is emitted, even if the entity is just one
+        self.parent.well_added_signal.emit(
+            [entity_dict['uid']])  # a list of uids is emitted, even if the entity is just one
         return entity_dict['uid']
 
     def remove_entity(self, uid=None):
@@ -109,29 +110,37 @@ class WellCollection(QAbstractTableModel):
                 self.parent.well_legend_df.drop(idx_remove, inplace=True)
                 table_updated = table_updated or True
             for feature in features_in_legend:
-                if self.parent.well_coll.df.loc[(self.parent.well_coll.df['Loc ID'] == locid) & (self.parent.well_coll.df['geological_feature'] == feature)].empty:
+                if self.parent.well_coll.df.loc[(self.parent.well_coll.df['Loc ID'] == locid) & (
+                        self.parent.well_coll.df['geological_feature'] == feature)].empty:
                     """Get index of row to be removed, then remove it in place with .drop()."""
-                    idx_remove = self.parent.well_legend_df[(self.parent.well_legend_df['Loc ID'] == locid) & (self.parent.well_legend_df['geological_feature'] == feature)].index
+                    idx_remove = self.parent.well_legend_df[(self.parent.well_legend_df['Loc ID'] == locid) & (
+                                self.parent.well_legend_df['geological_feature'] == feature)].index
                     self.parent.well_legend_df.drop(idx_remove, inplace=True)
                     table_updated = table_updated or True
 
         for feature in features_in_legend:
             if self.parent.well_coll.df.loc[self.parent.well_coll.df['geological_feature'] == feature].empty:
                 """Get index of row to be removed, then remove it in place with .drop()."""
-                idx_remove = self.parent.well_legend_df[self.parent.well_legend_df['geological_feature'] == feature].index
+                idx_remove = self.parent.well_legend_df[
+                    self.parent.well_legend_df['geological_feature'] == feature].index
                 self.parent.well_legend_df.drop(idx_remove, inplace=True)
                 table_updated = table_updated or True
 
         """Then add new locid / feature"""
         for uid in self.parent.well_coll.df['uid'].to_list():
             locid = self.parent.well_coll.df.loc[self.parent.well_coll.df['uid'] == uid, "Loc ID"].values[0]
-            feature = self.parent.well_coll.df.loc[self.parent.well_coll.df['uid'] == uid, "geological_feature"].values[0]
-            if self.parent.well_legend_df.loc[(self.parent.well_legend_df['Loc ID'] == locid) & (self.parent.well_legend_df['geological_feature'] == feature)].empty:
+            feature = self.parent.well_coll.df.loc[self.parent.well_coll.df['uid'] == uid, "geological_feature"].values[
+                0]
+            if self.parent.well_legend_df.loc[(self.parent.well_legend_df['Loc ID'] == locid) & (
+                    self.parent.well_legend_df['geological_feature'] == feature)].empty:
                 self.parent.well_legend_df = self.parent.well_legend_df.append({'Loc ID': locid,
                                                                                 'geological_feature': feature,
-                                                                                'color_R': round(np_random.random() * 255),
-                                                                                'color_G': round(np_random.random() * 255),
-                                                                                'color_B': round(np_random.random() * 255),
+                                                                                'color_R': round(
+                                                                                    np_random.random() * 255),
+                                                                                'color_G': round(
+                                                                                    np_random.random() * 255),
+                                                                                'color_B': round(
+                                                                                    np_random.random() * 255),
                                                                                 'line_thick': 2.0,
                                                                                 },
                                                                                ignore_index=True)
@@ -150,7 +159,8 @@ class WellCollection(QAbstractTableModel):
 
         legend_dict = self.parent.well_legend_df.loc[self.parent.well_legend_df['Loc ID'] == locid].to_dict('records')
         # print(legend_dict[0])
-        return legend_dict[0]  # the '[0]' is needed since .to_dict('records') returns a list of dictionaries (with just one element in this case)
+        return legend_dict[
+            0]  # the '[0]' is needed since .to_dict('records') returns a list of dictionaries (with just one element in this case)
 
     def get_uids(self):
         """Get list of uids."""
@@ -159,7 +169,6 @@ class WellCollection(QAbstractTableModel):
     def get_well_locid_uids(self, locid=None):
         """Get list of uids of a given locid."""
         return self.df.loc[self.df['Loc ID'] == locid, 'uid'].to_list()
-
 
     def get_uid_name(self, uid=None):
         """Get value(s) stored in dataframe (as pointer) from uid."""
@@ -202,8 +211,8 @@ class WellCollection(QAbstractTableModel):
         """Set value(s) stored in dataframe (as pointer) from uid. This is a LIST and "at" must be used!"""
         row = self.df[self.df['uid'] == uid].index.values[0]
         self.df.at[row, 'properties_components'] = properties_components
-    
-    def get_uid_marker_names(self,uid=None):
+
+    def get_uid_marker_names(self, uid=None):
         return self.df.loc[self.df['uid'] == uid, 'markers'].values[0]
 
     def get_uid_vtk_obj(self, uid=None):
@@ -286,6 +295,7 @@ class WellCollection(QAbstractTableModel):
                 self.dataChanged.emit(index, index)
                 uid = self.df.iloc[index.row(), 0]
                 self.well_attr_modified_update_legend_table()
-                self.parent.well_metadata_modified_signal.emit([uid])  # a list of uids is emitted, even if the entity is just one
+                self.parent.well_metadata_modified_signal.emit(
+                    [uid])  # a list of uids is emitted, even if the entity is just one
                 return True
         return QVariant()
