@@ -13,6 +13,7 @@ from numpy import pi as np_pi
 from numpy import sin as np_sin
 from numpy import cos as np_cos
 from numpy import dstack as np_dstack
+from numpy import abs as np_abs
 
 import rasterio as rio
 import rasterio.plot as rio_plt
@@ -98,11 +99,15 @@ def xs_image2vtk(self=None, in_file_name=None, x_section_uid=None):
     dim_Z = xs_image.height
     """Cross-section azimuth"""
     azimuth = self.xsect_coll.get_uid_azimuth(x_section_uid)
+    origin_z = self.xsect_coll.get_uid_bottom(x_section_uid)
+    width = self.xsect_coll.get_uid_length(x_section_uid)
+    height = np_abs(self.xsect_coll.get_uid_top(x_section_uid))-np_abs(self.xsect_coll.get_uid_bottom(x_section_uid))
+
     """x-section georeferencing dialog"""
     in_dict = {'origin_W': ['Origin W', '0.0'],
-               'origin_Z': ['Origin Z', '0.0'],
-               'width': ['width', '1.0'],
-               'height': ['height', '1.0']}
+               'origin_Z': ['Origin Z', f'{origin_z}'],
+               'width': ['width', f'{width}'],
+               'height': ['height', f'{height}']}
     out_dict = multiple_input_dialog(title='XSection image georeferencing\n(in XSection reference frame)', input_dict=in_dict)
     if out_dict is None:
         return

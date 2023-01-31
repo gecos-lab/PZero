@@ -5874,9 +5874,9 @@ class ViewStereoplot(BaseView):
 
     def toggle_contours(self,filled=False):
 
-        '''[Gabriele] This is not the best way, but for now will do.
+        """[Gabriele] This is not the best way, but for now will do.
         It's a toggle switch that display kamb contours for visible poles in
-        the stereoplot.'''
+        the stereoplot."""
 
         self.ViewFrameLayout.removeWidget(self.canvas)
         self.ViewFrameLayout.removeWidget(self.navi_toolbar)
