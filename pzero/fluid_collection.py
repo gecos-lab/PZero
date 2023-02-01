@@ -112,6 +112,7 @@ class FluidsCollection(QAbstractTableModel):
                                                                                 'color_G': G,
                                                                                 'color_B': B,
                                                                                 'line_thick': 2.0,
+                                                                                'point_size': 10.0,
                                                                                 'opacity': 100,
                                                                                 'fluid_time': 0.0},
                                                                                ignore_index=True)

@@ -92,23 +92,22 @@ class BackgroundCollection(QAbstractTableModel):
         """Then add new background_type / feature to the legend if needed."""
         background_type = entity_dict['background_type']
         feature = entity_dict['background_feature']
-        if self.parent.backgrounds_legend_df.loc[
-            (self.parent.backgrounds_legend_df['background_type'] == background_type) & (
-                    self.parent.backgrounds_legend_df['background_feature'] == feature)].empty:
+        if self.parent.backgrounds_legend_df.loc[(self.parent.backgrounds_legend_df['background_type'] == background_type)
+                                                 & (self.parent.backgrounds_legend_df['background_feature'] == feature)].empty:
             if color:
                 print(color)
                 R, G, B = color
             else:
                 R, G, B = np.round(np.random.random(3) * 255)
-            self.parent.backgrounds_legend_df = self.parent.backgrounds_legend_df.append(
-                {'background_type': background_type,
-                 'background_feature': feature,
-                 'color_R': R,
-                 'color_G': G,
-                 'color_B': B,
-                 'line_thick': 2.0,
-                 'opacity': 100},
-                ignore_index=True)
+            self.parent.backgrounds_legend_df = self.parent.backgrounds_legend_df.append({'background_type': background_type,
+                                                                                         'background_feature': feature,
+                                                                                         'color_R': R,
+                                                                                         'color_G': G,
+                                                                                         'color_B': B,
+                                                                                         'line_thick': 2.0,
+                                                                                         'point_size': 10.0,
+                                                                                         'opacity': 100},
+                                                                                        ignore_index=True)
             self.parent.legend.update_widget(self.parent)
             self.parent.prop_legend.update_widget(self.parent)
         """Then emit signal to update the views."""

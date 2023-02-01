@@ -161,6 +161,8 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             lambda updated_list: self.geology_legend_color_modified_update_views(updated_list=updated_list))
         self.parent.geology_legend_thick_modified_signal.connect(
             lambda updated_list: self.geology_legend_thick_modified_update_views(updated_list=updated_list))
+        self.parent.geology_legend_point_size_modified_signal.connect(
+            lambda updated_list: self.geology_legend_point_size_modified_update_views(updated_list=updated_list))
         self.parent.geology_legend_opacity_modified_signal.connect(
             lambda updated_list: self.geology_legend_opacity_modified_update_views(updated_list=updated_list))
 
@@ -225,6 +227,8 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             lambda updated_list: self.dom_legend_color_modified_update_views(updated_list=updated_list))
         self.parent.dom_legend_thick_modified_signal.connect(
             lambda updated_list: self.dom_legend_thick_modified_update_views(updated_list=updated_list))
+        self.parent.dom_legend_point_size_modified_signal.connect(
+            lambda updated_list: self.dom_legend_point_size_modified_update_views(updated_list=updated_list))
         self.parent.dom_legend_opacity_modified_signal.connect(
             lambda updated_list: self.dom_legend_opacity_modified_update_views(updated_list=updated_list))
 
@@ -270,6 +274,8 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             lambda updated_list: self.fluid_legend_color_modified_update_views(updated_list=updated_list))
         self.parent.fluid_legend_thick_modified_signal.connect(
             lambda updated_list: self.fluid_legend_thick_modified_update_views(updated_list=updated_list))
+        self.parent.fluid_legend_point_size_modified_signal.connect(
+            lambda updated_list: self.fluid_legend_point_size_modified_update_views(updated_list=updated_list))
         self.parent.fluid_legend_opacity_modified_signal.connect(
             lambda updated_list: self.fluid_legend_opacity_modified_update_views(updated_list=updated_list))
 
@@ -289,6 +295,8 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             lambda updated_list: self.background_legend_color_modified_update_views(updated_list=updated_list))
         self.parent.background_legend_thick_modified_signal.connect(
             lambda updated_list: self.background_legend_thick_modified_update_views(updated_list=updated_list))
+        self.parent.background_legend_point_size_modified_signal.connect(
+            lambda updated_list: self.background_legend_point_size_modified_update_views(updated_list=updated_list))
         self.parent.background_legend_opacity_modified_signal.connect(
             lambda updated_list: self.background_legend_opacity_modified_update_views(updated_list=updated_list))
 
@@ -2732,7 +2740,18 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         """Re-connect signals."""
         self.GeologyTreeWidget.itemChanged.connect(self.toggle_geology_topology_visibility)
         self.TopologyTreeWidget.itemChanged.connect(self.toggle_geology_topology_visibility)
-
+    def geology_legend_point_size_modified_update_views(self, updated_list=None):
+        """This is called when the point size in the geological legend is modified.
+        Disconnect signals to geology and topology tree, if they are set, to avoid a nasty loop
+        that disrupts the trees, then they are reconnected when the trees are rebuilt"""
+        self.GeologyTreeWidget.itemChanged.disconnect()
+        self.TopologyTreeWidget.itemChanged.disconnect()
+        for uid in updated_list:
+            """Case for line_thick changed"""
+            self.change_actor_point_size(uid=uid, collection='geol_coll')
+        """Re-connect signals."""
+        self.GeologyTreeWidget.itemChanged.connect(self.toggle_geology_topology_visibility)
+        self.TopologyTreeWidget.itemChanged.connect(self.toggle_geology_topology_visibility)
     def geology_legend_opacity_modified_update_views(self, updated_list=None):
         """This is called when the line thickness in the geological legend is modified.
         Disconnect signals to geology and topology tree, if they are set, to avoid a nasty loop
@@ -3135,7 +3154,16 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             self.change_actor_line_thick(uid=uid, collection='dom_coll')
         """Re-connect signals."""
         self.DOMsTableWidget.itemChanged.connect(self.toggle_dom_visibility)
-
+    def dom_legend_point_size_modified_update_views(self, updated_list=None):
+        """This is called when the line thickness in the cross-section legend is modified.
+        Disconnect signals to xsect list, if they are set, then they are
+        reconnected when the list is rebuilt"""
+        self.DOMsTableWidget.itemChanged.disconnect()
+        for uid in updated_list:
+            """Case for line_thick changed"""
+            self.change_actor_point_size(uid=uid, collection='dom_coll')
+        """Re-connect signals."""
+        self.DOMsTableWidget.itemChanged.connect(self.toggle_dom_visibility)
     def dom_legend_opacity_modified_update_views(self, updated_list=None):
         """This is called when the opacity in the image legend is modified.
         Disconnect signals to image tree, if they are set, to avoid a nasty loop
@@ -3143,7 +3171,8 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.DOMsTableWidget.itemChanged.disconnect()
         for uid in updated_list:
             """Case for color changed"""
-            self.change_actor_opacity(uid=uid, collection='dom_coll')
+            if isinstance(self,View3D):
+                self.change_actor_opacity(uid=uid, collection='dom_coll')
         """Re-connect signals."""
         self.DOMsTableWidget.itemChanged.connect(self.toggle_dom_visibility)
 
@@ -3442,6 +3471,19 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.FluidsTreeWidget.itemChanged.connect(self.toggle_fluids_topology_visibility)
         self.FluidsTopologyTreeWidget.itemChanged.connect(self.toggle_fluids_topology_visibility)
 
+    def fluid_legend_point_size_modified_update_views(self, updated_list=None):
+        """This is called when the line thickness in the fluid legend is modified.
+        Disconnect signals to fluid and topology tree, if they are set, to avoid a nasty loop
+        that disrupts the trees, then they are reconnected when the trees are rebuilt"""
+        self.FluidsTreeWidget.itemChanged.disconnect()
+        self.FluidsTopologyTreeWidget.itemChanged.disconnect()
+        for uid in updated_list:
+            """Case for line_thick changed"""
+            self.change_actor_line_point_size(uid=uid, collection='fluids_coll')
+        """Re-connect signals."""
+        self.FluidsTreeWidget.itemChanged.connect(self.toggle_fluids_topology_visibility)
+        self.FluidsTopologyTreeWidget.itemChanged.connect(self.toggle_fluids_topology_visibility)
+
     def fluid_legend_opacity_modified_update_views(self, updated_list=None):
         """This is called when the opacity in the fluid legend is modified.
         Disconnect signals to fluid and topology tree, if they are set, to avoid a nasty loop
@@ -3591,6 +3633,19 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         for uid in updated_list:
             """Case for line_thick changed"""
             self.change_actor_line_thick(uid=uid, collection='backgrounds_coll')
+        """Re-connect signals."""
+        self.BackgroundsTreeWidget.itemChanged.connect(self.toggle_backgrounds_topology_visibility)
+        self.BackgroundsTopologyTreeWidget.itemChanged.connect(self.toggle_backgrounds_topology_visibility)
+
+    def background_legend_point_size_modified_update_views(self, updated_list=None):
+        """This is called when the line thickness in the fluid legend is modified.
+        Disconnect signals to fluid and topology tree, if they are set, to avoid a nasty loop
+        that disrupts the trees, then they are reconnected when the trees are rebuilt"""
+        self.BackgroundsTreeWidget.itemChanged.disconnect()
+        self.BackgroundsTopologyTreeWidget.itemChanged.disconnect()
+        for uid in updated_list:
+            """Case for line_thick changed"""
+            self.change_actor_point_size(uid=uid, collection='backgrounds_coll')
         """Re-connect signals."""
         self.BackgroundsTreeWidget.itemChanged.connect(self.toggle_backgrounds_topology_visibility)
         self.BackgroundsTopologyTreeWidget.itemChanged.connect(self.toggle_backgrounds_topology_visibility)
@@ -4172,13 +4227,6 @@ class View3D(BaseView):
         """Update line thickness for actor uid"""
         if collection == 'geol_coll':
             line_thick = self.parent.geol_coll.get_uid_legend(uid=uid)['line_thick']
-            if isinstance(self.parent.geol_coll.get_uid_vtk_obj(uid), VertexSet):
-                self.actors_df.loc[self.actors_df['uid'] == uid, 'actor'].values[0].GetProperty().SetPointSize(
-                    line_thick)
-            else:
-                self.actors_df.loc[self.actors_df['uid'] == uid, 'actor'].values[0].GetProperty().SetLineWidth(
-                    line_thick)
-
         elif collection == 'xsect_coll':
             line_thick = self.parent.xsect_coll.get_legend()['line_thick']
         elif collection == 'boundary_coll':
@@ -4188,38 +4236,34 @@ class View3D(BaseView):
         elif collection == 'dom_coll':
             line_thick = self.parent.dom_coll.get_legend()['line_thick']
             """Note: no legend for image."""
-            if isinstance(self.parent.dom_coll.get_uid_vtk_obj(uid), PCDom):
-                """Use line_thick to set point size here."""
-                self.actors_df.loc[self.actors_df['uid'] == uid, 'actor'].values[0].GetProperty().SetPointSize(
-                    line_thick)
-            else:
-                self.actors_df.loc[self.actors_df['uid'] == uid, 'actor'].values[0].GetProperty().SetLineWidth(
-                    line_thick)
         elif collection == 'well_coll':
             line_thick = self.parent.well_coll.get_uid_legend(uid=uid)['line_thick']
-            self.actors_df.loc[self.actors_df['uid'] == uid, 'actor'].values[0].GetProperty().SetLineWidth(line_thick)
         elif collection == 'fluids_coll':
             line_thick = self.parent.fluids_coll.get_uid_legend(uid=uid)['line_thick']
-
-            if isinstance(self.parent.fluids_coll.get_uid_vtk_obj(uid), VertexSet):
-                self.actors_df.loc[self.actors_df['uid'] == uid, 'actor'].values[0].GetProperty().SetPointSize(
-                    line_thick)
-            else:
-                self.actors_df.loc[self.actors_df['uid'] == uid, 'actor'].values[0].GetProperty().SetLineWidth(
-                    line_thick)
-
         elif collection == 'backgrounds_coll':
             line_thick = self.parent.backgrounds_coll.get_uid_legend(uid=uid)['line_thick']
+        self.actors_df.loc[self.actors_df['uid'] == uid, 'actor'].values[0].GetProperty().SetLineWidth(line_thick)
 
-            if isinstance(self.parent.backgrounds_coll.get_uid_vtk_obj(uid), VertexSet):
-                self.actors_df.loc[self.actors_df['uid'] == uid, 'actor'].values[0].GetProperty().SetPointSize(
-                    line_thick)
-            else:
-                self.actors_df.loc[self.actors_df['uid'] == uid, 'actor'].values[0].GetProperty().SetLineWidth(
-                    line_thick)
-
-    def change_actor_point_thick(self, uid=None, collection=None):
-        ...
+    def change_actor_point_size(self, uid=None, collection=None):
+        """Update line thickness for actor uid"""
+        if collection == 'geol_coll':
+            point_size = self.parent.geol_coll.get_uid_legend(uid=uid)['point_size']
+        elif collection == 'xsect_coll':
+            point_size = self.parent.xsect_coll.get_legend()['point_size']
+        elif collection == 'boundary_coll':
+            point_size = self.parent.boundary_coll.get_legend()['point_size']
+        elif collection == 'mesh3d_coll':
+            point_size = self.parent.mesh3d_coll.get_legend()['point_size']
+        elif collection == 'dom_coll':
+            point_size = self.parent.dom_coll.get_legend()['point_size']
+            """Note: no legend for image."""
+        elif collection == 'well_coll':
+            point_size = self.parent.well_coll.get_uid_legend(uid=uid)['point_size']
+        elif collection == 'fluids_coll':
+            point_size = self.parent.fluids_coll.get_uid_legend(uid=uid)['point_size']
+        elif collection == 'backgrounds_coll':
+            point_size = self.parent.backgrounds_coll.get_uid_legend(uid=uid)['point_size']
+        self.actors_df.loc[self.actors_df['uid'] == uid, 'actor'].values[0].GetProperty().SetPointSize(point_size)
 
     def set_actor_visible(self, uid=None, visible=None, name=None):
 
@@ -4276,6 +4320,7 @@ class View3D(BaseView):
             color_B = self.parent.geol_coll.get_uid_legend(uid=uid)['color_B']
             color_RGB = [color_R / 255, color_G / 255, color_B / 255]
             line_thick = self.parent.geol_coll.get_uid_legend(uid=uid)['line_thick']
+            point_size = self.parent.geol_coll.get_uid_legend(uid=uid)['point_size']
             opacity = self.parent.geol_coll.get_uid_legend(uid=uid)['opacity'] / 100
 
             plot_entity = self.parent.geol_coll.get_uid_vtk_obj(uid)
@@ -4337,6 +4382,7 @@ class View3D(BaseView):
             color_B = self.parent.fluids_coll.get_uid_legend(uid=uid)['color_B']
             color_RGB = [color_R / 255, color_G / 255, color_B / 255]
             line_thick = self.parent.fluids_coll.get_uid_legend(uid=uid)['line_thick']
+            point_size = self.parent.fluids_coll.get_uid_legend(uid=uid)['point_size']
             opacity = self.parent.fluids_coll.get_uid_legend(uid=uid)['opacity'] / 100
 
             plot_entity = self.parent.fluids_coll.get_uid_vtk_obj(uid)
@@ -4346,6 +4392,7 @@ class View3D(BaseView):
             color_B = self.parent.backgrounds_coll.get_uid_legend(uid=uid)['color_B']
             color_RGB = [color_R / 255, color_G / 255, color_B / 255]
             line_thick = self.parent.backgrounds_coll.get_uid_legend(uid=uid)['line_thick']
+            point_size = self.parent.backgrounds_coll.get_uid_legend(uid=uid)['point_size']
             opacity = self.parent.backgrounds_coll.get_uid_legend(uid=uid)['opacity'] / 100
 
             plot_entity = self.parent.backgrounds_coll.get_uid_vtk_obj(uid)
@@ -4429,7 +4476,6 @@ class View3D(BaseView):
                     show_property = None
                     show_property_title = None
 
-
                 else:
                     if plot_entity.get_point_data_shape(show_property)[-1] == 3:
                         plot_rgb_option = True
@@ -4439,14 +4485,13 @@ class View3D(BaseView):
                                                line_thick=line_thick,
                                                plot_texture_option=texture, plot_rgb_option=plot_rgb_option,
                                                visible=visible,
-                                               style=style, point_size=line_thick * 10.0, points_as_spheres=True,
+                                               style=style, point_size=point_size, points_as_spheres=True,
                                                pickable=pickable, opacity=opacity)
             else:
                 this_actor = None
         elif isinstance(plot_entity, DEM):
             """Show texture specified in show_property"""
-            if show_property in \
-                    self.parent.dom_coll.df.loc[self.parent.dom_coll.df['uid'] == uid, "texture_uids"].values[0]:
+            if show_property in self.parent.dom_coll.df.loc[self.parent.dom_coll.df['uid'] == uid, "texture_uids"].values[0]:
                 active_image = self.parent.image_coll.get_uid_vtk_obj(show_property)
                 active_image_texture = active_image.texture
                 # active_image_properties_components = active_image.properties_components[0]  # IF USED THIS MUST BE FIXED FOR TEXTURES WITH MORE THAN 3 COMPONENTS

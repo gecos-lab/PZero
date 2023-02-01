@@ -65,6 +65,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
     geology_metadata_modified_signal = pyqtSignal(list)
     geology_legend_color_modified_signal = pyqtSignal(list)
     geology_legend_thick_modified_signal = pyqtSignal(list)
+    geology_legend_point_size_modified_signal = pyqtSignal(list)
     geology_legend_opacity_modified_signal = pyqtSignal(list)
 
 
@@ -100,6 +101,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
     dom_metadata_modified_signal = pyqtSignal(list)
     dom_legend_color_modified_signal = pyqtSignal(list)
     dom_legend_thick_modified_signal = pyqtSignal(list)
+    dom_legend_point_size_modified_signal = pyqtSignal(list)
     dom_legend_opacity_modified_signal = pyqtSignal(list)
 
     image_added_signal = pyqtSignal(list)
@@ -124,6 +126,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
     fluid_metadata_modified_signal = pyqtSignal(list)
     fluid_legend_color_modified_signal = pyqtSignal(list)
     fluid_legend_thick_modified_signal = pyqtSignal(list)
+    fluid_legend_point_size_modified_signal = pyqtSignal(list)
     fluid_legend_opacity_modified_signal = pyqtSignal(list)
 
     background_added_signal = pyqtSignal(list)
@@ -134,6 +137,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
     background_metadata_modified_signal = pyqtSignal(list)
     background_legend_color_modified_signal = pyqtSignal(list)
     background_legend_thick_modified_signal = pyqtSignal(list)
+    background_legend_point_size_modified_signal = pyqtSignal(list)
     background_legend_opacity_modified_signal = pyqtSignal(list)
 
     prop_legend_cmap_modified_signal = pyqtSignal(str)

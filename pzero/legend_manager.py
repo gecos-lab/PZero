@@ -21,6 +21,7 @@ class Legend(QObject):
                         'color_G': int(255),
                         'color_B': int(255),
                         'line_thick': 2.0,
+                        'point_size': 10.0,
                         'opacity': int(100)}
 
     well_legend_dict = {'Loc ID': 'undef',
@@ -40,6 +41,7 @@ class Legend(QObject):
                           'color_G': int(255),
                           'color_B': int(255),
                           'line_thick': 2.0,
+                          'point_size': 10.0,
                           'opacity': 100}
     backgrounds_legend_dict = {'background_type': "undef",
                                'background_feature': "undef",
@@ -48,6 +50,7 @@ class Legend(QObject):
                                'color_G': int(255),
                                'color_B': int(255),
                                'line_thick': 2.0,
+                               'point_size': 10.0,
                                'opacity': 100}
 
     legend_type_dict = {'geological_type': str,
@@ -66,6 +69,7 @@ class Legend(QObject):
                         'color_G': int,
                         'color_B': int,
                         'line_thick': float,
+                        'point_size': float,
                         'opacity': int}
 
     others_legend_dict = {'other_type': ["XSection", "Boundary", "Mesh3D", "DOM", "Image"],
@@ -134,13 +138,14 @@ class Legend(QObject):
                                                                  str(color_B)])  # self.GeologyTreeWidget as parent -> top level
             parent.LegendTreeWidget.setItemWidget(llevel_1, 4, other_color_dialog_btn)
             parent.LegendTreeWidget.setItemWidget(llevel_1, 5, other_line_thick_spn)
-            parent.LegendTreeWidget.setItemWidget(llevel_1, 6, other_point_size_spn)
+            if other_type == 'DOM':
+                parent.LegendTreeWidget.setItemWidget(llevel_1, 6, other_point_size_spn)
+                other_point_size_spn.valueChanged.connect(lambda: self.change_other_feature_point_size(parent=parent))
             parent.LegendTreeWidget.setItemWidget(llevel_1, 7, other_opacity_spn)
 
             "Set signals for the widgets below"
             other_color_dialog_btn.clicked.connect(lambda: self.change_other_feature_color(parent=parent))
             other_line_thick_spn.valueChanged.connect(lambda: self.change_other_feature_line_thick(parent=parent))
-            other_point_size_spn.valueChanged.connect(lambda: self.change_other_feature_point_size(parent=parent))
             other_opacity_spn.valueChanged.connect(lambda: self.change_other_feature_opacity(parent=parent))
 
         for geo_type in pd_unique(parent.geol_legend_df['geological_type']):
@@ -168,6 +173,10 @@ class Legend(QObject):
                     line_thick = parent.geol_legend_df.loc[(parent.geol_legend_df['geological_type'] == geo_type) & (
                                 parent.geol_legend_df['geological_feature'] == feature) & (parent.geol_legend_df[
                                                                                                'scenario'] == scenario), "line_thick"].values[
+                        0]
+                    point_size = parent.geol_legend_df.loc[(parent.geol_legend_df['geological_type'] == geo_type) & (
+                                parent.geol_legend_df['geological_feature'] == feature) & (parent.geol_legend_df[
+                                                                                               'scenario'] == scenario), "point_size"].values[
                         0]
                     opacity = parent.geol_legend_df.loc[(parent.geol_legend_df['geological_type'] == geo_type) & (
                                 parent.geol_legend_df['geological_feature'] == feature) & (parent.geol_legend_df[
@@ -203,7 +212,13 @@ class Legend(QObject):
                     geol_line_thick_spn.feature = feature
                     geol_line_thick_spn.scenario = scenario
                     geol_line_thick_spn.setValue(line_thick)
-                    "geol_line_opacity_spn > QSpinBox used to select line thickness"
+                    "geol_point_size_spn > QSpinBox used to select point size"
+                    geol_point_size_spn = QSpinBox()
+                    geol_point_size_spn.geo_type = geo_type  # this is to pass these values to the update function below
+                    geol_point_size_spn.feature = feature
+                    geol_point_size_spn.scenario = scenario
+                    geol_point_size_spn.setValue(point_size)
+                    "geol_line_opacity_spn > QSpinBox used to select opacity"
                     geol_opacity_spn = QSpinBox()
                     geol_opacity_spn.geo_type = geo_type  # this is to pass these values to the update function below
                     geol_opacity_spn.feature = feature
@@ -240,6 +255,7 @@ class Legend(QObject):
                                                           str(color_B)])  # llevel_2 as parent -> 3rd level
                     parent.LegendTreeWidget.setItemWidget(llevel_3, 4, geol_color_dialog_btn)
                     parent.LegendTreeWidget.setItemWidget(llevel_3, 5, geol_line_thick_spn)
+                    parent.LegendTreeWidget.setItemWidget(llevel_3, 6, geol_point_size_spn)
                     parent.LegendTreeWidget.setItemWidget(llevel_3, 7, geol_opacity_spn)
                     parent.LegendTreeWidget.setItemWidget(llevel_3, 8, geol_time_spn)
                     # parent.LegendTreeWidget.setItemWidget(llevel_3, 6, geol_time_combo)
@@ -248,6 +264,8 @@ class Legend(QObject):
                     geol_color_dialog_btn.clicked.connect(lambda: self.change_geology_feature_color(parent=parent))
                     geol_line_thick_spn.valueChanged.connect(
                         lambda: self.change_geology_feature_line_thick(parent=parent))
+                    geol_point_size_spn.valueChanged.connect(
+                        lambda: self.change_geology_feature_point_size(parent=parent))
                     geol_opacity_spn.valueChanged.connect(lambda: self.change_geology_feature_opacity(parent=parent))
                     geol_time_spn.editingFinished.connect(lambda: self.change_geological_time(parent=parent))
                     # geol_time_combo.currentTextChanged.connect(lambda: self.change_geological_time(parent=parent))
@@ -322,6 +340,10 @@ class Legend(QObject):
                                 parent.fluids_legend_df['fluid_feature'] == feature) & (parent.fluids_legend_df[
                                                                                             'scenario'] == scenario), "line_thick"].values[
                         0]
+                    point_size = parent.fluids_legend_df.loc[(parent.fluids_legend_df['fluid_type'] == fluid_type) & (
+                                parent.fluids_legend_df['fluid_feature'] == feature) & (parent.fluids_legend_df[
+                                                                                            'scenario'] == scenario), "point_size"].values[
+                        0]
                     opacity = parent.fluids_legend_df.loc[(parent.fluids_legend_df['fluid_type'] == fluid_type) & (
                                 parent.fluids_legend_df['fluid_feature'] == feature) & (parent.fluids_legend_df[
                                                                                             'scenario'] == scenario), "opacity"].values[
@@ -348,12 +370,18 @@ class Legend(QObject):
                     fluid_color_dialog_btn.scenario = scenario
                     fluid_color_dialog_btn.setStyleSheet(
                         "background-color:rgb({},{},{})".format(color_R, color_G, color_B))
-                    "geol_line_thick_spn > QSpinBox used to select line thickness"
+                    "fluid_line_thick_spn > QSpinBox used to select line thickness"
                     fluid_line_thick_spn = QSpinBox()
                     fluid_line_thick_spn.fluid_type = fluid_type  # this is to pass these values to the update function below
                     fluid_line_thick_spn.feature = feature
                     fluid_line_thick_spn.scenario = scenario
                     fluid_line_thick_spn.setValue(line_thick)
+                    "fluid_point_size_spn > QSpinBox used to select point size"
+                    fluid_point_size_spn = QSpinBox()
+                    fluid_point_size_spn.fluid_type = fluid_type  # this is to pass these values to the update function below
+                    fluid_point_size_spn.feature = feature
+                    fluid_point_size_spn.scenario = scenario
+                    fluid_point_size_spn.setValue(point_size)
                     "fluid_opacity_spn > QSpinBox used to select line thickness"
                     fluid_opacity_spn = QSpinBox()
                     fluid_opacity_spn.fluid_type = fluid_type  # this is to pass these values to the update function below
@@ -391,6 +419,7 @@ class Legend(QObject):
                                                           str(color_B)])  # llevel_2 as parent -> 3rd level
                     parent.LegendTreeWidget.setItemWidget(llevel_3, 4, fluid_color_dialog_btn)
                     parent.LegendTreeWidget.setItemWidget(llevel_3, 5, fluid_line_thick_spn)
+                    parent.LegendTreeWidget.setItemWidget(llevel_3, 6, fluid_point_size_spn)
                     parent.LegendTreeWidget.setItemWidget(llevel_3, 7, fluid_opacity_spn)
                     parent.LegendTreeWidget.setItemWidget(llevel_3, 8, fluid_time_spn)
                     # parent.LegendTreeWidget.setItemWidget(llevel_3, 6, geol_time_combo)
@@ -400,6 +429,8 @@ class Legend(QObject):
                         lambda: self.change_fluid_feature_color(parent=parent))
                     fluid_line_thick_spn.valueChanged.connect(
                         lambda: self.change_fluid_feature_line_thick(parent=parent))
+                    fluid_point_size_spn.valueChanged.connect(
+                        lambda: self.change_fluid_feature_point_size(parent=parent))
                     fluid_opacity_spn.valueChanged.connect(
                         lambda: self.change_fluid_feature_opacity(parent=parent))
                     fluid_time_spn.editingFinished.connect(
@@ -424,6 +455,9 @@ class Legend(QObject):
                 line_thick = parent.backgrounds_legend_df.loc[
                     (parent.backgrounds_legend_df['background_type'] == background_type) & (
                                 parent.backgrounds_legend_df['background_feature'] == feature), "line_thick"].values[0]
+                point_size = parent.backgrounds_legend_df.loc[
+                    (parent.backgrounds_legend_df['background_type'] == background_type) & (
+                                parent.backgrounds_legend_df['background_feature'] == feature), "point_size"].values[0]
                 opacity = parent.backgrounds_legend_df.loc[
                     (parent.backgrounds_legend_df['background_type'] == background_type) & (
                                 parent.backgrounds_legend_df['background_feature'] == feature), "opacity"].values[0]
@@ -441,6 +475,11 @@ class Legend(QObject):
 
                 background_line_thick_spn.setValue(line_thick)
 
+                "background_point_size_spn > QSpinBox used to select line thickness"
+                background_point_size_spn = QSpinBox()
+                background_point_size_spn.background_type = background_type  # this is to pass these values to the update function below
+                background_point_size_spn.feature = feature
+                background_point_size_spn.setValue(point_size)
                 "background_opacity_spn > QSpinBox used to select line thickness"
                 background_opacity_spn = QSpinBox()
                 background_opacity_spn.background_type = background_type  # this is to pass these values to the update function below
@@ -452,6 +491,7 @@ class Legend(QObject):
                 # llevel_3 = QTreeWidgetItem(llevel_2, [scenario, str(color_R), str(color_G), str(color_B)])  # llevel_2 as parent -> 3rd level
                 parent.LegendTreeWidget.setItemWidget(llevel_2, 4, backgrounds_color_dialog_btn)
                 parent.LegendTreeWidget.setItemWidget(llevel_2, 5, background_line_thick_spn)
+                parent.LegendTreeWidget.setItemWidget(llevel_2, 6, background_point_size_spn)
                 parent.LegendTreeWidget.setItemWidget(llevel_2, 7, background_opacity_spn)
 
                 "Set signals for the widgets below"
@@ -459,6 +499,8 @@ class Legend(QObject):
                     lambda: self.change_background_feature_color(parent=parent))
                 background_line_thick_spn.valueChanged.connect(
                     lambda: self.change_background_feature_line_thick(parent=parent))
+                background_point_size_spn.valueChanged.connect(
+                    lambda: self.change_background_feature_point_size(parent=parent))
                 background_opacity_spn.valueChanged.connect(
                     lambda: self.change_background_opacity(parent=parent)
                 )
@@ -524,7 +566,20 @@ class Legend(QObject):
                     parent.geol_coll.df['geological_feature'] == feature) & (parent.geol_coll.df[
                                                                                  'scenario'] == scenario), "uid"].to_list()
         parent.geology_legend_thick_modified_signal.emit(updated_list)
-
+    def change_geology_feature_point_size(self, parent=None):
+        geo_type = self.sender().geo_type
+        feature = self.sender().feature
+        scenario = self.sender().scenario
+        point_size = self.sender().value()
+        "Here the query is reversed and modified, dropping the values() method, to allow SETTING the line thickness in the legend"
+        parent.geol_legend_df.loc[(parent.geol_legend_df['geological_type'] == geo_type) & (
+                    parent.geol_legend_df['geological_feature'] == feature) & (
+                                              parent.geol_legend_df['scenario'] == scenario), "point_size"] = point_size
+        """Signal to update actors in windows. This is emitted only for the modified uid under the 'line_thick' key."""
+        updated_list = parent.geol_coll.df.loc[(parent.geol_coll.df['geological_type'] == geo_type) & (
+                    parent.geol_coll.df['geological_feature'] == feature) & (parent.geol_coll.df[
+                                                                                 'scenario'] == scenario), "uid"].to_list()
+        parent.geology_legend_point_size_modified_signal.emit(updated_list)
     def change_geology_feature_opacity(self, parent=None):
         geo_type = self.sender().geo_type
         feature = self.sender().feature
@@ -632,14 +687,14 @@ class Legend(QObject):
         "Here the query is reversed and modified, dropping the values() method, to allow SETTING the line thickness in the legend"
         parent.others_legend_df.loc[(parent.others_legend_df['other_type'] == other_type), "point_size"] = point_size
         """Signals to update actors in windows. This is emitted only for the modified uid under the 'color' key."""
-        if other_type == "XSection":
-            parent.xsect_legend_thick_modified_signal.emit(parent.xsect_coll.df['uid'].tolist())
-        elif other_type == "DOM":
-            parent.dom_legend_thick_modified_signal.emit(parent.dom_coll.df['uid'].tolist())
-        elif other_type == "Mesh3D":
-            parent.mesh3d_legend_thick_modified_signal.emit(parent.dom_coll.df['uid'].tolist())
-        elif other_type == "Boundary":
-            parent.boundary_legend_thick_modified_signal.emit(parent.boundary_coll.df['uid'].tolist())
+        # if other_type == "XSection":
+        #     parent.xsect_legend_point_size_modified_signal.emit(parent.xsect_coll.df['uid'].tolist())
+        if other_type == "DOM":
+            parent.dom_legend_point_size_modified_signal.emit(parent.dom_coll.df['uid'].tolist())
+        # elif other_type == "Mesh3D":
+        #     parent.mesh3d_legend_point_size_modified_signal.emit(parent.dom_coll.df['uid'].tolist())
+        # elif other_type == "Boundary":
+        #     parent.boundary_legend_point_size_modified_signal.emit(parent.boundary_coll.df['uid'].tolist())
 
     def change_other_feature_opacity(self, parent=None):
         other_type = self.sender().other_type
@@ -776,6 +831,21 @@ class Legend(QObject):
                                                                               'scenario'] == scenario), "uid"].to_list()
         parent.fluid_legend_thick_modified_signal.emit(updated_list)
 
+    def change_fluid_feature_point_size(self, parent=None):
+        fluid_type = self.sender().fluid_type
+        feature = self.sender().feature
+        scenario = self.sender().scenario
+        point_size = self.sender().value()
+        "Here the query is reversed and modified, dropping the values() method, to allow SETTING the line thickness in the legend"
+        parent.fluids_legend_df.loc[(parent.fluids_legend_df['fluid_type'] == fluid_type) & (
+                    parent.fluids_legend_df['fluid_feature'] == feature) & (parent.fluids_legend_df[
+                                                                                'scenario'] == scenario), "point_size"] = point_size
+        """Signal to update actors in windows. This is emitted only for the modified uid under the 'line_thick' key."""
+        updated_list = parent.fluids_coll.df.loc[(parent.fluids_coll.df['fluid_type'] == fluid_type) & (
+                    parent.fluids_coll.df['fluid_feature'] == feature) & (parent.fluids_coll.df[
+                                                                              'scenario'] == scenario), "uid"].to_list()
+        parent.fluid_legend_point_size_modified_signal.emit(updated_list)
+
     def change_fluid_feature_opacity(self, parent=None):
         fluid_type = self.sender().fluid_type
         feature = self.sender().feature
@@ -865,6 +935,18 @@ class Legend(QObject):
                         parent.backgrounds_coll.df['background_feature'] == feature), "uid"].to_list()
         parent.background_legend_thick_modified_signal.emit(updated_list)
 
+    def change_background_feature_point_size(self, parent=None):
+        background_type = self.sender().background_type
+        feature = self.sender().feature
+        point_size = self.sender().value()
+        "Here the query is reversed and modified, dropping the values() method, to allow SETTING the line thickness in the legend"
+        parent.backgrounds_legend_df.loc[(parent.backgrounds_legend_df['background_type'] == background_type) & (
+                    parent.backgrounds_legend_df['background_feature'] == feature), "point_size"] = point_size
+        """Signal to update actors in windows. This is emitted only for the modified uid under the 'line_thick' key."""
+        updated_list = parent.backgrounds_coll.df.loc[
+            (parent.backgrounds_coll.df['background_type'] == background_type) & (
+                        parent.backgrounds_coll.df['background_feature'] == feature), "uid"].to_list()
+        parent.background_legend_point_size_modified_signal.emit(updated_list)
     def change_background_opacity(self,parent=None):
         background_type = self.sender().background_type
         feature = self.sender().feature
