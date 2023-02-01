@@ -221,7 +221,8 @@ class DomCollection(QAbstractTableModel):
         if map_image_uid in self.df.at[row, 'texture_uids']:
             self.get_uid_vtk_obj(dom_uid).remove_texture(map_image_uid=map_image_uid)
             self.df.at[row, 'texture_uids'].remove(map_image_uid)
-            self.parent.dom_metadata_modified_signal.emit([dom_uid])
+            self.parent.dom_data_keys_removed_signal.emit([dom_uid])
+            # self.parent.dom_metadata_modified_signal.emit([dom_uid])
 
     def set_active_texture_on_dom(self, dom_uid=None, map_image_uid=None):
         self.get_uid_vtk_obj(dom_uid).set_active_texture(map_image_uid=map_image_uid)

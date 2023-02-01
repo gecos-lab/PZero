@@ -3074,7 +3074,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
 
     def dom_data_keys_modified_update_views(self, updated_list=None):
         """This is called when entity point or cell data are modified.
-        Disconnect signals to geology and topology tree, if they are set, to avoid a nasty loop
+        Disconnect signals to DOM tree, if they are set, to avoid a nasty loop
         that disrupts the trees, then they are reconnected when the trees are rebuilt"""
         self.DOMsTableWidget.itemChanged.disconnect()
         for uid in updated_list:

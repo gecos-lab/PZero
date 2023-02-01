@@ -514,7 +514,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         if not map_image_name:
             return
         map_image_uid = self.image_coll.df.loc[self.image_coll.df['name'] == map_image_name, 'uid'].values[0]
-        if not map_image_uid in self.image_coll.get_uids():
+        if map_image_uid not in self.image_coll.get_uids():
             return
         """Add textures."""
         dom_uids = self.selected_uids
@@ -530,11 +530,12 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             return
         """Map Image selection dialog."""
         map_image_names = self.image_coll.df.loc[self.image_coll.df['image_type'] == "MapImage", 'name'].to_list()
-        map_image_name = input_combo_dialog(parent=None, title="Remove texture from DEM", label="Choose Map Image", choice_list=map_image_names)
+        map_image_name = input_combo_dialog(parent=None, title="Remove texture from DEM", label="Choose Map Image",
+                                            choice_list=map_image_names)
         if not map_image_name:
             return
         map_image_uid = self.image_coll.df.loc[self.image_coll.df['name'] == map_image_name, 'uid'].values[0]
-        if not map_image_uid in self.image_coll.get_uids():
+        if map_image_uid not in self.image_coll.get_uids():
             return
         """Remove textures."""
         if map_image_uid in self.image_coll.get_uids():
