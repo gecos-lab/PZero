@@ -566,6 +566,7 @@ class Legend(QObject):
                     parent.geol_coll.df['geological_feature'] == feature) & (parent.geol_coll.df[
                                                                                  'scenario'] == scenario), "uid"].to_list()
         parent.geology_legend_thick_modified_signal.emit(updated_list)
+
     def change_geology_feature_point_size(self, parent=None):
         geo_type = self.sender().geo_type
         feature = self.sender().feature
@@ -580,6 +581,7 @@ class Legend(QObject):
                     parent.geol_coll.df['geological_feature'] == feature) & (parent.geol_coll.df[
                                                                                  'scenario'] == scenario), "uid"].to_list()
         parent.geology_legend_point_size_modified_signal.emit(updated_list)
+
     def change_geology_feature_opacity(self, parent=None):
         geo_type = self.sender().geo_type
         feature = self.sender().feature

@@ -73,11 +73,7 @@ def edit_line(self):
         self.clear_selection()
         self.plotter.untrack_click_position()
         traced_pld = self.tracer.GetContourRepresentation().GetContourRepresentationAsPolyData()
-        if not self.vbm_U0:
-                print("Zero-length vector")
-                self.vector_by_mouse_dU = 0
-                self.vector_by_mouse_dV = 0
-            if isinstance(self, NewViewMap):
+        if isinstance(self, NewViewMap):
             vtk_obj = PolyLine()
         elif isinstance(self, NewViewXsection):
             vtk_obj = XsPolyLine(x_section_uid=self.this_x_section_uid, parent=self.parent)

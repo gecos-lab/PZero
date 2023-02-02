@@ -45,7 +45,7 @@ from pandas import unique as pd_unique
 from vtk.util import numpy_support
 from vtkmodules.vtkInteractionWidgets import vtkCameraOrientationWidget, vtkContourWidget, \
     vtkLinearContourLineInterpolator
-from vtk import vtkExtractPoints, vtkSphere, vtkAreaPicker, vtkPropPicker, vtkImageTracerWidget, vtkDistanceWidget
+from vtk import vtkExtractPoints, vtkSphere, vtkAreaPicker, vtkPropPicker, vtkImageTracerWidget, vtkDistanceWidget, vtkAppendPolyData
 
 """3D plotting imports"""
 from pyvista import global_theme as pv_global_theme
@@ -4122,7 +4122,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                                             line_thick=line_thick,
                                             plot_texture_option=texture, plot_rgb_option=plot_rgb_option,
                                             visible=visible,
-                                            style=style, point_size=line_thick, points_as_spheres=True,
+                                            style=style, point_size=point_size, points_as_spheres=True,
                                             pickable=pickable)
             else:
                 this_actor = None
@@ -4458,7 +4458,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                   color_bar_range=None, show_property_title=None, line_thick=None,
                   plot_texture_option=None, plot_rgb_option=None, visible=None,
                   style='surface', point_size=None, points_as_spheres=False, render_lines_as_tubes=False,
-                  pickable=True):
+                  pickable=True, opacity=1.0,smooth_shading=False):
         if not self.actors_df.empty:
             """This stores the camera position before redrawing the actor.
             Added to avoid a bug that sometimes sends the scene to a very distant place.
@@ -4566,14 +4566,16 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             #   2. Have a general actors_df with a table_index value (that needs to be updated when adding or removing objects)
             #   3. Have a selected_entities_df indipendent from the tables or views that collects the selected actors (both in the table or in the view)
 
-            for uid in sel_uid:
-                idx = self.actors_df.loc[self.actors_df['uid'] == uid].index[0]
-                coll = self.actors_df.loc[self.actors_df['uid'] == uid, 'collection'].values[0]
+            # For now selection will work only for geology objects
 
-                if coll == 'geol_coll':
-                    self.parent.GeologyTableView.selectRow(idx)
-                elif coll == 'image_coll':
-                    self.parent.ImagesTableView.selectRow(idx)
+            for uid in sel_uid:
+                idx = self.parent.geol_coll.df.loc[self.parent.geol_coll.df['uid'] == uid].index[0]
+                # coll = self.actors_df.loc[self.actors_df['uid'] == uid, 'collection'].values[0]
+
+                # if coll == 'geol_coll':
+                self.parent.GeologyTableView.selectRow(idx)
+                # elif coll == 'image_coll':
+                #     self.parent.ImagesTableView.selectRow(idx)
                 # return
         else:
             self.parent.GeologyTableView.clearSelection()
@@ -4626,8 +4628,8 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         actors = set(self.plotter.renderer.actors)
 
         actor = picker.GetActor()
-
         sel_uid = self.actors_df.loc[self.actors_df['actor'] == actor, 'uid'].values[0]
+        print(sel_uid)
         if shift:
             self.selected_uids.append(sel_uid)
         else:
@@ -6957,9 +6959,7 @@ class NewView2D(BaseView):
         self.actionBase_Tool.setText("Edit")
 
         self.drawLineButton = QAction('Draw line', self)  # create action
-        self.drawLineButton.triggered.connect(lambda:
-                                              draw_line(
-                                                  self))  # connect action to function with additional argument parent
+        self.drawLineButton.triggered.connect(lambda: draw_line(self))  # connect action to function with additional argument parent
         self.menuBaseView.addAction(self.drawLineButton)  # add action to menu
         self.toolBarBase.addAction(self.drawLineButton)  # add action to toolbar
 
