@@ -1100,7 +1100,17 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 new_geol_legend_df = pd_read_csv(in_dir_name + '/geol_legend_table.csv', encoding='utf-8', dtype=Legend.legend_type_dict, keep_default_na=False)
             if not new_geol_legend_df.empty:
                 self.geol_legend_df = new_geol_legend_df
+
+            in_keys = set(self.geol_legend_df.keys())
+            def_keys = set(Legend.geol_legend_dict.keys())
+
+            diffs = def_keys.difference(in_keys)
+
+            for diff in diffs:
+                self.geol_legend_df[diff] = Legend.geol_legend_dict[diff]
             self.geol_legend_df.sort_values(by='geological_time', ascending=True, inplace=True)
+
+
 
         """Read well legend tables."""
 
@@ -1111,6 +1121,13 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 new_well_legend_df = pd_read_csv(in_dir_name + '/well_legend_table.csv', encoding='utf-8', dtype=Legend.legend_type_dict, keep_default_na=False)
             if not new_well_legend_df.empty:
                 self.well_legend_df = new_well_legend_df
+            in_keys = set(self.well_legend_df.keys())
+            def_keys = set(Legend.well_legend_dict.keys())
+
+            diffs = def_keys.difference(in_keys)
+
+            for diff in diffs:
+                self.well_legend_df[diff] = Legend.well_legend_dict[diff]
             self.well_legend_df.sort_values(by='Loc ID', ascending=True, inplace=True)
         """Read fluids legend tables."""
 
@@ -1121,7 +1138,15 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 new_fluids_legend_df = pd_read_csv(in_dir_name + '/fluids_legend_table.csv', encoding='utf-8', dtype=Legend.legend_type_dict, keep_default_na=False)
             if not new_fluids_legend_df.empty:
                 self.fluids_legend_df = new_fluids_legend_df
+            in_keys = set(self.fluids_legend_df.keys())
+            def_keys = set(Legend.fluids_legend_dict.keys())
+
+            diffs = def_keys.difference(in_keys)
+
+            for diff in diffs:
+                self.fluids_legend_df[diff] = Legend.fluids_legend_dict[diff]
             self.fluids_legend_df.sort_values(by='fluid_time', ascending=True, inplace=True)
+
 
         """Read Backgrounds legend tables."""
 
@@ -1132,6 +1157,13 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 new_backgrounds_legend_df = pd_read_csv(in_dir_name + '/backgrounds_legend_table.csv', encoding='utf-8', dtype=Legend.legend_type_dict, keep_default_na=False)
             if not new_backgrounds_legend_df.empty:
                 self.backgrounds_legend_df = new_backgrounds_legend_df
+            in_keys = set(self.backgrounds_legend_df.keys())
+            def_keys = set(Legend.backgrounds_legend_dict.keys())
+
+            diffs = def_keys.difference(in_keys)
+
+            for diff in diffs:
+                self.backgrounds_legend_df[diff] = Legend.backgrounds_legend_dict[diff]
 
         """Read other legend tables."""
 
@@ -1140,12 +1172,13 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 new_others_legend_df = pd_read_json(in_dir_name + '/others_legend_table.json', orient='index', dtype=Legend.legend_type_dict)
             else:
                 new_others_legend_df = pd_read_csv(in_dir_name + '/others_legend_table.csv', encoding='utf-8', dtype=Legend.legend_type_dict, keep_default_na=False)
-            if not new_others_legend_df.empty:
-                # self.others_legend_df = new_others_legend_df
-                for other_type in self.others_legend_df['other_type'].values:
-                    if other_type in new_others_legend_df['other_type'].values:
-                        self.others_legend_df[self.others_legend_df['other_type'] == other_type] = new_others_legend_df[new_others_legend_df['other_type'] == other_type].values
+            in_keys = set(self.others_legend_df.keys())
+            def_keys = set(Legend.others_legend_dict.keys())
 
+            diffs = def_keys.difference(in_keys)
+
+            for diff in diffs:
+                self.others_legend_df[diff] = Legend.others_legend_dict[diff]
 
         if os.path.isfile((in_dir_name + '/prop_legend_df.csv')) or os.path.isfile((in_dir_name + '/prop_legend_df.json')):
             if os.path.isfile((in_dir_name + '/prop_legend_df.json')):

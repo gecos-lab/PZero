@@ -4353,7 +4353,7 @@ class View3D(BaseView):
             color_B = self.parent.boundary_coll.get_legend()['color_B']
             color_RGB = [color_R / 255, color_G / 255, color_B / 255]
             line_thick = self.parent.boundary_coll.get_legend()['line_thick']
-            opacity = self.parent.boundary_coll.get_uid_legend(uid=uid)['opacity'] / 100
+            opacity = self.parent.boundary_coll.get_legend()['opacity'] / 100
 
             plot_entity = self.parent.boundary_coll.get_uid_vtk_obj(uid)
         elif collection == 'mesh3d_coll':
