@@ -1,16 +1,18 @@
 """orientation_analysis.py
 PZero© Andrea Bistacchi"""
 
-
 from numpy import ndarray as np_ndarray
 from numpy import less_equal as np_less_equal
 from numpy import greater as np_greater
-from numpy import asarray as np_asarray 
+from numpy import asarray as np_asarray
 from numpy import deg2rad as np_deg2rad
 from numpy import sin as np_sin
 from numpy import cos as np_cos
+from numpy import tan as np_tan
 from numpy import squeeze as np_squeeze
 from numpy import number as np_number
+from numpy import cross as np_cross
+from numpy import zeros_like as np_zeros_like
 
 from .helper_dialogs import multiple_input_dialog
 from .entities_factory import TriSurf, VertexSet, XsVertexSet
@@ -24,12 +26,14 @@ def strikes2dip_directions(strikes=None):
     returns the same types."""
     if isinstance(strikes, np_ndarray):
         strikes_array = strikes
-        directions_array = (strikes_array + 90) * np_less_equal(strikes_array, 270) + (strikes_array - 270) * np_greater(strikes_array, 270)
+        directions_array = (strikes_array + 90) * np_less_equal(strikes_array, 270) + (
+                    strikes_array - 270) * np_greater(strikes_array, 270)
         directions = directions_array
         return directions
     elif isinstance(strikes, list):
         strikes_array = np_asarray(strikes)
-        directions_array = (strikes_array + 90) * np_less_equal(strikes_array, 270) + (strikes_array - 270) * np_greater(strikes_array, 270)
+        directions_array = (strikes_array + 90) * np_less_equal(strikes_array, 270) + (
+                    strikes_array - 270) * np_greater(strikes_array, 270)
         directions = list(directions_array)
         return directions
     elif isinstance(strikes, (float, int)):
@@ -47,7 +51,7 @@ def plunge_trends2lineations(plunges=None, trends=None):
     to lineation unit vectors pointing downwards if Plunge > 0.
     Accepts single values, lists or Numpy arrays and
     returns Numpy arrays."""
-    if isinstance(plunges, (float, int, list,np_number)) and isinstance(trends, (float, int, list,np_number)):
+    if isinstance(plunges, (float, int, list, np_number)) and isinstance(trends, (float, int, list, np_number)):
         plunges_array = np_asarray(plunges)
         trends_array = np_asarray(trends)
     elif isinstance(plunges, np_ndarray) and isinstance(trends, np_ndarray):
@@ -57,11 +61,12 @@ def plunge_trends2lineations(plunges=None, trends=None):
         print("Plunge/Trend type not recognized.")
     plunges_array = np_deg2rad(plunges_array)
     trends_array = np_deg2rad(trends_array)
-    lineations = np_asarray([np_sin(trends_array) * np_cos(plunges_array), np_cos(trends_array) * np_cos(plunges_array), -np_sin(plunges_array)])
+    lineations = np_asarray([np_sin(trends_array) * np_cos(plunges_array), np_cos(trends_array) * np_cos(plunges_array),
+                             -np_sin(plunges_array)])
     return lineations.T
 
 
-def dip_directions2normals(dips=None, directions=None):
+def dip_directions2normals(dips=None, directions=None, return_dip_dir_vec=False):
     """Convert Dip/Direction measurements in degrees (single or list)
     to normal unit vectors pointing downwards if Dip > 0.
     Accepts single values, lists or Numpy arrays and
@@ -77,8 +82,10 @@ def dip_directions2normals(dips=None, directions=None):
     dips_array = np_squeeze(dips_array)
     directions_array = np_squeeze(directions_array)
     plunges_array = 90 - dips_array
-    trends_array = (directions_array + 180) * np_less_equal(directions_array, 180) + (directions_array - 180) * np_greater(directions_array, 180)
+    trends_array = (directions_array + 180) * np_less_equal(directions_array, 180) + (
+                directions_array - 180) * np_greater(directions_array, 180)
     normals = plunge_trends2lineations(plunges=plunges_array, trends=trends_array)
+
     return normals
 
 
@@ -108,17 +115,20 @@ def set_normals(self):
                 property_name_list = self.geol_coll.get_uid_properties_names(uid=self.selected_uids[0])
                 if len(self.selected_uids) > 1:
                     for uid in self.selected_uids[1:]:
-                        property_name_list = list(set(property_name_list) & set(self.geol_coll.get_uid_properties_names(uid=uid)))
+                        property_name_list = list(
+                            set(property_name_list) & set(self.geol_coll.get_uid_properties_names(uid=uid)))
                 if property_name_list == []:
                     return
-                input_dict = {'dip_name': ['Dip property: ', property_name_list], 'dir_name': ['Direction property: ', property_name_list]}
+                input_dict = {'dip_name': ['Dip property: ', property_name_list],
+                              'dir_name': ['Direction property: ', property_name_list]}
                 updt_dict = multiple_input_dialog(title='Select Dip/Direction property names', input_dict=input_dict)
                 if updt_dict is None:
                     return
                 """Now calculate Normals on each VTK object and append Normals to properties_names list."""
                 for uid in self.selected_uids:
                     self.geol_coll.append_uid_property(uid=uid, property_name="Normals", property_components=3)
-                    vset_set_normals(VertexSet=self.geol_coll.get_uid_vtk_obj(uid), dip_name=updt_dict['dip_name'], dir_name=updt_dict['dir_name'])
+                    vset_set_normals(VertexSet=self.geol_coll.get_uid_vtk_obj(uid), dip_name=updt_dict['dip_name'],
+                                     dir_name=updt_dict['dir_name'])
                     self.prop_legend.update_widget(self)
                     print("Normals set on TriSurf ", uid)
                 print("All Normals set.")
@@ -151,3 +161,11 @@ def set_normals(self):
             print("Normals can be calculated only on geological entities and Point Clouds (at the moment).")
     else:
         print("No input data selected.")
+
+
+def get_dip_dir_vectors(normals=None):
+    dip_az = -normals.copy()
+    dip_az[:, 2] = 0
+    dir_vectors = np_cross(normals, dip_az)
+    dip_vectors = np_cross(-normals, dir_vectors)
+    return dip_vectors, dir_vectors

@@ -1,5 +1,8 @@
 """windows_factory.py
 PZero© Andrea Bistacchi"""
+import vtkmodules.vtkFiltersCore
+
+from .orientation_analysis import get_dip_dir_vectors
 
 """QT imports"""
 from PyQt5.QtWidgets import *
@@ -36,14 +39,17 @@ from pandas import unique as pd_unique
 # import vtk.numpy_interface.dataset_adapter as dsa
 from vtk.util import numpy_support
 from vtkmodules.vtkInteractionWidgets import vtkCameraOrientationWidget
-from vtk import vtkExtractPoints, vtkSphere
+from vtk import vtkExtractPoints, vtkSphere, vtkAppendPolyData
 
 """3D plotting imports"""
 from pyvista import global_theme as pv_global_theme
 from pyvistaqt import QtInteractor as pvQtInteractor
 from pyvista import _vtk
 from pyvista import read_texture
-from pyvista import Disc as pvDisc
+from pyvista import Plane as pv_Plane
+from pyvista import Line as pv_Line
+from pyvista import Disc as pv_Disc
+
 from pyvista import PolyData as pvPolyData
 from pyvista import PointSet as pvPointSet
 from pyvista import Plotter as pv_plot
@@ -333,8 +339,8 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             if sec_uid:
                 geo_features = pd_unique(self.parent.geol_coll.df.loc[
                                              (self.parent.geol_coll.df['geological_type'] == geo_type) & (
-                                                         self.parent.geol_coll.df[
-                                                             'x_section'] == sec_uid), 'geological_feature'])
+                                                     self.parent.geol_coll.df[
+                                                         'x_section'] == sec_uid), 'geological_feature'])
             else:
                 geo_features = pd_unique(self.parent.geol_coll.df.loc[self.parent.geol_coll.df[
                                                                           'geological_type'] == geo_type, 'geological_feature'])
@@ -344,29 +350,29 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                 if sec_uid:
                     geo_scenario = pd_unique(self.parent.geol_coll.df.loc[
                                                  (self.parent.geol_coll.df['geological_type'] == geo_type) & (
-                                                             self.parent.geol_coll.df[
-                                                                 'geological_feature'] == feature) & (
-                                                             self.parent.geol_coll.df[
-                                                                 'x_section'] == sec_uid), 'scenario'])
+                                                         self.parent.geol_coll.df[
+                                                             'geological_feature'] == feature) & (
+                                                         self.parent.geol_coll.df[
+                                                             'x_section'] == sec_uid), 'scenario'])
                 else:
                     geo_scenario = pd_unique(self.parent.geol_coll.df.loc[
                                                  (self.parent.geol_coll.df['geological_type'] == geo_type) & (
-                                                             self.parent.geol_coll.df[
-                                                                 'geological_feature'] == feature), 'scenario'])
+                                                         self.parent.geol_coll.df[
+                                                             'geological_feature'] == feature), 'scenario'])
                 for scenario in geo_scenario:
                     glevel_3 = QTreeWidgetItem(glevel_2, [scenario])  # glevel_2 as parent -> 2nd middle level
                     glevel_3.setFlags(glevel_3.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
                     if sec_uid:
                         uids = self.parent.geol_coll.df.loc[
                             (self.parent.geol_coll.df['geological_type'] == geo_type) & (
-                                        self.parent.geol_coll.df['geological_feature'] == feature) & (
-                                        self.parent.geol_coll.df['scenario'] == scenario) & (
-                                        self.parent.geol_coll.df['x_section'] == sec_uid), 'uid'].to_list()
+                                    self.parent.geol_coll.df['geological_feature'] == feature) & (
+                                    self.parent.geol_coll.df['scenario'] == scenario) & (
+                                    self.parent.geol_coll.df['x_section'] == sec_uid), 'uid'].to_list()
                     else:
                         uids = self.parent.geol_coll.df.loc[
                             (self.parent.geol_coll.df['geological_type'] == geo_type) & (
-                                        self.parent.geol_coll.df['geological_feature'] == feature) & (
-                                        self.parent.geol_coll.df['scenario'] == scenario), 'uid'].to_list()
+                                    self.parent.geol_coll.df['geological_feature'] == feature) & (
+                                    self.parent.geol_coll.df['scenario'] == scenario), 'uid'].to_list()
                     for uid in uids:
                         property_combo = QComboBox()
                         property_combo.uid = uid
@@ -415,11 +421,11 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                 tlevel_2.setFlags(tlevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
                 if sec_uid:
                     uids = self.parent.geol_coll.df.loc[(self.parent.geol_coll.df['topological_type'] == topo_type) & (
-                                self.parent.geol_coll.df['scenario'] == scenario) & (self.parent.geol_coll.df[
-                                                                                         'x_section'] == sec_uid), 'uid'].to_list()
+                            self.parent.geol_coll.df['scenario'] == scenario) & (self.parent.geol_coll.df[
+                                                                                     'x_section'] == sec_uid), 'uid'].to_list()
                 else:
                     uids = self.parent.geol_coll.df.loc[(self.parent.geol_coll.df['topological_type'] == topo_type) & (
-                                self.parent.geol_coll.df['scenario'] == scenario), 'uid'].to_list()
+                            self.parent.geol_coll.df['scenario'] == scenario), 'uid'].to_list()
                 for uid in uids:
                     property_combo = QComboBox()
                     property_combo.uid = uid
@@ -462,7 +468,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                     """for cycle that loops n times as the number of subItems in the specific geological type branch"""
                     if self.GeologyTreeWidget.findItems(self.parent.geol_coll.get_uid_geological_type(uid),
                                                         Qt.MatchExactly, 0)[0].child(child_1).text(
-                            0) == self.parent.geol_coll.get_uid_geological_feature(uid):
+                        0) == self.parent.geol_coll.get_uid_geological_feature(uid):
                         counter_1 += 1
                 if counter_1 != 0:
                     for child_1 in range(
@@ -470,7 +476,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                                                              Qt.MatchExactly, 0)[0].childCount()):
                         if self.GeologyTreeWidget.findItems(self.parent.geol_coll.get_uid_geological_type(uid),
                                                             Qt.MatchExactly, 0)[0].child(child_1).text(
-                                0) == self.parent.geol_coll.get_uid_geological_feature(uid):
+                            0) == self.parent.geol_coll.get_uid_geological_feature(uid):
                             """Already exists a TreeItem (2 level) for the geological feature"""
                             counter_2 = 0
                             for child_2 in range(self.GeologyTreeWidget.itemBelow(
@@ -480,7 +486,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                                 if self.GeologyTreeWidget.itemBelow(self.GeologyTreeWidget.findItems(
                                         self.parent.geol_coll.get_uid_geological_type(uid), Qt.MatchExactly, 0)[
                                                                         0]).child(child_2).text(
-                                        0) == self.parent.geol_coll.get_uid_scenario(uid):
+                                    0) == self.parent.geol_coll.get_uid_scenario(uid):
                                     counter_2 += 1
                             if counter_2 != 0:
                                 for child_2 in range(self.GeologyTreeWidget.itemBelow(self.GeologyTreeWidget.findItems(
@@ -489,7 +495,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                                     if self.GeologyTreeWidget.itemBelow(self.GeologyTreeWidget.findItems(
                                             self.parent.geol_coll.get_uid_geological_type(uid), Qt.MatchExactly, 0)[
                                                                             0]).child(child_2).text(
-                                            0) == self.parent.geol_coll.get_uid_scenario(uid):
+                                        0) == self.parent.geol_coll.get_uid_scenario(uid):
                                         """Same geological type, geological feature and scenario"""
                                         property_combo = QComboBox()
                                         property_combo.uid = uid
@@ -615,7 +621,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                         """Iterate through every Scenario child"""
                         for child_entity in range(
                                 self.GeologyTreeWidget.topLevelItem(top_geo_type).child(child_geo_feat).child(
-                                        child_scenario).childCount()):
+                                    child_scenario).childCount()):
                             """Iterate through every Entity child"""
                             if self.GeologyTreeWidget.topLevelItem(top_geo_type).child(child_geo_feat).child(
                                     child_scenario).child(child_entity).text(1) == uid:
@@ -663,7 +669,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                     """for cycle that loops n times as the number of subItems in the specific topological type branch"""
                     if self.TopologyTreeWidget.findItems(self.parent.geol_coll.get_uid_topological_type(uid),
                                                          Qt.MatchExactly, 0)[0].child(child_1).text(
-                            0) == self.parent.geol_coll.get_uid_scenario(uid):
+                        0) == self.parent.geol_coll.get_uid_scenario(uid):
                         counter_1 += 1
                 if counter_1 != 0:
                     for child_1 in range(
@@ -671,7 +677,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                                                               Qt.MatchExactly, 0)[0].childCount()):
                         if self.TopologyTreeWidget.findItems(self.parent.geol_coll.get_uid_topological_type(uid),
                                                              Qt.MatchExactly, 0)[0].child(child_1).text(
-                                0) == self.parent.geol_coll.get_uid_scenario(uid):
+                            0) == self.parent.geol_coll.get_uid_scenario(uid):
                             """Same topological type and scenario"""
                             property_combo = QComboBox()
                             property_combo.uid = uid
@@ -1164,9 +1170,9 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                             property_texture_combo.texture_uid_list.append(f'{prop}[{component}]')
 
             for texture_uid in \
-            self.parent.dom_coll.df.loc[self.parent.dom_coll.df['uid'] == uid, 'texture_uids'].values[0]:
+                    self.parent.dom_coll.df.loc[self.parent.dom_coll.df['uid'] == uid, 'texture_uids'].values[0]:
                 texture_name = \
-                self.parent.image_coll.df.loc[self.parent.image_coll.df['uid'] == texture_uid, 'name'].values[0]
+                    self.parent.image_coll.df.loc[self.parent.image_coll.df['uid'] == texture_uid, 'name'].values[0]
                 property_texture_combo.addItem(texture_name)
                 property_texture_combo.texture_uid_list.append(texture_uid)
 
@@ -1221,9 +1227,9 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                             property_texture_combo.addItem(f'{prop}[{n_component}]')
                             property_texture_combo.texture_uid_list.append(f'{prop}[{n_component}]')
             for texture_uid in \
-            self.parent.dom_coll.df.loc[self.parent.dom_coll.df['uid'] == uid, 'texture_uids'].values[0]:
+                    self.parent.dom_coll.df.loc[self.parent.dom_coll.df['uid'] == uid, 'texture_uids'].values[0]:
                 texture_name = \
-                self.parent.image_coll.df.loc[self.parent.image_coll.df['uid'] == texture_uid, 'name'].values[0]
+                    self.parent.image_coll.df.loc[self.parent.image_coll.df['uid'] == texture_uid, 'name'].values[0]
                 property_texture_combo.addItem(texture_name)
                 property_texture_combo.texture_uid_list.append(texture_uid)
             self.DOMsTableWidget.insertRow(row)
@@ -1665,8 +1671,8 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             if sec_uid:
                 fluid_features = pd_unique(self.parent.fluids_coll.df.loc[
                                                (self.parent.fluids_coll.df['fluid_type'] == fluid_type) & (
-                                                           self.parent.fluids_coll.df[
-                                                               'x_section'] == sec_uid), 'fluid_feature'])
+                                                       self.parent.fluids_coll.df[
+                                                           'x_section'] == sec_uid), 'fluid_feature'])
             else:
                 fluid_features = pd_unique(self.parent.fluids_coll.df.loc[
                                                self.parent.fluids_coll.df['fluid_type'] == fluid_type, 'fluid_feature'])
@@ -1676,29 +1682,29 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                 if sec_uid:
                     fluid_scenario = pd_unique(self.parent.fluids_coll.df.loc[
                                                    (self.parent.fluids_coll.df['fluid_type'] == fluid_type) & (
-                                                               self.parent.fluids_coll.df[
-                                                                   'fluid_feature'] == feature) & (
-                                                               self.parent.fluids_coll.df[
-                                                                   'x_section'] == sec_uid), 'scenario'])
+                                                           self.parent.fluids_coll.df[
+                                                               'fluid_feature'] == feature) & (
+                                                           self.parent.fluids_coll.df[
+                                                               'x_section'] == sec_uid), 'scenario'])
                 else:
                     fluid_scenario = pd_unique(self.parent.fluids_coll.df.loc[
                                                    (self.parent.fluids_coll.df['fluid_type'] == fluid_type) & (
-                                                               self.parent.fluids_coll.df[
-                                                                   'fluid_feature'] == feature), 'scenario'])
+                                                           self.parent.fluids_coll.df[
+                                                               'fluid_feature'] == feature), 'scenario'])
                 for scenario in fluid_scenario:
                     flevel_3 = QTreeWidgetItem(flevel_2, [scenario])  # flevel_2 as parent -> 2nd middle level
                     flevel_3.setFlags(flevel_3.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
                     if sec_uid:
                         uids = self.parent.fluids_coll.df.loc[
                             (self.parent.fluids_coll.df['fluid_type'] == fluid_type) & (
-                                        self.parent.fluids_coll.df['fluid_feature'] == feature) & (
-                                        self.parent.fluids_coll.df['scenario'] == scenario) & (
-                                        self.parent.fluids_coll.df['x_section'] == sec_uid), 'uid'].to_list()
+                                    self.parent.fluids_coll.df['fluid_feature'] == feature) & (
+                                    self.parent.fluids_coll.df['scenario'] == scenario) & (
+                                    self.parent.fluids_coll.df['x_section'] == sec_uid), 'uid'].to_list()
                     else:
                         uids = self.parent.fluids_coll.df.loc[
                             (self.parent.fluids_coll.df['fluid_type'] == fluid_type) & (
-                                        self.parent.fluids_coll.df['fluid_feature'] == feature) & (
-                                        self.parent.fluids_coll.df['scenario'] == scenario), 'uid'].to_list()
+                                    self.parent.fluids_coll.df['fluid_feature'] == feature) & (
+                                    self.parent.fluids_coll.df['scenario'] == scenario), 'uid'].to_list()
                     for uid in uids:
                         property_combo = QComboBox()
                         property_combo.uid = uid
@@ -1709,7 +1715,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                         for prop in self.parent.fluids_coll.get_uid_properties_names(uid):
                             property_combo.addItem(prop)
                         name = \
-                        self.parent.fluids_coll.df.loc[(self.parent.fluids_coll.df['uid'] == uid), 'name'].values[0]
+                            self.parent.fluids_coll.df.loc[(self.parent.fluids_coll.df['uid'] == uid), 'name'].values[0]
                         flevel_4 = QTreeWidgetItem(flevel_3, [name, uid])  # flevel_3 as parent -> lower level
                         self.FluidsTreeWidget.setItemWidget(flevel_4, 2, property_combo)
                         property_combo.currentIndexChanged.connect(lambda: self.toggle_property())
@@ -1749,12 +1755,12 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                 if sec_uid:
                     uids = self.parent.fluids_coll.df.loc[
                         (self.parent.fluids_coll.df['topological_type'] == topo_type) & (
-                                    self.parent.fluids_coll.df['scenario'] == scenario) & (
-                                    self.parent.fluids_coll.df['x_section'] == sec_uid), 'uid'].to_list()
+                                self.parent.fluids_coll.df['scenario'] == scenario) & (
+                                self.parent.fluids_coll.df['x_section'] == sec_uid), 'uid'].to_list()
                 else:
                     uids = self.parent.fluids_coll.df.loc[
                         (self.parent.fluids_coll.df['topological_type'] == topo_type) & (
-                                    self.parent.fluids_coll.df['scenario'] == scenario), 'uid'].to_list()
+                                self.parent.fluids_coll.df['scenario'] == scenario), 'uid'].to_list()
                 for uid in uids:
                     property_combo = QComboBox()
                     property_combo.uid = uid
@@ -1796,7 +1802,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                     """for cycle that loops n times as the number of subItems in the specific fluid type branch"""
                     if self.FluidsTreeWidget.findItems(self.parent.fluids_coll.get_uid_fluid_type(uid), Qt.MatchExactly,
                                                        0)[0].child(child_1).text(
-                            0) == self.parent.fluids_coll.get_uid_fluid_feature(uid):
+                        0) == self.parent.fluids_coll.get_uid_fluid_feature(uid):
                         counter_1 += 1
                 if counter_1 != 0:
                     for child_1 in range(
@@ -1804,7 +1810,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                                                             Qt.MatchExactly, 0)[0].childCount()):
                         if self.FluidsTreeWidget.findItems(self.parent.fluids_coll.get_uid_fluid_type(uid),
                                                            Qt.MatchExactly, 0)[0].child(child_1).text(
-                                0) == self.parent.fluids_coll.get_uid_fluid_feature(uid):
+                            0) == self.parent.fluids_coll.get_uid_fluid_feature(uid):
                             """Already exists a TreeItem (2 level) for the fluid feature"""
                             counter_2 = 0
                             for child_2 in range(self.FluidsTreeWidget.itemBelow(
@@ -1814,7 +1820,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                                 if self.FluidsTreeWidget.itemBelow(
                                         self.FluidsTreeWidget.findItems(self.parent.fluids_coll.get_uid_fluid_type(uid),
                                                                         Qt.MatchExactly, 0)[0]).child(child_2).text(
-                                        0) == self.parent.fluids_coll.get_uid_scenario(uid):
+                                    0) == self.parent.fluids_coll.get_uid_scenario(uid):
                                     counter_2 += 1
                             if counter_2 != 0:
                                 for child_2 in range(self.FluidsTreeWidget.itemBelow(
@@ -1823,7 +1829,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                                     if self.FluidsTreeWidget.itemBelow(self.FluidsTreeWidget.findItems(
                                             self.parent.fluids_coll.get_uid_fluid_type(uid), Qt.MatchExactly, 0)[
                                                                            0]).child(child_2).text(
-                                            0) == self.parent.fluids_coll.get_uid_scenario(uid):
+                                        0) == self.parent.fluids_coll.get_uid_scenario(uid):
                                         """Same fluid type, fluid feature and scenario"""
                                         property_combo = QComboBox()
                                         property_combo.uid = uid
@@ -1949,7 +1955,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                         """Iterate through every Scenario child"""
                         for child_entity in range(
                                 self.FluidsTreeWidget.topLevelItem(top_fluid_type).child(child_fluid_feat).child(
-                                        child_scenario).childCount()):
+                                    child_scenario).childCount()):
                             """Iterate through every Entity child"""
                             if self.FluidsTreeWidget.topLevelItem(top_fluid_type).child(child_fluid_feat).child(
                                     child_scenario).child(child_entity).text(1) == uid:
@@ -1998,15 +2004,16 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                     """for cycle that loops n times as the number of subItems in the specific topological type branch"""
                     if self.FluidsTopologyTreeWidget.findItems(self.parent.fluids_coll.get_uid_topological_type(uid),
                                                                Qt.MatchExactly, 0)[0].child(child_1).text(
-                            0) == self.parent.fluids_coll.get_uid_scenario(uid):
+                        0) == self.parent.fluids_coll.get_uid_scenario(uid):
                         counter_1 += 1
                 if counter_1 != 0:
                     for child_1 in range(self.FluidsTopologyTreeWidget.findItems(
                             self.parent.fluids_coll.get_uid_topological_type(uid), Qt.MatchExactly, 0)[0].childCount()):
                         if \
-                        self.FluidsTopologyTreeWidget.findItems(self.parent.fluids_coll.get_uid_topological_type(uid),
-                                                                Qt.MatchExactly, 0)[0].child(child_1).text(
-                                0) == self.parent.fluids_coll.get_uid_scenario(uid):
+                                self.FluidsTopologyTreeWidget.findItems(
+                                    self.parent.fluids_coll.get_uid_topological_type(uid),
+                                    Qt.MatchExactly, 0)[0].child(child_1).text(
+                                    0) == self.parent.fluids_coll.get_uid_scenario(uid):
                             """Same topological type and scenario"""
                             property_combo = QComboBox()
                             property_combo.uid = uid
@@ -2168,7 +2175,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.BackgroundsTreeWidget.setItemsExpandable(True)
         if sec_uid:
             background_types = pd_unique(self.parent.backgrounds_coll.df.loc[(
-                        self.parent.backgrounds_coll.df['x_section'] == sec_uid), 'background_type'])
+                    self.parent.backgrounds_coll.df['x_section'] == sec_uid), 'background_type'])
         else:
             background_types = pd_unique(self.parent.backgrounds_coll.df['background_type'])
         for background_type in background_types:
@@ -2178,8 +2185,8 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             if sec_uid:
                 background_features = pd_unique(self.parent.backgrounds_coll.df.loc[(self.parent.backgrounds_coll.df[
                                                                                          'background_type'] == background_type) & (
-                                                                                                self.parent.backgrounds_coll.df[
-                                                                                                    'x_section'] == sec_uid), 'background_feature'])
+                                                                                            self.parent.backgrounds_coll.df[
+                                                                                                'x_section'] == sec_uid), 'background_feature'])
             else:
                 background_features = pd_unique(self.parent.backgrounds_coll.df.loc[self.parent.backgrounds_coll.df[
                                                                                         'background_type'] == background_type, 'background_feature'])
@@ -2189,12 +2196,12 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                 if sec_uid:
                     uids = self.parent.backgrounds_coll.df.loc[
                         (self.parent.backgrounds_coll.df['background_type'] == background_type) & (
-                                    self.parent.backgrounds_coll.df['background_feature'] == feature) & (
-                                    self.parent.backgrounds_coll.df['x_section'] == sec_uid), 'uid'].to_list()
+                                self.parent.backgrounds_coll.df['background_feature'] == feature) & (
+                                self.parent.backgrounds_coll.df['x_section'] == sec_uid), 'uid'].to_list()
                 else:
                     uids = self.parent.backgrounds_coll.df.loc[
                         (self.parent.backgrounds_coll.df['background_type'] == background_type) & (
-                                    self.parent.backgrounds_coll.df['background_feature'] == feature), 'uid'].to_list()
+                                self.parent.backgrounds_coll.df['background_feature'] == feature), 'uid'].to_list()
                 for uid in uids:
                     property_combo = QComboBox()
                     property_combo.uid = uid
@@ -2204,8 +2211,9 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                     for prop in self.parent.backgrounds_coll.get_uid_properties_names(uid):
                         property_combo.addItem(prop)
                     name = \
-                    self.parent.backgrounds_coll.df.loc[(self.parent.backgrounds_coll.df['uid'] == uid), 'name'].values[
-                        0]
+                        self.parent.backgrounds_coll.df.loc[
+                            (self.parent.backgrounds_coll.df['uid'] == uid), 'name'].values[
+                            0]
                     flevel_3 = QTreeWidgetItem(flevel_2, [name, uid])  # flevel_3 as parent -> lower level
                     self.BackgroundsTreeWidget.setItemWidget(flevel_3, 2, property_combo)
                     property_combo.currentIndexChanged.connect(lambda: self.toggle_property())
@@ -2244,13 +2252,13 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                 if sec_uid:
                     uids = self.parent.backgrounds_coll.df.loc[
                         (self.parent.backgrounds_coll.df['topological_type'] == topo_type) & (
-                                    self.parent.backgrounds_coll.df['background_type'] == background_type) & (
-                                    self.parent.backgrounds_coll.df['x_section'] == sec_uid), 'uid'].to_list()
+                                self.parent.backgrounds_coll.df['background_type'] == background_type) & (
+                                self.parent.backgrounds_coll.df['x_section'] == sec_uid), 'uid'].to_list()
                 else:
                     uids = self.parent.backgrounds_coll.df.loc[
                         (self.parent.backgrounds_coll.df['topological_type'] == topo_type) & (
-                                    self.parent.backgrounds_coll.df[
-                                        'background_type'] == background_type), 'uid'].to_list()
+                                self.parent.backgrounds_coll.df[
+                                    'background_type'] == background_type), 'uid'].to_list()
                 for uid in uids:
                     property_combo = QComboBox()
                     property_combo.uid = uid
@@ -2260,7 +2268,8 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                     for prop in self.parent.backgrounds_coll.get_uid_properties_names(uid):
                         property_combo.addItem(prop)
                     name = \
-                    self.parent.backgrounds_coll.df.loc[self.parent.backgrounds_coll.df['uid'] == uid, 'name'].values[0]
+                        self.parent.backgrounds_coll.df.loc[
+                            self.parent.backgrounds_coll.df['uid'] == uid, 'name'].values[0]
                     tlevel_3 = QTreeWidgetItem(tlevel_2, [name, uid])  # tlevel_2 as parent -> lower level
                     self.BackgroundsTopologyTreeWidget.setItemWidget(tlevel_3, 2, property_combo)
                     property_combo.currentIndexChanged.connect(lambda: self.toggle_property())
@@ -2294,16 +2303,17 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                     """for cycle that loops n times as the number of subItems in the specific background type branch"""
                     if self.BackgroundsTreeWidget.findItems(self.parent.backgrounds_coll.get_uid_background_type(uid),
                                                             Qt.MatchExactly, 0)[0].child(child_1).text(
-                            0) == self.parent.backgrounds_coll.get_uid_background_feature(uid):
+                        0) == self.parent.backgrounds_coll.get_uid_background_feature(uid):
                         counter_1 += 1
                 if counter_1 != 0:
                     for child_1 in range(self.BackgroundsTreeWidget.findItems(
                             self.parent.backgrounds_coll.get_uid_background_type(uid), Qt.MatchExactly, 0)[
                                              0].childCount()):
                         if \
-                        self.BackgroundsTreeWidget.findItems(self.parent.backgrounds_coll.get_uid_background_type(uid),
-                                                             Qt.MatchExactly, 0)[0].child(child_1).text(
-                                0) == self.parent.backgrounds_coll.get_uid_background_feature(uid):
+                                self.BackgroundsTreeWidget.findItems(
+                                    self.parent.backgrounds_coll.get_uid_background_type(uid),
+                                    Qt.MatchExactly, 0)[0].child(child_1).text(
+                                    0) == self.parent.backgrounds_coll.get_uid_background_feature(uid):
                             """Already exists a TreeItem (2 level) for the background feature"""
 
                             """Same background type and background feature"""
@@ -2442,7 +2452,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                     """for cycle that loops n times as the number of subItems in the specific topological type branch"""
                     if self.BackgroundsTopologyTreeWidget.findItems(
                             self.parent.backgrounds_coll.get_uid_topological_type(uid), Qt.MatchExactly, 0)[0].child(
-                            child_1).text(0) == self.parent.backgrounds_coll.get_uid_background_feature(uid):
+                        child_1).text(0) == self.parent.backgrounds_coll.get_uid_background_feature(uid):
                         counter_1 += 1
                 if counter_1 != 0:
                     for child_1 in range(self.BackgroundsTopologyTreeWidget.findItems(
@@ -2740,6 +2750,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         """Re-connect signals."""
         self.GeologyTreeWidget.itemChanged.connect(self.toggle_geology_topology_visibility)
         self.TopologyTreeWidget.itemChanged.connect(self.toggle_geology_topology_visibility)
+
     def geology_legend_point_size_modified_update_views(self, updated_list=None):
         """This is called when the point size in the geological legend is modified.
         Disconnect signals to geology and topology tree, if they are set, to avoid a nasty loop
@@ -2752,6 +2763,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         """Re-connect signals."""
         self.GeologyTreeWidget.itemChanged.connect(self.toggle_geology_topology_visibility)
         self.TopologyTreeWidget.itemChanged.connect(self.toggle_geology_topology_visibility)
+
     def geology_legend_opacity_modified_update_views(self, updated_list=None):
         """This is called when the line thickness in the geological legend is modified.
         Disconnect signals to geology and topology tree, if they are set, to avoid a nasty loop
@@ -3154,6 +3166,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             self.change_actor_line_thick(uid=uid, collection='dom_coll')
         """Re-connect signals."""
         self.DOMsTableWidget.itemChanged.connect(self.toggle_dom_visibility)
+
     def dom_legend_point_size_modified_update_views(self, updated_list=None):
         """This is called when the line thickness in the cross-section legend is modified.
         Disconnect signals to xsect list, if they are set, then they are
@@ -3164,6 +3177,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             self.change_actor_point_size(uid=uid, collection='dom_coll')
         """Re-connect signals."""
         self.DOMsTableWidget.itemChanged.connect(self.toggle_dom_visibility)
+
     def dom_legend_opacity_modified_update_views(self, updated_list=None):
         """This is called when the opacity in the image legend is modified.
         Disconnect signals to image tree, if they are set, to avoid a nasty loop
@@ -3171,7 +3185,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.DOMsTableWidget.itemChanged.disconnect()
         for uid in updated_list:
             """Case for color changed"""
-            if isinstance(self,View3D):
+            if isinstance(self, View3D):
                 self.change_actor_opacity(uid=uid, collection='dom_coll')
         """Re-connect signals."""
         self.DOMsTableWidget.itemChanged.connect(self.toggle_dom_visibility)
@@ -3809,7 +3823,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             return
         """Confirm removal dialog."""
         check = QMessageBox.question(self, "Remove Entities", (
-                    "Do you really want to remove entities\n" + str(self.selected_uids) + "\nPlease confirm."),
+                "Do you really want to remove entities\n" + str(self.selected_uids) + "\nPlease confirm."),
                                      QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
         if check == QMessageBox.No:
             return
@@ -4436,6 +4450,7 @@ class View3D(BaseView):
             style = 'points'
             plot_rgb_option = None
             texture = False
+            smooth_shading = False
             if isinstance(plot_entity.points, np_ndarray):
                 """This  check is needed to avoid errors when trying to plot an empty
                 PolyData, just created at the beginning of a digitizing session."""
@@ -4452,22 +4467,31 @@ class View3D(BaseView):
                 elif show_property == 'Z':
                     show_property = plot_entity.points_Z
                 elif show_property == 'Normals':
-                    # r = self.parent.geol_coll.get_uid_legend(uid=uid)['line_thick']
-                    texture = read_texture('pzero/icons/dip.png')
-                    disk = pvDisc(outer=10, inner=0, c_res=30)
-                    disk.texture_map_to_plane(inplace=True)
                     show_scalar_bar = False
+                    show_property_title = None
                     show_property = None
-
-                    show_property_title = 'none'
                     style = 'surface'
-                    pv_downcast = pvPolyData()
-                    pv_downcast.ShallowCopy(plot_entity)
-                    pv_downcast.Modified()
+                    smooth_shading = True
+                    appender = vtkAppendPolyData()
+                    r = self.parent.geol_coll.get_uid_legend(uid=uid)['point_size'] * 4
+                    points = plot_entity.points
+                    normals = plot_entity.get_point_data('Normals')
+                    dip_vectors, dir_vectors = get_dip_dir_vectors(normals=normals)
+                    line1 = pv_Line(pointa=(0, 0, 0), pointb=(r, 0, 0))
+                    line2 = pv_Line(pointa=(-r, 0, 0), pointb=(r, 0, 0))
+                    for point, normal in zip(points, normals):
+                        # base = pv_Plane(center=point, direction=normal,i_size=r,j_size=r)
+                        base = pv_Disc(center=point, normal=normal, inner=0, outer=r, c_res=30)
+                        appender.AddInputData(base)
 
-                    # print(pv_downcast['Normals'])
-                    plot_entity = pv_downcast.glyph(orient='Normals', geom=disk)
-                    # print('Normals not available for now in 3D view')
+                    dip_glyph = plot_entity.glyph(geometry=line1, prop=dip_vectors)
+                    dir_glyph = plot_entity.glyph(geometry=line2, prop=dir_vectors)
+
+                    appender.AddInputData(dip_glyph)
+                    appender.AddInputData(dir_glyph)
+                    appender.Update()
+                    plot_entity = appender.GetOutput()
+
                 elif show_property == 'name':
                     point = plot_entity.points
                     name_value = plot_entity.get_field_data('name')
@@ -4486,12 +4510,13 @@ class View3D(BaseView):
                                                plot_texture_option=texture, plot_rgb_option=plot_rgb_option,
                                                visible=visible,
                                                style=style, point_size=point_size, points_as_spheres=True,
-                                               pickable=pickable, opacity=opacity)
+                                               pickable=pickable, opacity=opacity, smooth_shading=smooth_shading)
             else:
                 this_actor = None
         elif isinstance(plot_entity, DEM):
             """Show texture specified in show_property"""
-            if show_property in self.parent.dom_coll.df.loc[self.parent.dom_coll.df['uid'] == uid, "texture_uids"].values[0]:
+            if show_property in \
+                    self.parent.dom_coll.df.loc[self.parent.dom_coll.df['uid'] == uid, "texture_uids"].values[0]:
                 active_image = self.parent.image_coll.get_uid_vtk_obj(show_property)
                 active_image_texture = active_image.texture
                 # active_image_properties_components = active_image.properties_components[0]  # IF USED THIS MUST BE FIXED FOR TEXTURES WITH MORE THAN 3 COMPONENTS
@@ -4573,7 +4598,8 @@ class View3D(BaseView):
             this_actor = self.plot_PC_3D(uid=uid, plot_entity=new_plot, color_RGB=color_RGB,
                                          show_property=show_property_value, show_scalar_bar=show_scalar_bar,
                                          color_bar_range=None, show_property_title=show_property_title,
-                                         plot_rgb_option=plot_rgb_option, visible=visible, point_size=line_thick, opacity=opacity)
+                                         plot_rgb_option=plot_rgb_option, visible=visible, point_size=line_thick,
+                                         opacity=opacity)
 
         elif isinstance(plot_entity, (MapImage, XsImage)):
             """Do not plot directly image - it is much slower.
@@ -4747,7 +4773,7 @@ class View3D(BaseView):
                      color_bar_range=None, show_property_title=None, line_thick=None,
                      plot_texture_option=None, plot_rgb_option=None, visible=None,
                      style='surface', point_size=5.0, points_as_spheres=False, render_lines_as_tubes=False,
-                     pickable=True, opacity=1.0):
+                     pickable=True, opacity=1.0, smooth_shading=False):
         if not self.actors_df.empty:
             """This stores the camera position before redrawing the actor.
             Added to avoid a bug that sometimes sends the scene to a very distant place.
@@ -4791,7 +4817,7 @@ class View3D(BaseView):
                                            # ________________________________ vtk.vtkTexture or np_ndarray or boolean, will work if input mesh has texture coordinates. True > first available texture. String > texture with that name already associated to mesh.
                                            render_points_as_spheres=points_as_spheres,
                                            render_lines_as_tubes=render_lines_as_tubes,
-                                           smooth_shading=False,
+                                           smooth_shading=smooth_shading,
                                            ambient=0.0,
                                            diffuse=1.0,
                                            specular=0.0,
@@ -5846,7 +5872,7 @@ class ViewXsection(View2D):
             return
         if self.this_x_section_name:
             self.this_x_section_uid = \
-            parent.xsect_coll.df.loc[parent.xsect_coll.df['name'] == self.this_x_section_name, 'uid'].values[0]
+                parent.xsect_coll.df.loc[parent.xsect_coll.df['name'] == self.this_x_section_name, 'uid'].values[0]
         else:
             return
 
@@ -5886,7 +5912,7 @@ class ViewXsection(View2D):
         if collection == 'geol_coll':
             if (self.parent.geol_coll.get_uid_topological_type(
                     uid) == "XsVertexSet" or self.parent.geol_coll.get_uid_topological_type(
-                    uid) == "XsPolyLine") and self.parent.geol_coll.get_uid_x_section(uid) == self.this_x_section_uid:
+                uid) == "XsPolyLine") and self.parent.geol_coll.get_uid_x_section(uid) == self.this_x_section_uid:
                 color_R = self.parent.geol_coll.get_uid_legend(uid=uid)['color_R']
                 color_G = self.parent.geol_coll.get_uid_legend(uid=uid)['color_G']
                 color_B = self.parent.geol_coll.get_uid_legend(uid=uid)['color_B']
@@ -5909,7 +5935,7 @@ class ViewXsection(View2D):
         elif collection == 'boundary_coll':
             if self.parent.boundary_coll.get_uid_topological_type(
                     uid) == "XsPolyLine" and self.parent.boundary_coll.get_uid_x_section(
-                    uid) == self.this_x_section_uid:
+                uid) == self.this_x_section_uid:
                 color_R = self.parent.boundary_coll.get_legend()['color_R']
                 color_G = self.parent.boundary_coll.get_legend()['color_G']
                 color_B = self.parent.boundary_coll.get_legend()['color_B']
@@ -6259,7 +6285,7 @@ class ViewStereoplot(BaseView):
 
             filtered_geo_feat = self.parent.geol_coll.df.loc[
                 (self.parent.geol_coll.df['geological_type'] == geo_type) & (
-                            self.parent.geol_coll.df['topological_type'] == 'VertexSet'), 'geological_feature']
+                        self.parent.geol_coll.df['topological_type'] == 'VertexSet'), 'geological_feature']
             geo_features = pd_unique(filtered_geo_feat)
 
             for feature in geo_features:
@@ -6268,18 +6294,18 @@ class ViewStereoplot(BaseView):
 
                 geo_scenario = pd_unique(self.parent.geol_coll.df.loc[
                                              (self.parent.geol_coll.df['geological_type'] == geo_type) & (
-                                                         self.parent.geol_coll.df[
-                                                             'geological_feature'] == feature), 'scenario'])
+                                                     self.parent.geol_coll.df[
+                                                         'geological_feature'] == feature), 'scenario'])
 
                 for scenario in geo_scenario:
                     glevel_3 = QTreeWidgetItem(glevel_2, [scenario])  # glevel_2 as parent -> 2nd middle level
                     glevel_3.setFlags(glevel_3.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
 
                     uids = self.parent.geol_coll.df.loc[(self.parent.geol_coll.df['geological_type'] == geo_type) & (
-                                self.parent.geol_coll.df['geological_feature'] == feature) & (self.parent.geol_coll.df[
-                                                                                                  'scenario'] == scenario) & (
-                                                                    self.parent.geol_coll.df[
-                                                                        'topological_type'] == 'VertexSet'), 'uid'].to_list()
+                            self.parent.geol_coll.df['geological_feature'] == feature) & (self.parent.geol_coll.df[
+                                                                                              'scenario'] == scenario) & (
+                                                                self.parent.geol_coll.df[
+                                                                    'topological_type'] == 'VertexSet'), 'uid'].to_list()
 
                     for uid in uids:
                         property_combo = QComboBox()
@@ -6323,8 +6349,8 @@ class ViewStereoplot(BaseView):
                 tlevel_2.setFlags(tlevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
 
                 uids = self.parent.geol_coll.df.loc[(self.parent.geol_coll.df['topological_type'] == topo_type) & (
-                            self.parent.geol_coll.df['scenario'] == scenario) & (self.parent.geol_coll.df[
-                                                                                     'topological_type'] == 'VertexSet'), 'uid'].to_list()
+                        self.parent.geol_coll.df['scenario'] == scenario) & (self.parent.geol_coll.df[
+                                                                                 'topological_type'] == 'VertexSet'), 'uid'].to_list()
 
                 for uid in uids:
                     property_combo = QComboBox()
@@ -6359,7 +6385,7 @@ class ViewStereoplot(BaseView):
                     """for cycle that loops n times as the number of subItems in the specific geological type branch"""
                     if self.GeologyTreeWidget.findItems(self.parent.geol_coll.get_uid_geological_type(uid),
                                                         Qt.MatchExactly, 0)[0].child(child_1).text(
-                            0) == self.parent.geol_coll.get_uid_geological_feature(uid):
+                        0) == self.parent.geol_coll.get_uid_geological_feature(uid):
                         counter_1 += 1
                 if counter_1 != 0:
                     for child_1 in range(
@@ -6367,7 +6393,7 @@ class ViewStereoplot(BaseView):
                                                              Qt.MatchExactly, 0)[0].childCount()):
                         if self.GeologyTreeWidget.findItems(self.parent.geol_coll.get_uid_geological_type(uid),
                                                             Qt.MatchExactly, 0)[0].child(child_1).text(
-                                0) == self.parent.geol_coll.get_uid_geological_feature(uid):
+                            0) == self.parent.geol_coll.get_uid_geological_feature(uid):
                             """Already exists a TreeItem (2 level) for the geological feature"""
                             counter_2 = 0
                             for child_2 in range(self.GeologyTreeWidget.itemBelow(
@@ -6377,7 +6403,7 @@ class ViewStereoplot(BaseView):
                                 if self.GeologyTreeWidget.itemBelow(self.GeologyTreeWidget.findItems(
                                         self.parent.geol_coll.get_uid_geological_type(uid), Qt.MatchExactly, 0)[
                                                                         0]).child(child_2).text(
-                                        0) == self.parent.geol_coll.get_uid_scenario(uid):
+                                    0) == self.parent.geol_coll.get_uid_scenario(uid):
                                     counter_2 += 1
                             if counter_2 != 0:
                                 for child_2 in range(self.GeologyTreeWidget.itemBelow(self.GeologyTreeWidget.findItems(
@@ -6386,7 +6412,7 @@ class ViewStereoplot(BaseView):
                                     if self.GeologyTreeWidget.itemBelow(self.GeologyTreeWidget.findItems(
                                             self.parent.geol_coll.get_uid_geological_type(uid), Qt.MatchExactly, 0)[
                                                                             0]).child(child_2).text(
-                                            0) == self.parent.geol_coll.get_uid_scenario(uid):
+                                        0) == self.parent.geol_coll.get_uid_scenario(uid):
                                         """Same geological type, geological feature and scenario"""
                                         property_combo = QComboBox()
                                         property_combo.uid = uid
@@ -6505,7 +6531,7 @@ class ViewStereoplot(BaseView):
                     """for cycle that loops n times as the number of subItems in the specific topological type branch"""
                     if self.TopologyTreeWidget.findItems(self.parent.geol_coll.get_uid_topological_type(uid),
                                                          Qt.MatchExactly, 0)[0].child(child_1).text(
-                            0) == self.parent.geol_coll.get_uid_scenario(uid):
+                        0) == self.parent.geol_coll.get_uid_scenario(uid):
                         counter_1 += 1
                 if counter_1 != 0:
                     for child_1 in range(
@@ -6513,7 +6539,7 @@ class ViewStereoplot(BaseView):
                                                               Qt.MatchExactly, 0)[0].childCount()):
                         if self.TopologyTreeWidget.findItems(self.parent.geol_coll.get_uid_topological_type(uid),
                                                              Qt.MatchExactly, 0)[0].child(child_1).text(
-                                0) == self.parent.geol_coll.get_uid_scenario(uid):
+                            0) == self.parent.geol_coll.get_uid_scenario(uid):
                             """Same topological type and scenario"""
                             property_combo = QComboBox()
                             property_combo.uid = uid
