@@ -73,7 +73,11 @@ def edit_line(self):
         self.clear_selection()
         self.plotter.untrack_click_position()
         traced_pld = self.tracer.GetContourRepresentation().GetContourRepresentationAsPolyData()
-        if isinstance(self, NewViewMap):
+        if not self.vbm_U0:
+                print("Zero-length vector")
+                self.vector_by_mouse_dU = 0
+                self.vector_by_mouse_dV = 0
+            if isinstance(self, NewViewMap):
             vtk_obj = PolyLine()
         elif isinstance(self, NewViewXsection):
             vtk_obj = XsPolyLine(x_section_uid=self.this_x_section_uid, parent=self.parent)
@@ -119,7 +123,6 @@ def sort_line_nodes(self):
 def move_line(self):
     """Move the whole line by rigid-body translation."""
     print("Move Line. Move the whole line by rigid-body translation.")
-    print(self.selected_uids)
     """Terminate running event loops"""
     # self.stop_event_loops()
     """Check if a line is selected"""
@@ -1296,6 +1299,15 @@ def copy_similar(self):  # this must be done per-part___________________________
     inZ = self.parent.geol_coll.get_uid_vtk_obj(input_uid).points_Z
     """Get similar folding vector."""
     self.vector_by_mouse(verbose=True)
+    if not self.vbm_U0:
+        """Deselect input line."""
+        self.selected_uids = []
+        self.parent.geology_geom_modified_signal.emit([input_uid])  # emit uid as list to force redraw()
+        print("Zero-length vector")
+        """Un-Freeze QT interface"""
+        for action in self.findChildren(QAction):
+            action.setEnabled(True)
+        return
     """Create output line."""
     if isinstance(self, ViewMap):
         outX = inX + self.vector_by_mouse_dU
@@ -1341,6 +1353,10 @@ def measure_distance(self):
         if isinstance(action.parentWidget(), NavigationToolbar) is False:
             action.setDisabled(True)
     self.vector_by_mouse(verbose=True)
+    if not self.vbm_U0:
+        print("Zero-length vector")
+        self.vector_by_mouse_azimuth = 0
+        self.vector_by_mouse_length = 0
     message = "Distance (m): " + str(round(self.vector_by_mouse_length, 2)) + "\n\n" + "Azimuth: " + str(
         round(self.vector_by_mouse_azimuth, 2))
     out = message_dialog(title="Measure Distance", message=message)

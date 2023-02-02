@@ -14,7 +14,6 @@ from numpy import arctan2 as np_arctan2
 from numpy import sqrt as np_sqrt
 from numpy import set_printoptions as np_set_printoptions
 
-
 import pandas as pd
 from PyQt5.QtCore import QAbstractTableModel, Qt, QVariant
 # from PyQt5.QtGui import QStandardItem, QImage
@@ -51,14 +50,23 @@ def section_from_azimuth(self):
     It is therefore necessary in section_dict_in to implement the right type for each variable."""
     while True:
         self.vector_by_mouse(verbose=True)
-        section_dict_in = {'warning': ['XSection from azimuth', 'Build new XSection from a user-drawn line.\nOnce drawn, values can be modified from keyboard\nor by drawing another vector.', 'QLabel'],
-                                   'name': ['Insert Xsection name', 'new_section', 'QLineEdit'],
-                                   'base_x': ['Insert origin X coord', self.vbm_U0, 'QLineEdit'],
-                                   'base_y': ['Insert origin Y coord', self.vbm_V0, 'QLineEdit'],
-                                   'azimuth': ['Insert azimuth', self.vector_by_mouse_azimuth, 'QLineEdit'],
-                                   'length': ['Insert length', self.vector_by_mouse_length, 'QLineEdit'],
-                                   'top': ['Insert top', 0.0, 'QLineEdit'],
-                                   'bottom': ['Insert bottom', 0.0, 'QLineEdit']}
+        if not self.vbm_U0:
+            print("Zero-length vector")
+            """Un-Freeze QT interface"""
+            for action in self.findChildren(QAction):
+                action.setEnabled(True)
+            return
+        section_dict_in = {'warning': ['XSection from azimuth',
+                                       'Build new XSection from a user-drawn line.\nOnce drawn, values can be '
+                                       'modified from keyboard\nor by drawing another vector.',
+                                       'QLabel'],
+                           'name': ['Insert Xsection name', 'new_section', 'QLineEdit'],
+                           'base_x': ['Insert origin X coord', self.vbm_U0, 'QLineEdit'],
+                           'base_y': ['Insert origin Y coord', self.vbm_V0, 'QLineEdit'],
+                           'azimuth': ['Insert azimuth', self.vector_by_mouse_azimuth, 'QLineEdit'],
+                           'length': ['Insert length', self.vector_by_mouse_length, 'QLineEdit'],
+                           'top': ['Insert top', 0.0, 'QLineEdit'],
+                           'bottom': ['Insert bottom', 0.0, 'QLineEdit']}
         section_dict_updt = general_input_dialog(title='XSection from Azimuth', input_dict=section_dict_in)
         if section_dict_updt is not None:
             break
@@ -71,8 +79,10 @@ def section_from_azimuth(self):
         section_dict[key] = section_dict_updt[key]
     section_dict['base_z'] = 0.0
     section_dict['end_z'] = 0.0
-    section_dict['end_x'] = section_dict['base_x'] + section_dict['length'] * np_sin(section_dict['azimuth'] * np_pi / 180)
-    section_dict['end_y'] = section_dict['base_y'] + section_dict['length'] * np_cos(section_dict['azimuth'] * np_pi / 180)
+    section_dict['end_x'] = section_dict['base_x'] + section_dict['length'] * np_sin(
+        section_dict['azimuth'] * np_pi / 180)
+    section_dict['end_y'] = section_dict['base_y'] + section_dict['length'] * np_cos(
+        section_dict['azimuth'] * np_pi / 180)
     section_dict['normal_x'] = np_sin((section_dict['azimuth'] + 90) * np_pi / 180)
     section_dict['normal_y'] = np_cos((section_dict['azimuth'] + 90) * np_pi / 180)
     section_dict['normal_z'] = 0.0
@@ -100,17 +110,22 @@ def section_from_azimuth(self):
                 section_dict['name'] = section_dict['name'] + '_0'
             else:
                 break
-        section_dict['base_x'] = section_dict['base_x'] - (section_dict_updt_set['spacing'] * np_cos(section_dict_updt['azimuth'] * np_pi / 180))
-        section_dict['base_y'] = section_dict['base_y'] + (section_dict_updt_set['spacing'] * np_sin(section_dict_updt['azimuth'] * np_pi / 180))
-        section_dict['end_x'] = section_dict['base_x'] + section_dict['length'] * np_sin(section_dict['azimuth'] * np_pi / 180)
-        section_dict['end_y'] = section_dict['base_y'] + section_dict['length'] * np_cos(section_dict['azimuth'] * np_pi / 180)
+        section_dict['base_x'] = section_dict['base_x'] - (
+                    section_dict_updt_set['spacing'] * np_cos(section_dict_updt['azimuth'] * np_pi / 180))
+        section_dict['base_y'] = section_dict['base_y'] + (
+                    section_dict_updt_set['spacing'] * np_sin(section_dict_updt['azimuth'] * np_pi / 180))
+        section_dict['end_x'] = section_dict['base_x'] + section_dict['length'] * np_sin(
+            section_dict['azimuth'] * np_pi / 180)
+        section_dict['end_y'] = section_dict['base_y'] + section_dict['length'] * np_cos(
+            section_dict['azimuth'] * np_pi / 180)
         section_dict['uid'] = None
         uid = self.parent.xsect_coll.add_entity_from_dict(entity_dict=section_dict)
     """Un-Freeze QT interface"""
     for action in self.findChildren(QAction):
         action.setEnabled(True)
 
-def section_from_points(self, drawn = True, section_dict_updt=None):
+
+def section_from_points(self, drawn=True, section_dict_updt=None):
     """Create a new cross section from origin and azimuth"""
     section_dict = deepcopy(self.parent.xsect_coll.section_dict)
     """multiple_input_dialog widget is built to check the default value associated to each feature in
@@ -120,19 +135,28 @@ def section_from_points(self, drawn = True, section_dict_updt=None):
     for action in self.findChildren(QAction):
         if isinstance(action.parentWidget(), NavigationToolbar) is False:
             action.setDisabled(True)
-    # [Gabriele] Added new drawn flag to know if the data is drawn on map or is imported
+    # [Gabriele] Added new drawn flag to know if the data is drawn on map or is imported from a file
     if drawn:
         self.text_msg.set_text("Draw a vector with mouse to represent the new XSection")
         while True:
             self.vector_by_mouse(verbose=True)
-            section_dict_in = {'warning': ['XSection from points', 'Build new XSection from a user-drawn line.\nOnce drawn, values can be modified from keyboard\nor by drawing another vector.', 'QLabel'],
-                                       'name': ['Insert Xsection name', 'new_section', 'QLineEdit'],
-                                       'base_x': ['Insert origin X coord', self.vbm_U0, 'QLineEdit'],
-                                       'base_y': ['Insert origin Y coord', self.vbm_V0, 'QLineEdit'],
-                                       'end_x': ['Insert end-point X coord', self.vbm_Uf, 'QLineEdit'],
-                                       'end_y': ['Insert end-point Y coord', self.vbm_Vf, 'QLineEdit'],
-                                       'top': ['Insert top', 0.0, 'QLineEdit'],
-                                       'bottom': ['Insert bottom', 0.0, 'QLineEdit']}
+            if not self.vbm_U0:
+                print("Zero-length vector")
+                """Un-Freeze QT interface"""
+                for action in self.findChildren(QAction):
+                    action.setEnabled(True)
+                return
+            section_dict_in = {'warning': ['XSection from points',
+                                           'Build new XSection from a user-drawn line.\nOnce drawn, values can be '
+                                           'modified from keyboard\nor by drawing another vector.',
+                                           'QLabel'],
+                               'name': ['Insert Xsection name', 'new_section', 'QLineEdit'],
+                               'base_x': ['Insert origin X coord', self.vbm_U0, 'QLineEdit'],
+                               'base_y': ['Insert origin Y coord', self.vbm_V0, 'QLineEdit'],
+                               'end_x': ['Insert end-point X coord', self.vbm_Uf, 'QLineEdit'],
+                               'end_y': ['Insert end-point Y coord', self.vbm_Vf, 'QLineEdit'],
+                               'top': ['Insert top', 0.0, 'QLineEdit'],
+                               'bottom': ['Insert bottom', 0.0, 'QLineEdit']}
             section_dict_updt = general_input_dialog(title='New XSection from points', input_dict=section_dict_in)
             if section_dict_updt is not None:
                 break
@@ -145,14 +169,16 @@ def section_from_points(self, drawn = True, section_dict_updt=None):
         section_dict[key] = section_dict_updt[key]
     section_dict['base_z'] = 0.0
     section_dict['end_z'] = 0.0
-    section_dict['azimuth'] = np_arctan2((section_dict['end_x'] - section_dict['base_x']), (section_dict['end_y'] - section_dict['base_y'])) * 180 / np_pi
+    section_dict['azimuth'] = np_arctan2((section_dict['end_x'] - section_dict['base_x']),
+                                         (section_dict['end_y'] - section_dict['base_y'])) * 180 / np_pi
     if section_dict['azimuth'] < 0:
         section_dict['azimuth'] += 360
-    section_dict['length'] = np_sqrt((section_dict['end_x'] - section_dict['base_x']) ** 2 + (section_dict['end_y'] - section_dict['base_y']) ** 2)
+    section_dict['length'] = np_sqrt(
+        (section_dict['end_x'] - section_dict['base_x']) ** 2 + (section_dict['end_y'] - section_dict['base_y']) ** 2)
     section_dict['normal_x'] = np_sin((section_dict['azimuth'] + 90) * np_pi / 180)
     section_dict['normal_y'] = np_cos((section_dict['azimuth'] + 90) * np_pi / 180)
     section_dict['normal_z'] = 0.0
-    uid = self.parent.xsect_coll.add_entity_from_dict(entity_dict=section_dict)
+    self.parent.xsect_coll.add_entity_from_dict(entity_dict=section_dict)
 
     if drawn:
         """Once the original XSection has been drawn, ask if a set of XSections is needed."""
@@ -178,10 +204,14 @@ def section_from_points(self, drawn = True, section_dict_updt=None):
                     section_dict['name'] = section_dict['name'] + '_0'
                 else:
                     break
-            section_dict['base_x'] = section_dict['base_x'] - (section_dict_updt_set['spacing'] * np_cos(section_dict['azimuth'] * np_pi / 180))
-            section_dict['base_y'] = section_dict['base_y'] + (section_dict_updt_set['spacing'] * np_sin(section_dict['azimuth'] * np_pi / 180))
-            section_dict['end_x'] = section_dict['end_x'] - (section_dict_updt_set['spacing'] * np_cos(section_dict['azimuth'] * np_pi / 180))
-            section_dict['end_y'] = section_dict['end_y'] + (section_dict_updt_set['spacing'] * np_sin(section_dict['azimuth'] * np_pi / 180))
+            section_dict['base_x'] = section_dict['base_x'] - (
+                        section_dict_updt_set['spacing'] * np_cos(section_dict['azimuth'] * np_pi / 180))
+            section_dict['base_y'] = section_dict['base_y'] + (
+                        section_dict_updt_set['spacing'] * np_sin(section_dict['azimuth'] * np_pi / 180))
+            section_dict['end_x'] = section_dict['end_x'] - (
+                        section_dict_updt_set['spacing'] * np_cos(section_dict['azimuth'] * np_pi / 180))
+            section_dict['end_y'] = section_dict['end_y'] + (
+                        section_dict_updt_set['spacing'] * np_sin(section_dict['azimuth'] * np_pi / 180))
             section_dict['normal_x'] = np_sin((section_dict['azimuth'] + 90) * np_pi / 180)
             section_dict['normal_y'] = np_cos((section_dict['azimuth'] + 90) * np_pi / 180)
             section_dict['uid'] = None
@@ -190,13 +220,16 @@ def section_from_points(self, drawn = True, section_dict_updt=None):
     for action in self.findChildren(QAction):
         action.setEnabled(True)
 
+
 def sections_from_file(self):
     from os.path import splitext
-    '''[Gabriele]  Read GOCAD ASCII (.pl) or ASCII files (.dat) to extract the data necessary to create a section (or multiple sections). The necessary keys are defined in the section_dict_updt dict.
+    '''[Gabriele]  Read GOCAD ASCII (.pl) or ASCII files (.dat) to extract the data necessary to create a section (or 
+    multiple sections). The necessary keys are defined in the section_dict_updt dict.
 
     For GOCAD ASCII the file is parsed for every line searching for key words that define the line containing the data.
 
-    For normal ASCII files exported from MOVE the data is registered as a csv and so the pd.read_csv function can be used. The separator is automatically extracted using csv.Sniffer() (auto_sep helper function).
+    For normal ASCII files exported from MOVE the data is registered as a csv and so the pd.read_csv function can be 
+    used. The separator is automatically extracted using csv.Sniffer() (auto_sep helper function).
 
     For both importing methods the user must define the top and bottom values of the section.
     '''
@@ -207,19 +240,23 @@ def sections_from_file(self):
                          'end_y': 0,
                          'top': 0,
                          'bottom': 0}
-    files = open_file_dialog(parent=self, caption="Import section traces", filter="GOCAD ASCII (*.*);;ASCII (*.dat)", multiple = True)
+    files = open_file_dialog(parent=self, caption="Import section traces", filter="GOCAD ASCII (*.*);;ASCII (*.dat);;CSV (*.csv)",
+                             multiple=True)
 
-    name, extension = splitext(files[0]) # [Gabriele] This could be implemented automatically in open_file_dialog (return file and extensio list)
+    name, extension = splitext(files[0])  # [Gabriele] This could be implemented automatically in open_file_dialog
+    # return file and extension list
 
-    section_dict_in = {'warning': ['XSection from file', 'Build new XSection from a GOCAD ASCII or simple ASCII file.\nChoose the top and bottom limit of the sections to continue', 'QLabel'],
-                        'top': ['Insert top', 0.0, 'QLineEdit'],
-                        'bottom': ['Insert bottom', 0.0, 'QLineEdit']}
-    top_bottom = general_input_dialog(title='XSection from files', input_dict=section_dict_in)
+    section_dict_in = {'warning': ['XSection from file', 'Build new XSection from a GOCAD ASCII or simple ASCII '
+                                                         'file.\nChoose the top and bottom limit of the sections to '
+                                                         'continue', 'QLabel'],
+                       'top': ['Insert top', 0.0, 'QLineEdit'],
+                       'bottom': ['Insert bottom', 0.0, 'QLineEdit']}
 
-    # [Gabriele] Check if the file type is GOCADASCII
-    if extension == '.pl':
-        for file in files:
-            with open(file,'r') as IN:
+    # [Gabriele] Check the file type
+    for file in files:
+        if extension == '.pl':
+            top_bottom = general_input_dialog(title='XSection from files', input_dict=section_dict_in)
+            with open(file, 'r') as IN:
                 for line in IN:
                     if 'name:' in line:
                         line_data = line.strip().split(':')
@@ -236,24 +273,39 @@ def sections_from_file(self):
                         # [Gabriele] When the END of the entry is reached create a section
                         section_dict_updt['top'] = top_bottom['top']
                         section_dict_updt['bottom'] = top_bottom['bottom']
-                        section_from_points(self,drawn = False,
-                                            section_dict_updt=section_dict_updt)
-    elif extension == '.dat':
-        for file in files:
+                        section_from_points(self, drawn=False, section_dict_updt=section_dict_updt)
+        elif extension == '.dat':
+            top_bottom = general_input_dialog(title='XSection from files', input_dict=section_dict_in)
             sep = auto_sep(file)
-            pd_df = pd.read_csv(file,sep=sep)
+            pd_df = pd.read_csv(file, sep=sep)
             unique_traces = pd.unique(pd_df['Name'])
             for trace in unique_traces:
                 section_dict_updt['name'] = trace
-                section_dict_updt['base_x'] = pd_df.loc[(pd_df['Name'] == trace) & (pd_df['Vertex Index'] == 1)]['x'].values
-                section_dict_updt['base_y'] = pd_df.loc[(pd_df['Name'] == trace) & (pd_df['Vertex Index'] == 1)]['y'].values
-                section_dict_updt['base_z'] = pd_df.loc[(pd_df['Name'] == trace) & (pd_df['Vertex Index'] == 1)]['y'].values
-                section_dict_updt['end_x'] = pd_df.loc[(pd_df['Name'] == trace) & (pd_df['Vertex Index'] == 2)]['x'].values
-                section_dict_updt['end_y'] = pd_df.loc[(pd_df['Name'] == trace) & (pd_df['Vertex Index'] == 2)]['y'].values
+                section_dict_updt['base_x'] = pd_df.loc[(pd_df['Name'] == trace) & (pd_df['Vertex Index'] == 1)][
+                    'x'].values
+                section_dict_updt['base_y'] = pd_df.loc[(pd_df['Name'] == trace) & (pd_df['Vertex Index'] == 1)][
+                    'y'].values
+                section_dict_updt['base_z'] = pd_df.loc[(pd_df['Name'] == trace) & (pd_df['Vertex Index'] == 1)][
+                    'y'].values
+                section_dict_updt['end_x'] = pd_df.loc[(pd_df['Name'] == trace) & (pd_df['Vertex Index'] == 2)][
+                    'x'].values
+                section_dict_updt['end_y'] = pd_df.loc[(pd_df['Name'] == trace) & (pd_df['Vertex Index'] == 2)][
+                    'y'].values
                 section_dict_updt['top'] = top_bottom['top']
                 section_dict_updt['bottom'] = top_bottom['bottom']
-                section_from_points(self,drawn = False,
-                                    section_dict_updt=section_dict_updt)
+                section_from_points(self, drawn=False, section_dict_updt=section_dict_updt)
+        elif extension == '.csv':
+            sep = auto_sep(file)
+            pd_df = pd.read_csv(file, sep=sep)
+            for index, sec in pd_df.iterrows():
+                section_dict_updt['name'] = sec['name']
+                section_dict_updt['base_x'] = sec['base_x']
+                section_dict_updt['base_y'] = sec['base_y']
+                section_dict_updt['end_x'] = sec['end_x']
+                section_dict_updt['end_y'] = sec['end_y']
+                section_dict_updt['top'] = sec['top']
+                section_dict_updt['bottom'] = sec['bottom']
+                section_from_points(self, drawn=False, section_dict_updt=section_dict_updt)
 
 
 
@@ -269,24 +321,33 @@ class XSectionCollection(QAbstractTableModel):
     """section_dict is a dictionary of attributes used to define Xsections.
     Always use deepcopy(GeologicalCollection.geological_entity_dict) to copy
     this dictioary without altering the original."""
-    section_dict = {'uid': '', 'name': 'undef', 'base_x': 0.0, 'base_y': 0.0, 'base_z': 0.0, 'end_x': 0.0, 'end_y': 0.0, 'end_z': 0.0, 'normal_x': 0.0, 'normal_y': 0.0, 'normal_z': 0.0, 'azimuth': 0.0, 'length': 0.0, 'top': 0.0, 'bottom': 0.0, 'vtk_plane': None,  # None to avoid errors with deepcopy
+    section_dict = {'uid': '', 'name': 'undef', 'base_x': 0.0, 'base_y': 0.0, 'base_z': 0.0, 'end_x': 0.0, 'end_y': 0.0,
+                    'end_z': 0.0, 'normal_x': 0.0, 'normal_y': 0.0, 'normal_z': 0.0, 'azimuth': 0.0, 'length': 0.0,
+                    'top': 0.0, 'bottom': 0.0, 'vtk_plane': None,  # None to avoid errors with deepcopy
                     'vtk_frame': None}  # None to avoid errors with deepcopy
 
-    section_type_dict = {'uid': str, 'name': str, 'base_x': float, 'base_y': float, 'base_z': float, 'end_x': float, 'end_y': float, 'end_z': float, 'normal_x': float, 'normal_y': float, 'normal_z': float, 'azimuth': float, 'length': float, 'top': float, 'bottom': float, 'vtk_plane': object, 'vtk_frame': object}
+    section_type_dict = {'uid': str, 'name': str, 'base_x': float, 'base_y': float, 'base_z': float, 'end_x': float,
+                         'end_y': float, 'end_z': float, 'normal_x': float, 'normal_y': float, 'normal_z': float,
+                         'azimuth': float, 'length': float, 'top': float, 'bottom': float, 'vtk_plane': object,
+                         'vtk_frame': object}
 
-    """The edit dialog will be able to edit attributes of multiple entities (and selecting "None" will not change them)______"""
+    """The edit dialog will be able to edit attributes of multiple entities (and selecting "None" will not change 
+    them)______"""
 
     def __init__(self, parent=None, *args, **kwargs):
         super(XSectionCollection, self).__init__(*args, **kwargs)
-        """Import reference to parent, otherwise it is difficult to reference them in SetData() that has a standard list of inputs."""
+        """Import reference to parent, otherwise it is difficult to reference them in SetData() that has a standard 
+        list of inputs."""
         self.parent = parent
 
         """Initialize Pandas dataframe."""
         self.df = pd.DataFrame(columns=list(self.section_dict.keys()))
 
-        """Here we use .columns.get_indexer to get indexes of the columns that we would like to be editable in the QTableView"""
-        """IN THE FUTURE think about editing top, bottom (just modify frame). To modify end-point and base-point we need to
-        ensure that they lie in the cross section, then just modify frame since W coords of objects are always calculated on-the-fly."""
+        """Here we use .columns.get_indexer to get indexes of the columns that we would like to be editable in the 
+        QTableView"""
+        """IN THE FUTURE think about editing top, bottom (just modify frame). To modify end-point and base-point we 
+        need to ensure that they lie in the cross section, then just modify frame since W coords of objects are 
+        always calculated on-the-fly."""
         self.editable_columns = self.df.columns.get_indexer(["name"])
 
     """Custom methods used to add or remove entities, query the dataframe, etc."""
@@ -302,7 +363,8 @@ class XSectionCollection(QAbstractTableModel):
         self.set_geometry(uid=entity_dict['uid'])
         """Reset data model"""
         self.modelReset.emit()
-        self.parent.xsect_added_signal.emit([entity_dict['uid']])  # a list of uids is emitted, even if the entity is just one
+        self.parent.xsect_added_signal.emit(
+            [entity_dict['uid']])  # a list of uids is emitted, even if the entity is just one
         return entity_dict['uid']
 
     def remove_entity(self, uid=None):
@@ -329,7 +391,8 @@ class XSectionCollection(QAbstractTableModel):
         return self.df['name'].to_list()
 
     def get_legend(self):
-        legend_dict = self.parent.others_legend_df.loc[self.parent.others_legend_df['other_type'] == 'XSection'].to_dict('records')
+        legend_dict = self.parent.others_legend_df.loc[
+            self.parent.others_legend_df['other_type'] == 'XSection'].to_dict('records')
         return legend_dict[0]
 
     def get_uid_name(self, uid=None):
@@ -462,7 +525,8 @@ class XSectionCollection(QAbstractTableModel):
 
     """Methods used to set parameters and the geometry of a single cross section."""
 
-    def set_parameters_in_table(self, uid=None, name=None, base_point=None, end_point=None, normal=None, azimuth=None, length=None, top=None, bottom=None):
+    def set_parameters_in_table(self, uid=None, name=None, base_point=None, end_point=None, normal=None, azimuth=None,
+                                length=None, top=None, bottom=None):
         """Write parameters in Xsections Pandas dataframe"""
         self.df.loc[self.df['uid'] == uid, 'name'] = name
         self.df.loc[self.df['uid'] == uid, 'base_x'] = base_point[0]
@@ -500,10 +564,14 @@ class XSectionCollection(QAbstractTableModel):
         return deltaX, deltaY
 
     def set_geometry(self, uid=None):
-        """"Given all parameters, sets the vtkPlane origin and normal properties, and builds the frame used for visualization"""
-        base_point = [self.df.loc[self.df['uid'] == uid, 'base_x'], self.df.loc[self.df['uid'] == uid, 'base_y'], self.df.loc[self.df['uid'] == uid, 'base_z']]
-        end_point = [self.df.loc[self.df['uid'] == uid, 'end_x'], self.df.loc[self.df['uid'] == uid, 'end_y'], self.df.loc[self.df['uid'] == uid, 'end_z']]
-        normal = [self.df.loc[self.df['uid'] == uid, 'normal_x'], self.df.loc[self.df['uid'] == uid, 'normal_y'], self.df.loc[self.df['uid'] == uid, 'normal_z']]
+        """"Given all parameters, sets the vtkPlane origin and normal properties, and builds the frame used for
+        visualization"""
+        base_point = [self.df.loc[self.df['uid'] == uid, 'base_x'], self.df.loc[self.df['uid'] == uid, 'base_y'],
+                      self.df.loc[self.df['uid'] == uid, 'base_z']]
+        end_point = [self.df.loc[self.df['uid'] == uid, 'end_x'], self.df.loc[self.df['uid'] == uid, 'end_y'],
+                     self.df.loc[self.df['uid'] == uid, 'end_z']]
+        normal = [self.df.loc[self.df['uid'] == uid, 'normal_x'], self.df.loc[self.df['uid'] == uid, 'normal_y'],
+                  self.df.loc[self.df['uid'] == uid, 'normal_z']]
         top = self.df.loc[self.df['uid'] == uid, 'top']
         bottom = self.df.loc[self.df['uid'] == uid, 'bottom']
         vtk_plane = Plane()
@@ -579,6 +647,7 @@ class XSectionCollection(QAbstractTableModel):
                 if self.df["name"].duplicated().sum() > 0:
                     self.df.iloc[index.row(), index.column()] = value + "_" + uid
                 self.dataChanged.emit(index, index)
-                self.parent.xsect_metadata_modified_signal.emit([uid])  # a list of uids is emitted, even if the entity is just one
+                self.parent.xsect_metadata_modified_signal.emit(
+                    [uid])  # a list of uids is emitted, even if the entity is just one
                 return True
             return QVariant()

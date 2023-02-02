@@ -1,6 +1,9 @@
 """windows_factory.py
 PZero© Andrea Bistacchi"""
 from vtkmodules.vtkCommonCore import vtkCommand
+import vtkmodules.vtkFiltersCore
+
+from .orientation_analysis import get_dip_dir_vectors
 
 """QT imports"""
 from PyQt5.QtWidgets import *
@@ -31,6 +34,7 @@ from numpy import sqrt as np_sqrt
 from numpy import pi as np_pi
 from numpy import array as np_array
 from numpy import square as np_square
+from numpy import all as np_all
 
 from pandas import DataFrame as pd_DataFrame
 from pandas import unique as pd_unique
@@ -48,7 +52,10 @@ from pyvista import global_theme as pv_global_theme
 from pyvistaqt import QtInteractor as pvQtInteractor
 from pyvista import _vtk
 from pyvista import read_texture
-from pyvista import Disc as pvDisc
+from pyvista import Plane as pv_Plane
+from pyvista import Line as pv_Line
+from pyvista import Disc as pv_Disc
+
 from pyvista import PolyData as pvPolyData
 from pyvista import PointSet as pvPointSet
 from pyvista import Plotter as pv_plot
@@ -101,13 +108,19 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.setupUi(self)
         # _____________________________________________________________________________
         # THE FOLLOWING ACTUALLY DELETES ANY REFERENCE TO CLOSED WINDOWS, HENCE FREEING
-        # MEMORY, BUT CREATES PROBLEMS WITH SIGNALS THAT ARE STILL ACTIVE
+        # MEMORY, BUT COULD CREATE PROBLEMS WITH SIGNALS THAT ARE STILL ACTIVE
         # SEE DISCUSSIONS ON QPointer AND WA_DeleteOnClose ON THE INTERNET
         # self.setAttribute(Qt.WA_DeleteOnClose, True)
         self.parent = parent
 
         """Connect actionQuit.triggered SIGNAL to self.close SLOT"""
         self.actionClose.triggered.connect(self.close)
+
+        """Connect signal to delete window when the project is closed (and a new one is opened)."""
+        # see discussion on deleteLater vs. close on the Internet as above, delete results in deleted slots being
+        # still referenced from the main window signals, thus causing errors
+        # self.parent.project_close_signal.connect(self.deleteLater)
+        self.parent.project_close_signal.connect(self.close)
 
         """Create empty Pandas dataframe with actor's with columns:
         uid = actor's uid -> the same as the original object's uid
@@ -162,6 +175,10 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             lambda updated_list: self.geology_legend_color_modified_update_views(updated_list=updated_list))
         self.parent.geology_legend_thick_modified_signal.connect(
             lambda updated_list: self.geology_legend_thick_modified_update_views(updated_list=updated_list))
+        self.parent.geology_legend_point_size_modified_signal.connect(
+            lambda updated_list: self.geology_legend_point_size_modified_update_views(updated_list=updated_list))
+        self.parent.geology_legend_opacity_modified_signal.connect(
+            lambda updated_list: self.geology_legend_opacity_modified_update_views(updated_list=updated_list))
 
         self.parent.xsect_added_signal.connect(
             lambda updated_list: self.xsect_added_update_views(updated_list=updated_list))
@@ -175,6 +192,8 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             lambda updated_list: self.xsect_legend_color_modified_update_views(updated_list=updated_list))
         self.parent.xsect_legend_thick_modified_signal.connect(
             lambda updated_list: self.xsect_legend_thick_modified_update_views(updated_list=updated_list))
+        self.parent.xsect_legend_opacity_modified_signal.connect(
+            lambda updated_list: self.xsect_legend_opacity_modified_update_views(updated_list=updated_list))
 
         self.parent.boundary_added_signal.connect(
             lambda updated_list: self.boundary_added_update_views(updated_list=updated_list))
@@ -188,6 +207,8 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             lambda updated_list: self.boundary_legend_color_modified_update_views(updated_list=updated_list))
         self.parent.boundary_legend_thick_modified_signal.connect(
             lambda updated_list: self.boundary_legend_thick_modified_update_views(updated_list=updated_list))
+        self.parent.boundary_legend_opacity_modified_signal.connect(
+            lambda updated_list: self.boundary_legend_opacity_modified_update_views(updated_list=updated_list))
 
         self.parent.mesh3d_added_signal.connect(
             lambda updated_list: self.mesh3d_added_update_views(updated_list=updated_list))
@@ -203,6 +224,8 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             lambda updated_list: self.mesh3d_legend_color_modified_update_views(updated_list=updated_list))
         self.parent.mesh3d_legend_thick_modified_signal.connect(
             lambda updated_list: self.mesh3d_legend_thick_modified_update_views(updated_list=updated_list))
+        self.parent.mesh3d_legend_opacity_modified_signal.connect(
+            lambda updated_list: self.mesh3d_legend_opacity_modified_update_views(updated_list=updated_list))
 
         self.parent.dom_added_signal.connect(
             lambda updated_list: self.dom_added_update_views(updated_list=updated_list))
@@ -218,6 +241,10 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             lambda updated_list: self.dom_legend_color_modified_update_views(updated_list=updated_list))
         self.parent.dom_legend_thick_modified_signal.connect(
             lambda updated_list: self.dom_legend_thick_modified_update_views(updated_list=updated_list))
+        self.parent.dom_legend_point_size_modified_signal.connect(
+            lambda updated_list: self.dom_legend_point_size_modified_update_views(updated_list=updated_list))
+        self.parent.dom_legend_opacity_modified_signal.connect(
+            lambda updated_list: self.dom_legend_opacity_modified_update_views(updated_list=updated_list))
 
         self.parent.image_added_signal.connect(
             lambda updated_list: self.image_added_update_views(updated_list=updated_list))
@@ -225,6 +252,8 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             lambda updated_list: self.image_removed_update_views(updated_list=updated_list))
         self.parent.image_metadata_modified_signal.connect(
             lambda updated_list: self.image_metadata_modified_update_views(updated_list=updated_list))
+        self.parent.image_legend_opacity_modified_signal.connect(
+            lambda updated_list: self.image_legend_opacity_modified_update_views(updated_list=updated_list))
 
         self.parent.well_added_signal.connect(
             lambda updated_list: self.well_added_update_views(updated_list=updated_list))
@@ -240,6 +269,8 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             lambda updated_list: self.well_legend_color_modified_update_views(updated_list=updated_list))
         self.parent.well_legend_thick_modified_signal.connect(
             lambda updated_list: self.well_legend_thick_modified_update_views(updated_list=updated_list))
+        self.parent.well_legend_opacity_modified_signal.connect(
+            lambda updated_list: self.well_legend_opacity_modified_update_views(updated_list=updated_list))
 
         self.parent.fluid_added_signal.connect(
             lambda updated_list: self.fluid_added_update_views(updated_list=updated_list))
@@ -257,6 +288,10 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             lambda updated_list: self.fluid_legend_color_modified_update_views(updated_list=updated_list))
         self.parent.fluid_legend_thick_modified_signal.connect(
             lambda updated_list: self.fluid_legend_thick_modified_update_views(updated_list=updated_list))
+        self.parent.fluid_legend_point_size_modified_signal.connect(
+            lambda updated_list: self.fluid_legend_point_size_modified_update_views(updated_list=updated_list))
+        self.parent.fluid_legend_opacity_modified_signal.connect(
+            lambda updated_list: self.fluid_legend_opacity_modified_update_views(updated_list=updated_list))
 
         self.parent.background_added_signal.connect(
             lambda updated_list: self.background_added_update_views(updated_list=updated_list))
@@ -274,6 +309,10 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             lambda updated_list: self.background_legend_color_modified_update_views(updated_list=updated_list))
         self.parent.background_legend_thick_modified_signal.connect(
             lambda updated_list: self.background_legend_thick_modified_update_views(updated_list=updated_list))
+        self.parent.background_legend_point_size_modified_signal.connect(
+            lambda updated_list: self.background_legend_point_size_modified_update_views(updated_list=updated_list))
+        self.parent.background_legend_opacity_modified_signal.connect(
+            lambda updated_list: self.background_legend_opacity_modified_update_views(updated_list=updated_list))
 
         self.parent.prop_legend_cmap_modified_signal.connect(
             lambda this_property: self.prop_legend_cmap_modified_update_views(this_property=this_property))
@@ -1013,7 +1052,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         """Send message with argument = the cell being checked/unchecked."""
         self.Mesh3DTableWidget.itemChanged.connect(self.toggle_mesh3d_visibility)
 
-    def update_mesh3d_list_added(self, new_list=None):
+    def update_mesh3d_list_added(self, new_list=None, sec_uid=None):
         """Update Mesh3D list without creating a new model"""
         row = self.Mesh3DTableWidget.rowCount()
         uid_list = list(new_list['uid'])
@@ -1415,7 +1454,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
 
             property_combo = QComboBox()
             property_combo.uid = uid
-            property_combo.name = 'General'
+            property_combo.name = 'Annotations'
             property_combo.addItem("none")
             property_combo.addItem("name")
             self.WellsTreeWidget.setItemWidget(tlevel_1, 2, property_combo)
@@ -1434,7 +1473,11 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             property_combo.addItem("Y")
             property_combo.addItem("Z")
             for prop in self.parent.well_coll.get_uid_properties_names(uid):
-                if prop != ('LITHOLOGY' or 'GEOLOGY'):
+                if prop == 'LITHOLOGY':
+                    pass
+                elif prop == 'GEOLOGY':
+                    pass
+                else:
                     property_combo.addItem(prop)
 
             self.WellsTreeWidget.setItemWidget(tlevel_2_trace, 2, property_combo)
@@ -1508,12 +1551,17 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
 
                     property_combo = QComboBox()
                     property_combo.uid = uid
+                    property_combo.name = 'Trace'
                     property_combo.addItem("none")
                     property_combo.addItem("X")
                     property_combo.addItem("Y")
                     property_combo.addItem("Z")
                     for prop in self.parent.well_coll.get_uid_properties_names(uid):
-                        if prop != 'GEOLOGY':
+                        if prop == 'LITHOLOGY':
+                            pass
+                        elif prop == 'GEOLOGY':
+                            pass
+                        else:
                             property_combo.addItem(prop)
 
                     self.WellsTreeWidget.setItemWidget(glevel_2, 2, property_combo)
@@ -1527,28 +1575,45 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                     break
             else:
                 """Different geological type, geological feature and scenario"""
-                glevel_1 = QTreeWidgetItem(self.WellsTreeWidget, [self.parent.well_coll.get_uid_well_locid(uid)])
-                glevel_1.setFlags(glevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
-                self.WellsTreeWidget.insertTopLevelItem(0, glevel_1)
+                tlevel_1 = QTreeWidgetItem(self.WellsTreeWidget, [
+                    self.parent.well_coll.get_uid_well_locid(uid)])  # self.GeologyTreeWidget as parent -> top level
+                tlevel_1.setFlags(tlevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
 
                 property_combo = QComboBox()
                 property_combo.uid = uid
+                property_combo.name = 'Annotations'
+                property_combo.addItem("none")
+                property_combo.addItem("name")
+                self.WellsTreeWidget.setItemWidget(tlevel_1, 2, property_combo)
+                property_combo.currentIndexChanged.connect(lambda: self.toggle_property())
+
+                # ======================================= TRACE =======================================
+
+                tlevel_2_trace = QTreeWidgetItem(tlevel_1, ['Trace', uid])  # tlevel_1 as parent -> middle level
+                tlevel_2_trace.setFlags(tlevel_2_trace.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
+
+                property_combo = QComboBox()
+                property_combo.uid = uid
+                property_combo.name = 'Trace'
                 property_combo.addItem("none")
                 property_combo.addItem("X")
                 property_combo.addItem("Y")
                 property_combo.addItem("Z")
                 for prop in self.parent.well_coll.get_uid_properties_names(uid):
-                    property_combo.addItem(prop)
+                    if prop == 'LITHOLOGY':
+                        pass
+                    elif prop == 'GEOLOGY':
+                        pass
+                    else:
+                        property_combo.addItem(prop)
 
-                glevel_2 = QTreeWidgetItem(glevel_1, ['Trace', uid])
-                self.WellsTreeWidget.setItemWidget(glevel_2, 2, property_combo)
+                self.WellsTreeWidget.setItemWidget(tlevel_2_trace, 2, property_combo)
                 property_combo.currentIndexChanged.connect(lambda: self.toggle_property())
-                glevel_2.setFlags(glevel_2.flags() | Qt.ItemIsUserCheckable)
+                tlevel_2_trace.setFlags(tlevel_2_trace.flags() | Qt.ItemIsUserCheckable)
                 if self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]:
-                    glevel_2.setCheckState(0, Qt.Checked)
+                    tlevel_2_trace.setCheckState(0, Qt.Checked)
                 elif not self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]:
-                    glevel_2.setCheckState(0, Qt.Unchecked)
-                self.WellsTreeWidget.insertTopLevelItem(0, glevel_2)
+                    tlevel_2_trace.setCheckState(0, Qt.Unchecked)
                 break
 
         self.WellsTreeWidget.itemChanged.connect(self.toggle_well_visibility)
@@ -2696,6 +2761,32 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.GeologyTreeWidget.itemChanged.connect(self.toggle_geology_topology_visibility)
         self.TopologyTreeWidget.itemChanged.connect(self.toggle_geology_topology_visibility)
 
+    def geology_legend_point_size_modified_update_views(self, updated_list=None):
+        """This is called when the point size in the geological legend is modified.
+        Disconnect signals to geology and topology tree, if they are set, to avoid a nasty loop
+        that disrupts the trees, then they are reconnected when the trees are rebuilt"""
+        self.GeologyTreeWidget.itemChanged.disconnect()
+        self.TopologyTreeWidget.itemChanged.disconnect()
+        for uid in updated_list:
+            """Case for line_thick changed"""
+            self.change_actor_point_size(uid=uid, collection='geol_coll')
+        """Re-connect signals."""
+        self.GeologyTreeWidget.itemChanged.connect(self.toggle_geology_topology_visibility)
+        self.TopologyTreeWidget.itemChanged.connect(self.toggle_geology_topology_visibility)
+
+    def geology_legend_opacity_modified_update_views(self, updated_list=None):
+        """This is called when the line thickness in the geological legend is modified.
+        Disconnect signals to geology and topology tree, if they are set, to avoid a nasty loop
+        that disrupts the trees, then they are reconnected when the trees are rebuilt"""
+        self.GeologyTreeWidget.itemChanged.disconnect()
+        self.TopologyTreeWidget.itemChanged.disconnect()
+        for uid in updated_list:
+            """Case for line_thick changed"""
+            self.change_actor_opacity(uid=uid, collection='geol_coll')
+        """Re-connect signals."""
+        self.GeologyTreeWidget.itemChanged.connect(self.toggle_geology_topology_visibility)
+        self.TopologyTreeWidget.itemChanged.connect(self.toggle_geology_topology_visibility)
+
     """Methods used to add, remove, and update actors from the cross section collection."""
 
     def xsect_added_update_views(self, updated_list=None):
@@ -2778,6 +2869,17 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         """Re-connect signals."""
         self.XSectionTreeWidget.itemChanged.connect(self.toggle_xsection_visibility)
 
+    def xsect_legend_opacity_modified_update_views(self, updated_list=None):
+        """This is called when the opacity in the image legend is modified.
+        Disconnect signals to image tree, if they are set, to avoid a nasty loop
+        that disrupts the trees, then they are reconnected when the trees are rebuilt"""
+        self.XSectionTreeWidget.itemChanged.disconnect()
+        for uid in updated_list:
+            """Case for color changed"""
+            self.change_actor_opacity(uid=uid, collection='xsect_coll')
+        """Re-connect signals."""
+        self.XSectionTreeWidget.itemChanged.connect(self.toggle_xsect_visibility)
+
     """Methods used to add, remove, and update actors from the Boundary collection."""
 
     def boundary_added_update_views(self, updated_list=None):
@@ -2858,6 +2960,17 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         for uid in updated_list:
             """Case for line_thick changed"""
             self.change_actor_line_thick(uid=uid, collection='boundary_coll')
+        """Re-connect signals."""
+        self.BoundariesTableWidget.itemChanged.connect(self.toggle_boundary_visibility)
+
+    def boundary_legend_opacity_modified_update_views(self, updated_list=None):
+        """This is called when the opacity in the image legend is modified.
+        Disconnect signals to image tree, if they are set, to avoid a nasty loop
+        that disrupts the trees, then they are reconnected when the trees are rebuilt"""
+        self.BoundariesTableWidget.itemChanged.disconnect()
+        for uid in updated_list:
+            """Case for color changed"""
+            self.change_actor_opacity(uid=uid, collection='boundary_coll')
         """Re-connect signals."""
         self.BoundariesTableWidget.itemChanged.connect(self.toggle_boundary_visibility)
 
@@ -2957,6 +3070,17 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         """Re-connect signals."""
         self.Mesh3DTableWidget.itemChanged.connect(self.toggle_mesh3d_visibility)
 
+    def mesh3d_legend_opacity_modified_update_views(self, updated_list=None):
+        """This is called when the opacity in the image legend is modified.
+        Disconnect signals to image tree, if they are set, to avoid a nasty loop
+        that disrupts the trees, then they are reconnected when the trees are rebuilt"""
+        self.Mesh3DTableWidget.itemChanged.disconnect()
+        for uid in updated_list:
+            """Case for color changed"""
+            self.change_actor_opacity(uid=uid, collection='mesh3d_coll')
+        """Re-connect signals."""
+        self.Mesh3DTableWidget.itemChanged.connect(self.toggle_mesh3d_visibility)
+
     """Methods used to add, remove, and update actors from the DOM collection."""
 
     def dom_added_update_views(self, updated_list=None):
@@ -2991,7 +3115,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
 
     def dom_data_keys_modified_update_views(self, updated_list=None):
         """This is called when entity point or cell data are modified.
-        Disconnect signals to geology and topology tree, if they are set, to avoid a nasty loop
+        Disconnect signals to DOM tree, if they are set, to avoid a nasty loop
         that disrupts the trees, then they are reconnected when the trees are rebuilt"""
         self.DOMsTableWidget.itemChanged.disconnect()
         for uid in updated_list:
@@ -3053,6 +3177,29 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         """Re-connect signals."""
         self.DOMsTableWidget.itemChanged.connect(self.toggle_dom_visibility)
 
+    def dom_legend_point_size_modified_update_views(self, updated_list=None):
+        """This is called when the line thickness in the cross-section legend is modified.
+        Disconnect signals to xsect list, if they are set, then they are
+        reconnected when the list is rebuilt"""
+        self.DOMsTableWidget.itemChanged.disconnect()
+        for uid in updated_list:
+            """Case for line_thick changed"""
+            self.change_actor_point_size(uid=uid, collection='dom_coll')
+        """Re-connect signals."""
+        self.DOMsTableWidget.itemChanged.connect(self.toggle_dom_visibility)
+
+    def dom_legend_opacity_modified_update_views(self, updated_list=None):
+        """This is called when the opacity in the image legend is modified.
+        Disconnect signals to image tree, if they are set, to avoid a nasty loop
+        that disrupts the trees, then they are reconnected when the trees are rebuilt"""
+        self.DOMsTableWidget.itemChanged.disconnect()
+        for uid in updated_list:
+            """Case for color changed"""
+            if isinstance(self, View3D):
+                self.change_actor_opacity(uid=uid, collection='dom_coll')
+        """Re-connect signals."""
+        self.DOMsTableWidget.itemChanged.connect(self.toggle_dom_visibility)
+
     """Methods used to add, remove, and update actors from the image collection."""
 
     def image_added_update_views(self, updated_list=None):
@@ -3095,6 +3242,18 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             self.create_image_list()
         """Re-connect signals."""
         self.ImagesTableWidget.itemChanged.connect(self.toggle_image_visibility)
+
+    def image_legend_opacity_modified_update_views(self, updated_list=None):
+        """This is called when the opacity in the image legend is modified.
+        Disconnect signals to image tree, if they are set, to avoid a nasty loop
+        that disrupts the trees, then they are reconnected when the trees are rebuilt"""
+        self.ImagesTableWidget.itemChanged.disconnect()
+        for uid in updated_list:
+            """Case for color changed"""
+            self.change_actor_opacity(uid=uid, collection='image_coll')
+        """Re-connect signals."""
+        self.ImagesTableWidget.itemChanged.connect(self.toggle_image_visibility)
+
 
     """Methods used to add, remove, and update actors from the wells collection."""
 
@@ -3184,6 +3343,17 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         for uid in updated_list:
             """Case for line_thick changed"""
             self.change_actor_line_thick(uid=uid, collection='well_coll')
+        """Re-connect signals."""
+        self.WellsTreeWidget.itemChanged.connect(self.toggle_well_visibility)
+
+    def well_legend_opacity_modified_update_views(self, updated_list=None):
+        """This is called when the opacity in the well legend is modified.
+        Disconnect signals to geology and topology tree, if they are set, to avoid a nasty loop
+        that disrupts the trees, then they are reconnected when the trees are rebuilt"""
+        self.WellsTreeWidget.itemChanged.disconnect()
+        for uid in updated_list:
+            """Case for line_thick changed"""
+            self.change_actor_opacity(uid=uid, collection='well_coll')
         """Re-connect signals."""
         self.WellsTreeWidget.itemChanged.connect(self.toggle_well_visibility)
 
@@ -3322,6 +3492,32 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         for uid in updated_list:
             """Case for line_thick changed"""
             self.change_actor_line_thick(uid=uid, collection='fluids_coll')
+        """Re-connect signals."""
+        self.FluidsTreeWidget.itemChanged.connect(self.toggle_fluids_topology_visibility)
+        self.FluidsTopologyTreeWidget.itemChanged.connect(self.toggle_fluids_topology_visibility)
+
+    def fluid_legend_point_size_modified_update_views(self, updated_list=None):
+        """This is called when the line thickness in the fluid legend is modified.
+        Disconnect signals to fluid and topology tree, if they are set, to avoid a nasty loop
+        that disrupts the trees, then they are reconnected when the trees are rebuilt"""
+        self.FluidsTreeWidget.itemChanged.disconnect()
+        self.FluidsTopologyTreeWidget.itemChanged.disconnect()
+        for uid in updated_list:
+            """Case for line_thick changed"""
+            self.change_actor_line_point_size(uid=uid, collection='fluids_coll')
+        """Re-connect signals."""
+        self.FluidsTreeWidget.itemChanged.connect(self.toggle_fluids_topology_visibility)
+        self.FluidsTopologyTreeWidget.itemChanged.connect(self.toggle_fluids_topology_visibility)
+
+    def fluid_legend_opacity_modified_update_views(self, updated_list=None):
+        """This is called when the opacity in the fluid legend is modified.
+        Disconnect signals to fluid and topology tree, if they are set, to avoid a nasty loop
+        that disrupts the trees, then they are reconnected when the trees are rebuilt"""
+        self.FluidsTreeWidget.itemChanged.disconnect()
+        self.FluidsTopologyTreeWidget.itemChanged.disconnect()
+        for uid in updated_list:
+            """Case for line_thick changed"""
+            self.change_actor_opacity(uid=uid, collection='fluids_coll')
         """Re-connect signals."""
         self.FluidsTreeWidget.itemChanged.connect(self.toggle_fluids_topology_visibility)
         self.FluidsTopologyTreeWidget.itemChanged.connect(self.toggle_fluids_topology_visibility)
@@ -3466,7 +3662,33 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.BackgroundsTreeWidget.itemChanged.connect(self.toggle_backgrounds_topology_visibility)
         self.BackgroundsTopologyTreeWidget.itemChanged.connect(self.toggle_backgrounds_topology_visibility)
 
-    # ================================  General methods shared by all views ================================
+    def background_legend_point_size_modified_update_views(self, updated_list=None):
+        """This is called when the line thickness in the fluid legend is modified.
+        Disconnect signals to fluid and topology tree, if they are set, to avoid a nasty loop
+        that disrupts the trees, then they are reconnected when the trees are rebuilt"""
+        self.BackgroundsTreeWidget.itemChanged.disconnect()
+        self.BackgroundsTopologyTreeWidget.itemChanged.disconnect()
+        for uid in updated_list:
+            """Case for line_thick changed"""
+            self.change_actor_point_size(uid=uid, collection='backgrounds_coll')
+        """Re-connect signals."""
+        self.BackgroundsTreeWidget.itemChanged.connect(self.toggle_backgrounds_topology_visibility)
+        self.BackgroundsTopologyTreeWidget.itemChanged.connect(self.toggle_backgrounds_topology_visibility)
+
+    def background_legend_opacity_modified_update_views(self, updated_list=None):
+        """This is called when the line thickness in the fluid legend is modified.
+        Disconnect signals to fluid and topology tree, if they are set, to avoid a nasty loop
+        that disrupts the trees, then they are reconnected when the trees are rebuilt"""
+        self.BackgroundsTreeWidget.itemChanged.disconnect()
+        self.BackgroundsTopologyTreeWidget.itemChanged.disconnect()
+        for uid in updated_list:
+            """Case for line_thick changed"""
+            self.change_actor_opacity(uid=uid, collection='backgrounds_coll')
+        """Re-connect signals."""
+        self.BackgroundsTreeWidget.itemChanged.connect(self.toggle_backgrounds_topology_visibility)
+        self.BackgroundsTopologyTreeWidget.itemChanged.connect(self.toggle_backgrounds_topology_visibility)
+
+    """General methods shared by all views."""
 
     def toggle_property(self):
         """Generic method to toggle the property shown by an actor that is already present in the view."""
@@ -3605,20 +3827,34 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         color_RGB = [color_R / 255, color_G / 255, color_B / 255]
         self.actors_df.loc[self.actors_df['uid'] == uid, 'actor'].values[0].GetProperty().SetColor(color_RGB)
 
+    def change_actor_opacity(self, uid=None, collection=None):
+        if collection == 'geol_coll':
+            opacity = self.parent.geol_coll.get_uid_legend(uid=uid)['opacity'] / 100
+        elif collection == 'xsect_coll':
+            opacity = self.parent.xsect_coll.get_legend()['opacity'] / 100
+        elif collection == 'boundary_coll':
+            opacity = self.parent.boundary_coll.get_legend()['opacity'] / 100
+        elif collection == 'mesh3d_coll':
+            opacity = self.parent.mesh3d_coll.get_legend()['opacity'] / 100
+        elif collection == 'dom_coll':
+            opacity = self.parent.dom_coll.get_legend()['opacity'] / 100
+        elif collection == 'well_coll':
+            opacity = self.parent.well_coll.get_uid_legend(uid=uid)['opacity'] / 100
+        elif collection == 'fluids_coll':
+            opacity = self.parent.fluids_coll.get_uid_legend(uid=uid)['opacity'] / 100
+        elif collection == 'backgrounds_coll':
+            opacity = self.parent.backgrounds_coll.get_uid_legend(uid=uid)['opacity'] / 100
+        elif collection == 'image_coll':
+            opacity = self.parent.image_coll.get_legend()['opacity'] / 100
+        """Note: no legend for image."""
+        """Update color for actor uid"""
+        self.actors_df.loc[self.actors_df['uid'] == uid, 'actor'].values[0].GetProperty().SetOpacity(opacity)
+
     def change_actor_line_thick(self, uid=None, collection=None):
         """Update line thickness for actor uid"""
 
         if collection == 'geol_coll':
             line_thick = self.parent.geol_coll.get_uid_legend(uid=uid)['line_thick']
-            if isinstance(self.parent.geol_coll.get_uid_vtk_obj(uid), VertexSet) or isinstance(
-                    self.parent.geol_coll.get_uid_vtk_obj(uid), XsVertexSet):
-                self.actors_df.loc[self.actors_df['uid'] == uid, 'actor'].values[0].GetProperty().SetPointSize(
-                    line_thick)
-            else:
-                self.actors_df.loc[self.actors_df['uid'] == uid, 'actor'].values[0].GetProperty().SetLineWidth(
-                    line_thick)
-
-
         elif collection == 'xsect_coll':
             line_thick = self.parent.xsect_coll.get_legend()['line_thick']
         elif collection == 'boundary_coll':
@@ -3628,35 +3864,34 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         elif collection == 'dom_coll':
             line_thick = self.parent.dom_coll.get_legend()['line_thick']
             """Note: no legend for image."""
-            if isinstance(self.parent.dom_coll.get_uid_vtk_obj(uid), PCDom):
-                """Use line_thick to set point size here."""
-                self.actors_df.loc[self.actors_df['uid'] == uid, 'actor'].values[0].GetProperty().SetPointSize(
-                    line_thick)
-            else:
-                self.actors_df.loc[self.actors_df['uid'] == uid, 'actor'].values[0].GetProperty().SetLineWidth(
-                    line_thick)
         elif collection == 'well_coll':
             line_thick = self.parent.well_coll.get_uid_legend(uid=uid)['line_thick']
-            self.actors_df.loc[self.actors_df['uid'] == uid, 'actor'].values[0].GetProperty().SetLineWidth(line_thick)
         elif collection == 'fluids_coll':
             line_thick = self.parent.fluids_coll.get_uid_legend(uid=uid)['line_thick']
-
-            if isinstance(self.parent.fluids_coll.get_uid_vtk_obj(uid), VertexSet):
-                self.actors_df.loc[self.actors_df['uid'] == uid, 'actor'].values[0].GetProperty().SetPointSize(
-                    line_thick)
-            else:
-                self.actors_df.loc[self.actors_df['uid'] == uid, 'actor'].values[0].GetProperty().SetLineWidth(
-                    line_thick)
-
         elif collection == 'backgrounds_coll':
             line_thick = self.parent.backgrounds_coll.get_uid_legend(uid=uid)['line_thick']
+        self.actors_df.loc[self.actors_df['uid'] == uid, 'actor'].values[0].GetProperty().SetLineWidth(line_thick)
 
-            if isinstance(self.parent.backgrounds_coll.get_uid_vtk_obj(uid), VertexSet):
-                self.actors_df.loc[self.actors_df['uid'] == uid, 'actor'].values[0].GetProperty().SetPointSize(
-                    line_thick)
-            else:
-                self.actors_df.loc[self.actors_df['uid'] == uid, 'actor'].values[0].GetProperty().SetLineWidth(
-                    line_thick)
+    def change_actor_point_size(self, uid=None, collection=None):
+        """Update line thickness for actor uid"""
+        if collection == 'geol_coll':
+            point_size = self.parent.geol_coll.get_uid_legend(uid=uid)['point_size']
+        elif collection == 'xsect_coll':
+            point_size = self.parent.xsect_coll.get_legend()['point_size']
+        elif collection == 'boundary_coll':
+            point_size = self.parent.boundary_coll.get_legend()['point_size']
+        elif collection == 'mesh3d_coll':
+            point_size = self.parent.mesh3d_coll.get_legend()['point_size']
+        elif collection == 'dom_coll':
+            point_size = self.parent.dom_coll.get_legend()['point_size']
+            """Note: no legend for image."""
+        elif collection == 'well_coll':
+            point_size = self.parent.well_coll.get_uid_legend(uid=uid)['point_size']
+        elif collection == 'fluids_coll':
+            point_size = self.parent.fluids_coll.get_uid_legend(uid=uid)['point_size']
+        elif collection == 'backgrounds_coll':
+            point_size = self.parent.backgrounds_coll.get_uid_legend(uid=uid)['point_size']
+        self.actors_df.loc[self.actors_df['uid'] == uid, 'actor'].values[0].GetProperty().SetPointSize(point_size)
 
     def set_actor_visible(self, uid=None, visible=None, name=None):
 
@@ -3713,6 +3948,9 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             color_B = self.parent.geol_coll.get_uid_legend(uid=uid)['color_B']
             color_RGB = [color_R / 255, color_G / 255, color_B / 255]
             line_thick = self.parent.geol_coll.get_uid_legend(uid=uid)['line_thick']
+            point_size = self.parent.geol_coll.get_uid_legend(uid=uid)['point_size']
+            opacity = self.parent.geol_coll.get_uid_legend(uid=uid)['opacity'] / 100
+
             plot_entity = self.parent.geol_coll.get_uid_vtk_obj(uid)
         elif collection == 'xsect_coll':
             color_R = self.parent.xsect_coll.get_legend()['color_R']
@@ -3720,6 +3958,8 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             color_B = self.parent.xsect_coll.get_legend()['color_B']
             color_RGB = [color_R / 255, color_G / 255, color_B / 255]
             line_thick = self.parent.xsect_coll.get_legend()['line_thick']
+            opacity = self.parent.xsect_coll.get_legend()['opacity'] / 100
+
             plot_entity = self.parent.xsect_coll.get_uid_vtk_frame(uid)
         elif collection == 'boundary_coll':
             color_R = self.parent.boundary_coll.get_legend()['color_R']
@@ -3727,6 +3967,8 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             color_B = self.parent.boundary_coll.get_legend()['color_B']
             color_RGB = [color_R / 255, color_G / 255, color_B / 255]
             line_thick = self.parent.boundary_coll.get_legend()['line_thick']
+            opacity = self.parent.boundary_coll.get_uid_legend(uid=uid)['opacity'] / 100
+
             plot_entity = self.parent.boundary_coll.get_uid_vtk_obj(uid)
         elif collection == 'mesh3d_coll':
             color_R = self.parent.mesh3d_coll.get_legend()['color_R']
@@ -3734,6 +3976,8 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             color_B = self.parent.mesh3d_coll.get_legend()['color_B']
             color_RGB = [color_R / 255, color_G / 255, color_B / 255]
             line_thick = self.parent.mesh3d_coll.get_legend()['line_thick']
+            opacity = self.parent.mesh3d_coll.get_legend()['opacity'] / 100
+
             plot_entity = self.parent.mesh3d_coll.get_uid_vtk_obj(uid)
         elif collection == 'dom_coll':
             color_R = self.parent.dom_coll.get_legend()['color_R']
@@ -3741,11 +3985,15 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             color_B = self.parent.dom_coll.get_legend()['color_B']
             color_RGB = [color_R / 255, color_G / 255, color_B / 255]
             line_thick = self.parent.dom_coll.get_legend()['line_thick']
+            opacity = self.parent.dom_coll.get_legend()['opacity'] / 100
+
             plot_entity = self.parent.dom_coll.get_uid_vtk_obj(uid)
         elif collection == 'image_coll':
             """Note: no legend for image."""
             color_RGB = [255, 255, 255]
             line_thick = 5.0
+            opacity = self.parent.image_coll.get_legend()['opacity'] / 100
+
             plot_entity = self.parent.image_coll.get_uid_vtk_obj(uid)
         elif collection == 'well_coll':
             color_R = self.parent.well_coll.get_uid_legend(uid=uid)['color_R']
@@ -3753,6 +4001,8 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             color_B = self.parent.well_coll.get_uid_legend(uid=uid)['color_B']
             color_RGB = [color_R / 255, color_G / 255, color_B / 255]
             line_thick = self.parent.well_coll.get_uid_legend(uid=uid)['line_thick']
+            opacity = self.parent.well_coll.get_uid_legend(uid=uid)['opacity'] / 100
+
             plot_entity = self.parent.well_coll.get_uid_vtk_obj(uid)
         elif collection == 'fluids_coll':
             color_R = self.parent.fluids_coll.get_uid_legend(uid=uid)['color_R']
@@ -3760,6 +4010,9 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             color_B = self.parent.fluids_coll.get_uid_legend(uid=uid)['color_B']
             color_RGB = [color_R / 255, color_G / 255, color_B / 255]
             line_thick = self.parent.fluids_coll.get_uid_legend(uid=uid)['line_thick']
+            point_size = self.parent.fluids_coll.get_uid_legend(uid=uid)['point_size']
+            opacity = self.parent.fluids_coll.get_uid_legend(uid=uid)['opacity'] / 100
+
             plot_entity = self.parent.fluids_coll.get_uid_vtk_obj(uid)
         elif collection == 'backgrounds_coll':
             color_R = self.parent.backgrounds_coll.get_uid_legend(uid=uid)['color_R']
@@ -3767,6 +4020,9 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             color_B = self.parent.backgrounds_coll.get_uid_legend(uid=uid)['color_B']
             color_RGB = [color_R / 255, color_G / 255, color_B / 255]
             line_thick = self.parent.backgrounds_coll.get_uid_legend(uid=uid)['line_thick']
+            point_size = self.parent.backgrounds_coll.get_uid_legend(uid=uid)['point_size']
+            opacity = self.parent.backgrounds_coll.get_uid_legend(uid=uid)['opacity'] / 100
+
             plot_entity = self.parent.backgrounds_coll.get_uid_vtk_obj(uid)
         else:
             print("no collection")
@@ -3807,6 +4063,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             style = 'points'
             plot_rgb_option = None
             texture = False
+            smooth_shading = False
             if isinstance(plot_entity.points, np_ndarray):
                 """This  check is needed to avoid errors when trying to plot an empty
                 PolyData, just created at the beginning of a digitizing session."""
@@ -3823,22 +4080,31 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                 elif show_property == 'Z':
                     show_property = plot_entity.points_Z
                 elif show_property == 'Normals':
-                    # r = self.parent.geol_coll.get_uid_legend(uid=uid)['line_thick']
-                    texture = read_texture('pzero/icons/dip.png')
-                    disk = pvDisc(outer=10, inner=0, c_res=30)
-                    disk.texture_map_to_plane(inplace=True)
                     show_scalar_bar = False
+                    show_property_title = None
                     show_property = None
-
-                    show_property_title = 'none'
                     style = 'surface'
-                    pv_downcast = pvPolyData()
-                    pv_downcast.ShallowCopy(plot_entity)
-                    pv_downcast.Modified()
+                    smooth_shading = True
+                    appender = vtkAppendPolyData()
+                    r = self.parent.geol_coll.get_uid_legend(uid=uid)['point_size'] * 4
+                    points = plot_entity.points
+                    normals = plot_entity.get_point_data('Normals')
+                    dip_vectors, dir_vectors = get_dip_dir_vectors(normals=normals)
+                    line1 = pv_Line(pointa=(0, 0, 0), pointb=(r, 0, 0))
+                    line2 = pv_Line(pointa=(-r, 0, 0), pointb=(r, 0, 0))
+                    for point, normal in zip(points, normals):
+                        # base = pv_Plane(center=point, direction=normal,i_size=r,j_size=r)
+                        base = pv_Disc(center=point, normal=normal, inner=0, outer=r, c_res=30)
+                        appender.AddInputData(base)
 
-                    # print(pv_downcast['Normals'])
-                    plot_entity = pv_downcast.glyph(orient='Normals', geom=disk)
-                    # print('Normals not available for now in 3D view')
+                    dip_glyph = plot_entity.glyph(geometry=line1, prop=dip_vectors)
+                    dir_glyph = plot_entity.glyph(geometry=line2, prop=dir_vectors)
+
+                    appender.AddInputData(dip_glyph)
+                    appender.AddInputData(dir_glyph)
+                    appender.Update()
+                    plot_entity = appender.GetOutput()
+
                 elif show_property == 'name':
                     point = plot_entity.points
                     name_value = plot_entity.get_field_data('name')
@@ -3846,7 +4112,6 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                                                   font_size=15, shape_opacity=0.5, name=f'{uid}_name')
                     show_property = None
                     show_property_title = None
-
 
                 else:
                     if plot_entity.get_point_data_shape(show_property)[-1] == 3:
@@ -3945,7 +4210,8 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             this_actor = self.plot_PC_3D(uid=uid, plot_entity=new_plot, color_RGB=color_RGB,
                                          show_property=show_property_value, show_scalar_bar=show_scalar_bar,
                                          color_bar_range=None, show_property_title=show_property_title,
-                                         plot_rgb_option=plot_rgb_option, visible=visible, point_size=line_thick)
+                                         plot_rgb_option=plot_rgb_option, visible=visible, point_size=line_thick,
+                                         opacity=opacity)
 
         elif isinstance(plot_entity, (MapImage, XsImage)):
             """Do not plot directly image - it is much slower.
@@ -3957,7 +4223,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             this_actor = self.plot_mesh(uid=uid, plot_entity=plot_entity.frame, color_RGB=None, show_property=None,
                                         show_scalar_bar=None,
                                         color_bar_range=None, show_property_title=None, line_thick=line_thick,
-                                        plot_texture_option=plot_texture_option, plot_rgb_option=False, visible=visible)
+                                        plot_texture_option=plot_texture_option, plot_rgb_option=False, visible=visible, opacity=opacity)
         elif isinstance(plot_entity, Seismics):
             plot_rgb_option = None
             if isinstance(plot_entity.points, np_ndarray):
@@ -3982,7 +4248,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                                             show_property=show_property, show_scalar_bar=show_scalar_bar,
                                             color_bar_range=None, show_property_title=show_property_title,
                                             line_thick=line_thick,
-                                            plot_texture_option=False, plot_rgb_option=plot_rgb_option, visible=visible)
+                                            plot_texture_option=False, plot_rgb_option=plot_rgb_option, visible=visible, opacity=opacity)
             else:
                 this_actor = None
         elif isinstance(plot_entity, Voxet):
@@ -4001,7 +4267,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                                             show_property=show_property, show_scalar_bar=show_scalar_bar,
                                             color_bar_range=None, show_property_title=show_property_title,
                                             line_thick=line_thick,
-                                            plot_texture_option=False, plot_rgb_option=plot_rgb_option, visible=visible)
+                                            plot_texture_option=False, plot_rgb_option=plot_rgb_option, visible=visible, opacity=opacity)
             else:
                 this_actor = None
         elif isinstance(plot_entity, WellTrace):
@@ -4031,7 +4297,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                                         color_bar_range=None, show_property_title=show_property_title,
                                         line_thick=line_thick,
                                         plot_texture_option=False, plot_rgb_option=plot_rgb_option, visible=visible,
-                                        render_lines_as_tubes=False)
+                                        render_lines_as_tubes=False, opacity=opacity)
         else:
             print("[Windows factory]: actor with no class")
             this_actor = None
@@ -4087,7 +4353,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         elif collection == 'well_coll':
             plot_entity = self.parent.well_coll.get_uid_vtk_obj(uid)
             point = plot_entity.points[0].reshape(-1, 3)
-            name_value = self.parent.well_coll.get_uid_well_locid(uid)
+            name_value = [self.parent.well_coll.get_uid_well_locid(uid)]
         elif collection == 'fluids_coll':
             plot_entity = self.parent.fluids_coll.get_uid_vtk_obj(uid)
             point = plot_entity.GetCenter()
@@ -4215,7 +4481,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                                            edge_color=None,  # default black
                                            point_size=point_size,  # was 5.0
                                            line_width=line_thick,
-                                           opacity=1.0,
+                                           opacity=opacity,
                                            # ___________________ single value > uniform opacity. A string can be specified to map the scalars range to opacity.
                                            flip_scalars=False,  # flip direction of cmap
                                            lighting=None,  # bool to enable view-direction lighting
@@ -4236,7 +4502,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                                            # ________________________________ vtk.vtkTexture or np_ndarray or boolean, will work if input mesh has texture coordinates. True > first available texture. String > texture with that name already associated to mesh.
                                            render_points_as_spheres=points_as_spheres,
                                            render_lines_as_tubes=render_lines_as_tubes,
-                                           smooth_shading=False,
+                                           smooth_shading=smooth_shading,
                                            ambient=0.0,
                                            diffuse=1.0,
                                            specular=0.0,
@@ -4290,10 +4556,10 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             if len(sel_uid) > 1:
                 self.parent.GeologyTableView.setSelectionMode(QAbstractItemView.MultiSelection)
 
-            # In general this approach is not the best. 
+            # In general this approach is not the best.
             # In the actors_df the index of the df is indipendent from the index of the table views.
             # We could have 6 entities 5 of which are in the geology tab and 1 in the image tab.
-            # When selecting the image the actors_df index could be anything from 0 to 5 (depends on the add_all_entities order) 
+            # When selecting the image the actors_df index could be anything from 0 to 5 (depends on the add_all_entities order)
             # but in the table view is 0 thus returning nothing.
             # To resolve this we could:
             #   1. Create a actor_df for each collection
@@ -4714,7 +4980,7 @@ class View3D(BaseView):
 
     def plot_PC_3D(self, uid=None, plot_entity=None, visible=None, color_RGB=None, show_property=None,
                    show_scalar_bar=None, color_bar_range=None, show_property_title=None, plot_rgb_option=None,
-                   point_size=1.0, points_as_spheres=True):
+                   point_size=1.0, points_as_spheres=True, opacity=1.0):
         """[Gabriele]  Plot the point cloud"""
         if not self.actors_df.empty:
             """This stores the camera position before redrawing the actor.
@@ -4744,7 +5010,8 @@ class View3D(BaseView):
                                                               'label_font_size': 16, 'shadow': True,
                                                               'interactive': True, 'vertical': False},
                                              rgb=plot_rgb_option,
-                                             show_scalar_bar=show_scalar_bar)
+                                             show_scalar_bar=show_scalar_bar,
+                                             opacity=opacity)
         # self.n_points = plot_entity.GetNumberOfPoints()
         if not visible:
             this_actor.SetVisibility(False)
@@ -4783,7 +5050,8 @@ class View3D(BaseView):
                     elif self.toggle_bore_geo == -1:
                         self.plotter.remove_actor(f'{uid}_litho')
                         geo = plot_entity.plot_tube('GEOLOGY')
-                        self.plotter.add_mesh(geo, name=f'{uid}_geo', rgb=True)
+                        if geo != None:
+                            self.plotter.add_mesh(geo, name=f'{uid}_geo', rgb=True)
 
             self.toggle_bore_geo *= -1
         elif method == 'litho':
@@ -4797,7 +5065,8 @@ class View3D(BaseView):
                     elif self.toggle_bore_litho == -1:
                         self.plotter.remove_actor(f'{uid}_geo')
                         litho = plot_entity.plot_tube('LITHOLOGY')
-                        self.plotter.add_mesh(litho, name=f'{uid}_litho', rgb=True)
+                        if litho != None:
+                            self.plotter.add_mesh(litho, name=f'{uid}_litho', rgb=True)
 
             self.toggle_bore_litho *= -1
 
@@ -5362,7 +5631,9 @@ class View2D(BaseView):
                     self.temp_vbm_dV = event.ydata - self.temp_vbm_V0
                     self.temp_vbm_length = sqrt(self.temp_vbm_dU ** 2 + self.temp_vbm_dV ** 2)
                     self.temp_vbm_azimuth = degrees(atan2(self.temp_vbm_dU, self.temp_vbm_dV))
-                    self.temp_vbm_line.set_data([self.temp_vbm_U0, event.xdata], [self.temp_vbm_V0, event.ydata])
+                    # self.temp_vbm_line.set_data([self.temp_vbm_U0, event.xdata], [self.temp_vbm_V0, event.ydata])
+                    self.temp_vbm_line.set_data([self.temp_vbm_U0, self.temp_vbm_dU + self.temp_vbm_U0],
+                                                [self.temp_vbm_V0, self.temp_vbm_dV + self.temp_vbm_V0])
                     self.temp_vbm_line.figure.canvas.draw()  # ________________WE NEED SOMETHING HERE TO SHOW THESE VALUES IN REAL TIME____________________________________________  # self.text_msg.set_text("dU: {0:.2f} dV: {1:.2f} length: {2:d} azimuth: {3:d}".format(self.temp_vbm_dU,  #                                                                                     self.temp_vbm_dV,  #                                                                                     self.temp_vbm_length,  #                                                                                     self.temp_vbm_azimuth))
                 except:
                     return
@@ -5402,7 +5673,20 @@ class View2D(BaseView):
                                                                                           self.vector_by_mouse_azimuth))
                     self.figure.canvas.stop_event_loop()
                 except:
-                    return
+                    self.temp_vbm_dU = None
+                    self.temp_vbm_dV = None
+                    self.temp_vbm_U0 = None
+                    self.temp_vbm_V0 = None
+                    self.vbm_U0 = None
+                    self.vbm_V0 = None
+                    self.vbm_Uf = None
+                    self.vbm_Vf = None
+                    self.vector_by_mouse_dU = None
+                    self.vector_by_mouse_dV = None
+                    self.vector_by_mouse_length = None
+                    self.vector_by_mouse_azimuth = None
+                    self.text_msg.set_text("vector not defined")
+                    self.figure.canvas.stop_event_loop()
 
         self.cid_vbm_1 = self.canvas.mpl_connect('button_press_event', vbm_press_callback)
         self.cid_vbm_2 = self.canvas.mpl_connect('motion_notify_event', vbm_motion_callback)
@@ -5563,10 +5847,7 @@ class ViewMap(View2D):
                                 this_actor = self.ax.quiver(X, Y, U, V, pivot='mid', scale=40, width=0.005,
                                                             headlength=3, headaxislength=3, facecolor=color_RGB,
                                                             edgecolor='white', linewidth=1)
-                                for i, x in enumerate(X):
-                                    y = Y[i]
-                                    dip = int(plot_entity.points_map_dip[i])
-                                    self.ax.annotate(f'{dip}', xy=(x, y))
+
                             else:
                                 this_actor, = self.ax.plot(X, Y, color=color_RGB, linestyle='', marker='o',
                                                            markersize=8, markeredgecolor='white', label=uid,
@@ -5994,7 +6275,6 @@ class ViewXsection(View2D):
                 {'uid': uid, 'actor': this_actor, 'show': False, 'collection': 'mesh3d_coll', 'show_prop': None},
                 ignore_index=True)
             self.update_mesh3d_list_added(actors_df_new, sec_uid=self.this_x_section_uid)
-        """Re-connect signals."""
         self.Mesh3DTableWidget.itemChanged.connect(self.toggle_mesh3d_visibility)
 
     def dom_added_update_views(self, updated_list=None):
@@ -6529,26 +6809,30 @@ class ViewStereoplot(BaseView):
                     self.dip_az = plot_entity.points_map_dip_azimuth
                     self.dip = plot_entity.points_map_dip
 
-                    # [Gabriele] Dip az needs to be converted to strike (dz-90) to plot with mplstereonet
-                    if uid in self.selected_uids:
-                        if show_property == "Planes":
-                            this_actor = self.ax.plane(self.dip_az - 90, self.dip, color=color_RGB)[0]
-                        else:
-                            this_actor = self.ax.pole(self.dip_az - 90, self.dip, color=color_RGB)[0]
+                    if np_all(self.dip_az != None):
 
-                        this_actor.set_visible(visible)
-                    else:
-                        if show_property == "Planes":
-                            this_actor = self.ax.plane(self.dip_az - 90, self.dip, color=color_RGB)[0]
-                        else:
-                            if filled is not None and visible is True:
-                                if filled:
-                                    self.ax.density_contourf(self.dip_az - 90, self.dip, measurement='poles')
-                                else:
-                                    self.ax.density_contour(self.dip_az - 90, self.dip, measurement='poles')
-                            this_actor = self.ax.pole(self.dip_az, self.dip, color=color_RGB)[0]
-                        if this_actor:
+                        # [Gabriele] Dip az needs to be converted to strike (dz-90) to plot with mplstereonet
+                        if uid in self.selected_uids:
+                            if show_property == "Planes":
+                                this_actor = self.ax.plane(self.dip_az - 90, self.dip, color=color_RGB)[0]
+                            else:
+                                this_actor = self.ax.pole(self.dip_az - 90, self.dip, color=color_RGB)[0]
+
                             this_actor.set_visible(visible)
+                        else:
+                            if show_property == "Planes":
+                                this_actor = self.ax.plane(self.dip_az - 90, self.dip, color=color_RGB)[0]
+                            else:
+                                if filled is not None and visible is True:
+                                    if filled:
+                                        self.ax.density_contourf(self.dip_az - 90, self.dip, measurement='poles')
+                                    else:
+                                        self.ax.density_contour(self.dip_az - 90, self.dip, measurement='poles')
+                                this_actor = self.ax.pole(self.dip_az, self.dip, color=color_RGB)[0]
+                            if this_actor:
+                                this_actor.set_visible(visible)
+                    else:
+                        this_actor = None
                 else:
                     this_actor = None
             else:
@@ -6605,9 +6889,9 @@ class ViewStereoplot(BaseView):
 
     def toggle_contours(self, filled=False):
 
-        '''[Gabriele] This is not the best way, but for now will do.
+        """[Gabriele] This is not the best way, but for now will do.
         It's a toggle switch that display kamb contours for visible poles in
-        the stereoplot.'''
+        the stereoplot."""
 
         self.ViewFrameLayout.removeWidget(self.canvas)
         self.ViewFrameLayout.removeWidget(self.navi_toolbar)

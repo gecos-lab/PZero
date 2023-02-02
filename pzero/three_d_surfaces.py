@@ -26,7 +26,7 @@ from numpy import float32 as np_float32
 from pandas import DataFrame as pd_DataFrame
 from .geological_collection import GeologicalCollection
 from .helper_dialogs import multiple_input_dialog, input_one_value_dialog, input_text_dialog, input_combo_dialog, input_checkbox_dialog, tic, toc, progress_dialog, general_input_dialog
-from .entities_factory import TriSurf, XsPolyLine, PolyLine, VertexSet, Voxet, XsVoxet, XsVertexSet
+from .entities_factory import TriSurf, XsPolyLine, PolyLine, VertexSet, Voxet, XsVoxet, XsVertexSet,Attitude
 
 import pyvista as pv
 
@@ -578,14 +578,6 @@ def linear_extrusion(self):
     plunge = input_one_value_dialog(title='Linear Extrusion', label='Plunge Value', default_value=30.0)
     if plunge is None:
         plunge = 30.0
-    if plunge > 90:
-        while plunge > 90:
-            plunge -= 90
-    elif plunge < 0:
-        while plunge < 0:
-            plunge += 90
-    if plunge == 90:
-        plunge = 89
     """Ask for vertical extrusion: how extruded will the surface be?"""
     extrusion_par = {'bottom':['Lower limit:', -1000],'top':['Higher limit',1000]}
     vertical_extrusion = multiple_input_dialog(title='Vertical Extrusion', input_dict=extrusion_par)
@@ -597,10 +589,10 @@ def linear_extrusion(self):
     linear_extrusion = vtk.vtkLinearExtrusionFilter()
     linear_extrusion.CappingOn()  # yes or no?
     linear_extrusion.SetExtrusionTypeToVectorExtrusion()
-    """Trigonometric formulas to calculate vector"""
-    x_vector = np_sin(np_pi * (trend + 180) / 180)
-    y_vector = np_cos(np_pi * (trend + 180) / 180)
-    z_vector = np_tan(np_pi * (plunge + 180) / 180)
+    """Direction cosines"""
+    x_vector = - (np_cos((trend - 90) * np_pi / 180) * np_cos(plunge * np_pi / 180))
+    y_vector = np_sin((trend - 90) * np_pi / 180) * np_cos(plunge * np_pi / 180)
+    z_vector = np_sin(plunge * np_pi / 180)
     linear_extrusion.SetVector(x_vector, y_vector, z_vector)  # double,double,double format
     linear_extrusion.SetScaleFactor(total_extrusion)  # double format
     linear_extrusion.SetInputData(self.geol_coll.get_uid_vtk_obj(input_uids[0]))
@@ -1053,27 +1045,27 @@ def project_2_dem(self):
         return
     else:
         input_uids = deepcopy(self.selected_uids)
-    for uid in input_uids:
-        if isinstance(self.geol_coll.get_uid_vtk_obj(uid), PolyLine):
-            pass
-        else:
-            print(" -- Error input type: only PolyLine type -- ")
-            return
+    # for uid in input_uids:
+    #     if isinstance(self.geol_coll.get_uid_vtk_obj(uid), PolyLine):
+    #         pass
+    #     else:
+    #         print(" -- Error input type: only PolyLine type -- ")
+    #         return
     """Ask if the tool replaces the input entities, or if they shall be preserved"""
     replace_on_off = input_text_dialog(title='Project to Surface', label='Replace Original Entities? (YES/NO)', default_text='YES')
     if replace_on_off is None:
         return
-    if replace_on_off != 'YES' and replace_on_off != 'yes' and replace_on_off != 'y' and replace_on_off != 'Y' and replace_on_off != 'NO' and replace_on_off != 'no' and replace_on_off != 'n' and replace_on_off != 'N':
+    if replace_on_off.lower() != 'yes' and replace_on_off.lower() != 'y' and replace_on_off.lower() != 'no' and replace_on_off.lower() != 'n':
         return
-#     """Ask for the DOM (/DEM), source of the projection"""
-#     dom_list_uids = self.dom_coll.get_uids()
-#     dom_list_names = []
-#     for uid in dom_list_uids:
-#         dom_list_names.append(self.dom_coll.get_uid_name(uid))
-#     dom_name = input_combo_dialog(title='Project to Surface', label='Input surface for projection', choice_list=dom_list_names)
-#     if dom_name is None:
-#         return
-#     dom_uid = self.dom_coll.df.loc[self.dom_coll.df['name'] == dom_name, 'uid'].values[0]
+    """Ask for the DOM (/DEM), source of the projection"""
+    dom_list_uids = self.dom_coll.get_uids()
+    dom_list_names = []
+    for uid in dom_list_uids:
+        dom_list_names.append(self.dom_coll.get_uid_name(uid))
+    dom_name = input_combo_dialog(title='Project to Surface', label='Input surface for projection', choice_list=dom_list_names)
+    if dom_name is None:
+        return
+    dom_uid = self.dom_coll.df.loc[self.dom_coll.df['name'] == dom_name, 'uid'].values[0]
 #     print("dom_uid ", dom_uid)
 #     """Convert DEM (vtkStructuredGrid) in vtkImageData to perform the projection with vtkProjectedTerrainPath"""
 #     dem_to_image = vtk.vtkDEMReader()
@@ -1081,23 +1073,27 @@ def project_2_dem(self):
 #     dem_to_image.Update()
 #     print("dem_to_image ", dem_to_image)
 #     print("dem_to_image.GetOutput() ", dem_to_image.GetOutput())
-    """Ask for the Orthoimage, source of the projection"""
-    image_list_uids = self.image_coll.get_uids()
-    image_list_names = []
-    for uid in image_list_uids:
-        image_list_names.append(self.image_coll.get_uid_name(uid))
-    img_name = input_combo_dialog(title='Project to Surface', label='Input surface for projection', choice_list=image_list_names)
-    if img_name is None:
-        return
-    img_uid = self.image_coll.df.loc[self.image_coll.df['name'] == img_name, 'uid'].values[0]
+#     """Ask for the Orthoimage, source of the projection"""
+#     image_list_uids = self.image_coll.get_uids()
+#     image_list_names = []
+#     for uid in image_list_uids:
+#         image_list_names.append(self.image_coll.get_uid_name(uid))
+#     img_name = input_combo_dialog(title='Project to Surface', label='Input surface for projection', choice_list=image_list_names)
+#     if img_name is None:
+#         return
+#     img_uid = self.image_coll.df.loc[self.image_coll.df['name'] == img_name, 'uid'].values[0]
     """----- some check is needed here. Check if the chosen image is a 2D map with elevation values -----"""
+    prgs_bar = progress_dialog(max_value=len(input_uids), title_txt="Input dataframe", label_txt="Projecting data to DEM...", cancel_txt=None, parent=self)
+
     for uid in input_uids:
+
         """Create a new instance of vtkProjectedTerrainPath"""
-        projection = vtk.vtkProjectedTerrainPath()
+        projection = vtk.vtkPointInterpolator2D()
         projection.SetInputData(self.geol_coll.get_uid_vtk_obj(uid))
-        projection.SetProjectionModeToSimple()  # projects the original polyline points
-        projection.SetSourceData(self.image_coll.get_uid_vtk_obj(img_uid))  # this must be vtkImageData
-        projection.SetHeightOffset(0)
+        projection.SetSourceData(self.dom_coll.get_uid_vtk_obj(dom_uid))
+        projection.SetKernel(vtk.vtkVoronoiKernel())
+        projection.SetNullPointsStrategyToClosestPoint()
+        projection.SetZArrayName('elevation')
         projection.Update()
         """Create deepcopy of the geological entity dictionary."""
         obj_dict = deepcopy(self.geol_coll.geological_entity_dict)
@@ -1110,9 +1106,16 @@ def project_2_dem(self):
         obj_dict['scenario'] = self.geol_coll.get_uid_scenario(uid)
         obj_dict['geological_type'] = self.geol_coll.get_uid_geological_type(uid)
         obj_dict['topological_type'] = self.geol_coll.get_uid_topological_type(uid)
-        obj_dict['vtk_obj'] = PolyLine()
+        if isinstance(self.geol_coll.get_uid_vtk_obj(uid), PolyLine):
+            obj_dict['vtk_obj'] = PolyLine()
+        elif isinstance(self.geol_coll.get_uid_vtk_obj(uid), Attitude): # Attitude class needs to go away
+            obj_dict['vtk_obj'] = Attitude()
+        elif isinstance(self.geol_coll.get_uid_vtk_obj(uid), VertexSet):
+            obj_dict['vtk_obj'] = VertexSet()
+
         """ShallowCopy is the way to copy the new entity into the instance created at the beginning"""
         obj_dict['vtk_obj'].ShallowCopy(projection.GetOutput())
+        obj_dict['vtk_obj'].points[:, 2] = obj_dict['vtk_obj'].get_point_data('elevation')
         obj_dict['vtk_obj'].Modified()
         if obj_dict['vtk_obj'] is None:
             return
@@ -1126,6 +1129,7 @@ def project_2_dem(self):
             self.geol_coll.set_uid_name(uid=uid, name=obj_dict['name'])
             self.geology_geom_modified_signal.emit([uid])  # emit uid as list to force redraw
         self.geology_metadata_modified_signal.emit([uid])
+        prgs_bar.add_one()
 
 
 def project_2_xs(self):

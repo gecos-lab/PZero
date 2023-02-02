@@ -116,6 +116,8 @@ class GeologicalCollection(QAbstractTableModel):
                                                                             'color_G': G,
                                                                             'color_B': B,
                                                                             'line_thick': 5.0,
+                                                                            'point_size': 10.0,
+                                                                            'opacity': 100,
                                                                             'geological_time': 0.0,
                                                                             'geological_sequence': "strati_0"},
                                                                            ignore_index=True)
@@ -198,7 +200,7 @@ class GeologicalCollection(QAbstractTableModel):
         out_uid = self.add_entity_from_dict(self, entity_dict=entity_dict)
         return out_uid
 
-    def replace_vtk(self, uid=None, vtk_object=None,const_color=False):
+    def replace_vtk(self, uid=None, vtk_object=None, const_color=False):
         if isinstance(vtk_object, type(self.df.loc[self.df['uid'] == uid, 'vtk_obj'].values[0])):
             new_dict = deepcopy(self.df.loc[self.df['uid'] == uid, self.df.columns != 'vtk_obj'].to_dict('records')[0])
             new_dict['vtk_obj'] = vtk_object

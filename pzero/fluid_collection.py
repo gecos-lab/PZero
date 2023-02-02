@@ -31,35 +31,37 @@ class FluidsCollection(QAbstractTableModel):
     implicitly define types. Always use deepcopy(FluidsCollection.fluid_entity_dict) to
     copy this dictionary without altering the original."""
     fluid_entity_dict = {'uid': "",
-                              'name': "undef",
-                              'topological_type': "undef",
-                              'fluid_type': "undef",
-                              'fluid_feature': "undef",
-                              'scenario': "undef",
-                              'properties_names': [],
-                              'properties_components': [],
-                              'x_section': "", # this is the uid of the cross section for "XsVertexSet", "XsPolyLine", and "XsImage", empty for all others
-                              'vtk_obj': None}
+                         'name': "undef",
+                         'topological_type': "undef",
+                         'fluid_type': "undef",
+                         'fluid_feature': "undef",
+                         'scenario': "undef",
+                         'properties_names': [],
+                         'properties_components': [],
+                         'x_section': "",
+                         # this is the uid of the cross section for "XsVertexSet", "XsPolyLine", and "XsImage", empty for all others
+                         'vtk_obj': None}
 
     fluid_entity_type_dict = {'uid': str,
-                                   'name': str,
-                                   'topological_type': str,
-                                   'fluid_type': str,
-                                   'fluid_feature': str,
-                                   'scenario': str,
-                                   'properties_names': list,
-                                   'properties_components': list,
-                                   'x_section': str,  # this is the uid of the cross section for "XsVertexSet", "XsPolyLine", and "XsImage", empty for all others
-                                   'vtk_obj': object}
+                              'name': str,
+                              'topological_type': str,
+                              'fluid_type': str,
+                              'fluid_feature': str,
+                              'scenario': str,
+                              'properties_names': list,
+                              'properties_components': list,
+                              'x_section': str,
+                              # this is the uid of the cross section for "XsVertexSet", "XsPolyLine", and "XsImage", empty for all others
+                              'vtk_obj': object}
 
     """List of valid fluid types."""
     valid_fluid_types = ["undef",
-                              "water table",
-                              "idrography",
-                              "piezometry",
-                              "oil",
-                              "other",
-                              ]
+                         "water table",
+                         "idrography",
+                         "piezometry",
+                         "oil",
+                         "other",
+                         ]
 
     """List of valid data types."""
     valid_topological_type = ["VertexSet", "PolyLine", "TriSurf", "XsVertexSet", "XsPolyLine"]
@@ -81,7 +83,7 @@ class FluidsCollection(QAbstractTableModel):
 
     """Custom methods used to add or remove entities, query the dataframe, etc."""
 
-    def add_entity_from_dict(self, entity_dict=None,color=None):
+    def add_entity_from_dict(self, entity_dict=None, color=None):
         """Add entity to collection from dictionary."""
         """Create a new uid if it is not included in the dictionary."""
         if not entity_dict['uid']:
@@ -95,25 +97,30 @@ class FluidsCollection(QAbstractTableModel):
         fluid_type = entity_dict["fluid_type"]
         feature = entity_dict["fluid_feature"]
         scenario = entity_dict["scenario"]
-        if self.parent.fluids_legend_df.loc[(self.parent.fluids_legend_df['fluid_type'] == fluid_type) & (self.parent.fluids_legend_df['fluid_feature'] == feature) & (self.parent.fluids_legend_df['scenario'] == scenario)].empty:
+        if self.parent.fluids_legend_df.loc[(self.parent.fluids_legend_df['fluid_type'] == fluid_type) & (
+                self.parent.fluids_legend_df['fluid_feature'] == feature) & (
+                                                    self.parent.fluids_legend_df['scenario'] == scenario)].empty:
             if color:
                 print(color)
-                R,G,B = color
+                R, G, B = color
             else:
-                R,G,B = np.round(np.random.random(3) * 255)
+                R, G, B = np.round(np.random.random(3) * 255)
             self.parent.fluids_legend_df = self.parent.fluids_legend_df.append({'fluid_type': fluid_type,
-                                                                            'fluid_feature': feature,
-                                                                            'scenario': scenario,
-                                                                            'color_R': R,
-                                                                            'color_G': G,
-                                                                            'color_B': B,
-                                                                            'line_thick': 2.0,
-                                                                            'fluid_time': 0.0},
-                                                                           ignore_index=True)
+                                                                                'fluid_feature': feature,
+                                                                                'scenario': scenario,
+                                                                                'color_R': R,
+                                                                                'color_G': G,
+                                                                                'color_B': B,
+                                                                                'line_thick': 2.0,
+                                                                                'point_size': 10.0,
+                                                                                'opacity': 100,
+                                                                                'fluid_time': 0.0},
+                                                                               ignore_index=True)
             self.parent.legend.update_widget(self.parent)
             self.parent.prop_legend.update_widget(self.parent)
         """Then emit signal to update the views."""
-        self.parent.fluid_added_signal.emit([entity_dict['uid']])  # a list of uids is emitted, even if the entity is just one, for future compatibility
+        self.parent.fluid_added_signal.emit(
+            [entity_dict['uid']])  # a list of uids is emitted, even if the entity is just one, for future compatibility
         return entity_dict['uid']
 
     def remove_entity(self, uid=None):
@@ -132,31 +139,44 @@ class FluidsCollection(QAbstractTableModel):
         for fluid_type in fluid_types_in_legend:
             if self.parent.fluids_coll.df.loc[self.parent.fluids_coll.df['fluid_type'] == fluid_type].empty:
                 """Get index of row to be removed, then remove it in place with .drop()."""
-                idx_remove = self.parent.fluids_legend_df[self.parent.fluids_legend_df['fluid_type'] == fluid_type].index
+                idx_remove = self.parent.fluids_legend_df[
+                    self.parent.fluids_legend_df['fluid_type'] == fluid_type].index
                 self.parent.fluids_legend_df.drop(idx_remove, inplace=True)
                 table_updated = table_updated or True
             for feature in features_in_legend:
-                if self.parent.fluids_coll.df.loc[(self.parent.fluids_coll.df['fluid_type'] == fluid_type) & (self.parent.fluids_coll.df['fluid_feature'] == feature)].empty:
+                if self.parent.fluids_coll.df.loc[(self.parent.fluids_coll.df['fluid_type'] == fluid_type) & (
+                        self.parent.fluids_coll.df['fluid_feature'] == feature)].empty:
                     """Get index of row to be removed, then remove it in place with .drop()."""
-                    idx_remove = self.parent.fluids_legend_df[(self.parent.fluids_legend_df['fluid_type'] == fluid_type) & (self.parent.fluids_legend_df['fluid_feature'] == feature)].index
+                    idx_remove = self.parent.fluids_legend_df[
+                        (self.parent.fluids_legend_df['fluid_type'] == fluid_type) & (
+                                    self.parent.fluids_legend_df['fluid_feature'] == feature)].index
                     self.parent.fluids_legend_df.drop(idx_remove, inplace=True)
                     table_updated = table_updated or True
                 for scenario in scenarios_in_legend:
-                    if self.parent.fluids_coll.df.loc[(self.parent.fluids_coll.df['fluid_type'] == fluid_type) & (self.parent.fluids_coll.df['fluid_feature'] == feature) & (self.parent.fluids_coll.df['scenario'] == scenario)].empty:
+                    if self.parent.fluids_coll.df.loc[(self.parent.fluids_coll.df['fluid_type'] == fluid_type) & (
+                            self.parent.fluids_coll.df['fluid_feature'] == feature) & (self.parent.fluids_coll.df[
+                                                                                           'scenario'] == scenario)].empty:
                         """Get index of row to be removed, then remove it in place with .drop()."""
-                        idx_remove = self.parent.fluids_legend_df[(self.parent.fluids_legend_df['fluid_type'] == fluid_type) & (self.parent.fluids_legend_df['fluid_feature'] == feature) & (self.parent.fluids_legend_df['scenario'] == scenario)].index
+                        idx_remove = self.parent.fluids_legend_df[
+                            (self.parent.fluids_legend_df['fluid_type'] == fluid_type) & (
+                                        self.parent.fluids_legend_df['fluid_feature'] == feature) & (
+                                        self.parent.fluids_legend_df['scenario'] == scenario)].index
                         self.parent.fluids_legend_df.drop(idx_remove, inplace=True)
                         table_updated = table_updated or True
         for feature in features_in_legend:
             if self.parent.fluids_coll.df.loc[self.parent.fluids_coll.df['fluid_feature'] == feature].empty:
                 """Get index of row to be removed, then remove it in place with .drop()."""
-                idx_remove = self.parent.fluids_legend_df[self.parent.fluids_legend_df['fluid_feature'] == feature].index
+                idx_remove = self.parent.fluids_legend_df[
+                    self.parent.fluids_legend_df['fluid_feature'] == feature].index
                 self.parent.fluids_legend_df.drop(idx_remove, inplace=True)
                 table_updated = table_updated or True
             for scenario in scenarios_in_legend:
-                if self.parent.fluids_coll.df.loc[(self.parent.fluids_coll.df['fluid_feature'] == feature) & (self.parent.fluids_coll.df['scenario'] == scenario)].empty:
+                if self.parent.fluids_coll.df.loc[(self.parent.fluids_coll.df['fluid_feature'] == feature) & (
+                        self.parent.fluids_coll.df['scenario'] == scenario)].empty:
                     """Get index of row to be removed, then remove it in place with .drop()."""
-                    idx_remove = self.parent.fluids_legend_df[(self.parent.fluids_legend_df['fluid_feature'] == feature) & (self.parent.fluids_legend_df['scenario'] == scenario)].index
+                    idx_remove = self.parent.fluids_legend_df[
+                        (self.parent.fluids_legend_df['fluid_feature'] == feature) & (
+                                    self.parent.fluids_legend_df['scenario'] == scenario)].index
                     self.parent.fluids_legend_df.drop(idx_remove, inplace=True)
                     table_updated = table_updated or True
         for scenario in scenarios_in_legend:
@@ -189,7 +209,7 @@ class FluidsCollection(QAbstractTableModel):
         out_uid = self.add_entity_from_dict(self, entity_dict=entity_dict)
         return out_uid
 
-    def replace_vtk(self, uid=None, vtk_object=None,const_color=False):
+    def replace_vtk(self, uid=None, vtk_object=None, const_color=False):
         if isinstance(vtk_object, type(self.df.loc[self.df['uid'] == uid, 'vtk_obj'].values[0])):
             new_dict = deepcopy(self.df.loc[self.df['uid'] == uid, self.df.columns != 'vtk_obj'].to_dict('records')[0])
             new_dict['vtk_obj'] = vtk_object
@@ -197,11 +217,11 @@ class FluidsCollection(QAbstractTableModel):
                 R = self.get_uid_legend(uid=uid)['color_R']
                 G = self.get_uid_legend(uid=uid)['color_G']
                 B = self.get_uid_legend(uid=uid)['color_B']
-                color = [R,G,B]
+                color = [R, G, B]
             else:
-                color=None
+                color = None
             self.remove_entity(uid)
-            self.add_entity_from_dict(entity_dict=new_dict,color=color)
+            self.add_entity_from_dict(entity_dict=new_dict, color=color)
         else:
             print("ERROR - replace_vtk with vtk of a different type.")
 
@@ -218,31 +238,44 @@ class FluidsCollection(QAbstractTableModel):
         for fluid_type in fluid_types_in_legend:
             if self.parent.fluids_coll.df.loc[self.parent.fluids_coll.df['fluid_type'] == fluid_type].empty:
                 """Get index of row to be removed, then remove it in place with .drop()."""
-                idx_remove = self.parent.fluids_legend_df[self.parent.fluids_legend_df['fluid_type'] == fluid_type].index
+                idx_remove = self.parent.fluids_legend_df[
+                    self.parent.fluids_legend_df['fluid_type'] == fluid_type].index
                 self.parent.fluids_legend_df.drop(idx_remove, inplace=True)
                 table_updated = table_updated or True
             for feature in features_in_legend:
-                if self.parent.fluids_coll.df.loc[(self.parent.fluids_coll.df['fluid_type'] == fluid_type) & (self.parent.fluids_coll.df['fluid_feature'] == feature)].empty:
+                if self.parent.fluids_coll.df.loc[(self.parent.fluids_coll.df['fluid_type'] == fluid_type) & (
+                        self.parent.fluids_coll.df['fluid_feature'] == feature)].empty:
                     """Get index of row to be removed, then remove it in place with .drop()."""
-                    idx_remove = self.parent.fluids_legend_df[(self.parent.fluids_legend_df['fluid_type'] == fluid_type) & (self.parent.fluids_legend_df['fluid_feature'] == feature)].index
+                    idx_remove = self.parent.fluids_legend_df[
+                        (self.parent.fluids_legend_df['fluid_type'] == fluid_type) & (
+                                    self.parent.fluids_legend_df['fluid_feature'] == feature)].index
                     self.parent.fluids_legend_df.drop(idx_remove, inplace=True)
                     table_updated = table_updated or True
                 for scenario in scenarios_in_legend:
-                    if self.parent.fluids_coll.df.loc[(self.parent.fluids_coll.df['fluid_type'] == fluid_type) & (self.parent.fluids_coll.df['fluid_feature'] == feature) & (self.parent.fluids_coll.df['scenario'] == scenario)].empty:
+                    if self.parent.fluids_coll.df.loc[(self.parent.fluids_coll.df['fluid_type'] == fluid_type) & (
+                            self.parent.fluids_coll.df['fluid_feature'] == feature) & (self.parent.fluids_coll.df[
+                                                                                           'scenario'] == scenario)].empty:
                         """Get index of row to be removed, then remove it in place with .drop()."""
-                        idx_remove = self.parent.fluids_legend_df[(self.parent.fluids_legend_df['fluid_type'] == fluid_type) & (self.parent.fluids_legend_df['fluid_feature'] == feature) & (self.parent.fluids_legend_df['scenario'] == scenario)].index
+                        idx_remove = self.parent.fluids_legend_df[
+                            (self.parent.fluids_legend_df['fluid_type'] == fluid_type) & (
+                                        self.parent.fluids_legend_df['fluid_feature'] == feature) & (
+                                        self.parent.fluids_legend_df['scenario'] == scenario)].index
                         self.parent.fluids_legend_df.drop(idx_remove, inplace=True)
                         table_updated = table_updated or True
         for feature in features_in_legend:
             if self.parent.fluids_coll.df.loc[self.parent.fluids_coll.df['fluid_feature'] == feature].empty:
                 """Get index of row to be removed, then remove it in place with .drop()."""
-                idx_remove = self.parent.fluids_legend_df[self.parent.fluids_legend_df['fluid_feature'] == feature].index
+                idx_remove = self.parent.fluids_legend_df[
+                    self.parent.fluids_legend_df['fluid_feature'] == feature].index
                 self.parent.fluids_legend_df.drop(idx_remove, inplace=True)
                 table_updated = table_updated or True
             for scenario in scenarios_in_legend:
-                if self.parent.fluids_coll.df.loc[(self.parent.fluids_coll.df['fluid_feature'] == feature) & (self.parent.fluids_coll.df['scenario'] == scenario)].empty:
+                if self.parent.fluids_coll.df.loc[(self.parent.fluids_coll.df['fluid_feature'] == feature) & (
+                        self.parent.fluids_coll.df['scenario'] == scenario)].empty:
                     """Get index of row to be removed, then remove it in place with .drop()."""
-                    idx_remove = self.parent.fluids_legend_df[(self.parent.fluids_legend_df['fluid_feature'] == feature) & (self.parent.fluids_legend_df['scenario'] == scenario)].index
+                    idx_remove = self.parent.fluids_legend_df[
+                        (self.parent.fluids_legend_df['fluid_feature'] == feature) & (
+                                    self.parent.fluids_legend_df['scenario'] == scenario)].index
                     self.parent.fluids_legend_df.drop(idx_remove, inplace=True)
                     table_updated = table_updated or True
         for scenario in scenarios_in_legend:
@@ -253,20 +286,27 @@ class FluidsCollection(QAbstractTableModel):
                 table_updated = table_updated or True
         """Then add new fluid_type / feature"""
         for uid in self.parent.fluids_coll.df['uid'].to_list():
-            fluid_type = self.parent.fluids_coll.df.loc[self.parent.fluids_coll.df['uid'] == uid, "fluid_type"].values[0]
-            feature = self.parent.fluids_coll.df.loc[self.parent.fluids_coll.df['uid'] == uid, "fluid_feature"].values[0]
+            fluid_type = self.parent.fluids_coll.df.loc[self.parent.fluids_coll.df['uid'] == uid, "fluid_type"].values[
+                0]
+            feature = self.parent.fluids_coll.df.loc[self.parent.fluids_coll.df['uid'] == uid, "fluid_feature"].values[
+                0]
             scenario = self.parent.fluids_coll.df.loc[self.parent.fluids_coll.df['uid'] == uid, "scenario"].values[0]
-            if self.parent.fluids_legend_df.loc[(self.parent.fluids_legend_df['fluid_type'] == fluid_type) & (self.parent.fluids_legend_df['fluid_feature'] == feature) & (self.parent.fluids_legend_df['scenario'] == scenario)].empty:
+            if self.parent.fluids_legend_df.loc[(self.parent.fluids_legend_df['fluid_type'] == fluid_type) & (
+                    self.parent.fluids_legend_df['fluid_feature'] == feature) & (
+                                                        self.parent.fluids_legend_df['scenario'] == scenario)].empty:
                 self.parent.fluids_legend_df = self.parent.fluids_legend_df.append({'fluid_type': fluid_type,
-                                                                                'fluid_feature': feature,
-                                                                                'scenario': scenario,
-                                                                                'color_R': round(np.random.random() * 255),
-                                                                                'color_G': round(np.random.random() * 255),
-                                                                                'color_B': round(np.random.random() * 255),
-                                                                                'line_thick': 2.0,
-                                                                                'fluid_time': 0.0,
-                                                                                'fluid_sequence': "strati_0"},
-                                                                               ignore_index=True)
+                                                                                    'fluid_feature': feature,
+                                                                                    'scenario': scenario,
+                                                                                    'color_R': round(
+                                                                                        np.random.random() * 255),
+                                                                                    'color_G': round(
+                                                                                        np.random.random() * 255),
+                                                                                    'color_B': round(
+                                                                                        np.random.random() * 255),
+                                                                                    'line_thick': 2.0,
+                                                                                    'fluid_time': 0.0,
+                                                                                    'fluid_sequence': "strati_0"},
+                                                                                   ignore_index=True)
                 table_updated = table_updated or True
         """When done, if the table was updated update the widget. No signal is sent here to the views."""
         if table_updated:
@@ -281,8 +321,12 @@ class FluidsCollection(QAbstractTableModel):
         fluid_type = self.df.loc[self.df['uid'] == uid, 'fluid_type'].values[0]
         feature = self.df.loc[self.df['uid'] == uid, 'fluid_feature'].values[0]
         scenario = self.df.loc[self.df['uid'] == uid, 'scenario'].values[0]
-        legend_dict = self.parent.fluids_legend_df.loc[(self.parent.fluids_legend_df['fluid_type'] == fluid_type) & (self.parent.fluids_legend_df['fluid_feature'] == feature) & (self.parent.fluids_legend_df['scenario'] == scenario)].to_dict('records')
-        return legend_dict[0]  # the '[0]' is needed since .to_dict('records') returns a list of dictionaries (with just one element in this case)
+        legend_dict = self.parent.fluids_legend_df.loc[(self.parent.fluids_legend_df['fluid_type'] == fluid_type) & (
+                    self.parent.fluids_legend_df['fluid_feature'] == feature) & (self.parent.fluids_legend_df[
+                                                                                     'scenario'] == scenario)].to_dict(
+            'records')
+        return legend_dict[
+            0]  # the '[0]' is needed since .to_dict('records') returns a list of dictionaries (with just one element in this case)
 
     def get_uids(self):
         """Get list of uids."""
@@ -304,7 +348,7 @@ class FluidsCollection(QAbstractTableModel):
         """Set value(s) stored in dataframe (as pointer) from uid."""
         self.df.loc[self.df['uid'] == uid, 'name'] = name
 
-    def get_name_uid(self,name=None):
+    def get_name_uid(self, name=None):
         return self.df.loc[self.df['name'] == name, 'uid'].values[0]
 
     def get_uid_topological_type(self, uid=None):
@@ -365,9 +409,9 @@ class FluidsCollection(QAbstractTableModel):
         """Set value(s) stored in dataframe (as pointer) from uid."""
         self.df.loc[self.df['uid'] == uid, 'x_section'] = x_section
 
-    def get_xuid_uid(self,xuid=None):
+    def get_xuid_uid(self, xuid=None):
         '''[Gabriele] Get the uids of the fluid objects for the corresponding xsec uid (parent)'''
-        return self.df.loc[self.df['x_section']== xuid, 'uid']
+        return self.df.loc[self.df['x_section'] == xuid, 'uid']
 
     def get_uid_vtk_obj(self, uid=None):
         """Get value(s) stored in dataframe (as pointer) from uid."""
@@ -455,6 +499,7 @@ class FluidsCollection(QAbstractTableModel):
                 self.dataChanged.emit(index, index)
                 uid = self.df.iloc[index.row(), 0]
                 self.fluid_attr_modified_update_legend_table()
-                self.parent.fluid_metadata_modified_signal.emit([uid])  # a list of uids is emitted, even if the entity is just one
+                self.parent.fluid_metadata_modified_signal.emit(
+                    [uid])  # a list of uids is emitted, even if the entity is just one
                 return True
         return QVariant()

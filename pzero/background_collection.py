@@ -37,8 +37,9 @@ class BackgroundCollection(QAbstractTableModel):
                               'background_feature': "undef",
                               'properties_names': [],
                               'properties_components': [],
-                              'x_section': "", # this is the uid of the cross section for "XsVertexSet", "XsPolyLine", and "XsImage", empty for all others
-                              'borehole':"",
+                              'x_section': "",
+                              # this is the uid of the cross section for "XsVertexSet", "XsPolyLine", and "XsImage", empty for all others
+                              'borehole': "",
                               'vtk_obj': None}
 
     background_entity_type_dict = {'uid': str,
@@ -48,14 +49,15 @@ class BackgroundCollection(QAbstractTableModel):
                                    'background_feature': str,
                                    'properties_names': list,
                                    'properties_components': list,
-                                   'x_section': str,  # this is the uid of the cross section for "XsVertexSet", "XsPolyLine", and "XsImage", empty for all others
-                                   'borehole':str,
+                                   'x_section': str,
+                                   # this is the uid of the cross section for "XsVertexSet", "XsPolyLine", and "XsImage", empty for all others
+                                   'borehole': str,
                                    'vtk_obj': object}
 
     """List of valid background types."""
     valid_backgrounds_types = ["undef",
-                          "Annotations",
-                          "Cultural"]
+                               "Annotations",
+                               "Cultural"]
 
     """List of valid data types."""
     valid_topological_type = ["VertexSet", "PolyLine", "TriSurf", "XsVertexSet", "XsPolyLine"]
@@ -77,7 +79,7 @@ class BackgroundCollection(QAbstractTableModel):
 
     """Custom methods used to add or remove entities, query the dataframe, etc."""
 
-    def add_entity_from_dict(self, entity_dict=None,color=None):
+    def add_entity_from_dict(self, entity_dict=None, color=None):
         """Add entity to collection from dictionary."""
         """Create a new uid if it is not included in the dictionary."""
         if not entity_dict['uid']:
@@ -90,23 +92,27 @@ class BackgroundCollection(QAbstractTableModel):
         """Then add new background_type / feature to the legend if needed."""
         background_type = entity_dict['background_type']
         feature = entity_dict['background_feature']
-        if self.parent.backgrounds_legend_df.loc[(self.parent.backgrounds_legend_df['background_type'] == background_type) & (self.parent.backgrounds_legend_df['background_feature'] == feature)].empty:
+        if self.parent.backgrounds_legend_df.loc[(self.parent.backgrounds_legend_df['background_type'] == background_type)
+                                                 & (self.parent.backgrounds_legend_df['background_feature'] == feature)].empty:
             if color:
                 print(color)
-                R,G,B = color
+                R, G, B = color
             else:
-                R,G,B = np.round(np.random.random(3) * 255)
+                R, G, B = np.round(np.random.random(3) * 255)
             self.parent.backgrounds_legend_df = self.parent.backgrounds_legend_df.append({'background_type': background_type,
-                                                                            'background_feature': feature,
-                                                                            'color_R': R,
-                                                                            'color_G': G,
-                                                                            'color_B': B,
-                                                                            'line_thick': 2.0},
-                                                                           ignore_index=True)
+                                                                                         'background_feature': feature,
+                                                                                         'color_R': R,
+                                                                                         'color_G': G,
+                                                                                         'color_B': B,
+                                                                                         'line_thick': 2.0,
+                                                                                         'point_size': 10.0,
+                                                                                         'opacity': 100},
+                                                                                        ignore_index=True)
             self.parent.legend.update_widget(self.parent)
             self.parent.prop_legend.update_widget(self.parent)
         """Then emit signal to update the views."""
-        self.parent.background_added_signal.emit([entity_dict['uid']])  # a list of uids is emitted, even if the entity is just one, for future compatibility
+        self.parent.background_added_signal.emit(
+            [entity_dict['uid']])  # a list of uids is emitted, even if the entity is just one, for future compatibility
         return entity_dict['uid']
 
     def remove_entity(self, uid=None):
@@ -124,19 +130,25 @@ class BackgroundCollection(QAbstractTableModel):
         for background_type in backgrounds_types_in_legend:
             if self.parent.backgrounds_coll.df.loc[self.parent.backgrounds_coll.df['background_type'] == background_type].empty:
                 """Get index of row to be removed, then remove it in place with .drop()."""
-                idx_remove = self.parent.backgrounds_legend_df[self.parent.backgrounds_legend_df['background_type'] == background_type].index
+                idx_remove = self.parent.backgrounds_legend_df[
+                    self.parent.backgrounds_legend_df['background_type'] == background_type].index
                 self.parent.backgrounds_legend_df.drop(idx_remove, inplace=True)
                 table_updated = table_updated or True
             for feature in features_in_legend:
-                if self.parent.backgrounds_coll.df.loc[(self.parent.backgrounds_coll.df['background_type'] == background_type) & (self.parent.backgrounds_coll.df['background_feature'] == feature)].empty:
+                if self.parent.backgrounds_coll.df.loc[
+                    (self.parent.backgrounds_coll.df['background_type'] == background_type) & (
+                            self.parent.backgrounds_coll.df['background_feature'] == feature)].empty:
                     """Get index of row to be removed, then remove it in place with .drop()."""
-                    idx_remove = self.parent.backgrounds_legend_df[(self.parent.backgrounds_legend_df['background_type'] == background_type) & (self.parent.backgrounds_legend_df['background_feature'] == feature)].index
+                    idx_remove = self.parent.backgrounds_legend_df[
+                        (self.parent.backgrounds_legend_df['background_type'] == background_type) & (
+                                self.parent.backgrounds_legend_df['background_feature'] == feature)].index
                     self.parent.backgrounds_legend_df.drop(idx_remove, inplace=True)
                     table_updated = table_updated or True
         for feature in features_in_legend:
             if self.parent.backgrounds_coll.df.loc[self.parent.backgrounds_coll.df['background_feature'] == feature].empty:
                 """Get index of row to be removed, then remove it in place with .drop()."""
-                idx_remove = self.parent.backgrounds_legend_df[self.parent.backgrounds_legend_df['background_feature'] == feature].index
+                idx_remove = self.parent.backgrounds_legend_df[
+                    self.parent.backgrounds_legend_df['background_feature'] == feature].index
                 self.parent.backgrounds_legend_df.drop(idx_remove, inplace=True)
                 table_updated = table_updated or True
         """When done, if the table was updated update the widget, and in any case send the signal over to the views."""
@@ -163,7 +175,7 @@ class BackgroundCollection(QAbstractTableModel):
         out_uid = self.add_entity_from_dict(self, entity_dict=entity_dict)
         return out_uid
 
-    def replace_vtk(self, uid=None, vtk_object=None,const_color=False):
+    def replace_vtk(self, uid=None, vtk_object=None, const_color=False):
         if isinstance(vtk_object, type(self.df.loc[self.df['uid'] == uid, 'vtk_obj'].values[0])):
             new_dict = deepcopy(self.df.loc[self.df['uid'] == uid, self.df.columns != 'vtk_obj'].to_dict('records')[0])
             new_dict['vtk_obj'] = vtk_object
@@ -171,11 +183,11 @@ class BackgroundCollection(QAbstractTableModel):
                 R = self.get_uid_legend(uid=uid)['color_R']
                 G = self.get_uid_legend(uid=uid)['color_G']
                 B = self.get_uid_legend(uid=uid)['color_B']
-                color = [R,G,B]
+                color = [R, G, B]
             else:
-                color=None
+                color = None
             self.remove_entity(uid)
-            self.add_entity_from_dict(entity_dict=new_dict,color=color)
+            self.add_entity_from_dict(entity_dict=new_dict, color=color)
         else:
             print("ERROR - replace_vtk with vtk of a different type.")
 
@@ -191,33 +203,44 @@ class BackgroundCollection(QAbstractTableModel):
         for background_type in backgrounds_types_in_legend:
             if self.parent.backgrounds_coll.df.loc[self.parent.backgrounds_coll.df['background_type'] == background_type].empty:
                 """Get index of row to be removed, then remove it in place with .drop()."""
-                idx_remove = self.parent.backgrounds_legend_df[self.parent.backgrounds_legend_df['background_type'] == background_type].index
+                idx_remove = self.parent.backgrounds_legend_df[
+                    self.parent.backgrounds_legend_df['background_type'] == background_type].index
                 self.parent.backgrounds_legend_df.drop(idx_remove, inplace=True)
                 table_updated = table_updated or True
             for feature in features_in_legend:
-                if self.parent.backgrounds_coll.df.loc[(self.parent.backgrounds_coll.df['background_type'] == background_type) & (self.parent.backgrounds_coll.df['background_feature'] == feature)].empty:
+                if self.parent.backgrounds_coll.df.loc[
+                    (self.parent.backgrounds_coll.df['background_type'] == background_type) & (
+                            self.parent.backgrounds_coll.df['background_feature'] == feature)].empty:
                     """Get index of row to be removed, then remove it in place with .drop()."""
-                    idx_remove = self.parent.backgrounds_legend_df[(self.parent.backgrounds_legend_df['background_type'] == background_type) & (self.parent.backgrounds_legend_df['background_feature'] == feature)].index
+                    idx_remove = self.parent.backgrounds_legend_df[
+                        (self.parent.backgrounds_legend_df['background_type'] == background_type) & (
+                                self.parent.backgrounds_legend_df['background_feature'] == feature)].index
                     self.parent.backgrounds_legend_df.drop(idx_remove, inplace=True)
                     table_updated = table_updated or True
         for feature in features_in_legend:
             if self.parent.backgrounds_coll.df.loc[self.parent.backgrounds_coll.df['background_feature'] == feature].empty:
                 """Get index of row to be removed, then remove it in place with .drop()."""
-                idx_remove = self.parent.backgrounds_legend_df[self.parent.backgrounds_legend_df['background_feature'] == feature].index
+                idx_remove = self.parent.backgrounds_legend_df[
+                    self.parent.backgrounds_legend_df['background_feature'] == feature].index
                 self.parent.backgrounds_legend_df.drop(idx_remove, inplace=True)
                 table_updated = table_updated or True
         """Then add new background_type / feature"""
         for uid in self.parent.backgrounds_coll.df['uid'].to_list():
-            background_type = self.parent.backgrounds_coll.df.loc[self.parent.backgrounds_coll.df['uid'] == uid, "type"].values[0]
-            feature = self.parent.backgrounds_coll.df.loc[self.parent.backgrounds_coll.df['uid'] == uid, "feature"].values[0]
-            if self.parent.backgrounds_legend_df.loc[(self.parent.backgrounds_legend_df['background_type'] == background_type) & (self.parent.backgrounds_legend_df['background_feature'] == feature)].empty:
-                self.parent.backgrounds_legend_df = self.parent.backgrounds_legend_df.append({'background_type': background_type,
-                                                                                'background_feature': feature,
-                                                                                'color_R': round(np.random.random() * 255),
-                                                                                'color_G': round(np.random.random() * 255),
-                                                                                'color_B': round(np.random.random() * 255),
-                                                                                'line_thick': 2.0},
-                                                                               ignore_index=True)
+            background_type = \
+                self.parent.backgrounds_coll.df.loc[self.parent.backgrounds_coll.df['uid'] == uid, "type"].values[0]
+            feature = \
+                self.parent.backgrounds_coll.df.loc[self.parent.backgrounds_coll.df['uid'] == uid, "feature"].values[0]
+            if self.parent.backgrounds_legend_df.loc[
+                (self.parent.backgrounds_legend_df['background_type'] == background_type) & (
+                        self.parent.backgrounds_legend_df['background_feature'] == feature)].empty:
+                self.parent.backgrounds_legend_df = self.parent.backgrounds_legend_df.append(
+                    {'background_type': background_type,
+                     'background_feature': feature,
+                     'color_R': round(np.random.random() * 255),
+                     'color_G': round(np.random.random() * 255),
+                     'color_B': round(np.random.random() * 255),
+                     'line_thick': 2.0},
+                    ignore_index=True)
                 table_updated = table_updated or True
         """When done, if the table was updated update the widget. No signal is sent here to the views."""
         if table_updated:
@@ -231,8 +254,12 @@ class BackgroundCollection(QAbstractTableModel):
         """Get legend as dictionary from uid."""
         background_type = self.df.loc[self.df['uid'] == uid, 'background_type'].values[0]
         feature = self.df.loc[self.df['uid'] == uid, 'background_feature'].values[0]
-        legend_dict = self.parent.backgrounds_legend_df.loc[(self.parent.backgrounds_legend_df['background_type'] == background_type) & (self.parent.backgrounds_legend_df['background_feature'] == feature)].to_dict('records')
-        return legend_dict[0]  # the '[0]' is needed since .to_dict('records') returns a list of dictionaries (with just one element in this case)
+        legend_dict = self.parent.backgrounds_legend_df.loc[
+            (self.parent.backgrounds_legend_df['background_type'] == background_type) & (
+                    self.parent.backgrounds_legend_df['background_feature'] == feature)].to_dict('records')
+        return legend_dict[
+            0]  # the '[0]' is needed since .to_dict('records') returns a list of dictionaries (with just one element
+        # in this case)
 
     def get_uids(self):
         """Get list of uids."""
@@ -254,7 +281,7 @@ class BackgroundCollection(QAbstractTableModel):
         """Set value(s) stored in dataframe (as pointer) from uid."""
         self.df.loc[self.df['uid'] == uid, 'name'] = name
 
-    def get_name_uid(self,name=None):
+    def get_name_uid(self, name=None):
         return self.df.loc[self.df['name'] == name, 'uid'].values[0]
 
     def get_uid_topological_type(self, uid=None):
@@ -307,23 +334,23 @@ class BackgroundCollection(QAbstractTableModel):
         """Set value(s) stored in dataframe (as pointer) from uid."""
         self.df.loc[self.df['uid'] == uid, 'x_section'] = x_section
 
-    def get_xuid_uid(self,xuid=None):
+    def get_xuid_uid(self, xuid=None):
         '''[Gabriele] Get the uids of the background objects for the corresponding xsec uid (parent)'''
-        return self.df.loc[self.df['x_section']== xuid, 'uid']
+        return self.df.loc[self.df['x_section'] == xuid, 'uid']
 
-    def get_buid_uid(self,buid=None):
+    def get_buid_uid(self, buid=None):
         '''[Gabriele] Get the uids of the background objects for the corresponding bore uid (parent)'''
 
-        return self.df.loc[self.df['borehole']== buid, 'uid']
+        return self.df.loc[self.df['borehole'] == buid, 'uid']
 
-    def get_uid_borehole(self,uid=None):
-        
+    def get_uid_borehole(self, uid=None):
+
         return self.df.loc[self.df['uid'] == uid, 'borehole'].values[0]
-    
+
     def set_uid_borehole(self, uid=None, borehole=None):
         """Set value(s) stored in dataframe (as pointer) from uid."""
         self.df.loc[self.df['uid'] == uid, 'x_section'] = borehole
-    
+
     def get_uid_vtk_obj(self, uid=None):
         """Get value(s) stored in dataframe (as pointer) from uid."""
         return self.df.loc[self.df['uid'] == uid, 'vtk_obj'].values[0]
@@ -334,7 +361,7 @@ class BackgroundCollection(QAbstractTableModel):
 
     def append_uid_property(self, uid=None, property_name=None, property_components=None):
         """Add property name and components to an uid and create empty property on vtk object.
-        For some reason here list.append(new_eleemnt) does not work"""
+        For some reason here list.append(new_element) does not work"""
         old_properties_names = self.get_uid_properties_names(uid=uid)
         old_properties_components = self.get_uid_properties_components(uid=uid)
         new_properties_names = old_properties_names + [property_name]
@@ -410,6 +437,7 @@ class BackgroundCollection(QAbstractTableModel):
                 self.dataChanged.emit(index, index)
                 uid = self.df.iloc[index.row(), 0]
                 self.backgrounds_attr_modified_update_legend_table()
-                self.parent.background_metadata_modified_signal.emit([uid])  # a list of uids is emitted, even if the entity is just one
+                self.parent.background_metadata_modified_signal.emit(
+                    [uid])  # a list of uids is emitted, even if the entity is just one
                 return True
         return QVariant()

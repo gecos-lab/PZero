@@ -79,7 +79,7 @@ def shp2vtk(self=None, in_file_name=None,collection=None):
                 curr_obj_dict["topological_type"] = "PolyLine"
                 curr_obj_dict["vtk_obj"] = PolyLine()
                 if gdf.geom_type[row] == "LineString":
-                    outXYZ = np_array(gdf.loc[row].geometry)
+                    outXYZ = np_array(gdf.loc[row].geometry) # !!This does not work with shapely 2.0!!
                     # print("outXYZ:\n", outXYZ)
                     if np_shape(outXYZ)[1] == 2:
                         outZ = np_zeros((np_shape(outXYZ)[0], 1))
@@ -160,7 +160,7 @@ def shp2vtk(self=None, in_file_name=None,collection=None):
                     curr_obj_dict["vtk_obj"].points = outXYZ
 
                     if 'dip_dir' in column_names:
-                        dir = pd_series((gdf_index.loc[i, "dip_dir"]-90)%360)
+                        dir = pd_series((gdf_index.loc[i, "dip_dir"]-90) % 360)
                         curr_obj_dict["vtk_obj"].set_point_data('dir', dir.values)
                     if 'dir' in column_names:
                         curr_obj_dict["vtk_obj"].set_point_data('dir', pd_series(gdf_index.loc[i, "dir"]).values)
@@ -171,9 +171,6 @@ def shp2vtk(self=None, in_file_name=None,collection=None):
                         # print(type(curr_obj_dict["vtk_obj"].get_point_data('dip')))
                         normals = dip_directions2normals(curr_obj_dict["vtk_obj"].get_point_data('dip'), curr_obj_dict["vtk_obj"].get_point_data('dir'))
                         curr_obj_dict["vtk_obj"].set_point_data('Normals',normals)
-
-
-
 
                     if curr_obj_dict["vtk_obj"].points_number > 1:
                         curr_obj_dict["vtk_obj"].auto_cells()

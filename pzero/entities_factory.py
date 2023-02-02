@@ -1,14 +1,19 @@
 """entities_factory.py
 PZero© Andrea Bistacchi"""
 
-from vtk import vtkPolyData, vtkPoints, vtkCellCenters, vtkIdFilter, vtkCleanPolyData, vtkPolyDataNormals, vtkPlane, vtkCellArray, vtkLine, vtkIdList, vtkTriangleFilter, vtkTriangle, vtkFeatureEdges, vtkCleanPolyData, vtkStripper, vtkPolygon, vtkUnstructuredGrid, vtkTetra, vtkImageData, vtkStructuredGrid, vtkPolyDataConnectivityFilter,vtkPolyDataMapper,vtkPCANormalEstimation,vtkEuclideanClusterExtraction, vtkCenterOfMass,vtkArcPlotter,vtkTubeFilter,vtkActor,vtkLocator,vtkPointSet
+from vtk import vtkPolyData, vtkPoints, vtkCellCenters, vtkIdFilter, vtkCleanPolyData, vtkPolyDataNormals, vtkPlane, \
+    vtkCellArray, vtkLine, vtkIdList, vtkTriangleFilter, vtkTriangle, vtkFeatureEdges, vtkCleanPolyData, vtkStripper, \
+    vtkPolygon, vtkUnstructuredGrid, vtkTetra, vtkImageData, vtkStructuredGrid, vtkPolyDataConnectivityFilter, \
+    vtkPolyDataMapper, vtkPCANormalEstimation, vtkEuclideanClusterExtraction, vtkCenterOfMass, vtkArcPlotter, \
+    vtkTubeFilter, vtkActor, vtkLocator, vtkPointSet
 from vtk.util.numpy_support import vtk_to_numpy
 from vtk.numpy_interface.dataset_adapter import WrapDataObject, vtkDataArrayToVTKArray
-from pyvista import helpers as pv_helpers # very usefull. Can be used when dsa fails
-from pyvista import PolyData as pv_PolyData #this should be removed
-from pyvista import Spline #this should be removed
-from pyvista import Plotter #this should be removed
+from pyvista import helpers as pv_helpers  # very useful. Can be used when dsa fails
+from pyvista import PolyData as pv_PolyData  # this should be removed
+from pyvista import Spline  # this should be removed
+from pyvista import Plotter  # this should be removed
 from pyvista import image_to_texture as pv_image_to_texture
+from pyvista import wrap as pv_wrap
 from pyvista.core.filters import _update_alg
 from numpy import shape as np_shape
 from numpy import arctan2 as np_arctan2
@@ -33,8 +38,10 @@ from numpy import hstack as np_hstack
 from numpy import column_stack as np_column_stack
 from numpy import where as np_where
 from numpy import zeros as np_zeros
+from vtkmodules.vtkFiltersCore import vtkGlyph3D
 
 from .helper_functions import profiler
+
 """
 Some notes on the way we derive our classes from VTK.
 
@@ -159,6 +166,7 @@ class PolyData(vtkPolyData):
     vtk.numpy_interface.dataset_adapter (dsa) to access points, cells, etc. as Numpy arrays instead of
     VTK arrays. Numpy arrays are just a reference to the underlying VTK arrays, so modifying in Numpy
     also modifies the VTK array and vice-versa. Property methods are used where logical and possible."""
+
     def __init__(self, *args, **kwargs):
         super(PolyData, self).__init__(*args, **kwargs)
         self._locator = None
@@ -197,7 +205,7 @@ class PolyData(vtkPolyData):
     def points_Z(self):
         """Returns Z point coordinates as Numpy array"""
         return self.points[:, 2]
-  
+
     def append_point(self, point_vector=None):
         """Appends a single point from Numpy point_vector at the end of the VTK point array."""
         """Check that point_vector is a row vector."""
@@ -226,7 +234,8 @@ class PolyData(vtkPolyData):
         pass
 
     @cells.setter
-    def cells(self, cells_matrix=None):  # _______________________________________________________________ this does not work - see how to fix this that is very important - possibly use VEDO or PYVISTA or BETTER numpy_to_vtk.
+    def cells(self,
+              cells_matrix=None):  # _______________________________________________________________ this does not work - see how to fix this that is very important - possibly use VEDO or PYVISTA or BETTER numpy_to_vtk.
         """Set all cells by applying append_cell recursively"""
         if self.GetNumberOfCells() != 0:
             self.DeleteCells()  # this marks the cells to be deleted
@@ -236,7 +245,8 @@ class PolyData(vtkPolyData):
             self.append_cell(cell_array=cells_matrix[row, :])
 
     @property
-    def cell_centers(self):  # ___________________________________________________ SEEMS USEFUL BUT NOT YET USED AND TESTED
+    def cell_centers(
+            self):  # ___________________________________________________ SEEMS USEFUL BUT NOT YET USED AND TESTED
         """Returns a 3xn array of n point coordinates at the parametric center of n cells.
         This is not necessarily the same as the geometric or bonding box center."""
         vtk_cell_ctrs = vtkCellCenters()
@@ -312,15 +322,16 @@ class PolyData(vtkPolyData):
         self.GetCellData().SetNormals(normals_filter.GetOutput().GetCellData().GetNormals())
         self.Modified()
 
-
     @property
     def points_map_dip_azimuth(self):
         """Returns dip azimuth (in grad) as Numpy array for map plotting if points have Normals property."""
         if "Normals" in self.point_data_keys:
-            if len(np_shape(self.get_point_data("Normals")))>=2:
-                map_dip_azimuth = np_arctan2(self.get_point_data("Normals")[:, 0], self.get_point_data("Normals")[:, 1]) * 180 / np_pi - 180
+            if len(np_shape(self.get_point_data("Normals"))) >= 2:
+                map_dip_azimuth = np_arctan2(self.get_point_data("Normals")[:, 0],
+                                             self.get_point_data("Normals")[:, 1]) * 180 / np_pi - 180
             else:
-                map_dip_azimuth = np_arctan2(self.get_point_data("Normals")[0], self.get_point_data("Normals")[1]) * 180 / np_pi - 180
+                map_dip_azimuth = np_arctan2(self.get_point_data("Normals")[0],
+                                             self.get_point_data("Normals")[1]) * 180 / np_pi - 180
             return map_dip_azimuth
         else:
             return None
@@ -329,8 +340,8 @@ class PolyData(vtkPolyData):
     def points_map_dip(self):
         """Returns dip (in grad) as Numpy array for map plotting if points have Normals property."""
         if "Normals" in self.point_data_keys:
-            #problem with one point objects -> np_squeeze (called in get_point_data) returns a (3, ) array instead of a (n,3) array.
-            if len(np_shape(self.get_point_data("Normals")))>=2:
+            # problem with one point objects -> np_squeeze (called in get_point_data) returns a (3, ) array instead of a (n,3) array.
+            if len(np_shape(self.get_point_data("Normals"))) >= 2:
 
                 map_dip = 90 - np_arcsin(-self.get_point_data("Normals")[:, 2]) * 180 / np_pi
             else:
@@ -343,7 +354,8 @@ class PolyData(vtkPolyData):
     def points_map_trend(self):
         """Returns trend as Numpy array for map plotting if points have Lineations property."""
         if "Lineations" in self.point_data_keys:
-            map_trend = np_arctan2(self.get_point_data("Lineations")[:, 0], self.get_point_data("Lineations")[:, 1]) * 180 / np_pi
+            map_trend = np_arctan2(self.get_point_data("Lineations")[:, 0],
+                                   self.get_point_data("Lineations")[:, 1]) * 180 / np_pi
             return map_trend
         else:
             return None
@@ -381,19 +393,21 @@ class PolyData(vtkPolyData):
         """Removes a point data attribute with name = data_key."""
         self.GetPointData().RemoveArray(data_key)
 
-    def get_point_data(self, data_key=None):  # _________________________________________________________ CHECK THIS - PROBABLY reshape SHOULD APPLY TO ALL CASES
+    def get_point_data(self,
+                       data_key=None):  # _________________________________________________________ CHECK THIS - PROBABLY reshape SHOULD APPLY TO ALL CASES
         """Returns a point data attribute as Numpy array. This cannot be converted to
         a property method since the key of the attribute must be specified."""
         # if isinstance(self, (VertexSet, PolyLine, TriSurf, XsVertexSet, XsPolyLine)):
         """For vector entities return a n-by-m-dimensional array where n is the
         number of points and m is the number of components of the attribute.
         Reshape is needed since the Numpy array returned by dsa is "flat" as a standard VTK array."""
-        point_data = WrapDataObject(self).PointData[data_key].reshape((self.get_point_data_shape(data_key=data_key)[0], self.get_point_data_shape(data_key=data_key)[1]))
+        point_data = WrapDataObject(self).PointData[data_key].reshape(
+            (self.get_point_data_shape(data_key=data_key)[0], self.get_point_data_shape(data_key=data_key)[1]))
         # elif isinstance(self, PolyData):
         #     """For point entities we don't need to reshape"""
         #     point_data = WrapDataObject(self).PointData[data_key]
         """We use np_squeeze to remove axes with length 1, so a 1D array will be returned with shape (n, ) and not with shape (n, 1)."""
-        #The np_array is sometimes necessary. Without it in some cases this error occures: ndarray subclass __array_wrap__ method returned an object which was not an instance of an ndarray subclass
+        # The np_array is sometimes necessary. Without it in some cases this error occures: ndarray subclass __array_wrap__ method returned an object which was not an instance of an ndarray subclass
         return np_squeeze(np_array(point_data))
 
     def get_point_data_shape(self, data_key=None):
@@ -413,7 +427,8 @@ class PolyData(vtkPolyData):
         """Get point data type."""
         return WrapDataObject(self).PointData[data_key].dtype.name
 
-    def set_point_data(self, data_key=None, attribute_matrix=None):  # _____________________________________________ REVEL CITED HERE TO FLATTEN THE ARRAY AND THEN NOT USED?
+    def set_point_data(self, data_key=None,
+                       attribute_matrix=None):  # _____________________________________________ REVEL CITED HERE TO FLATTEN THE ARRAY AND THEN NOT USED?
         """Sets point data attribute from Numpy array (sets a completely new point attributes array)
         Applying ravel to the input n-d array is required to flatten the array as in VTK arrays
         (see also reshape in get_point_data)."""
@@ -431,44 +446,49 @@ class PolyData(vtkPolyData):
         """Lists cell attribute names"""
         pass
 
-    def init_cell_data(self, parent=None, data_key=None, dimension=None):  # _______________________ TO BE IMPLEMENTED IF WE WANT TO WORK WITH CELL DATA
+    def init_cell_data(self, parent=None, data_key=None,
+                       dimension=None):  # _______________________ TO BE IMPLEMENTED IF WE WANT TO WORK WITH CELL DATA
         """Creates a new cell attribute with name = data_key
         as an empty Numpy array with dimension = 1, 2, 3, 4, 6, or 9"""
         # print("cell data init:\n", self.get_cell_data(data_key))
         pass
 
-    def remove_cell_data(self, parent=None, data_key=None):  # _______________________ TO BE IMPLEMENTED IF WE WANT TO WORK WITH CELL DATA
+    def remove_cell_data(self, parent=None,
+                         data_key=None):  # _______________________ TO BE IMPLEMENTED IF WE WANT TO WORK WITH CELL DATA
         """Remove a cell attribute"""
         pass
 
-    def get_cell_data(self, parent=None, data_key=None):  # _______________________ TO BE IMPLEMENTED IF WE WANT TO WORK WITH CELL DATA
+    def get_cell_data(self, parent=None,
+                      data_key=None):  # _______________________ TO BE IMPLEMENTED IF WE WANT TO WORK WITH CELL DATA
         pass
 
-    def set_cell_data(self, parent=None, data_key=None, attribute_matrix=None):  # _______________________ TO BE IMPLEMENTED IF WE WANT TO WORK WITH CELL DATA
+    def set_cell_data(self, parent=None, data_key=None,
+                      attribute_matrix=None):  # _______________________ TO BE IMPLEMENTED IF WE WANT TO WORK WITH CELL DATA
         """Sets cell attribute from Numpy array"""
         pass
 
-    def edit_cell_data(self, parent=None, data_key=None, cell_id=None, cell_data_array=None):  # _______________________ TO BE IMPLEMENTED IF WE WANT TO WORK WITH CELL DATA
+    def edit_cell_data(self, parent=None, data_key=None, cell_id=None,
+                       cell_data_array=None):  # _______________________ TO BE IMPLEMENTED IF WE WANT TO WORK WITH CELL DATA
         """Sets cell attribute from Numpy array"""
         pass
-    
+
     # ==================== FIELD DATA ====================
 
-    def set_field_data(self,name=None,data=None):
+    def set_field_data(self, name=None, data=None):
         ''' [Gabriele] for field data pv_helpers is useful since we can have arrays of strings
         that are not well managed by dsa'''
-        
-        arr = pv_helpers.convert_array(data,name=name)
+
+        arr = pv_helpers.convert_array(data, name=name)
         WrapDataObject(self).GetFieldData().AddArray(arr)
 
     def get_field_data_keys(self):
         return WrapDataObject(self).GetFieldData().keys()
-    
-    def get_field_data(self,key=None):
+
+    def get_field_data(self, key=None):
         field_data = WrapDataObject(self).FieldData[key]
         values = np_array([field_data.GetValue(i) for i in range(field_data.GetNumberOfValues())])
-        return values    
-    
+        return values
+
     def get_field_data_shape(self, data_key=None):
         field_data = WrapDataObject(self).FieldData[data_key]
         n_values = field_data.GetNumberOfValues()
@@ -478,7 +498,7 @@ class PolyData(vtkPolyData):
     def get_field_data_type(self, data_key=None):
         """Get point data type."""
         return WrapDataObject(self).FieldData[data_key].GetDataTypeAsString()
-    
+
     @property
     def topological_type(self):
         for topological_type in valid_topological_types:
@@ -532,69 +552,28 @@ class PolyData(vtkPolyData):
             return vtk_out_list
 
     ''' The locator property can be used to set and retrieve different vtkPointLocator (e.g. octree) types to use in vtkAlgorithms. '''
+
     @property
     def locator(self):
         return self._locator
 
     @locator.setter
     def locator(self, locator):
-        if isinstance(locator,vtkLocator):
+        if isinstance(locator, vtkLocator):
             self._locator = locator
 
-
-    def get_center_of_mass(self,use_scal = False):
+    def get_center_of_mass(self, use_scal=False):
         com = vtkCenterOfMass()
         com.SetInputData(self)
         com.SetUseScalarsAsWeights(use_scal)
         return np_array(com.GetCenter())
 
-    def center_scale(self,scale_factors):
-
-        #[Gabriele] This should be written with VTK
-        temp = pv_PolyData()
-        temp.DeepCopy(self)
-
-        tran = np_array(temp.points[0])
-        # temp.points -= tran
-        # print(tran)
-
-        t1 = temp.translate(tran*-1,inplace=False)
-        t1.scale(scale_factors,inplace=True)
-        t1.translate(tran,inplace=True)
-        del temp
-        # t1.points += tran
-
-        # print(t1.points[0])
-
-
-
-        # transform1 = vtkTransform()
-        # transform1.Translate(center*-1)
-        # tr1 = vtkTransformPolyDataFilter()
-        # tr1.SetInputData(self)
-        # tr1.SetTransform(transform1)
-        # tr1.Update()
-        # print(tr1.GetOutput())
-        #
-        # transform2 = vtkTransform()
-        # transform2.Scale(scale_factors)
-        # tr2 = vtkTransformPolyDataFilter()
-        # tr2.SetInputData(tr1.GetOutput())
-        # tr2.SetTransform(transform2)
-        # tr2.Update()
-        #
-        # print(tr2.GetOutput())
-        #
-        # transform3 = vtkTransform()
-        # transform3.Translate(center)
-        # tr3 = vtkTransformPolyDataFilter()
-        # tr3.SetInputData(tr2.GetOutput())
-        # tr3.SetTransform(transform3)
-        #
-        # tr3.Update()
-        #
-        # print(tr3.GetOutput())
-        return t1
+    def glyph(self, geometry=None, scale=False,prop=None):
+        # Create a glyph representation of the entity. For now using pyvista.
+        downcast = pv_wrap(self)
+        downcast['prop'] = prop
+        glyph = downcast.glyph(orient='prop',scale=False,geom=geometry)
+        return glyph
 
 
 class Plane(vtkPlane):  # _______________________ AT THE MOMENT THIS DOES NOT EXPOSE ANY OTHER METHOD - SEE IF IT IS USEFUL
@@ -603,12 +582,14 @@ class Plane(vtkPlane):  # _______________________ AT THE MOMENT THIS DOES NOT EX
     arrays instead of VTK arrays. Numpy arrays are just a reference to the underlying VTK arrays, so
     modifying in Numpy also modifies the VTK array and vice-versa. Property methods are used where
     logical and possible."""
+
     def __init__(self, *args, **kwargs):
         super(Plane, self).__init__(*args, **kwargs)
 
 
 class VertexSet(PolyData):
     """VertexSet is a set of points, e.g. a point cloud, derived from BaseEntity and vtkPolyData"""
+
     def __init__(self, *args, **kwargs):
         super(VertexSet, self).__init__(*args, **kwargs)
 
@@ -626,20 +607,20 @@ class VertexSet(PolyData):
             self.DeleteCells()
             self.GetVerts().Modified()
 
-
-
-        vertices = vtkCellArray() #[Gabriele] vertices (cells)
-        npoints = self.points_number # [Gabriele] Points present in the object
+        vertices = vtkCellArray()  # [Gabriele] vertices (cells)
+        npoints = self.points_number  # [Gabriele] Points present in the object
         cellIds = [0]
         for pid in range(npoints):
             cellIds[0] = pid
-            vertices.InsertNextCell(1,cellIds)
-        self.SetVerts(vertices) #[Gabriele] Assign the vertices to the point_cloud (vtkPolyData)
+            vertices.InsertNextCell(1, cellIds)
+        self.SetVerts(vertices)  # [Gabriele] Assign the vertices to the point_cloud (vtkPolyData)
         self.Modified()
 
 
-class PolyLine(PolyData):  # _____________________________ HERE WE MUST DECIDE WHETHER TO USE LINE (TYPE = 3) OR POLYLINE (TYPE = 4) CELLS - NOT BOTH - POLYLINE COULD BE USEFUL FOR MULTI-PART
+class PolyLine(
+    PolyData):  # _____________________________ HERE WE MUST DECIDE WHETHER TO USE LINE (TYPE = 3) OR POLYLINE (TYPE = 4) CELLS - NOT BOTH - POLYLINE COULD BE USEFUL FOR MULTI-PART
     """PolyLine is a polyline derived from BaseEntity and vtkPolyData"""
+
     def __init__(self, *args, **kwargs):
         super(PolyLine, self).__init__(*args, **kwargs)
 
@@ -677,10 +658,10 @@ class PolyLine(PolyData):  # _____________________________ HERE WE MUST DECIDE W
             self.DeleteCells()
             self.GetLines().Modified()
         pline_cells = vtkCellArray()
-        for point in range(self.points_number-1):
+        for point in range(self.points_number - 1):
             line = vtkLine()
             line.GetPointIds().SetId(0, point)
-            line.GetPointIds().SetId(1, point+1)
+            line.GetPointIds().SetId(1, point + 1)
             pline_cells.InsertNextCell(line)
         self.SetLines(pline_cells)
         self.BuildLinks()
@@ -721,6 +702,7 @@ class PolyLine(PolyData):  # _____________________________ HERE WE MUST DECIDE W
 
 class TriSurf(PolyData):
     """TriSurf is a triangulated surface, derived from BaseEntity and vtkPolyData"""
+
     def __init__(self, *args, **kwargs):
         super(TriSurf, self).__init__(*args, **kwargs)
 
@@ -789,10 +771,12 @@ class TriSurf(PolyData):
         for cell in range(edges_clean_strips_clean.GetOutput().GetNumberOfCells()):
             if edges_clean_strips_clean.GetOutput().GetCell(cell).GetNumberOfPoints() >= 3:
                 polygon = vtkPolygon()
-                polygon.GetPointIds().SetNumberOfIds(edges_clean_strips_clean.GetOutput().GetCell(cell).GetNumberOfPoints())
+                polygon.GetPointIds().SetNumberOfIds(
+                    edges_clean_strips_clean.GetOutput().GetCell(cell).GetNumberOfPoints())
                 for point_in_cell in range(edges_clean_strips_clean.GetOutput().GetCell(cell).GetNumberOfPoints()):
                     point_in_border = point_in_cell + points_in_border
-                    border_points.InsertNextPoint(edges_clean_strips_clean.GetOutput().GetCell(cell).GetPoints().GetPoint(point_in_cell))
+                    border_points.InsertNextPoint(
+                        edges_clean_strips_clean.GetOutput().GetCell(cell).GetPoints().GetPoint(point_in_cell))
                     polygon.GetPointIds().SetId(point_in_cell, point_in_border)
                 border_polygons.InsertNextCell(polygon)
                 points_in_polygon = polygon.GetNumberOfPoints()
@@ -854,7 +838,9 @@ class TriSurf(PolyData):
                 trgl_point_ids = vtkIdList()
                 trisurf_copy.GetCellPoints(cell_id, trgl_point_ids)
                 """Use the mean value of vertex coordinates to calculate the triangle center. The ComputeCentroid() VTK method yields incorrect centres not contained in the triangle plane."""
-                trgl_ctr = (np_asarray(trisurf_copy.GetPoint(trgl_point_ids.GetId(0))) + np_asarray(trisurf_copy.GetPoint(trgl_point_ids.GetId(1))) + np_asarray(trisurf_copy.GetPoint(trgl_point_ids.GetId(2)))) / 3
+                trgl_ctr = (np_asarray(trisurf_copy.GetPoint(trgl_point_ids.GetId(0))) + np_asarray(
+                    trisurf_copy.GetPoint(trgl_point_ids.GetId(1))) + np_asarray(
+                    trisurf_copy.GetPoint(trgl_point_ids.GetId(2)))) / 3
                 for e_i in range(3):
                     """Loop over edge points."""
                     edge_point_id = trgl_point_ids.GetId(e_i)
@@ -886,7 +872,8 @@ class TriSurf(PolyData):
                             point_displ = point_displ + edge_displ
             """Normalize the displacement, scale by tol, and record all in an array to be used later on."""
             point_displ = point_displ / np_linalg_norm(point_displ) * tol
-            displace_boundary_points_array = np_append(displace_boundary_points_array, np_array([[point_id, point_displ[0], point_displ[1], point_displ[2]]]), axis=0)
+            displace_boundary_points_array = np_append(displace_boundary_points_array, np_array(
+                [[point_id, point_displ[0], point_displ[1], point_displ[2]]]), axis=0)
         for row in displace_boundary_points_array:
             """Here we perform the dilation, on the points and with the vectors stored in displace_boundary_points_array.
             Converting the first column to integer is needed since Numpy arrays store homogeneous objects, hence the point
@@ -902,6 +889,7 @@ class TriSurf(PolyData):
 class XSectionBaseEntity:
     """This abstract class is used just to implement the method to calculate the W coordinate for all geometrical/topological entities belonging to a XSection.
     We store a reference to parent - the project, and to the x_section_uid in order to be able to use property methods below."""
+
     def __init__(self, x_section_uid=None, parent=None, *args, **kwargs):
         self.x_section_uid = x_section_uid
         self.parent = parent
@@ -913,7 +901,8 @@ class XSectionBaseEntity:
         x_section_base_y = self.parent.xsect_coll.get_uid_base_y(self.x_section_uid)
         x_section_end_x = self.parent.xsect_coll.get_uid_end_x(self.x_section_uid)
         x_section_end_y = self.parent.xsect_coll.get_uid_end_y(self.x_section_uid)
-        sense = np_sign((self.points_X - x_section_base_x) * (x_section_end_x - x_section_base_x) + (self.points_Y - x_section_base_y) * (x_section_end_y - x_section_base_y))
+        sense = np_sign((self.points_X - x_section_base_x) * (x_section_end_x - x_section_base_x) + (
+                    self.points_Y - x_section_base_y) * (x_section_end_y - x_section_base_y))
         return np_sqrt((self.points_X - x_section_base_x) ** 2 + (self.points_Y - x_section_base_y) ** 2) * sense
 
     @property
@@ -921,7 +910,8 @@ class XSectionBaseEntity:
         """Returns apparent dip as Numpy array for map plotting if points have Normals property."""
         if "Normals" in self.point_data_keys:
             xs_azimuth = self.parent.xsect_coll.get_uid_azimuth(self.x_section_uid)
-            app_dip = np_arctan(np_tan(self.points_map_dip * np_pi/180) * np_cos((self.points_map_dip_azimuth - xs_azimuth) * np_pi/180)) * 180 / np_pi
+            app_dip = np_arctan(np_tan(self.points_map_dip * np_pi / 180) * np_cos(
+                (self.points_map_dip_azimuth - xs_azimuth) * np_pi / 180)) * 180 / np_pi
             return app_dip
         else:
             return None
@@ -931,7 +921,8 @@ class XSectionBaseEntity:
         """Returns apparent plunge as Numpy array for map plotting if points have Lineations property."""
         if "Lineations" in self.point_data_keys:
             xs_azimuth = self.parent.xsect_coll.get_uid_azimuth(self.x_section_uid)
-            app_plunge = np_arctan(np_tan(self.points_map_plunge * np_pi/180) * np_cos((self.points_map_trend - xs_azimuth) * np_pi/180)) * 180 / np_pi
+            app_plunge = np_arctan(np_tan(self.points_map_plunge * np_pi / 180) * np_cos(
+                (self.points_map_trend - xs_azimuth) * np_pi / 180)) * 180 / np_pi
             return app_plunge
         else:
             return None
@@ -939,6 +930,7 @@ class XSectionBaseEntity:
 
 class XsVertexSet(VertexSet, XSectionBaseEntity):
     """XsVertexSet is a set of points, e.g. a point cloud, belonging to a unique XSection, derived from XSectionBaseEntity and VertexSet"""
+
     def __init__(self, *args, **kwargs):
         super(XsVertexSet, self).__init__(*args, **kwargs)
 
@@ -950,6 +942,7 @@ class XsVertexSet(VertexSet, XSectionBaseEntity):
 
 class XsPolyLine(PolyLine, XSectionBaseEntity):
     """XsPolyLine is a polyline belonging to a unique XSection, derived from XSectionBaseEntity and PolyLine"""
+
     def __init__(self, *args, **kwargs):
         super(XsPolyLine, self).__init__(*args, **kwargs)
 
@@ -959,8 +952,10 @@ class XsPolyLine(PolyLine, XSectionBaseEntity):
         return xpline_copy
 
 
-class XsTriSurf(TriSurf, XSectionBaseEntity):  # ______________________________________ NOT YET USED - SEE IF THIS IS USEFUL
+class XsTriSurf(TriSurf,
+                XSectionBaseEntity):  # ______________________________________ NOT YET USED - SEE IF THIS IS USEFUL
     """XsTriSurf is a triangulated surface belonging to a unique XSection, derived from XSectionBaseEntity and TriSurf"""
+
     def __init__(self, *args, **kwargs):
         super(XsTriSurf, self).__init__(*args, **kwargs)
 
@@ -970,8 +965,10 @@ class XsTriSurf(TriSurf, XSectionBaseEntity):  # _______________________________
         return xtsurf_copy
 
 
-class TetraSolid(vtkUnstructuredGrid):  # ______________________________________ NOT YET USED - EVERYTHING MUST BE CHECKED - ADD METHODS SIMILAR TO POLYDATA
+class TetraSolid(
+    vtkUnstructuredGrid):  # ______________________________________ NOT YET USED - EVERYTHING MUST BE CHECKED - ADD METHODS SIMILAR TO POLYDATA
     """TetraSolid is a tetrahedral mesh, derived from vtkUnstructuredGrid"""
+
     def __init__(self, *args, **kwargs):
         super(TetraSolid, self).__init__(*args, **kwargs)
 
@@ -1013,9 +1010,11 @@ class TetraSolid(vtkUnstructuredGrid):  # ______________________________________
         return edges.GetOutput()
 
 
-class Voxet(vtkImageData):  # _______________________________________________ SEE IF POINT METHODS MAKE SENSE HERE - NOW COMMENTED
+class Voxet(
+    vtkImageData):  # _______________________________________________ SEE IF POINT METHODS MAKE SENSE HERE - NOW COMMENTED
     """Voxet is a 3D image, derived from BaseEntity and vtkImageData"""
     """Add methods similar to PolyData for points."""
+
     def __init__(self, *args, **kwargs):
         super(Voxet, self).__init__(*args, **kwargs)
 
@@ -1191,7 +1190,9 @@ class Voxet(vtkImageData):  # _______________________________________________ SE
         a property method since the key of the attribute must be specified."""
         """For 2D raster entities return a n-by-m-by-o-dimensional array where n-by-m
         is the shape of the raster and o is the number of components of the attribute."""
-        point_data = WrapDataObject(self).PointData[data_key].reshape((self.get_point_data_shape(data_key=data_key)[1], self.get_point_data_shape(data_key=data_key)[0], self.get_point_data_shape(data_key=data_key)[2]))
+        point_data = WrapDataObject(self).PointData[data_key].reshape((self.get_point_data_shape(data_key=data_key)[1],
+                                                                       self.get_point_data_shape(data_key=data_key)[0],
+                                                                       self.get_point_data_shape(data_key=data_key)[2]))
         """We use np_squeeze to remove axes with length 1, so a 1D array will be returned with shape (n, ) and not with shape (n, 1)."""
         return np_squeeze(point_data)
 
@@ -1221,24 +1222,29 @@ class Voxet(vtkImageData):  # _______________________________________________ SE
         """Lists cell attribute names."""
         pass
 
-    def init_cell_data(self, parent=None, data_key=None, dimension=None):  # _______________________ TO BE IMPLEMENTED IF WE WANT TO WORK WITH CELL DATA
+    def init_cell_data(self, parent=None, data_key=None,
+                       dimension=None):  # _______________________ TO BE IMPLEMENTED IF WE WANT TO WORK WITH CELL DATA
         """Creates a new cell attribute with name = data_key
         as an empty Numpy array with dimension = 1, 2, 3, 4, 6, or 9."""
         pass
 
-    def remove_cell_data(self, parent=None, data_key=None):  # _______________________ TO BE IMPLEMENTED IF WE WANT TO WORK WITH CELL DATA
+    def remove_cell_data(self, parent=None,
+                         data_key=None):  # _______________________ TO BE IMPLEMENTED IF WE WANT TO WORK WITH CELL DATA
         """Remove a cell attribute."""
         pass
 
-    def get_cell_data(self, parent=None, data_key=None):  # _______________________ TO BE IMPLEMENTED IF WE WANT TO WORK WITH CELL DATA
+    def get_cell_data(self, parent=None,
+                      data_key=None):  # _______________________ TO BE IMPLEMENTED IF WE WANT TO WORK WITH CELL DATA
         """Returns cell attribute as Numpy array."""
         pass
 
-    def set_cell_data(self, parent=None, data_key=None, attribute_matrix=None):  # _______________________ TO BE IMPLEMENTED IF WE WANT TO WORK WITH CELL DATA
+    def set_cell_data(self, parent=None, data_key=None,
+                      attribute_matrix=None):  # _______________________ TO BE IMPLEMENTED IF WE WANT TO WORK WITH CELL DATA
         """Sets cell attribute from Numpy array."""
         pass
 
-    def edit_cell_data(self, parent=None, data_key=None, cell_id=None, cell_data_array=None):  # _______________________ TO BE IMPLEMENTED IF WE WANT TO WORK WITH CELL DATA
+    def edit_cell_data(self, parent=None, data_key=None, cell_id=None,
+                       cell_data_array=None):  # _______________________ TO BE IMPLEMENTED IF WE WANT TO WORK WITH CELL DATA
         """Sets cell attribute from Numpy array."""
         pass
 
@@ -1271,8 +1277,10 @@ class Voxet(vtkImageData):  # _______________________________________________ SE
         return frame
 
 
-class XsVoxet(Voxet):  # _____________________________________________________________ use frame and texture as in XSImage?
+class XsVoxet(
+    Voxet):  # _____________________________________________________________ use frame and texture as in XSImage?
     """XsVoxet is a slice of a Voxet performed along a XSection."""
+
     def __init__(self, x_section_uid=None, parent=None, *args, **kwargs):
         self.x_section_uid = x_section_uid
         self.parent = parent  # we store a reference to parent - the project - in order to be able to use property methods below
@@ -1300,15 +1308,23 @@ class XsVoxet(Voxet):  # _______________________________________________________
         x_section_end_y = self.parent.xsect_coll.get_uid_end_y(self.x_section_uid)
         x_section_azimuth = self.parent.xsect_coll.get_uid_azimuth(self.x_section_uid)
         if (0 <= x_section_azimuth <= 90) or (180 < x_section_azimuth <= 270):
-            sense_min = np_sign((self.bounds[0] - x_section_base_x) * (x_section_end_x - x_section_base_x) + (self.bounds[2] - x_section_base_y) * (x_section_end_y - x_section_base_y))
-            sense_max = np_sign((self.bounds[1] - x_section_base_x) * (x_section_end_x - x_section_base_x) + (self.bounds[3] - x_section_base_y) * (x_section_end_y - x_section_base_y))
-            W_min = np_sqrt((self.bounds[0] - x_section_base_x) ** 2 + (self.bounds[2] - x_section_base_y) ** 2) * sense_min
-            W_max = np_sqrt((self.bounds[1] - x_section_base_x) ** 2 + (self.bounds[3] - x_section_base_y) ** 2) * sense_max
+            sense_min = np_sign((self.bounds[0] - x_section_base_x) * (x_section_end_x - x_section_base_x) + (
+                        self.bounds[2] - x_section_base_y) * (x_section_end_y - x_section_base_y))
+            sense_max = np_sign((self.bounds[1] - x_section_base_x) * (x_section_end_x - x_section_base_x) + (
+                        self.bounds[3] - x_section_base_y) * (x_section_end_y - x_section_base_y))
+            W_min = np_sqrt(
+                (self.bounds[0] - x_section_base_x) ** 2 + (self.bounds[2] - x_section_base_y) ** 2) * sense_min
+            W_max = np_sqrt(
+                (self.bounds[1] - x_section_base_x) ** 2 + (self.bounds[3] - x_section_base_y) ** 2) * sense_max
         else:
-            sense_min = np_sign((self.bounds[0] - x_section_base_x) * (x_section_end_x - x_section_base_x) + (self.bounds[3] - x_section_base_y) * (x_section_end_y - x_section_base_y))
-            sense_max = np_sign((self.bounds[1] - x_section_base_x) * (x_section_end_x - x_section_base_x) + (self.bounds[2] - x_section_base_y) * (x_section_end_y - x_section_base_y))
-            W_min = np_sqrt((self.bounds[0] - x_section_base_x) ** 2 + (self.bounds[3] - x_section_base_y) ** 2) * sense_min
-            W_max = np_sqrt((self.bounds[1] - x_section_base_x) ** 2 + (self.bounds[2] - x_section_base_y) ** 2) * sense_max
+            sense_min = np_sign((self.bounds[0] - x_section_base_x) * (x_section_end_x - x_section_base_x) + (
+                        self.bounds[3] - x_section_base_y) * (x_section_end_y - x_section_base_y))
+            sense_max = np_sign((self.bounds[1] - x_section_base_x) * (x_section_end_x - x_section_base_x) + (
+                        self.bounds[2] - x_section_base_y) * (x_section_end_y - x_section_base_y))
+            W_min = np_sqrt(
+                (self.bounds[0] - x_section_base_x) ** 2 + (self.bounds[3] - x_section_base_y) ** 2) * sense_min
+            W_max = np_sqrt(
+                (self.bounds[1] - x_section_base_x) ** 2 + (self.bounds[2] - x_section_base_y) ** 2) * sense_max
         Z_min = self.bounds[4]
         Z_max = self.bounds[5]
         if W_min > W_max:
@@ -1321,7 +1337,8 @@ class XsVoxet(Voxet):  # _______________________________________________________
             Z_min = Z_tmp
         return [W_min, W_max, Z_min, Z_max]
 
-    def image_data(self, show_property=None):  # _____________________ THERE WAS A NOTE SAYING "CHECK THIS" BUT IT IS PROBABLY OK
+    def image_data(self,
+                   show_property=None):  # _____________________ THERE WAS A NOTE SAYING "CHECK THIS" BUT IT IS PROBABLY OK
         """Returns a rows_n x columns_n x properties_components numpy array with image data.
         Inspired by vtkimagedata_to_array in vtkplotlib:
         https://github.com/bwoodsend/vtkplotlib/blob/master/vtkplotlib/_image_io.py"""
@@ -1331,9 +1348,11 @@ class XsVoxet(Voxet):  # _______________________________________________________
         return image_data
 
 
-class Seismics(vtkStructuredGrid):  # ___________________________________ MUST BE UPDATED AS 2D AND 3D SEISMICS, AND TO WORK AS OTHER CLASSES OF THE IMAGE COLLECTION
+class Seismics(
+    vtkStructuredGrid):  # ___________________________________ MUST BE UPDATED AS 2D AND 3D SEISMICS, AND TO WORK AS OTHER CLASSES OF THE IMAGE COLLECTION
     """Seismics is a 3D structured grid, derived from BaseEntity and vtkStructuredGrid.
     NOT ALL SEISMICS MUST BE UNSTRUCTURED."""
+
     def __init__(self, *args, **kwargs):
         super(Seismics, self).__init__(*args, **kwargs)
 
@@ -1426,7 +1445,9 @@ class Seismics(vtkStructuredGrid):  # ___________________________________ MUST B
         a property method since the key of the attribute must be specified."""
         """For 2D raster entities return a n-by-m-by-o-dimensional array where n-by-m
         is the shape of the raster and o is the number of components of the attribute."""
-        point_data = WrapDataObject(self).PointData[data_key].reshape((self.get_point_data_shape(data_key=data_key)[1], self.get_point_data_shape(data_key=data_key)[0], self.get_point_data_shape(data_key=data_key)[2]))
+        point_data = WrapDataObject(self).PointData[data_key].reshape((self.get_point_data_shape(data_key=data_key)[1],
+                                                                       self.get_point_data_shape(data_key=data_key)[0],
+                                                                       self.get_point_data_shape(data_key=data_key)[2]))
         """We use np_squeeze to remove axes with length 1, so a 1D array will be returned with shape (n, ) and not with shape (n, 1)."""
         return np_squeeze(point_data)
 
@@ -1452,24 +1473,29 @@ class Seismics(vtkStructuredGrid):  # ___________________________________ MUST B
         """Lists cell attribute names"""
         pass
 
-    def init_cell_data(self, parent=None, data_key=None, dimension=None):  # _______________________ TO BE IMPLEMENTED IF WE WANT TO WORK WITH CELL DATA
+    def init_cell_data(self, parent=None, data_key=None,
+                       dimension=None):  # _______________________ TO BE IMPLEMENTED IF WE WANT TO WORK WITH CELL DATA
         """Creates a new cell attribute with name = data_key
         as an empty Numpy array with dimension = 1, 2, 3, 4, 6, or 9"""
         pass
 
-    def remove_cell_data(self, parent=None, data_key=None):  # _______________________ TO BE IMPLEMENTED IF WE WANT TO WORK WITH CELL DATA
+    def remove_cell_data(self, parent=None,
+                         data_key=None):  # _______________________ TO BE IMPLEMENTED IF WE WANT TO WORK WITH CELL DATA
         """Remove a cell attribute"""
         pass
 
-    def get_cell_data(self, parent=None, data_key=None):  # _______________________ TO BE IMPLEMENTED IF WE WANT TO WORK WITH CELL DATA
+    def get_cell_data(self, parent=None,
+                      data_key=None):  # _______________________ TO BE IMPLEMENTED IF WE WANT TO WORK WITH CELL DATA
         """Returns cell attribute as Numpy array"""
         pass
 
-    def set_cell_data(self, parent=None, data_key=None, attribute_matrix=None):  # _______________________ TO BE IMPLEMENTED IF WE WANT TO WORK WITH CELL DATA
+    def set_cell_data(self, parent=None, data_key=None,
+                      attribute_matrix=None):  # _______________________ TO BE IMPLEMENTED IF WE WANT TO WORK WITH CELL DATA
         """Sets cell attribute from Numpy array"""
         pass
 
-    def edit_cell_data(self, parent=None, data_key=None, cell_id=None, cell_data_array=None):  # _______________________ TO BE IMPLEMENTED IF WE WANT TO WORK WITH CELL DATA
+    def edit_cell_data(self, parent=None, data_key=None, cell_id=None,
+                       cell_data_array=None):  # _______________________ TO BE IMPLEMENTED IF WE WANT TO WORK WITH CELL DATA
         """Sets cell attribute from Numpy array"""
         pass
 
@@ -1505,6 +1531,7 @@ class Seismics(vtkStructuredGrid):  # ___________________________________ MUST B
 class DEM(vtkStructuredGrid):
     """DEM is a Digital Elevation Model derived from vtkStructuredGrid,
     saved in the project folder as .vts. Many methods are similar to PolyData."""
+
     def __init__(self, *args, **kwargs):
         super(DEM, self).__init__(*args, **kwargs)
 
@@ -1586,7 +1613,9 @@ class DEM(vtkStructuredGrid):
         a property method since the key of the attribute must be specified."""
         """For 2D raster entities return a n-by-m-by-o-dimensional array where n-by-m
         is the shape of the raster and o is the number of components of the attribute."""
-        point_data = WrapDataObject(self).PointData[data_key].reshape((self.get_point_data_shape(data_key=data_key)[1], self.get_point_data_shape(data_key=data_key)[0], self.get_point_data_shape(data_key=data_key)[2]))
+        point_data = WrapDataObject(self).PointData[data_key].reshape((self.get_point_data_shape(data_key=data_key)[1],
+                                                                       self.get_point_data_shape(data_key=data_key)[0],
+                                                                       self.get_point_data_shape(data_key=data_key)[2]))
         """We use np_squeeze to remove axes with length 1, so a 1D array will be returned with shape (n, ) and not with shape (n, 1)."""
         return np_squeeze(point_data)
 
@@ -1612,24 +1641,29 @@ class DEM(vtkStructuredGrid):
         """Lists cell attribute names"""
         pass
 
-    def init_cell_data(self, parent=None, data_key=None, dimension=None):  # _______________________ TO BE IMPLEMENTED IF WE WANT TO WORK WITH CELL DATA
+    def init_cell_data(self, parent=None, data_key=None,
+                       dimension=None):  # _______________________ TO BE IMPLEMENTED IF WE WANT TO WORK WITH CELL DATA
         """Creates a new cell attribute with name = data_key
         as an empty Numpy array with dimension = 1, 2, 3, 4, 6, or 9"""
         pass
 
-    def remove_cell_data(self, parent=None, data_key=None):  # _______________________ TO BE IMPLEMENTED IF WE WANT TO WORK WITH CELL DATA
+    def remove_cell_data(self, parent=None,
+                         data_key=None):  # _______________________ TO BE IMPLEMENTED IF WE WANT TO WORK WITH CELL DATA
         """Remove a cell attribute"""
         pass
 
-    def get_cell_data(self, parent=None, data_key=None):  # _______________________ TO BE IMPLEMENTED IF WE WANT TO WORK WITH CELL DATA
+    def get_cell_data(self, parent=None,
+                      data_key=None):  # _______________________ TO BE IMPLEMENTED IF WE WANT TO WORK WITH CELL DATA
         """Returns cell attribute as Numpy array"""
         pass
 
-    def set_cell_data(self, parent=None, data_key=None, attribute_matrix=None):  # _______________________ TO BE IMPLEMENTED IF WE WANT TO WORK WITH CELL DATA
+    def set_cell_data(self, parent=None, data_key=None,
+                      attribute_matrix=None):  # _______________________ TO BE IMPLEMENTED IF WE WANT TO WORK WITH CELL DATA
         """Sets cell attribute from Numpy array"""
         pass
 
-    def edit_cell_data(self, parent=None, data_key=None, cell_id=None, cell_data_array=None):  # _______________________ TO BE IMPLEMENTED IF WE WANT TO WORK WITH CELL DATA
+    def edit_cell_data(self, parent=None, data_key=None, cell_id=None,
+                       cell_data_array=None):  # _______________________ TO BE IMPLEMENTED IF WE WANT TO WORK WITH CELL DATA
         """Sets cell attribute from Numpy array"""
         pass
 
@@ -1645,8 +1679,10 @@ class DEM(vtkStructuredGrid):
             Y1 = map_image.bounds[3]
         else:
             Y1 = map_image.bounds[2]
-        U = (self.points_X - X0)/(X1 - X0)
-        V = (self.points_Y - Y0) / (Y1 - Y0)
+        U = (self.points_X - X0) / (X1 - X0) * np_where(self.points_X >= X0, 1, np_NaN) * np_where(self.points_X <= X1,
+                                                                                                   1, np_NaN)
+        V = (self.points_Y - Y0) / (Y1 - Y0) * np_where(self.points_Y >= Y0, np_NaN, 1) * np_where(self.points_Y <= Y1,
+                                                                                                   np_NaN, 1)
         UV = np_column_stack((U, V))
         """Set point data on object. Do not initialize the array before this line."""
         self.set_point_data(data_key=map_image_uid, attribute_matrix=UV)
@@ -1661,6 +1697,7 @@ class DEM(vtkStructuredGrid):
 class PCDom(vtkPointSet):  # _______________________ DO WE NEED ADDITIONAL METHODS WITH RESPECT TO POLYDATA?
     """Point Cloud DOM.
     See discussion at https://discourse.vtk.org/t/proposal-adding-a-vtkpointcloud-data-structure/3872/3 """
+
     def __init__(self, *args, **kwargs):
         super(PCDom, self).__init__(*args, **kwargs)
 
@@ -1716,11 +1753,13 @@ class PCDom(vtkPointSet):  # _______________________ DO WE NEED ADDITIONAL METHO
     def points_map_dip_azimuth(self):
         """Returns dip azimuth (in grad) as Numpy array for map plotting if points have Normals property."""
         if "Normals" in self.point_data_keys:
-            if len(np_shape(self.get_point_data("Normals")))>=2:
-                map_dip_azimuth = np_arctan2(self.get_point_data("Normals")[:, 0], self.get_point_data("Normals")[:, 1]) * 180 / np_pi - 180
-                map_dip_azimuth = np_where(map_dip_azimuth == 360, 0,map_dip_azimuth)
+            if len(np_shape(self.get_point_data("Normals"))) >= 2:
+                map_dip_azimuth = np_arctan2(self.get_point_data("Normals")[:, 0],
+                                             self.get_point_data("Normals")[:, 1]) * 180 / np_pi - 180
+                map_dip_azimuth = np_where(map_dip_azimuth == 360, 0, map_dip_azimuth)
             else:
-                map_dip_azimuth = np_arctan2(self.get_point_data("Normals")[0], self.get_point_data("Normals")[1]) * 180 / np_pi - 180
+                map_dip_azimuth = np_arctan2(self.get_point_data("Normals")[0],
+                                             self.get_point_data("Normals")[1]) * 180 / np_pi - 180
             return map_dip_azimuth
         else:
             return None
@@ -1729,8 +1768,8 @@ class PCDom(vtkPointSet):  # _______________________ DO WE NEED ADDITIONAL METHO
     def points_map_dip(self):
         """Returns dip (in grad) as Numpy array for map plotting if points have Normals property."""
         if "Normals" in self.point_data_keys:
-            #problem with one point objects -> np_squeeze (called in get_point_data) returns a (3, ) array instead of a (n,3) array.
-            if len(np_shape(self.get_point_data("Normals")))>=2:
+            # problem with one point objects -> np_squeeze (called in get_point_data) returns a (3, ) array instead of a (n,3) array.
+            if len(np_shape(self.get_point_data("Normals"))) >= 2:
 
                 map_dip = 90 - np_arcsin(-self.get_point_data("Normals")[:, 2]) * 180 / np_pi
             else:
@@ -1743,7 +1782,8 @@ class PCDom(vtkPointSet):  # _______________________ DO WE NEED ADDITIONAL METHO
     def points_map_trend(self):
         """Returns trend as Numpy array for map plotting if points have Lineations property."""
         if "Lineations" in self.point_data_keys:
-            map_trend = np_arctan2(self.get_point_data("Lineations")[:, 0], self.get_point_data("Lineations")[:, 1]) * 180 / np_pi
+            map_trend = np_arctan2(self.get_point_data("Lineations")[:, 0],
+                                   self.get_point_data("Lineations")[:, 1]) * 180 / np_pi
             return map_trend
         else:
             return None
@@ -1805,14 +1845,16 @@ class PCDom(vtkPointSet):  # _______________________ DO WE NEED ADDITIONAL METHO
         connectivity_filter.ColorClustersOn()
         # print(connectivity_filterconnectivity_filter.GetLocator())
         # connectivity_filter.AlignedNormalsOn()
-        _update_alg(connectivity_filter,True,'test')
+        _update_alg(connectivity_filter, True, 'test')
         # connectivity_filter.Update()
         # num_regions = connectivity_filter.GetNumberOfExtractedRegions()
         # print(connectivity_filter.GetOutput().GetPointData().GetArray('RegionId'))
         self.GetPointData().SetScalars(connectivity_filter.GetOutput().GetPointData().GetArray('ClusterId'))
         self.Modified()
         # return num_regions
-    def set_point_data(self, data_key=None, attribute_matrix=None):  # _____________________________________________ REVEL CITED HERE TO FLATTEN THE ARRAY AND THEN NOT USED?
+
+    def set_point_data(self, data_key=None,
+                       attribute_matrix=None):  # _____________________________________________ REVEL CITED HERE TO FLATTEN THE ARRAY AND THEN NOT USED?
         """Sets point data attribute from Numpy array (sets a completely new point attributes array)
         Applying ravel to the input n-d array is required to flatten the array as in VTK arrays
         (see also reshape in get_point_data)."""
@@ -1829,6 +1871,7 @@ class PCDom(vtkPointSet):  # _______________________ DO WE NEED ADDITIONAL METHO
         return WrapDataObject(self).PointData[data_key].dtype.name
 
     ''' New property to retrieve and set vtkPointSet proxy model'''
+
     def get_point_data_shape(self, data_key=None):
         """Returns the shape of a point data attribute matrix."""
         # if isinstance(self, (VertexSet, PolyLine, TriSurf, XsVertexSet, XsPolyLine, PCDom)):
@@ -1842,19 +1885,21 @@ class PCDom(vtkPointSet):  # _______________________ DO WE NEED ADDITIONAL METHO
             n_components = 1
         return [n_points, n_components]
 
-    def get_point_data(self, data_key=None):  # _________________________________________________________ CHECK THIS - PROBABLY reshape SHOULD APPLY TO ALL CASES
+    def get_point_data(self,
+                       data_key=None):  # _________________________________________________________ CHECK THIS - PROBABLY reshape SHOULD APPLY TO ALL CASES
         """Returns a point data attribute as Numpy array. This cannot be converted to
         a property method since the key of the attribute must be specified."""
         # if isinstance(self, (VertexSet, PolyLine, TriSurf, XsVertexSet, XsPolyLine)):
         """For vector entities return a n-by-m-dimensional array where n is the
         number of points and m is the number of components of the attribute.
         Reshape is needed since the Numpy array returned by dsa is "flat" as a standard VTK array."""
-        point_data = WrapDataObject(self).PointData[data_key].reshape((self.get_point_data_shape(data_key=data_key)[0], self.get_point_data_shape(data_key=data_key)[1]))
+        point_data = WrapDataObject(self).PointData[data_key].reshape(
+            (self.get_point_data_shape(data_key=data_key)[0], self.get_point_data_shape(data_key=data_key)[1]))
         # elif isinstance(self, PolyData):
         #     """For point entities we don't need to reshape"""
         #     point_data = WrapDataObject(self).PointData[data_key]
         """We use np_squeeze to remove axes with length 1, so a 1D array will be returned with shape (n, ) and not with shape (n, 1)."""
-        #The np_array is sometimes necessary. Without it in some cases this error occures: ndarray subclass __array_wrap__ method returned an object which was not an instance of an ndarray subclass
+        # The np_array is sometimes necessary. Without it in some cases this error occures: ndarray subclass __array_wrap__ method returned an object which was not an instance of an ndarray subclass
         return np_squeeze(np_array(point_data))
 
     # @profiler('/home/gabriele/STORAGE/Unibro/Libri-e-dispense/Tesi/profiler_data/normals_calc/brolla_proxy',10)
@@ -1879,39 +1924,37 @@ class PCDom(vtkPointSet):  # _______________________ DO WE NEED ADDITIONAL METHO
         """Update the input polydata "self" with the new normals."""
         normals = vtk_to_numpy(normals_filter.GetOutput().GetPointData().GetNormals())
         print('Flipping to negative')
-        normals_flipped = np_where(normals[:,2:]>0,normals*-1,normals)
-        self.set_point_data('Normals',normals_flipped)
+        normals_flipped = np_where(normals[:, 2:] > 0, normals * -1, normals)
+        self.set_point_data('Normals', normals_flipped)
         self.Modified()
 
     # def calc_radius(self):
 
+    # self.init_point_data('radial_filt',1)
 
-
-        # self.init_point_data('radial_filt',1)
-
-        # # r = vtkStatisticalOutlierRemoval()
-        # r = vtkRadiusOutlierRemoval()
-        # r.SetInputData(self)
-        # r.GenerateOutliersOn()
-        # # r.SetSampleSize(10)
-        # r.SetRadius(200)
-        # r.SetNumberOfNeighbors(100)
-        # r.Update()
-        # # print(r.GetOutput().GetPoints())
-        # print('filer run')
-        # appender = vtkAppendPolyData()
-        # for i in range(2):
-        #     part = PolyData()
-        #
-        #     part.ShallowCopy(r.GetOutput(i))
-        #
-        #     selected = np_repeat(i,part.points_number)
-        #
-        #     part.set_point_data('radial_filt',selected)
-        #     appender.AddInputData(part)
-        #
-        # appender.Update()
-        # self.GetPointData().SetScalars(appender.GetOutput().GetPointData().GetArray("radial_filt"))
+    # # r = vtkStatisticalOutlierRemoval()
+    # r = vtkRadiusOutlierRemoval()
+    # r.SetInputData(self)
+    # r.GenerateOutliersOn()
+    # # r.SetSampleSize(10)
+    # r.SetRadius(200)
+    # r.SetNumberOfNeighbors(100)
+    # r.Update()
+    # # print(r.GetOutput().GetPoints())
+    # print('filer run')
+    # appender = vtkAppendPolyData()
+    # for i in range(2):
+    #     part = PolyData()
+    #
+    #     part.ShallowCopy(r.GetOutput(i))
+    #
+    #     selected = np_repeat(i,part.points_number)
+    #
+    #     part.set_point_data('radial_filt',selected)
+    #     appender.AddInputData(part)
+    #
+    # appender.Update()
+    # self.GetPointData().SetScalars(appender.GetOutput().GetPointData().GetArray("radial_filt"))
 
     # @property
     # def point_set_proxy(self):
@@ -1937,6 +1980,7 @@ class PCDom(vtkPointSet):  # _______________________ DO WE NEED ADDITIONAL METHO
 
 class TSDom(PolyData):  # __________________________________ TO BE IMPLEMENTED - could also be derived from TriSurf()
     """Textured Surface DOM"""
+
     def __init__(self, *args, **kwargs):
         super(TSDom, self).__init__(*args, **kwargs)
 
@@ -1946,9 +1990,11 @@ class TSDom(PolyData):  # __________________________________ TO BE IMPLEMENTED -
         return tsdom_copy
 
 
-class Image(vtkImageData):  # _________________________________________________see if it is a good idea to use this also as a superclass to Voxet()
+class Image(
+    vtkImageData):  # _________________________________________________see if it is a good idea to use this also as a superclass to Voxet()
     """Image is an abstract class for image data, used as a base for subclasses, derived from
     vtkImageData() that is saved in the project folder as .vti"""
+
     def __init__(self, *args, **kwargs):
         super(Image, self).__init__(*args, **kwargs)
 
@@ -2031,13 +2077,15 @@ class Image(vtkImageData):  # _________________________________________________s
         with shape (n, ) and not with shape (n, 1), and 2D raster entities will return a
         n-by-m-by-o-dimensional array where n-by-m is the shape of the raster and o is the
         number of components of the attribute. 3D raster will result in n-by-m-by-p-by-o."""
-        image_data = WrapDataObject(self).PointData[property_name].reshape((self.V_n, self.U_n, self.W_n, self.get_property_components(property_name)))
+        image_data = WrapDataObject(self).PointData[property_name].reshape(
+            (self.V_n, self.U_n, self.W_n, self.get_property_components(property_name)))
         return np_squeeze(image_data)
 
 
 class MapImage(Image):
     """MapImage is a georeferenced (possibly multi-property) 2D image, derived from
     vtkImageData() that is saved in the project folder as .vti"""
+
     def __init__(self, *args, **kwargs):
         super(MapImage, self).__init__(*args, **kwargs)
 
@@ -2080,6 +2128,7 @@ class MapImage(Image):
 class XsImage(Image):
     """XsImage is a (possibly multi-property) 2D image, vertically georeferenced in a cross-section,
     derived from vtkImageData(), and is saved in the project folder as .vti"""
+
     def __init__(self, x_section_uid=None, parent=None, *args, **kwargs):
         self.x_section_uid = x_section_uid
         self.parent = parent  # we store a reference to parent - the project - in order to be able to use property methods below
@@ -2109,15 +2158,23 @@ class XsImage(Image):
         x_section_end_y = self.parent.xsect_coll.get_uid_end_y(self.x_section_uid)
         x_section_azimuth = self.parent.xsect_coll.get_uid_azimuth(self.x_section_uid)
         if (0 <= x_section_azimuth <= 90) or (180 < x_section_azimuth <= 270):
-            sense_min = np_sign((self.bounds[0] - x_section_base_x) * (x_section_end_x - x_section_base_x) + (self.bounds[2] - x_section_base_y) * (x_section_end_y - x_section_base_y))
-            sense_max = np_sign((self.bounds[1] - x_section_base_x) * (x_section_end_x - x_section_base_x) + (self.bounds[3] - x_section_base_y) * (x_section_end_y - x_section_base_y))
-            W_min = np_sqrt((self.bounds[0] - x_section_base_x) ** 2 + (self.bounds[2] - x_section_base_y) ** 2) * sense_min
-            W_max = np_sqrt((self.bounds[1] - x_section_base_x) ** 2 + (self.bounds[3] - x_section_base_y) ** 2) * sense_max
+            sense_min = np_sign((self.bounds[0] - x_section_base_x) * (x_section_end_x - x_section_base_x) + (
+                        self.bounds[2] - x_section_base_y) * (x_section_end_y - x_section_base_y))
+            sense_max = np_sign((self.bounds[1] - x_section_base_x) * (x_section_end_x - x_section_base_x) + (
+                        self.bounds[3] - x_section_base_y) * (x_section_end_y - x_section_base_y))
+            W_min = np_sqrt(
+                (self.bounds[0] - x_section_base_x) ** 2 + (self.bounds[2] - x_section_base_y) ** 2) * sense_min
+            W_max = np_sqrt(
+                (self.bounds[1] - x_section_base_x) ** 2 + (self.bounds[3] - x_section_base_y) ** 2) * sense_max
         else:
-            sense_min = np_sign((self.bounds[0] - x_section_base_x) * (x_section_end_x - x_section_base_x) + (self.bounds[3] - x_section_base_y) * (x_section_end_y - x_section_base_y))
-            sense_max = np_sign((self.bounds[1] - x_section_base_x) * (x_section_end_x - x_section_base_x) + (self.bounds[2] - x_section_base_y) * (x_section_end_y - x_section_base_y))
-            W_min = np_sqrt((self.bounds[0] - x_section_base_x) ** 2 + (self.bounds[3] - x_section_base_y) ** 2) * sense_min
-            W_max = np_sqrt((self.bounds[1] - x_section_base_x) ** 2 + (self.bounds[2] - x_section_base_y) ** 2) * sense_max
+            sense_min = np_sign((self.bounds[0] - x_section_base_x) * (x_section_end_x - x_section_base_x) + (
+                        self.bounds[3] - x_section_base_y) * (x_section_end_y - x_section_base_y))
+            sense_max = np_sign((self.bounds[1] - x_section_base_x) * (x_section_end_x - x_section_base_x) + (
+                        self.bounds[2] - x_section_base_y) * (x_section_end_y - x_section_base_y))
+            W_min = np_sqrt(
+                (self.bounds[0] - x_section_base_x) ** 2 + (self.bounds[3] - x_section_base_y) ** 2) * sense_min
+            W_max = np_sqrt(
+                (self.bounds[1] - x_section_base_x) ** 2 + (self.bounds[2] - x_section_base_y) ** 2) * sense_max
         Z_min = self.bounds[4]
         Z_max = self.bounds[5]
         if W_min > W_max:
@@ -2176,9 +2233,11 @@ class XsImage(Image):
         return pv_image_to_texture(self)
 
 
-class Image3D(Image):  # ________________________________________________________________ TO BE IMPLEMENTED - JUST COPY AND PASTE AT THE MOMENT
+class Image3D(
+    Image):  # ________________________________________________________________ TO BE IMPLEMENTED - JUST COPY AND PASTE AT THE MOMENT
     """Image3D is a georeferenced (possibly multi-property) 3D image, derived from
     vtkImageData() that is saved in the project folder as .vti"""
+
     def __init__(self, *args, **kwargs):
         super(Image3D, self).__init__(*args, **kwargs)
 
@@ -2209,9 +2268,9 @@ class Image3D(Image):  # _______________________________________________________
 class Well:
     # [Gabriele] vtkCylinderSource could be used but it is not supported by pyvista
 
-    def __init__(self,ID=None,trace_xyz=None,head_xyz=None, *args, **kwargs):
+    def __init__(self, ID=None, trace_xyz=None, head_xyz=None, *args, **kwargs):
         super(Well, self).__init__(*args, **kwargs)
-        
+
         self._ID = ID
         self._trace = WellTrace()
         self._head = WellMarker()
@@ -2231,59 +2290,56 @@ class Well:
     def preview(self):
         p = Plotter()
         p.add_mesh(self.trace)
-        p.add_mesh(self.head,render_points_as_spheres=True)
+        p.add_mesh(self.head, render_points_as_spheres=True)
         p.show()
 
     @property
     def ID(self):
         return self._ID
-    
+
     @ID.setter
-    def ID(self,ID):
+    def ID(self, ID):
         self._ID = ID
-    
+
     @property
     def head(self):
         return self._head
-    
+
     @head.setter
-    def head(self,head_xyz):
+    def head(self, head_xyz):
         self._head.create_marker(head_xyz)
 
-    
     @property
     def trace(self):
         return self._trace
 
     @trace.setter
-    def trace(self,trace):
-        
+    def trace(self, trace):
+
         self._trace.ShallowCopy(trace)
-        head_p = self._trace.get_field_data('pmarker_head').reshape(-1,3)
+        head_p = self._trace.get_field_data('pmarker_head').reshape(-1, 3)
         self.head = head_p
 
-    
     @property
     def components(self):
-        return [self.head,self.trace]
-    
-    @components.setter
-    def components(self,head,trace):
-        self._head = head
-        self._trace = trace    
-    
-    def add_trace_data(self,name=None,tr_data=None,xyz=None):
-        if xyz is None:
-            self._trace.set_point_data(data_key=name,attribute_matrix=tr_data)
-        else:
-            self._trace.set_field_data(name=name,data=tr_data)
-            self._trace.set_field_data(name=f'p{name}',data=xyz)
+        return [self.head, self.trace]
 
-    
-    def add_marker_data(self,name=None,mrk_pos = None, mrk_data=None):
-        self._trace.set_field_data(name=f'pmarker_{name}',data=mrk_pos) 
-        self._trace.set_field_data(name=f'marker_{name}',data=mrk_data) 
-    
+    @components.setter
+    def components(self, head, trace):
+        self._head = head
+        self._trace = trace
+
+    def add_trace_data(self, name=None, tr_data=None, xyz=None):
+        if xyz is None:
+            self._trace.set_point_data(data_key=name, attribute_matrix=tr_data)
+        else:
+            self._trace.set_field_data(name=name, data=tr_data)
+            self._trace.set_field_data(name=f'p{name}', data=xyz)
+
+    def add_marker_data(self, name=None, mrk_pos=None, mrk_data=None):
+        self._trace.set_field_data(name=f'pmarker_{name}', data=mrk_pos)
+        self._trace.set_field_data(name=f'marker_{name}', data=mrk_data)
+
     def get_marker_names(self):
         field_data = self._trace.get_field_data_keys()
         name_list = []
@@ -2292,7 +2348,7 @@ class Well:
                 if 'pmarker' in data:
                     pass
                 else:
-                    name = data.split('_',1)[1]
+                    name = data.split('_', 1)[1]
                     name_list.append(name)
         return name_list
 
@@ -2308,9 +2364,9 @@ class Well:
                 pass
             else:
                 name_list.append(data)
-        return name_list       
-        
-    # def get_properties_types(self):
+        return name_list
+
+        # def get_properties_types(self):
     #     return [data.ndim for data in list(self.prop_trace_dict.values())]
     # def set_marker(self,xyz):
     #     self.head.points = xyz
@@ -2319,7 +2375,7 @@ class Well:
 
     # def get_head(self):
     #     return self.head
-    
+
     # def set_trace(self,trace):
     #     spline = Spline(trace)
     #     self.trace.ShallowCopy(spline)
@@ -2338,24 +2394,24 @@ class WellTrace(PolyLine):
         well_trace_copy.DeepCopy(self)
         return well_trace_copy
 
-    def create_trace(self,xyz_trace,name=None):
+    def create_trace(self, xyz_trace, name=None):
         # lines = pv_helpers.lines_from_points(xyz_trace)
         lines = Spline(xyz_trace)
-        lines.rename_array('arc_length','MD')
+        lines.rename_array('arc_length', 'MD')
         # lines = lines.compute_arc_length()
-        lines.field_data['name'] = [name]
+        lines.field_data['pname'] = [name]
         lines.field_data['MD'] = lines['MD']
         self.ShallowCopy(lines)
-    
-    def set_head(self,xyz_head=None):
-        self.set_field_data(name='pmarker_head',data=xyz_head)
-    def plot_along_trace(self,prop=None,method='trace',camera=None):
-        
 
-        prop_trace = self.get_field_data(f'p{prop}').reshape(-1,3)
-        
+    def set_head(self, xyz_head=None):
+        self.set_field_data(name='pmarker_head', data=xyz_head)
+
+    def plot_along_trace(self, prop=None, method='trace', camera=None):
+
+        prop_trace = self.get_field_data(f'p{prop}').reshape(-1, 3)
+
         prop_data = self.get_field_data(prop)
-        
+
         # temp = pv_helpers.lines_from_points(prop_trace)
         temp = Spline(prop_trace)
         temp[prop] = prop_data
@@ -2370,7 +2426,7 @@ class WellTrace(PolyLine):
             filter.SetHeight(2.50)
             # filter.UseDefaultNormalOn()
             filter.SetCamera(camera)
-            filter.SetDefaultNormal(0,1,0)
+            filter.SetDefaultNormal(0, 1, 0)
             # filter.Update()
         elif method == 'cylinder':
             filter = vtkTubeFilter()
@@ -2387,50 +2443,58 @@ class WellTrace(PolyLine):
 
         del temp
         return actor
-    
-    def plot_tube(self,prop):
 
-        prop_trace = self.get_field_data(f'p{prop}').reshape(-1,3)
-        prop_data = self.get_field_data(prop).reshape(-1,3)
-        
-        # temp = pv_helpers.lines_from_points(prop_trace)
-        temp = Spline(prop_trace)
-        temp[prop] = prop_data
+    def plot_tube(self, prop):
 
-        filter = vtkTubeFilter()
-        filter.SetInputData(temp)
-        filter.SetRadius(1)
-        filter.SetNumberOfSides(10)
-        filter.Update()
-        out = filter.GetOutput()
-        del temp
-        return out
+        try:
+            prop_trace = self.get_field_data(f'p{prop}').reshape(-1, 3)
+        except AttributeError:
+            print('Data not available')
+            return None
+        else:
+            prop_data = self.get_field_data(prop).reshape(-1, 3)
 
-    def plot_markers(self,prop):
+            # temp = pv_helpers.lines_from_points(prop_trace)
+            temp = Spline(prop_trace)
+            temp[prop] = prop_data
+
+            filter = vtkTubeFilter()
+            filter.SetInputData(temp)
+            filter.SetRadius(1)
+            filter.SetNumberOfSides(10)
+            filter.Update()
+            out = filter.GetOutput()
+            del temp
+            return out
+
+    def plot_markers(self, prop):
         print(self.get_field_data_keys())
-        prop_pos = self.get_field_data(f'pmarker_{prop}').reshape(-1,3)
+        prop_pos = self.get_field_data(f'pmarker_{prop}').reshape(-1, 3)
         prop_data = self.get_field_data(f'marker_{prop}')
-        
-        return [prop_pos,prop_data]
+
+        return [prop_pos, prop_data]
+
 
 class WellMarker(VertexSet):
     def __init__(self, *args, **kwargs):
         super(WellMarker, self).__init__(*args, **kwargs)
+
     #
     def deep_copy(self):
         well_marker_copy = WellMarker()
         well_marker_copy.DeepCopy(self)
         return well_marker_copy
-    
-    def create_marker(self,xyz,name=None):
+
+    def create_marker(self, xyz, name=None):
         self.points = xyz
         self.auto_cells()
-        self.set_field_data(name='name',data=np_array(name))
-        
+        self.set_field_data(name='name', data=np_array(name))
+
 
 class Attitude(VertexSet):
     def __init__(self, *args, **kwargs):
         super(Attitude, self).__init__(*args, **kwargs)
+
     #
     def deep_copy(self):
         att_copy = Attitude()
