@@ -1200,7 +1200,7 @@ def project_2_xs(self):
             entity_dict['topological_type'] = "XsVertexSet"
             out_vtk = XsVertexSet(x_section_uid=xs_uid, parent=self)
             out_vtk.DeepCopy(self.geol_coll.get_uid_vtk_obj(uid))
-        elif self.geol_coll.get_uid_topological_type(uid) == "PolyLine":
+        elif self.geol_coll.get_uid_topological_type(uid) == "PolyLine" or self.geol_coll.get_uid_topological_type(uid) == "XsPolyLine":
             entity_dict['topological_type'] = "XsPolyLine"
             out_vtk = XsPolyLine(x_section_uid=xs_uid, parent=self)
             out_vtk.DeepCopy(self.geol_coll.get_uid_vtk_obj(uid))
