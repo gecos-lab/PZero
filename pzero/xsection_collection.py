@@ -90,7 +90,7 @@ def section_from_azimuth(self):
     """Once the original XSection has been drawn, ask if a set of XSections is needed."""
     section_dict_in_set = {'activate': ['Multiple XSections', 'Draw a set of parallel XSections', 'QCheckBox'],
                            'spacing': ['Spacing', 1000.0, 'QLineEdit'],
-                           'num_xs': ['Number of XSections', 5, 'QLineEdit']}
+                           'num_xs': ['Number of XSections on each side', 5, 'QLineEdit']}
     section_dict_updt_set = general_input_dialog(title='XSection from Azimuth', input_dict=section_dict_in_set)
     if section_dict_updt_set is None:
         """Un-Freeze QT interface"""
@@ -103,7 +103,19 @@ def section_from_azimuth(self):
             action.setEnabled(True)
         return
     name_original_xs = section_dict['name']
-    for xsect in range(section_dict_updt_set['num_xs'] - 1):
+    counter = 0
+    for xsect in range((section_dict_updt_set['num_xs']) * 2):
+        if counter == section_dict_updt_set['num_xs']:
+            section_dict['base_x'] = section_dict['base_x'] + (section_dict_updt_set['num_xs'] * (
+                    section_dict_updt_set['spacing'] * np_cos(section_dict_updt['azimuth'] * np_pi / 180)))
+            section_dict['base_y'] = section_dict['base_y'] - (section_dict_updt_set['num_xs'] * (
+                    section_dict_updt_set['spacing'] * np_sin(section_dict_updt['azimuth'] * np_pi / 180)))
+            section_dict['end_x'] = section_dict['base_x'] - ((section_dict['length'] * np_sin(
+                section_dict['azimuth'] * np_pi / 180)) * section_dict_updt_set['num_xs'])
+            section_dict['end_y'] = section_dict['base_y'] - ((section_dict['length'] * np_cos(
+                section_dict['azimuth'] * np_pi / 180)) * section_dict_updt_set['num_xs'])
+            section_dict_updt_set['spacing'] *= -1
+        counter += 1
         section_dict['name'] = name_original_xs + '_' + str(xsect)
         while True:
             if section_dict['name'] in self.parent.xsect_coll.get_names():
