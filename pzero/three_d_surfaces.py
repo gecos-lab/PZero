@@ -1223,11 +1223,11 @@ def project_2_xs(self):
 
         out_vtk.set_point_data('distance',np_abs(t))
 
-        if entity_dict['topological_type'] == "XsVertexSet":           
+        if entity_dict['topological_type'] == "XsVertexSet":
             # print(out_vtk.get_point_data('distance'))
             if xs_dist <= 0:
                 entity_dict['vtk_obj'] = out_vtk
-                out_uid = self.geol_coll.add_entity_from_dict(entity_dict=entity_dict)
+                self.geol_coll.add_entity_from_dict(entity_dict=entity_dict)
             else:
 
                 thresh = vtk.vtkThresholdPoints()
@@ -1266,7 +1266,19 @@ def project_2_xs(self):
                 connectivity_clean.SetInputConnection(connectivity.GetOutputPort())
                 connectivity_clean.Update()
                 """Check if polyline really exists then create entity"""
-                if connectivity_clean.GetOutput().GetNumberOfPoints() > 0:
+                if xs_dist <= 0:
+                    out_vtk = connectivity_clean.GetOutput()
+                else:
+
+                    thresh = vtk.vtkThresholdPoints()
+                    thresh.SetInputConnection(connectivity_clean.GetOutputPort())
+                    thresh.ThresholdByLower(xs_dist)
+                    thresh.SetInputArrayToProcess(0, 0, 0, vtk.vtkDataObject().FIELD_ASSOCIATION_POINTS,
+                                                  'distance')
+                    thresh.Update()
+
+                    out_vtk = thresh.GetOutput()
+                if out_vtk.GetNumberOfPoints() > 0:
                     # vtkAppendPolyData...
                     entity_dict['vtk_obj'] = XsPolyLine(x_section_uid=xs_uid, parent=self)
                     entity_dict['vtk_obj'].DeepCopy(connectivity_clean.GetOutput())
