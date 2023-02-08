@@ -137,7 +137,6 @@ def move_line(self):
     current_uid = self.selected_uids[0]
     """Editing loop."""
     """For some reason in the following the [:] is needed."""
-    print(np_shape(self.vector_by_mouse_dU))
     if isinstance(self, (ViewMap, NewViewMap)):
         self.clear_selection()
         old_obj = self.parent.geol_coll.get_uid_vtk_obj(current_uid)
@@ -156,16 +155,18 @@ def move_line(self):
     elif isinstance(self, (ViewXsection, NewViewXsection)):
         vector_by_mouse_dX, vector_by_mouse_dY = self.parent.xsect_coll.get_deltaXY_from_deltaW(
             section_uid=self.this_x_section_uid, deltaW=self.vector_by_mouse_dU)
-        self.parent.geol_coll.get_uid_vtk_obj(current_uid).points_X[:] = self.parent.geol_coll.get_uid_vtk_obj(
-            current_uid).points_X[:] + vector_by_mouse_dX
-        self.parent.geol_coll.get_uid_vtk_obj(current_uid).points_Y[:] = self.parent.geol_coll.get_uid_vtk_obj(
-            current_uid).points_Y[:] + vector_by_mouse_dY
-        self.parent.geol_coll.get_uid_vtk_obj(current_uid).points_Z[:] = self.parent.geol_coll.get_uid_vtk_obj(
-            current_uid).points_Z[:] + self.vector_by_mouse_dV
-    """Deselect input line."""
-    self.selected_uids = []
-    self.parent.geology_geom_modified_signal.emit([current_uid])  # emit uid as list to force redraw()
-    self.enable_actions()
+
+        self.clear_selection()
+        old_obj = self.parent.geol_coll.get_uid_vtk_obj(current_uid)
+        trans = vtkTransform()
+        trans.Translate(vector_by_mouse_dX, vector_by_mouse_dY, self.vector_by_mouse_dV)
+        transform_filter = vtkTransformPolyDataFilter()
+        transform_filter.SetTransform(trans)
+        transform_filter.SetInputData(old_obj)
+        transform_filter.Update()
+        new_obj = XsPolyLine(x_section_uid=self.this_x_section_uid, parent=self.parent)
+        new_obj.ShallowCopy(transform_filter.GetOutput())
+        self.parent.geol_coll.replace_vtk(current_uid, new_obj, const_color=True)
 
     """Un-Freeze QT interface"""
     for action in self.findChildren(QAction):

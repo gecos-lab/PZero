@@ -6930,7 +6930,6 @@ class NewView2D(BaseView):
         self.line_dict = None
         self.plotter.enable_image_style()
         self.plotter.enable_parallel_projection()
-        self.trigger_event = 'LeftButtonReleaseEvent'
 
         self.tracer = vtkContourWidget()
         self.tracer.SetInteractor(self.plotter.iren.interactor)
@@ -7057,15 +7056,18 @@ class NewView2D(BaseView):
                 self.run_function = pass_func
 
             def check_length(self, event1, event2):
-                # print('ciao')
+
                 n_nodes = self.GetContourRepresentation().GetNumberOfNodes()
                 if n_nodes == 3:
                     pld = self.GetContourRepresentation().GetContourRepresentationAsPolyData()
                     points = np_array(pld.GetPoints().GetData())[:2, :]
                     self.parent.vector_by_mouse_dU = points[1, 0]-points[0, 0]
-                    self.parent.vector_by_mouse_dV = points[1, 1]-points[1, 0]
+                    if isinstance(self.parent, NewViewMap):
+                        self.parent.vector_by_mouse_dV = points[1, 1]-points[0, 1]
+                    elif isinstance(self.parent, NewViewXsection):
+                        self.parent.vector_by_mouse_dV = points[1, 2] - points[0, 2]
                     self.EnabledOff()
-                    if self.run_function == 'move_line':  # This should be converted so that it passes directly the fucntion as a class parameter
+                    if self.run_function == 'move_line':  # This should be converted so that it passes directly the func as a class parameter
                         from pzero.two_d_lines import move_line
                         move_line(self.parent)
 
