@@ -1,5 +1,6 @@
 from copy import deepcopy
 
+import numpy as np
 from numpy import asarray as np_asarray
 from numpy import vstack as np_vstack
 from numpy import column_stack as np_column_stack
@@ -110,7 +111,7 @@ def sort_line_nodes(self):
     self.parent.geol_coll.get_uid_vtk_obj(
         current_uid).sort_nodes()  # this could be probably done per-part__________________________
     """Deselect input line."""
-    self.selected_uids = []
+    self.clear_selection()
     self.parent.geology_geom_modified_signal.emit([current_uid])  # emit uid as list to force redraw()
     # """Un-Freeze QT interface"""
     # for action in self.findChildren(QAction):
@@ -131,54 +132,37 @@ def move_line(self):
         print(" -- Selected data is not a line -- ")
         return
     """Freeze QT interface"""
-    for action in self.findChildren(QAction):
-        if isinstance(action.parentWidget(), NavigationToolbar) is False:
-            action.setDisabled(True)
+    self.disable_actions()
     """If more than one line is selected, keep the first."""
     current_uid = self.selected_uids[0]
     """Editing loop."""
     """For some reason in the following the [:] is needed."""
     if isinstance(self, (ViewMap, NewViewMap)):
-        self.clear_selection()
-        old_obj = self.parent.geol_coll.get_uid_vtk_obj(current_uid)
-        trans = vtkTransform()
-        trans.Translate(self.vector_by_mouse_dU, self.vector_by_mouse_dV, 0)
-        transform_filter = vtkTransformPolyDataFilter()
-        transform_filter.SetTransform(trans)
-        transform_filter.SetInputData(old_obj)
-        transform_filter.Update()
-        new_obj = PolyLine()
-        new_obj.ShallowCopy(transform_filter.GetOutput())
-        self.parent.geol_coll.replace_vtk(current_uid, new_obj, const_color=True)
-        # self.parent.geol_coll.get_uid_vtk_obj(current_uid).points_X[:] = self.parent.geol_coll.get_uid_vtk_obj(current_uid).points_X[:] + self.vector_by_mouse_dU
-        # self.parent.geol_coll.get_uid_vtk_obj(current_uid).points_Y[:] = self.parent.geol_coll.get_uid_vtk_obj(current_uid).points_Y[:] + self.vector_by_mouse_dV
+        x = self.parent.geol_coll.get_uid_vtk_obj(current_uid).points_X[:] + self.vector_by_mouse_dU
+        y = self.parent.geol_coll.get_uid_vtk_obj(current_uid).points_Y[:] + self.vector_by_mouse_dV
+        z = self.parent.geol_coll.get_uid_vtk_obj(current_uid).points_Z[:]
 
     elif isinstance(self, (ViewXsection, NewViewXsection)):
         vector_by_mouse_dX, vector_by_mouse_dY = self.parent.xsect_coll.get_deltaXY_from_deltaW(
             section_uid=self.this_x_section_uid, deltaW=self.vector_by_mouse_dU)
+        x = self.parent.geol_coll.get_uid_vtk_obj(current_uid).points_X[:] + vector_by_mouse_dX
+        y = self.parent.geol_coll.get_uid_vtk_obj(current_uid).points_Y[:] + vector_by_mouse_dY
+        z = self.parent.geol_coll.get_uid_vtk_obj(current_uid).points_Z[:]+ self.vector_by_mouse_dV
 
-        self.clear_selection()
-        old_obj = self.parent.geol_coll.get_uid_vtk_obj(current_uid)
-        trans = vtkTransform()
-        trans.Translate(vector_by_mouse_dX, vector_by_mouse_dY, self.vector_by_mouse_dV)
-        transform_filter = vtkTransformPolyDataFilter()
-        transform_filter.SetTransform(trans)
-        transform_filter.SetInputData(old_obj)
-        transform_filter.Update()
-        new_obj = XsPolyLine(x_section_uid=self.this_x_section_uid, parent=self.parent)
-        new_obj.ShallowCopy(transform_filter.GetOutput())
-        self.parent.geol_coll.replace_vtk(current_uid, new_obj, const_color=True)
-
+    points = np.stack((x, y, z), axis=1)
+    self.clear_selection()
+    self.parent.geol_coll.get_uid_vtk_obj(current_uid).points = points
+    left_right(current_uid)
+    """Deselect input line."""
+    self.parent.geology_geom_modified_signal.emit([current_uid])  # emit uid as list to force redraw()
     """Un-Freeze QT interface"""
-    for action in self.findChildren(QAction):
-        action.setEnabled(True)
+    self.enable_actions()
 
 
 def rotate_line(self):
     """Rotate the whole line by rigid-body rotation using Shapely."""
     print("Rotate Line. Rotate the whole line by rigid-body rotation. Please insert angle of anticlockwise rotation.")
     """Terminate running event loops"""
-    self.stop_event_loops()
     """Check if a line is selected"""
     if not self.selected_uids:
         print(" -- No input data selected -- ")
@@ -188,9 +172,7 @@ def rotate_line(self):
         print(" -- Selected data is not a line -- ")
         return
     """Freeze QT interface"""
-    for action in self.findChildren(QAction):
-        if isinstance(action.parentWidget(), NavigationToolbar) is False:
-            action.setDisabled(True)
+    self.disable_actions()
     """If more than one line is selected, keep the first."""
     current_uid = self.selected_uids[0]
     """Editing loop."""
@@ -198,14 +180,12 @@ def rotate_line(self):
                                    label="Insert rotation angle in degrees, anticlockwise", default_value=10)
     if angle is None:
         """Un-Freeze QT interface"""
-        for action in self.findChildren(QAction):
-            action.setEnabled(True)
+        self.enable_actions()
         return
-    self.text_msg.set_text("angle anticlockwise: {0:.2f}".format(angle))
-    if isinstance(self, ViewMap):
+    if isinstance(self, (ViewMap, NewViewMap)):
         inU = self.parent.geol_coll.get_uid_vtk_obj(current_uid).points_X
         inV = self.parent.geol_coll.get_uid_vtk_obj(current_uid).points_Y
-    elif isinstance(self, ViewXsection):
+    elif isinstance(self, (ViewXsection, NewViewXsection)):
         inU = self.parent.geol_coll.get_uid_vtk_obj(current_uid).points_W
         inV = self.parent.geol_coll.get_uid_vtk_obj(current_uid).points_Z
     """Stack coordinates in two-columns matrix"""
@@ -217,21 +197,25 @@ def rotate_line(self):
     """Un-stack output coordinates and write them to the empty dictionary."""
     outU = outUV[:, 0]
     outV = outUV[:, 1]
-    if isinstance(self, ViewMap):
-        self.parent.geol_coll.get_uid_vtk_obj(current_uid).points_X[:] = outU
-        self.parent.geol_coll.get_uid_vtk_obj(current_uid).points_Y[:] = outV
-    elif isinstance(self, ViewXsection):
+    if isinstance(self, (ViewMap, NewViewMap)):
+        x = outU
+        y = outV
+        z = self.parent.geol_coll.get_uid_vtk_obj(current_uid).points_Z
+
+    elif isinstance(self, (ViewXsection, NewViewXsection)):
         outX, outY = self.parent.xsect_coll.get_XY_from_W(section_uid=self.this_x_section_uid, W=outU)
-        self.parent.geol_coll.get_uid_vtk_obj(current_uid).points_X[:] = outX
-        self.parent.geol_coll.get_uid_vtk_obj(current_uid).points_Y[:] = outY
-        self.parent.geol_coll.get_uid_vtk_obj(current_uid).points_Z[:] = outV
+        x = outX
+        y = outY
+        z = outV
+
+    points = np.stack((x, y, z), axis=1)
+    self.clear_selection()
+    self.parent.geol_coll.get_uid_vtk_obj(current_uid).points = points
     left_right(current_uid)
     """Deselect input line."""
-    self.selected_uids = []
     self.parent.geology_geom_modified_signal.emit([current_uid])  # emit uid as list to force redraw()
     """Un-Freeze QT interface"""
-    for action in self.findChildren(QAction):
-        action.setEnabled(True)
+    self.enable_actions()
 
 
 def extend_line(self):
@@ -272,7 +256,7 @@ def extend_line(self):
     point_n = inUV.shape[0]
     while 1:
         """Pick points and add them to the line with left clicks. Middle click undoes the last point. Right click saves and exits."""
-        self.text_msg.set_text("Press F to change the end line to extend.")
+
         self.pick_with_mouse()
         """Switch off the selection of the end of the line to extend"""
         end_to_extend.set_visible(False)
@@ -366,31 +350,30 @@ def split_line_line(self):
     """Split line (paper) with another line (scissors). First, select the paper-line then the scissors-line"""
     print("Split line with line. Line to be split has been selected, please select an intersecting line.")
     """Terminate running event loops"""
-    self.stop_event_loops()
     """Check if a line is selected"""
     if not self.selected_uids:
         print(" -- No input data selected -- ")
+        return
+    elif len(self.selected_uids) <= 1:
+        print(" -- Not enough input data selected. Select at least 2 objects -- ")
         return
     if (self.parent.geol_coll.get_uid_topological_type(self.selected_uids[0]) != "PolyLine") and (
             self.parent.geol_coll.get_uid_topological_type(self.selected_uids[0]) != "XsPolyLine"):
         print(" -- Selected data is not a line -- ")
         return
     """Freeze QT interface"""
-    for action in self.findChildren(QAction):
-        if isinstance(action.parentWidget(), NavigationToolbar) is False:
-            action.setDisabled(True)
+    self.disable_actions()
     """If more than one line is selected, keep the first"""
     current_uid_paper = self.selected_uids[0]
-    """Select cut-by line (scissors)."""
-    self.select_actor_with_mouse()
-    current_uid_scissors = self.selected_uids[0]
+    current_uid_scissors = self.selected_uids[1]
+
     """Create deepcopies of the selected entities. Split U- and V-coordinates."""
-    if isinstance(self, ViewMap):
+    if isinstance(self, (ViewMap,NewViewMap)):
         inU_paper = deepcopy(self.parent.geol_coll.get_uid_vtk_obj(current_uid_paper).points[:, 0])
         inV_paper = deepcopy(self.parent.geol_coll.get_uid_vtk_obj(current_uid_paper).points[:, 1])
         inU_scissors = deepcopy(self.parent.geol_coll.get_uid_vtk_obj(current_uid_scissors).points[:, 0])
         inV_scissors = deepcopy(self.parent.geol_coll.get_uid_vtk_obj(current_uid_scissors).points[:, 1])
-    elif isinstance(self, ViewXsection):
+    elif isinstance(self, (ViewXsection,NewViewXsection)):
         inU_paper = deepcopy(self.parent.geol_coll.get_uid_vtk_obj(current_uid_paper).points_W)
         inV_paper = deepcopy(self.parent.geol_coll.get_uid_vtk_obj(current_uid_paper).points_Z)
         inU_scissors = deepcopy(self.parent.geol_coll.get_uid_vtk_obj(current_uid_scissors).points_W)
@@ -408,8 +391,7 @@ def split_line_line(self):
                       shp_line_in_scissors)  # lines must include all line parts not affected by splitting and two parts for the split line__________
     else:  # handles the case when the LineString share a linear path and, for the moment, exists the tool
         """Un-Freeze QT interface"""
-        for action in self.findChildren(QAction):
-            action.setEnabled(True)
+        self.enable_actions()
         return
     replace = 1  # replace = 1 for the first line to operate replace_vtk
     uids = [current_uid_scissors]
@@ -431,10 +413,10 @@ def split_line_line(self):
                 0]
         new_line['scenario'] = \
             self.parent.geol_coll.df.loc[self.parent.geol_coll.df['uid'] == current_uid_paper, 'scenario'].values[0]
-        if isinstance(self, ViewMap):
+        if isinstance(self, (ViewMap,NewViewMap)):
             new_line['x_section'] = None
             new_line['vtk_obj'] = PolyLine()
-        elif isinstance(self, ViewXsection):
+        elif isinstance(self, (ViewXsection, NewViewXsection)):
             new_line['x_section'] = self.this_x_section_uid
             new_line['vtk_obj'] = XsPolyLine(self.this_x_section_uid, parent=self.parent)
         outUV = deepcopy(np_array(line))
@@ -442,11 +424,11 @@ def split_line_line(self):
         outU = outUV[:, 0]
         outV = outUV[:, 1]
         """Convert local coordinates to XYZ ones."""
-        if isinstance(self, ViewMap):
+        if isinstance(self, (ViewMap,NewViewMap)):
             outX = outU
             outY = outV
             outZ = np_zeros(np_shape(outX))
-        elif isinstance(self, ViewXsection):
+        elif isinstance(self, (ViewXsection, NewViewXsection)):
             outX, outY = self.parent.xsect_coll.get_XY_from_W(section_uid=self.this_x_section_uid, W=outU)
             outZ = outV
         """Create new vtk objects"""
@@ -468,11 +450,10 @@ def split_line_line(self):
         else:
             print("Empty object")
     """Deselect input line and force redraw"""
-    self.selected_uids = []
+    self.clear_selection()
     self.parent.geology_geom_modified_signal.emit(uids)  # emit uid as list to force redraw()
     """Un-Freeze QT interface"""
-    for action in self.findChildren(QAction):
-        action.setEnabled(True)
+    self.enable_actions()
 
 
 def split_line_existing_point(self):
@@ -504,7 +485,7 @@ def split_line_existing_point(self):
     current_line_U_px, current_line_V_px = current_line_UV_px.T
     """Select editable vertex."""
     self.pick_with_mouse()
-    self.text_msg.set_text("Pick vertex with left click or exit with any other button.")
+
     if self.pick_with_mouse_button != 1:
         """Un-Freeze QT interface"""
         for action in self.findChildren(QAction):
@@ -617,34 +598,32 @@ def merge_lines(self):
     """Merge two (contiguous or non-contiguous) lines."""  # lines must include all line parts not affected by splitting and two parts for the split line__________
     print("Merge two lines. First line has been selected, please select second line for merging.")
     """Terminate running event loops"""
-    self.stop_event_loops()
     """Check if a line is selected"""
     if not self.selected_uids:
         print(" -- No input data selected -- ")
+        return
+    elif len(self.selected_uids) <= 1:
+        print(" -- Not enough input data selected. Select at least 2 objects -- ")
         return
     if (self.parent.geol_coll.get_uid_topological_type(self.selected_uids[0]) != "PolyLine") and (
             self.parent.geol_coll.get_uid_topological_type(self.selected_uids[0]) != "XsPolyLine"):
         print(" -- Selected data is not a line -- ")
         return
     """Freeze QT interface"""
-    for action in self.findChildren(QAction):
-        if isinstance(action.parentWidget(), NavigationToolbar) is False:
-            action.setDisabled(True)
-    """If more than one line is selected, keep the first"""
+    self.disable_actions()
+
     current_uid_one = self.selected_uids[0]
-    """Select the second line"""
-    self.select_actor_with_mouse()
-    current_uid_two = self.selected_uids[0]
+    current_uid_two = self.selected_uids[1]
     """Create empty dictionary for the output line."""
     new_line = deepcopy(self.parent.geol_coll.geological_entity_dict)
-    if isinstance(self, ViewMap):
+    if isinstance(self, (ViewMap,NewViewMap)):
         new_line['vtk_obj'] = PolyLine()
         new_line['x_section'] = None
         inU_one = deepcopy(self.parent.geol_coll.get_uid_vtk_obj(current_uid_one).points[:, 0])
         inV_one = deepcopy(self.parent.geol_coll.get_uid_vtk_obj(current_uid_one).points[:, 1])
         inU_two = deepcopy(self.parent.geol_coll.get_uid_vtk_obj(current_uid_two).points[:, 0])
         inV_two = deepcopy(self.parent.geol_coll.get_uid_vtk_obj(current_uid_two).points[:, 1])
-    elif isinstance(self, ViewXsection):
+    elif isinstance(self, (ViewXsection,NewViewXsection)):
         new_line['vtk_obj'] = XsPolyLine(self.this_x_section_uid, parent=self.parent)
         new_line['x_section'] = self.this_x_section_uid
         inU_one = deepcopy(self.parent.geol_coll.get_uid_vtk_obj(current_uid_one).points_W)
@@ -684,17 +663,16 @@ def merge_lines(self):
     else:
         print("Polyline is not simple, it self-intersects")
         """Un-Freeze QT interface"""
-        for action in self.findChildren(QAction):
-            action.setEnabled(True)
+        self.disable_actions()
         return
     """Un-stack output coordinates and write them to the empty dictionary."""
     outU = outUV[:, 0]
     outV = outUV[:, 1]
-    if isinstance(self, ViewMap):
+    if isinstance(self, (ViewMap,NewViewMap)):
         outX = outU
         outY = outV
         outZ = np_zeros(np_shape(outX))
-    elif isinstance(self, ViewXsection):
+    elif isinstance(self, (ViewXsection,NewViewXsection)):
         outX, outY = self.parent.xsect_coll.get_XY_from_W(section_uid=self.this_x_section_uid, W=outU)
         outZ = outV
     new_points = np_column_stack((outX, outY, outZ))
@@ -707,12 +685,11 @@ def merge_lines(self):
     else:
         print("Empty object")
     """Deselect input line."""
+    self.clear_selection()
     self.parent.geol_coll.remove_entity(current_uid_two)
-    self.selected_uids = []
     self.parent.geology_geom_modified_signal.emit([current_uid_one])  # emit uid as list to force redraw()
     """Un-Freeze QT interface"""
-    for action in self.findChildren(QAction):
-        action.setEnabled(True)
+    self.enable_actions()
 
 
 def snap_line(self):
@@ -720,35 +697,33 @@ def snap_line(self):
     depending on the Tolerance parameter."""
     print("Snap line to line. Line to be snapped has been selected, please select second line.")
     """Terminate running event loops"""
-    self.stop_event_loops()
     """Check if a line is selected"""
     if not self.selected_uids:
         print(" -- No input data selected -- ")
+        return
+    elif len(self.selected_uids) <= 1:
+        print(" -- Not enough input data selected. Select at least 2 objects -- ")
         return
     if (self.parent.geol_coll.get_uid_topological_type(self.selected_uids[0]) != "PolyLine") and (
             self.parent.geol_coll.get_uid_topological_type(self.selected_uids[0]) != "XsPolyLine"):
         print(" -- Selected data is not a line -- ")
         return
     """Freeze QT interface"""
-    for action in self.findChildren(QAction):
-        if isinstance(action.parentWidget(), NavigationToolbar) is False:
-            action.setDisabled(True)
+    self.disable_actions()
     """If more than one line is selected, keep the first"""
     current_uid_snap = self.selected_uids[0]
-    """Select line used as the goal of the snapping tool."""
-    self.select_actor_with_mouse()
-    current_uid_goal = self.selected_uids[0]
+    current_uid_goal = self.selected_uids[1]
     """Create empty dictionary for the output line."""
     new_line = deepcopy(self.parent.geol_coll.geological_entity_dict)
     """Editing loop. Get coordinates of the line to be modified (snap-line)."""
-    if isinstance(self, ViewMap):
+    if isinstance(self, (ViewMap,NewViewMap)):
         new_line['vtk_obj'] = PolyLine()
         new_line['x_section'] = None
         inU_snap = deepcopy(self.parent.geol_coll.get_uid_vtk_obj(current_uid_snap).points[:, 0])
         inV_snap = deepcopy(self.parent.geol_coll.get_uid_vtk_obj(current_uid_snap).points[:, 1])
         inU_goal = deepcopy(self.parent.geol_coll.get_uid_vtk_obj(current_uid_goal).points[:, 0])
         inV_goal = deepcopy(self.parent.geol_coll.get_uid_vtk_obj(current_uid_goal).points[:, 1])
-    elif isinstance(self, ViewXsection):
+    elif isinstance(self, (ViewXsection,NewViewXsection)):
         new_line['vtk_obj'] = XsPolyLine(self.this_x_section_uid, parent=self.parent)
         new_line['x_section'] = self.this_x_section_uid
         inU_snap = deepcopy(self.parent.geol_coll.get_uid_vtk_obj(current_uid_snap).points_W)
@@ -765,12 +740,11 @@ def snap_line(self):
     Little tolerance risks of not snapping distant lines, while too big tolerance snaps to the wrong vertex and
     not to the nearest one"""
     if shp_line_in_snap.is_simple and shp_line_in_goal.is_simple:
-        shp_line_out_snap = snap(shp_line_in_snap, shp_line_in_goal, 150)
+        shp_line_out_snap = snap(shp_line_in_snap, shp_line_in_goal, 70)
     else:
         print("Polyline is not simple, it self-intersects")
         """Un-Freeze QT interface"""
-        for action in self.findChildren(QAction):
-            action.setEnabled(True)
+        self.enable_actions()
         return
     shp_line_out_diff = shp_line_out_snap.difference(shp_line_in_goal)  # eliminate the shared path that Snap may create
     outUV = deepcopy(np_array(shp_line_out_diff))
@@ -778,11 +752,11 @@ def snap_line(self):
     outU = outUV[:, 0]
     outV = outUV[:, 1]
     """Convert local coordinates to XYZ ones."""
-    if isinstance(self, ViewMap):
+    if isinstance(self, (ViewMap,NewViewMap)):
         outX = outU
         outY = outV
         outZ = np_zeros(np_shape(outX))
-    elif isinstance(self, ViewXsection):
+    elif isinstance(self, (ViewXsection,NewViewXsection)):
         outX, outY = self.parent.xsect_coll.get_XY_from_W(section_uid=self.this_x_section_uid, W=outU)
         outZ = outV
     """Create new vtk objects"""
@@ -796,19 +770,17 @@ def snap_line(self):
     else:
         print("Empty object")
     """Deselect input line and force redraw"""
-    self.selected_uids = []
+    self.clear_selection()
     self.parent.geology_geom_modified_signal.emit(
         [current_uid_snap, current_uid_goal])  # emit uid as list to force redraw()
     """Un-Freeze QT interface"""
-    for action in self.findChildren(QAction):
-        action.setEnabled(True)
+    self.enable_actions()
 
 
 def resample_line_distance(self):  # this must be done per-part_______________________________________________________
     """Resample selected line with constant spacing. Distance of spacing is required"""
     print("Resample line. Define constant spacing for resampling.")
     """Terminate running event loops"""
-    self.stop_event_loops()
     """Check if a line is selected"""
     if not self.selected_uids:
         print(" -- No input data selected -- ")
@@ -818,9 +790,7 @@ def resample_line_distance(self):  # this must be done per-part_________________
         print(" -- Selected data is not a line -- ")
         return
     """Freeze QT interface"""
-    for action in self.findChildren(QAction):
-        if isinstance(action.parentWidget(), NavigationToolbar) is False:
-            action.setDisabled(True)
+    self.disable_actions()
     """If more than one line is selected, keep the first"""
     current_uid = self.selected_uids[0]
     """Ask for distance for evenly spacing resampling"""
@@ -837,12 +807,12 @@ def resample_line_distance(self):  # this must be done per-part_________________
         distance_delta = 20
     """Create empty dictionary for the output line"""
     new_line = deepcopy(self.parent.geol_coll.geological_entity_dict)
-    if isinstance(self, ViewMap):
+    if isinstance(self, (ViewMap,NewViewMap)):
         new_line['topological_type'] = 'PolyLine'
         new_line['x_section'] = None
         inU = deepcopy(self.parent.geol_coll.get_uid_vtk_obj(current_uid).points[:, 0])
         inV = deepcopy(self.parent.geol_coll.get_uid_vtk_obj(current_uid).points[:, 1])
-    elif isinstance(self, ViewXsection):
+    elif isinstance(self, (ViewXsection,NewViewXsection)):
         new_line['topological_type'] = 'XsPolyLine'
         new_line['x_section'] = self.this_x_section_uid
         inU = deepcopy(self.parent.geol_coll.get_uid_vtk_obj(current_uid).points_W)
@@ -861,12 +831,12 @@ def resample_line_distance(self):  # this must be done per-part_________________
     """Un-stack output coordinates and write them to the empty dictionary."""
     outU = outUV[:, 0]
     outV = outUV[:, 1]
-    if isinstance(self, ViewMap):
+    if isinstance(self, (ViewMap,NewViewMap)):
         outX = outU
         outY = outV
         outZ = np_zeros(np_shape(outX))
         new_line['vtk_obj'] = PolyLine()
-    elif isinstance(self, ViewXsection):
+    elif isinstance(self, (ViewXsection,NewViewXsection)):
         outX, outY = self.parent.xsect_coll.get_XY_from_W(section_uid=self.this_x_section_uid, W=outU)
         outZ = outV
         new_line['vtk_obj'] = XsPolyLine(self.this_x_section_uid, parent=self.parent)
@@ -880,19 +850,16 @@ def resample_line_distance(self):  # this must be done per-part_________________
     else:
         print("Empty object")
     """Deselect input line."""
-    self.selected_uids = []
+    self.clear_selection()
     self.parent.geology_geom_modified_signal.emit([current_uid])  # emit uid as list to force redraw()
     """Un-Freeze QT interface"""
-    for action in self.findChildren(QAction):
-        action.setEnabled(True)
+    self.enable_actions()
 
 
-def resample_line_number_points(
-        self):  # this must be done per-part_______________________________________________________
+def resample_line_number_points(self):  # this must be done per-part___________________________________________________
     """Resample selected line with constant spacing. Number of points to divide the line in is required"""
     print("Resample line. Define number of vertices to create on the line.")
     """Terminate running event loops"""
-    self.stop_event_loops()
     """Check if a line is selected"""
     if not self.selected_uids:
         print(" -- No input data selected -- ")
@@ -902,9 +869,7 @@ def resample_line_number_points(
         print(" -- Selected data is not a line -- ")
         return
     """Freeze QT interface"""
-    for action in self.findChildren(QAction):
-        if isinstance(action.parentWidget(), NavigationToolbar) is False:
-            action.setDisabled(True)
+    self.disable_actions()
     """If more than one line is selected, keep the first"""
     current_uid = self.selected_uids[0]
     """Ask for the number of points for evenly spacing resampling"""
@@ -912,8 +877,7 @@ def resample_line_number_points(
                                               label="Insert number of points", default_value="Number")
     if number_of_points is None or isinstance(number_of_points, str):
         """Un-Freeze QT interface"""
-        for action in self.findChildren(QAction):
-            action.setEnabled(True)
+        self.enable_actions()
         return
     else:
         number_of_points = int(number_of_points)
@@ -923,12 +887,12 @@ def resample_line_number_points(
     """Create empty dictionary for the output line"""
     new_line = deepcopy(self.parent.geol_coll.geological_entity_dict)
     """Define topological_type and x_section. Get coordinates of input line"""
-    if isinstance(self, ViewMap):
+    if isinstance(self, (ViewMap,NewViewMap)):
         new_line['topological_type'] = 'PolyLine'
         new_line['x_section'] = None
         inU = deepcopy(self.parent.geol_coll.get_uid_vtk_obj(current_uid).points[:, 0])
         inV = deepcopy(self.parent.geol_coll.get_uid_vtk_obj(current_uid).points[:, 1])
-    elif isinstance(self, ViewXsection):
+    elif isinstance(self, (ViewXsection,NewViewXsection)):
         new_line['topological_type'] = 'XsPolyLine'
         new_line['x_section'] = self.this_x_section_uid
         inU = deepcopy(self.parent.geol_coll.get_uid_vtk_obj(current_uid).points_W)
@@ -944,12 +908,12 @@ def resample_line_number_points(
     """Un-stack output coordinates and write them to the empty dictionary."""
     outU = outUV[:, 0]
     outV = outUV[:, 1]
-    if isinstance(self, ViewMap):
+    if isinstance(self, (ViewMap,NewViewMap)):
         outX = outU
         outY = outV
         outZ = np_zeros(np_shape(outX))
         new_line['vtk_obj'] = PolyLine()
-    elif isinstance(self, ViewXsection):
+    elif isinstance(self, (ViewXsection,NewViewXsection)):
         outX, outY = self.parent.xsect_coll.get_XY_from_W(section_uid=self.this_x_section_uid, W=outU)
         outZ = outV
         new_line['vtk_obj'] = XsPolyLine(self.this_x_section_uid, parent=self.parent)
@@ -963,19 +927,18 @@ def resample_line_number_points(
     else:
         print("Empty object")
     """Deselect input line."""
-    self.selected_uids = []
+    self.clear_selection()
     self.parent.geology_geom_modified_signal.emit([current_uid])  # emit uid as list to force redraw()
     """Un-Freeze QT interface"""
-    for action in self.findChildren(QAction):
-        action.setEnabled(True)
+    self.enable_actions()
 
 
 def simplify_line(self):  # this must be done per-part_______________________________________________________
     """Return a simplified representation of the line. Permits the user to choose a value for the Tolerance parameter."""
-    print(
-        "Simplify line. Define tolerance value: small values result in more vertices and great similarity with the input line.")
+    print("Simplify line. Define tolerance value: "
+          "small values result in more vertices and great similarity with the input line.")
     """Terminate running event loops"""
-    self.stop_event_loops()
+
     """Check if a line is selected"""
     if not self.selected_uids:
         print(" -- No input data selected -- ")
@@ -985,9 +948,7 @@ def simplify_line(self):  # this must be done per-part__________________________
         print(" -- Selected data is not a line -- ")
         return
     """Freeze QT interface"""
-    for action in self.findChildren(QAction):
-        if isinstance(action.parentWidget(), NavigationToolbar) is False:
-            action.setDisabled(True)
+    self.disable_actions()
     """If more than one line is selected, keep the first"""
     current_uid = self.selected_uids[0]
     """Ask for the tolerance parameter"""
@@ -995,20 +956,19 @@ def simplify_line(self):  # this must be done per-part__________________________
                                          default_value="0.1")
     if tolerance_p is None:
         """Un-Freeze QT interface"""
-        for action in self.findChildren(QAction):
-            action.setEnabled(True)
+        self.enable_actions()
         return
     if tolerance_p <= 0:
         tolerance_p = 0.1
     """Editing loop. Create empty dictionary for the output line"""
     new_line = deepcopy(self.parent.geol_coll.geological_entity_dict)
     """Get coordinates of input line."""
-    if isinstance(self, ViewMap):
+    if isinstance(self, (ViewMap,NewViewMap)):
         new_line['topological_type'] = 'PolyLine'
         new_line['x_section'] = None
         inU = deepcopy(self.parent.geol_coll.get_uid_vtk_obj(current_uid).points[:, 0])
         inV = deepcopy(self.parent.geol_coll.get_uid_vtk_obj(current_uid).points[:, 1])
-    elif isinstance(self, ViewXsection):
+    elif isinstance(self, (ViewXsection,NewViewXsection)):
         new_line['topological_type'] = 'XsPolyLine'
         new_line['x_section'] = self.this_x_section_uid
         inU = deepcopy(self.parent.geol_coll.get_uid_vtk_obj(current_uid).points_W)
@@ -1022,12 +982,12 @@ def simplify_line(self):  # this must be done per-part__________________________
     """Un-stack output coordinates and write them to the empty dictionary."""
     outU = outUV[:, 0]
     outV = outUV[:, 1]
-    if isinstance(self, ViewMap):
+    if isinstance(self, (ViewMap,NewViewMap)):
         outX = outU
         outY = outV
         outZ = np_zeros(np_shape(outX))
         new_line['vtk_obj'] = PolyLine()
-    elif isinstance(self, ViewXsection):
+    elif isinstance(self, (ViewXsection,NewViewXsection)):
         outX, outY = self.parent.xsect_coll.get_XY_from_W(section_uid=self.this_x_section_uid, W=outU)
         outZ = outV
         new_line['vtk_obj'] = XsPolyLine(self.this_x_section_uid, parent=self.parent)
@@ -1042,11 +1002,10 @@ def simplify_line(self):  # this must be done per-part__________________________
     else:
         print("Empty object")
     """Deselect input line."""
-    self.selected_uids = []
+    self.clear_selection()
     self.parent.geology_geom_modified_signal.emit([current_uid])  # emit uid as list to force redraw()
     """Un-Freeze QT interface"""
-    for action in self.findChildren(QAction):
-        action.setEnabled(True)
+    self.enable_actions()
 
 
 def copy_parallel(self):  # this must be done per-part_______________________________________________________
@@ -1055,7 +1014,7 @@ def copy_parallel(self):  # this must be done per-part__________________________
     a positive distance creates a line shifted upwards and to the left."""
     print("Copy Parallel. Create a line copied and translated.")
     """Terminate running event loops"""
-    self.stop_event_loops()
+
     """Check if a line is selected"""
     if not self.selected_uids:
         print(" -- No input data selected -- ")
@@ -1065,9 +1024,7 @@ def copy_parallel(self):  # this must be done per-part__________________________
         print(" -- Selected data is not a line -- ")
         return
     """Freeze QT interface"""
-    for action in self.findChildren(QAction):
-        if isinstance(action.parentWidget(), NavigationToolbar) is False:
-            action.setDisabled(True)
+    self.disable_actions()
     """If more than one line is selected, keep the first."""
     input_uid = self.selected_uids[0]
     """IN THE FUTURE add a test to check that the selected feature is a geological feature"""
@@ -1076,13 +1033,12 @@ def copy_parallel(self):  # this must be done per-part__________________________
                                       default_value=100)
     if distance is None:
         """Un-Freeze QT interface"""
-        for action in self.findChildren(QAction):
-            action.setEnabled(True)
+        self.enable_actions()
         return
-    self.text_msg.set_text("distance: {0:.2f}".format(distance))
+
     in_line_name = self.parent.geol_coll.df.loc[self.parent.geol_coll.df['uid'] == input_uid, 'name'].values[0]
     out_line_name = in_line_name + '_para_' + '%d' % distance
-    self.text_msg.set_text("New line name: " + out_line_name)
+
     """Create empty dictionary for the output line and set name and geological_type.
     IN THE FUTURE see if other metadata should be automatically set."""
     line_dict = deepcopy(self.parent.geol_coll.geological_entity_dict)
@@ -1091,39 +1047,34 @@ def copy_parallel(self):  # this must be done per-part__________________________
         self.parent.geol_coll.df.loc[self.parent.geol_coll.df['uid'] == input_uid, 'geological_type'].values[0]
     line_dict['geological_feature'] = self.parent.geol_coll.get_uid_geological_feature(self.selected_uids[0])
     line_dict['scenario'] = self.parent.geol_coll.get_uid_scenario(self.selected_uids[0])
-    if isinstance(self, ViewMap):
+    if isinstance(self, (ViewMap,NewViewMap)):
         line_dict['vtk_obj'] = PolyLine()
         line_dict['topological_type'] = 'PolyLine'
-    elif isinstance(self, ViewXsection):
+    elif isinstance(self, (ViewXsection,NewViewXsection)):
         line_dict['vtk_obj'] = XsPolyLine(self.this_x_section_uid, parent=self.parent)
         line_dict['topological_type'] = 'XsPolyLine'
         line_dict['x_section'] = self.this_x_section_uid
     """Get coordinates of input line."""
-    if isinstance(self, ViewMap):
+    if isinstance(self, (ViewMap,NewViewMap)):
         inU = self.parent.geol_coll.get_uid_vtk_obj(input_uid).points_X
         inV = self.parent.geol_coll.get_uid_vtk_obj(input_uid).points_Y
-    elif isinstance(self, ViewXsection):
+    elif isinstance(self, (ViewXsection,NewViewXsection)):
         inU = self.parent.geol_coll.get_uid_vtk_obj(input_uid).points_W
         inV = self.parent.geol_coll.get_uid_vtk_obj(input_uid).points_Z
     """Stack coordinates in two-columns matrix"""
     print("np_column_stack((inU, inV))")
-    tic()
     inUV = np_column_stack((inU, inV))
-    toc()
     """Deselect input line."""
-    self.selected_uids = []
-    print("self.parent.geology_geom_modified_signal.emit([input_uid])")
-    tic()
+    self.clear_selection()
     self.parent.geology_geom_modified_signal.emit([input_uid])  # emit uid as list to force redraw()
-    toc()
     """Run the Shapely function."""
     shp_line_in = LineString(inUV)
     print("shp_line_in.parallel_offset")
     if shp_line_in.is_simple:
-        tic()
+
         shp_line_out = shp_line_in.parallel_offset(distance, 'left', resolution=16,
                                                    join_style=1)  # parallel folds are obtained with join_style=1
-        toc()
+
         outUV = np_array(shp_line_out)
         """Un-stack output coordinates and write them to the empty dictionary."""
         outU = outUV[:, 0]
@@ -1134,18 +1085,18 @@ def copy_parallel(self):  # this must be done per-part__________________________
         for action in self.findChildren(QAction):
             action.setEnabled(True)
         return
-    if isinstance(self, ViewMap):
+    if isinstance(self, (ViewMap,NewViewMap)):
         outX = outU
         outY = outV
         outZ = np_zeros(np_shape(outX))
-    elif isinstance(self, ViewXsection):
+    elif isinstance(self, (ViewXsection,NewViewXsection)):
         outX, outY = self.parent.xsect_coll.get_XY_from_W(section_uid=self.this_x_section_uid, W=outU)
         outZ = outV
     """Stack coordinates in two-columns matrix and write to vtk object."""
     print("outXYZ = np_column_stack((outX, outY, outZ))")
-    tic()
+
     outXYZ = np_column_stack((outX, outY, outZ))
-    toc()
+
     line_dict['vtk_obj'].points = outXYZ
     line_dict['vtk_obj'].auto_cells()
     """Create entity from the dictionary and run left_right."""
@@ -1155,8 +1106,7 @@ def copy_parallel(self):  # this must be done per-part__________________________
     else:
         print("Empty object")
     """Un-Freeze QT interface"""
-    for action in self.findChildren(QAction):
-        action.setEnabled(True)
+    self.enable_actions()
 
 
 def copy_kink(self):  # this must be done per-part_______________________________________________________
@@ -1165,7 +1115,6 @@ def copy_kink(self):  # this must be done per-part______________________________
     a positive distance creates a line shifted upwards and to the left."""
     print("Copy Kink. Create a line copied and translated.")
     """Terminate running event loops"""
-    self.stop_event_loops()
     """Check if a line is selected"""
     if not self.selected_uids:
         print(" -- No input data selected -- ")
@@ -1175,9 +1124,7 @@ def copy_kink(self):  # this must be done per-part______________________________
         print(" -- Selected data is not a line -- ")
         return
     """Freeze QT interface"""
-    for action in self.findChildren(QAction):
-        if isinstance(action.parentWidget(), NavigationToolbar) is False:
-            action.setDisabled(True)
+    self.disable_actions()
     """If more than one line is selected, keep the first."""
     input_uid = self.selected_uids[0]
     """IN THE FUTURE add a test to check that the selected feature is a geological feature"""
@@ -1186,13 +1133,12 @@ def copy_kink(self):  # this must be done per-part______________________________
                                       default_value=100)
     if distance is None:
         """Un-Freeze QT interface"""
-        for action in self.findChildren(QAction):
-            action.setEnabled(True)
+        self.enable_actions()
         return
-    self.text_msg.set_text("distance: {0:.2f}".format(distance))
+
     in_line_name = self.parent.geol_coll.df.loc[self.parent.geol_coll.df['uid'] == input_uid, 'name'].values[0]
     out_line_name = in_line_name + '_kink_' + '%d' % distance
-    self.text_msg.set_text("New line name: " + out_line_name)
+
     """Create empty dictionary for the output line and set name and geological_type.
     IN THE FUTURE see if other metadata should be automatically set."""
     line_dict = deepcopy(self.parent.geol_coll.geological_entity_dict)
@@ -1201,24 +1147,24 @@ def copy_kink(self):  # this must be done per-part______________________________
         self.parent.geol_coll.df.loc[self.parent.geol_coll.df['uid'] == input_uid, 'geological_type'].values[0]
     line_dict['geological_feature'] = self.parent.geol_coll.get_uid_geological_feature(self.selected_uids[0])
     line_dict['scenario'] = self.parent.geol_coll.get_uid_scenario(self.selected_uids[0])
-    if isinstance(self, ViewMap):
+    if isinstance(self, (ViewMap,NewViewMap)):
         line_dict['vtk_obj'] = PolyLine()
         line_dict['topological_type'] = 'PolyLine'
-    elif isinstance(self, ViewXsection):
+    elif isinstance(self, (ViewXsection,NewViewXsection)):
         line_dict['vtk_obj'] = XsPolyLine(self.this_x_section_uid, parent=self.parent)
         line_dict['topological_type'] = 'XsPolyLine'
         line_dict['x_section'] = self.this_x_section_uid
     """Get coordinates of input line."""
-    if isinstance(self, ViewMap):
+    if isinstance(self, (ViewMap,NewViewMap)):
         inU = self.parent.geol_coll.get_uid_vtk_obj(input_uid).points_X
         inV = self.parent.geol_coll.get_uid_vtk_obj(input_uid).points_Y
-    elif isinstance(self, ViewXsection):
+    elif isinstance(self, (ViewXsection,NewViewXsection)):
         inU = self.parent.geol_coll.get_uid_vtk_obj(input_uid).points_W
         inV = self.parent.geol_coll.get_uid_vtk_obj(input_uid).points_Z
     """Stack coordinates in two-columns matrix"""
     inUV = np_column_stack((inU, inV))
     """Deselect input line."""
-    self.selected_uids = []
+    self.clear_selection()
     self.parent.geology_geom_modified_signal.emit([input_uid])  # emit uid as list to force redraw()
     """Run the Shapely function."""
     shp_line_in = LineString(inUV)
@@ -1232,14 +1178,13 @@ def copy_kink(self):  # this must be done per-part______________________________
     else:
         print("Polyline is not simple, it self-intersects")
         """Un-Freeze QT interface"""
-        for action in self.findChildren(QAction):
-            action.setEnabled(True)
+        self.enable_actions()
         return
-    if isinstance(self, ViewMap):
+    if isinstance(self, (ViewMap,NewViewMap)):
         outX = outU
         outY = outV
         outZ = np_zeros(np_shape(outX))
-    elif isinstance(self, ViewXsection):
+    elif isinstance(self, (ViewXsection,NewViewXsection)):
         outX, outY = self.parent.xsect_coll.get_XY_from_W(section_uid=self.this_x_section_uid, W=outU)
         outZ = outV
     """Stack coordinates in two-columns matrix and write to vtk object."""
@@ -1253,8 +1198,7 @@ def copy_kink(self):  # this must be done per-part______________________________
     else:
         print("Empty object")
     """Un-Freeze QT interface"""
-    for action in self.findChildren(QAction):
-        action.setEnabled(True)
+    self.enable_actions()
 
 
 def copy_similar(self):  # this must be done per-part_______________________________________________________
@@ -1325,7 +1269,7 @@ def copy_similar(self):  # this must be done per-part___________________________
     in_line_name = self.parent.geol_coll.df.loc[self.parent.geol_coll.df['uid'] == input_uid, 'name'].values[0]
     distance = self.vector_by_mouse_length
     out_line_name = in_line_name + '_simi_' + '%d' % distance
-    self.text_msg.set_text("New line name: " + out_line_name)
+
     line_dict['name'] = out_line_name
     """Create entity from the dictionary and run left_right."""
     output_uid = self.parent.geol_coll.add_entity_from_dict(line_dict)
