@@ -817,10 +817,10 @@ def intersection_xs(self):
     xsect_names = input_checkbox_dialog(title="Intersection XSection", label="Choose XSections to intersect", choice_list=self.xsect_coll.get_names())
     if xsect_names is None:
         return
-    xsect_uids = []
-    for name in xsect_names:
-        xsect_uids.append(self.xsect_coll.df.loc[self.xsect_coll.df['name'] == name, 'uid'].values[0])
-    for xsect_uid in xsect_uids:
+    # xsect_uids = []
+    for sec_name in xsect_names: #this is redundant
+        xsect_uid = self.xsect_coll.df.loc[self.xsect_coll.df['name'] == sec_name, 'uid'].values[0]
+        postfix = f'_int_{sec_name}'
         if self.shown_table == "tabGeology":
             for uid in input_uids:
                 if self.geol_coll.get_uid_topological_type(uid) in ["PolyLine", "XsPolyLine"]:
@@ -833,11 +833,12 @@ def intersection_xs(self):
                         cutter.Update()
                         if cutter.GetOutput().GetNumberOfPoints() > 0:
                             """Create new dict for the new XsVertexSet"""
+
                             obj_dict = deepcopy(self.geol_coll.geological_entity_dict)
                             obj_dict['x_section'] = xsect_uid
                             obj_dict['topological_type'] = 'XsVertexSet'
                             obj_dict['vtk_obj'] = XsVertexSet(x_section_uid=xsect_uid, parent=self)
-                            obj_dict['name'] = self.geol_coll.get_uid_name(uid) + '_intersect'
+                            obj_dict['name'] = f'{self.geol_coll.get_uid_name(uid)}{postfix}'
                             obj_dict['geological_type'] = self.geol_coll.get_uid_geological_type(uid)
                             obj_dict['geological_feature'] = self.geol_coll.get_uid_geological_feature(uid)
                             obj_dict['scenario'] = self.geol_coll.get_uid_scenario(uid)
@@ -909,7 +910,7 @@ def intersection_xs(self):
                                 obj_dict['x_section'] = xsect_uid
                                 obj_dict['topological_type'] = 'XsPolyLine'
                                 obj_dict['vtk_obj'] = XsPolyLine(x_section_uid=xsect_uid, parent=self)
-                                obj_dict['name'] = self.geol_coll.get_uid_name(uid) + '_intersect'
+                                obj_dict['name'] = f'{self.geol_coll.get_uid_name(uid)}{postfix}'
                                 obj_dict['geological_type'] = self.geol_coll.get_uid_geological_type(uid)
                                 obj_dict['geological_feature'] = self.geol_coll.get_uid_geological_feature(uid)
                                 obj_dict['scenario'] = self.geol_coll.get_uid_scenario(uid)
@@ -987,7 +988,7 @@ def intersection_xs(self):
                         probe_image.GetPointData().GetArray(0).SetName(self.mesh3d_coll.get_uid_properties_names(uid)[0])
                         """Create new dict for the new XsVoxet"""
                         obj_dict = deepcopy(self.mesh3d_coll.mesh3d_entity_dict)
-                        obj_dict['name'] = self.mesh3d_coll.get_uid_name(uid) + '_intersect_' + self.xsect_coll.get_uid_name(xsect_uid)
+                        obj_dict['name'] = f'{self.mesh3d_coll.get_uid_name(uid)}{postfix}'
                         obj_dict['mesh3d_type'] = 'XsVoxet'
                         obj_dict['properties_names'] = self.mesh3d_coll.get_uid_properties_names(uid)
                         obj_dict['properties_components'] = self.mesh3d_coll.get_uid_properties_components(uid)
@@ -1010,7 +1011,7 @@ def intersection_xs(self):
                     cutter.Update()
                     """Create new dict for the new DomXs"""
                     obj_dict = deepcopy(self.dom_coll.dom_entity_dict)
-                    obj_dict['name'] = self.dom_coll.get_uid_name(uid) + '_trace'
+                    obj_dict['name'] = f'{self.dom_coll.get_uid_name(uid)}{postfix}'
                     obj_dict['dom_type'] = 'DomXs'
                     obj_dict['properties_names'] = self.dom_coll.get_uid_properties_names(uid)
                     obj_dict['properties_components'] = self.dom_coll.get_uid_properties_components(uid)
@@ -1101,7 +1102,7 @@ def project_2_dem(self):
             obj_dict['uid'] = uid
         elif replace_on_off == 'NO' or replace_on_off == 'no' or replace_on_off == 'n':
             obj_dict['uid'] = None
-        obj_dict['name'] = self.geol_coll.get_uid_name(uid) + '_projected'
+        obj_dict['name'] = f'{self.geol_coll.get_uid_name(uid)}_proj_DEM'
         obj_dict['geological_feature'] = self.geol_coll.get_uid_geological_feature(uid)
         obj_dict['scenario'] = self.geol_coll.get_uid_scenario(uid)
         obj_dict['geological_type'] = self.geol_coll.get_uid_geological_type(uid)
