@@ -81,6 +81,7 @@ def edit_line(self):
         self.parent.geol_coll.replace_vtk(uid=uid, vtk_object=vtk_obj, const_color=True)
         self.enable_actions()
 
+    self.disable_actions()
     sel_uid = self.selected_uids[0]
     actor = self.plotter.renderer.actors[sel_uid]
     data = actor.mapper.dataset

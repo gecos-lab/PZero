@@ -230,6 +230,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.actionViewPlaneXsection.triggered.connect(lambda: NewViewXsection(parent=self))
         self.actionViewStereoplot.triggered.connect(lambda: ViewStereoplot(parent=self))
 
+        self.update_actors = True
     def closeEvent(self, event):
         """Re-implement the standard closeEvent method of QWidget and ask (1) to save project, and (2) for confirmation to quit."""
         reply = QMessageBox.question(self, 'Closing Pzero', 'Save the project?', QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
@@ -388,6 +389,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         if check == QMessageBox.No:
             return
         """Remove entities."""
+        self.update_actors = False
         for uid in self.selected_uids:
             if self.shown_table == "tabGeology":
                 self.geol_coll.remove_entity(uid=uid)
@@ -407,7 +409,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 self.fluids_coll.remove_entity(uid=uid)
             elif self.shown_table == "tabBackgrounds":
                 self.backgrounds_coll.remove_entity(uid=uid)
-
+        self.update_actors = True
     def entities_merge(self):  # ____________________________________________________ CHECK (1) HOW PROPERTIES AND TEXTURES ARE AFFECTED BY MERGING, (2) HOW IT WORKS FOR DOMs
         """Merge entities of the same type - VertexSet, PolyLine, TriSurf, ..."""
         if not self.selected_uids:

@@ -127,7 +127,7 @@ class GeologicalCollection(QAbstractTableModel):
         self.parent.geology_added_signal.emit([entity_dict['uid']])  # a list of uids is emitted, even if the entity is just one, for future compatibility
         return entity_dict['uid']
 
-    def remove_entity(self, uid=None):
+    def remove_entity(self, uid=None,update=True):
         """Remove entity from collection."""
         """Remove row from dataframe and reset data model."""
         if not uid in self.get_uids():
@@ -210,7 +210,7 @@ class GeologicalCollection(QAbstractTableModel):
                 B = self.get_uid_legend(uid=uid)['color_B']
                 color = [R, G, B]
             else:
-                color=None
+                color = None
             self.remove_entity(uid)
             self.add_entity_from_dict(entity_dict=new_dict, color=color)
         else:

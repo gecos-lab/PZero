@@ -44,7 +44,8 @@ from pandas import unique as pd_unique
 # import vtk.numpy_interface.dataset_adapter as dsa
 from vtk.util import numpy_support
 from vtkmodules.vtkInteractionWidgets import vtkCameraOrientationWidget, vtkContourWidget, \
-    vtkLinearContourLineInterpolator
+    vtkLinearContourLineInterpolator, vtkDijkstraImageContourLineInterpolator, vtkBezierContourLineInterpolator, \
+    vtkPolyDataContourLineInterpolator, vtkPolygonalSurfaceContourLineInterpolator, vtkTerrainContourLineInterpolator
 from vtk import vtkExtractPoints, vtkSphere, vtkAreaPicker, vtkPropPicker, vtkImageTracerWidget, vtkDistanceWidget, vtkAppendPolyData
 
 """3D plotting imports"""
@@ -2654,7 +2655,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.GeologyTreeWidget.itemChanged.disconnect()
         self.TopologyTreeWidget.itemChanged.disconnect()
         for uid in updated_list:
-            self.remove_actor_in_view(uid=uid, redraw=True)
+            self.remove_actor_in_view(uid=uid, redraw=True, update=self.parent.update_actors)
         self.update_geology_tree_removed(removed_list=updated_list)
         self.update_topology_tree_removed(removed_list=updated_list)
         """Re-connect signals."""
@@ -3928,12 +3929,13 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         else:
             this_actor.SetVisibility(visible)
 
-    def remove_actor_in_view(self, uid=None, redraw=False):
+    def remove_actor_in_view(self, uid=None, redraw=False, update=True):
         """"Remove actor from plotter"""
         """plotter.remove_actor can remove a single entity or a list of entities as actors -> here we remove a single entity"""
         if not self.actors_df.loc[self.actors_df['uid'] == uid].empty:
             this_actor = self.actors_df.loc[self.actors_df['uid'] == uid, 'actor'].values[0]
-            success = self.plotter.remove_actor(this_actor)
+            if not update:
+                success = self.plotter.remove_actor(this_actor)
             self.actors_df.drop(self.actors_df[self.actors_df['uid'] == uid].index, inplace=True)
 
     def show_actor_with_property(self, uid=None, collection=None, show_property=None, visible=None):
@@ -6933,7 +6935,14 @@ class NewView2D(BaseView):
 
         self.tracer = vtkContourWidget()
         self.tracer.SetInteractor(self.plotter.iren.interactor)
+        head = pv.wrap(self.tracer.GetContourRepresentation().GetActiveCursorShape())
+        self.tracer.GetContourRepresentation().SetCursorShape(head)
         self.tracer.GetContourRepresentation().SetLineInterpolator(vtkLinearContourLineInterpolator())
+        self.tracer.GetContourRepresentation().GetLinesProperty().SetLineWidth(3)
+        self.tracer.GetContourRepresentation().GetProperty().SetColor((255, 255, 255))
+        self.tracer.GetContourRepresentation().GetActiveProperty().SetColor((255, 0, 0))
+
+
         self.tracer.ContinuousDrawOff()
         self.tracer.FollowCursorOn()
         self.tracer_event_translator = self.tracer.GetEventTranslator()
@@ -7074,6 +7083,14 @@ class NewView2D(BaseView):
         vector_widget = Vector(parent=self, pass_func=function)
         vector_widget.SetInteractor(self.plotter.iren.interactor)
         vector_widget.GetContourRepresentation().SetLineInterpolator(vtkLinearContourLineInterpolator())
+        head = pv.wrap(vector_widget.GetContourRepresentation().GetActiveCursorShape()).scale(0.5, 0.5, 0.5)
+        vector_widget.GetContourRepresentation().SetCursorShape(head)
+        vector_widget.GetContourRepresentation().SetLineInterpolator(vtkLinearContourLineInterpolator())
+        vector_widget.GetContourRepresentation().GetProperty().SetColor((255, 0, 0))
+        vector_widget.GetContourRepresentation().GetProperty().SetPointSize(0)
+        vector_widget.GetContourRepresentation().GetActiveProperty().SetColor((255, 0, 0))
+        vector_widget.GetContourRepresentation().GetLinesProperty().SetLineWidth(5)
+        vector_widget.GetContourRepresentation().GetLinesProperty().SetColor((255, 0, 0))
         vector_widget.ContinuousDrawOff()
         vector_widget.FollowCursorOn()
         vector_widget.EnabledOn()
