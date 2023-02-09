@@ -78,6 +78,8 @@ import matplotlib.style as mplstyle
 # from matplotlib.backend_bases import FigureCanvasBase
 import mplstereonet
 
+from .helper_widgets import Editor, Tracer, Vector
+
 from uuid import UUID
 
 """Probably not-required imports"""
@@ -4595,7 +4597,8 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         """Function used to disable actor picking"""
 
         self.plotter.iren.interactor.RemoveObservers('LeftButtonPressEvent')  # Remove the selector observer
-        self.plotter.untrack_click_position()  # Remove the right click observer
+        self.plotter.untrack_click_position(side='right')  # Remove the right click observer
+        self.plotter.untrack_click_position(side='left')  # Remove the left click observer
         if isinstance(self, View3D):
             self.plotter.enable_trackball_style()
         elif isinstance(self, NewView2D):
@@ -6933,23 +6936,8 @@ class NewView2D(BaseView):
         self.plotter.enable_image_style()
         self.plotter.enable_parallel_projection()
 
-        self.tracer = vtkContourWidget()
-        self.tracer.SetInteractor(self.plotter.iren.interactor)
-        head = pv.wrap(self.tracer.GetContourRepresentation().GetActiveCursorShape())
-        self.tracer.GetContourRepresentation().SetCursorShape(head)
-        self.tracer.GetContourRepresentation().SetLineInterpolator(vtkLinearContourLineInterpolator())
-        self.tracer.GetContourRepresentation().GetLinesProperty().SetLineWidth(3)
-        self.tracer.GetContourRepresentation().GetProperty().SetColor((255, 255, 255))
-        self.tracer.GetContourRepresentation().GetActiveProperty().SetColor((255, 0, 0))
-
-
-        self.tracer.ContinuousDrawOff()
-        self.tracer.FollowCursorOn()
-        self.tracer_event_translator = self.tracer.GetEventTranslator()
-        self.tracer_event_translator.RemoveTranslation(vtkCommand.RightButtonPressEvent)
-
-        self.vector_by_mouse_dU = None
-        self.vector_by_mouse_dV = None
+        self.tracer = Tracer(self)
+        self.editor = Editor(self)
 
         self.traced_pld = None
 
@@ -6982,7 +6970,7 @@ class NewView2D(BaseView):
         self.toolBarBase.addAction(self.sortLineButton)  # add action to toolbar
 
         self.moveLineButton = QAction('Move line', self)  # create action
-        self.moveLineButton.triggered.connect(lambda: self.vector_by_mouse('move_line'))  # connect action to function
+        self.moveLineButton.triggered.connect(lambda: self.vector_by_mouse(move_line))  # connect action to function
         self.menuBaseView.addAction(self.moveLineButton)  # add action to menu
         self.toolBarBase.addAction(self.moveLineButton)  # add action to toolbar
 
@@ -7054,46 +7042,13 @@ class NewView2D(BaseView):
         self.menuBaseView.addAction(self.measureDistanceButton)  # add action to menu
         self.toolBarBase.addAction(self.measureDistanceButton)  # add action to toolbar
 
-    def vector_by_mouse(self, function=None):
+    def vector_by_mouse(self, func):
+        if not self.selected_uids:
+            print(" -- No input data selected -- ")
+            return
         self.disable_actions()
-
-        class Vector(vtkContourWidget):
-            def __init__(self, parent=None, pass_func=None, *args, **kwargs):
-                super().__init__(*args, **kwargs)
-                self.parent = parent
-                self.AddObserver(vtkCommand.InteractionEvent, self.check_length)
-                self.run_function = pass_func
-
-            def check_length(self, event1, event2):
-
-                n_nodes = self.GetContourRepresentation().GetNumberOfNodes()
-                if n_nodes == 3:
-                    pld = self.GetContourRepresentation().GetContourRepresentationAsPolyData()
-                    points = np_array(pld.GetPoints().GetData())[:2, :]
-                    self.parent.vector_by_mouse_dU = points[1, 0]-points[0, 0]
-                    if isinstance(self.parent, NewViewMap):
-                        self.parent.vector_by_mouse_dV = points[1, 1]-points[0, 1]
-                    elif isinstance(self.parent, NewViewXsection):
-                        self.parent.vector_by_mouse_dV = points[1, 2] - points[0, 2]
-                    self.EnabledOff()
-                    if self.run_function == 'move_line':  # This should be converted so that it passes directly the func as a class parameter
-                        from pzero.two_d_lines import move_line
-                        move_line(self.parent)
-
-        vector_widget = Vector(parent=self, pass_func=function)
-        vector_widget.SetInteractor(self.plotter.iren.interactor)
-        vector_widget.GetContourRepresentation().SetLineInterpolator(vtkLinearContourLineInterpolator())
-        head = pv.wrap(vector_widget.GetContourRepresentation().GetActiveCursorShape()).scale(0.5, 0.5, 0.5)
-        vector_widget.GetContourRepresentation().SetCursorShape(head)
-        vector_widget.GetContourRepresentation().SetLineInterpolator(vtkLinearContourLineInterpolator())
-        vector_widget.GetContourRepresentation().GetProperty().SetColor((255, 0, 0))
-        vector_widget.GetContourRepresentation().GetProperty().SetPointSize(0)
-        vector_widget.GetContourRepresentation().GetActiveProperty().SetColor((255, 0, 0))
-        vector_widget.GetContourRepresentation().GetLinesProperty().SetLineWidth(5)
-        vector_widget.GetContourRepresentation().GetLinesProperty().SetColor((255, 0, 0))
-        vector_widget.ContinuousDrawOff()
-        vector_widget.FollowCursorOn()
-        vector_widget.EnabledOn()
+        vector = Vector(parent=self, pass_func=func)
+        vector.EnabledOn()
 
 
 class NewViewMap(NewView2D):

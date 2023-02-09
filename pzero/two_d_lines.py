@@ -21,6 +21,7 @@ from shapely import affinity
 from shapely.geometry import LineString, Point, MultiLineString
 from shapely.ops import split, snap
 from PyQt5.QtWidgets import QAction
+from time import sleep
 
 """Implementation of functions specific to this view (e.g. particular editing or visualization functions)"""
 
@@ -67,10 +68,11 @@ def draw_line(self):
 
 
 def edit_line(self):
+
     def end_edit(event, uid):
         self.tracer.EnabledOff()
 
-        self.plotter.untrack_click_position()
+        self.plotter.untrack_click_position(side='right')
         traced_pld = self.tracer.GetContourRepresentation().GetContourRepresentationAsPolyData()
         if isinstance(self, NewViewMap):
             vtk_obj = PolyLine()
@@ -81,6 +83,13 @@ def edit_line(self):
         self.parent.geol_coll.replace_vtk(uid=uid, vtk_object=vtk_obj, const_color=True)
         self.enable_actions()
 
+    def left_click(event):
+        x, y = event
+        print(x, y)
+        print(self.editor.GetContourRepresentation().SetPixelTolerance(100))
+        # self.editor.GetContourRepresentation().AddNodeAtWorldPosition(event)
+        self.editor.GetContourRepresentation().AddNodeOnContour(x, y)
+
     self.disable_actions()
     sel_uid = self.selected_uids[0]
     actor = self.plotter.renderer.actors[sel_uid]
@@ -89,6 +98,8 @@ def edit_line(self):
     self.tracer.EnabledOn()
     self.tracer.Initialize(data)
     self.plotter.track_click_position(side='right', callback=lambda event: end_edit(event, sel_uid))
+    # self.plotter.track_mouse_position()
+    # self.plotter.track_click_position(side='left', callback=left_click, viewport=True)
 
 
 def sort_line_nodes(self):
@@ -116,17 +127,16 @@ def sort_line_nodes(self):
     self.clear_selection()
 
 
-def move_line(self):
+def move_line(self, points=None):
     """Move the whole line by rigid-body translation."""
     print("Move Line. Move the whole line by rigid-body translation.")
-    """Terminate running event loops"""
-    # self.stop_event_loops()
-    """Check if a line is selected"""
-    if not self.selected_uids:
-        print(" -- No input data selected -- ")
-        return
-    """Freeze QT interface"""
-    self.disable_actions()
+
+    vector_by_mouse_dU = points[1, 0] - points[0, 0]
+    if isinstance(self, NewViewMap):
+        vector_by_mouse_dV = points[1, 1] - points[0, 1]
+    elif isinstance(self, NewViewXsection):
+        vector_by_mouse_dV = points[1, 2] - points[0, 2]
+
     for current_uid in self.selected_uids:
         if (self.parent.geol_coll.get_uid_topological_type(current_uid) != "PolyLine") and (
                 self.parent.geol_coll.get_uid_topological_type(current_uid) != "XsPolyLine"):
@@ -136,16 +146,16 @@ def move_line(self):
         """Editing loop."""
         """For some reason in the following the [:] is needed."""
         if isinstance(self, (ViewMap, NewViewMap)):
-            x = self.parent.geol_coll.get_uid_vtk_obj(current_uid).points_X[:] + self.vector_by_mouse_dU
-            y = self.parent.geol_coll.get_uid_vtk_obj(current_uid).points_Y[:] + self.vector_by_mouse_dV
+            x = self.parent.geol_coll.get_uid_vtk_obj(current_uid).points_X[:] + vector_by_mouse_dU
+            y = self.parent.geol_coll.get_uid_vtk_obj(current_uid).points_Y[:] + vector_by_mouse_dV
             z = self.parent.geol_coll.get_uid_vtk_obj(current_uid).points_Z[:]
 
         elif isinstance(self, (ViewXsection, NewViewXsection)):
             vector_by_mouse_dX, vector_by_mouse_dY = self.parent.xsect_coll.get_deltaXY_from_deltaW(
-                section_uid=self.this_x_section_uid, deltaW=self.vector_by_mouse_dU)
+                section_uid=self.this_x_section_uid, deltaW=vector_by_mouse_dU)
             x = self.parent.geol_coll.get_uid_vtk_obj(current_uid).points_X[:] + vector_by_mouse_dX
             y = self.parent.geol_coll.get_uid_vtk_obj(current_uid).points_Y[:] + vector_by_mouse_dY
-            z = self.parent.geol_coll.get_uid_vtk_obj(current_uid).points_Z[:]+ self.vector_by_mouse_dV
+            z = self.parent.geol_coll.get_uid_vtk_obj(current_uid).points_Z[:]+ vector_by_mouse_dV
 
         points = np.stack((x, y, z), axis=1)
         self.parent.geol_coll.get_uid_vtk_obj(current_uid).points = points
@@ -1271,15 +1281,15 @@ def copy_similar(self):  # this must be done per-part___________________________
         return
     """Create output line."""
     if isinstance(self, ViewMap):
-        outX = inX + self.vector_by_mouse_dU
-        outY = inY + self.vector_by_mouse_dV
+        outX = inX + vector_by_mouse_dU
+        outY = inY + vector_by_mouse_dV
         outZ = np_zeros(np_shape(outX))
     elif isinstance(self, ViewXsection):
         vector_by_mouse_dX, vector_by_mouse_dY = self.parent.xsect_coll.get_deltaXY_from_deltaW(
-            section_uid=self.this_x_section_uid, deltaW=self.vector_by_mouse_dU)
+            section_uid=self.this_x_section_uid, deltaW=vector_by_mouse_dU)
         outX = inX + vector_by_mouse_dX
         outY = inY + vector_by_mouse_dY
-        outZ = inZ + self.vector_by_mouse_dV
+        outZ = inZ + vector_by_mouse_dV
     """Stack coordinates in two-columns matrix and write to vtk object."""
     outXYZ = np_column_stack((outX, outY, outZ))
     line_dict['vtk_obj'].points = outXYZ
