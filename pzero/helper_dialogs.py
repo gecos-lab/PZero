@@ -83,7 +83,7 @@ def open_file_dialog(parent=None, caption=None, filter=None, multiple=False):
     return in_file_name
 
 
-def save_file_dialog(parent=None, caption=None, filter=None,directory=False):
+def save_file_dialog(parent=None, caption=None, filter=None, directory=False):
     """Open a dialog and input a file or folder name.
     If the dialog is closed without a valid file name, it returns None."""
     if directory:

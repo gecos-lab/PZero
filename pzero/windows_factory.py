@@ -1,6 +1,5 @@
 """windows_factory.py
 PZero© Andrea Bistacchi"""
-import vtkmodules.vtkFiltersCore
 
 from .orientation_analysis import get_dip_dir_vectors
 
@@ -14,7 +13,7 @@ from .base_view_window_ui import Ui_BaseViewWindow
 from .entities_factory import VertexSet, PolyLine, TriSurf, TetraSolid, XsVertexSet, XsPolyLine, DEM, PCDom, MapImage, \
     Voxet, XsVoxet, Plane, Seismics, XsTriSurf, XsImage, PolyData, Well, WellMarker, WellTrace, Attitude
 from .helper_dialogs import input_one_value_dialog, input_text_dialog, input_combo_dialog, message_dialog, \
-    options_dialog, multiple_input_dialog, tic, toc, open_file_dialog, progress_dialog
+    options_dialog, multiple_input_dialog, tic, toc, open_file_dialog, progress_dialog, save_file_dialog
 from .geological_collection import GeologicalCollection
 from copy import deepcopy
 from uuid import uuid4
@@ -4008,12 +4007,15 @@ class View3D(BaseView):
 
     def export_obj(self):
         out_file_name = save_file_dialog(parent=self, caption="Export 3D view as OBJ.",
-                                         filter="obj (*.obj)").removesuffix(".obj")
+                                         filter="obj (*.obj)")#.removesuffix(".obj")
         self.plotter.export_obj(out_file_name)
 
     def export_gltf(self):
         out_file_name = save_file_dialog(parent=self, caption="Export 3D view as GLTF.", filter="gltf (*.gltf)")
+        self.cam_orient_widget.Off() #the orientation widget if present breaks the export
         self.plotter.export_gltf(out_file_name)
+        self.cam_orient_widget.On()
+
 
     def initialize_interactor(self):
         """Add the pyvista interactor object to self.ViewFrameLayout ->
