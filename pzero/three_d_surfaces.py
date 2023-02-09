@@ -24,6 +24,8 @@ from numpy import float32 as np_float32
 
 
 from pandas import DataFrame as pd_DataFrame
+from vtkmodules.vtkCommonDataModel import vtkBoundingBox
+
 from .geological_collection import GeologicalCollection
 from .helper_dialogs import multiple_input_dialog, input_one_value_dialog, input_text_dialog, input_combo_dialog, input_checkbox_dialog, tic, toc, progress_dialog, general_input_dialog
 from .entities_factory import TriSurf, XsPolyLine, PolyLine, VertexSet, Voxet, XsVoxet, XsVertexSet,Attitude
@@ -47,7 +49,8 @@ def interpolation_delaunay_2d(self):
         print(" -- No input data selected -- ")
         return
     else:
-        """Deep copy list of selected uids needed otherwise problems can arise if the main geology table is deselected while the dataframe is being built"""
+        """Deep copy list of selected uids needed otherwise problems 
+        can arise if the main geology table is deselected while the dataframe is being built"""
         input_uids = deepcopy(self.selected_uids)
     for uid in input_uids:
         if isinstance(self.geol_coll.get_uid_vtk_obj(uid), PolyLine) or isinstance(self.geol_coll.get_uid_vtk_obj(uid), XsPolyLine) or isinstance(self.geol_coll.get_uid_vtk_obj(uid), VertexSet) or isinstance(self.geol_coll.get_uid_vtk_obj(uid), XsVertexSet) or isinstance(self.geol_coll.get_uid_vtk_obj(uid), TriSurf):
@@ -57,17 +60,23 @@ def interpolation_delaunay_2d(self):
             return
     """Create deepcopy of the geological entity dictionary."""
     surf_dict = deepcopy(self.geol_coll.geological_entity_dict)
-    input_dict = {'name': ['TriSurf name: ', self.geol_coll.get_uid_name(input_uids[0]) + '_delaunay2d'], 'geological_type': ['Geological type: ', GeologicalCollection.valid_geological_types], 'geological_feature': ['Geological feature: ', self.geol_coll.get_uid_geological_feature(input_uids[0])], 'scenario': ['Scenario: ', self.geol_coll.get_uid_scenario(input_uids[0])]}
+    input_dict = {'name': ['TriSurf name: ', self.geol_coll.get_uid_name(input_uids[0]) + '_delaunay2d'],
+                  'geological_type': ['Geological type: ', GeologicalCollection.valid_geological_types, self.geol_coll.get_uid_geological_type(input_uids[0])],
+                  'geological_feature': ['Geological feature: ', self.geol_coll.get_uid_geological_feature(input_uids[0])],
+                  'scenario': ['Scenario: ', self.geol_coll.get_uid_scenario(input_uids[0])]}
     surf_dict_updt = multiple_input_dialog(title='New Delaunay 2D interpolation', input_dict=input_dict)
     """Check if the output of the widget is empty or not. If the Cancel button was clicked, the tool quits"""
     if surf_dict_updt is None:
         return
     """Ask for the Tolerance and Alpha values. Tolerance controls discarding of closely spaced points.
     Alpha controls the 'size' of output primitivies - a 0 Alpha Value outputs a triangle mesh."""
-    tolerance_value = input_one_value_dialog(title='Delaunay2D Parameters', label='Tolerance Value', default_value=0.001)
+    tolerance_value = input_one_value_dialog(title='Delaunay2D Parameters', label='Tolerance Value. Discard points '
+                                                                                  'closer than the specified value', default_value=0)
     if tolerance_value is None:
-        tolerance_value = 0.001
-    alpha_value = input_one_value_dialog(title='Delaunay2D Parameters', label='Alpha Value', default_value=0)
+        tolerance_value = 0
+    alpha_value = input_one_value_dialog(title='Delaunay2D Parameters', label='Alpha Value. Discard triangles not contained '
+                                                                              'in a sphere of radius set '
+                                                                              'by the specified value ', default_value=0)
     if alpha_value is None:
         alpha_value = 0
     """Getting the values that have been typed by the user through the multiple input widget"""
@@ -81,11 +90,18 @@ def interpolation_delaunay_2d(self):
     for uid in input_uids:
         vtkappend.AddInputData(self.geol_coll.get_uid_vtk_obj(uid))
     vtkappend.Update()
+
+    bounding_box = vtkBoundingBox()
+    bounding_box.ComputeBounds(vtkappend.GetOutput().GetPoints())
+    diagonal = bounding_box.GetDiagonalLength()
+    tolerance_value_bounding = tolerance_value/diagonal
     """Create a new instance of the interpolation class"""
     delaunay_2d = vtk.vtkDelaunay2D()
     delaunay_2d.SetInputDataObject(vtkappend.GetOutput())
-    delaunay_2d.SetTolerance(tolerance_value)
+    delaunay_2d.SetProjectionPlaneMode(2)
+    delaunay_2d.SetTolerance(tolerance_value_bounding)
     delaunay_2d.SetAlpha(alpha_value)
+
     delaunay_2d.Update()  # executes the interpolation
     """ShallowCopy is the way to copy the new interpolated surface into the TriSurf instance created at the beginning"""
     surf_dict['vtk_obj'].ShallowCopy(delaunay_2d.GetOutput())
@@ -119,7 +135,8 @@ def poisson_interpolation(self):
             return
     """Create deepcopy of the geological entity dictionary."""
     surf_dict = deepcopy(self.geol_coll.geological_entity_dict)
-    input_dict = {'name': ['TriSurf name: ', self.geol_coll.get_uid_name(input_uids[0]) + '_cloud'], 'geological_type': ['Geological type: ', GeologicalCollection.valid_geological_types], 'geological_feature': ['Geological feature: ', self.geol_coll.get_uid_geological_feature(input_uids[0])], 'scenario': ['Scenario: ', self.geol_coll.get_uid_scenario(input_uids[0])]}
+    input_dict = {'name': ['TriSurf name: ', self.geol_coll.get_uid_name(input_uids[0]) + '_cloud'],
+                  'geological_type': ['Geological type: ', GeologicalCollection.valid_geological_types], 'geological_feature': ['Geological feature: ', self.geol_coll.get_uid_geological_feature(input_uids[0])], 'scenario': ['Scenario: ', self.geol_coll.get_uid_scenario(input_uids[0])]}
     surf_dict_updt = multiple_input_dialog(title='Surface interpolation from point cloud', input_dict=input_dict)
     """Check if the output of the widget is empty or not. If the Cancel button was clicked, the tool quits"""
     if surf_dict_updt is None:
@@ -1299,25 +1316,22 @@ def split_surf(self):
         print("No input data selected.")
         return
     else:
-        """Deep copy list of selected uids needed otherwise problems can arise if the main geology table is deseselcted while the dataframe is being built"""
-        input_uids = deepcopy(self.selected_uids_all())
+        """Deep copy list of selected uids needed otherwise problems can arise if the main geology table 
+        is deseselcted while the dataframe is being built"""
         # print(self.selected_uids_all())
         # 0. Define the reference surface and target surfaces
-        if input_uids[0] not in self.geol_coll.get_uids():
-            ref_surf = self.dom_coll.get_uid_vtk_obj(input_uids[0])
-            pld = pv.PolyData(ref_surf.points)
-            pld.delaunay_2d(inplace=True)
-        else:
-            ref_surf = self.geol_coll.get_uid_vtk_obj(input_uids[0])
+        # if input_uids[0] not in self.geol_coll.get_uids():
+        #     ref_surf = self.dom_coll.get_uid_vtk_obj(input_uids[0])
+        #     pld = pv.PolyData(ref_surf.points)
+        #     pld.delaunay_2d(inplace=True)
+        # else:
+        scissor_surf = self.geol_coll.get_uid_vtk_obj(self.selected_uids[-1])
 
-        targ_surfs = [self.geol_coll.get_uid_vtk_obj(uid) for uid in input_uids[1:]]
-        extend = input_one_value_dialog(title='Cut entire surface?',label='Yes[1]/No[0]',default_value=1)
-
-        for i,targ_surf in enumerate(targ_surfs): #for every target surface
-
+        for paper_uid in self.selected_uids[:-1]: # for every target surface
+            paper_surf = self.geol_coll.get_uid_vtk_obj(paper_uid)
             temp_surf = pv.PolyData()
-            temp_surf.ShallowCopy(targ_surf)
-            implicit_dist = temp_surf.compute_implicit_distance(ref_surf)
+            temp_surf.ShallowCopy(paper_surf)
+            implicit_dist = temp_surf.compute_implicit_distance(scissor_surf)
             intersect = vtk.vtkClipPolyData()
             intersect.SetInputData(implicit_dist)
             intersect.GenerateClippedOutputOn()
@@ -1334,7 +1348,7 @@ def split_surf(self):
             append each single part in a multipart object and assign
             the RegionId property using connected_calc().
             '''
-            parts = [intersect.GetOutput(),intersect.GetClippedOutput()]
+            parts = [intersect.GetOutput(), intersect.GetClippedOutput()]
 
             for part in parts:
                 temp = TriSurf()
@@ -1349,22 +1363,21 @@ def split_surf(self):
             final_obj.DeepCopy(appender.GetOutput())
             final_obj.clean_topology
 
-            uid = input_uids[i+1] #Use the target obj as reference
             obj_dict = deepcopy(self.geol_coll.geological_entity_dict)
 
             obj_dict['uid'] = str(uuid4())
 
-            obj_dict['topological_type'] = self.geol_coll.get_uid_topological_type(uid)
+            obj_dict['topological_type'] = self.geol_coll.get_uid_topological_type(paper_uid)
 
             obj_dict['vtk_obj'] = final_obj
 
-            obj_dict['name'] = self.geol_coll.get_uid_name(uid) + '_split'
+            obj_dict['name'] = self.geol_coll.get_uid_name(paper_uid) + '_split'
 
-            obj_dict['geological_type'] = self.geol_coll.get_uid_geological_type(uid)
+            obj_dict['geological_type'] = self.geol_coll.get_uid_geological_type(paper_uid)
 
-            obj_dict['geological_feature'] = self.geol_coll.get_uid_geological_feature(uid)
+            obj_dict['geological_feature'] = self.geol_coll.get_uid_geological_feature(paper_uid)
 
-            obj_dict['scenario'] = self.geol_coll.get_uid_scenario(uid)
+            obj_dict['scenario'] = self.geol_coll.get_uid_scenario(paper_uid)
 
             self.geol_coll.add_entity_from_dict(obj_dict)
 

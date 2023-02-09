@@ -41,7 +41,10 @@ def draw_line(self):
     """Create deepcopy of the geological entity dictionary."""
     line_dict = deepcopy(self.parent.geol_coll.geological_entity_dict)
     """One dictionary is set as input for a general widget of multiple-value-input"""
-    line_dict_in = {'name': ['PolyLine name: ', 'new_pline'], 'geological_type': ['Geological type: ', GeologicalCollection.valid_geological_types], 'geological_feature': ['Geological feature: ', self.parent.geol_legend_df['geological_feature'].tolist()], 'scenario': ['Scenario: ', list(set(self.parent.geol_legend_df['scenario'].tolist()))]}
+    line_dict_in = {'name': ['PolyLine name: ', 'new_pline'],
+                    'geological_type': ['Geological type: ', GeologicalCollection.valid_geological_types],
+                    'geological_feature': ['Geological feature: ', self.parent.geol_legend_df['geological_feature'].tolist()],
+                    'scenario': ['Scenario: ', list(set(self.parent.geol_legend_df['scenario'].tolist()))]}
     line_dict_updt = multiple_input_dialog(title='Digitize new PolyLine', input_dict=line_dict_in)
     """Check if the output of the widget is empty or not. If the Cancel button was clicked, the tool quits"""
     if line_dict_updt is None:

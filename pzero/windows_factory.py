@@ -1,5 +1,6 @@
 """windows_factory.py
 PZero© Andrea Bistacchi"""
+from vtkmodules.vtkRenderingCore import vtkPropPicker
 
 from .orientation_analysis import get_dip_dir_vectors
 
@@ -3871,7 +3872,7 @@ class View3D(BaseView):
 
         self.init_zoom = self.plotter.camera.distance
         self.cam_orient_widget.On()  # [Gabriele] The orientation widget needs to be turned on AFTER the canvas is shown
-        self.picker = self.plotter.enable_mesh_picking(callback=self.pkd_mesh, show_message=False)
+        # self.picker = self.plotter.enable_mesh_picking(callback=self.pkd_mesh, show_message=False)
 
     def closeEvent(self, event):
         """Override the standard closeEvent method since self.plotter.close() is needed to cleanly close the vtk plotter."""
@@ -3926,6 +3927,16 @@ class View3D(BaseView):
         self.menuBaseView.addAction(self.zoomActive)
         self.toolBarBase.addAction(self.zoomActive)
 
+        self.selectLineButton = QAction('Select entity', self)  # create action
+        self.selectLineButton.triggered.connect(self.select_actor_with_mouse)  # connect action to function
+        self.menuBaseView.addAction(self.selectLineButton)  # add action to menu
+        self.toolBarBase.addAction(self.selectLineButton)  # add action to toolbar
+
+        self.clearSelectionButton = QAction('Clear Selection', self)  # create action
+        self.clearSelectionButton.triggered.connect(self.clear_selection)  # connect action to function
+        self.menuBaseView.addAction(self.clearSelectionButton)  # add action to menu
+        self.toolBarBase.addAction(self.clearSelectionButton)  # add action to toolbar
+
         # self.showOct = QAction("Show octree structure", self)
         # self.showOct.triggered.connect(self.show_octree)
         # self.menuBaseView.addAction(self.showOct)
@@ -3959,10 +3970,10 @@ class View3D(BaseView):
         self.menuBaseView.addAction(self.actionPickAttitude)
         self.toolBarBase.addAction(self.actionPickAttitude)
 
-        self.actionPickMesh = QAction('Mesh picking', self)
-        self.actionPickMesh.triggered.connect(lambda: self.act_pmesh())
-        self.menuBaseView.addAction(self.actionPickMesh)
-        self.toolBarBase.addAction(self.actionPickMesh)
+        # self.actionPickMesh = QAction('Mesh picking', self)
+        # self.actionPickMesh.triggered.connect(lambda: self.act_pmesh())
+        # self.menuBaseView.addAction(self.actionPickMesh)
+        # self.toolBarBase.addAction(self.actionPickMesh)
 
         self.actionExportGltf = QAction('Export as GLTF', self)
         self.actionExportGltf.triggered.connect(self.export_gltf)
@@ -4167,17 +4178,123 @@ class View3D(BaseView):
         # act_list.append(pts_act)
         # self.act_list.append(actor)
 
-    def pkd_mesh(self, mesh):
+    ''' Picking general functions '''
 
-        '''[Gabriele] To select the mesh in the entity list we compare the actors of the actors_df dataframe
-        with the picker.GetActor() result'''
+    def actor_in_table(self, sel_uid=None):
+        ''' Function used to highlight in the table view a list of selected actors'''
 
-        actor = self.picker.GetActor()
+        if sel_uid:
+            '''[Gabriele] To select the mesh in the entity list we compare the actors of the actors_df dataframe
+            with the picker.GetActor() result'''
+            self.parent.GeologyTableView.clearSelection()
+            if len(sel_uid) > 1:
+                self.parent.GeologyTableView.setSelectionMode(QAbstractItemView.MultiSelection)
+
+            # In general this approach is not the best.
+            # In the actors_df the index of the df is independent from the index of the table views.
+            # We could have 6 entities 5 of which are in the geology tab and 1 in the image tab.
+            # When selecting the image the actors_df index could be anything from 0 to 5 (depends on the add_all_entities order)
+            # but in the table view is 0 thus returning nothing.
+            # To resolve this we could:
+            #   1. Create a actor_df for each collection
+            #   2. Have a general actors_df with a table_index value (that needs to be updated when adding or removing objects)
+            #   3. Have a selected_entities_df indipendent from the tables or views that collects the selected actors (both in the table or in the view)
+
+            # For now selection will work only for geology objects
+
+            for uid in sel_uid:
+                uid_list = [self.parent.GeologyTableView.model().index(row, 0).data() for row in range(
+                            len(self.parent.geol_coll.df.index))]
+                print(uid_list)
+                idx = uid_list.index(uid)
+                # coll = self.actors_df.loc[self.actors_df['uid'] == uid, 'collection'].values[0]
+
+                # if coll == 'geol_coll':
+                self.parent.GeologyTableView.selectRow(idx)
+                # elif coll == 'image_coll':
+                #     self.parent.ImagesTableView.selectRow(idx)
+                # return
+        else:
+            self.parent.GeologyTableView.clearSelection()
+            self.selected_uids = []
+
+    def select_actor_with_mouse(self):
+        ''' Function used to initiate actor selection'''
+        self.disable_actions()
+        self.plotter.iren.interactor.AddObserver('LeftButtonPressEvent', self.select_actor)
+        # self.plotter.iren.interactor.AddObserver('KeyPressEvent',self.clear_selected)
+        self.plotter.track_click_position(self.end_pick)
+        self.plotter.add_key_event('c', self.clear_selection)
+
+    def end_pick(self, pos):
+        """Function used to disable actor picking"""
+
+        self.plotter.iren.interactor.RemoveObservers('LeftButtonPressEvent')  # Remove the selector observer
+        self.plotter.untrack_click_position(side='right')  # Remove the right click observer
+        self.plotter.untrack_click_position(side='left')  # Remove the left click observer
+        if isinstance(self, View3D):
+            self.plotter.enable_trackball_style()
+
+        self.plotter.reset_key_events()
+        self.selected_uids = self.parent.selected_uids
+        self.enable_actions()
+
+    def clear_selection(self):
+        for av_actor in self.plotter.renderer.actors.copy():
+            if '_silh' in av_actor:
+                self.plotter.remove_actor(av_actor)
+
+        if not self.selected_uids == []:
+            deselected_uids = self.selected_uids
+            self.selected_uids = []
+            self.parent.geology_geom_modified_signal.emit(deselected_uids)  # emit uid as list to force redraw
+        self.actor_in_table()
+
+    def select_actor(self, obj, event):
+        style = obj.GetInteractorStyle()
+        style.SetDefaultRenderer(self.plotter.renderer)
+        pos = obj.GetEventPosition()
+        shift = obj.GetShiftKey()
+        name_list = set()
+        # end_pos = style.GetEndPosition()
+
+        picker = vtkPropPicker()
+        picker.PickProp(pos[0], pos[1], style.GetDefaultRenderer())
+
+        actors = set(self.plotter.renderer.actors)
+
+        actor = picker.GetActor()
         sel_uid = self.actors_df.loc[self.actors_df['actor'] == actor, 'uid'].values[0]
-        idx = self.actors_df.loc[self.actors_df['uid'] == sel_uid].index[0]
-        self.parent.GeologyTableView.selectRow(idx)
-        return
+        print(sel_uid)
+        if shift:
+            self.selected_uids.append(sel_uid)
+        else:
+            self.selected_uids = [sel_uid]
 
+        for sel_uid in self.selected_uids:
+            sel_actor = self.actors_df.loc[self.actors_df['uid'] == sel_uid, 'actor'].values[0]
+            mesh = sel_actor.GetMapper().GetInput()
+            name = f'{sel_uid}_silh'
+            name_list.add(name)
+
+            self.plotter.add_mesh(mesh, pickable=False, name=name, color='Yellow', style='wireframe', line_width=5)
+
+            for av_actor in actors.difference(name_list):
+                if '_silh' in av_actor:
+                    self.plotter.remove_actor(av_actor)
+
+        self.actor_in_table(self.selected_uids)
+
+
+    def disable_actions(self):
+        for action in self.findChildren(QAction):
+            if isinstance(action.parentWidget(), NavigationToolbar) is False:
+                action.setDisabled(True)
+
+
+    def enable_actions(self):
+        for action in self.findChildren(QAction):
+            action.setEnabled(True)
     def change_actor_color(self, uid=None, collection=None):
         if collection == 'geol_coll':
             color_R = self.parent.geol_coll.get_uid_legend(uid=uid)['color_R']
