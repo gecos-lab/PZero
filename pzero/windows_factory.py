@@ -4552,7 +4552,6 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
 
     def actor_in_table(self, sel_uid=None):
         ''' Function used to highlight in the table view a list of selected actors'''
-
         if sel_uid:
             '''[Gabriele] To select the mesh in the entity list we compare the actors of the actors_df dataframe
             with the picker.GetActor() result'''
@@ -4573,18 +4572,21 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             # For now selection will work only for geology objects
 
             for uid in sel_uid:
-                idx = self.parent.geol_coll.df.loc[self.parent.geol_coll.df['uid'] == uid].index[0]
+                uid_list = [self.parent.GeologyTableView.model().index(row, 0).data() for row in range(
+                    len(self.parent.geol_coll.df.index))]
+                idx = uid_list.index(uid)
                 # coll = self.actors_df.loc[self.actors_df['uid'] == uid, 'collection'].values[0]
 
                 # if coll == 'geol_coll':
                 self.parent.GeologyTableView.selectRow(idx)
+
+
                 # elif coll == 'image_coll':
                 #     self.parent.ImagesTableView.selectRow(idx)
                 # return
         else:
             self.parent.GeologyTableView.clearSelection()
             self.selected_uids = []
-
     def select_actor_with_mouse(self):
         ''' Function used to initiate actor selection'''
         self.disable_actions()
