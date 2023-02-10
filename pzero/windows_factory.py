@@ -4182,13 +4182,15 @@ class View3D(BaseView):
 
     def actor_in_table(self, sel_uid=None):
         ''' Function used to highlight in the table view a list of selected actors'''
-
+        old_sel = self.parent.GeologyTableView.SelectionMode()
         if sel_uid:
             '''[Gabriele] To select the mesh in the entity list we compare the actors of the actors_df dataframe
             with the picker.GetActor() result'''
             self.parent.GeologyTableView.clearSelection()
             if len(sel_uid) > 1:
                 self.parent.GeologyTableView.setSelectionMode(QAbstractItemView.MultiSelection)
+            else:
+                self.parent.GeologyTableView.reset()
 
             # In general this approach is not the best.
             # In the actors_df the index of the df is independent from the index of the table views.
@@ -4217,6 +4219,7 @@ class View3D(BaseView):
         else:
             self.parent.GeologyTableView.clearSelection()
             self.selected_uids = []
+
 
     def select_actor_with_mouse(self):
         ''' Function used to initiate actor selection'''
@@ -4248,6 +4251,7 @@ class View3D(BaseView):
             deselected_uids = self.selected_uids
             self.selected_uids = []
             self.parent.geology_geom_modified_signal.emit(deselected_uids)  # emit uid as list to force redraw
+        self.parent.GeologyTableView.reset()
         self.actor_in_table()
 
     def select_actor(self, obj, event):

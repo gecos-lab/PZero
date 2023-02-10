@@ -98,7 +98,9 @@ def interpolation_delaunay_2d(self):
     """Create a new instance of the interpolation class"""
     delaunay_2d = vtk.vtkDelaunay2D()
     delaunay_2d.SetInputDataObject(vtkappend.GetOutput())
-    delaunay_2d.SetProjectionPlaneMode(2)
+    delaunay_2d.SetProjectionPlaneMode(1)
+    trans = delaunay_2d.ComputeBestFittingPlane(vtkappend.GetOutput())
+    delaunay_2d.SetTransform(trans)
     delaunay_2d.SetTolerance(tolerance_value_bounding)
     delaunay_2d.SetAlpha(alpha_value)
 
@@ -1331,7 +1333,9 @@ def split_surf(self):
             paper_surf = self.geol_coll.get_uid_vtk_obj(paper_uid)
             temp_surf = pv.PolyData()
             temp_surf.ShallowCopy(paper_surf)
+            # print(temp_surf.array_names)
             implicit_dist = temp_surf.compute_implicit_distance(scissor_surf)
+            implicit_dist.set_active_scalars('implicit_distance')
             intersect = vtk.vtkClipPolyData()
             intersect.SetInputData(implicit_dist)
             intersect.GenerateClippedOutputOn()
