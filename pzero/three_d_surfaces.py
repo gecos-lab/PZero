@@ -25,6 +25,7 @@ from numpy import float32 as np_float32
 
 from pandas import DataFrame as pd_DataFrame
 from vtkmodules.vtkCommonDataModel import vtkBoundingBox
+from vtkmodules.vtkFiltersGeneral import vtkIntersectionPolyDataFilter
 
 from .geological_collection import GeologicalCollection
 from .helper_dialogs import multiple_input_dialog, input_one_value_dialog, input_text_dialog, input_combo_dialog, input_checkbox_dialog, tic, toc, progress_dialog, general_input_dialog
@@ -1331,8 +1332,18 @@ def split_surf(self):
 
         for paper_uid in self.selected_uids[:-1]: # for every target surface
             paper_surf = self.geol_coll.get_uid_vtk_obj(paper_uid)
+
+            # cutter = vtkIntersectionPolyDataFilter()
+            # cutter.SetInputDataObject(0, paper_surf)
+            # cutter.SetInputDataObject(1, scissor_surf)
+
             temp_surf = pv.PolyData()
             temp_surf.ShallowCopy(paper_surf)
+            line_intersection = PolyLine()
+            intersection, intersect, _ = temp_surf.intersection(scissor_surf, split_first=True, split_second=False)
+            line_intersection.ShallowCopy(intersection)
+            paper_intersection = TriSurf()
+            paper_intersection.ShallowCopy(intersect)
             # print(temp_surf.array_names)
             implicit_dist = temp_surf.compute_implicit_distance(scissor_surf)
             implicit_dist.set_active_scalars('implicit_distance')
@@ -1365,7 +1376,6 @@ def split_surf(self):
 
             final_obj = TriSurf()
             final_obj.DeepCopy(appender.GetOutput())
-            final_obj.clean_topology
 
             obj_dict = deepcopy(self.geol_coll.geological_entity_dict)
 
@@ -1385,13 +1395,37 @@ def split_surf(self):
 
             self.geol_coll.add_entity_from_dict(obj_dict)
 
-            #Calculate connectivity for the splitted surface
+            # Calculate connectivity for the splitted surface
 
             self.geol_coll.append_uid_property(uid=obj_dict['uid'], property_name="RegionId", property_components=1)
 
             self.geol_coll.get_uid_vtk_obj(obj_dict['uid']).connected_calc()
+
+            # Add line intersection
+            obj_dict = deepcopy(self.geol_coll.geological_entity_dict)
+
+            obj_dict['uid'] = str(uuid4())
+
+            obj_dict['topological_type'] = 'PolyLine'
+
+            obj_dict['vtk_obj'] = line_intersection
+
+            obj_dict['name'] = self.geol_coll.get_uid_name(paper_uid) + '_line_int'
+
+            obj_dict['geological_type'] = self.geol_coll.get_uid_geological_type(paper_uid)
+
+            obj_dict['geological_feature'] = self.geol_coll.get_uid_geological_feature(paper_uid)
+
+            obj_dict['scenario'] = self.geol_coll.get_uid_scenario(paper_uid)
+
+            self.geol_coll.add_entity_from_dict(obj_dict)
+            self.geol_coll.append_uid_property(uid=obj_dict['uid'], property_name="RegionId", property_components=1)
+            self.geol_coll.get_uid_vtk_obj(obj_dict['uid']).connected_calc()
+
             self.prop_legend.update_widget(self)
-            del temp
+
+            del temp_surf
+            del intersection
 
 
 
