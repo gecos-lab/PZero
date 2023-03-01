@@ -2,6 +2,7 @@ from vtkmodules.vtkCommonCore import vtkCommand
 from vtkmodules.vtkInteractionWidgets import vtkContourWidget, vtkLinearContourLineInterpolator, vtkBrokenLineWidget
 
 from numpy import array as np_array
+from numpy import flip as np_flip
 from pyvista import wrap as pv_wrap
 
 
@@ -51,30 +52,69 @@ class Vector(vtkContourWidget):
             self.run_function(self.parent, points)
 
 
-class Editor(vtkBrokenLineWidget):
+class Editor(vtkContourWidget):
     def __init__(self, parent=None, pass_func=None, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.parent = parent
         self.SetInteractor(self.parent.plotter.iren.interactor)
-        # head = pv_wrap(self.GetContourRepresentation().GetActiveCursorShape())
-        # self.GetContourRepresentation().SetCursorShape(head)
-        # self.GetContourRepresentation().SetLineInterpolator(vtkLinearContourLineInterpolator())
-        # self.GetContourRepresentation().GetLinesProperty().SetLineWidth(3)
-        # self.GetContourRepresentation().GetProperty().SetColor((255, 255, 255))
-        # self.GetContourRepresentation().GetActiveProperty().SetColor((255, 0, 0))
-        #
-        # self.ContinuousDrawOff()
-        # self.FollowCursorOn()
-        # self.AllowNodePickingOn()
-        # self.event_translator = self.GetEventTranslator()
-        # self.event_translator.RemoveTranslation(vtkCommand.RightButtonPressEvent)
-        # self.event_translator.RemoveTranslation(vtkCommand.LeftButtonPressEvent)
-    #     self.AddObserver(vtkCommand.StartInteractionEvent, self.point_selected)
-    #     self.run_function = pass_func
-    #
-    # def point_selected(self, event1, event2):
-    #     pos = self.parent.plotter.mouse_position
-    #
-    #     event1.GetContourRepresentation().AddNodeAtWorldPosition()
+        # self.GetContourRepresentation().BuildRepresentation()
+        # self.GetContourRepresentation().ShowSelectedNodesOn()
+        head = pv_wrap(self.GetContourRepresentation().GetActiveCursorShape())
+        self.pos_fin = [0, 0]
+        self.event_translator = self.GetEventTranslator()
 
+        self.GetContourRepresentation().SetCursorShape(head)
+        self.GetContourRepresentation().SetLineInterpolator(vtkLinearContourLineInterpolator())
+        self.GetContourRepresentation().GetLinesProperty().SetLineWidth(3)
+        self.GetContourRepresentation().GetProperty().SetColor((255, 255, 255))
+        self.GetContourRepresentation().GetActiveProperty().SetColor((255, 0, 0))
+        self.ContinuousDrawOff()
 
+    def initialize(self, line, mode):
+
+        if mode == 'edit':
+            if mode == 'edit':
+                self.Initialize(line)
+                self.FollowCursorOn()
+                self.event_translator = self.GetEventTranslator()
+                self.event_translator.RemoveTranslation(vtkCommand.RightButtonPressEvent)
+
+        elif mode == 'extend':
+            self.Initialize(line, 0)
+            self.ContinuousDrawOff()
+            self.FollowCursorOff()
+            self.AllowNodePickingOn()
+
+            self.event_translator.RemoveTranslation(vtkCommand.RightButtonPressEvent)
+            self.event_translator.RemoveTranslation(vtkCommand.LeftButtonPressEvent)
+            f_node = self.GetContourRepresentation().GetNumberOfNodes() - 1
+            self.GetContourRepresentation().GetNthNodeDisplayPosition(f_node, self.pos_fin)
+            self.GetContourRepresentation().ActivateNode(self.pos_fin)
+            self.Render()
+            self.parent.plotter.track_click_position(side='left', callback=self.extend_line, viewport=True)
+            self.parent.plotter.add_key_event('k', self.switch_active)
+
+    def extend_line(self, event=None):
+        f_node = self.GetContourRepresentation().GetNumberOfNodes()
+        self.GetContourRepresentation().AddNodeAtDisplayPosition(event)
+        self.GetContourRepresentation().GetNthNodeDisplayPosition(f_node, self.pos_fin)
+        self.GetContourRepresentation().ActivateNode(self.pos_fin)
+        self.Render()
+
+    # def end_extend(self, event=None):
+    #     pld = self.GetContourRepresentation().GetContourRepresentationAsPolyData()
+    #     plotter.add_mesh(pld, name='Line')
+    #     self.EnabledOff()
+    #     plotter.untrack_click_position(side='right')
+    #     plotter.untrack_click_position(side='left')
+    #     plotter.clear_events_for_key('k')
+
+    def switch_active(self):
+        line = pv_wrap(self.GetContourRepresentation().GetContourRepresentationAsPolyData())
+        points = line.points
+        p_flip = np_flip(points, axis=0)
+        # line = pv.lines_from_points(p_flip)
+        self.GetContourRepresentation().ClearAllNodes()
+        for point in p_flip:
+            self.GetContourRepresentation().AddNodeAtWorldPosition(point)
+        self.Render()

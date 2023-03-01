@@ -78,7 +78,7 @@ import matplotlib.style as mplstyle
 # from matplotlib.backend_bases import FigureCanvasBase
 import mplstereonet
 
-from .helper_widgets import Editor, Tracer, Vector
+from .helper_widgets import Vector
 
 from uuid import UUID
 
@@ -4635,26 +4635,29 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         actors = set(self.plotter.renderer.actors)
 
         actor = picker.GetActor()
-        sel_uid = self.actors_df.loc[self.actors_df['actor'] == actor, 'uid'].values[0]
-        print(sel_uid)
-        if shift:
-            self.selected_uids.append(sel_uid)
+
+        if not self.actors_df.loc[self.actors_df['actor'] == actor, 'uid'].empty:
+            sel_uid = self.actors_df.loc[self.actors_df['actor'] == actor, 'uid'].values[0]
+            if shift:
+                self.selected_uids.append(sel_uid)
+            else:
+                self.selected_uids = [sel_uid]
+
+            for sel_uid in self.selected_uids:
+                sel_actor = self.actors_df.loc[self.actors_df['uid'] == sel_uid, 'actor'].values[0]
+                mesh = sel_actor.GetMapper().GetInput()
+                name = f'{sel_uid}_silh'
+                name_list.add(name)
+
+                self.plotter.add_mesh(mesh, pickable=False, name=name, color='Yellow', style='wireframe', line_width=5)
+
+                for av_actor in actors.difference(name_list):
+                    if '_silh' in av_actor:
+                        self.plotter.remove_actor(av_actor)
+
+            self.actor_in_table(self.selected_uids)
         else:
-            self.selected_uids = [sel_uid]
-
-        for sel_uid in self.selected_uids:
-            sel_actor = self.actors_df.loc[self.actors_df['uid'] == sel_uid, 'actor'].values[0]
-            mesh = sel_actor.GetMapper().GetInput()
-            name = f'{sel_uid}_silh'
-            name_list.add(name)
-
-            self.plotter.add_mesh(mesh, pickable=False, name=name, color='Yellow', style='wireframe', line_width=5)
-
-            for av_actor in actors.difference(name_list):
-                if '_silh' in av_actor:
-                    self.plotter.remove_actor(av_actor)
-
-        self.actor_in_table(self.selected_uids)
+            return None
 
     # """All following functions must be re-implemented in derived classes - they appear here just as placeholders"""
 
@@ -6938,8 +6941,7 @@ class NewView2D(BaseView):
         self.plotter.enable_image_style()
         self.plotter.enable_parallel_projection()
 
-        self.tracer = Tracer(self)
-        self.editor = Editor(self)
+
 
         self.traced_pld = None
 

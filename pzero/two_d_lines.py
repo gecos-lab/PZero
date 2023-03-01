@@ -15,6 +15,7 @@ from vtk import vtkTransform, vtkTransformPolyDataFilter
 
 from .geological_collection import GeologicalCollection
 from .helper_dialogs import multiple_input_dialog, input_one_value_dialog, message_dialog, tic, toc
+from .helper_widgets import Editor, Tracer
 from .windows_factory import ViewMap, ViewXsection, NavigationToolbar, NewViewMap, NewViewXsection
 from .entities_factory import PolyLine, XsPolyLine
 from shapely import affinity
@@ -30,10 +31,10 @@ def draw_line(self):
     def end_digitize(event, input_dict):
         # Signal called to end the digitization of a trace. It returns a new polydata
         self.plotter.untrack_click_position()
-        traced_pld = self.tracer.GetContourRepresentation().GetContourRepresentationAsPolyData()
-        self.tracer.EnabledOff()
+        traced_pld = tracer.GetContourRepresentation().GetContourRepresentationAsPolyData()
         input_dict['vtk_obj'].ShallowCopy(traced_pld)
         self.parent.geol_coll.add_entity_from_dict(input_dict)
+        tracer.EnabledOff()
         self.enable_actions()
 
     self.disable_actions()
@@ -61,42 +62,34 @@ def draw_line(self):
         line_dict['topological_type'] = 'XsPolyLine'
         line_dict['x_section'] = self.this_x_section_uid
         line_dict['vtk_obj'] = XsPolyLine(x_section_uid=self.this_x_section_uid, parent=self.parent)
-
-    self.tracer.EnabledOn()
-    self.tracer.Initialize()
+    tracer = Tracer(self)
+    tracer.EnabledOn()
     self.plotter.track_click_position(side='right', callback=lambda event: end_digitize(event, line_dict))
 
 
 def edit_line(self):
 
     def end_edit(event, uid):
-        self.tracer.EnabledOff()
-
         self.plotter.untrack_click_position(side='right')
-        traced_pld = self.tracer.GetContourRepresentation().GetContourRepresentationAsPolyData()
+        traced_pld = editor.GetContourRepresentation().GetContourRepresentationAsPolyData()
         if isinstance(self, NewViewMap):
             vtk_obj = PolyLine()
         elif isinstance(self, NewViewXsection):
             vtk_obj = XsPolyLine(x_section_uid=self.this_x_section_uid, parent=self.parent)
         vtk_obj.ShallowCopy(traced_pld)
-        self.clear_selection()
         self.parent.geol_coll.replace_vtk(uid=uid, vtk_object=vtk_obj, const_color=True)
+        editor.EnabledOff()
+        self.clear_selection()
         self.enable_actions()
-
-    def left_click(event):
-        x, y = event
-        print(x, y)
-        print(self.editor.GetContourRepresentation().SetPixelTolerance(100))
-        # self.editor.GetContourRepresentation().AddNodeAtWorldPosition(event)
-        self.editor.GetContourRepresentation().AddNodeOnContour(x, y)
 
     self.disable_actions()
     sel_uid = self.selected_uids[0]
     actor = self.plotter.renderer.actors[sel_uid]
     data = actor.mapper.dataset
     # self.tracer.SetInputData(data)
-    self.tracer.EnabledOn()
-    self.tracer.Initialize(data)
+    editor = Editor(self)
+    editor.EnabledOn()
+    editor.initialize(data,'edit')
     self.plotter.track_click_position(side='right', callback=lambda event: end_edit(event, sel_uid))
     # self.plotter.track_mouse_position()
     # self.plotter.track_click_position(side='left', callback=left_click, viewport=True)
@@ -228,10 +221,26 @@ def rotate_line(self):
 
 
 def extend_line(self):
+    def end_edit(event, uid):
+        self.plotter.untrack_click_position(side='right')
+        self.plotter.untrack_click_position(side='left')
+        self.plotter.clear_events_for_key('k')
+
+        traced_pld = extender.GetContourRepresentation().GetContourRepresentationAsPolyData()
+        if isinstance(self, NewViewMap):
+            vtk_obj = PolyLine()
+        elif isinstance(self, NewViewXsection):
+            vtk_obj = XsPolyLine(x_section_uid=self.this_x_section_uid, parent=self.parent)
+        vtk_obj.ShallowCopy(traced_pld)
+
+        self.parent.geol_coll.replace_vtk(uid=uid, vtk_object=vtk_obj, const_color=True)
+        extender.EnabledOff()
+        self.clear_selection()
+        self.enable_actions()
     """Extend selected line."""
-    print("Extend Line. Press F to change end of line to extend.")
+    print("Extend Line. Press k to change end of line to extend.")
     """Terminate running event loops"""
-    self.stop_event_loops()
+    # self.stop_event_loops()
     """Check if a line is selected"""
     if not self.selected_uids:
         print(" -- No input data selected -- ")
@@ -241,119 +250,16 @@ def extend_line(self):
         print(" -- Selected data is not a line -- ")
         return
     """Freeze QT interface"""
-    for action in self.findChildren(QAction):
-        if isinstance(action.parentWidget(), NavigationToolbar) is False:
-            action.setDisabled(True)
+    self.disable_actions()
     """If more than one line is selected, keep the first"""
-    current_uid = self.selected_uids[0]
-    """Create deepcopy of the selected line."""
-    if isinstance(self, ViewMap):
-        inU = deepcopy(self.parent.geol_coll.get_uid_vtk_obj(current_uid).points[:, 0])
-        inV = deepcopy(self.parent.geol_coll.get_uid_vtk_obj(current_uid).points[:, 1])
-    elif isinstance(self, ViewXsection):
-        inU = deepcopy(self.parent.geol_coll.get_uid_vtk_obj(current_uid).points_W)
-        inV = deepcopy(self.parent.geol_coll.get_uid_vtk_obj(current_uid).points_Z)
-    """Color of red the end of the line that will be extended"""
-    current_line = self.actors_df.loc[self.actors_df['uid'] == current_uid, 'actor'].values[0]
-    current_line_U_true, current_line_V_true = current_line.get_data()
-    end_to_extend, = self.ax.plot(current_line_U_true[-1], current_line_V_true[-1], color='red')
-    end_to_extend.set_marker('D')
-    end_to_extend.figure.canvas.draw()
-    """Stack coordinates in two-columns matrix"""
-    inUV = np_column_stack((inU, inV))
-    """Obtain number of vertices from the numpy array. It is used in the editing loop for an incremental var."""
-    point_n = inUV.shape[0]
-    while 1:
-        """Pick points and add them to the line with left clicks. Middle click undoes the last point. Right click saves and exits."""
+    sel_uid = self.selected_uids[0]
+    current_line = self.actors_df.loc[self.actors_df['uid'] == sel_uid, 'actor'].values[0].GetMapper().GetInput()
 
-        self.pick_with_mouse()
-        """Switch off the selection of the end of the line to extend"""
-        end_to_extend.set_visible(False)
-        end_to_extend.figure.canvas.draw()
-        # end_to_extend.remove() # gives error if implemented
-        if self.pick_with_mouse_button == 1:  # left click to add one vertex and cell
-            newU = self.pick_with_mouse_U_data
-            newV = self.pick_with_mouse_V_data
-            if isinstance(self, ViewMap):
-                new_point = np_asarray([[newU, newV, 0.0]])
-            elif isinstance(self, ViewXsection):
-                X, Y = self.parent.xsect_coll.get_XY_from_W(section_uid=self.this_x_section_uid, W=newU)
-                new_point = np_asarray([[X, Y, newV]])
-            if point_n <= 0:  # <= 0 handles cases where multiple middle clicks may have resulted in negative point_n
-                if isinstance(self, ViewMap):
-                    line_dict['vtk_obj'] = PolyLine()
-                elif isinstance(self, ViewXsection):
-                    line_dict['vtk_obj'] = XsPolyLine(self.this_x_section_uid, parent=self.parent)
-                line_dict['vtk_obj'].points = new_point
-                point_n = 1
-                current_uid = self.parent.geol_coll.add_entity_from_dict(line_dict)
-                self.selected_uids = [current_uid]
-                self.parent.geology_geom_modified_signal.emit([current_uid])  # emit uid as list to force redraw
-            elif point_n >= 1:  # with multiple points, creates cells
-                new_cell = np_asarray([[point_n - 1, point_n]])
-                self.parent.geol_coll.get_uid_vtk_obj(current_uid).append_point(point_vector=new_point)
-                self.parent.geol_coll.get_uid_vtk_obj(current_uid).append_cell(cell_array=new_cell)
-                self.parent.geology_geom_modified_signal.emit([current_uid])  # emit uid as list
-                point_n += 1
-                """Color of red the end of the line that will be extended"""
-                current_line = self.actors_df.loc[self.actors_df['uid'] == current_uid, 'actor'].values[0]
-                current_line_U_true, current_line_V_true = current_line.get_data()
-                end_to_extend, = self.ax.plot(current_line_U_true[-1], current_line_V_true[-1], color='red')
-                end_to_extend.set_marker('D')
-                end_to_extend.figure.canvas.draw()
-        elif self.pick_with_mouse_button == 2:  # middle click to remove last cell and vertex
-            if point_n <= 1:  # <= 0 handles cases where multiple middle clicks may have resulted in negative point_n
-                pass
-            elif point_n >= 2:
-                """Create a deepcopy of the dictionary to break links between the input line and the output line."""
-                line_dict = deepcopy(self.parent.geol_coll.geological_entity_dict)
-                new_points = deepcopy(self.parent.geol_coll.get_uid_vtk_obj(current_uid).points[:-1, :])
-                if isinstance(self, ViewMap):
-                    line_dict['vtk_obj'] = PolyLine()
-                elif isinstance(self, ViewXsection):
-                    line_dict['vtk_obj'] = XsPolyLine(self.this_x_section_uid, parent=self.parent)
-                """Create new vtk object, then replace it to the previous one (only necessary when the number of line vertices is reduced."""
-                line_dict['vtk_obj'].points = new_points
-                if point_n > 2:
-                    line_dict[
-                        'vtk_obj'].auto_cells()  # try copying the cell array skipping the last one as in .cells[:-1, :]_____________________
-                self.parent.geol_coll.replace_vtk(uid=current_uid, vtk_object=line_dict['vtk_obj'])
-                del line_dict
-                point_n -= 1
-                """Color of red the end of the line that will be extended"""
-                current_line = self.actors_df.loc[self.actors_df['uid'] == current_uid, 'actor'].values[0]
-                current_line_U_true, current_line_V_true = current_line.get_data()
-                end_to_extend, = self.ax.plot(current_line_U_true[-1], current_line_V_true[-1], color='red')
-                end_to_extend.set_marker('D')
-                end_to_extend.figure.canvas.draw()
-        elif self.pick_with_mouse_button == 3:  # right click to complete line
-            """IN THE FUTURE add a check here to ensure that an empty object cannot be saved -> remove the entity from the collection if it is empty with point_n <2."""
-            if point_n < 2:
-                print("error - empty object")
-                pass
-            else:
-                left_right(current_uid)
-                end_to_extend.set_visible(False)
-                end_to_extend.figure.canvas.draw()  # end_to_extend.remove() # gives error if implemented
-            break
-        elif self.pick_with_mouse_key == 'f' or self.pick_with_mouse_key == 'F':  # to change end of line to extend
-            end_to_extend.set_visible(False)
-            end_to_extend.figure.canvas.draw()
-            # end_to_extend.remove() # gives error if implemented
-            flip_line(self=self, uid=current_uid)
-            """Color of red the end of the line that will be extended"""
-            current_line = self.actors_df.loc[self.actors_df['uid'] == current_uid, 'actor'].values[0]
-            current_line_U_true, current_line_V_true = current_line.get_data()
-            end_to_extend, = self.ax.plot(current_line_U_true[0], current_line_V_true[0], color='red')
-            end_to_extend.set_marker('D')
-            end_to_extend.figure.canvas.draw()
-    """When finished digitizing, deselect line."""
-    self.selected_uids = []
-    self.parent.geology_geom_modified_signal.emit([current_uid])  # emit uid as list to force redraw
-    """Un-Freeze QT interface"""
-    for action in self.findChildren(QAction):
-        action.setEnabled(True)
+    extender = Editor(self)
+    extender.EnabledOn()
+    extender.initialize(current_line, 'extend')
 
+    self.plotter.track_click_position(side='right', callback=lambda event: end_edit(event, sel_uid))
 
 def split_line_line(self):
     """Split line (paper) with another line (scissors). First, select the paper-line then the scissors-line"""
@@ -438,7 +344,7 @@ def split_line_line(self):
             outU = outUV[:, 0]
             outV = outUV[:, 1]
             """Convert local coordinates to XYZ ones."""
-            if isinstance(self, (ViewMap,NewViewMap)):
+            if isinstance(self, (ViewMap, NewViewMap)):
                 outX = outU
                 outY = outV
                 outZ = np_zeros(np_shape(outX))
