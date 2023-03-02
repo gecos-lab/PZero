@@ -6941,10 +6941,6 @@ class NewView2D(BaseView):
         self.plotter.enable_image_style()
         self.plotter.enable_parallel_projection()
 
-
-
-        self.traced_pld = None
-
     """Re-implementations of functions that appear in all views - see placeholders in BaseView()"""
 
     def initialize_menu_tools(self):
@@ -7037,19 +7033,19 @@ class NewView2D(BaseView):
         self.toolBarBase.addAction(self.copyKinkButton)  # add action to toolbar
 
         self.copySimilarButton = QAction('Copy similar', self)  # create action
-        self.copySimilarButton.triggered.connect(lambda: copy_similar(self))  # connect action to function
+        self.copySimilarButton.triggered.connect(lambda: self.vector_by_mouse(copy_similar))  # connect action to function
         self.menuBaseView.addAction(self.copySimilarButton)  # add action to menu
         self.toolBarBase.addAction(self.copySimilarButton)  # add action to toolbar
 
         self.measureDistanceButton = QAction('Measure', self)  # cline_thickreate action
-        self.measureDistanceButton.triggered.connect(lambda: measure_distance(self))  # connect action to function
+        self.measureDistanceButton.triggered.connect(lambda: self.vector_by_mouse(measure_distance))  # connect action to function
         self.menuBaseView.addAction(self.measureDistanceButton)  # add action to menu
         self.toolBarBase.addAction(self.measureDistanceButton)  # add action to toolbar
 
     def vector_by_mouse(self, func):
-        if not self.selected_uids:
-            print(" -- No input data selected -- ")
-            return
+        # if not self.selected_uids:
+        #     print(" -- No input data selected -- ")
+        #     return
         self.disable_actions()
         vector = Vector(parent=self, pass_func=func)
         vector.EnabledOn()
@@ -7062,16 +7058,18 @@ class NewViewMap(NewView2D):
         self.plotter.view_xy()
 
     def initialize_menu_tools(self):
+        from .xsection_collection import section_from_azimuth, section_from_points, sections_from_file
+        from .boundary_collection import boundary_from_points
         super().initialize_menu_tools()
-        self.sectionFromAzimuthButton = QAction('Section from Azimuth', self)  # create action
+        self.sectionFromAzimuthButton = QAction('Inclined section', self)  # create action
         self.sectionFromAzimuthButton.triggered.connect(
-            self.section_from_azimuth)  # connect action to function with additional argument parent
+            lambda: self.vector_by_mouse(section_from_azimuth))  # connect action to function)  # connect action to function with additional argument parent
         self.menuBaseView.addAction(self.sectionFromAzimuthButton)  # add action to menu
         self.toolBarBase.addAction(self.sectionFromAzimuthButton)  # add action to toolbar
 
-        self.sectionFromPointsButton = QAction('Section from 2 points', self)  # create action
+        self.sectionFromPointsButton = QAction('Vertical section', self)  # create action
         self.sectionFromPointsButton.triggered.connect(
-            self.section_from_points)  # connect action to function with additional argument parent
+            lambda: self.vector_by_mouse(section_from_points))  # connect action to function with additional argument parent
         self.menuBaseView.addAction(self.sectionFromPointsButton)  # add action to menu
         self.toolBarBase.addAction(self.sectionFromPointsButton)  # add action to toolbar
 
@@ -7089,152 +7087,6 @@ class NewViewMap(NewView2D):
 
     def section_from_azimuth(self):
         print('ciao')
-
-    def section_from_points(self):
-
-        xyz = []
-        section_dict = deepcopy(self.parent.xsect_coll.section_dict)
-
-        def digitize(event):
-            xyz.append(list(event))
-            poly = pv_lines_from_points(xyz)
-
-            name = 'section_trace'
-            # plotter.add_points(np.array(xyz))
-            self.plotter.add_mesh(poly, name=f'line_{name}')
-            self.plotter.add_points(np_array(xyz), name=f'point_{name}')
-
-        def end_digitize(event):
-
-            self.plotter.untrack_click_position(side='left')
-            self.plotter.untrack_click_position(side='right')
-
-            actor_name = 'section_trace'
-
-            vtk_obj = self.plotter.renderer.actors[f'line_{actor_name}'].mapper.dataset
-            points = vtk_obj.points
-
-            section_dict_in = {'warning': ['XSection from points',
-                                           'Build new XSection from a user-drawn line.\nOnce drawn, values can be modified from keyboard\nor by drawing another vector.',
-                                           'QLabel'],
-                               'name': ['Insert Xsection name', 'new_section', 'QLineEdit'],
-                               'base_x': ['Insert origin X coord', points[0, 0], 'QLineEdit'],
-                               'base_y': ['Insert origin Y coord', points[0, 1], 'QLineEdit'],
-                               'end_x': ['Insert end-point X coord', points[1, 0], 'QLineEdit'],
-                               'end_y': ['Insert end-point Y coord', points[1, 1], 'QLineEdit'],
-                               'top': ['Insert top', 0.0, 'QLineEdit'],
-                               'bottom': ['Insert bottom', 0.0, 'QLineEdit']}
-            section_dict_updt = general_input_dialog(title='New XSection from points', input_dict=section_dict_in)
-            if section_dict_updt is None:
-                return
-
-            while True:
-                if section_dict_updt['name'] in self.parent.xsect_coll.get_names():
-                    section_dict_updt['name'] = section_dict_updt['name'] + '_0'
-                else:
-                    break
-
-            for key in section_dict_updt:
-                section_dict[key] = section_dict_updt[key]
-
-            section_dict['base_z'] = 0.0
-            section_dict['end_z'] = 0.0
-            section_dict['azimuth'] = np_arctan2((section_dict['end_x'] - section_dict['base_x']),
-                                                 (section_dict['end_y'] - section_dict['base_y'])) * 180 / np_pi
-            if section_dict['azimuth'] < 0:
-                section_dict['azimuth'] += 360
-            section_dict['length'] = np_sqrt((section_dict['end_x'] - section_dict['base_x']) ** 2 + (
-                    section_dict['end_y'] - section_dict['base_y']) ** 2)
-            section_dict['normal_x'] = np_sin((section_dict['azimuth'] + 90) * np_pi / 180)
-            section_dict['normal_y'] = np_cos((section_dict['azimuth'] + 90) * np_pi / 180)
-            section_dict['normal_z'] = 0.0
-            self.plotter.remove_actor(f'line_{actor_name}')
-            self.plotter.remove_actor(f'point_{actor_name}')
-            uid = self.parent.xsect_coll.add_entity_from_dict(entity_dict=section_dict)
-
-            """Once the original XSection has been drawn, ask if a set of XSections is needed."""
-            section_dict_in_set = {'activate': ['Multiple XSections', 'Draw a set of parallel XSections', 'QCheckBox'],
-                                   'spacing': ['Spacing', 1000.0, 'QLineEdit'],
-                                   'num_xs': ['Number of XSections', 5, 'QLineEdit']}
-            section_dict_updt_set = general_input_dialog(title='XSection from Azimuth', input_dict=section_dict_in_set)
-
-            if section_dict_updt_set is None:
-                """Un-Freeze QT interface"""
-                for action in self.findChildren(QAction):
-                    action.setEnabled(True)
-                return
-            if section_dict_updt_set['activate'] == "uncheck":
-                """Un-Freeze QT interface"""
-                for action in self.findChildren(QAction):
-                    action.setEnabled(True)
-                return
-
-            name_original_xs = section_dict['name']
-
-            for xsect in range(section_dict_updt_set['num_xs'] - 1):
-                section_dict['name'] = name_original_xs + '_' + str(xsect)
-                while True:
-                    if section_dict['name'] in self.parent.xsect_coll.get_names():
-                        section_dict['name'] = section_dict['name'] + '_0'
-                    else:
-                        break
-                section_dict['base_x'] = section_dict['base_x'] - (
-                        section_dict_updt_set['spacing'] * np_cos(section_dict['azimuth'] * np_pi / 180))
-                section_dict['base_y'] = section_dict['base_y'] + (
-                        section_dict_updt_set['spacing'] * np_sin(section_dict['azimuth'] * np_pi / 180))
-                section_dict['end_x'] = section_dict['end_x'] - (
-                        section_dict_updt_set['spacing'] * np_cos(section_dict['azimuth'] * np_pi / 180))
-                section_dict['end_y'] = section_dict['end_y'] + (
-                        section_dict_updt_set['spacing'] * np_sin(section_dict['azimuth'] * np_pi / 180))
-                section_dict['normal_x'] = np_sin((section_dict['azimuth'] + 90) * np_pi / 180)
-                section_dict['normal_y'] = np_cos((section_dict['azimuth'] + 90) * np_pi / 180)
-                section_dict['uid'] = None
-                uid = self.parent.xsect_coll.add_entity_from_dict(entity_dict=section_dict)
-
-            self.enable_actions()
-
-        self.disable_actions()
-        # """Freeze QT interface"""
-        # for action in self.findChildren(QAction):
-        #     if isinstance(action.parentWidget(), NavigationToolbar) is False:
-        #         action.setDisabled(True)
-        # """Deselect all previously selected actors."""
-        # if not self.selected_uids == []:
-        #     deselected_uids = self.selected_uids
-        #     self.selected_uids = []
-        #     self.parent.geology_geom_modified_signal.emit(deselected_uids)  # emit uid as list to force redraw
-        # """Create deepcopy of the geological entity dictionary."""
-        # line_dict = deepcopy(self.parent.geol_coll.geological_entity_dict)
-
-        # """One dictionary is set as input for a general widget of multiple-value-input"""
-        # line_dict_in = {'name': ['PolyLine name: ', 'new_pline'], 'geological_type': ['Geological type: ', GeologicalCollection.valid_geological_types], 'geological_feature': ['Geological feature: ', self.parent.geol_legend_df['geological_feature'].tolist()], 'scenario': ['Scenario: ', list(set(self.parent.geol_legend_df['scenario'].tolist()))]}
-        # line_dict_updt = multiple_input_dialog(title='Digitize new PolyLine', input_dict=line_dict_in)
-        # """Check if the output of the widget is empty or not. If the Cancel button was clicked, the tool quits"""
-
-        # if line_dict_updt is None:
-        #     """Un-Freeze QT interface"""
-        #     for action in self.findChildren(QAction):
-        #         action.setEnabled(True)
-        #     return
-        # """Getting the values that have been typed by the user through the widget"""
-        # for key in line_dict_updt:
-        #     line_dict[key] = line_dict_updt[key]
-        # if isinstance(self, NewViewMap):
-        #     line_dict['topological_type'] = 'PolyLine'
-        #     line_dict['vtk_obj'] = PolyLine()
-        #     line_dict['x_section'] = None
-        # elif isinstance(self, NewViewXsection):
-        #     line_dict['topological_type'] = 'XsPolyLine'
-        #     line_dict['x_section'] = self.this_x_section_uid
-        #     line_dict['vtk_obj'] = XsPolyLine()
-        # else:
-        #     """Un-Freeze QT interface"""
-        #     for action in self.findChildren(QAction):
-        #         action.setEnabled(True)
-        #     return
-
-        self.plotter.track_click_position(callback=digitize, side='left')
-        self.plotter.track_click_position(callback=end_digitize, side='right')
 
     def sections_from_file(self):
         print('ciao')
@@ -7280,7 +7132,7 @@ class NewViewXsection(NewView2D):
 
         section_plane = parent.xsect_coll.get_uid_vtk_plane(self.this_x_section_uid)
         center = np_array(section_plane.GetOrigin())
-        direction = np_array(section_plane.GetNormal())
+        direction = -np_array(section_plane.GetNormal())
 
         self.plotter.camera.focal_point = center
         self.plotter.camera.position = center + direction
