@@ -1,6 +1,6 @@
 """entities_factory.py
 PZero© Andrea Bistacchi"""
-
+import numpy as np
 from vtk import vtkPolyData, vtkPoints, vtkCellCenters, vtkIdFilter, vtkCleanPolyData, vtkPolyDataNormals, vtkPlane, \
     vtkCellArray, vtkLine, vtkIdList, vtkTriangleFilter, vtkTriangle, vtkFeatureEdges, vtkCleanPolyData, vtkStripper, \
     vtkPolygon, vtkUnstructuredGrid, vtkTetra, vtkImageData, vtkStructuredGrid, vtkPolyDataConnectivityFilter, \
@@ -10,6 +10,7 @@ from vtk.util.numpy_support import vtk_to_numpy
 from vtk.numpy_interface.dataset_adapter import WrapDataObject, vtkDataArrayToVTKArray
 from pyvista import helpers as pv_helpers  # very useful. Can be used when dsa fails
 from pyvista import PolyData as pv_PolyData  # this should be removed
+from pyvista import Arrow as pv_Arrow
 from pyvista import Spline  # this should be removed
 from pyvista import Plotter  # this should be removed
 from pyvista import image_to_texture as pv_image_to_texture
@@ -29,6 +30,8 @@ from numpy import squeeze as np_squeeze
 from numpy import size as np_size
 from numpy import asarray as np_asarray
 from numpy.linalg import norm as np_linalg_norm
+
+
 from numpy import cross as np_cross
 from numpy import append as np_append
 from numpy import array as np_array
@@ -38,6 +41,9 @@ from numpy import hstack as np_hstack
 from numpy import column_stack as np_column_stack
 from numpy import where as np_where
 from numpy import zeros as np_zeros
+from numpy import dot as np_dot
+
+from .orientation_analysis import get_dip_dir_vectors
 from vtkmodules.vtkFiltersCore import vtkGlyph3D
 
 from .helper_functions import profiler
@@ -892,6 +898,19 @@ class XSectionBaseEntity:
     def __init__(self, x_section_uid=None, parent=None, *args, **kwargs):
         self.x_section_uid = x_section_uid
         self.parent = parent
+
+    def world2plane(self):
+        plane = self.parent.xsect_coll.get_uid_vtk_plane(self.x_section_uid)
+        normal = np_array([plane.GetNormal()])
+        dip_vec, dir_vec = get_dip_dir_vectors(normal)
+        uv = np_zeros((self.GetNumberOfPoints(), 2))
+
+        for i, point in enumerate(self.points):
+            uv[i, 0] = np_dot(dir_vec[0], point) #u
+            uv[i, 1] = -np_dot(dip_vec[0], point) #v is negative because of the right hand rule
+
+        return uv[:, 0], uv[:, 1]
+
 
     @property
     def points_W(self):

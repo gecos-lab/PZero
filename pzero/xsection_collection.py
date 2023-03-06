@@ -16,8 +16,11 @@ from numpy import sqrt as np_sqrt
 from numpy import set_printoptions as np_set_printoptions
 from numpy import array as np_array
 from numpy import deg2rad as np_deg2rad
+from numpy.linalg import inv as np_linalg_inv
+from numpy import repeat as np_repeat
+from numpy import dot as np_dot
 
-from .orientation_analysis import dip_directions2normals
+from .orientation_analysis import dip_directions2normals,get_dip_dir_vectors
 
 import pandas as pd
 from PyQt5.QtCore import QAbstractTableModel, Qt, QVariant
@@ -314,6 +317,7 @@ def sections_from_file(self):
                          'base_y': 0,
                          'end_x': 0,
                          'end_y': 0,
+                         'dip': 90.0,
                          'top': 0,
                          'bottom': 0}
     files = open_file_dialog(parent=self, caption="Import section traces", filter="GOCAD ASCII (*.*);;ASCII (*.dat);;CSV (*.csv)",
@@ -639,6 +643,23 @@ class XSectionCollection(QAbstractTableModel):
         deltaY = deltaW * np_cos(azimuth * np_pi / 180)
         return deltaX, deltaY
 
+    def plane2world(self, section_uid=None, u=None, v=None, as_arr=False):
+        n_points = len(u)
+        plane = self.get_uid_vtk_plane(section_uid)
+
+        normal = np_array(plane.GetNormal())
+        origin = np_array(plane.GetOrigin())
+        d = np_repeat(np_dot(normal, origin), n_points)
+
+        dip_vec, dir_vec = get_dip_dir_vectors(np_array([normal]))
+        A = np_array([dir_vec[0], dip_vec[0], normal])
+        B = np_array([u, -v, d]) #this should be [-u +v -d] (because we calculated -v) but it is opposite because of the right hand rule
+        X = np_linalg_inv(A).dot(B).T
+
+        if as_arr:
+            return X
+        else:
+            return X[:, 0], X[:, 1], X[:, 2]
     def set_geometry(self, uid=None):
         """"Given all parameters, sets the vtkPlane origin and normal properties, and builds the frame used for
         visualization"""

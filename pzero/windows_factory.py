@@ -7074,7 +7074,7 @@ class NewViewMap(NewView2D):
         self.toolBarBase.addAction(self.sectionFromPointsButton)  # add action to toolbar
 
         self.sectionFromFileButton = QAction('Sections from file', self)
-        self.sectionFromFileButton.triggered.connect(self.sections_from_file)
+        self.sectionFromFileButton.triggered.connect(lambda: sections_from_file(self))
 
         self.menuBaseView.addAction(self.sectionFromFileButton)  # add action to menu
         self.toolBarBase.addAction(self.sectionFromFileButton)  # add action to toolbar

@@ -12,12 +12,11 @@ from numpy import tan as np_tan
 from numpy import squeeze as np_squeeze
 from numpy import number as np_number
 from numpy import cross as np_cross
-from numpy import zeros_like as np_zeros_like
+from numpy import where as np_where
 
 from .helper_dialogs import multiple_input_dialog
-from .entities_factory import TriSurf, VertexSet, XsVertexSet
 
-"""IN THE FUTURE add functions for ortientation analysis."""
+"""IN THE FUTURE add functions for orientation analysis."""
 
 
 def strikes2dip_directions(strikes=None):
@@ -90,6 +89,8 @@ def dip_directions2normals(dips=None, directions=None, return_dip_dir_vec=False)
 
 
 def vset_set_normals(VertexSet=None, dip_name=None, dir_name=None):
+    from .entities_factory import VertexSet
+
     dips_array = VertexSet.get_point_data(dip_name)
     dirs_array = VertexSet.get_point_data(dir_name)
     normals = dip_directions2normals(dips=dips_array, directions=dirs_array)
@@ -98,6 +99,8 @@ def vset_set_normals(VertexSet=None, dip_name=None, dir_name=None):
 
 
 def set_normals(self):
+    from .entities_factory import TriSurf, VertexSet, XsVertexSet
+
     """General function to set normals on different entities.
     It branches to other functions depending on the selected entity
     and aborts if the input entities are not homogeneous."""
@@ -164,8 +167,9 @@ def set_normals(self):
 
 
 def get_dip_dir_vectors(normals=None):
-    dip_az = -normals.copy()
-    dip_az[:, 2] = 0
-    dir_vectors = np_cross(normals, dip_az)
-    dip_vectors = np_cross(-normals, dir_vectors)
+    normals[np_where(normals[:, 2] > 0)] *= -1
+    dir_vectors = normals.copy()
+    dir_vectors[:, 2] = 0
+    dir_vectors[:, 0], dir_vectors[:, 1] = normals[:, 1], -normals[:, 0]  # direction is the az vector rotated clockwise by 90° around the Z axis
+    dip_vectors = np_cross(normals, dir_vectors)
     return dip_vectors, dir_vectors
