@@ -7058,20 +7058,14 @@ class NewViewMap(NewView2D):
         self.plotter.view_xy()
 
     def initialize_menu_tools(self):
-        from .xsection_collection import section_from_azimuth, section_from_points, sections_from_file
+        from .xsection_collection import section_from_azimuth, sections_from_file
         from .boundary_collection import boundary_from_points
         super().initialize_menu_tools()
-        self.sectionFromAzimuthButton = QAction('Inclined section', self)  # create action
+        self.sectionFromAzimuthButton = QAction('Section from azimuth', self)  # create action
         self.sectionFromAzimuthButton.triggered.connect(
             lambda: self.vector_by_mouse(section_from_azimuth))  # connect action to function)  # connect action to function with additional argument parent
         self.menuBaseView.addAction(self.sectionFromAzimuthButton)  # add action to menu
         self.toolBarBase.addAction(self.sectionFromAzimuthButton)  # add action to toolbar
-
-        self.sectionFromPointsButton = QAction('Vertical section', self)  # create action
-        self.sectionFromPointsButton.triggered.connect(
-            lambda: self.vector_by_mouse(section_from_points))  # connect action to function with additional argument parent
-        self.menuBaseView.addAction(self.sectionFromPointsButton)  # add action to menu
-        self.toolBarBase.addAction(self.sectionFromPointsButton)  # add action to toolbar
 
         self.sectionFromFileButton = QAction('Sections from file', self)
         self.sectionFromFileButton.triggered.connect(lambda: sections_from_file(self))

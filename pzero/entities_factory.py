@@ -30,6 +30,7 @@ from numpy import squeeze as np_squeeze
 from numpy import size as np_size
 from numpy import asarray as np_asarray
 from numpy.linalg import norm as np_linalg_norm
+from numpy import ones as np_ones
 
 
 from numpy import cross as np_cross
@@ -580,6 +581,12 @@ class PolyData(vtkPolyData):
         downcast['prop'] = prop
         glyph = downcast.glyph(orient='prop',scale=False,geom=geometry)
         return glyph
+
+    def get_homo_points(self):
+        ones = np_ones((self.GetNumberOfPoints(), 1))
+        homo_points = np_column_stack((self.points, ones))
+
+        return homo_points
 
 
 class Plane(vtkPlane):  # _______________________ AT THE MOMENT THIS DOES NOT EXPOSE ANY OTHER METHOD - SEE IF IT IS USEFUL

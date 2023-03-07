@@ -19,6 +19,8 @@ from numpy import deg2rad as np_deg2rad
 from numpy.linalg import inv as np_linalg_inv
 from numpy import repeat as np_repeat
 from numpy import dot as np_dot
+from numpy import matmul as np_matmul
+from numpy import mean as np_mean
 
 from .orientation_analysis import dip_directions2normals,get_dip_dir_vectors
 
@@ -59,13 +61,18 @@ def section_from_azimuth(self, vector):
                        'name': ['Insert Xsection name', 'new_section', 'QLineEdit'],
                        'base_x': ['Insert origin X coord', vector.p1[0], 'QLineEdit'],
                        'base_y': ['Insert origin Y coord', vector.p1[1], 'QLineEdit'],
-                       'end_x': ['Insert origin X coord', vector.p2[0], 'QLineEdit'],
-                       'end_y': ['Insert origin Y coord', vector.p2[1], 'QLineEdit'],
+                       'end_x': ['Insert end X coord', vector.p2[0], 'QLineEdit'],
+                       'end_y': ['Insert end Y coord', vector.p2[1], 'QLineEdit'],
                        'azimuth': ['Insert azimuth', vector.azimuth, 'QLineEdit'],
                        'dip': ['Insert dip', 90.0, 'QLineEdit'],
                        'length': ['Insert length', vector.length, 'QLineEdit'],
-                       'top': ['Insert top', 0.0, 'QLineEdit'],
-                       'bottom': ['Insert bottom', 0.0, 'QLineEdit']}
+                       'width': ['Insert width', 0.0, 'QLineEdit'],
+                       'bottom': ['Insert bottom', 0.0, 'QLineEdit'],
+                       'activate': ['Multiple XSections', 'Draw a set of parallel XSections', 'QCheckBox'],
+                       'spacing': ['Spacing', 1000.0, 'QLineEdit'],
+                       'num_xs': ['Number of XSections', 5, 'QLineEdit'],
+                       'along': ['Repeat parallel to:', ['Normal', 'Azimuth'], 'QComboBox']
+                       }
     section_dict_updt = general_input_dialog(title='New XSection from points', input_dict=section_dict_in)
     if section_dict_updt is None:
         return
@@ -79,226 +86,66 @@ def section_from_azimuth(self, vector):
     for key in section_dict_updt:
         section_dict[key] = section_dict_updt[key]
 
-    section_dict['base_z'] = 0.0
-    section_dict['end_z'] = 0.0
-    # section_dict['azimuth'] = np_arctan2((section_dict['end_x'] - section_dict['base_x']),
-    #                                      (section_dict['end_y'] - section_dict['base_y'])) * 180 / np_pi
-    # if section_dict['azimuth'] < 0:
-    #     section_dict['azimuth'] += 360
-    # section_dict['length'] = np_sqrt((section_dict['end_x'] - section_dict['base_x']) ** 2 + (
-    #         section_dict['end_y'] - section_dict['base_y']) ** 2)
-    normals = dip_directions2normals(dips=section_dict['dip'], directions=(section_dict['azimuth']+90)%360)
+    activate = section_dict['activate']
+    num_xs = section_dict['num_xs']
+    along = section_dict['along']
+
+    section_dict.pop('activate', None)
+    section_dict.pop('num_xs', None)
+
+    section_dict['base_z'] = section_dict['bottom']
+    section_dict['end_z'] = section_dict['top']
+    normals = dip_directions2normals(dips=section_dict['dip'], directions=(section_dict['azimuth']+90) % 360)
     section_dict['normal_x'] = normals[0]
     section_dict['normal_y'] = normals[1]
     section_dict['normal_z'] = normals[2]
     uid = self.parent.xsect_coll.add_entity_from_dict(entity_dict=section_dict)
 
-    """Once the original XSection has been drawn, ask if a set of XSections is needed."""
-    section_dict_in_set = {'activate': ['Multiple XSections', 'Draw a set of parallel XSections', 'QCheckBox'],
-                           'spacing': ['Spacing', 1000.0, 'QLineEdit'],
-                           'num_xs': ['Number of XSections', 5, 'QLineEdit']}
-    section_dict_updt_set = general_input_dialog(title='XSection from Azimuth', input_dict=section_dict_in_set)
-
-    if section_dict_updt_set is None:
+    if section_dict is None:
         """Un-Freeze QT interface"""
         self.enable_actions()
-    if section_dict_updt_set['activate'] == "uncheck":
-        """Un-Freeze QT interface"""
-        self.enable_actions()
-    else:
-        # name_original_xs = section_dict['name']
-        #
-        # for xsect in range(section_dict_updt_set['num_xs'] - 1):
-        #     section_dict['name'] = name_original_xs + '_' + str(xsect)
-        #     while True:
-        #         if section_dict['name'] in self.parent.xsect_coll.get_names():
-        #             section_dict['name'] = section_dict['name'] + '_0'
-        #         else:
-        #             break
-        #     section_dict['base_x'] = section_dict['base_x'] - (
-        #             section_dict_updt_set['spacing'] * np_cos(section_dict['azimuth'] * np_pi / 180))
-        #     section_dict['base_y'] = section_dict['base_y'] + (
-        #             section_dict_updt_set['spacing'] * np_sin(section_dict['azimuth'] * np_pi / 180))
-        #     section_dict['end_x'] = section_dict['end_x'] - (
-        #             section_dict_updt_set['spacing'] * np_cos(section_dict['azimuth'] * np_pi / 180))
-        #     section_dict['end_y'] = section_dict['end_y'] + (
-        #             section_dict_updt_set['spacing'] * np_sin(section_dict['azimuth'] * np_pi / 180))
-        #     section_dict['normal_x'] = np_sin((section_dict['azimuth'] + 90) * np_pi / 180)
-        #     section_dict['normal_y'] = np_cos((section_dict['azimuth'] + 90) * np_pi / 180)
-        #     section_dict['uid'] = None
-        #     uid = self.parent.xsect_coll.add_entity_from_dict(entity_dict=section_dict)
-        ...
-
-        self.enable_actions()
-# def section_from_azimuth(self):
-#     """Create a new cross section from origin and azimuth"""
-#     """Freeze QT interface"""
-#     for action in self.findChildren(QAction):
-#         if isinstance(action.parentWidget(), NavigationToolbar) is False:
-#             action.setDisabled(True)
-#     self.text_msg.set_text("Draw a vector with mouse to represent the new XSection")
-#     section_dict = deepcopy(self.parent.xsect_coll.section_dict)
-#     """multiple_input_dialog widget is built to check the default value associated to each feature in
-#     section_dict_in: this value defines the type (str-int-float) of the output that is passed to section_dict_updt.
-#     It is therefore necessary in section_dict_in to implement the right type for each variable."""
-#     while True:
-#         self.vector_by_mouse(verbose=True)
-#         if not self.vbm_U0:
-#             print("Zero-length vector")
-#             """Un-Freeze QT interface"""
-#             for action in self.findChildren(QAction):
-#                 action.setEnabled(True)
-#             return
-#         section_dict_in = {'warning': ['XSection from azimuth',
-#                                        'Build new XSection from a user-drawn line.\nOnce drawn, values can be '
-#                                        'modified from keyboard\nor by drawing another vector.',
-#                                        'QLabel'],
-#                            'name': ['Insert Xsection name', 'new_section', 'QLineEdit'],
-#                            'base_x': ['Insert origin X coord', self.vbm_U0, 'QLineEdit'],
-#                            'base_y': ['Insert origin Y coord', self.vbm_V0, 'QLineEdit'],
-#                            'azimuth': ['Insert azimuth', self.vector_by_mouse_azimuth, 'QLineEdit'],
-#                            'length': ['Insert length', self.vector_by_mouse_length, 'QLineEdit'],
-#                            'top': ['Insert top', 0.0, 'QLineEdit'],
-#                            'bottom': ['Insert bottom', 0.0, 'QLineEdit']}
-#         section_dict_updt = general_input_dialog(title='XSection from Azimuth', input_dict=section_dict_in)
-#         if section_dict_updt is not None:
-#             break
-#     while True:
-#         if section_dict_updt['name'] in self.parent.xsect_coll.get_names():
-#             section_dict_updt['name'] = section_dict_updt['name'] + '_0'
-#         else:
-#             break
-#     for key in section_dict_updt:
-#         section_dict[key] = section_dict_updt[key]
-#     section_dict['base_z'] = 0.0
-#     section_dict['end_z'] = 0.0
-#     section_dict['end_x'] = section_dict['base_x'] + section_dict['length'] * np_sin(
-#         section_dict['azimuth'] * np_pi / 180)
-#     section_dict['end_y'] = section_dict['base_y'] + section_dict['length'] * np_cos(
-#         section_dict['azimuth'] * np_pi / 180)
-#     section_dict['normal_x'] = np_sin((section_dict['azimuth'] + 90) * np_pi / 180)
-#     section_dict['normal_y'] = np_cos((section_dict['azimuth'] + 90) * np_pi / 180)
-#     section_dict['normal_z'] = 0.0
-#     uid = self.parent.xsect_coll.add_entity_from_dict(entity_dict=section_dict)
-#     """Once the original XSection has been drawn, ask if a set of XSections is needed."""
-#     section_dict_in_set = {'activate': ['Multiple XSections', 'Draw a set of parallel XSections', 'QCheckBox'],
-#                            'spacing': ['Spacing', 1000.0, 'QLineEdit'],
-#                            'num_xs': ['Number of XSections', 5, 'QLineEdit']}
-#     section_dict_updt_set = general_input_dialog(title='XSection from Azimuth', input_dict=section_dict_in_set)
-#     if section_dict_updt_set is None:
-#         """Un-Freeze QT interface"""
-#         for action in self.findChildren(QAction):
-#             action.setEnabled(True)
-#         return
-#     if section_dict_updt_set['activate'] == "uncheck":
-#         """Un-Freeze QT interface"""
-#         for action in self.findChildren(QAction):
-#             action.setEnabled(True)
-#         return
-#     name_original_xs = section_dict['name']
-#     for xsect in range(section_dict_updt_set['num_xs'] - 1):
-#         section_dict['name'] = name_original_xs + '_' + str(xsect)
-#         while True:
-#             if section_dict['name'] in self.parent.xsect_coll.get_names():
-#                 section_dict['name'] = section_dict['name'] + '_0'
-#             else:
-#                 break
-#         section_dict['base_x'] = section_dict['base_x'] - (
-#                     section_dict_updt_set['spacing'] * np_cos(section_dict_updt['azimuth'] * np_pi / 180))
-#         section_dict['base_y'] = section_dict['base_y'] + (
-#                     section_dict_updt_set['spacing'] * np_sin(section_dict_updt['azimuth'] * np_pi / 180))
-#         section_dict['end_x'] = section_dict['base_x'] + section_dict['length'] * np_sin(
-#             section_dict['azimuth'] * np_pi / 180)
-#         section_dict['end_y'] = section_dict['base_y'] + section_dict['length'] * np_cos(
-#             section_dict['azimuth'] * np_pi / 180)
-#         section_dict['uid'] = None
-#         uid = self.parent.xsect_coll.add_entity_from_dict(entity_dict=section_dict)
-#     """Un-Freeze QT interface"""
-#     for action in self.findChildren(QAction):
-#         action.setEnabled(True)
-
-
-def section_from_points(self, vector):
-    section_dict = deepcopy(self.parent.xsect_coll.section_dict)
-
-    self.plotter.untrack_click_position(side='left')
-
-    # points = np_array([vector.p1, vector.p2])
-
-    section_dict_in = {'warning': ['XSection from points',
-                                   'Build new XSection from a user-drawn line.\nOnce drawn, values can be modified from keyboard\nor by drawing another vector.',
-                                   'QLabel'],
-                       'name': ['Insert Xsection name', 'new_section', 'QLineEdit'],
-                       'base_x': ['Insert origin X coord', vector.p1[0], 'QLineEdit'],
-                       'base_y': ['Insert origin Y coord', vector.p1[1], 'QLineEdit'],
-                       'end_x': ['Insert end-point X coord', vector.p2[0], 'QLineEdit'],
-                       'end_y': ['Insert end-point Y coord', vector.p2[1], 'QLineEdit'],
-                       'top': ['Insert top', 0.0, 'QLineEdit'],
-                       'bottom': ['Insert bottom', 0.0, 'QLineEdit']}
-    section_dict_updt = general_input_dialog(title='New XSection from points', input_dict=section_dict_in)
-    if section_dict_updt is None:
-        return
-
-    while True:
-        if section_dict_updt['name'] in self.parent.xsect_coll.get_names():
-            section_dict_updt['name'] = section_dict_updt['name'] + '_0'
-        else:
-            break
-
-    for key in section_dict_updt:
-        section_dict[key] = section_dict_updt[key]
-
-    section_dict['base_z'] = 0.0
-    section_dict['end_z'] = 0.0
-    section_dict['azimuth'] = np_arctan2((section_dict['end_x'] - section_dict['base_x']),
-                                         (section_dict['end_y'] - section_dict['base_y'])) * 180 / np_pi
-    if section_dict['azimuth'] < 0:
-        section_dict['azimuth'] += 360
-    section_dict['length'] = np_sqrt((section_dict['end_x'] - section_dict['base_x']) ** 2 + (
-            section_dict['end_y'] - section_dict['base_y']) ** 2)
-    section_dict['normal_x'] = np_sin((section_dict['azimuth'] + 90) * np_pi / 180)
-    section_dict['normal_y'] = np_cos((section_dict['azimuth'] + 90) * np_pi / 180)
-    section_dict['normal_z'] = 0.0
-    section_dict['dip'] = 90.0
-    uid = self.parent.xsect_coll.add_entity_from_dict(entity_dict=section_dict)
-
-    """Once the original XSection has been drawn, ask if a set of XSections is needed."""
-    section_dict_in_set = {'activate': ['Multiple XSections', 'Draw a set of parallel XSections', 'QCheckBox'],
-                           'spacing': ['Spacing', 1000.0, 'QLineEdit'],
-                           'num_xs': ['Number of XSections', 5, 'QLineEdit']}
-    section_dict_updt_set = general_input_dialog(title='XSection from Azimuth', input_dict=section_dict_in_set)
-
-    if section_dict_updt_set is None:
-        """Un-Freeze QT interface"""
-        self.enable_actions()
-    if section_dict_updt_set['activate'] == "uncheck":
+    if activate == "uncheck":
         """Un-Freeze QT interface"""
         self.enable_actions()
     else:
         name_original_xs = section_dict['name']
+        spacing = section_dict['spacing']
+        fac = 2
+        for xsect in range(num_xs - 1):
 
-        for xsect in range(section_dict_updt_set['num_xs'] - 1):
             section_dict['name'] = name_original_xs + '_' + str(xsect)
             while True:
                 if section_dict['name'] in self.parent.xsect_coll.get_names():
                     section_dict['name'] = section_dict['name'] + '_0'
                 else:
                     break
-            section_dict['base_x'] = section_dict['base_x'] - (
-                    section_dict_updt_set['spacing'] * np_cos(section_dict['azimuth'] * np_pi / 180))
-            section_dict['base_y'] = section_dict['base_y'] + (
-                    section_dict_updt_set['spacing'] * np_sin(section_dict['azimuth'] * np_pi / 180))
-            section_dict['end_x'] = section_dict['end_x'] - (
-                    section_dict_updt_set['spacing'] * np_cos(section_dict['azimuth'] * np_pi / 180))
-            section_dict['end_y'] = section_dict['end_y'] + (
-                    section_dict_updt_set['spacing'] * np_sin(section_dict['azimuth'] * np_pi / 180))
-            section_dict['normal_x'] = np_sin((section_dict['azimuth'] + 90) * np_pi / 180)
-            section_dict['normal_y'] = np_cos((section_dict['azimuth'] + 90) * np_pi / 180)
+
+            tx = self.parent.xsect_coll.get_uid_normal_x(uid)*spacing
+            ty = self.parent.xsect_coll.get_uid_normal_y(uid)*spacing
+            if along == 'Normal':
+                tz = self.parent.xsect_coll.get_uid_normal_z(uid)*spacing
+            else:
+                tz = 0
+
+            trans_mat = np_array([[1, 0, 0, 0],
+                                  [0, 1, 0, 0],
+                                  [0, 0, 1, 0],
+                                  [tx, ty, tz, 1]])
+
+            frame = self.parent.xsect_coll.get_uid_vtk_frame(uid)
+            homo_points = frame.get_homo_points()
+            new_points = np_matmul(homo_points, trans_mat)[:, :-1]
+            section_dict['base_x'] = new_points[0, 0]
+            section_dict['base_y'] = new_points[0, 1]
+
+            section_dict['end_x'] = new_points[3, 0]
+            section_dict['end_y'] = new_points[3, 1]
+            section_dict['bottom'] = new_points[0, 2]
             section_dict['uid'] = None
+
             uid = self.parent.xsect_coll.add_entity_from_dict(entity_dict=section_dict)
 
         self.enable_actions()
-
 
 def sections_from_file(self):
     from os.path import splitext
@@ -674,23 +521,20 @@ class XSectionCollection(QAbstractTableModel):
         dip = np_deg2rad(self.df.loc[self.df['uid'] == uid, 'dip'].values[0])
         azimuth = np_deg2rad((self.df.loc[self.df['uid'] == uid, 'azimuth'].values[0]+180) % 360)
 
-        height = self.df.loc[self.df['uid']==uid, 'top'].values[0] - self.df.loc[self.df['uid'] == uid, 'bottom'].values[0]
-
-
-        # print(self.df)
-        top = self.df.loc[self.df['uid'] == uid, 'top']
-        bottom = self.df.loc[self.df['uid'] == uid, 'bottom']
+        width = self.df.loc[self.df['uid'] == uid, 'width'].values[0]
+        bottom = self.df.loc[self.df['uid'] == uid, 'bottom'].values[0]
 
         vtk_frame = XsPolyLine(x_section_uid=uid, parent=self.parent)
 
-        #
-        # contour = pv_plane.extract_feature_edges()
-        # vtk_frame.ShallowCopy(contour)
         frame_points = vtkPoints()
         frame_cells = vtkCellArray()
         frame_points.InsertPoint(0, base_point[0], base_point[1], bottom)
-        frame_points.InsertPoint(1, base_point[0]+height*np_cos(dip)*np_cos(-azimuth), base_point[1]+height*np_cos(dip)*np_sin(-azimuth), height*np_sin(dip))
-        frame_points.InsertPoint(2, end_point[0]+height*np_cos(dip)*np_cos(-azimuth), end_point[1]+height*np_cos(dip)*np_sin(-azimuth), height*np_sin(dip))
+        frame_points.InsertPoint(1, base_point[0]+width*np_cos(dip)*np_cos(-azimuth),
+                                 base_point[1]+width*np_cos(dip)*np_sin(-azimuth),
+                                 bottom+width*np_sin(dip))
+        frame_points.InsertPoint(2, end_point[0]+width*np_cos(dip)*np_cos(-azimuth),
+                                 end_point[1]+width*np_cos(dip)*np_sin(-azimuth),
+                                 bottom+width*np_sin(dip))
         frame_points.InsertPoint(3, end_point[0], end_point[1], bottom)
         line = vtkLine()
         line.GetPointIds().SetId(0, 0)
