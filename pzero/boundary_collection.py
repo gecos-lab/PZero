@@ -30,40 +30,31 @@ pd_set_option('display.max_colwidth', pd_max_colwidth)
 """"Methods used to create boundaries. TO BE MOVED IN ANOTHER MODULE - WORKS IN MAP VIEW?? ________________________________"""
 
 
-def boundary_from_points(self):
+def boundary_from_points(self, vector):
     """Create a new Boundary from a vector"""
     boundary_dict = deepcopy(self.parent.boundary_coll.boundary_entity_dict)
     """multiple_input_dialog widget is built to check the default value associated to each feature in
     section_dict_in: this value defines the type (str-int-float) of the output that is passed to section_dict_updt.
     It is therefore necessary in section_dict_in to implement the right type for each variable."""
     """Freeze QT interface"""
-    for action in self.findChildren(QAction):
-        if isinstance(action.parentWidget(), NavigationToolbar) is False:
-            action.setDisabled(True)
-    self.text_msg.set_text("Draw a vector with mouse to represent the new Boundary")
+    self.disable_actions()
     """Draw the diagonal of the Boundary by drawing a vector with vector_by_mouse. "while True" lets the user 
     draw the vector multiple times if modifications are necessary"""
-    while True:
-        self.vector_by_mouse(verbose=True)
-        if not self.vbm_U0:
-            print("Zero-length vector")
-            """Un-Freeze QT interface"""
-            for action in self.findChildren(QAction):
-                action.setEnabled(True)
-            return
-        boundary_dict_in = {'warning': ['Boundary from points', 'Build new Boundary from a user-drawn line that represents the horizontal diagonal\nof the Bounding box.\nOnce drawn, values can be modified from keyboard or by drawing another vector.', 'QLabel'],
-                            'name': ['Insert Boundary name', 'new_boundary', 'QLineEdit'],
-                            'origin_x': ['Insert origin X coord', self.vbm_U0, 'QLineEdit'],
-                            'origin_y': ['Insert origin Y coord', self.vbm_V0, 'QLineEdit'],
-                            'end_x': ['Insert end-point X coord', self.vbm_Uf, 'QLineEdit'],
-                            'end_y': ['Insert end-point Y coord', self.vbm_Vf, 'QLineEdit'],
-                            'top': ['Insert top', 1000.0, 'QLineEdit'],
-                            'bottom': ['Insert bottom', -1000.0, 'QLineEdit'],
-                            'activatevolume': ['volumeyn', 'Do not create volume. Create horizontal parallelogram at Z=0 meters', 'QCheckBox']}
-        boundary_dict_updt = general_input_dialog(title='New Boundary from points', input_dict=boundary_dict_in)
-        if boundary_dict_updt is not None:
-            break
-    pass
+    self.plotter.untrack_click_position(side='left')
+
+    boundary_dict_in = {'warning': ['Boundary from points', 'Build new Boundary from a user-drawn line that represents the horizontal diagonal\nof the Bounding box.\nOnce drawn, values can be modified from keyboard or by drawing another vector.', 'QLabel'],
+                        'name': ['Insert Boundary name', 'new_boundary', 'QLineEdit'],
+                        'origin_x': ['Insert origin X coord', vector.p1[0], 'QLineEdit'],
+                        'origin_y': ['Insert origin Y coord', vector.p1[1], 'QLineEdit'],
+                        'end_x': ['Insert end-point X coord', vector.p2[0], 'QLineEdit'],
+                        'end_y': ['Insert end-point Y coord', vector.p2[1], 'QLineEdit'],
+                        'top': ['Insert top', 1000.0, 'QLineEdit'],
+                        'bottom': ['Insert bottom', -1000.0, 'QLineEdit'],
+                        'activatevolume': ['volumeyn', 'Do not create volume. Create horizontal parallelogram at Z=0 meters', 'QCheckBox']}
+    boundary_dict_updt = general_input_dialog(title='New Boundary from points', input_dict=boundary_dict_in)
+    if boundary_dict_updt is None:
+        self.enable_actions()
+        return
     """Check if other Boundaries with the same name exist. If so, add suffix to make the name unique"""
     while True:
         if boundary_dict_updt['name'] in self.parent.boundary_coll.get_names():
@@ -116,8 +107,7 @@ def boundary_from_points(self):
         boundary_dict['vtk_obj'].append_cell(np_array([1, 2, 3]))
     uid = self.parent.boundary_coll.add_entity_from_dict(entity_dict=boundary_dict)
     """Un-Freeze QT interface"""
-    for action in self.findChildren(QAction):
-        action.setEnabled(True)
+    self.enable_actions()
 
 
 class BoundaryCollection(QAbstractTableModel):

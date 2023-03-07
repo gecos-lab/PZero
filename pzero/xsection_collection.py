@@ -75,6 +75,7 @@ def section_from_azimuth(self, vector):
                        }
     section_dict_updt = general_input_dialog(title='New XSection from points', input_dict=section_dict_in)
     if section_dict_updt is None:
+        self.enable_actions()
         return
 
     while True:

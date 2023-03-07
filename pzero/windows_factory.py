@@ -3973,7 +3973,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             color_B = self.parent.boundary_coll.get_legend()['color_B']
             color_RGB = [color_R / 255, color_G / 255, color_B / 255]
             line_thick = self.parent.boundary_coll.get_legend()['line_thick']
-            opacity = self.parent.boundary_coll.get_uid_legend(uid=uid)['opacity'] / 100
+            opacity = self.parent.boundary_coll.get_legend()['opacity'] / 100
 
             plot_entity = self.parent.boundary_coll.get_uid_vtk_obj(uid)
         elif collection == 'mesh3d_coll':
@@ -7076,7 +7076,7 @@ class NewViewMap(NewView2D):
         self.toolBarBase.addAction(self.sectionFromFileButton)  # add action to toolbar
 
         self.boundaryFromPointsButton = QAction('Boundary from 2 points', self)  # create action
-        self.boundaryFromPointsButton.triggered.connect(lambda: boundary_from_points(self))  # connect action to function with additional argument parent
+        self.boundaryFromPointsButton.triggered.connect(lambda: self.vector_by_mouse(boundary_from_points))  # connect action to function with additional argument parent
         self.menuBaseView.addAction(self.boundaryFromPointsButton)  # add action to menu
         self.toolBarBase.addAction(self.boundaryFromPointsButton)  # add action to toolbar
 
@@ -7111,7 +7111,7 @@ class NewViewMap(NewView2D):
             color_B = self.parent.boundary_coll.get_legend()['color_B']
             color_RGB = [color_R / 255, color_G / 255, color_B / 255]
             line_thick = self.parent.boundary_coll.get_legend()['line_thick']
-            opacity = self.parent.boundary_coll.get_uid_legend(uid=uid)['opacity'] / 100
+            opacity = self.parent.boundary_coll.get_legend()['opacity'] / 100
 
             plot_entity = self.parent.boundary_coll.get_uid_vtk_obj(uid)
         elif collection == 'mesh3d_coll':
@@ -7442,6 +7442,7 @@ class NewViewMap(NewView2D):
             this_actor = None
         return this_actor
 
+
 class NewViewXsection(NewView2D):
 
     def __init__(self, parent=None, *args, **kwargs):
@@ -7693,7 +7694,7 @@ class NewViewXsection(NewView2D):
             color_B = self.parent.boundary_coll.get_legend()['color_B']
             color_RGB = [color_R / 255, color_G / 255, color_B / 255]
             line_thick = self.parent.boundary_coll.get_legend()['line_thick']
-            opacity = self.parent.boundary_coll.get_uid_legend(uid=uid)['opacity'] / 100
+            opacity = self.parent.boundary_coll.get_legend()['opacity'] / 100
 
             plot_entity = self.parent.boundary_coll.get_uid_vtk_obj(uid)
         elif collection == 'mesh3d_coll':

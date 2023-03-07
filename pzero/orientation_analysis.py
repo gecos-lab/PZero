@@ -175,6 +175,6 @@ def get_dip_dir_vectors(normals=None,az=False):
     if az:
         az_vectors = normals.copy()
         az_vectors[:, 2] = 0
-        return dip_vectors, dir_vectors,az_vectors
+        return dip_vectors, dir_vectors, az_vectors
     else:
         return dip_vectors, dir_vectors
