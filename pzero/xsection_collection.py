@@ -110,7 +110,6 @@ def section_from_azimuth(self, vector):
     else:
         name_original_xs = section_dict['name']
         spacing = section_dict['spacing']
-        fac = 2
         for xsect in range(num_xs - 1):
 
             section_dict['name'] = name_original_xs + '_' + str(xsect)

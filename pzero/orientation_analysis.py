@@ -166,10 +166,15 @@ def set_normals(self):
         print("No input data selected.")
 
 
-def get_dip_dir_vectors(normals=None):
+def get_dip_dir_vectors(normals=None,az=False):
     normals[np_where(normals[:, 2] > 0)] *= -1
     dir_vectors = normals.copy()
     dir_vectors[:, 2] = 0
     dir_vectors[:, 0], dir_vectors[:, 1] = normals[:, 1], -normals[:, 0]  # direction is the az vector rotated clockwise by 90° around the Z axis
     dip_vectors = np_cross(normals, dir_vectors)
-    return dip_vectors, dir_vectors
+    if az:
+        az_vectors = normals.copy()
+        az_vectors[:, 2] = 0
+        return dip_vectors, dir_vectors,az_vectors
+    else:
+        return dip_vectors, dir_vectors
