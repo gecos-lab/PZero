@@ -10,7 +10,7 @@ from numpy import shape as np_shape
 from numpy import sqrt as np_sqrt
 from numpy import flip as np_flip
 from numpy import arange as np_arange
-
+from numpy import round as np_round
 from vtk import vtkTransform, vtkTransformPolyDataFilter
 
 from .geological_collection import GeologicalCollection
@@ -966,7 +966,7 @@ def copy_parallel(self):  # this must be done per-part__________________________
         line_dict['vtk_obj'] = PolyLine()
         line_dict['topological_type'] = 'PolyLine'
     elif isinstance(self, (ViewXsection, NewViewXsection)):
-        inU,inV = self.parent.geol_coll.get_uid_vtk_obj(input_uid).world2plane()
+        inU, inV = self.parent.geol_coll.get_uid_vtk_obj(input_uid).world2plane()
         line_dict['vtk_obj'] = XsPolyLine(self.this_x_section_uid, parent=self.parent)
         line_dict['topological_type'] = 'XsPolyLine'
         line_dict['x_section'] = self.this_x_section_uid
@@ -994,11 +994,11 @@ def copy_parallel(self):  # this must be done per-part__________________________
         for action in self.findChildren(QAction):
             action.setEnabled(True)
         return
-    if isinstance(self, (ViewMap,NewViewMap)):
+    if isinstance(self, (ViewMap, NewViewMap)):
         outX = outU
         outY = outV
         outZ = np_zeros(np_shape(outX))
-    elif isinstance(self, (ViewXsection,NewViewXsection)):
+    elif isinstance(self, (ViewXsection, NewViewXsection)):
         outX, outY, outZ = self.parent.xsect_coll.plane2world(self.this_x_section_uid, outU, outV)
     """Stack coordinates in two-columns matrix and write to vtk object."""
     print("outXYZ = np_column_stack((outX, outY, outZ))")
@@ -1188,7 +1188,7 @@ def measure_distance(self, vector):
         return
 
     message = "Distance (m): " + str(round(vector.length, 2)) + "\n\n" + "Angle: " + str(
-        round(vector.azimuth, 2))
+        round(vector.azimuth, 2)) + "\n\n" + "Point1: " + str(np_round(vector.p1, 2)) + "\n\n"+"Point2: " + str(np_round(vector.p2, 2))
     out = message_dialog(title="Measure Distance", message=message)
     """Un-Freeze QT interface"""
     for action in self.findChildren(QAction):
