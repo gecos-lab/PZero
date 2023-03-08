@@ -1,7 +1,7 @@
 """windows_factory.py
 PZero© Andrea Bistacchi"""
 from vtkmodules.vtkCommonCore import vtkCommand
-import vtkmodules.vtkFiltersCore
+from vtkmodules.vtkRenderingCore import vtkPropPicker
 
 from .orientation_analysis import get_dip_dir_vectors
 
@@ -15,7 +15,7 @@ from .base_view_window_ui import Ui_BaseViewWindow
 from .entities_factory import VertexSet, PolyLine, TriSurf, TetraSolid, XsVertexSet, XsPolyLine, DEM, PCDom, MapImage, \
     Voxet, XsVoxet, Plane, Seismics, XsTriSurf, XsImage, PolyData, Well, WellMarker, WellTrace, Attitude
 from .helper_dialogs import input_one_value_dialog, input_text_dialog, input_combo_dialog, message_dialog, \
-    options_dialog, multiple_input_dialog, tic, toc, open_file_dialog, progress_dialog, general_input_dialog
+    options_dialog, multiple_input_dialog, tic, toc, open_file_dialog, progress_dialog, save_file_dialog,general_input_dialog
 from .geological_collection import GeologicalCollection
 from copy import deepcopy
 from uuid import uuid4
@@ -48,7 +48,7 @@ from vtk.util import numpy_support
 from vtkmodules.vtkInteractionWidgets import vtkCameraOrientationWidget, vtkContourWidget, \
     vtkLinearContourLineInterpolator, vtkDijkstraImageContourLineInterpolator, vtkBezierContourLineInterpolator, \
     vtkPolyDataContourLineInterpolator, vtkPolygonalSurfaceContourLineInterpolator, vtkTerrainContourLineInterpolator
-from vtk import vtkExtractPoints, vtkSphere, vtkAreaPicker, vtkPropPicker, vtkImageTracerWidget, vtkDistanceWidget, vtkAppendPolyData
+from vtk import vtkExtractPoints, vtkSphere, vtkAreaPicker, vtkImageTracerWidget, vtkDistanceWidget, vtkAppendPolyData
 
 """3D plotting imports"""
 from pyvista import global_theme as pv_global_theme

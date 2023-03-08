@@ -83,7 +83,7 @@ def open_file_dialog(parent=None, caption=None, filter=None, multiple=False):
     return in_file_name
 
 
-def save_file_dialog(parent=None, caption=None, filter=None,directory=False):
+def save_file_dialog(parent=None, caption=None, filter=None, directory=False):
     """Open a dialog and input a file or folder name.
     If the dialog is closed without a valid file name, it returns None."""
     if directory:
@@ -109,7 +109,7 @@ def multiple_input_dialog(title="title", input_dict=None,return_widget=False):
     1) title of the widget
     2) a dictionary of the form -->
         dict = {'key_0': ['label_0', 'default_value_0'],
-                'key_1': ['label_1', ['default_value_1.0', 'default_value_1.1', 'default_value_1.2']],
+                'key_1': ['label_1', ['default_value_1.0', 'default_value_1.1', 'default_value_1.2'],set_value],
                 'key_2': ['label_2', 'default_value_2']}
         The values can be either strings, doubles, integers, or lists. In case of lists a combo box is used for input.
     Based on the length of dict, the widget builds the right number of QLineEdits and QComboBoxes.
@@ -132,18 +132,24 @@ def multiple_input_dialog(title="title", input_dict=None,return_widget=False):
         gridLayout.addWidget(objects_qt[key][0], i + 1, 1)
         """Create QLineEdits and QComboBoxes."""
         if isinstance(input_dict[key][1], list):
-            objects_qt[key][1] = QComboBox(widget,objectName=f'par_{key}')
+            objects_qt[key][1] = QComboBox(widget, objectName=f'par_{key}')
+            if len(input_dict[key]) == 3:
+                display_value = input_dict[key][2]
+                index = input_dict[key][1].index(display_value)
+            else:
+                index = 0
             objects_qt[key][1].addItems(input_dict[key][1])
             objects_qt[key][1].setEditable(True)
+            objects_qt[key][1].setCurrentIndex(index)
         elif isinstance(input_dict[key][1], bool):
-            objects_qt[key][1] = QCheckBox(widget,objectName=f'par_{key}')
+            objects_qt[key][1] = QCheckBox(widget, objectName=f'par_{key}')
             # objects_qt[key][1].setText(str(input_dict[key][0]))
             objects_qt[key][1].setChecked(input_dict[key][1])
         elif isinstance(input_dict[key][1], int):
-            objects_qt[key][1] = QLineEdit(widget,objectName=f'par_{key}')
+            objects_qt[key][1] = QLineEdit(widget, objectName=f'par_{key}')
             objects_qt[key][1].setText(str(input_dict[key][1]))
         elif isinstance(input_dict[key][1], float):
-            objects_qt[key][1] = QLineEdit(widget,objectName=f'par_{key}')
+            objects_qt[key][1] = QLineEdit(widget, objectName=f'par_{key}')
             objects_qt[key][1].setText(str(input_dict[key][1]))
         # elif isinstance(input_dict[key][1], int):
         #     objects_qt[key][1] = QSpinBox(widget)
