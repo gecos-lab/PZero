@@ -248,14 +248,44 @@ class XSectionCollection(QAbstractTableModel):
     """section_dict is a dictionary of attributes used to define Xsections.
     Always use deepcopy(GeologicalCollection.geological_entity_dict) to copy
     this dictioary without altering the original."""
-    section_dict = {'uid': '', 'name': 'undef', 'base_x': 0.0, 'base_y': 0.0, 'base_z': 0.0, 'end_x': 0.0, 'end_y': 0.0,
-                    'end_z': 0.0, 'normal_x': 0.0, 'normal_y': 0.0, 'normal_z': 0.0, 'azimuth': 0.0, 'length': 0.0,
-                    'top': 0.0, 'bottom': 0.0, 'vtk_plane': None,  # None to avoid errors with deepcopy
+    section_dict = {'uid': '',
+                    'name': 'undef',
+                    'base_x': 0.0,
+                    'base_y': 0.0,
+                    'base_z': 0.0,
+                    'end_x': 0.0,
+                    'end_y': 0.0,
+                    'end_z': 0.0,
+                    'normal_x': 0.0,
+                    'normal_y': 0.0,
+                    'normal_z': 0.0,
+                    'azimuth': 0.0,
+                    'dip': 90.0,
+                    'length': 0.0,
+                    'width': 0.0,
+                    'top': 0.0,
+                    'bottom': 0.0,
+                    'vtk_plane': None,  # None to avoid errors with deepcopy
                     'vtk_frame': None}  # None to avoid errors with deepcopy
 
-    section_type_dict = {'uid': str, 'name': str, 'base_x': float, 'base_y': float, 'base_z': float, 'end_x': float,
-                         'end_y': float, 'end_z': float, 'normal_x': float, 'normal_y': float, 'normal_z': float,
-                         'azimuth': float, 'length': float, 'top': float, 'bottom': float, 'vtk_plane': object,
+    section_type_dict = {'uid': str,
+                         'name': str,
+                         'base_x': float,
+                         'base_y': float,
+                         'base_z': float,
+                         'end_x': float,
+                         'end_y': float,
+                         'end_z': float,
+                         'normal_x': float,
+                         'normal_y': float,
+                         'normal_z': float,
+                         'azimuth': float,
+                         'dip': float,
+                         'length': float,
+                         'width': float,
+                         'top': float,
+                         'bottom': float,
+                         'vtk_plane': object,
                          'vtk_frame': object}
 
     """The edit dialog will be able to edit attributes of multiple entities (and selecting "None" will not change 
