@@ -1181,8 +1181,9 @@ def measure_distance(self, vector):
         self.enable_actions()
         return
 
-    message = "Distance (m): " + str(round(vector.length, 2)) + "\n\n" + "Angle: " + str(
-        round(vector.azimuth, 2)) + "\n\n" + "Point1: " + str(np_round(vector.p1, 2)) + "\n\n"+"Point2: " + str(np_round(vector.p2, 2))
+    message = "Distance (m): " + str(round(vector.length, 2)) + "\n\n" + "Azimuth: " + str(
+        round(vector.azimuth, 2))+ "\n\n" + "Dip: " + str(
+        round(vector.dip, 2)) + "\n\n" + "Point1: " + str(np_round(vector.p1, 2)) + "\n\n"+"Point2: " + str(np_round(vector.p2, 2))
     out = message_dialog(title="Measure Distance", message=message)
     """Un-Freeze QT interface"""
     for action in self.findChildren(QAction):

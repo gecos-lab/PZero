@@ -5,7 +5,7 @@ from numpy import array as np_array
 from numpy import flip as np_flip
 from pyvista import wrap as pv_wrap
 from pyvista import lines_from_points as pv_line_from_points
-from math import degrees, atan2, sqrt,asin
+from math import degrees, atan2, sqrt, asin
 
 
 class Tracer(vtkContourWidget):
@@ -49,6 +49,7 @@ class Vector(vtkContourWidget):
         self.length = 0
         self.deltas = 0
         self.azimuth = 0
+        self.dip = 0
         self.p1 = [0, 0, 0]
         self.p2 = [0, 0, 0]
         self.line = None
@@ -60,10 +61,12 @@ class Vector(vtkContourWidget):
             self.GetContourRepresentation().GetNthNodeWorldPosition(0, self.p1)
             self.GetContourRepresentation().GetNthNodeWorldPosition(1, self.p2)
             self.deltas = np_array(self.p2)-np_array(self.p1)
+            self.length = sqrt(self.deltas[0] ** 2 + self.deltas[1] ** 2 + self.deltas[2] ** 2)
             self.azimuth = degrees(atan2(self.deltas[0], self.deltas[1])) % 360
             self.line = pv_line_from_points(np_array([self.p1, self.p2]))
             # self.points = np_array(pld.GetPoints().GetData())[:2, :]
-            self.length = sqrt(self.deltas[0] ** 2 + self.deltas[1] ** 2 + self.deltas[2] ** 2)
+            self.dip = degrees(asin(abs(self.deltas[2]/self.length))) % 90
+
 
             # print(self.length)
             self.EnabledOff()

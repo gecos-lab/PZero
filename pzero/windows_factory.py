@@ -2668,7 +2668,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.GeologyTreeWidget.itemChanged.disconnect()
         self.TopologyTreeWidget.itemChanged.disconnect()
         for uid in updated_list:
-            self.remove_actor_in_view(uid=uid, redraw=True, update=self.parent.update_actors)
+            self.remove_actor_in_view(uid=uid, redraw=True)
         self.update_geology_tree_removed(removed_list=updated_list)
         self.update_topology_tree_removed(removed_list=updated_list)
         """Re-connect signals."""
@@ -3950,7 +3950,8 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         else:
             this_actor.SetVisibility(visible)
 
-    def remove_actor_in_view(self, uid=None, redraw=False, update=True):
+    def remove_actor_in_view(self, uid=None, redraw=False):
+        update = self.parent.update_actors
         """"Remove actor from plotter"""
         """plotter.remove_actor can remove a single entity or a list of entities as actors -> here we remove a single entity"""
         if not self.actors_df.loc[self.actors_df['uid'] == uid].empty:
@@ -4458,6 +4459,12 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.menuBaseView.addAction(self.clearSelectionButton)  # add action to menu
         self.toolBarBase.addAction(self.clearSelectionButton)  # add action to toolbar
 
+        self.vertExagButton = QAction('Vertical exaggeration', self)
+        self.vertExagButton.triggered.connect(self.vert_exag)  # connect action to function
+        self.menuWindow.addAction(self.vertExagButton)  # add action to menu
+
+
+
     def show_qt_canvas(self):
         """Show the Qt Window"""
 
@@ -4742,6 +4749,13 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
     #     """List of selected_uids is cleared"""
     #     self.selected_uids = []
 
+    def vert_exag(self):
+        exag_value = input_one_value_dialog(parent=self,
+                                            title='Vertical exaggeration options',
+                                            label='Set vertical exaggeration',
+                                            default_value= 1.0)
+
+        self.plotter.set_scale(zscale = exag_value)
 
 class View3D(BaseView):
     """Create 3D view and import UI created with Qt Designer by subclassing base view"""
