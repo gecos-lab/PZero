@@ -968,10 +968,15 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         """Send message with argument = the cell being checked/unchecked."""
         self.BoundariesTableWidget.itemChanged.connect(self.toggle_boundary_visibility)
 
-    def update_boundary_list_added(self, new_list=None):
+    def update_boundary_list_added(self, new_list=None, sec_uid=None):
         """Update boundaries list without creating a new model"""
         row = self.BoundariesTableWidget.rowCount()
-        for uid in new_list['uid']:
+        if sec_uid:
+            uids = self.parent.boundary_coll.df.loc[
+                (self.parent.boundary_coll.df['x_section'] == sec_uid), 'uid'].to_list()
+        else:
+            uids = self.parent.boundary_coll.df['uid'].to_list()
+        for uid in uids:
             name = self.parent.boundary_coll.df.loc[self.parent.boundary_coll.df['uid'] == uid, 'name'].values[0]
             name_item = QTableWidgetItem(name)
             name_item.setFlags(name_item.flags() | Qt.ItemIsUserCheckable)
@@ -1365,10 +1370,14 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         """Send message with argument = the cell being checked/unchecked."""
         self.ImagesTableWidget.itemChanged.connect(self.toggle_image_visibility)
 
-    def update_image_list_added(self, new_list=None):
+    def update_image_list_added(self, new_list=None, sec_uid=None):
         """Update Image list without creating a new model"""
         row = self.ImagesTableWidget.rowCount()
-        for uid in new_list['uid']:
+        if sec_uid:
+            uids = self.parent.image_coll.df.loc[(self.parent.image_coll.df['x_section'] == sec_uid), 'uid'].to_list()
+        else:
+            uids = self.parent.image_coll.df['uid'].to_list()
+        for uid in uids:
             name = self.parent.image_coll.df.loc[self.parent.image_coll.df['uid'] == uid, 'name'].values[0]
             name_item = QTableWidgetItem(name)
             name_item.setFlags(name_item.flags() | Qt.ItemIsUserCheckable)
@@ -3724,48 +3733,56 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
     def add_all_entities(self):
         """Add all entities in project collections. This must be reimplemented for cross-sections in order
         to show entities belonging to the section only. All objects are visible by default -> show = True"""
+
         for index, uid in enumerate(self.parent.geol_coll.df['uid'].tolist()):
             this_actor = self.show_actor_with_property(uid=uid, collection='geol_coll', show_property=None,
                                                        visible=True)
             self.actors_df = self.actors_df.append(
                 {'uid': uid, 'actor': this_actor, 'show': True, 'collection': 'geol_coll', 'show_prop': None},
                 ignore_index=True)
+
         for uid in self.parent.xsect_coll.df['uid'].tolist():
             this_actor = self.show_actor_with_property(uid=uid, collection='xsect_coll', show_property=None,
                                                        visible=False)
             self.actors_df = self.actors_df.append(
                 {'uid': uid, 'actor': this_actor, 'show': False, 'collection': 'xsect_coll', 'show_prop': None},
                 ignore_index=True)
+
         for uid in self.parent.boundary_coll.df['uid'].tolist():
             this_actor = self.show_actor_with_property(uid=uid, collection='boundary_coll', show_property=None,
                                                        visible=False)
             self.actors_df = self.actors_df.append(
                 {'uid': uid, 'actor': this_actor, 'show': False, 'collection': 'boundary_coll', 'show_prop': None},
                 ignore_index=True)
+
         for uid in self.parent.mesh3d_coll.df['uid'].tolist():
             this_actor = self.show_actor_with_property(uid=uid, collection='mesh3d_coll', show_property=None,
                                                        visible=False)
             self.actors_df = self.actors_df.append(
                 {'uid': uid, 'actor': this_actor, 'show': False, 'collection': 'mesh3d_coll', 'show_prop': None},
                 ignore_index=True)
+
         for uid in self.parent.dom_coll.df['uid'].tolist():
             this_actor = self.show_actor_with_property(uid=uid, collection='dom_coll', show_property=None,
                                                        visible=False)
             self.actors_df = self.actors_df.append(
                 {'uid': uid, 'actor': this_actor, 'show': False, 'collection': 'dom_coll', 'show_prop': None},
                 ignore_index=True)
+
         for uid in self.parent.image_coll.df['uid'].tolist():
             this_actor = self.show_actor_with_property(uid=uid, collection='image_coll', show_property=None,
                                                        visible=False)
             self.actors_df = self.actors_df.append(
                 {'uid': uid, 'actor': this_actor, 'show': False, 'collection': 'image_coll', 'show_prop': None},
                 ignore_index=True)
+
         for uid in self.parent.well_coll.df['uid'].tolist():
             this_actor = self.show_actor_with_property(uid=uid, collection='well_coll', show_property=None,
                                                        visible=False)
             self.actors_df = self.actors_df.append(
                 {'uid': uid, 'actor': this_actor, 'show': False, 'collection': 'well_coll', 'show_prop': None},
                 ignore_index=True)
+
         for uid in self.parent.fluids_coll.df['uid'].tolist():
             this_actor = self.show_actor_with_property(uid=uid, collection='fluids_coll', show_property=None,
                                                        visible=False)
@@ -4404,10 +4421,11 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         """Set orientation widget (turned on after the qt canvas is shown)"""
         self.cam_orient_widget = vtkCameraOrientationWidget()
         self.cam_orient_widget.SetParentRenderer(self.plotter.renderer)
-        """Set default orientation horizontal because vertical colorbars interfere with the widget."""
+        """Set default orientation horizontal because vertical colorbars interfere with the camera widget."""
         pv_global_theme.colorbar_orientation = 'horizontal'
 
         """Manage home view"""
+        self.default_view = self.plotter.camera_position
 
     def initialize_menu_tools(self):
         self.saveHomeView = QAction("Save home view", self)  # create action
@@ -7473,6 +7491,7 @@ class NewViewXsection(NewView2D):
         self.create_dom_list(sec_uid=self.this_x_section_uid)
         self.create_image_list(sec_uid=self.this_x_section_uid)
 
+
         # We should add something to programmatically set the visibility of entities via UID
         # Don't know if it is already implemented or not
         self.set_actor_visible(uid=self.this_x_section_uid, visible=True)
@@ -7487,9 +7506,8 @@ class NewViewXsection(NewView2D):
         self.plotter.reset_camera()
 
     def add_all_entities(self):
+        """Add all entities in project collections. All objects are visible by default -> show = True"""
         sec_uid = self.this_x_section_uid
-        """Add all entities in project collections. This must be reimplemented for cross-sections in order
-        to show entities belonging to the section only. All objects are visible by default -> show = True"""
         for uid in self.parent.geol_coll.df['uid'].tolist():
             if self.parent.geol_coll.get_uid_x_section(uid) == sec_uid:
                 this_actor = self.show_actor_with_property(uid=uid, collection='geol_coll', show_property=None,
@@ -7497,6 +7515,7 @@ class NewViewXsection(NewView2D):
                 self.actors_df = self.actors_df.append(
                     {'uid': uid, 'actor': this_actor, 'show': True, 'collection': 'geol_coll', 'show_prop': None},
                     ignore_index=True)
+
         for uid in self.parent.xsect_coll.df['uid'].tolist():
             if uid == sec_uid:
                 this_actor = self.show_actor_with_property(uid=uid, collection='xsect_coll', show_property=None,
@@ -7504,6 +7523,7 @@ class NewViewXsection(NewView2D):
                 self.actors_df = self.actors_df.append(
                     {'uid': uid, 'actor': this_actor, 'show': False, 'collection': 'xsect_coll', 'show_prop': None},
                     ignore_index=True)
+
         for uid in self.parent.boundary_coll.df['uid'].tolist():
             if self.parent.boundary_coll.get_uid_x_section(uid) == sec_uid:
                 this_actor = self.show_actor_with_property(uid=uid, collection='boundary_coll', show_property=None,
@@ -7669,7 +7689,8 @@ class NewViewXsection(NewView2D):
         """First get the vtk object from its collection."""
         show_property_title = show_property
         show_scalar_bar = True
-        if collection == 'geol_coll':
+        sec_uid = self.this_x_section_uid
+        if collection == 'geol_coll' and self.parent.geol_coll.get_uid_x_section(uid) == sec_uid:
             color_R = self.parent.geol_coll.get_uid_legend(uid=uid)['color_R']
             color_G = self.parent.geol_coll.get_uid_legend(uid=uid)['color_G']
             color_B = self.parent.geol_coll.get_uid_legend(uid=uid)['color_B']
@@ -7679,7 +7700,7 @@ class NewViewXsection(NewView2D):
             opacity = self.parent.geol_coll.get_uid_legend(uid=uid)['opacity'] / 100
 
             plot_entity = self.parent.geol_coll.get_uid_vtk_obj(uid)
-        elif collection == 'xsect_coll':
+        elif collection == 'xsect_coll' and uid == sec_uid:
             color_R = self.parent.xsect_coll.get_legend()['color_R']
             color_G = self.parent.xsect_coll.get_legend()['color_G']
             color_B = self.parent.xsect_coll.get_legend()['color_B']
@@ -7688,7 +7709,7 @@ class NewViewXsection(NewView2D):
             opacity = self.parent.xsect_coll.get_legend()['opacity'] / 100
 
             plot_entity = self.parent.xsect_coll.get_uid_vtk_frame(uid)
-        elif collection == 'boundary_coll':
+        elif collection == 'boundary_coll' and self.parent.boundary_coll.get_uid_x_section(uid) == sec_uid:
             color_R = self.parent.boundary_coll.get_legend()['color_R']
             color_G = self.parent.boundary_coll.get_legend()['color_G']
             color_B = self.parent.boundary_coll.get_legend()['color_B']
@@ -7697,7 +7718,7 @@ class NewViewXsection(NewView2D):
             opacity = self.parent.boundary_coll.get_legend()['opacity'] / 100
 
             plot_entity = self.parent.boundary_coll.get_uid_vtk_obj(uid)
-        elif collection == 'mesh3d_coll':
+        elif collection == 'mesh3d_coll' and self.parent.mesh3d_coll.get_uid_x_section(uid) == sec_uid:
             color_R = self.parent.mesh3d_coll.get_legend()['color_R']
             color_G = self.parent.mesh3d_coll.get_legend()['color_G']
             color_B = self.parent.mesh3d_coll.get_legend()['color_B']
@@ -7706,7 +7727,7 @@ class NewViewXsection(NewView2D):
             opacity = self.parent.mesh3d_coll.get_legend()['opacity'] / 100
 
             plot_entity = self.parent.mesh3d_coll.get_uid_vtk_obj(uid)
-        elif collection == 'dom_coll':
+        elif collection == 'dom_coll' and self.parent.dom_coll.get_uid_x_section(uid) == sec_uid:
             color_R = self.parent.dom_coll.get_legend()['color_R']
             color_G = self.parent.dom_coll.get_legend()['color_G']
             color_B = self.parent.dom_coll.get_legend()['color_B']
@@ -7715,14 +7736,15 @@ class NewViewXsection(NewView2D):
             opacity = self.parent.dom_coll.get_legend()['opacity'] / 100
 
             plot_entity = self.parent.dom_coll.get_uid_vtk_obj(uid)
-        elif collection == 'image_coll':
+
+        elif collection == 'image_coll' and self.parent.image_coll.get_uid_x_section(uid) == sec_uid:
             """Note: no legend for image."""
             color_RGB = [255, 255, 255]
             line_thick = 5.0
             opacity = self.parent.image_coll.get_legend()['opacity'] / 100
 
             plot_entity = self.parent.image_coll.get_uid_vtk_obj(uid)
-        elif collection == 'well_coll':
+        elif collection == 'well_coll' and self.parent.well_coll.get_uid_x_section(uid) == sec_uid:
             color_R = self.parent.well_coll.get_uid_legend(uid=uid)['color_R']
             color_G = self.parent.well_coll.get_uid_legend(uid=uid)['color_G']
             color_B = self.parent.well_coll.get_uid_legend(uid=uid)['color_B']
@@ -7731,7 +7753,7 @@ class NewViewXsection(NewView2D):
             opacity = self.parent.well_coll.get_uid_legend(uid=uid)['opacity'] / 100
 
             plot_entity = self.parent.well_coll.get_uid_vtk_obj(uid)
-        elif collection == 'fluids_coll':
+        elif collection == 'fluids_coll' and self.parent.fluids_coll.get_uid_x_section(uid) == sec_uid:
             color_R = self.parent.fluids_coll.get_uid_legend(uid=uid)['color_R']
             color_G = self.parent.fluids_coll.get_uid_legend(uid=uid)['color_G']
             color_B = self.parent.fluids_coll.get_uid_legend(uid=uid)['color_B']
@@ -7741,7 +7763,7 @@ class NewViewXsection(NewView2D):
             opacity = self.parent.fluids_coll.get_uid_legend(uid=uid)['opacity'] / 100
 
             plot_entity = self.parent.fluids_coll.get_uid_vtk_obj(uid)
-        elif collection == 'backgrounds_coll':
+        elif collection == 'backgrounds_coll' and self.parent.backgrounds_coll.get_uid_x_section(uid) == sec_uid:
             color_R = self.parent.backgrounds_coll.get_uid_legend(uid=uid)['color_R']
             color_G = self.parent.backgrounds_coll.get_uid_legend(uid=uid)['color_G']
             color_B = self.parent.backgrounds_coll.get_uid_legend(uid=uid)['color_B']
@@ -7753,7 +7775,7 @@ class NewViewXsection(NewView2D):
             plot_entity = self.parent.backgrounds_coll.get_uid_vtk_obj(uid)
         else:
             print("no collection")
-            this_actor = None
+            return
         """Then plot the vtk object with proper options."""
         if isinstance(plot_entity, (PolyLine, TriSurf, XsPolyLine)) and not isinstance(plot_entity, WellTrace):
             plot_rgb_option = None
@@ -8026,3 +8048,85 @@ class NewViewXsection(NewView2D):
             print("[Windows factory]: actor with no class")
             this_actor = None
         return this_actor
+
+
+    '''[Gabriele] Update the views depending on the sec_uid. We need to redefine the functions to use the sec_uid parameter for the update_dom_list_added func. We just need the x_added_x functions because the x_removed_x works on an already build/modified tree'''
+
+    def geology_added_update_views(self, updated_list=None):
+        """This is called when an entity is added to the geological collection.
+        Disconnect signals to geology and topology tree, if they are set, to avoid a nasty loop
+        that disrupts the trees, then they are reconnected when the trees are rebuilt"""
+        self.GeologyTreeWidget.itemChanged.disconnect()
+        self.TopologyTreeWidget.itemChanged.disconnect()
+        """Create pandas dataframe as list of "new" actors"""
+        actors_df_new = pd_DataFrame(columns=['uid', 'actor', 'show', 'collection', 'show_prop'])
+        for uid in updated_list:
+            this_actor = self.show_actor_with_property(uid=uid, collection='geol_coll', show_property=None,
+                                                       visible=True)
+            self.actors_df = self.actors_df.append(
+                {'uid': uid, 'actor': this_actor, 'show': True, 'collection': 'geol_coll', 'show_prop': None},
+                ignore_index=True)
+            actors_df_new = actors_df_new.append(
+                {'uid': uid, 'actor': this_actor, 'show': True, 'collection': 'geol_coll', 'show_prop': None},
+                ignore_index=True)
+            self.update_geology_tree_added(actors_df_new, sec_uid=self.this_x_section_uid)
+            self.update_topology_tree_added(actors_df_new, sec_uid=self.this_x_section_uid)
+        """Re-connect signals."""
+        self.GeologyTreeWidget.itemChanged.connect(self.toggle_geology_topology_visibility)
+        self.TopologyTreeWidget.itemChanged.connect(self.toggle_geology_topology_visibility)
+
+    def mesh3d_added_update_views(self, updated_list=None):
+        """This is called when a mesh3d is added to the mesh3d collection.
+        Disconnect signals to mesh3d list, if they are set, then they are
+        reconnected when the list is rebuilt"""
+        self.Mesh3DTableWidget.itemChanged.disconnect()
+        actors_df_new = pd_DataFrame(columns=['uid', 'actor', 'show', 'collection', 'show_prop'])
+        for uid in updated_list:
+            this_actor = self.show_actor_with_property(uid=uid, collection='mesh3d_coll', show_property=None,
+                                                       visible=False)
+            self.actors_df = self.actors_df.append(
+                {'uid': uid, 'actor': this_actor, 'show': False, 'collection': 'mesh3d_coll', 'show_prop': None},
+                ignore_index=True)
+            actors_df_new = actors_df_new.append(
+                {'uid': uid, 'actor': this_actor, 'show': False, 'collection': 'mesh3d_coll', 'show_prop': None},
+                ignore_index=True)
+            self.update_mesh3d_list_added(actors_df_new, sec_uid=self.this_x_section_uid)
+        self.Mesh3DTableWidget.itemChanged.connect(self.toggle_mesh3d_visibility)
+
+    def dom_added_update_views(self, updated_list=None):
+        """This is called when a DOM is added to the xsect collection.
+        Disconnect signals to dom list, if they are set, then they are
+        reconnected when the list is rebuilt"""
+        self.DOMsTableWidget.itemChanged.disconnect()
+        actors_df_new = pd_DataFrame(columns=['uid', 'actor', 'show', 'collection', 'show_prop'])
+        for uid in updated_list:
+            this_actor = self.show_actor_with_property(uid=uid, collection='dom_coll', show_property=None,
+                                                       visible=False)
+            self.actors_df = self.actors_df.append(
+                {'uid': uid, 'actor': this_actor, 'show': False, 'collection': 'dom_coll', 'show_prop': None},
+                ignore_index=True)
+            actors_df_new = actors_df_new.append(
+                {'uid': uid, 'actor': this_actor, 'show': False, 'collection': 'dom_coll', 'show_prop': None},
+                ignore_index=True)
+            self.update_dom_list_added(actors_df_new, sec_uid=self.this_x_section_uid)
+        """Re-connect signals."""
+        self.DOMsTableWidget.itemChanged.connect(self.toggle_dom_visibility)
+
+    def xsect_added_update_views(self, updated_list=None):
+        """This is called when a cross-section is added to the xsect collection.
+        Disconnect signals to xsect list, if they are set, then they are
+        reconnected when the list is rebuilt"""
+        self.XSectionTreeWidget.itemChanged.disconnect()
+        actors_df_new = pd_DataFrame(columns=['uid', 'actor', 'show', 'collection', 'show_prop'])
+        for uid in updated_list:
+            this_actor = self.show_actor_with_property(uid=uid, collection='xsect_coll', show_property=None,
+                                                       visible=True)
+            self.actors_df = self.actors_df.append(
+                {'uid': uid, 'actor': this_actor, 'show': True, 'collection': 'xsect_coll', 'show_prop': None},
+                ignore_index=True)
+            actors_df_new = actors_df_new.append(
+                {'uid': uid, 'actor': this_actor, 'show': True, 'collection': 'xsect_coll', 'show_prop': None},
+                ignore_index=True)
+            self.update_xsections_tree_added(actors_df_new, sec_uid=self.this_x_section_uid)
+        """Re-connect signals."""
+        self.XSectionTreeWidget.itemChanged.connect(self.toggle_xsection_visibility)

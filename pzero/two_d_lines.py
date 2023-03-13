@@ -39,11 +39,6 @@ def draw_line(self):
             self.parent.geol_coll.add_entity_from_dict(input_dict)
         tracer.EnabledOff()
         self.enable_actions()
-        u,v = input_dict['vtk_obj'].world2plane()
-        # # print(uv)
-        # world = input_dict['vtk_obj'].plane2world(uv)
-        # print(world)
-        # print(input_dict['vtk_obj'].points)
 
     self.disable_actions()
     """Create deepcopy of the geological entity dictionary."""
@@ -281,9 +276,8 @@ def split_line_line(self):
         inV = self.parent.geol_coll.get_uid_vtk_obj(current_uid_scissors).points_Y
     elif isinstance(self, NewViewXsection):
         inU, inV = self.parent.geol_coll.get_uid_vtk_obj(current_uid_scissors).world2plane()
-    print(inU)
+
     inUV_scissors = np_column_stack((inU, inV))
-    print(inUV_scissors)
     shp_line_in_scissors = LineString(inUV_scissors)
 
 
