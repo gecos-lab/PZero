@@ -49,21 +49,38 @@ def geo_image2vtk(self=None, in_file_name=None):
             # vtk_array = numpy_support.numpy_to_vtk(np.flip(numpy_array.swapaxes(0, 1), axis=1).reshape((-1, 3), order='F'), deep=True)
             vtk_array = numpy_support.numpy_to_vtk(numpy_array.swapaxes(0, 1).reshape((-1, 3), order='F'), deep=True)
             vtk_array.SetName('RGB')
+        elif geo_image.count == 4:
+            vtk_r_property = geo_image.read(1)
+            vtk_g_property = geo_image.read(2)
+            vtk_b_property = geo_image.read(3)
+            vtk_a_property = geo_image.read(4)
+            numpy_array = np_dstack((vtk_r_property, vtk_g_property, vtk_b_property,vtk_a_property))
+            # vtk_array = numpy_support.numpy_to_vtk(np.flip(numpy_array.swapaxes(0, 1), axis=1).reshape((-1, 3), order='F'), deep=True)
+            vtk_array = numpy_support.numpy_to_vtk(numpy_array.swapaxes(0, 1).reshape((-1, 4), order='F'), deep=True)
+            vtk_array.SetName('RGB')
         else:
             """ADD OPTION FOR MULTIBAND IMAGES HERE_____________________________"""
+            print('Multiband not supported')
             return
         """Create MapImage entity (inherits from vtk.vtkImageData) and then set all data."""
         vtk_image = MapImage()
         """With the following dimensions, origin and spacing, image coords 0,0 are at upper-left and image coords grow along x and -y."""
         vtk_image.SetDimensions(img_width_px, img_height_px, 1)
-        vtk_image.SetSpacing([(img_x_max - img_x_min) / (img_width_px + 1), (img_y_min - img_y_max) / (img_height_px + 1), 1])
-        vtk_image.SetOrigin([img_x_min, img_y_max, 0])
+        vtk_image.SetSpacing([(img_x_max - img_x_min) / (img_width_px + 1),
+                              (img_y_min - img_y_max) / (img_height_px + 1),
+                              1])
+        # vtk_image.SetOrigin([img_x_min, img_y_max, 0])
+
+        vtk_image.SetOrigin([img_x_min-round(img_x_min, -2), img_y_max-round(img_y_min, -2), 0])
+        # Re-centering the image. Maybe not the best solution, we should add an option to add re-centering every object
+        # using the same translation vector.
         """Add the vtk array image data"""
         vtk_image.GetPointData().AddArray(vtk_array)
         if geo_image.count == 1:
             vtk_image.GetPointData().SetActiveScalars('greyscale')
-        elif geo_image.count == 3:
+        elif geo_image.count >= 3:
             vtk_image.GetPointData().SetActiveScalars('RGB')
+
         """Create dictionary."""
         curr_obj_dict = deepcopy(ImageCollection.image_entity_dict)
         curr_obj_dict['uid'] = str(uuid.uuid4())
@@ -73,7 +90,7 @@ def geo_image2vtk(self=None, in_file_name=None):
         curr_obj_dict['properties_types'] = vtk_image.properties_types
         if geo_image.count == 1:
             curr_obj_dict['properties_names'] = ['greyscale']
-        elif geo_image.count == 3:
+        elif geo_image.count >= 3:
             curr_obj_dict['properties_names'] = ['RGB']
         curr_obj_dict['vtk_obj'] = vtk_image
         """Add to entity collection."""

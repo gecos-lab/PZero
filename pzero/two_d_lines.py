@@ -21,6 +21,7 @@ from .entities_factory import PolyLine, XsPolyLine
 from shapely import affinity
 from shapely.geometry import LineString, Point, MultiLineString
 from shapely.ops import split, snap
+from shapely.affinity import scale
 from PyQt5.QtWidgets import QAction
 from time import sleep
 
@@ -86,6 +87,9 @@ def edit_line(self):
         self.enable_actions()
 
     self.disable_actions()
+    if not self.selected_uids:
+        print(" -- No input data selected -- ")
+        return
     sel_uid = self.selected_uids[0]
     actor = self.plotter.renderer.actors[sel_uid]
     data = actor.mapper.dataset
@@ -608,8 +612,10 @@ def snap_line(self):
             self.parent.geol_coll.get_uid_topological_type(current_uid_goal) != "XsPolyLine"):
         print(" -- Selected goal is not a line -- ")
         return
-    tolerance = input_one_value_dialog(parent=self, title="Snap tolerance",
-                                   label="Insert snap tolerance", default_value=10)
+    tolerance = input_one_value_dialog(parent=self,
+                                       title="Snap tolerance",
+                                       label="Insert snap tolerance",
+                                       default_value=10)
     for current_uid_snap in self.selected_uids[:-1]:
         if (self.parent.geol_coll.get_uid_topological_type(current_uid_snap) != "PolyLine") and (
                 self.parent.geol_coll.get_uid_topological_type(current_uid_snap) != "XsPolyLine"):
@@ -617,28 +623,39 @@ def snap_line(self):
             return
 
         """Create empty dictionary for the output line."""
-        new_line = deepcopy(self.parent.geol_coll.geological_entity_dict)
+        new_line_snap = deepcopy(self.parent.geol_coll.geological_entity_dict)
+        new_line_goal = deepcopy(self.parent.geol_coll.geological_entity_dict)
+
         """Editing loop. Get coordinates of the line to be modified (snap-line)."""
         if isinstance(self, NewViewMap):
-            new_line['vtk_obj'] = PolyLine()
-            new_line['x_section'] = None
-            inU_snap = deepcopy(self.parent.geol_coll.get_uid_vtk_obj(current_uid_snap).points[:, 0])
-            inV_snap = deepcopy(self.parent.geol_coll.get_uid_vtk_obj(current_uid_snap).points[:, 1])
-            inU_goal = deepcopy(self.parent.geol_coll.get_uid_vtk_obj(current_uid_goal).points[:, 0])
-            inV_goal = deepcopy(self.parent.geol_coll.get_uid_vtk_obj(current_uid_goal).points[:, 1])
-        elif isinstance(self, (ViewXsection,NewViewXsection)):
-            new_line['vtk_obj'] = XsPolyLine(self.this_x_section_uid, parent=self.parent)
-            new_line['x_section'] = self.this_x_section_uid
-            inU_snap = deepcopy(self.parent.geol_coll.get_uid_vtk_obj(current_uid_snap).points_W)
-            inV_snap = deepcopy(self.parent.geol_coll.get_uid_vtk_obj(current_uid_snap).points_Z)
-            inU_goal = deepcopy(self.parent.geol_coll.get_uid_vtk_obj(current_uid_goal).points_W)
-            inV_goal = deepcopy(self.parent.geol_coll.get_uid_vtk_obj(current_uid_goal).points_Z)
+            new_line_snap['vtk_obj'] = PolyLine()
+            new_line_snap['x_section'] = None
+            new_line_goal['vtk_obj'] = PolyLine()
+            new_line_goal['x_section'] = None
+            inU_snap = deepcopy(self.parent.geol_coll.get_uid_vtk_obj(current_uid_snap).points_X)
+            inV_snap = deepcopy(self.parent.geol_coll.get_uid_vtk_obj(current_uid_snap).points_Y)
+            inU_goal = deepcopy(self.parent.geol_coll.get_uid_vtk_obj(current_uid_goal).points_X)
+            inV_goal = deepcopy(self.parent.geol_coll.get_uid_vtk_obj(current_uid_goal).points_Y)
+        elif isinstance(self, NewViewXsection):
+            new_line_snap['vtk_obj'] = XsPolyLine(self.this_x_section_uid, parent=self.parent)
+            new_line_snap['x_section'] = self.this_x_section_uid
+            new_line_goal['vtk_obj'] = XsPolyLine(self.this_x_section_uid, parent=self.parent)
+            new_line_goal['x_section'] = self.this_x_section_uid
+            inU_snap, inV_snap = self.parent.geol_coll.get_uid_vtk_obj(current_uid_snap).world2plane()
+            inU_goal, inV_goal = self.parent.geol_coll.get_uid_vtk_obj(current_uid_goal).world2plane()
         """Stack coordinates in two-columns matrix"""
         inUV_snap = np_column_stack((inU_snap, inV_snap))
         inUV_goal = np_column_stack((inU_goal, inV_goal))
         """Run the Shapely function."""
         shp_line_in_snap = LineString(inUV_snap)
         shp_line_in_goal = LineString(inUV_goal)
+
+        shp_line_in_goal, extended = int_node(shp_line_in_goal, shp_line_in_snap)
+        # plt.plot(np_array(shp_line_in_goal)[:, 0], np_array(shp_line_in_goal)[:, 1], 'r-o')
+        # plt.plot(np_array(extended)[:, 0], np_array(extended)[:, 1], 'b-o')
+        # plt.show()
+
+
         """In the snapping tool, the last input value is called Tolerance. Can be modified, do some checks.
         Little tolerance risks of not snapping distant lines, while too big tolerance snaps to the wrong vertex and
         not to the nearest one"""
@@ -650,37 +667,49 @@ def snap_line(self):
             self.enable_actions()
             return
         shp_line_out_diff = shp_line_out_snap.difference(shp_line_in_goal)  # eliminate the shared path that Snap may create
-        outUV = deepcopy(np_array(shp_line_out_diff))
+        outUV_snap = deepcopy(np_array(shp_line_out_diff))
+        outUV_goal = deepcopy(np_array(shp_line_in_goal))
         """Un-stack output coordinates and write them to the empty dictionary."""
-        if outUV.ndim < 2:
-            print(outUV)
+        if outUV_snap.ndim < 2:
+            print(outUV_snap)
             print('Invalid shape')
             self.clear_selection()
             self.enable_actions()
             return
-        outU = outUV[:, 0]
-        outV = outUV[:, 1]
+        outU_snap = outUV_snap[:, 0]
+        outV_snap = outUV_snap[:, 1]
+        outU_goal = outUV_goal[:, 0]
+        outV_goal = outUV_goal[:, 1]
         """Convert local coordinates to XYZ ones."""
-        if isinstance(self, (ViewMap,NewViewMap)):
-            outX = outU
-            outY = outV
-            outZ = np_zeros(np_shape(outX))
-        elif isinstance(self, (ViewXsection,NewViewXsection)):
-            outX, outY = self.parent.xsect_coll.get_XY_from_W(section_uid=self.this_x_section_uid, W=outU)
-            outZ = outV
+        if isinstance(self, NewViewMap):
+            outX_snap = outU_snap
+            outY_snap = outV_snap
+            outZ_snap = np_zeros(np_shape(outX_snap))
+
+            outX_goal = outU_goal
+            outY_goal = outV_goal
+            outZ_goal = np_zeros(np_shape(outX_goal))
+        elif isinstance(self, NewViewXsection):
+            outX_snap, outY_snap, outZ_snap = self.parent.xsect_coll.plane2world(self.this_x_section_uid, outU_snap, outV_snap)
+            outX_goal, outY_goal, outZ_goal = self.parent.xsect_coll.plane2world(self.this_x_section_uid, outU_goal, outV_goal)
+
+            # outZ = outV
         """Create new vtk objects"""
-        new_points = np_column_stack((outX, outY, outZ))
-        new_line['vtk_obj'].points = new_points
-        new_line['vtk_obj'].auto_cells()
+        new_points_snap = np_column_stack((outX_snap, outY_snap, outZ_snap))
+        new_points_goal = np_column_stack((outX_goal, outY_goal, outZ_goal))
+
+        new_line_snap['vtk_obj'].points = new_points_snap
+        new_line_snap['vtk_obj'].auto_cells()
+        new_line_goal['vtk_obj'].points = new_points_goal
+        new_line_goal['vtk_obj'].auto_cells()
         """Replace VTK object"""
-        if new_line['vtk_obj'].points_number > 0:
-            self.parent.geol_coll.replace_vtk(uid=current_uid_snap, vtk_object=new_line['vtk_obj'])
-            del new_line
+        if new_line_snap['vtk_obj'].points_number > 0:
+            self.parent.geol_coll.replace_vtk(uid=current_uid_snap, vtk_object=new_line_snap['vtk_obj'], const_color=True)
+            self.parent.geol_coll.replace_vtk(uid=current_uid_goal, vtk_object=new_line_goal['vtk_obj'], const_color=True)
+            del new_line_snap
+            del new_line_goal
         else:
             print("Empty object")
-        """Deselect input line and force redraw"""
-        self.parent.geology_geom_modified_signal.emit(
-            [current_uid_snap, current_uid_goal])  # emit uid as list to force redraw()
         """Un-Freeze QT interface"""
     self.clear_selection()
     self.enable_actions()
@@ -1212,3 +1241,59 @@ def left_right(self, uid=None):
         flip_line(uid=uid)
     elif U_line[0] == U_line[-1] and V_line[0] > V_line[-1]:  # reverse if vertical up-to-down
         flip_line(uid=uid)
+
+
+def int_node(line1, line2):
+    """
+    Function used to add the intersection node to a line crossed or touched by a second line.
+    This function works by extending of a given factor the start and end segment the line2 and then use shapely to:
+
+    1. Split line1 with line2
+    2. Join the two split geometries
+
+    We do this to identify and add the intersection node to line1:
+
+    O----------O --split--> O-----O O-----O --join--> O-----O-----O
+
+    The extension is used in case the joint is a Y or T and the positioning of the node is not pixel perfect. Depending
+    on the number of segment composing line2 we extend in different ways:
+
+    1. Only one segment extend the whole thing using the start and end vertex
+    2. Two segments extend the two segments using the end of the first and the start of the second.
+    3. Three or more segments extend the first and last segment using the end of the first and the start of the last.
+    """
+
+    fac = 100
+    if line1.crosses(line2):
+        split_lines1 = split(line1, line2)
+        outcoords1 = [list(i.coords) for i in split_lines1]
+
+        new_line = LineString([i for sublist in outcoords1 for i in sublist])
+        extended_line = line2
+
+    else:
+        if len(line2.coords) == 2:
+            scaled_segment1 = scale(line2, xfact=fac, yfact=fac, origin=line2.boundary[0])
+            scaled_segment2 = scale(scaled_segment1, xfact=fac, yfact=fac, origin=scaled_segment1.boundary[1])
+            extended_line = LineString(scaled_segment2)
+        elif len(line2.coords) == 3:
+            first_seg = LineString(line2.coords[:2])
+            last_seg = LineString(line2.coords[-2:])
+            scaled_first_segment = scale(first_seg, xfact=fac, yfact=fac, origin=first_seg.boundary[1])
+            scaled_last_segment = scale(last_seg, xfact=fac, yfact=fac, origin=last_seg.boundary[0])
+            extended_line = LineString([*scaled_first_segment.coords, *scaled_last_segment.coords])
+        else:
+            first_seg = LineString(line2.coords[:2])
+            last_seg = LineString(line2.coords[-2:])
+
+            scaled_first_segment = scale(first_seg, xfact=fac, yfact=fac, origin=first_seg.boundary[1])
+            scaled_last_segment = scale(last_seg, xfact=fac, yfact=fac, origin=last_seg.boundary[0])
+            extended_line = LineString([*scaled_first_segment.coords, *line2.coords[2:-2], *scaled_last_segment.coords])
+
+        split_lines = split(line1, extended_line)
+
+        outcoords = [list(i.coords) for i in split_lines]
+        new_line = LineString([i for sublist in outcoords for i in sublist])
+
+    return new_line, extended_line
+
