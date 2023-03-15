@@ -20,9 +20,12 @@ from .windows_factory import ViewMap, ViewXsection, NavigationToolbar, NewViewMa
 from .entities_factory import PolyLine, XsPolyLine
 from shapely import affinity
 from shapely.geometry import LineString, Point, MultiLineString
-from shapely.ops import split, snap
+from shapely.ops import split
+from shapely.ops import snap as shp_snap
 from shapely.affinity import scale
 from PyQt5.QtWidgets import QAction
+
+from geopandas import GeoDataFrame as geodataframe
 from time import sleep
 
 import matplotlib.pyplot as plt
@@ -616,7 +619,9 @@ def snap_line(self):
                                        title="Snap tolerance",
                                        label="Insert snap tolerance",
                                        default_value=10)
+
     for current_uid_snap in self.selected_uids[:-1]:
+        print(current_uid_snap)
         if (self.parent.geol_coll.get_uid_topological_type(current_uid_snap) != "PolyLine") and (
                 self.parent.geol_coll.get_uid_topological_type(current_uid_snap) != "XsPolyLine"):
             print(" -- Selected snap is not a line -- ")
@@ -660,7 +665,7 @@ def snap_line(self):
         Little tolerance risks of not snapping distant lines, while too big tolerance snaps to the wrong vertex and
         not to the nearest one"""
         if shp_line_in_snap.is_simple and shp_line_in_goal.is_simple:
-            shp_line_out_snap = snap(shp_line_in_snap, shp_line_in_goal, tolerance)
+            shp_line_out_snap = shp_snap(shp_line_in_snap, shp_line_in_goal, tolerance)
         else:
             print("Polyline is not simple, it self-intersects")
             """Un-Freeze QT interface"""
@@ -671,11 +676,8 @@ def snap_line(self):
         outUV_goal = deepcopy(np_array(shp_line_in_goal))
         """Un-stack output coordinates and write them to the empty dictionary."""
         if outUV_snap.ndim < 2:
-            print(outUV_snap)
             print('Invalid shape')
-            self.clear_selection()
-            self.enable_actions()
-            return
+            continue
         outU_snap = outUV_snap[:, 0]
         outV_snap = outUV_snap[:, 1]
         outU_goal = outUV_goal[:, 0]
@@ -1296,4 +1298,47 @@ def int_node(line1, line2):
         new_line = LineString([i for sublist in outcoords for i in sublist])
 
     return new_line, extended_line
+
+
+def clean_intersection(self):
+    '''
+    Clean intersections for a given line. The "search radius" is a buffer applied to the selected line to snap lines
+    at a given distance from the selected line
+    '''
+    data = []
+    if isinstance(self, NewViewMap):
+        for i, line in self.parent.geol_coll.df.loc[self.parent.geol_coll.df['topological_type'] == 'PolyLine'].iterrows():
+            vtkgeom = line['vtk_obj']
+            uid = line['uid']
+            geom = LineString(vtkgeom.points[:, :2])
+            data.append({'uid': uid, 'geometry': geom})
+    elif isinstance(self, NewViewXsection):
+        for i, line in self.parent.geol_coll.df.loc[self.parent.geol_coll.df['topological_type'] == 'XsPolyLine'].iterrows():
+            vtkgeom = line['vtk_obj']
+            uid = line['uid']
+            inU, inV = vtkgeom.world2plane()
+            inUV = np_column_stack((inU, inV))
+            geom = LineString(inUV)
+            data.append({'uid': uid, 'geometry': geom})
+    search = input_one_value_dialog(parent=self,
+                                       title="Search radius",
+                                       label="Insert search radius",
+                                       default_value=0.05)
+    df = geodataframe(data=data)
+    df_buffer = df.buffer(search)
+
+    sel_uid = self.selected_uids[0]
+
+    line1 = df.loc[df['uid'] == sel_uid, 'geometry'].values[0]
+    idx_line1 = df.index[df['uid'] == sel_uid]
+
+    df_buffer.drop(index=idx_line1, inplace=True)
+
+    idx_list = df_buffer.index[df_buffer.intersects(line1) == True]  # Subset the intersecting lines
+    uids = df.iloc[idx_list]['uid'].to_list()
+
+    uids.append(sel_uid)
+
+    self.selected_uids = uids
+    snap_line(self)
 

@@ -4050,6 +4050,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             plot_entity = self.parent.backgrounds_coll.get_uid_vtk_obj(uid)
         else:
             print("no collection")
+            print(collection)
             this_actor = None
         """Then plot the vtk object with proper options."""
         if isinstance(plot_entity, (PolyLine, TriSurf, XsPolyLine)) and not isinstance(plot_entity, WellTrace):
@@ -6980,7 +6981,7 @@ class NewView2D(BaseView):
     def initialize_menu_tools(self):
         from .two_d_lines import draw_line, edit_line, sort_line_nodes, move_line, rotate_line, extend_line, \
             split_line_line, split_line_existing_point, merge_lines, snap_line, resample_line_distance, \
-            resample_line_number_points, simplify_line, copy_parallel, copy_kink, copy_similar, measure_distance
+            resample_line_number_points, simplify_line, copy_parallel, copy_kink, copy_similar, measure_distance, clean_intersection
 
         """Imports for this view."""
         """Customize menus and tools for this view"""
@@ -7075,6 +7076,11 @@ class NewView2D(BaseView):
         self.measureDistanceButton.triggered.connect(lambda: self.vector_by_mouse(measure_distance))  # connect action to function
         self.menuBaseView.addAction(self.measureDistanceButton)  # add action to menu
         self.toolBarBase.addAction(self.measureDistanceButton)  # add action to toolbar
+
+        self.cleanSectionButton = QAction('Clean intersections', self)
+        self.cleanSectionButton.triggered.connect(lambda: clean_intersection(self))  # connect action to function
+        self.menuBaseView.addAction(self.cleanSectionButton)  # add action to menu
+        self.toolBarBase.addAction(self.cleanSectionButton)  # add action to toolbar
 
     def vector_by_mouse(self, func):
         # if not self.selected_uids:
@@ -7202,6 +7208,7 @@ class NewViewMap(NewView2D):
             plot_entity = self.parent.backgrounds_coll.get_uid_vtk_obj(uid)
         else:
             print("no collection")
+            print(collection)
             this_actor = None
         """Then plot the vtk object with proper options."""
         if isinstance(plot_entity, (PolyLine, TriSurf, XsPolyLine)) and not isinstance(plot_entity, WellTrace):
@@ -7789,6 +7796,7 @@ class NewViewXsection(NewView2D):
             plot_entity = self.parent.backgrounds_coll.get_uid_vtk_obj(uid)
         else:
             print("no collection")
+            print(collection)
             return
         """Then plot the vtk object with proper options."""
         if isinstance(plot_entity, (PolyLine, TriSurf, XsPolyLine)) and not isinstance(plot_entity, WellTrace):
