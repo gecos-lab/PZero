@@ -90,7 +90,7 @@ class GeologicalCollection(QAbstractTableModel):
 
     """Custom methods used to add or remove entities, query the dataframe, etc."""
 
-    def add_entity_from_dict(self, entity_dict=None,color=None):
+    def add_entity_from_dict(self, entity_dict=None, color=None):
         """Add entity to collection from dictionary."""
         """Create a new uid if it is not included in the dictionary."""
         if not entity_dict['uid']:
@@ -127,7 +127,7 @@ class GeologicalCollection(QAbstractTableModel):
         self.parent.geology_added_signal.emit([entity_dict['uid']])  # a list of uids is emitted, even if the entity is just one, for future compatibility
         return entity_dict['uid']
 
-    def remove_entity(self, uid=None,update=True):
+    def remove_entity(self, uid=None, update=True):
         """Remove entity from collection."""
         """Remove row from dataframe and reset data model."""
         if not uid in self.get_uids():

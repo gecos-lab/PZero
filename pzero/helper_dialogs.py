@@ -763,12 +763,12 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
             self.ColnameItem = QTableWidgetItem()
             self.ColnameItem.setText(str(col_names[i]))
             self.AttrcomboBox = QComboBox(self)
-            self.AttrcomboBox.setObjectName(f'AttrcomboBox{i}')
+            self.AttrcomboBox.setObjectName(f'AttrcomboBox_{i}')
             self.AttrcomboBox.setEditable(False)
             self.AttrcomboBox.addItems(self.default_attr_list)
-            self.AttrcomboBox.activated.connect(lambda: ass_value())
+            self.AttrcomboBox.activated.connect(lambda: ass_value(self.AttrcomboBox))
             self.ScalarnameLine = QLineEdit()
-            self.ScalarnameLine.setObjectName(f'ScalarnameLine{i}')
+            self.ScalarnameLine.setObjectName(f'ScalarnameLine_{i}')
             self.ScalarnameLine.setEnabled(False)
             self.ScalarnameLine.returnPressed.connect(lambda: ass_scalar())
             self.AssignTable.setItem(i, 0, self.ColnameItem)
@@ -791,15 +791,13 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
 
         # self.resize(750, 600) #[Gabriele] Set appropriate window size
 
-        def ass_value():
+        def ass_value(attr):
 
             '''[Gabriele] Get column and row of clicked widget in table '''
+            sel_combo = self.sender()  # [Gabriele] Combobox @ row and column
+            row = int(sel_combo.objectName().split('_')[1])
+            print(row)
 
-            clicked = QApplication.focusWidget().pos()
-            index = self.AssignTable.indexAt(clicked)
-            col = index.column()
-            row = index.row()
-            sel_combo = self.AssignTable.cellWidget(row, col)  # [Gabriele] Combobox @ row and column
 
             '''[Gabriele] Use a dict to rename the columns. The keys are the column index of the original df while the values are the new names. '''
 

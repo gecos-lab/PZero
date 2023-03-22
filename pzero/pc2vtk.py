@@ -13,6 +13,7 @@ from numpy import column_stack as np_column_stack
 from numpy import array as np_array
 from numpy import uint8 as np_uint8
 from numpy import shape as np_shape
+from numpy import where as np_where
 
 import os
 from copy import deepcopy
@@ -109,6 +110,7 @@ def pc2vtk(in_file_name,col_names,row_range,header_row,usecols,delimiter,self=No
         points.SetData(XYZ)
         point_cloud.SetPoints(points)
         point_cloud.Modified()
+        point_cloud.generate_cells()
 
         # pv_PD = PointSet(XYZ)
         ''' [Gabriele] Set properties (exclude XYZ data) and add properties names and components in the appropriate lists (properties_names and properties_components).'''
@@ -131,7 +133,8 @@ def pc2vtk(in_file_name,col_names,row_range,header_row,usecols,delimiter,self=No
                 point_cloud.init_point_data('Normals',3)
                 normals = np_array([input_df['Nx'],input_df['Ny'],input_df['Nz']]).T
 
-                point_cloud.set_point_data('Normals',normals)
+                normals_flipped = np_where(normals[:, 2:] > 0, normals * -1, normals)
+                point_cloud.set_point_data('Normals', normals_flipped)
 
                 input_df.drop(['Nx','Ny','Nz'],axis=1,inplace=True)
 
@@ -158,8 +161,6 @@ def pc2vtk(in_file_name,col_names,row_range,header_row,usecols,delimiter,self=No
         """Create dictionary."""
         curr_obj_attributes = deepcopy(DomCollection.dom_entity_dict)
         curr_obj_attributes['uid'] = str(uuid4())
-
-        point_cloud.init_point_data(f'tag_{curr_obj_attributes["uid"]}',1)
         point_cloud.Modified()
         curr_obj_attributes['name'] = basename
         curr_obj_attributes['dom_type'] = "PCDom"

@@ -1,8 +1,12 @@
 """windows_factory.py
 PZero© Andrea Bistacchi"""
+from pyvista.core.filters import _update_alg
 from vtkmodules.vtkCommonCore import vtkCommand
+from vtkmodules.vtkFiltersCore import vtkThresholdPoints, vtkDelaunay2D
+from vtkmodules.vtkFiltersPoints import vtkRadiusOutlierRemoval, vtkEuclideanClusterExtraction, vtkProjectPointsToPlane
 from vtkmodules.vtkRenderingCore import vtkPropPicker
 
+from .dom_collection import DomCollection
 from .orientation_analysis import get_dip_dir_vectors
 
 """QT imports"""
@@ -28,6 +32,7 @@ from numpy import append as np_append
 from numpy import ndarray as np_ndarray
 from numpy import abs as np_abs
 from numpy import sin as np_sin
+from numpy import arcsin as np_arcsin
 from numpy import cos as np_cos
 from numpy import arctan2 as np_arctan2
 from numpy import sqrt as np_sqrt
@@ -37,6 +42,9 @@ from numpy import square as np_square
 from numpy import all as np_all
 from numpy import zeros_like as np_zeros_like
 from numpy import cross as np_cross
+from numpy import max as np_max
+from numpy import repeat as np_repeat
+from numpy import where as np_where
 
 from pandas import DataFrame as pd_DataFrame
 from pandas import unique as pd_unique
@@ -3122,7 +3130,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         reconnected when the list is rebuilt"""
         self.DOMsTableWidget.itemChanged.disconnect()
         for uid in updated_list:
-            self.remove_actor_in_view(uid=uid)
+            self.remove_actor_in_view(uid=uid, redraw=True)
             self.update_dom_list_removed(removed_list=updated_list)
         """Re-connect signals."""
         self.DOMsTableWidget.itemChanged.connect(self.toggle_dom_visibility)
@@ -3895,7 +3903,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.actors_df.loc[self.actors_df['uid'] == uid, 'actor'].values[0].GetProperty().SetLineWidth(line_thick)
 
     def change_actor_point_size(self, uid=None, collection=None):
-        """Update line thickness for actor uid"""
+        """Update point size for actor uid"""
         if collection == 'geol_coll':
             point_size = self.parent.geol_coll.get_uid_legend(uid=uid)['point_size']
         elif collection == 'xsect_coll':
@@ -3952,8 +3960,10 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
 
     def remove_actor_in_view(self, uid=None, redraw=False):
         update = self.parent.update_actors
+        print(update)
         """"Remove actor from plotter"""
-        """plotter.remove_actor can remove a single entity or a list of entities as actors -> here we remove a single entity"""
+        """plotter.remove_actor can remove a single entity or a list of entities as actors -> 
+        here we remove a single entity"""
         if not self.actors_df.loc[self.actors_df['uid'] == uid].empty:
             this_actor = self.actors_df.loc[self.actors_df['uid'] == uid, 'actor'].values[0]
             if not update:
@@ -4109,14 +4119,14 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                     show_property_title = None
                     show_property = None
                     style = 'surface'
-                    smooth_shading = True
                     appender = vtkAppendPolyData()
-                    r = self.parent.geol_coll.get_uid_legend(uid=uid)['point_size'] * 4
+                    r = point_size
                     points = plot_entity.points
                     normals = plot_entity.get_point_data('Normals')
                     dip_vectors, dir_vectors = get_dip_dir_vectors(normals=normals)
                     line1 = pv_Line(pointa=(0, 0, 0), pointb=(r, 0, 0))
                     line2 = pv_Line(pointa=(-r, 0, 0), pointb=(r, 0, 0))
+
                     for point, normal in zip(points, normals):
                         # base = pv_Plane(center=point, direction=normal,i_size=r,j_size=r)
                         base = pv_Disc(center=point, normal=normal, inner=0, outer=r, c_res=30)
@@ -4464,15 +4474,13 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.vertExagButton.triggered.connect(self.vert_exag)  # connect action to function
         self.menuWindow.addAction(self.vertExagButton)  # add action to menu
 
-
-
     def show_qt_canvas(self):
         """Show the Qt Window"""
 
         self.show()
-
-        self.init_zoom = self.plotter.camera.distance
-        self.cam_orient_widget.On()  # [Gabriele] The orientation widget needs to be turned on AFTER the canvas is shown
+        if isinstance(self,View3D):
+            self.init_zoom = self.plotter.camera.distance
+            self.cam_orient_widget.On()  # [Gabriele] The orientation widget needs to be turned on AFTER the canvas is shown
         # self.picker = self.plotter.enable_mesh_picking(callback= self.pkd_mesh,show_message=False)
 
     def closeEvent(self, event):
@@ -4481,7 +4489,8 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         reply = QMessageBox.question(self, 'Closing window', 'Close this window?', QMessageBox.Yes | QMessageBox.No,
                                      QMessageBox.No)
         if reply == QMessageBox.Yes:
-            self.plotter.close()  # needed to cleanly close the vtk plotter
+            if not isinstance(self,ViewStereoplot):
+                self.plotter.close()  # needed to cleanly close the vtk plotter
             event.accept()
         else:
             event.ignore()
@@ -4583,9 +4592,23 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         if sel_uid:
             '''[Gabriele] To select the mesh in the entity list we compare the actors of the actors_df dataframe
             with the picker.GetActor() result'''
-            self.parent.GeologyTableView.clearSelection()
+            collection = self.actors_df.loc[self.actors_df['uid'] == sel_uid[0], 'collection'].values[0]
+
+            if collection == 'geol_coll':
+                table = self.parent.GeologyTableView
+                df = self.parent.geol_coll.df
+                self.parent.tabCentral.setCurrentIndex(0) #set the correct tab to avoid problems
+            elif collection == 'dom_coll':
+                table = self.parent.DOMsTableView
+                df = self.parent.dom_coll.df
+                self.parent.tabCentral.setCurrentIndex(4)
+            else:
+                print('Selection not supported')
+                return
+            table.clearSelection()
+
             if len(sel_uid) > 1:
-                self.parent.GeologyTableView.setSelectionMode(QAbstractItemView.MultiSelection)
+                table.setSelectionMode(QAbstractItemView.MultiSelection)
 
             # In general this approach is not the best.
             # In the actors_df the index of the df is indipendent from the index of the table views.
@@ -4600,13 +4623,12 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             # For now selection will work only for geology objects
 
             for uid in sel_uid:
-                uid_list = [self.parent.GeologyTableView.model().index(row, 0).data() for row in range(
-                    len(self.parent.geol_coll.df.index))]
+                uid_list = [table.model().index(row, 0).data() for row in range(len(df.index))]
                 idx = uid_list.index(uid)
                 # coll = self.actors_df.loc[self.actors_df['uid'] == uid, 'collection'].values[0]
 
                 # if coll == 'geol_coll':
-                self.parent.GeologyTableView.selectRow(idx)
+                table.selectRow(idx)
 
 
                 # elif coll == 'image_coll':
@@ -4614,6 +4636,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                 # return
         else:
             self.parent.GeologyTableView.clearSelection()
+            self.parent.DOMsTableView.clearSelection()
             self.selected_uids = []
     def select_actor_with_mouse(self):
         ''' Function used to initiate actor selection'''
@@ -4640,13 +4663,13 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
 
     def clear_selection(self):
         for av_actor in self.plotter.renderer.actors.copy():
+            self.plotter.remove_bounding_box()
             if '_silh' in av_actor:
                 self.plotter.remove_actor(av_actor)
 
         if not self.selected_uids == []:
             deselected_uids = self.selected_uids
             self.selected_uids = []
-            self.parent.geology_geom_modified_signal.emit(deselected_uids)  # emit uid as list to force redraw
         self.actor_in_table()
 
     def select_actor(self, obj, event):
@@ -4673,15 +4696,19 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
 
             for sel_uid in self.selected_uids:
                 sel_actor = self.actors_df.loc[self.actors_df['uid'] == sel_uid, 'actor'].values[0]
+                collection = self.actors_df.loc[self.actors_df['uid'] == sel_uid, 'collection'].values[0]
                 mesh = sel_actor.GetMapper().GetInput()
-                name = f'{sel_uid}_silh'
-                name_list.add(name)
+                if collection == 'dom_coll':
+                    self.plotter.add_bounding_box(line_width=5, color='Yellow')
+                else:
+                    name = f'{sel_uid}_silh'
+                    name_list.add(name)
 
-                self.plotter.add_mesh(mesh, pickable=False, name=name, color='Yellow', style='wireframe', line_width=5)
+                    self.plotter.add_mesh(mesh, pickable=False, name=name, color='Yellow', style='wireframe', line_width=5)
 
-                for av_actor in actors.difference(name_list):
-                    if '_silh' in av_actor:
-                        self.plotter.remove_actor(av_actor)
+                    for av_actor in actors.difference(name_list):
+                        if '_silh' in av_actor:
+                            self.plotter.remove_actor(av_actor)
 
             self.actor_in_table(self.selected_uids)
         else:
@@ -4803,6 +4830,24 @@ class View3D(BaseView):
 
         self.menuBaseView.addMenu(self.menuBoreTraceVis)
 
+        self.actionThresholdf.triggered.connect(lambda: self.thresh_filt())
+        self.actionSurface_densityf.triggered.connect(lambda: self.surf_den_filt())
+        self.actionRoughnessf.triggered.connect(lambda: self.rough_filt())
+        self.actionCurvaturef.triggered.connect(lambda: self.curv_filt())
+        self.actionNormalsf.triggered.connect(lambda: self.norm_filt())
+        self.actionManualf.triggered.connect(lambda: self.manual_filt())
+
+
+        self.actionManual_picking.triggered.connect(lambda: self.act_att())
+        self.actionSegment.triggered.connect(lambda: self.act_seg())
+        self.actionPick.triggered.connect(lambda: self.auto_pick())
+        self.actionFacets.triggered.connect(lambda: self.facets())
+
+        # self.actionCalculate_normals.triggered.connect(lambda: self.normalGeometry())
+        self.actionNormals_to_DDR.triggered.connect(lambda: self.normals2dd())
+
+
+
         # self.showOct = QAction("Show octree structure", self)
         # self.showOct.triggered.connect(self.show_octree)
         # self.menuBaseView.addAction(self.showOct)
@@ -4814,27 +4859,9 @@ class View3D(BaseView):
         self.actionOrbitEntity.triggered.connect(lambda: self.orbit_entity())
         self.menuOrbit.addAction(self.actionOrbitEntity)
 
-        self.menuEdit = QMenu('Edit point cloud', self)
-        # self.actionCalculateNormalsPC = QAction('Calculate normals for point clouds',self)
-        self.actionNormals2dd = QAction('Convert normals to Dip/Direction', self)
-        self.actionNormals2dd.triggered.connect(lambda: self.normals2dd())
-        self.actionFilter = QAction('Filter', self)
-        self.actionFilter.triggered.connect(lambda: self.radial_filt())
-        self.menuEdit.addAction(self.actionNormals2dd)
-        self.menuEdit.addAction(self.actionFilter)
-        self.menuTools.addMenu(self.menuEdit)
-        self.menuTools.addMenu(self.menuOrbit)
+        self.menuWindow.addMenu(self.menuOrbit)
 
         """______________THIS MUST BE MOVED TO MAIN WINDOW AND NAME MUST BE MORE SPECIFIC_________________"""
-        self.actionFilter = QAction('Filter', self)
-        self.actionFilter.triggered.connect(self.radial_filt)
-        self.menuBaseView.addAction(self.actionFilter)
-        self.toolBarBase.addAction(self.actionFilter)
-
-        self.actionPickAttitude = QAction('Measure attitude', self)
-        self.actionPickAttitude.triggered.connect(self.act_att)
-        self.menuBaseView.addAction(self.actionPickAttitude)
-        self.toolBarBase.addAction(self.actionPickAttitude)
 
         self.actionExportGltf = QAction('Export as GLTF', self)
         self.actionExportGltf.triggered.connect(self.export_gltf)
@@ -4885,33 +4912,16 @@ class View3D(BaseView):
             self.tog_att *= -1
             print('Picking enabled')
         else:
-            picker = self.plotter.picker
-            # print(picker)
-            picker.RemoveObservers(_vtk.vtkCommand.EndPickEvent)
-            self.picker = self.plotter.enable_mesh_picking(callback=lambda mesh: self.pkd_mesh(mesh),
-                                                           show_message=False)
-            self.tog_att *= -1
-            print('Picking disabled')
-
-    def act_pmesh(self):
-        """[Gabriele] Not the best solution but for now it works"""
-        if self.tog_att == -1:
-            self.select_actor_with_mouse()
-            print('Mesh picking enabled')
-        else:
-            picker = self.plotter.picker
-            # print(picker)
-            self.picker.RemoveObservers(_vtk.vtkCommand.EndPickEvent)
-            self.select_actor_with_mouse()
+            self.plotter.disable_picking()
             self.tog_att *= -1
             print('Picking disabled')
 
     def pkd_point(self, mesh, pid, set_opt):
 
-        actor = self.picker.GetActor()
-        sel_uid = self.actors_df.loc[self.actors_df['actor'] == actor, 'uid'].values[0]
+        # actor = self.picker.GetActor()
+        # sel_uid = self.actors_df.loc[self.actors_df['actor'] == actor, 'uid'].values[0]
 
-        obj = self.parent.dom_coll.get_uid_vtk_obj(sel_uid)
+        obj = mesh
         # locator = vtkStaticPointLocator()
         # locator.SetDataSet(obj)
         # locator.BuildLocator()
@@ -5007,6 +5017,227 @@ class View3D(BaseView):
         # pts_act = plt.add_mesh(sel_p,color='r',pickable =False)
         # act_list.append(pts_act)
         # self.act_list.append(actor)
+
+    def act_seg(self):
+
+        if len(self.selected_uids) == 0:
+            print('No entities selected, make sure to have the right tab open')
+            return
+        else:
+            uid = self.selected_uids[0]
+
+        vtk_obj = self.parent.dom_coll.get_uid_vtk_obj(uid)
+
+        if isinstance(vtk_obj, PCDom):
+            if 'dip direction' not in self.parent.dom_coll.get_uid_properties_names(uid):
+                print(
+                    'dip directio/dip data not present in the dataset. Calculate from Normals using the specific function.')
+                return
+            input_dict = {'name': ['Name result: ', 'segmented_'],
+                          'dd1': ['Dip direction lower threshold: ', 0],
+                          'dd2': ['Dip direction upper threshold: ', 10],
+                          'd1': ['Dip lower threshold: ', 0],
+                          'd2': ['Dip upper threshold: ', 10],
+                          'rad': ['Search radius: ', 0.0],
+                          'nn': ['Minimum number of neighbors: ', 15]}
+            dialog = multiple_input_dialog(title='Segmentation filter', input_dict=input_dict)
+
+            # print(dialog)
+
+            vtk_obj.GetPointData().SetActiveScalars('dip direction')
+            connectivity_filter_dd = vtkEuclideanClusterExtraction()
+            connectivity_filter_dd.SetInputData(vtk_obj)
+            connectivity_filter_dd.SetRadius(dialog['rad'])
+            connectivity_filter_dd.SetExtractionModeToAllClusters()
+            connectivity_filter_dd.ScalarConnectivityOn()
+            connectivity_filter_dd.SetScalarRange(dialog['dd1'], dialog['dd2'])
+            _update_alg(connectivity_filter_dd, True, 'Segmenting on dip directions')
+            f1 = connectivity_filter_dd.GetOutput()
+            # print(f1)
+            f1.GetPointData().SetActiveScalars('dip')
+            # print(f1.GetNumberOfPoints())
+            #
+            connectivity_filter_dip = vtkEuclideanClusterExtraction()
+            connectivity_filter_dip.SetInputData(f1)
+            connectivity_filter_dip.SetRadius(dialog['rad'])
+            connectivity_filter_dip.SetExtractionModeToAllClusters()
+            connectivity_filter_dip.ColorClustersOn()
+            connectivity_filter_dip.ScalarConnectivityOn()
+            connectivity_filter_dip.SetScalarRange(dialog['d1'], dialog['d2'])
+
+            _update_alg(connectivity_filter_dip, True, 'Segmenting dips')
+
+            n_clusters = connectivity_filter_dip.GetNumberOfExtractedClusters()
+
+            # print(n_clusters)
+
+            r = vtkRadiusOutlierRemoval()
+            r.SetInputData(connectivity_filter_dip.GetOutput())
+            r.SetRadius(dialog['rad'])
+            r.SetNumberOfNeighbors(dialog['nn'])
+            r.GenerateOutliersOff()
+
+            _update_alg(r, True, 'Cleaning pc')
+            pc_clean = r.GetOutput()
+            pc_clean.GetPointData().SetActiveScalars('ClusterId')
+            appender_pc = vtkAppendPolyData()
+            for i in range(n_clusters):
+                print(f'{i}/{n_clusters}', end='\r')
+
+                thresh = vtkThresholdPoints()
+
+                thresh.SetInputData(pc_clean)
+                thresh.ThresholdBetween(i, i)
+
+                thresh.Update()
+                if thresh.GetOutput().GetNumberOfPoints() > dialog['nn']:
+                    appender_pc.AddInputData(thresh.GetOutput())
+            appender_pc.Update()
+
+            seg_pc = PCDom()
+            seg_pc.ShallowCopy(appender_pc.GetOutput())
+            seg_pc.generate_cells()
+            properties_name = seg_pc.point_data_keys
+            properties_components = [seg_pc.get_point_data_shape(i)[1] for i in properties_name]
+
+            curr_obj_dict = deepcopy(DomCollection.dom_entity_dict)
+            curr_obj_dict['uid'] = str(uuid4())
+            curr_obj_dict['name'] = f'pc_{dialog["name"]}'
+            curr_obj_dict['dom_type'] = "PCDom"
+            curr_obj_dict['properties_names'] = properties_name
+            curr_obj_dict['properties_components'] = properties_components
+            curr_obj_dict['vtk_obj'] = seg_pc
+            """Add to entity collection."""
+            self.parent.dom_coll.add_entity_from_dict(entity_dict=curr_obj_dict)
+
+            del f1
+            del pc_clean
+            del seg_pc
+            del properties_name
+            del properties_components
+
+        else:
+            print('Entity not point cloud or multiple entities visible')
+
+    def auto_pick(self):
+        if len(self.selected_uids) == 0:
+            print('No entities selected, make sure to have the right tab open')
+            return
+        else:
+            uid = self.selected_uids[0]
+
+        vtk_obj = self.parent.dom_coll.get_uid_vtk_obj(uid)
+        name = self.parent.dom_coll.get_uid_name(uid)
+        appender = vtkAppendPolyData()
+        max_region = np_max(vtk_obj.get_point_data('ClusterId'))
+        vtk_obj.GetPointData().SetActiveScalars('ClusterId')
+        for i in range(max_region):
+            print(f'{i}/{max_region}', end='\r')
+            thresh = vtkThresholdPoints()
+
+            thresh.SetInputData(vtk_obj)
+            thresh.ThresholdBetween(i, i)
+
+            thresh.Update()
+
+            points = numpy_support.vtk_to_numpy(thresh.GetOutput().GetPoints().GetData())
+            # print(points)
+            if thresh.GetOutput().GetNumberOfPoints() > 0:
+                # print(thresh.GetOutput())
+                c, n = best_fitting_plane(points)
+                # n = np.mean(numpy_support.vtk_to_numpy(thresh.GetOutput().GetPointData().GetArray('Normals')),axis=0)
+                # c = np.mean(points,axis=0)
+                if n[2] >= 0:
+                    n *= -1
+                # plane = pv.Plane(center = c, direction= n)
+                att_point = Attitude()
+                att_point.append_point(point_vector=c)
+                att_point.auto_cells()
+                att_point.set_point_data(data_key='Normals', attribute_matrix=n)
+                appender.AddInputData(att_point)
+
+        appender.Update()
+
+        points = Attitude()
+        points.ShallowCopy(appender.GetOutput())
+        properties_name = points.point_data_keys
+        properties_components = [points.get_point_data_shape(i)[1] for i in properties_name]
+
+        curr_obj_dict = deepcopy(GeologicalCollection.geological_entity_dict)
+        curr_obj_dict['uid'] = str(uuid4())
+        curr_obj_dict['name'] = f'{name}auto_pick'
+        curr_obj_dict['geological_type'] = 'undef'
+        curr_obj_dict['topological_type'] = "VertexSet"
+        curr_obj_dict['geological_feature'] = name
+        curr_obj_dict['properties_names'] = properties_name
+        curr_obj_dict['properties_components'] = properties_components
+        curr_obj_dict['vtk_obj'] = points
+        """Add to entity collection."""
+        self.parent.geol_coll.add_entity_from_dict(entity_dict=curr_obj_dict)
+
+    def facets(self):
+        if len(self.selected_uids) == 0:
+            print('No entities selected, make sure to have the right tab open')
+            return
+        else:
+            uid = self.selected_uids[0]
+
+        vtk_obj = self.parent.dom_coll.get_uid_vtk_obj(uid)
+        name = self.parent.dom_coll.get_uid_name(uid)
+        appender = vtkAppendPolyData()
+        max_region = np_max(vtk_obj.get_point_data('ClusterId'))
+        vtk_obj.GetPointData().SetActiveScalars('ClusterId')
+        for i in range(max_region):
+            print(f'{i}/{max_region}', end='\r')
+
+            thresh = vtkThresholdPoints()
+
+            thresh.SetInputData(vtk_obj)
+            thresh.ThresholdBetween(i, i)
+
+            thresh.Update()
+            points = numpy_support.vtk_to_numpy(thresh.GetOutput().GetPoints().GetData())
+            n_points = thresh.GetOutput().GetNumberOfPoints()
+            if n_points > 0:
+                c, n = best_fitting_plane(points)
+                if n[2] >= 0:
+                    n *= -1
+                dd = np_repeat((np_arctan2(n[0], n[1]) * 180 / np_pi - 180) % 360, n_points)
+                d = np_repeat(90 - np_arcsin(-n[2]) * 180 / np_pi, n_points)
+
+                facet = TriSurf()
+                plane_proj = vtkProjectPointsToPlane()
+                plane_proj.SetInputData(thresh.GetOutput())
+                plane_proj.SetProjectionTypeToBestFitPlane()
+
+                delaunay = vtkDelaunay2D()
+                delaunay.SetInputConnection(plane_proj.GetOutputPort())
+                delaunay.SetProjectionPlaneMode(2)
+                delaunay.Update()
+                facet.ShallowCopy(delaunay.GetOutput())
+                facet.remove_point_data('Normals')
+                facet.set_point_data('dip direction', dd)
+                facet.set_point_data('dip', d)
+                appender.AddInputData(facet)
+
+        appender.Update()
+
+        facets = TriSurf()
+        facets.ShallowCopy(appender.GetOutput())
+        properties_name = facets.point_data_keys
+        properties_components = [facets.get_point_data_shape(i)[1] for i in properties_name]
+
+        curr_obj_dict = deepcopy(GeologicalCollection.geological_entity_dict)
+        curr_obj_dict['uid'] = str(uuid4())
+        curr_obj_dict['name'] = f'{name}facets'
+        curr_obj_dict['geological_type'] = 'undef'
+        curr_obj_dict['topological_type'] = "TriSurf"
+        curr_obj_dict['geological_feature'] = name
+        curr_obj_dict['properties_names'] = properties_name
+        curr_obj_dict['properties_components'] = properties_components
+        curr_obj_dict['vtk_obj'] = facets
+        """Add to entity collection."""
+        self.parent.geol_coll.add_entity_from_dict(entity_dict=curr_obj_dict)
 
     def plot_volume_3D(self, uid=None, plot_entity=None):
         if not self.actors_df.empty:
@@ -5130,6 +5361,39 @@ class View3D(BaseView):
     def surf_den_filt(self):
         ...
 
+    def thresh_filt(self):
+        uid = self.actors_df.loc[self.actors_df['show'] == True,'uid'].values[0]
+        vtk_obj = self.parent.dom_coll.get_uid_vtk_obj(uid)
+        if isinstance(vtk_obj,PCDom):
+            input_dict = {'prop_name': ['Select property name: ', vtk_obj.properties_names], 'l_t': ['Lower threshold: ', 0], 'u_t': ['Upper threshold: ', 10]}
+            dialog = multiple_input_dialog(title='Threshold filter', input_dict=input_dict)
+
+            thresh = vtkThreshold()
+            thresh.SetInputData(vtk_obj)
+            thresh.SetInputArrayToProcess(0, 0, 0, vtkDataObject.FIELD_ASSOCIATION_POINTS, dialog['prop_name'])
+            thresh.SetLowerThreshold(float(dialog['l_t']))
+            thresh.SetUpperThreshold(float(dialog['u_t']))
+            thresh.Update()
+            out = PCDom()
+            out.ShallowCopy(thresh.GetOutput())
+            out.generate_cells()
+            # out.plot()
+            # self.parent.dom_coll.replace_vtk(uid[0],out)
+            entity_dict = deepcopy(self.parent.dom_coll.dom_entity_dict)
+            # print(entity_dict)
+            entity_dict['name'] = self.parent.dom_coll.get_uid_name(uid) + '_thresh_'+str(dialog['l_t'])+'_'+str(dialog['u_t'])
+            entity_dict['vtk_obj'] = out
+            entity_dict['dom_type'] = 'PCDom'
+            entity_dict['properties_names'] = self.parent.dom_coll.get_uid_properties_names(uid)
+            entity_dict['dom_type'] = 'PCDom'
+            entity_dict['properties_components'] = self.parent.dom_coll.get_uid_properties_components(uid)
+            entity_dict['vtk_obj'] = out
+            self.parent.dom_coll.add_entity_from_dict(entity_dict)
+            del out
+            del thresh
+        else:
+            print('Entity not point cloud or multiple entities visible')
+
     def rough_filt(self):
         print('Roughness filtering')
 
@@ -5145,17 +5409,15 @@ class View3D(BaseView):
     '''[Gabriele] PC Edit ----------------------------------------------------'''
 
     def normals2dd(self):
-        vis_uids = self.actors_df.loc[self.actors_df['show'] == True, 'uid']
-        for uid in vis_uids:
+        if len(self.selected_uids) == 0:
+            print('No entities selected, make sure to have the right tab open')
+            return
+        for uid in self.selected_uids:
             vtk_obj = self.parent.dom_coll.get_uid_vtk_obj(uid)
             prop_keys = vtk_obj.point_data_keys
             if 'Normals' not in prop_keys:
                 print('Normal data not present. Import or create normal data to proceed')
             else:
-                # normals = vtk_obj.get_point_data('Normals')
-                # nx,ny,nz = normals[:,0],normals[:,1],normals[:,2]
-                # dip = np.arccos(np_abs(nz))
-                # dir = np.arctan2(nx, ny)-np.deg2rad(90))
                 dip = vtk_obj.points_map_dip
                 dip_az = vtk_obj.points_map_dip_azimuth
 
@@ -5164,7 +5426,7 @@ class View3D(BaseView):
                 vtk_obj.init_point_data('dip direction', 1)
 
                 vtk_obj.set_point_data('dip', dip)
-                vtk_obj.set_point_data('dip direction', np_abs(dip_az))
+                vtk_obj.set_point_data('dip direction', dip_az)
 
                 self.parent.dom_coll.replace_vtk(uid, vtk_obj)
             # print(normals)
@@ -6378,7 +6640,6 @@ class ViewStereoplot(BaseView):
         self.setWindowTitle("Stereoplot View")
         self.tog_contours = -1
         # mplstyle.context('classic')
-
     def initialize_menu_tools(self):
 
         self.actionContours = QAction('View contours', self)
@@ -6852,30 +7113,30 @@ class ViewStereoplot(BaseView):
                     """This check is needed to avoid errors when trying to plot an empty
                     PolyData, just created at the beginning of a digitizing session.
                     Check if both these conditions are necessary_________________"""
+                    # [Gabriele] Dip az needs to be converted to strike (dz-90) to plot with mplstereonet
+                    strike = (plot_entity.points_map_dip_azimuth-90) % 360
+                    dip = plot_entity.points_map_dip
 
-                    self.dip_az = plot_entity.points_map_dip_azimuth
-                    self.dip = plot_entity.points_map_dip
+                    if np_all(strike != None):
 
-                    if np_all(self.dip_az != None):
 
-                        # [Gabriele] Dip az needs to be converted to strike (dz-90) to plot with mplstereonet
                         if uid in self.selected_uids:
                             if show_property == "Planes":
-                                this_actor = self.ax.plane(self.dip_az - 90, self.dip, color=color_RGB)[0]
+                                this_actor = self.ax.plane(strike, dip, color=color_RGB)[0]
                             else:
-                                this_actor = self.ax.pole(self.dip_az - 90, self.dip, color=color_RGB)[0]
+                                this_actor = self.ax.pole(strike, dip, color=color_RGB)[0]
 
                             this_actor.set_visible(visible)
                         else:
                             if show_property == "Planes":
-                                this_actor = self.ax.plane(self.dip_az - 90, self.dip, color=color_RGB)[0]
+                                this_actor = self.ax.plane(strike, dip, color=color_RGB)[0]
                             else:
                                 if filled is not None and visible is True:
                                     if filled:
-                                        self.ax.density_contourf(self.dip_az - 90, self.dip, measurement='poles')
+                                        self.ax.density_contourf(strike, dip, measurement='poles')
                                     else:
-                                        self.ax.density_contour(self.dip_az - 90, self.dip, measurement='poles')
-                                this_actor = self.ax.pole(self.dip_az, self.dip, color=color_RGB)[0]
+                                        self.ax.density_contour(strike, dip, measurement='poles')
+                                this_actor = self.ax.pole(strike, dip, color=color_RGB)[0]
                             if this_actor:
                                 this_actor.set_visible(visible)
                     else:

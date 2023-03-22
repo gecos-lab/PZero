@@ -43,6 +43,7 @@ from numpy import column_stack as np_column_stack
 from numpy import where as np_where
 from numpy import zeros as np_zeros
 from numpy import dot as np_dot
+from vtkmodules.vtkFiltersPoints import vtkConvertToPointCloud
 
 from .orientation_analysis import get_dip_dir_vectors
 from vtkmodules.vtkFiltersCore import vtkGlyph3D
@@ -334,8 +335,8 @@ class PolyData(vtkPolyData):
         """Returns dip azimuth (in grad) as Numpy array for map plotting if points have Normals property."""
         if "Normals" in self.point_data_keys:
             if len(np_shape(self.get_point_data("Normals"))) >= 2:
-                map_dip_azimuth = np_arctan2(self.get_point_data("Normals")[:, 0],
-                                             self.get_point_data("Normals")[:, 1]) * 180 / np_pi - 180
+                map_dip_azimuth = (np_arctan2(self.get_point_data("Normals")[:, 0],
+                                              self.get_point_data("Normals")[:, 1]) * 180 / np_pi - 180) % 360
             else:
                 map_dip_azimuth = np_arctan2(self.get_point_data("Normals")[0],
                                              self.get_point_data("Normals")[1]) * 180 / np_pi - 180
@@ -977,8 +978,7 @@ class XsPolyLine(PolyLine, XSectionBaseEntity):
         return xpline_copy
 
 
-class XsTriSurf(TriSurf,
-                XSectionBaseEntity):  # ______________________________________ NOT YET USED - SEE IF THIS IS USEFUL
+class XsTriSurf(TriSurf,XSectionBaseEntity):  # ______________________________________ NOT YET USED - SEE IF THIS IS USEFUL
     """XsTriSurf is a triangulated surface belonging to a unique XSection, derived from XSectionBaseEntity and TriSurf"""
 
     def __init__(self, *args, **kwargs):
@@ -990,8 +990,7 @@ class XsTriSurf(TriSurf,
         return xtsurf_copy
 
 
-class TetraSolid(
-    vtkUnstructuredGrid):  # ______________________________________ NOT YET USED - EVERYTHING MUST BE CHECKED - ADD METHODS SIMILAR TO POLYDATA
+class TetraSolid(vtkUnstructuredGrid):  # ______________________________________ NOT YET USED - EVERYTHING MUST BE CHECKED - ADD METHODS SIMILAR TO POLYDATA
     """TetraSolid is a tetrahedral mesh, derived from vtkUnstructuredGrid"""
 
     def __init__(self, *args, **kwargs):
@@ -1035,8 +1034,7 @@ class TetraSolid(
         return edges.GetOutput()
 
 
-class Voxet(
-    vtkImageData):  # _______________________________________________ SEE IF POINT METHODS MAKE SENSE HERE - NOW COMMENTED
+class Voxet(vtkImageData):  # _______________________________________________ SEE IF POINT METHODS MAKE SENSE HERE - NOW COMMENTED
     """Voxet is a 3D image, derived from BaseEntity and vtkImageData"""
     """Add methods similar to PolyData for points."""
 
@@ -1302,8 +1300,7 @@ class Voxet(
         return frame
 
 
-class XsVoxet(
-    Voxet):  # _____________________________________________________________ use frame and texture as in XSImage?
+class XsVoxet(Voxet):  # _____________________________________________________________ use frame and texture as in XSImage?
     """XsVoxet is a slice of a Voxet performed along a XSection."""
 
     def __init__(self, x_section_uid=None, parent=None, *args, **kwargs):
@@ -1373,8 +1370,7 @@ class XsVoxet(
         return image_data
 
 
-class Seismics(
-    vtkStructuredGrid):  # ___________________________________ MUST BE UPDATED AS 2D AND 3D SEISMICS, AND TO WORK AS OTHER CLASSES OF THE IMAGE COLLECTION
+class Seismics(vtkStructuredGrid):  # ___________________________________ MUST BE UPDATED AS 2D AND 3D SEISMICS, AND TO WORK AS OTHER CLASSES OF THE IMAGE COLLECTION
     """Seismics is a 3D structured grid, derived from BaseEntity and vtkStructuredGrid.
     NOT ALL SEISMICS MUST BE UNSTRUCTURED."""
 
@@ -1719,142 +1715,39 @@ class DEM(vtkStructuredGrid):
         self.GetPointData().SetActiveTCoords(map_image_uid)
 
 
-class PCDom(vtkPointSet):  # _______________________ DO WE NEED ADDITIONAL METHODS WITH RESPECT TO POLYDATA?
-    """Point Cloud DOM.
-    See discussion at https://discourse.vtk.org/t/proposal-adding-a-vtkpointcloud-data-structure/3872/3 """
+class PCDom(PolyData):  # _______________________ DO WE NEED ADDITIONAL METHODS WITH RESPECT TO POLYDATA?
+    '''Point Cloud DOM.
+    See discussion at https://discourse.vtk.org/t/proposal-adding-a-vtkpointcloud-data-structure/3872/3 ->
+    pointset would be better since no cell data is necessary but there are some problems (related to VTK and pyvista):
+    1. Many functions that could be useful to filter and elaborate the pc need celldata (e.g. vktthreshehold).
+    2. Many alternative functions designed for point clouds (with no cell data) usually are not very optimized
+    or miss some important features (e.g. vtkPointThreshold does not have an InvertOn option)
+    3. I could not find a way to save pointsets without casting to polydata and use vtkxmlPolyDataWriter.
+    4. For now pyvista has a problem visualizing vtkpointsets (not pyvista.PointSet).
+    Now this problem is resolved but we need to wait for an official release. To circumvent this problem
+    it's necessary to cast vtkPointSet to pyvista.PointSet() (not the best)
+    If these problems are resolved then it would be better to switch to vtkPointSet. For now vtkPolyData is used'''
 
-    def __init__(self, *args, **kwargs):
-        super(PCDom, self).__init__(*args, **kwargs)
+    # def points_map_dip_azimuth(self):
+    #     """Returns dip azimuth (in grad) as Numpy array for map plotting if points have Normals property.
+    #      Must be redefined since we use negative z vectors"""
+    #     if "Normals" in self.point_data_keys:
+    #         map_dip_azimuth = (np_arctan2(self.get_point_data("Normals")[:, 0],
+    #                                      self.get_point_data("Normals")[:, 1]) * 180 / np_pi + 180) % 360
+    #         map_dip_azimuth = np_where(map_dip_azimuth == 360, 0, map_dip_azimuth)
+    #         return map_dip_azimuth
+    #     else:
+    #         return None
 
-    def deep_copy(self):
-        pcdom_copy = PCDom()
-        pcdom_copy.DeepCopy(self)
-        return pcdom_copy
+    def generate_cells(self):
+        """Generate cells from just points using vtkConvertToPointCloud (very efficient)"""
 
-    @property
-    def bounds(self):
-        """Returns a list with xmin, xmax, ymin, ymax, zmin, zmax."""
-        return self.GetBounds()
-
-    @property
-    def points_number(self):
-        """Returns the number of points."""
-        return WrapDataObject(self).GetNumberOfPoints()
-
-    @property
-    def points(self):
-        """Returns point coordinates as a Numpy array with columns for x, y, z."""
-        return WrapDataObject(self).Points
-
-    @points.setter
-    def points(self, points_matrix=None):
-        """Sets point coordinates from a Numpy array with columns for x, y, z (sets a completely new point array)."""
-        WrapDataObject(self).Points = points_matrix
-
-    @property
-    def points_X(self):
-        """Returns X point coordinates as Numpy array."""
-        return self.points[:, 0]
-
-    @property
-    def points_Y(self):
-        """Returns Y point coordinates as Numpy array"""
-        return self.points[:, 1]
-
-    @property
-    def points_Z(self):
-        """Returns Z point coordinates as Numpy array"""
-        return self.points[:, 2]
-
-    @property
-    def point_data_keys(self):
-        """Lists point data keys, if present (except handles the case of objects with no properties)."""
-        try:
-            return WrapDataObject(self).PointData.keys()
-        except:
-            return []
-
-    @property
-    def points_map_dip_azimuth(self):
-        """Returns dip azimuth (in grad) as Numpy array for map plotting if points have Normals property."""
-        if "Normals" in self.point_data_keys:
-            if len(np_shape(self.get_point_data("Normals"))) >= 2:
-                map_dip_azimuth = np_arctan2(self.get_point_data("Normals")[:, 0],
-                                             self.get_point_data("Normals")[:, 1]) * 180 / np_pi - 180
-                map_dip_azimuth = np_where(map_dip_azimuth == 360, 0, map_dip_azimuth)
-            else:
-                map_dip_azimuth = np_arctan2(self.get_point_data("Normals")[0],
-                                             self.get_point_data("Normals")[1]) * 180 / np_pi - 180
-            return map_dip_azimuth
-        else:
-            return None
-
-    @property
-    def points_map_dip(self):
-        """Returns dip (in grad) as Numpy array for map plotting if points have Normals property."""
-        if "Normals" in self.point_data_keys:
-            # problem with one point objects -> np_squeeze (called in get_point_data) returns a (3, ) array instead of a (n,3) array.
-            if len(np_shape(self.get_point_data("Normals"))) >= 2:
-
-                map_dip = 90 - np_arcsin(-self.get_point_data("Normals")[:, 2]) * 180 / np_pi
-            else:
-                map_dip = 90 - np_arcsin(-self.get_point_data("Normals")[2]) * 180 / np_pi
-            return map_dip
-        else:
-            return None
-
-    @property
-    def points_map_trend(self):
-        """Returns trend as Numpy array for map plotting if points have Lineations property."""
-        if "Lineations" in self.point_data_keys:
-            map_trend = np_arctan2(self.get_point_data("Lineations")[:, 0],
-                                   self.get_point_data("Lineations")[:, 1]) * 180 / np_pi
-            return map_trend
-        else:
-            return None
-
-    @property
-    def points_map_plunge(self):
-        """Returns plunge as Numpy array for map plotting if points have Lineations property."""
-        if "Lineations" in self.point_data_keys:
-            map_plunge = np_arcsin(-self.get_point_data("Lineations")[:, 2]) * 180 / np_pi
-            return map_plunge
-        else:
-            return None
-
-    def ids_to_scalar(self):
-        """Store point and cell ids on scalars named "vtkIdFilter_Ids".
-        vtkIdFilter is a filter that generates scalars or field data using cell and point ids.
-        That is, the point attribute data scalars or field data are generated from the point ids,
-        and the cell attribute data scalars or field data are generated from the cell ids.
-        In theory one could decide to record only point or cell ids using PointIdsOn/Off and CellIdsOn/Off.
-        Here we use the default name for the scalar storing the ids, that is "vtkIdFilter_Ids", but
-        in theory this could be changed with SetPointIdsArrayName(<new_name>) and
-        SetCellIdsArrayName(<new_name>). In this case also the last lines must be modified accordingly."""
-        """Run the filter."""
-        id_filter = vtkIdFilter()
-        id_filter.SetInputData(self)
-        id_filter.PointIdsOn()
-        id_filter.CellIdsOn()
-        id_filter.Update()
-        """Update the input polydata "self" with the new scalars."""
-        self.GetPointData().SetScalars(id_filter.GetOutput().GetPointData().GetArray("vtkIdFilter_Ids"))
-        self.Modified()
-
-    def init_point_data(self, data_key=None, dimension=None):
-        """Creates a new point data attribute with name = data_key
-        as an empty Numpy array with dimension = 1, 2, 3, 4, 6, or 9.
-        These are the only dimensions accepted by VTK arrays."""
-        if dimension not in [1, 2, 3, 4, 6, 9]:
-            print("Error - dimension not in [1, 2, 3, 4, 6, 9]")
-            return
-        nan_array = np_empty((self.points_number, dimension))
-        nan_array[:] = np_NaN
-        WrapDataObject(self).PointData.append(nan_array, data_key)
-
-    def remove_point_data(self, data_key=None):
-        """Removes a point data attribute with name = data_key."""
-        self.GetPointData().RemoveArray(data_key)
+        generator = vtkConvertToPointCloud()
+        generator.SetInputData(self)
+        generator.SetCellGenerationMode(vtkConvertToPointCloud.VERTEX_CELLS)
+        generator.Update()
+        self.ShallowCopy(generator.GetOutput())
+        del generator
 
     def connected_calc(self):
         """Adds a scalar property called RegionId with the connected region index, useful for processing and
@@ -1876,70 +1769,22 @@ class PCDom(vtkPointSet):  # _______________________ DO WE NEED ADDITIONAL METHO
         # print(connectivity_filter.GetOutput().GetPointData().GetArray('RegionId'))
         self.GetPointData().SetScalars(connectivity_filter.GetOutput().GetPointData().GetArray('ClusterId'))
         self.Modified()
-        # return num_regions
-
-    def set_point_data(self, data_key=None,
-                       attribute_matrix=None):  # _____________________________________________ REVEL CITED HERE TO FLATTEN THE ARRAY AND THEN NOT USED?
-        """Sets point data attribute from Numpy array (sets a completely new point attributes array)
-        Applying ravel to the input n-d array is required to flatten the array as in VTK arrays
-        (see also reshape in get_point_data)."""
-        WrapDataObject(self).PointData.append(attribute_matrix, data_key)
-
-    def edit_point_data(self, data_key=None, point_id=None, point_data_array=None):
-        """Edits the data attribute of a single point from point_id and Numpy point_data_array"""
-        point_data_array = point_data_array.flat[:]  # to be sure that point_vector is a row vector
-        for col in range(np_size(point_data_array)):
-            WrapDataObject(self).PointData[data_key][point_id, col] = point_data_array[col]
-
-    def get_point_data_type(self, data_key=None):
-        """Get point data type."""
-        return WrapDataObject(self).PointData[data_key].dtype.name
-
-    ''' New property to retrieve and set vtkPointSet proxy model'''
-
-    def get_point_data_shape(self, data_key=None):
-        """Returns the shape of a point data attribute matrix."""
-        # if isinstance(self, (VertexSet, PolyLine, TriSurf, XsVertexSet, XsPolyLine, PCDom)):
-        """For vector entities we have attribute arrays of the same length as the number of points.
-        This method yields the number of points and the number of components of the attribute."""
-        n_points = np_shape(WrapDataObject(self).PointData[data_key])[0]
-        """The following solves the problem of Numpy returning just the length for 1D arrays."""
-        try:
-            n_components = np_shape(WrapDataObject(self).PointData[data_key])[1]
-        except:
-            n_components = 1
-        return [n_points, n_components]
-
-    def get_point_data(self,
-                       data_key=None):  # _________________________________________________________ CHECK THIS - PROBABLY reshape SHOULD APPLY TO ALL CASES
-        """Returns a point data attribute as Numpy array. This cannot be converted to
-        a property method since the key of the attribute must be specified."""
-        # if isinstance(self, (VertexSet, PolyLine, TriSurf, XsVertexSet, XsPolyLine)):
-        """For vector entities return a n-by-m-dimensional array where n is the
-        number of points and m is the number of components of the attribute.
-        Reshape is needed since the Numpy array returned by dsa is "flat" as a standard VTK array."""
-        point_data = WrapDataObject(self).PointData[data_key].reshape(
-            (self.get_point_data_shape(data_key=data_key)[0], self.get_point_data_shape(data_key=data_key)[1]))
-        # elif isinstance(self, PolyData):
-        #     """For point entities we don't need to reshape"""
-        #     point_data = WrapDataObject(self).PointData[data_key]
-        """We use np_squeeze to remove axes with length 1, so a 1D array will be returned with shape (n, ) and not with shape (n, 1)."""
-        # The np_array is sometimes necessary. Without it in some cases this error occures: ndarray subclass __array_wrap__ method returned an object which was not an instance of an ndarray subclass
-        return np_squeeze(np_array(point_data))
 
     # @profiler('/home/gabriele/STORAGE/Unibro/Libri-e-dispense/Tesi/profiler_data/normals_calc/brolla_proxy',10)
     def vtk_set_normals(self):
+        ''' Calculate normals for a point cloud using PCA. Since we are using PCA ,normals may point in +/- orientation,
+        which may not be consistent with neighboring normals. To resolve this problem we can flip the normals using
+        np_where. Once the normals are calculated we flip all of the z positive normals (mutiplying Nx,Ny,Nz by -1).
 
-        ''' Calculate normals for a point cloud using PCA. Since we are using PCA ,normals may point in +/- orientation, which may not be consistent with neighboring normals. To resolve this problem we can flip the normals using np_where. Once the normals are calculated we flip all of the z positive normals (mutiplying Nx,Ny,Nz by -1).
+        NOTE: Maybe is better not do it with the PCA filter but by sampling the PC and use the pca helper_function.
+        By doing this we could calculate different PC statistics (curvature, normals, roughness, density and so on)
+        for each sample point. It's a more efficient approach than just running multiple filters on the whole
+        point-cloud. Using a vtkPointSet proxy could speed up the process.
 
-        NOTE: Maybe is better not do it with the PCA filter but by sampling the PC and use the pca helper_function. By doing this we could calculate different PC statistics (curvature, normals, roughness, density and so on) for each sample point. It's a more efficient approach than just running multiple filters on the whole point cloud. Using a vtkPointSet proxy could speed up the process.
-
-        Another approach could be to calculate the normals on a subsampled pc and then attribute the calculated values to a neighbourhood of points around the known value (voronoi style).
+        Another approach could be to calculate the normals on a subsampled pc and then attribute the
+        calculated values to a neighbourhood of points around the known value (voronoi style).
         '''
-        # if self.point_set_proxy is None:
-        #     self.generate_point_set()
 
-        # ps_proxy = self.point_set_proxy
         normals_filter = vtkPCANormalEstimation()
         normals_filter.SetInputData(self)
         normals_filter.SetSampleSize(15)
@@ -1953,54 +1798,19 @@ class PCDom(vtkPointSet):  # _______________________ DO WE NEED ADDITIONAL METHO
         self.set_point_data('Normals', normals_flipped)
         self.Modified()
 
-    # def calc_radius(self):
+    @property
+    def properties_n(self):
+        """This is not exposed in collection but used internally in the class."""
+        return self.GetPointData().GetNumberOfArrays()
 
-    # self.init_point_data('radial_filt',1)
+    @property
+    def properties_names(self):
+        properties_names = []
+        for prop in range(self.properties_n):
+            property_name = self.GetPointData().GetArray(prop).GetName()
+            properties_names.append(property_name)
+        return properties_names
 
-    # # r = vtkStatisticalOutlierRemoval()
-    # r = vtkRadiusOutlierRemoval()
-    # r.SetInputData(self)
-    # r.GenerateOutliersOn()
-    # # r.SetSampleSize(10)
-    # r.SetRadius(200)
-    # r.SetNumberOfNeighbors(100)
-    # r.Update()
-    # # print(r.GetOutput().GetPoints())
-    # print('filer run')
-    # appender = vtkAppendPolyData()
-    # for i in range(2):
-    #     part = PolyData()
-    #
-    #     part.ShallowCopy(r.GetOutput(i))
-    #
-    #     selected = np_repeat(i,part.points_number)
-    #
-    #     part.set_point_data('radial_filt',selected)
-    #     appender.AddInputData(part)
-    #
-    # appender.Update()
-    # self.GetPointData().SetScalars(appender.GetOutput().GetPointData().GetArray("radial_filt"))
-
-    # @property
-    # def point_set_proxy(self):
-    #     return self._point_set_proxy
-    #
-    # @point_set_proxy.setter
-    # def point_set_proxy(self,point_set_obj):
-    #     self._point_set_proxy = point_set_obj
-    #
-    # def generate_point_set(self):
-    #     points = self.GetPoints()
-    #     ps = vtkPointSet()
-    #     ps.SetPoints(points)
-    #     ps.BuildLocator()
-    #
-    #     point_ids = vtk.vtkIdFilter()
-    #     point_ids.SetInputData(ps)
-    #     point_ids.SetPointIdsArrayName('OriginalIds')
-    #     point_ids.Update()
-    #     self.point_set_proxy = point_ids.GetOutput()
-    #     return self.point_set_proxy
 
 
 class TSDom(PolyData):  # __________________________________ TO BE IMPLEMENTED - could also be derived from TriSurf()
@@ -2015,8 +1825,7 @@ class TSDom(PolyData):  # __________________________________ TO BE IMPLEMENTED -
         return tsdom_copy
 
 
-class Image(
-    vtkImageData):  # _________________________________________________see if it is a good idea to use this also as a superclass to Voxet()
+class Image(vtkImageData):  # _________________________________________________see if it is a good idea to use this also as a superclass to Voxet()
     """Image is an abstract class for image data, used as a base for subclasses, derived from
     vtkImageData() that is saved in the project folder as .vti"""
 
@@ -2258,8 +2067,7 @@ class XsImage(Image):
         return pv_image_to_texture(self)
 
 
-class Image3D(
-    Image):  # ________________________________________________________________ TO BE IMPLEMENTED - JUST COPY AND PASTE AT THE MOMENT
+class Image3D(Image):  # ________________________________________________________________ TO BE IMPLEMENTED - JUST COPY AND PASTE AT THE MOMENT
     """Image3D is a georeferenced (possibly multi-property) 3D image, derived from
     vtkImageData() that is saved in the project folder as .vti"""
 

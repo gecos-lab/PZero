@@ -386,7 +386,11 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             msg = f'{self.selected_uids[:10]} and {len(self.selected_uids[10:])} more'
         else:
             msg = f'{self.selected_uids}'
-        check = QMessageBox.question(self, "Remove Entities", (f"Do you really want to remove entities\n{msg}\nPlease confirm."), QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+        check = QMessageBox.question(self,
+                                     "Remove Entities",
+                                     (f"Do you really want to remove entities\n{msg}\nPlease confirm."),
+                                     QMessageBox.Yes | QMessageBox.No,
+                                     QMessageBox.No)
         if check == QMessageBox.No:
             return
         """Remove entities."""
@@ -471,7 +475,8 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         """Set the values that have been typed by the user through the multiple input widget."""
         for key in updt_dict:
             new_dict[key] = updt_dict[key]
-        """Create an empty vtk entity from classes VertexSet, PolyLine, TriSurf, XsVertexSet, XsPolyLine (geology), TSDom, PCDom (DOM)."""
+        """Create an empty vtk entity from classes VertexSet, PolyLine, TriSurf, XsVertexSet, XsPolyLine (geology), 
+        TSDom, PCDom (DOM)."""
         if new_dict['topological_type'] == 'VertexSet':
             new_dict['vtk_obj'] = VertexSet()
         elif new_dict['topological_type'] == 'PolyLine':

@@ -13,6 +13,7 @@ from numpy import squeeze as np_squeeze
 from numpy import number as np_number
 from numpy import cross as np_cross
 from numpy import where as np_where
+from numpy import array as np_array
 
 from .helper_dialogs import multiple_input_dialog
 
@@ -166,7 +167,9 @@ def set_normals(self):
         print("No input data selected.")
 
 
-def get_dip_dir_vectors(normals=None,az=False):
+def get_dip_dir_vectors(normals=None, az=False):
+    if normals.ndim == 1:
+        normals = np_array([normals])
     normals[np_where(normals[:, 2] > 0)] *= -1
     dir_vectors = normals.copy()
     dir_vectors[:, 2] = 0

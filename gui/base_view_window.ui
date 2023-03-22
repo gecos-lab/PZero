@@ -110,8 +110,8 @@
          <rect>
           <x>0</x>
           <y>0</y>
-          <width>274</width>
-          <height>384</height>
+          <width>328</width>
+          <height>272</height>
          </rect>
         </property>
         <property name="sizePolicy">
@@ -176,8 +176,8 @@
          <rect>
           <x>0</x>
           <y>0</y>
-          <width>274</width>
-          <height>384</height>
+          <width>328</width>
+          <height>272</height>
          </rect>
         </property>
         <property name="sizePolicy">
@@ -236,8 +236,8 @@
          <rect>
           <x>0</x>
           <y>0</y>
-          <width>274</width>
-          <height>384</height>
+          <width>328</width>
+          <height>272</height>
          </rect>
         </property>
         <property name="sizePolicy">
@@ -311,8 +311,8 @@
          <rect>
           <x>0</x>
           <y>0</y>
-          <width>274</width>
-          <height>384</height>
+          <width>328</width>
+          <height>272</height>
          </rect>
         </property>
         <property name="sizePolicy">
@@ -354,8 +354,8 @@
          <rect>
           <x>0</x>
           <y>0</y>
-          <width>274</width>
-          <height>384</height>
+          <width>328</width>
+          <height>272</height>
          </rect>
         </property>
         <property name="sizePolicy">
@@ -409,8 +409,8 @@
          <rect>
           <x>0</x>
           <y>0</y>
-          <width>274</width>
-          <height>384</height>
+          <width>328</width>
+          <height>272</height>
          </rect>
         </property>
         <property name="sizePolicy">
@@ -464,8 +464,8 @@
          <rect>
           <x>0</x>
           <y>0</y>
-          <width>274</width>
-          <height>384</height>
+          <width>328</width>
+          <height>272</height>
          </rect>
         </property>
         <attribute name="label">
@@ -488,8 +488,8 @@
          <rect>
           <x>0</x>
           <y>0</y>
-          <width>274</width>
-          <height>384</height>
+          <width>328</width>
+          <height>272</height>
          </rect>
         </property>
         <attribute name="label">
@@ -512,8 +512,8 @@
          <rect>
           <x>0</x>
           <y>0</y>
-          <width>274</width>
-          <height>384</height>
+          <width>328</width>
+          <height>272</height>
          </rect>
         </property>
         <attribute name="label">
@@ -536,8 +536,8 @@
          <rect>
           <x>0</x>
           <y>0</y>
-          <width>274</width>
-          <height>384</height>
+          <width>328</width>
+          <height>272</height>
          </rect>
         </property>
         <attribute name="label">
@@ -560,8 +560,8 @@
          <rect>
           <x>0</x>
           <y>0</y>
-          <width>274</width>
-          <height>384</height>
+          <width>328</width>
+          <height>272</height>
          </rect>
         </property>
         <attribute name="label">
@@ -584,8 +584,8 @@
          <rect>
           <x>0</x>
           <y>0</y>
-          <width>274</width>
-          <height>384</height>
+          <width>328</width>
+          <height>272</height>
          </rect>
         </property>
         <property name="sizePolicy">
@@ -762,16 +762,29 @@
     <property name="title">
      <string>Tools</string>
     </property>
+    <widget class="QMenu" name="menuAutomatic_segmentation">
+     <property name="title">
+      <string>Automatic segmentation</string>
+     </property>
+     <addaction name="actionSegment"/>
+     <addaction name="actionPick"/>
+     <addaction name="actionFacets"/>
+    </widget>
     <addaction name="actionFilters"/>
     <addaction name="separator"/>
     <addaction name="actionSurface_densityf"/>
     <addaction name="actionRoughnessf"/>
     <addaction name="actionCurvaturef"/>
+    <addaction name="actionThresholdf"/>
     <addaction name="actionManualf"/>
     <addaction name="actionNormalsf"/>
     <addaction name="separator"/>
     <addaction name="actionCalculate_normals"/>
     <addaction name="actionNormals_to_DDR"/>
+    <addaction name="actionPickers"/>
+    <addaction name="separator"/>
+    <addaction name="actionManual_picking"/>
+    <addaction name="menuAutomatic_segmentation"/>
    </widget>
    <addaction name="menuBaseView"/>
    <addaction name="menuWindow"/>
@@ -890,6 +903,43 @@
   <action name="actionNormals_to_DDR">
    <property name="text">
     <string>Normals to Dip/Dip direction</string>
+   </property>
+  </action>
+  <action name="actionPickers">
+   <property name="text">
+    <string>Pickers</string>
+   </property>
+   <property name="font">
+    <font>
+     <weight>75</weight>
+     <italic>true</italic>
+     <bold>true</bold>
+    </font>
+   </property>
+  </action>
+  <action name="actionManual_picking">
+   <property name="text">
+    <string>Manual picking</string>
+   </property>
+  </action>
+  <action name="actionThresholdf">
+   <property name="text">
+    <string>Threshold</string>
+   </property>
+  </action>
+  <action name="actionSegment">
+   <property name="text">
+    <string>Segment</string>
+   </property>
+  </action>
+  <action name="actionPick">
+   <property name="text">
+    <string>Pick</string>
+   </property>
+  </action>
+  <action name="actionFacets">
+   <property name="text">
+    <string>Facets</string>
    </property>
   </action>
  </widget>
