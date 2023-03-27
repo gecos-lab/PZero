@@ -4862,6 +4862,10 @@ class View3D(BaseView):
         self.menuWindow.addMenu(self.menuOrbit)
 
         """______________THIS MUST BE MOVED TO MAIN WINDOW AND NAME MUST BE MORE SPECIFIC_________________"""
+        self.actionExportScreen = QAction('Take screenshot', self)
+        self.actionExportScreen.triggered.connect(self.export_screen)
+        self.menuBaseView.addAction(self.actionExportScreen)
+        self.toolBarBase.addAction(self.actionExportScreen)
 
         self.actionExportGltf = QAction('Export as GLTF', self)
         self.actionExportGltf.triggered.connect(self.export_gltf)
@@ -4883,6 +4887,9 @@ class View3D(BaseView):
         self.menuBaseView.addAction(self.actionExportVtkjs)
         self.toolBarBase.addAction(self.actionExportVtkjs)
 
+    def export_screen(self):
+        out_file_name = save_file_dialog(parent=self, caption="Export 3D view as HTML.", filter="png (*.png);; jpeg (*.jpg)")
+        self.plotter.screenshot(out_file_name)
     def export_html(self):
         out_file_name = save_file_dialog(parent=self, caption="Export 3D view as HTML.", filter="html (*.html)")
         self.plotter.export_html(out_file_name)
