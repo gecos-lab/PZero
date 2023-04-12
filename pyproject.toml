@@ -16,13 +16,12 @@ dependencies = [
     "ezdxf",
     "lxml",
     "pythreejs",
-    "pyinstaller",
     "scipy",
     "matplotlib",
     "pandas",
     "geopandas",
     "PyQt5",
-    'importlib-metadata; python_version>"3.9"',
+    'importlib-metadata; python_version>"3.8"',
 ]
 
 authors = [{name="Andrea Bistacchi", email ="andrea.bistacchi@unimib.it" }]
@@ -33,9 +32,8 @@ readme = "README.md"
 pzero = 'pzero.run_pzero:run_pzero'
 
  [project.optional-dependencies]
-dev = ["build"]
-# docs = ["sphinx"]
-# examples = ["jupyterlab>3"]
+dev = ["build", "pyinstaller"]
+
 
 [build-system]
 requires = ["setuptools"]
