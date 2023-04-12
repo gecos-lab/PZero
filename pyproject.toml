@@ -1,0 +1,42 @@
+[project]
+name = "pzero"
+version = "0.0.1"
+dependencies = [
+    "rasterio",
+    "shapely",
+    "xarray",
+    "pyvista",
+    "pyvistaqt",
+    "vedo",
+    "loopstructural",
+    "cmocean",
+    "colorcet",
+    "mplstereonet",
+    "laspy",
+    "ezdxf",
+    "lxml",
+    "pythreejs",
+    "pyinstaller",
+    "scipy",
+    "matplotlib",
+    "pandas",
+    "geopandas",
+    "PyQt5",
+    'importlib-metadata; python_version>"3.9"',
+]
+
+authors = [{name="Andrea Bistacchi", email ="andrea.bistacchi@unimib.it" }]
+license = {text = "GNU AGPLv3"} # or whatever license you prefer
+readme = "README.md"
+
+[project.scripts]
+pzero = 'pzero.run_pzero:run_pzero'
+
+# [project.optional-dependencies]
+# tests = ["flake8", "pytest>7", ]
+# docs = ["sphinx"]
+# examples = ["jupyterlab>3"]
+
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
