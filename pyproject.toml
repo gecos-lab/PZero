@@ -1,6 +1,6 @@
 [project]
 name = "pzero"
-version = "0.0.1"
+version = "0.0.1" # to be modified to match actual version.
 dependencies = [
     "rasterio",
     "shapely",
@@ -32,8 +32,8 @@ readme = "README.md"
 [project.scripts]
 pzero = 'pzero.run_pzero:run_pzero'
 
-# [project.optional-dependencies]
-# tests = ["flake8", "pytest>7", ]
+ [project.optional-dependencies]
+dev = ["build"]
 # docs = ["sphinx"]
 # examples = ["jupyterlab>3"]
 
