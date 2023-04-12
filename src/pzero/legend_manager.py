@@ -121,11 +121,11 @@ class Legend(QObject):
             "other_line_thick_spn > QSpinBox used to select line thickness"
             other_line_thick_spn = QSpinBox()
             other_line_thick_spn.other_type = other_type  # this is to pass these values to the update function below
-            other_line_thick_spn.setValue(line_thick)
+            other_line_thick_spn.setValue(int(line_thick))
             "other_point_size_spn > QSpinBox used to select point size"
             other_point_size_spn = QSpinBox()
             other_point_size_spn.other_type = other_type  # this is to pass these values to the update function below
-            other_point_size_spn.setValue(point_size)
+            other_point_size_spn.setValue(int(point_size))
             "other_opacity_spn > QSpinBox used to select opacity"
             other_opacity_spn = QSpinBox()
             other_opacity_spn.setMaximum(100)
@@ -211,13 +211,13 @@ class Legend(QObject):
                     geol_line_thick_spn.geo_type = geo_type  # this is to pass these values to the update function below
                     geol_line_thick_spn.feature = feature
                     geol_line_thick_spn.scenario = scenario
-                    geol_line_thick_spn.setValue(line_thick)
+                    geol_line_thick_spn.setValue(int(line_thick))
                     "geol_point_size_spn > QSpinBox used to select point size"
                     geol_point_size_spn = QSpinBox()
                     geol_point_size_spn.geo_type = geo_type  # this is to pass these values to the update function below
                     geol_point_size_spn.feature = feature
                     geol_point_size_spn.scenario = scenario
-                    geol_point_size_spn.setValue(point_size)
+                    geol_point_size_spn.setValue(int(point_size))
                     "geol_line_opacity_spn > QSpinBox used to select opacity"
                     geol_opacity_spn = QSpinBox()
                     geol_opacity_spn.geo_type = geo_type  # this is to pass these values to the update function below
@@ -286,7 +286,7 @@ class Legend(QObject):
             line_thick = parent.well_legend_df.loc[parent.well_legend_df['Loc ID'] == locid, "line_thick"].values[0]
             opacity = parent.well_legend_df.loc[parent.well_legend_df['Loc ID'] == locid, "opacity"].values[0]
             # print(line_thick)
-
+            
             # if not isinstance(geol_sequence_value, str):
             #     print("geol_sequence_value: ", geol_sequence_value)
             #     geol_sequence_value = "strati_0"
@@ -298,7 +298,7 @@ class Legend(QObject):
             "well_line_thick_spn > QSpinBox used to select line thickness"
             well_line_thick_spn = QSpinBox()
             well_line_thick_spn.locid = locid  # this is to pass these values to the update function below
-            well_line_thick_spn.setValue(line_thick)
+            well_line_thick_spn.setValue(int(line_thick))
             "well_line_opacity_spn > QSpinBox used to select line thickness"
             well_line_opacity_spn = QSpinBox()
             well_line_opacity_spn.locid = locid
