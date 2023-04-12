@@ -30,7 +30,7 @@ block_cipher = None
 
 
 a = Analysis(
-    ['pzero.py'],
+    ['src/pzero/run_pzero.py'],
     pathex=[],
     binaries=[],
     datas=datas,
