@@ -533,6 +533,9 @@
     <bool>false</bool>
    </property>
    <widget class="QMenu" name="menuFile">
+    <property name="tearOffEnabled">
+     <bool>true</bool>
+    </property>
     <property name="title">
      <string>File</string>
     </property>
@@ -559,6 +562,9 @@
     <addaction name="actionQuit"/>
    </widget>
    <widget class="QMenu" name="menuWindow">
+    <property name="tearOffEnabled">
+     <bool>true</bool>
+    </property>
     <property name="title">
      <string>Window</string>
     </property>
@@ -573,6 +579,9 @@
     <addaction name="separator"/>
    </widget>
    <widget class="QMenu" name="menuHelp">
+    <property name="tearOffEnabled">
+     <bool>true</bool>
+    </property>
     <property name="title">
      <string>Help</string>
     </property>
@@ -580,6 +589,9 @@
     <addaction name="actionAbout"/>
    </widget>
    <widget class="QMenu" name="menuEdit">
+    <property name="tearOffEnabled">
+     <bool>true</bool>
+    </property>
     <property name="title">
      <string>Edit</string>
     </property>
@@ -603,6 +615,9 @@
     <addaction name="actionBuildOctree"/>
    </widget>
    <widget class="QMenu" name="menuInterpolation_tools">
+    <property name="tearOffEnabled">
+     <bool>true</bool>
+    </property>
     <property name="title">
      <string>Interpolation</string>
     </property>
@@ -635,215 +650,6 @@
      <verstretch>0</verstretch>
     </sizepolicy>
    </property>
-  </widget>
-  <widget class="QToolBar" name="toolbarFile">
-   <property name="sizePolicy">
-    <sizepolicy hsizetype="MinimumExpanding" vsizetype="Fixed">
-     <horstretch>1</horstretch>
-     <verstretch>1</verstretch>
-    </sizepolicy>
-   </property>
-   <property name="minimumSize">
-    <size>
-     <width>1280</width>
-     <height>30</height>
-    </size>
-   </property>
-   <property name="maximumSize">
-    <size>
-     <width>16777215</width>
-     <height>16777215</height>
-    </size>
-   </property>
-   <property name="baseSize">
-    <size>
-     <width>1280</width>
-     <height>30</height>
-    </size>
-   </property>
-   <property name="windowTitle">
-    <string>File</string>
-   </property>
-   <property name="toolTip">
-    <string>File</string>
-   </property>
-   <property name="floatable">
-    <bool>false</bool>
-   </property>
-   <attribute name="toolBarArea">
-    <enum>TopToolBarArea</enum>
-   </attribute>
-   <attribute name="toolBarBreak">
-    <bool>false</bool>
-   </attribute>
-   <addaction name="actionProjectNew"/>
-   <addaction name="actionProjectOpen"/>
-   <addaction name="actionProjectSave"/>
-   <addaction name="separator"/>
-   <addaction name="actionImportGocad"/>
-   <addaction name="actionImportGocadXsection"/>
-   <addaction name="actionImportGocadBoundary"/>
-   <addaction name="actionImportPC"/>
-   <addaction name="actionImportPyvista"/>
-   <addaction name="actionImportVedo"/>
-   <addaction name="actionImportSHP"/>
-   <addaction name="actionImportDEM"/>
-   <addaction name="actionImportOrthoImage"/>
-   <addaction name="actionImportXsectionImage"/>
-   <addaction name="actionImportWellData"/>
-   <addaction name="actionImportSEGY"/>
-   <addaction name="separator"/>
-   <addaction name="actionExportCAD"/>
-   <addaction name="actionExportVTK"/>
-   <addaction name="separator"/>
-   <addaction name="actionQuit"/>
-  </widget>
-  <widget class="QToolBar" name="toolBarEdit">
-   <property name="sizePolicy">
-    <sizepolicy hsizetype="MinimumExpanding" vsizetype="Fixed">
-     <horstretch>1</horstretch>
-     <verstretch>1</verstretch>
-    </sizepolicy>
-   </property>
-   <property name="minimumSize">
-    <size>
-     <width>1280</width>
-     <height>30</height>
-    </size>
-   </property>
-   <property name="maximumSize">
-    <size>
-     <width>16777215</width>
-     <height>16777215</height>
-    </size>
-   </property>
-   <property name="baseSize">
-    <size>
-     <width>1280</width>
-     <height>30</height>
-    </size>
-   </property>
-   <property name="windowTitle">
-    <string>Window</string>
-   </property>
-   <property name="toolTip">
-    <string>Window</string>
-   </property>
-   <property name="toolButtonStyle">
-    <enum>Qt::ToolButtonIconOnly</enum>
-   </property>
-   <property name="floatable">
-    <bool>false</bool>
-   </property>
-   <attribute name="toolBarArea">
-    <enum>TopToolBarArea</enum>
-   </attribute>
-   <attribute name="toolBarBreak">
-    <bool>true</bool>
-   </attribute>
-   <addaction name="actionEditEntityClone"/>
-   <addaction name="actionEditEntityRemove"/>
-   <addaction name="separator"/>
-   <addaction name="actionConnectedParts"/>
-   <addaction name="actionMergeEntities"/>
-   <addaction name="actionSplitMultipart"/>
-   <addaction name="separator"/>
-   <addaction name="actionEditTextureAdd"/>
-   <addaction name="actionEditTextureRemove"/>
-   <addaction name="separator"/>
-   <addaction name="actionAddProperty"/>
-   <addaction name="actionRemoveProperty"/>
-   <addaction name="separator"/>
-   <addaction name="actionCalculateNormal"/>
-   <addaction name="actionCalculateLineation"/>
-   <addaction name="separator"/>
-  </widget>
-  <widget class="QToolBar" name="toolBarInterpolation">
-   <property name="sizePolicy">
-    <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
-     <horstretch>0</horstretch>
-     <verstretch>0</verstretch>
-    </sizepolicy>
-   </property>
-   <property name="minimumSize">
-    <size>
-     <width>1280</width>
-     <height>30</height>
-    </size>
-   </property>
-   <property name="baseSize">
-    <size>
-     <width>1280</width>
-     <height>30</height>
-    </size>
-   </property>
-   <property name="windowTitle">
-    <string>toolBar</string>
-   </property>
-   <attribute name="toolBarArea">
-    <enum>TopToolBarArea</enum>
-   </attribute>
-   <attribute name="toolBarBreak">
-    <bool>true</bool>
-   </attribute>
-   <addaction name="actionDelaunay2DInterpolation"/>
-   <addaction name="actionPoissonInterpolation"/>
-   <addaction name="actionLoopStructuralImplicitModelling"/>
-   <addaction name="separator"/>
-   <addaction name="actionSurfaceSmoothing"/>
-   <addaction name="actionSubdivisionResampling"/>
-   <addaction name="actionDecimationPro"/>
-   <addaction name="actionDecimationQuadric"/>
-   <addaction name="actionRetopologize"/>
-   <addaction name="separator"/>
-   <addaction name="actionExtrusion"/>
-   <addaction name="actionIntersectionXSection"/>
-   <addaction name="actionProject2XSection"/>
-   <addaction name="actionProject2DEM"/>
-   <addaction name="actionSplitSurf"/>
-  </widget>
-  <widget class="QToolBar" name="toolBarWindows">
-   <property name="sizePolicy">
-    <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
-     <horstretch>0</horstretch>
-     <verstretch>0</verstretch>
-    </sizepolicy>
-   </property>
-   <property name="minimumSize">
-    <size>
-     <width>1280</width>
-     <height>30</height>
-    </size>
-   </property>
-   <property name="maximumSize">
-    <size>
-     <width>16777215</width>
-     <height>16777215</height>
-    </size>
-   </property>
-   <property name="baseSize">
-    <size>
-     <width>1280</width>
-     <height>30</height>
-    </size>
-   </property>
-   <property name="windowTitle">
-    <string>toolBar</string>
-   </property>
-   <attribute name="toolBarArea">
-    <enum>TopToolBarArea</enum>
-   </attribute>
-   <attribute name="toolBarBreak">
-    <bool>true</bool>
-   </attribute>
-   <addaction name="actionView3D"/>
-   <addaction name="actionViewMap"/>
-   <addaction name="actionViewPlaneXsection"/>
-   <addaction name="actionViewWellLog"/>
-   <addaction name="separator"/>
-   <addaction name="actionViewXYPlot"/>
-   <addaction name="actionViewHistogram"/>
-   <addaction name="actionViewStereoplot"/>
   </widget>
   <action name="actionProjectNew">
    <property name="text">
