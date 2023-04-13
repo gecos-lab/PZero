@@ -1,7 +1,6 @@
 """geological_collection.py
 PZero© Andrea Bistacchi"""
 
-
 from numpy import set_printoptions as np_set_set_printoptions
 from numpy import random as np_random
 from numpy import round as np_round
@@ -12,6 +11,8 @@ from pandas import unique as pd_unique
 import uuid
 from copy import deepcopy
 from PyQt5.QtCore import QAbstractTableModel, Qt, QVariant
+
+from pzero.collection_base import CollectionBase
 
 """Options to print Pandas dataframes in console when testing."""
 pd_desired_width = 800
@@ -25,7 +26,7 @@ pd_set_option('display.precision', pd_show_precision)
 pd_set_option('display.max_colwidth', pd_max_colwidth)
 
 
-class GeologicalCollection(QAbstractTableModel):
+class GeologicalCollection(CollectionBase):
     """
     Initialize GeologicalCollection table.
     Column headers are taken from GeologicalCollection.geological_entity_dict.keys()
@@ -36,59 +37,58 @@ class GeologicalCollection(QAbstractTableModel):
     Keys define both the geological and topological meaning of entities and values are default values that
     implicitly define types. Always use deepcopy(GeologicalCollection.geological_entity_dict) to
     copy this dictionary without altering the original."""
-    geological_entity_dict = {'uid': "",
-                              'name': "undef",
-                              'topological_type': "undef",
-                              'geological_type': "undef",
-                              'geological_feature': "undef",
-                              'scenario': "undef",
-                              'properties_names': [],
-                              'properties_components': [],
-                              'x_section': "", # this is the uid of the cross section for "XsVertexSet", "XsPolyLine", and "XsImage", empty for all others
-                              'vtk_obj': None}
 
-    geological_entity_type_dict = {'uid': str,
-                                   'name': str,
-                                   'topological_type': str,
-                                   'geological_type': str,
-                                   'geological_feature': str,
-                                   'scenario': str,
-                                   'properties_names': list,
-                                   'properties_components': list,
-                                   'x_section': str,  # this is the uid of the cross section for "XsVertexSet", "XsPolyLine", and "XsImage", empty for all others
-                                   'vtk_obj': object}
+    @property
+    def entity_dict(self):
+        return {'uid': "",
+                'name': "undef",
+                'topological_type': "undef",
+                'geological_type': "undef",
+                'geological_feature': "undef",
+                'scenario': "undef",
+                'properties_names': [],
+                'properties_components': [],
+                'x_section': "",
+                # this is the uid of the cross section for "XsVertexSet", "XsPolyLine", and "XsImage", empty for all others
+                'vtk_obj': None}
+
+    @property
+    def type_dict(self):
+        return {'uid': str,
+                'name': str,
+                'topological_type': str,
+                'geological_type': str,
+                'geological_feature': str,
+                'scenario': str,
+                'properties_names': list,
+                'properties_components': list,
+                'x_section': str,
+                # this is the uid of the cross section for "XsVertexSet", "XsPolyLine", and "XsImage", empty for all others
+                'vtk_obj': object}
 
     """List of valid geological types."""
-    valid_geological_types = ["undef",
-                              "fault",
-                              "intrusive",
-                              "unconformity",
-                              "top",
-                              "bedding",
-                              "foliation",
-                              "lineation",
-                              "axial_surface",
-                              "fold_axis"]
 
-    """List of valid data types."""
-    valid_topological_type = ["VertexSet", "PolyLine", "TriSurf", "XsVertexSet", "XsPolyLine"]
+    @property
+    def valid_types(self):
+        return ["undef",
+                "fault",
+                "intrusive",
+                "unconformity",
+                "top",
+                "bedding",
+                "foliation",
+                "lineation",
+                "axial_surface",
+                "fold_axis"]
 
-    """Initialize GeologicalCollection table. Column headers are taken from
-    GeologicalCollection.geological_entity_dict.keys(), and parent is supposed to be the project_window."""
-    """IN THE FUTURE the edit dialog should be able to edit metadata of multiple entities (and selecting "None" will not change them)."""
+    @property
+    def valid_topological_type(self):
+        """List of valid data types."""
+        return ["VertexSet", "PolyLine", "TriSurf", "XsVertexSet", "XsPolyLine"]
 
-    def __init__(self, parent=None, *args, **kwargs):
-        super(GeologicalCollection, self).__init__(*args, **kwargs)
-        """Import reference to parent, otherwise it is difficult to reference them in SetData() that has a standard list of inputs."""
-        self.parent = parent
-
-        """Initialize Pandas dataframe."""
-        self.df = pd_DataFrame(columns=list(self.geological_entity_dict.keys()))
-
-        """Here we use .columns.get_indexer to get indexes of the columns that we would like to be editable in the QTableView"""
-        self.editable_columns = self.df.columns.get_indexer(["name", "geological_type", "geological_feature", "scenario"])
-
-    """Custom methods used to add or remove entities, query the dataframe, etc."""
+    @property
+    def editable_columns(self):
+        return self.df.columns.get_indexer(["name", "geological_type", "geological_feature", "scenario"])
 
     def add_entity_from_dict(self, entity_dict=None, color=None):
         """Add entity to collection from dictionary."""
@@ -104,12 +104,14 @@ class GeologicalCollection(QAbstractTableModel):
         geo_type = entity_dict["geological_type"]
         feature = entity_dict["geological_feature"]
         scenario = entity_dict["scenario"]
-        if self.parent.geol_legend_df.loc[(self.parent.geol_legend_df['geological_type'] == geo_type) & (self.parent.geol_legend_df['geological_feature'] == feature) & (self.parent.geol_legend_df['scenario'] == scenario)].empty:
+        if self.main_window.geol_legend_df.loc[(self.main_window.geol_legend_df['geological_type'] == geo_type) & (
+                self.main_window.geol_legend_df['geological_feature'] == feature) & (
+                                                  self.main_window.geol_legend_df['scenario'] == scenario)].empty:
             if color:
                 R, G, B = color
             else:
                 R, G, B = np_round(np_random.random(3) * 255)
-            self.parent.geol_legend_df = self.parent.geol_legend_df.append({'geological_type': geo_type,
+            self.main_window.geol_legend_df = self.main_window.geol_legend_df.append({'geological_type': geo_type,
                                                                             'geological_feature': feature,
                                                                             'scenario': scenario,
                                                                             'color_R': R,
@@ -121,10 +123,11 @@ class GeologicalCollection(QAbstractTableModel):
                                                                             'geological_time': 0.0,
                                                                             'geological_sequence': "strati_0"},
                                                                            ignore_index=True)
-            self.parent.legend.update_widget(self.parent)
-            self.parent.prop_legend.update_widget(self.parent)
+            self.main_window.legend.update_widget(self.main_window)
+            self.main_window.prop_legend.update_widget(self.main_window)
         """Then emit signal to update the views."""
-        self.parent.geology_added_signal.emit([entity_dict['uid']])  # a list of uids is emitted, even if the entity is just one, for future compatibility
+        self.main_window.geology_added_signal.emit(
+            [entity_dict['uid']])  # a list of uids is emitted, even if the entity is just one, for future compatibility
         return entity_dict['uid']
 
     def remove_entity(self, uid=None, update=True):
@@ -132,55 +135,67 @@ class GeologicalCollection(QAbstractTableModel):
         """Remove row from dataframe and reset data model."""
         if not uid in self.get_uids():
             return
-        self.df.drop(self.parent.geol_coll.df[self.parent.geol_coll.df['uid'] == uid].index, inplace=True)
+        self.df.drop(self.main_window.geol_coll.df[self.main_window.geol_coll.df['uid'] == uid].index, inplace=True)
         self.modelReset.emit()  # is this really necessary?
         """Then remove geo_type / feature / scenario from legend if needed."""
         """table_updated is used to record if the table is updated or not"""
         table_updated = False
-        geo_types_in_legend = pd_unique(self.parent.geol_legend_df['geological_type'])
-        features_in_legend = pd_unique(self.parent.geol_legend_df['geological_feature'])
-        scenarios_in_legend = pd_unique(self.parent.geol_legend_df['scenario'])
+        geo_types_in_legend = pd_unique(self.main_window.geol_legend_df['geological_type'])
+        features_in_legend = pd_unique(self.main_window.geol_legend_df['geological_feature'])
+        scenarios_in_legend = pd_unique(self.main_window.geol_legend_df['scenario'])
         for geo_type in geo_types_in_legend:
-            if self.parent.geol_coll.df.loc[self.parent.geol_coll.df['geological_type'] == geo_type].empty:
+            if self.main_window.geol_coll.df.loc[self.main_window.geol_coll.df['geological_type'] == geo_type].empty:
                 """Get index of row to be removed, then remove it in place with .drop()."""
-                idx_remove = self.parent.geol_legend_df[self.parent.geol_legend_df['geological_type'] == geo_type].index
-                self.parent.geol_legend_df.drop(idx_remove, inplace=True)
+                idx_remove = self.main_window.geol_legend_df[self.main_window.geol_legend_df['geological_type'] == geo_type].index
+                self.main_window.geol_legend_df.drop(idx_remove, inplace=True)
                 table_updated = table_updated or True
             for feature in features_in_legend:
-                if self.parent.geol_coll.df.loc[(self.parent.geol_coll.df['geological_type'] == geo_type) & (self.parent.geol_coll.df['geological_feature'] == feature)].empty:
+                if self.main_window.geol_coll.df.loc[(self.main_window.geol_coll.df['geological_type'] == geo_type) & (
+                        self.main_window.geol_coll.df['geological_feature'] == feature)].empty:
                     """Get index of row to be removed, then remove it in place with .drop()."""
-                    idx_remove = self.parent.geol_legend_df[(self.parent.geol_legend_df['geological_type'] == geo_type) & (self.parent.geol_legend_df['geological_feature'] == feature)].index
-                    self.parent.geol_legend_df.drop(idx_remove, inplace=True)
+                    idx_remove = self.main_window.geol_legend_df[
+                        (self.main_window.geol_legend_df['geological_type'] == geo_type) & (
+                                    self.main_window.geol_legend_df['geological_feature'] == feature)].index
+                    self.main_window.geol_legend_df.drop(idx_remove, inplace=True)
                     table_updated = table_updated or True
                 for scenario in scenarios_in_legend:
-                    if self.parent.geol_coll.df.loc[(self.parent.geol_coll.df['geological_type'] == geo_type) & (self.parent.geol_coll.df['geological_feature'] == feature) & (self.parent.geol_coll.df['scenario'] == scenario)].empty:
+                    if self.main_window.geol_coll.df.loc[(self.main_window.geol_coll.df['geological_type'] == geo_type) & (
+                            self.main_window.geol_coll.df['geological_feature'] == feature) & (
+                                                            self.main_window.geol_coll.df['scenario'] == scenario)].empty:
                         """Get index of row to be removed, then remove it in place with .drop()."""
-                        idx_remove = self.parent.geol_legend_df[(self.parent.geol_legend_df['geological_type'] == geo_type) & (self.parent.geol_legend_df['geological_feature'] == feature) & (self.parent.geol_legend_df['scenario'] == scenario)].index
-                        self.parent.geol_legend_df.drop(idx_remove, inplace=True)
+                        idx_remove = self.main_window.geol_legend_df[
+                            (self.main_window.geol_legend_df['geological_type'] == geo_type) & (
+                                        self.main_window.geol_legend_df['geological_feature'] == feature) & (
+                                        self.main_window.geol_legend_df['scenario'] == scenario)].index
+                        self.main_window.geol_legend_df.drop(idx_remove, inplace=True)
                         table_updated = table_updated or True
         for feature in features_in_legend:
-            if self.parent.geol_coll.df.loc[self.parent.geol_coll.df['geological_feature'] == feature].empty:
+            if self.main_window.geol_coll.df.loc[self.main_window.geol_coll.df['geological_feature'] == feature].empty:
                 """Get index of row to be removed, then remove it in place with .drop()."""
-                idx_remove = self.parent.geol_legend_df[self.parent.geol_legend_df['geological_feature'] == feature].index
-                self.parent.geol_legend_df.drop(idx_remove, inplace=True)
+                idx_remove = self.main_window.geol_legend_df[
+                    self.main_window.geol_legend_df['geological_feature'] == feature].index
+                self.main_window.geol_legend_df.drop(idx_remove, inplace=True)
                 table_updated = table_updated or True
             for scenario in scenarios_in_legend:
-                if self.parent.geol_coll.df.loc[(self.parent.geol_coll.df['geological_feature'] == feature) & (self.parent.geol_coll.df['scenario'] == scenario)].empty:
+                if self.main_window.geol_coll.df.loc[(self.main_window.geol_coll.df['geological_feature'] == feature) & (
+                        self.main_window.geol_coll.df['scenario'] == scenario)].empty:
                     """Get index of row to be removed, then remove it in place with .drop()."""
-                    idx_remove = self.parent.geol_legend_df[(self.parent.geol_legend_df['geological_feature'] == feature) & (self.parent.geol_legend_df['scenario'] == scenario)].index
-                    self.parent.geol_legend_df.drop(idx_remove, inplace=True)
+                    idx_remove = self.main_window.geol_legend_df[
+                        (self.main_window.geol_legend_df['geological_feature'] == feature) & (
+                                    self.main_window.geol_legend_df['scenario'] == scenario)].index
+                    self.main_window.geol_legend_df.drop(idx_remove, inplace=True)
                     table_updated = table_updated or True
         for scenario in scenarios_in_legend:
-            if self.parent.geol_coll.df.loc[self.parent.geol_coll.df['scenario'] == scenario].empty:
+            if self.main_window.geol_coll.df.loc[self.main_window.geol_coll.df['scenario'] == scenario].empty:
                 """Get index of row to be removed, then remove it in place with .drop()."""
-                idx_remove = self.parent.geol_legend_df[self.parent.geol_legend_df['scenario'] == scenario].index
-                self.parent.geol_legend_df.drop(idx_remove, inplace=True)
+                idx_remove = self.main_window.geol_legend_df[self.main_window.geol_legend_df['scenario'] == scenario].index
+                self.main_window.geol_legend_df.drop(idx_remove, inplace=True)
                 table_updated = table_updated or True
         """When done, if the table was updated update the widget, and in any case send the signal over to the views."""
         if table_updated:
-            self.parent.legend.update_widget(self.parent)
-            self.parent.prop_legend.update_widget(self.parent)
-        self.parent.geology_removed_signal.emit([uid])  # a list of uids is emitted, even if the entity is just one
+            self.main_window.legend.update_widget(self.main_window)
+            self.main_window.prop_legend.update_widget(self.main_window)
+        self.main_window.geology_removed_signal.emit([uid])  # a list of uids is emitted, even if the entity is just one
         return uid
 
     def clone_entity(self, uid=None):
@@ -223,57 +238,75 @@ class GeologicalCollection(QAbstractTableModel):
         """table_updated is used to record if the table is updated or not"""
         table_updated = False
         """First remove unused geo_type / feature"""
-        geo_types_in_legend = pd_unique(self.parent.geol_legend_df['geological_type'])
-        features_in_legend = pd_unique(self.parent.geol_legend_df['geological_feature'])
-        scenarios_in_legend = pd_unique(self.parent.geol_legend_df['scenario'])
+        geo_types_in_legend = pd_unique(self.main_window.geol_legend_df['geological_type'])
+        features_in_legend = pd_unique(self.main_window.geol_legend_df['geological_feature'])
+        scenarios_in_legend = pd_unique(self.main_window.geol_legend_df['scenario'])
         for geo_type in geo_types_in_legend:
-            if self.parent.geol_coll.df.loc[self.parent.geol_coll.df['geological_type'] == geo_type].empty:
+            if self.main_window.geol_coll.df.loc[self.main_window.geol_coll.df['geological_type'] == geo_type].empty:
                 """Get index of row to be removed, then remove it in place with .drop()."""
-                idx_remove = self.parent.geol_legend_df[self.parent.geol_legend_df['geological_type'] == geo_type].index
-                self.parent.geol_legend_df.drop(idx_remove, inplace=True)
+                idx_remove = self.main_window.geol_legend_df[self.main_window.geol_legend_df['geological_type'] == geo_type].index
+                self.main_window.geol_legend_df.drop(idx_remove, inplace=True)
                 table_updated = table_updated or True
             for feature in features_in_legend:
-                if self.parent.geol_coll.df.loc[(self.parent.geol_coll.df['geological_type'] == geo_type) & (self.parent.geol_coll.df['geological_feature'] == feature)].empty:
+                if self.main_window.geol_coll.df.loc[(self.main_window.geol_coll.df['geological_type'] == geo_type) & (
+                        self.main_window.geol_coll.df['geological_feature'] == feature)].empty:
                     """Get index of row to be removed, then remove it in place with .drop()."""
-                    idx_remove = self.parent.geol_legend_df[(self.parent.geol_legend_df['geological_type'] == geo_type) & (self.parent.geol_legend_df['geological_feature'] == feature)].index
-                    self.parent.geol_legend_df.drop(idx_remove, inplace=True)
+                    idx_remove = self.main_window.geol_legend_df[
+                        (self.main_window.geol_legend_df['geological_type'] == geo_type) & (
+                                    self.main_window.geol_legend_df['geological_feature'] == feature)].index
+                    self.main_window.geol_legend_df.drop(idx_remove, inplace=True)
                     table_updated = table_updated or True
                 for scenario in scenarios_in_legend:
-                    if self.parent.geol_coll.df.loc[(self.parent.geol_coll.df['geological_type'] == geo_type) & (self.parent.geol_coll.df['geological_feature'] == feature) & (self.parent.geol_coll.df['scenario'] == scenario)].empty:
+                    if self.main_window.geol_coll.df.loc[(self.main_window.geol_coll.df['geological_type'] == geo_type) & (
+                            self.main_window.geol_coll.df['geological_feature'] == feature) & (
+                                                            self.main_window.geol_coll.df['scenario'] == scenario)].empty:
                         """Get index of row to be removed, then remove it in place with .drop()."""
-                        idx_remove = self.parent.geol_legend_df[(self.parent.geol_legend_df['geological_type'] == geo_type) & (self.parent.geol_legend_df['geological_feature'] == feature) & (self.parent.geol_legend_df['scenario'] == scenario)].index
-                        self.parent.geol_legend_df.drop(idx_remove, inplace=True)
+                        idx_remove = self.main_window.geol_legend_df[
+                            (self.main_window.geol_legend_df['geological_type'] == geo_type) & (
+                                        self.main_window.geol_legend_df['geological_feature'] == feature) & (
+                                        self.main_window.geol_legend_df['scenario'] == scenario)].index
+                        self.main_window.geol_legend_df.drop(idx_remove, inplace=True)
                         table_updated = table_updated or True
         for feature in features_in_legend:
-            if self.parent.geol_coll.df.loc[self.parent.geol_coll.df['geological_feature'] == feature].empty:
+            if self.main_window.geol_coll.df.loc[self.main_window.geol_coll.df['geological_feature'] == feature].empty:
                 """Get index of row to be removed, then remove it in place with .drop()."""
-                idx_remove = self.parent.geol_legend_df[self.parent.geol_legend_df['geological_feature'] == feature].index
-                self.parent.geol_legend_df.drop(idx_remove, inplace=True)
+                idx_remove = self.main_window.geol_legend_df[
+                    self.main_window.geol_legend_df['geological_feature'] == feature].index
+                self.main_window.geol_legend_df.drop(idx_remove, inplace=True)
                 table_updated = table_updated or True
             for scenario in scenarios_in_legend:
-                if self.parent.geol_coll.df.loc[(self.parent.geol_coll.df['geological_feature'] == feature) & (self.parent.geol_coll.df['scenario'] == scenario)].empty:
+                if self.main_window.geol_coll.df.loc[(self.main_window.geol_coll.df['geological_feature'] == feature) & (
+                        self.main_window.geol_coll.df['scenario'] == scenario)].empty:
                     """Get index of row to be removed, then remove it in place with .drop()."""
-                    idx_remove = self.parent.geol_legend_df[(self.parent.geol_legend_df['geological_feature'] == feature) & (self.parent.geol_legend_df['scenario'] == scenario)].index
-                    self.parent.geol_legend_df.drop(idx_remove, inplace=True)
+                    idx_remove = self.main_window.geol_legend_df[
+                        (self.main_window.geol_legend_df['geological_feature'] == feature) & (
+                                    self.main_window.geol_legend_df['scenario'] == scenario)].index
+                    self.main_window.geol_legend_df.drop(idx_remove, inplace=True)
                     table_updated = table_updated or True
         for scenario in scenarios_in_legend:
-            if self.parent.geol_coll.df.loc[self.parent.geol_coll.df['scenario'] == scenario].empty:
+            if self.main_window.geol_coll.df.loc[self.main_window.geol_coll.df['scenario'] == scenario].empty:
                 """Get index of row to be removed, then remove it in place with .drop()."""
-                idx_remove = self.parent.geol_legend_df[self.parent.geol_legend_df['scenario'] == scenario].index
-                self.parent.geol_legend_df.drop(idx_remove, inplace=True)
+                idx_remove = self.main_window.geol_legend_df[self.main_window.geol_legend_df['scenario'] == scenario].index
+                self.main_window.geol_legend_df.drop(idx_remove, inplace=True)
                 table_updated = table_updated or True
         """Then add new geo_type / feature"""
-        for uid in self.parent.geol_coll.df['uid'].to_list():
-            geo_type = self.parent.geol_coll.df.loc[self.parent.geol_coll.df['uid'] == uid, "geological_type"].values[0]
-            feature = self.parent.geol_coll.df.loc[self.parent.geol_coll.df['uid'] == uid, "geological_feature"].values[0]
-            scenario = self.parent.geol_coll.df.loc[self.parent.geol_coll.df['uid'] == uid, "scenario"].values[0]
-            if self.parent.geol_legend_df.loc[(self.parent.geol_legend_df['geological_type'] == geo_type) & (self.parent.geol_legend_df['geological_feature'] == feature) & (self.parent.geol_legend_df['scenario'] == scenario)].empty:
-                self.parent.geol_legend_df = self.parent.geol_legend_df.append({'geological_type': geo_type,
+        for uid in self.main_window.geol_coll.df['uid'].to_list():
+            geo_type = self.main_window.geol_coll.df.loc[self.main_window.geol_coll.df['uid'] == uid, "geological_type"].values[0]
+            feature = self.main_window.geol_coll.df.loc[self.main_window.geol_coll.df['uid'] == uid, "geological_feature"].values[
+                0]
+            scenario = self.main_window.geol_coll.df.loc[self.main_window.geol_coll.df['uid'] == uid, "scenario"].values[0]
+            if self.main_window.geol_legend_df.loc[(self.main_window.geol_legend_df['geological_type'] == geo_type) & (
+                    self.main_window.geol_legend_df['geological_feature'] == feature) & (
+                                                      self.main_window.geol_legend_df['scenario'] == scenario)].empty:
+                self.main_window.geol_legend_df = self.main_window.geol_legend_df.append({'geological_type': geo_type,
                                                                                 'geological_feature': feature,
                                                                                 'scenario': scenario,
-                                                                                'color_R': round(np_random.random() * 255),
-                                                                                'color_G': round(np_random.random() * 255),
-                                                                                'color_B': round(np_random.random() * 255),
+                                                                                'color_R': round(
+                                                                                    np_random.random() * 255),
+                                                                                'color_G': round(
+                                                                                    np_random.random() * 255),
+                                                                                'color_B': round(
+                                                                                    np_random.random() * 255),
                                                                                 'line_thick': 2.0,
                                                                                 'geological_time': 0.0,
                                                                                 'geological_sequence': "strati_0"},
@@ -281,50 +314,22 @@ class GeologicalCollection(QAbstractTableModel):
                 table_updated = table_updated or True
         """When done, if the table was updated update the widget. No signal is sent here to the views."""
         if table_updated:
-            self.parent.legend.update_widget(self.parent)
+            self.main_window.legend.update_widget(self.main_window)
 
-    def get_number_of_entities(self):
-        """Get number of entities stored in Pandas dataframe."""
-        return self.df.shape[0]
+
 
     def get_uid_legend(self, uid=None):
         """Get legend as dictionary from uid."""
         geo_type = self.df.loc[self.df['uid'] == uid, 'geological_type'].values[0]
         feature = self.df.loc[self.df['uid'] == uid, 'geological_feature'].values[0]
         scenario = self.df.loc[self.df['uid'] == uid, 'scenario'].values[0]
-        legend_dict = self.parent.geol_legend_df.loc[(self.parent.geol_legend_df['geological_type'] == geo_type) & (self.parent.geol_legend_df['geological_feature'] == feature) & (self.parent.geol_legend_df['scenario'] == scenario)].to_dict('records')
-        return legend_dict[0]  # the '[0]' is needed since .to_dict('records') returns a list of dictionaries (with just one element in this case)
+        legend_dict = self.main_window.geol_legend_df.loc[(self.main_window.geol_legend_df['geological_type'] == geo_type) & (
+                    self.main_window.geol_legend_df['geological_feature'] == feature) & (self.main_window.geol_legend_df[
+                                                                                        'scenario'] == scenario)].to_dict(
+            'records')
+        return legend_dict[
+            0]  # the '[0]' is needed since .to_dict('records') returns a list of dictionaries (with just one element in this case)
 
-    def get_uids(self):
-        """Get list of uids."""
-        return self.df['uid'].to_list()
-
-    def get_topological_type_uids(self, topological_type=None):
-        """Get list of uids of a given topological_type."""
-        return self.df.loc[self.df['topological_type'] == topological_type, 'uid'].to_list()
-
-    def get_geological_type_uids(self, geological_type=None):
-        """Get list of uids of a given geological_type."""
-        return self.df.loc[self.df['geological_type'] == geological_type, 'uid'].to_list()
-
-    def get_uid_name(self, uid=None):
-        """Get value(s) stored in dataframe (as pointer) from uid."""
-        return self.df.loc[self.df['uid'] == uid, 'name'].values[0]
-
-    def set_uid_name(self, uid=None, name=None):
-        """Set value(s) stored in dataframe (as pointer) from uid."""
-        self.df.loc[self.df['uid'] == uid, 'name'] = name
-
-    def get_name_uid(self,name=None):
-        return self.df.loc[self.df['name'] == name, 'uid'].values[0]
-
-    def get_uid_topological_type(self, uid=None):
-        """Get value(s) stored in dataframe (as pointer) from uid."""
-        return self.df.loc[self.df['uid'] == uid, 'topological_type'].values[0]
-
-    def set_uid_topological_type(self, uid=None, topological_type=None):
-        """Set value(s) stored in dataframe (as pointer) from uid."""
-        self.df.loc[self.df['uid'] == uid, 'topological_type'] = topological_type
 
     def get_uid_geological_type(self, uid=None):
         """Get value(s) stored in dataframe (as pointer) from uid."""
@@ -376,9 +381,9 @@ class GeologicalCollection(QAbstractTableModel):
         """Set value(s) stored in dataframe (as pointer) from uid."""
         self.df.loc[self.df['uid'] == uid, 'x_section'] = x_section
 
-    def get_xuid_uid(self,xuid=None):
+    def get_xuid_uid(self, xuid=None):
         '''[Gabriele] Get the uids of the geological objects for the corresponding xsec uid (parent)'''
-        return self.df.loc[self.df['x_section']== xuid, 'uid']
+        return self.df.loc[self.df['x_section'] == xuid, 'uid']
 
     def get_uid_vtk_obj(self, uid=None):
         """Get value(s) stored in dataframe (as pointer) from uid."""
@@ -399,7 +404,7 @@ class GeologicalCollection(QAbstractTableModel):
         self.set_uid_properties_components(uid=uid, properties_components=new_properties_components)
         self.get_uid_vtk_obj(uid=uid).init_point_data(data_key=property_name, dimension=property_components)
         """IN THE FUTURE add cell data"""
-        self.parent.geology_metadata_modified_signal.emit([uid])
+        self.main_window.geology_metadata_modified_signal.emit([uid])
 
     def remove_uid_property(self, uid=None, property_name=None):
         """Remove property name and components from an uid and remove property on vtk object.
@@ -413,7 +418,7 @@ class GeologicalCollection(QAbstractTableModel):
         self.set_uid_properties_components(uid=uid, properties_components=properties_components)
         self.get_uid_vtk_obj(uid=uid).remove_point_data(data_key=property_name)
         """IN THE FUTURE add cell data"""
-        self.parent.geology_data_keys_removed_signal.emit([uid])
+        self.main_window.geology_data_keys_removed_signal.emit([uid])
 
     def get_uid_property_shape(self, uid=None, property_name=None):
         """Returns an array with property data."""
@@ -425,40 +430,10 @@ class GeologicalCollection(QAbstractTableModel):
 
     """Standard QT methods slightly adapted to the data source."""
 
-    def data(self, index, role):
-        """Data is updated on the fly:
-        .row() index points to an entity in the vtkCollection
-        .column() index points to an element in the list created on the fly
-        based on the column headers stored in the dictionary."""
-        if role == Qt.DisplayRole:
-            value = self.df.iloc[index.row(), index.column()]
-            return str(value)
-
-    def headerData(self, section, orientation, role):
-        """Set header from pandas dataframe. "section" is a standard Qt variable."""
-        if role == Qt.DisplayRole:
-            if orientation == Qt.Horizontal:
-                return str(self.df.columns[section])
-            if orientation == Qt.Vertical:
-                return str(self.df.index[section])
-
-    def rowCount(self, index):
-        """Set row count from pandas dataframe"""
-        return self.df.shape[0]
-
-    def columnCount(self, index):
-        """Set column count from pandas dataframe"""
-        return self.df.shape[1]
-
-    def flags(self, index):
-        """Set editable columns."""
-        if index.column() in self.editable_columns:
-            return Qt.ItemFlags(QAbstractTableModel.flags(self, index) | Qt.ItemIsEditable)
-        return Qt.ItemIsEnabled | Qt.ItemIsSelectable
 
     def setData(self, index, value, role=Qt.EditRole):
         """This is the method allowing to edit the table and the underlying dataframe.
-        "self.parent is" is used to point to parent, because the standard Qt setData
+        "self.main_window is" is used to point to parent, because the standard Qt setData
         method does not allow for extra variables to be passed into this method."""
         if index.isValid():
             self.df.iloc[index.row(), index.column()] = value
@@ -466,6 +441,7 @@ class GeologicalCollection(QAbstractTableModel):
                 self.dataChanged.emit(index, index)
                 uid = self.df.iloc[index.row(), 0]
                 self.geology_attr_modified_update_legend_table()
-                self.parent.geology_metadata_modified_signal.emit([uid])  # a list of uids is emitted, even if the entity is just one
+                self.main_window.geology_metadata_modified_signal.emit(
+                    [uid])  # a list of uids is emitted, even if the entity is just one
                 return True
         return QVariant()

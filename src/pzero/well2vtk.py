@@ -7,8 +7,6 @@ Convert well data (csv, ags ...) in vtk objects.
 
 from numpy import array as np_array
 from numpy import append as np_append
-from numpy import cos as np_cos
-from numpy import sin as np_sin
 from numpy import vstack as np_vstack
 from numpy import zeros as np_zeros
 from numpy import argmin as np_argmin
@@ -18,16 +16,13 @@ from numpy import nan as np_nan
 from numpy import random as np_random
 
 from copy import deepcopy
-import vtk
-import pyvista as pv
-from .entities_factory import Attitude, Well,WellTrace,VertexSet
+from .entities_factory import Well, VertexSet
 from uuid import uuid4
 # from .entities_factory import WellData
 
-from .well_collection import WellCollection
-from .geological_collection import GeologicalCollection
-from .fluid_collection import FluidsCollection
-from .background_collection import BackgroundCollection
+from pzero.collections.well_collection import WellCollection
+from pzero.collections.geological_collection import GeologicalCollection
+from pzero.collections.background_collection import BackgroundCollection
 import pandas as pd
 # import lasio as ls
 

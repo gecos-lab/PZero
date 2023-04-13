@@ -67,7 +67,7 @@ class PropertiesCMaps(QObject):
         all_props = ['X', 'Y', 'Z']
         add_props = []
         """Make a list of all properties (unique values)."""
-        for collection in [parent.geol_coll, parent.dom_coll, parent.mesh3d_coll, parent.image_coll]:
+        for collection in parent.entities_db.collections_with_properties():
             coll_props = collection.df['properties_names'].to_list()
             coll_props = list(pd_flatten(coll_props))
             coll_prop_comps = collection.df['properties_components'].to_list()
@@ -78,7 +78,7 @@ class PropertiesCMaps(QObject):
                 elif coll_prop_comps[i] == 1:
                     add_props = add_props + [coll_props[i]]
         
-        if parent.well_coll.df['properties_names'].to_list():
+        if parent.entities_db.collection_by_name("well").df['properties_names'].to_list():
             add_props.append('MD')
 
         

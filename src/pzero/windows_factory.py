@@ -1,50 +1,43 @@
 """windows_factory.py
 PZero© Andrea Bistacchi"""
 from pyvista.core.filters import _update_alg
-from vtkmodules.vtkCommonCore import vtkCommand
 from vtkmodules.vtkFiltersCore import vtkThresholdPoints, vtkDelaunay2D
 from vtkmodules.vtkFiltersPoints import vtkRadiusOutlierRemoval, vtkEuclideanClusterExtraction, vtkProjectPointsToPlane
 from vtkmodules.vtkRenderingCore import vtkPropPicker
 
-from .dom_collection import DomCollection
+from pzero.collections.dom_collection import DomCollection
 from .orientation_analysis import get_dip_dir_vectors
+
 
 """QT imports"""
 from PyQt5.QtWidgets import *
 from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QCloseEvent, QFont
 
 """PZero imports"""
 from .base_view_window_ui import Ui_BaseViewWindow
-from .entities_factory import VertexSet, PolyLine, TriSurf, TetraSolid, XsVertexSet, XsPolyLine, DEM, PCDom, MapImage, \
-    Voxet, XsVoxet, Plane, Seismics, XsTriSurf, XsImage, PolyData, Well, WellMarker, WellTrace, Attitude
-from .helper_dialogs import input_one_value_dialog, input_text_dialog, input_combo_dialog, message_dialog, \
-    options_dialog, multiple_input_dialog, tic, toc, open_file_dialog, progress_dialog, save_file_dialog,general_input_dialog
-from .geological_collection import GeologicalCollection
+from .entities_factory import VertexSet, PolyLine, TriSurf, XsVertexSet, XsPolyLine, DEM, PCDom, MapImage, \
+    Voxet, XsVoxet, Seismics, XsImage, PolyData, Well, WellMarker, WellTrace, Attitude
+from .helper_dialogs import input_one_value_dialog, input_combo_dialog, message_dialog, \
+    multiple_input_dialog, progress_dialog, save_file_dialog
+from pzero.collections.geological_collection import GeologicalCollection
 from copy import deepcopy
 from uuid import uuid4
 from .helper_functions import best_fitting_plane, gen_frame
-from time import sleep
 
 """Maths imports"""
 from math import degrees, sqrt, atan2
 from numpy import append as np_append
 from numpy import ndarray as np_ndarray
-from numpy import abs as np_abs
 from numpy import sin as np_sin
 from numpy import arcsin as np_arcsin
 from numpy import cos as np_cos
 from numpy import arctan2 as np_arctan2
-from numpy import sqrt as np_sqrt
 from numpy import pi as np_pi
 from numpy import array as np_array
-from numpy import square as np_square
 from numpy import all as np_all
-from numpy import zeros_like as np_zeros_like
 from numpy import cross as np_cross
 from numpy import max as np_max
 from numpy import repeat as np_repeat
-from numpy import where as np_where
 
 from pandas import DataFrame as pd_DataFrame
 from pandas import unique as pd_unique
@@ -53,25 +46,17 @@ from pandas import unique as pd_unique
 """"VTK Numpy interface imports"""
 # import vtk.numpy_interface.dataset_adapter as dsa
 from vtk.util import numpy_support
-from vtkmodules.vtkInteractionWidgets import vtkCameraOrientationWidget, vtkContourWidget, \
-    vtkLinearContourLineInterpolator, vtkDijkstraImageContourLineInterpolator, vtkBezierContourLineInterpolator, \
-    vtkPolyDataContourLineInterpolator, vtkPolygonalSurfaceContourLineInterpolator, vtkTerrainContourLineInterpolator
-from vtk import vtkExtractPoints, vtkSphere, vtkAreaPicker, vtkImageTracerWidget, vtkDistanceWidget, vtkAppendPolyData
+from vtkmodules.vtkInteractionWidgets import vtkCameraOrientationWidget
+from vtk import vtkExtractPoints, vtkSphere, vtkAppendPolyData
 
 """3D plotting imports"""
 from pyvista import global_theme as pv_global_theme
 from pyvistaqt import QtInteractor as pvQtInteractor
-from pyvista import _vtk
-from pyvista import read_texture
-from pyvista import Plane as pv_Plane
 from pyvista import Line as pv_Line
 from pyvista import Disc as pv_Disc
 
-from pyvista import PolyData as pvPolyData
 from pyvista import PointSet as pvPointSet
 from pyvista import Plotter as pv_plot
-from pyvista import lines_from_points as pv_lines_from_points
-import pyvista as pv
 
 """2D plotting imports"""
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
@@ -79,7 +64,7 @@ from matplotlib.backends.backend_qt5agg import \
     NavigationToolbar2QT  # this is customized in subclass NavigationToolbar a few lines below
 # DO NOT USE import matplotlib.pyplot as plt  IT CREATES A DUPLICATE WINDOW IN NOTEBOOK
 from matplotlib.figure import Figure
-from matplotlib.offsetbox import TextArea, AnnotationBbox
+from matplotlib.offsetbox import TextArea
 from matplotlib.lines import Line2D
 from matplotlib.image import AxesImage
 from matplotlib.collections import PathCollection
@@ -89,8 +74,6 @@ import matplotlib.style as mplstyle
 import mplstereonet
 
 from .helper_widgets import Vector
-
-from uuid import UUID
 
 """Probably not-required imports"""
 # import sys
@@ -350,50 +333,50 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.GeologyTreeWidget.setItemsExpandable(True)
         if sec_uid:
             geo_types = pd_unique(
-                self.parent.geol_coll.df.loc[(self.parent.geol_coll.df['x_section'] == sec_uid), 'geological_type'])
+                self.parent.entities_db.collection_by_name('geol').df.loc[(self.parent.entities_db.collection_by_name('geol').df['x_section'] == sec_uid), 'geological_type'])
         else:
-            geo_types = pd_unique(self.parent.geol_coll.df['geological_type'])
+            geo_types = pd_unique(self.parent.entities_db.collection_by_name('geol').df['geological_type'])
         for geo_type in geo_types:
             glevel_1 = QTreeWidgetItem(self.GeologyTreeWidget,
                                        [geo_type])  # self.GeologyTreeWidget as parent -> top level
             glevel_1.setFlags(glevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
             if sec_uid:
-                geo_features = pd_unique(self.parent.geol_coll.df.loc[
-                                             (self.parent.geol_coll.df['geological_type'] == geo_type) & (
-                                                     self.parent.geol_coll.df[
+                geo_features = pd_unique(self.parent.entities_db.collection_by_name('geol').df.loc[
+                                             (self.parent.entities_db.collection_by_name('geol').df['geological_type'] == geo_type) & (
+                                                     self.parent.entities_db.collection_by_name('geol').df[
                                                          'x_section'] == sec_uid), 'geological_feature'])
             else:
-                geo_features = pd_unique(self.parent.geol_coll.df.loc[self.parent.geol_coll.df[
+                geo_features = pd_unique(self.parent.entities_db.collection_by_name('geol').df.loc[self.parent.entities_db.collection_by_name('geol').df[
                                                                           'geological_type'] == geo_type, 'geological_feature'])
             for feature in geo_features:
                 glevel_2 = QTreeWidgetItem(glevel_1, [feature])  # glevel_1 as parent -> 1st middle level
                 glevel_2.setFlags(glevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
                 if sec_uid:
-                    geo_scenario = pd_unique(self.parent.geol_coll.df.loc[
-                                                 (self.parent.geol_coll.df['geological_type'] == geo_type) & (
-                                                         self.parent.geol_coll.df[
+                    geo_scenario = pd_unique(self.parent.entities_db.collection_by_name('geol').df.loc[
+                                                 (self.parent.entities_db.collection_by_name('geol').df['geological_type'] == geo_type) & (
+                                                         self.parent.entities_db.collection_by_name('geol').df[
                                                              'geological_feature'] == feature) & (
-                                                         self.parent.geol_coll.df[
+                                                         self.parent.entities_db.collection_by_name('geol').df[
                                                              'x_section'] == sec_uid), 'scenario'])
                 else:
-                    geo_scenario = pd_unique(self.parent.geol_coll.df.loc[
-                                                 (self.parent.geol_coll.df['geological_type'] == geo_type) & (
-                                                         self.parent.geol_coll.df[
+                    geo_scenario = pd_unique(self.parent.entities_db.collection_by_name('geol').df.loc[
+                                                 (self.parent.entities_db.collection_by_name('geol').df['geological_type'] == geo_type) & (
+                                                         self.parent.entities_db.collection_by_name('geol').df[
                                                              'geological_feature'] == feature), 'scenario'])
                 for scenario in geo_scenario:
                     glevel_3 = QTreeWidgetItem(glevel_2, [scenario])  # glevel_2 as parent -> 2nd middle level
                     glevel_3.setFlags(glevel_3.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
                     if sec_uid:
-                        uids = self.parent.geol_coll.df.loc[
-                            (self.parent.geol_coll.df['geological_type'] == geo_type) & (
-                                    self.parent.geol_coll.df['geological_feature'] == feature) & (
-                                    self.parent.geol_coll.df['scenario'] == scenario) & (
-                                    self.parent.geol_coll.df['x_section'] == sec_uid), 'uid'].to_list()
+                        uids = self.parent.entities_db.collection_by_name('geol').df.loc[
+                            (self.parent.entities_db.collection_by_name('geol').df['geological_type'] == geo_type) & (
+                                    self.parent.entities_db.collection_by_name('geol').df['geological_feature'] == feature) & (
+                                    self.parent.entities_db.collection_by_name('geol').df['scenario'] == scenario) & (
+                                    self.parent.entities_db.collection_by_name('geol').df['x_section'] == sec_uid), 'uid'].to_list()
                     else:
-                        uids = self.parent.geol_coll.df.loc[
-                            (self.parent.geol_coll.df['geological_type'] == geo_type) & (
-                                    self.parent.geol_coll.df['geological_feature'] == feature) & (
-                                    self.parent.geol_coll.df['scenario'] == scenario), 'uid'].to_list()
+                        uids = self.parent.entities_db.collection_by_name('geol').df.loc[
+                            (self.parent.entities_db.collection_by_name('geol').df['geological_type'] == geo_type) & (
+                                    self.parent.entities_db.collection_by_name('geol').df['geological_feature'] == feature) & (
+                                    self.parent.entities_db.collection_by_name('geol').df['scenario'] == scenario), 'uid'].to_list()
                     for uid in uids:
                         property_combo = QComboBox()
                         property_combo.uid = uid
@@ -401,9 +384,9 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                         property_combo.addItem("X")
                         property_combo.addItem("Y")
                         property_combo.addItem("Z")
-                        for prop in self.parent.geol_coll.get_uid_properties_names(uid):
+                        for prop in self.parent.entities_db.collection_by_name('geol').get_uid_properties_names(uid):
                             property_combo.addItem(prop)
-                        name = self.parent.geol_coll.df.loc[(self.parent.geol_coll.df['uid'] == uid), 'name'].values[0]
+                        name = self.parent.entities_db.collection_by_name('geol').df.loc[(self.parent.entities_db.collection_by_name('geol').df['uid'] == uid), 'name'].values[0]
                         glevel_4 = QTreeWidgetItem(glevel_3, [name, uid])  # glevel_3 as parent -> lower level
                         self.GeologyTreeWidget.setItemWidget(glevel_4, 2, property_combo)
                         property_combo.currentIndexChanged.connect(lambda: self.toggle_property())
@@ -426,27 +409,27 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.TopologyTreeWidget.setItemsExpandable(True)
 
         if sec_uid:
-            filtered_topo = self.parent.geol_coll.df.loc[
-                (self.parent.geol_coll.df['x_section'] == sec_uid), 'topological_type']
+            filtered_topo = self.parent.entities_db.collection_by_name('geol').df.loc[
+                (self.parent.entities_db.collection_by_name('geol').df['x_section'] == sec_uid), 'topological_type']
             topo_types = pd_unique(filtered_topo)
         else:
-            topo_types = pd_unique(self.parent.geol_coll.df['topological_type'])
+            topo_types = pd_unique(self.parent.entities_db.collection_by_name('geol').df['topological_type'])
 
         for topo_type in topo_types:
             tlevel_1 = QTreeWidgetItem(self.TopologyTreeWidget,
                                        [topo_type])  # self.GeologyTreeWidget as parent -> top level
             tlevel_1.setFlags(tlevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
-            for scenario in pd_unique(self.parent.geol_coll.df.loc[
-                                          self.parent.geol_coll.df['topological_type'] == topo_type, 'scenario']):
+            for scenario in pd_unique(self.parent.entities_db.collection_by_name('geol').df.loc[
+                                          self.parent.entities_db.collection_by_name('geol').df['topological_type'] == topo_type, 'scenario']):
                 tlevel_2 = QTreeWidgetItem(tlevel_1, [scenario])  # tlevel_1 as parent -> middle level
                 tlevel_2.setFlags(tlevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
                 if sec_uid:
-                    uids = self.parent.geol_coll.df.loc[(self.parent.geol_coll.df['topological_type'] == topo_type) & (
-                            self.parent.geol_coll.df['scenario'] == scenario) & (self.parent.geol_coll.df[
+                    uids = self.parent.entities_db.collection_by_name('geol').df.loc[(self.parent.entities_db.collection_by_name('geol').df['topological_type'] == topo_type) & (
+                            self.parent.entities_db.collection_by_name('geol').df['scenario'] == scenario) & (self.parent.entities_db.collection_by_name('geol').df[
                                                                                      'x_section'] == sec_uid), 'uid'].to_list()
                 else:
-                    uids = self.parent.geol_coll.df.loc[(self.parent.geol_coll.df['topological_type'] == topo_type) & (
-                            self.parent.geol_coll.df['scenario'] == scenario), 'uid'].to_list()
+                    uids = self.parent.entities_db.collection_by_name('geol').df.loc[(self.parent.entities_db.collection_by_name('geol').df['topological_type'] == topo_type) & (
+                            self.parent.entities_db.collection_by_name('geol').df['scenario'] == scenario), 'uid'].to_list()
                 for uid in uids:
                     property_combo = QComboBox()
                     property_combo.uid = uid
@@ -454,9 +437,9 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                     property_combo.addItem("X")
                     property_combo.addItem("Y")
                     property_combo.addItem("Z")
-                    for prop in self.parent.geol_coll.get_uid_properties_names(uid):
+                    for prop in self.parent.entities_db.collection_by_name('geol').get_uid_properties_names(uid):
                         property_combo.addItem(prop)
-                    name = self.parent.geol_coll.df.loc[self.parent.geol_coll.df['uid'] == uid, 'name'].values[0]
+                    name = self.parent.entities_db.collection_by_name('geol').df.loc[self.parent.entities_db.collection_by_name('geol').df['uid'] == uid, 'name'].values[0]
                     tlevel_3 = QTreeWidgetItem(tlevel_2, [name, uid])  # tlevel_2 as parent -> lower level
                     self.TopologyTreeWidget.setItemWidget(tlevel_3, 2, property_combo)
                     property_combo.currentIndexChanged.connect(lambda: self.toggle_property())
@@ -475,48 +458,48 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         uid_list = list(new_list['uid'])
         if sec_uid:
             for i, uid in enumerate(new_list['uid']):
-                if sec_uid != self.parent.geol_coll.df.loc[self.parent.geol_coll.df['uid'] == uid, 'x_section'].values[
+                if sec_uid != self.parent.entities_db.collection_by_name('geol').df.loc[self.parent.entities_db.collection_by_name('geol').df['uid'] == uid, 'x_section'].values[
                     0]:
                     del uid_list[i]
         for uid in uid_list:
-            if self.GeologyTreeWidget.findItems(self.parent.geol_coll.get_uid_geological_type(uid), Qt.MatchExactly,
+            if self.GeologyTreeWidget.findItems(self.parent.entities_db.collection_by_name('geol').get_uid_geological_type(uid), Qt.MatchExactly,
                                                 0) != []:
                 """Already exists a TreeItem (1 level) for the geological type"""
                 counter_1 = 0
                 for child_1 in range(
-                        self.GeologyTreeWidget.findItems(self.parent.geol_coll.get_uid_geological_type(uid),
+                        self.GeologyTreeWidget.findItems(self.parent.entities_db.collection_by_name('geol').get_uid_geological_type(uid),
                                                          Qt.MatchExactly, 0)[0].childCount()):
                     """for cycle that loops n times as the number of subItems in the specific geological type branch"""
-                    if self.GeologyTreeWidget.findItems(self.parent.geol_coll.get_uid_geological_type(uid),
+                    if self.GeologyTreeWidget.findItems(self.parent.entities_db.collection_by_name('geol').get_uid_geological_type(uid),
                                                         Qt.MatchExactly, 0)[0].child(child_1).text(
-                        0) == self.parent.geol_coll.get_uid_geological_feature(uid):
+                        0) == self.parent.entities_db.collection_by_name('geol').get_uid_geological_feature(uid):
                         counter_1 += 1
                 if counter_1 != 0:
                     for child_1 in range(
-                            self.GeologyTreeWidget.findItems(self.parent.geol_coll.get_uid_geological_type(uid),
+                            self.GeologyTreeWidget.findItems(self.parent.entities_db.collection_by_name('geol').get_uid_geological_type(uid),
                                                              Qt.MatchExactly, 0)[0].childCount()):
-                        if self.GeologyTreeWidget.findItems(self.parent.geol_coll.get_uid_geological_type(uid),
+                        if self.GeologyTreeWidget.findItems(self.parent.entities_db.collection_by_name('geol').get_uid_geological_type(uid),
                                                             Qt.MatchExactly, 0)[0].child(child_1).text(
-                            0) == self.parent.geol_coll.get_uid_geological_feature(uid):
+                            0) == self.parent.entities_db.collection_by_name('geol').get_uid_geological_feature(uid):
                             """Already exists a TreeItem (2 level) for the geological feature"""
                             counter_2 = 0
                             for child_2 in range(self.GeologyTreeWidget.itemBelow(
-                                    self.GeologyTreeWidget.findItems(self.parent.geol_coll.get_uid_geological_type(uid),
+                                    self.GeologyTreeWidget.findItems(self.parent.entities_db.collection_by_name('geol').get_uid_geological_type(uid),
                                                                      Qt.MatchExactly, 0)[0]).childCount()):
                                 """for cycle that loops n times as the number of sub-subItems in the specific geological type and geological feature branch"""
                                 if self.GeologyTreeWidget.itemBelow(self.GeologyTreeWidget.findItems(
-                                        self.parent.geol_coll.get_uid_geological_type(uid), Qt.MatchExactly, 0)[
+                                        self.parent.entities_db.collection_by_name('geol').get_uid_geological_type(uid), Qt.MatchExactly, 0)[
                                                                         0]).child(child_2).text(
-                                    0) == self.parent.geol_coll.get_uid_scenario(uid):
+                                    0) == self.parent.entities_db.collection_by_name('geol').get_uid_scenario(uid):
                                     counter_2 += 1
                             if counter_2 != 0:
                                 for child_2 in range(self.GeologyTreeWidget.itemBelow(self.GeologyTreeWidget.findItems(
-                                        self.parent.geol_coll.get_uid_geological_type(uid), Qt.MatchExactly, 0)[
+                                        self.parent.entities_db.collection_by_name('geol').get_uid_geological_type(uid), Qt.MatchExactly, 0)[
                                                                                           0]).childCount()):
                                     if self.GeologyTreeWidget.itemBelow(self.GeologyTreeWidget.findItems(
-                                            self.parent.geol_coll.get_uid_geological_type(uid), Qt.MatchExactly, 0)[
+                                            self.parent.entities_db.collection_by_name('geol').get_uid_geological_type(uid), Qt.MatchExactly, 0)[
                                                                             0]).child(child_2).text(
-                                        0) == self.parent.geol_coll.get_uid_scenario(uid):
+                                        0) == self.parent.entities_db.collection_by_name('geol').get_uid_scenario(uid):
                                         """Same geological type, geological feature and scenario"""
                                         property_combo = QComboBox()
                                         property_combo.uid = uid
@@ -524,11 +507,11 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                                         property_combo.addItem("X")
                                         property_combo.addItem("Y")
                                         property_combo.addItem("Z")
-                                        for prop in self.parent.geol_coll.get_uid_properties_names(uid):
+                                        for prop in self.parent.entities_db.collection_by_name('geol').get_uid_properties_names(uid):
                                             property_combo.addItem(prop)
-                                        name = self.parent.geol_coll.get_uid_name(uid)
+                                        name = self.parent.entities_db.collection_by_name('geol').get_uid_name(uid)
                                         glevel_4 = QTreeWidgetItem(self.GeologyTreeWidget.findItems(
-                                            self.parent.geol_coll.get_uid_geological_type(uid), Qt.MatchExactly, 0)[
+                                            self.parent.entities_db.collection_by_name('geol').get_uid_geological_type(uid), Qt.MatchExactly, 0)[
                                                                        0].child(child_1).child(child_2), [name, uid])
                                         self.GeologyTreeWidget.setItemWidget(glevel_4, 2, property_combo)
                                         property_combo.currentIndexChanged.connect(lambda: self.toggle_property())
@@ -542,9 +525,9 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                             else:
                                 """Same geological type and geological feature, different scenario"""
                                 glevel_3 = QTreeWidgetItem(
-                                    self.GeologyTreeWidget.findItems(self.parent.geol_coll.get_uid_geological_type(uid),
+                                    self.GeologyTreeWidget.findItems(self.parent.entities_db.collection_by_name('geol').get_uid_geological_type(uid),
                                                                      Qt.MatchExactly, 0)[0].child(child_1),
-                                    [self.parent.geol_coll.get_uid_scenario(uid)])
+                                    [self.parent.entities_db.collection_by_name('geol').get_uid_scenario(uid)])
                                 glevel_3.setFlags(glevel_3.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
                                 self.GeologyTreeWidget.insertTopLevelItem(0, glevel_3)
                                 property_combo = QComboBox()
@@ -553,9 +536,9 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                                 property_combo.addItem("X")
                                 property_combo.addItem("Y")
                                 property_combo.addItem("Z")
-                                for prop in self.parent.geol_coll.get_uid_properties_names(uid):
+                                for prop in self.parent.entities_db.collection_by_name('geol').get_uid_properties_names(uid):
                                     property_combo.addItem(prop)
-                                name = self.parent.geol_coll.get_uid_name(uid)
+                                name = self.parent.entities_db.collection_by_name('geol').get_uid_name(uid)
                                 glevel_4 = QTreeWidgetItem(glevel_3, [name, uid])
                                 self.GeologyTreeWidget.setItemWidget(glevel_4, 2, property_combo)
                                 property_combo.currentIndexChanged.connect(lambda: self.toggle_property())
@@ -569,12 +552,12 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                 else:
                     """Same geological type, different geological feature and scenario"""
                     glevel_2 = QTreeWidgetItem(
-                        self.GeologyTreeWidget.findItems(self.parent.geol_coll.get_uid_geological_type(uid),
+                        self.GeologyTreeWidget.findItems(self.parent.entities_db.collection_by_name('geol').get_uid_geological_type(uid),
                                                          Qt.MatchExactly, 0)[0],
-                        [self.parent.geol_coll.get_uid_geological_feature(uid)])
+                        [self.parent.entities_db.collection_by_name('geol').get_uid_geological_feature(uid)])
                     glevel_2.setFlags(glevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
                     self.GeologyTreeWidget.insertTopLevelItem(0, glevel_2)
-                    glevel_3 = QTreeWidgetItem(glevel_2, [self.parent.geol_coll.get_uid_scenario(uid)])
+                    glevel_3 = QTreeWidgetItem(glevel_2, [self.parent.entities_db.collection_by_name('geol').get_uid_scenario(uid)])
                     glevel_3.setFlags(glevel_3.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
                     self.GeologyTreeWidget.insertTopLevelItem(0, glevel_3)
                     property_combo = QComboBox()
@@ -583,9 +566,9 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                     property_combo.addItem("X")
                     property_combo.addItem("Y")
                     property_combo.addItem("Z")
-                    for prop in self.parent.geol_coll.get_uid_properties_names(uid):
+                    for prop in self.parent.entities_db.collection_by_name('geol').get_uid_properties_names(uid):
                         property_combo.addItem(prop)
-                    name = self.parent.geol_coll.get_uid_name(uid)
+                    name = self.parent.entities_db.collection_by_name('geol').get_uid_name(uid)
                     glevel_4 = QTreeWidgetItem(glevel_3, [name, uid])
                     self.GeologyTreeWidget.setItemWidget(glevel_4, 2, property_combo)
                     property_combo.currentIndexChanged.connect(lambda: self.toggle_property())
@@ -598,13 +581,13 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                     break
             else:
                 """Different geological type, geological feature and scenario"""
-                glevel_1 = QTreeWidgetItem(self.GeologyTreeWidget, [self.parent.geol_coll.get_uid_geological_type(uid)])
+                glevel_1 = QTreeWidgetItem(self.GeologyTreeWidget, [self.parent.entities_db.collection_by_name('geol').get_uid_geological_type(uid)])
                 glevel_1.setFlags(glevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
                 self.GeologyTreeWidget.insertTopLevelItem(0, glevel_1)
-                glevel_2 = QTreeWidgetItem(glevel_1, [self.parent.geol_coll.get_uid_geological_feature(uid)])
+                glevel_2 = QTreeWidgetItem(glevel_1, [self.parent.entities_db.collection_by_name('geol').get_uid_geological_feature(uid)])
                 glevel_2.setFlags(glevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
                 self.GeologyTreeWidget.insertTopLevelItem(0, glevel_2)
-                glevel_3 = QTreeWidgetItem(glevel_2, [self.parent.geol_coll.get_uid_scenario(uid)])
+                glevel_3 = QTreeWidgetItem(glevel_2, [self.parent.entities_db.collection_by_name('geol').get_uid_scenario(uid)])
                 glevel_3.setFlags(glevel_3.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
                 self.GeologyTreeWidget.insertTopLevelItem(0, glevel_3)
                 property_combo = QComboBox()
@@ -613,9 +596,9 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                 property_combo.addItem("X")
                 property_combo.addItem("Y")
                 property_combo.addItem("Z")
-                for prop in self.parent.geol_coll.get_uid_properties_names(uid):
+                for prop in self.parent.entities_db.collection_by_name('geol').get_uid_properties_names(uid):
                     property_combo.addItem(prop)
-                name = self.parent.geol_coll.get_uid_name(uid)
+                name = self.parent.entities_db.collection_by_name('geol').get_uid_name(uid)
                 glevel_4 = QTreeWidgetItem(glevel_3, [name, uid])
                 self.GeologyTreeWidget.setItemWidget(glevel_4, 2, property_combo)
                 property_combo.currentIndexChanged.connect(lambda: self.toggle_property())
@@ -676,29 +659,29 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         uid_list = list(new_list['uid'])
         if sec_uid:
             for i, uid in enumerate(new_list['uid']):
-                if sec_uid != self.parent.geol_coll.df.loc[self.parent.geol_coll.df['uid'] == uid, 'x_section'].values[
+                if sec_uid != self.parent.entities_db.collection_by_name('geol').df.loc[self.parent.entities_db.collection_by_name('geol').df['uid'] == uid, 'x_section'].values[
                     0]:
                     del uid_list[i]
         for uid in uid_list:
-            if self.TopologyTreeWidget.findItems(self.parent.geol_coll.get_uid_topological_type(uid), Qt.MatchExactly,
+            if self.TopologyTreeWidget.findItems(self.parent.entities_db.collection_by_name('geol').get_uid_topological_type(uid), Qt.MatchExactly,
                                                  0) != []:
                 """Already exists a TreeItem (1 level) for the topological type"""
                 counter_1 = 0
                 for child_1 in range(
-                        self.TopologyTreeWidget.findItems(self.parent.geol_coll.get_uid_topological_type(uid),
+                        self.TopologyTreeWidget.findItems(self.parent.entities_db.collection_by_name('geol').get_uid_topological_type(uid),
                                                           Qt.MatchExactly, 0)[0].childCount()):
                     """for cycle that loops n times as the number of subItems in the specific topological type branch"""
-                    if self.TopologyTreeWidget.findItems(self.parent.geol_coll.get_uid_topological_type(uid),
+                    if self.TopologyTreeWidget.findItems(self.parent.entities_db.collection_by_name('geol').get_uid_topological_type(uid),
                                                          Qt.MatchExactly, 0)[0].child(child_1).text(
-                        0) == self.parent.geol_coll.get_uid_scenario(uid):
+                        0) == self.parent.entities_db.collection_by_name('geol').get_uid_scenario(uid):
                         counter_1 += 1
                 if counter_1 != 0:
                     for child_1 in range(
-                            self.TopologyTreeWidget.findItems(self.parent.geol_coll.get_uid_topological_type(uid),
+                            self.TopologyTreeWidget.findItems(self.parent.entities_db.collection_by_name('geol').get_uid_topological_type(uid),
                                                               Qt.MatchExactly, 0)[0].childCount()):
-                        if self.TopologyTreeWidget.findItems(self.parent.geol_coll.get_uid_topological_type(uid),
+                        if self.TopologyTreeWidget.findItems(self.parent.entities_db.collection_by_name('geol').get_uid_topological_type(uid),
                                                              Qt.MatchExactly, 0)[0].child(child_1).text(
-                            0) == self.parent.geol_coll.get_uid_scenario(uid):
+                            0) == self.parent.entities_db.collection_by_name('geol').get_uid_scenario(uid):
                             """Same topological type and scenario"""
                             property_combo = QComboBox()
                             property_combo.uid = uid
@@ -706,11 +689,11 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                             property_combo.addItem("X")
                             property_combo.addItem("Y")
                             property_combo.addItem("Z")
-                            for prop in self.parent.geol_coll.get_uid_properties_names(uid):
+                            for prop in self.parent.entities_db.collection_by_name('geol').get_uid_properties_names(uid):
                                 property_combo.addItem(prop)
-                            name = self.parent.geol_coll.get_uid_name(uid)
+                            name = self.parent.entities_db.collection_by_name('geol').get_uid_name(uid)
                             tlevel_3 = QTreeWidgetItem(
-                                self.TopologyTreeWidget.findItems(self.parent.geol_coll.get_uid_topological_type(uid),
+                                self.TopologyTreeWidget.findItems(self.parent.entities_db.collection_by_name('geol').get_uid_topological_type(uid),
                                                                   Qt.MatchExactly, 0)[0].child(child_1), [name, uid])
                             self.TopologyTreeWidget.setItemWidget(tlevel_3, 2, property_combo)
                             property_combo.currentIndexChanged.connect(lambda: self.toggle_property())
@@ -724,9 +707,9 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                 else:
                     """Same topological type, different scenario"""
                     tlevel_2 = QTreeWidgetItem(
-                        self.TopologyTreeWidget.findItems(self.parent.geol_coll.get_uid_topological_type(uid),
+                        self.TopologyTreeWidget.findItems(self.parent.entities_db.collection_by_name('geol').get_uid_topological_type(uid),
                                                           Qt.MatchExactly, 0)[0],
-                        [self.parent.geol_coll.get_uid_scenario(uid)])
+                        [self.parent.entities_db.collection_by_name('geol').get_uid_scenario(uid)])
                     tlevel_2.setFlags(tlevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
                     self.TopologyTreeWidget.insertTopLevelItem(0, tlevel_2)
                     property_combo = QComboBox()
@@ -735,9 +718,9 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                     property_combo.addItem("X")
                     property_combo.addItem("Y")
                     property_combo.addItem("Z")
-                    for prop in self.parent.geol_coll.get_uid_properties_names(uid):
+                    for prop in self.parent.entities_db.collection_by_name('geol').get_uid_properties_names(uid):
                         property_combo.addItem(prop)
-                    name = self.parent.geol_coll.get_uid_name(uid)
+                    name = self.parent.entities_db.collection_by_name('geol').get_uid_name(uid)
                     tlevel_3 = QTreeWidgetItem(tlevel_2, [name, uid])
                     self.TopologyTreeWidget.setItemWidget(tlevel_3, 2, property_combo)
                     property_combo.currentIndexChanged.connect(lambda: self.toggle_property())
@@ -751,10 +734,10 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             else:
                 """Different topological type and scenario"""
                 tlevel_1 = QTreeWidgetItem(self.TopologyTreeWidget,
-                                           [self.parent.geol_coll.get_uid_topological_type(uid)])
+                                           [self.parent.entities_db.collection_by_name('geol').get_uid_topological_type(uid)])
                 tlevel_1.setFlags(tlevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
                 self.TopologyTreeWidget.insertTopLevelItem(0, tlevel_1)
-                tlevel_2 = QTreeWidgetItem(tlevel_1, [self.parent.geol_coll.get_uid_scenario(uid)])
+                tlevel_2 = QTreeWidgetItem(tlevel_1, [self.parent.entities_db.collection_by_name('geol').get_uid_scenario(uid)])
                 tlevel_2.setFlags(tlevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
                 self.TopologyTreeWidget.insertTopLevelItem(0, tlevel_2)
                 property_combo = QComboBox()
@@ -763,9 +746,9 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                 property_combo.addItem("X")
                 property_combo.addItem("Y")
                 property_combo.addItem("Z")
-                for prop in self.parent.geol_coll.get_uid_properties_names(uid):
+                for prop in self.parent.entities_db.collection_by_name('geol').get_uid_properties_names(uid):
                     property_combo.addItem(prop)
-                name = self.parent.geol_coll.get_uid_name(uid)
+                name = self.parent.entities_db.collection_by_name('geol').get_uid_name(uid)
                 tlevel_3 = QTreeWidgetItem(tlevel_2, [name, uid])
                 self.TopologyTreeWidget.setItemWidget(tlevel_3, 2, property_combo)
                 property_combo.currentIndexChanged.connect(lambda: self.toggle_property())
@@ -863,11 +846,11 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                                     name_xslevel1)  # self.XSectionTreeWidget as parent -> top level
         xslevel_1.setFlags(xslevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
         if sec_uid:
-            uids = self.parent.xsect_coll.df.loc[self.parent.xsect_coll.df['uid'] == sec_uid, 'uid'].to_list()
+            uids = self.parent.entities_db.collection_by_name('xsect').df.loc[self.parent.entities_db.collection_by_name('xsect').df['uid'] == sec_uid, 'uid'].to_list()
         else:
-            uids = self.parent.xsect_coll.df['uid'].to_list()
+            uids = self.parent.entities_db.collection_by_name('xsect').df['uid'].to_list()
         for uid in uids:
-            name = self.parent.xsect_coll.df.loc[self.parent.xsect_coll.df['uid'] == uid, 'name'].values[0]
+            name = self.parent.entities_db.collection_by_name('xsect').df.loc[self.parent.entities_db.collection_by_name('xsect').df['uid'] == uid, 'name'].values[0]
             xslevel_2 = QTreeWidgetItem(xslevel_1, [name, uid])  # xslevel_2 as parent -> lower level
             xslevel_2.setFlags(xslevel_2.flags() | Qt.ItemIsUserCheckable)
             if self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]:
@@ -887,7 +870,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                 if sec_uid != uid:
                     del uid_list[i]
         for uid in uid_list:
-            name = self.parent.xsect_coll.get_uid_name(uid)
+            name = self.parent.entities_db.collection_by_name('xsect').get_uid_name(uid)
             xslevel_2 = QTreeWidgetItem(self.XSectionTreeWidget.findItems("All XSections", Qt.MatchExactly, 0)[0],
                                         [name, uid])
             xslevel_2.setFlags(xslevel_2.flags() | Qt.ItemIsUserCheckable)
@@ -954,13 +937,13 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.BoundariesTableWidget.setHorizontalHeaderLabels(['Name', 'uid'])
         self.BoundariesTableWidget.hideColumn(1)  # hide the uid column
         if sec_uid:
-            uids = self.parent.boundary_coll.df.loc[
-                (self.parent.boundary_coll.df['x_section'] == sec_uid), 'uid'].to_list()
+            uids = self.parent.entities_db.collection_by_name('boundary').df.loc[
+                (self.parent.entities_db.collection_by_name('boundary').df['x_section'] == sec_uid), 'uid'].to_list()
         else:
-            uids = self.parent.boundary_coll.df['uid'].to_list()
+            uids = self.parent.entities_db.collection_by_name('boundary').df['uid'].to_list()
         row = 0
         for uid in uids:
-            name = self.parent.boundary_coll.df.loc[self.parent.boundary_coll.df['uid'] == uid, 'name'].values[0]
+            name = self.parent.entities_db.collection_by_name('boundary').df.loc[self.parent.entities_db.collection_by_name('boundary').df['uid'] == uid, 'name'].values[0]
             name_item = QTableWidgetItem(name)
             name_item.setFlags(name_item.flags() | Qt.ItemIsUserCheckable)
             name_item.setFlags(name_item.flags() & ~Qt.ItemIsEditable)
@@ -980,12 +963,12 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         """Update boundaries list without creating a new model"""
         row = self.BoundariesTableWidget.rowCount()
         if sec_uid:
-            uids = self.parent.boundary_coll.df.loc[
-                (self.parent.boundary_coll.df['x_section'] == sec_uid), 'uid'].to_list()
+            uids = self.parent.entities_db.collection_by_name('boundary').df.loc[
+                (self.parent.entities_db.collection_by_name('boundary').df['x_section'] == sec_uid), 'uid'].to_list()
         else:
-            uids = self.parent.boundary_coll.df['uid'].to_list()
+            uids = self.parent.entities_db.collection_by_name('boundary').df['uid'].to_list()
         for uid in uids:
-            name = self.parent.boundary_coll.df.loc[self.parent.boundary_coll.df['uid'] == uid, 'name'].values[0]
+            name = self.parent.entities_db.collection_by_name('boundary').df.loc[self.parent.entities_db.collection_by_name('boundary').df['uid'] == uid, 'name'].values[0]
             name_item = QTableWidgetItem(name)
             name_item.setFlags(name_item.flags() | Qt.ItemIsUserCheckable)
             name_item.setFlags(name_item.flags() & ~Qt.ItemIsEditable)
@@ -1038,12 +1021,12 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.Mesh3DTableWidget.setHorizontalHeaderLabels(['Name', 'uid'])
         self.Mesh3DTableWidget.hideColumn(1)  # hide the uid column
         if sec_uid:
-            uids = self.parent.mesh3d_coll.df.loc[(self.parent.mesh3d_coll.df['x_section'] == sec_uid), 'uid'].to_list()
+            uids = self.parent.entities_db.collection_by_name('mesh3d').df.loc[(self.parent.entities_db.collection_by_name('mesh3d').df['x_section'] == sec_uid), 'uid'].to_list()
         else:
-            uids = self.parent.mesh3d_coll.df['uid'].to_list()
+            uids = self.parent.entities_db.collection_by_name('mesh3d').df['uid'].to_list()
         row = 0
         for uid in uids:
-            name = self.parent.mesh3d_coll.df.loc[self.parent.mesh3d_coll.df['uid'] == uid, 'name'].values[0]
+            name = self.parent.entities_db.collection_by_name('mesh3d').df.loc[self.parent.entities_db.collection_by_name('mesh3d').df['uid'] == uid, 'name'].values[0]
             name_item = QTableWidgetItem(name)
             name_item.setFlags(name_item.flags() | Qt.ItemIsUserCheckable)
             name_item.setFlags(name_item.flags() & ~Qt.ItemIsEditable)
@@ -1055,7 +1038,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             property_combo.addItem("X")
             property_combo.addItem("Y")
             property_combo.addItem("Z")
-            for prop in self.parent.mesh3d_coll.get_uid_properties_names(uid):
+            for prop in self.parent.entities_db.collection_by_name('mesh3d').get_uid_properties_names(uid):
                 property_combo.addItem(prop)
             self.Mesh3DTableWidget.insertRow(row)
             self.Mesh3DTableWidget.setItem(row, 0, name_item)
@@ -1077,10 +1060,10 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         if sec_uid:
             for i, uid in enumerate(new_list['uid']):
                 if sec_uid != \
-                        self.parent.mesh3d_coll.df.loc[self.parent.mesh3d_coll.df['uid'] == uid, 'x_section'].values[0]:
+                        self.parent.entities_db.collection_by_name('mesh3d').df.loc[self.parent.entities_db.collection_by_name('mesh3d').df['uid'] == uid, 'x_section'].values[0]:
                     del uid_list[i]
         for uid in uid_list:
-            name = self.parent.mesh3d_coll.df.loc[self.parent.mesh3d_coll.df['uid'] == uid, 'name'].values[0]
+            name = self.parent.entities_db.collection_by_name('mesh3d').df.loc[self.parent.entities_db.collection_by_name('mesh3d').df['uid'] == uid, 'name'].values[0]
             name_item = QTableWidgetItem(name)
             name_item.setFlags(name_item.flags() | Qt.ItemIsUserCheckable)
             name_item.setFlags(name_item.flags() & ~Qt.ItemIsEditable)
@@ -1092,7 +1075,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             property_combo.addItem("X")
             property_combo.addItem("Y")
             property_combo.addItem("Z")
-            for prop in self.parent.mesh3d_coll.get_uid_properties_names(uid):
+            for prop in self.parent.entities_db.collection_by_name('mesh3d').get_uid_properties_names(uid):
                 property_combo.addItem(prop)
             self.Mesh3DTableWidget.insertRow(row)
             self.Mesh3DTableWidget.setItem(row, 0, name_item)
@@ -1161,12 +1144,12 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.DOMsTableWidget.hideColumn(1)  # hide the uid column
         row = 0
         if sec_uid:
-            uids = self.parent.dom_coll.df.loc[(self.parent.dom_coll.df['x_section'] == sec_uid), 'uid'].to_list()
+            uids = self.parent.entities_db.collection_by_name('dom').df.loc[(self.parent.entities_db.collection_by_name('dom').df['x_section'] == sec_uid), 'uid'].to_list()
         else:
-            uids = self.parent.dom_coll.df['uid'].to_list()
+            uids = self.parent.entities_db.collection_by_name('dom').df['uid'].to_list()
         for uid in uids:
-            # print(self.parent.dom_coll.df.loc[self.parent.dom_coll.df['uid'] == uid, 'name'])
-            name = self.parent.dom_coll.df.loc[self.parent.dom_coll.df['uid'] == uid, 'name'].values[0]
+            # print(self.parent.entities_db.collection_by_name('dom').df.loc[self.parent.entities_db.collection_by_name('dom').df['uid'] == uid, 'name'])
+            name = self.parent.entities_db.collection_by_name('dom').df.loc[self.parent.entities_db.collection_by_name('dom').df['uid'] == uid, 'name'].values[0]
             name_item = QTableWidgetItem(name)
             name_item.setFlags(name_item.flags() | Qt.ItemIsUserCheckable)
             name_item.setFlags(name_item.flags() & ~Qt.ItemIsEditable)
@@ -1182,11 +1165,11 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
 
             '''[Gabriele] To add support to multi components properties (e.g. RGB) we can add a component check (if components > 1). If this statement is True we can iterate over the n components and set the new n properties using the template prop[n_component]. These properties do not point to actual data (the "RGB[0]" property is not present) but to a slice of the original property (RGB[:,0]).'''
 
-            for prop, components in zip(self.parent.dom_coll.get_uid_properties_names(uid),
-                                        self.parent.dom_coll.get_uid_properties_components(uid)):
+            for prop, components in zip(self.parent.entities_db.collection_by_name('dom').get_uid_properties_names(uid),
+                                        self.parent.entities_db.collection_by_name('dom').get_uid_properties_components(uid)):
 
                 if prop not in \
-                        self.parent.dom_coll.df.loc[self.parent.dom_coll.df['uid'] == uid, "texture_uids"].values[0]:
+                        self.parent.entities_db.collection_by_name('dom').df.loc[self.parent.entities_db.collection_by_name('dom').df['uid'] == uid, "texture_uids"].values[0]:
                     property_texture_combo.addItem(prop)
                     property_texture_combo.texture_uid_list.append(prop)
 
@@ -1196,9 +1179,9 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                             property_texture_combo.texture_uid_list.append(f'{prop}[{component}]')
 
             for texture_uid in \
-                    self.parent.dom_coll.df.loc[self.parent.dom_coll.df['uid'] == uid, 'texture_uids'].values[0]:
+                    self.parent.entities_db.collection_by_name('dom').df.loc[self.parent.entities_db.collection_by_name('dom').df['uid'] == uid, 'texture_uids'].values[0]:
                 texture_name = \
-                    self.parent.image_coll.df.loc[self.parent.image_coll.df['uid'] == texture_uid, 'name'].values[0]
+                    self.parent.entities_db.collection_by_name('image').df.loc[self.parent.entities_db.collection_by_name('image').df['uid'] == texture_uid, 'name'].values[0]
                 property_texture_combo.addItem(texture_name)
                 property_texture_combo.texture_uid_list.append(texture_uid)
 
@@ -1222,10 +1205,10 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         uid_list = list(new_list['uid'])
         if sec_uid:
             for i, uid in enumerate(new_list['uid']):
-                if sec_uid != self.parent.dom_coll.df.loc[self.parent.dom_coll.df['uid'] == uid, 'x_section'].values[0]:
+                if sec_uid != self.parent.entities_db.collection_by_name('dom').df.loc[self.parent.entities_db.collection_by_name('dom').df['uid'] == uid, 'x_section'].values[0]:
                     del uid_list[i]
         for uid in uid_list:
-            name = self.parent.dom_coll.df.loc[self.parent.dom_coll.df['uid'] == uid, 'name'].values[0]
+            name = self.parent.entities_db.collection_by_name('dom').df.loc[self.parent.entities_db.collection_by_name('dom').df['uid'] == uid, 'name'].values[0]
             name_item = QTableWidgetItem(name)
             name_item.setFlags(name_item.flags() | Qt.ItemIsUserCheckable)
             name_item.setFlags(name_item.flags() & ~Qt.ItemIsEditable)
@@ -1241,10 +1224,10 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
 
             '''[Gabriele] See function above for explanation'''
 
-            for prop, components in zip(self.parent.dom_coll.get_uid_properties_names(uid),
-                                        self.parent.dom_coll.get_uid_properties_components(uid)):
+            for prop, components in zip(self.parent.entities_db.collection_by_name('dom').get_uid_properties_names(uid),
+                                        self.parent.entities_db.collection_by_name('dom').get_uid_properties_components(uid)):
                 if prop not in \
-                        self.parent.dom_coll.df.loc[self.parent.dom_coll.df['uid'] == uid, "texture_uids"].values[0]:
+                        self.parent.entities_db.collection_by_name('dom').df.loc[self.parent.entities_db.collection_by_name('dom').df['uid'] == uid, "texture_uids"].values[0]:
                     property_texture_combo.addItem(prop)
                     property_texture_combo.texture_uid_list.append(prop)
                     # print(prop)
@@ -1253,9 +1236,9 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                             property_texture_combo.addItem(f'{prop}[{n_component}]')
                             property_texture_combo.texture_uid_list.append(f'{prop}[{n_component}]')
             for texture_uid in \
-                    self.parent.dom_coll.df.loc[self.parent.dom_coll.df['uid'] == uid, 'texture_uids'].values[0]:
+                    self.parent.entities_db.collection_by_name('dom').df.loc[self.parent.entities_db.collection_by_name('dom').df['uid'] == uid, 'texture_uids'].values[0]:
                 texture_name = \
-                    self.parent.image_coll.df.loc[self.parent.image_coll.df['uid'] == texture_uid, 'name'].values[0]
+                    self.parent.entities_db.collection_by_name('image').df.loc[self.parent.entities_db.collection_by_name('image').df['uid'] == texture_uid, 'name'].values[0]
                 property_texture_combo.addItem(texture_name)
                 property_texture_combo.texture_uid_list.append(texture_uid)
             self.DOMsTableWidget.insertRow(row)
@@ -1314,8 +1297,8 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         property_texture_uid = property_texture_list[property_texture_id]
         """Set the active texture coordinates."""
         if property_texture_uid in \
-                self.parent.dom_coll.df.loc[self.parent.dom_coll.df['uid'] == uid, "texture_uids"].values[0]:
-            self.parent.dom_coll.set_active_texture_on_dom(dom_uid=uid, map_image_uid=property_texture_uid)
+                self.parent.entities_db.collection_by_name('dom').df.loc[self.parent.entities_db.collection_by_name('dom').df['uid'] == uid, "texture_uids"].values[0]:
+            self.parent.entities_db.collection_by_name('dom').set_active_texture_on_dom(dom_uid=uid, map_image_uid=property_texture_uid)
         """Show DOM with current texture"""
         show = self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]
         collection = self.actors_df.loc[self.actors_df['uid'] == uid, 'collection'].values[0]
@@ -1345,12 +1328,12 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.ImagesTableWidget.setHorizontalHeaderLabels(['Name', 'uid'])
         self.ImagesTableWidget.hideColumn(1)  # hide the uid column
         if sec_uid:
-            uids = self.parent.image_coll.df.loc[(self.parent.image_coll.df['x_section'] == sec_uid), 'uid'].to_list()
+            uids = self.parent.entities_db.collection_by_name('image').df.loc[(self.parent.entities_db.collection_by_name('image').df['x_section'] == sec_uid), 'uid'].to_list()
         else:
-            uids = self.parent.image_coll.df['uid'].to_list()
+            uids = self.parent.entities_db.collection_by_name('image').df['uid'].to_list()
         row = 0
         for uid in uids:
-            name = self.parent.image_coll.df.loc[self.parent.image_coll.df['uid'] == uid, 'name'].values[0]
+            name = self.parent.entities_db.collection_by_name('image').df.loc[self.parent.entities_db.collection_by_name('image').df['uid'] == uid, 'name'].values[0]
             name_item = QTableWidgetItem(name)
             name_item.setFlags(name_item.flags() | Qt.ItemIsUserCheckable)
             name_item.setFlags(name_item.flags() & ~Qt.ItemIsEditable)
@@ -1363,7 +1346,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             # property_combo.addItem("X")
             # property_combo.addItem("Y")
             # property_combo.addItem("Z")
-            for prop in self.parent.image_coll.get_uid_properties_names(uid):
+            for prop in self.parent.entities_db.collection_by_name('image').get_uid_properties_names(uid):
                 property_combo.addItem(prop)
             self.ImagesTableWidget.insertRow(row)
             self.ImagesTableWidget.setItem(row, 0, name_item)
@@ -1382,11 +1365,11 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         """Update Image list without creating a new model"""
         row = self.ImagesTableWidget.rowCount()
         if sec_uid:
-            uids = self.parent.image_coll.df.loc[(self.parent.image_coll.df['x_section'] == sec_uid), 'uid'].to_list()
+            uids = self.parent.entities_db.collection_by_name('image').df.loc[(self.parent.entities_db.collection_by_name('image').df['x_section'] == sec_uid), 'uid'].to_list()
         else:
-            uids = self.parent.image_coll.df['uid'].to_list()
+            uids = self.parent.entities_db.collection_by_name('image').df['uid'].to_list()
         for uid in uids:
-            name = self.parent.image_coll.df.loc[self.parent.image_coll.df['uid'] == uid, 'name'].values[0]
+            name = self.parent.entities_db.collection_by_name('image').df.loc[self.parent.entities_db.collection_by_name('image').df['uid'] == uid, 'name'].values[0]
             name_item = QTableWidgetItem(name)
             name_item.setFlags(name_item.flags() | Qt.ItemIsUserCheckable)
             name_item.setFlags(name_item.flags() & ~Qt.ItemIsEditable)
@@ -1399,7 +1382,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             # property_combo.addItem("X")
             # property_combo.addItem("Y")
             # property_combo.addItem("Z")
-            for prop in self.parent.image_coll.get_uid_properties_names(uid):
+            for prop in self.parent.entities_db.collection_by_name('image').get_uid_properties_names(uid):
                 property_combo.addItem(prop)
             self.ImagesTableWidget.insertRow(row)
             self.ImagesTableWidget.setItem(row, 0, name_item)
@@ -1467,10 +1450,10 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.WellsTreeWidget.hideColumn(1)  # hide the uid column
         self.WellsTreeWidget.setItemsExpandable(True)
 
-        locids = pd_unique(self.parent.well_coll.df['Loc ID'])
+        locids = pd_unique(self.parent.entities_db.collection_by_name('well').df['Loc ID'])
 
         for locid in locids:
-            uid = self.parent.well_coll.df.loc[(self.parent.well_coll.df['Loc ID'] == locid), 'uid'].values[0]
+            uid = self.parent.entities_db.collection_by_name('well').df.loc[(self.parent.entities_db.collection_by_name('well').df['Loc ID'] == locid), 'uid'].values[0]
             tlevel_1 = QTreeWidgetItem(self.WellsTreeWidget, [locid])  # self.GeologyTreeWidget as parent -> top level
             tlevel_1.setFlags(tlevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
 
@@ -1494,7 +1477,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             property_combo.addItem("X")
             property_combo.addItem("Y")
             property_combo.addItem("Z")
-            for prop in self.parent.well_coll.get_uid_properties_names(uid):
+            for prop in self.parent.entities_db.collection_by_name('well').get_uid_properties_names(uid):
                 if prop == 'LITHOLOGY':
                     pass
                 elif prop == 'GEOLOGY':
@@ -1519,7 +1502,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         # property_combo.uid = uid
         # property_combo.name = 'Marker'
         # property_combo.addItem("none")
-        # for prop in self.parent.well_coll.get_uid_marker_names(uid):
+        # for prop in self.parent.entities_db.collection_by_name('well').get_uid_marker_names(uid):
         #     property_combo.addItem(prop)
 
         # self.WellsTreeWidget.setItemWidget(tlevel_2_mark, 2, property_combo)
@@ -1539,8 +1522,8 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         # property_combo.uid = uid
         # property_combo.name = 'Annotations'
         # property_combo.addItem("none")
-        # for annotation_uid in self.parent.backgrounds_coll.get_buid_uid(uid):
-        #     name = self.parent.backgrounds_coll.get_uid_name(annotation_uid)
+        # for annotation_uid in self.parent.entities_db.collection_by_name('backgrounds').get_buid_uid(uid):
+        #     name = self.parent.entities_db.collection_by_name('backgrounds').get_uid_name(annotation_uid)
         #     property_combo.addItem(name)
 
         # self.WellsTreeWidget.setItemWidget(tlevel_2_mark, 2, property_combo)
@@ -1559,14 +1542,14 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
     def update_well_tree_added(self, new_list=None):
         """Update well tree without creating a new model"""
         for uid in new_list['uid']:
-            if self.WellsTreeWidget.findItems(self.parent.well_coll.get_uid_well_locid(uid), Qt.MatchExactly, 0) != []:
+            if self.WellsTreeWidget.findItems(self.parent.entities_db.collection_by_name('well').get_uid_well_locid(uid), Qt.MatchExactly, 0) != []:
                 """Already exists a TreeItem (1 level) for the geological type"""
                 counter_1 = 0
                 for child_1 in range(
-                        self.WellsTreeWidget.findItems(self.parent.well_coll.get_uid_well_locid(uid), Qt.MatchExactly,
+                        self.WellsTreeWidget.findItems(self.parent.entities_db.collection_by_name('well').get_uid_well_locid(uid), Qt.MatchExactly,
                                                        0)[0].childCount()):
                     glevel_2 = QTreeWidgetItem(
-                        self.WellsTreeWidget.findItems(self.parent.well_coll.get_uid_well_locid(uid), Qt.MatchExactly,
+                        self.WellsTreeWidget.findItems(self.parent.entities_db.collection_by_name('well').get_uid_well_locid(uid), Qt.MatchExactly,
                                                        0)[0])
                     glevel_2.setFlags(glevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
                     self.WellsTreeWidget.insertTopLevelItem(0, glevel_2)
@@ -1578,7 +1561,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                     property_combo.addItem("X")
                     property_combo.addItem("Y")
                     property_combo.addItem("Z")
-                    for prop in self.parent.well_coll.get_uid_properties_names(uid):
+                    for prop in self.parent.entities_db.collection_by_name('well').get_uid_properties_names(uid):
                         if prop == 'LITHOLOGY':
                             pass
                         elif prop == 'GEOLOGY':
@@ -1598,7 +1581,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             else:
                 """Different geological type, geological feature and scenario"""
                 tlevel_1 = QTreeWidgetItem(self.WellsTreeWidget, [
-                    self.parent.well_coll.get_uid_well_locid(uid)])  # self.GeologyTreeWidget as parent -> top level
+                    self.parent.entities_db.collection_by_name('well').get_uid_well_locid(uid)])  # self.GeologyTreeWidget as parent -> top level
                 tlevel_1.setFlags(tlevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
 
                 property_combo = QComboBox()
@@ -1621,7 +1604,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                 property_combo.addItem("X")
                 property_combo.addItem("Y")
                 property_combo.addItem("Z")
-                for prop in self.parent.well_coll.get_uid_properties_names(uid):
+                for prop in self.parent.entities_db.collection_by_name('well').get_uid_properties_names(uid):
                     if prop == 'LITHOLOGY':
                         pass
                     elif prop == 'GEOLOGY':
@@ -1693,50 +1676,50 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.FluidsTreeWidget.setItemsExpandable(True)
         if sec_uid:
             fluid_types = pd_unique(
-                self.parent.fluids_coll.df.loc[(self.parent.fluids_coll.df['x_section'] == sec_uid), 'fluid_type'])
+                self.parent.entities_db.collection_by_name('fluids').df.loc[(self.parent.entities_db.collection_by_name('fluids').df['x_section'] == sec_uid), 'fluid_type'])
         else:
-            fluid_types = pd_unique(self.parent.fluids_coll.df['fluid_type'])
+            fluid_types = pd_unique(self.parent.entities_db.collection_by_name('fluids').df['fluid_type'])
         for fluid_type in fluid_types:
             flevel_1 = QTreeWidgetItem(self.FluidsTreeWidget,
                                        [fluid_type])  # self.FluidsTreeWidget as parent -> top level
             flevel_1.setFlags(flevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
             if sec_uid:
-                fluid_features = pd_unique(self.parent.fluids_coll.df.loc[
-                                               (self.parent.fluids_coll.df['fluid_type'] == fluid_type) & (
-                                                       self.parent.fluids_coll.df[
+                fluid_features = pd_unique(self.parent.entities_db.collection_by_name('fluids').df.loc[
+                                               (self.parent.entities_db.collection_by_name('fluids').df['fluid_type'] == fluid_type) & (
+                                                       self.parent.entities_db.collection_by_name('fluids').df[
                                                            'x_section'] == sec_uid), 'fluid_feature'])
             else:
-                fluid_features = pd_unique(self.parent.fluids_coll.df.loc[
-                                               self.parent.fluids_coll.df['fluid_type'] == fluid_type, 'fluid_feature'])
+                fluid_features = pd_unique(self.parent.entities_db.collection_by_name('fluids').df.loc[
+                                               self.parent.entities_db.collection_by_name('fluids').df['fluid_type'] == fluid_type, 'fluid_feature'])
             for feature in fluid_features:
                 flevel_2 = QTreeWidgetItem(flevel_1, [feature])  # flevel_1 as parent -> 1st middle level
                 flevel_2.setFlags(flevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
                 if sec_uid:
-                    fluid_scenario = pd_unique(self.parent.fluids_coll.df.loc[
-                                                   (self.parent.fluids_coll.df['fluid_type'] == fluid_type) & (
-                                                           self.parent.fluids_coll.df[
+                    fluid_scenario = pd_unique(self.parent.entities_db.collection_by_name('fluids').df.loc[
+                                                   (self.parent.entities_db.collection_by_name('fluids').df['fluid_type'] == fluid_type) & (
+                                                           self.parent.entities_db.collection_by_name('fluids').df[
                                                                'fluid_feature'] == feature) & (
-                                                           self.parent.fluids_coll.df[
+                                                           self.parent.entities_db.collection_by_name('fluids').df[
                                                                'x_section'] == sec_uid), 'scenario'])
                 else:
-                    fluid_scenario = pd_unique(self.parent.fluids_coll.df.loc[
-                                                   (self.parent.fluids_coll.df['fluid_type'] == fluid_type) & (
-                                                           self.parent.fluids_coll.df[
+                    fluid_scenario = pd_unique(self.parent.entities_db.collection_by_name('fluids').df.loc[
+                                                   (self.parent.entities_db.collection_by_name('fluids').df['fluid_type'] == fluid_type) & (
+                                                           self.parent.entities_db.collection_by_name('fluids').df[
                                                                'fluid_feature'] == feature), 'scenario'])
                 for scenario in fluid_scenario:
                     flevel_3 = QTreeWidgetItem(flevel_2, [scenario])  # flevel_2 as parent -> 2nd middle level
                     flevel_3.setFlags(flevel_3.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
                     if sec_uid:
-                        uids = self.parent.fluids_coll.df.loc[
-                            (self.parent.fluids_coll.df['fluid_type'] == fluid_type) & (
-                                    self.parent.fluids_coll.df['fluid_feature'] == feature) & (
-                                    self.parent.fluids_coll.df['scenario'] == scenario) & (
-                                    self.parent.fluids_coll.df['x_section'] == sec_uid), 'uid'].to_list()
+                        uids = self.parent.entities_db.collection_by_name('fluids').df.loc[
+                            (self.parent.entities_db.collection_by_name('fluids').df['fluid_type'] == fluid_type) & (
+                                    self.parent.entities_db.collection_by_name('fluids').df['fluid_feature'] == feature) & (
+                                    self.parent.entities_db.collection_by_name('fluids').df['scenario'] == scenario) & (
+                                    self.parent.entities_db.collection_by_name('fluids').df['x_section'] == sec_uid), 'uid'].to_list()
                     else:
-                        uids = self.parent.fluids_coll.df.loc[
-                            (self.parent.fluids_coll.df['fluid_type'] == fluid_type) & (
-                                    self.parent.fluids_coll.df['fluid_feature'] == feature) & (
-                                    self.parent.fluids_coll.df['scenario'] == scenario), 'uid'].to_list()
+                        uids = self.parent.entities_db.collection_by_name('fluids').df.loc[
+                            (self.parent.entities_db.collection_by_name('fluids').df['fluid_type'] == fluid_type) & (
+                                    self.parent.entities_db.collection_by_name('fluids').df['fluid_feature'] == feature) & (
+                                    self.parent.entities_db.collection_by_name('fluids').df['scenario'] == scenario), 'uid'].to_list()
                     for uid in uids:
                         property_combo = QComboBox()
                         property_combo.uid = uid
@@ -1744,10 +1727,10 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                         property_combo.addItem("X")
                         property_combo.addItem("Y")
                         property_combo.addItem("Z")
-                        for prop in self.parent.fluids_coll.get_uid_properties_names(uid):
+                        for prop in self.parent.entities_db.collection_by_name('fluids').get_uid_properties_names(uid):
                             property_combo.addItem(prop)
                         name = \
-                            self.parent.fluids_coll.df.loc[(self.parent.fluids_coll.df['uid'] == uid), 'name'].values[0]
+                            self.parent.entities_db.collection_by_name('fluids').df.loc[(self.parent.entities_db.collection_by_name('fluids').df['uid'] == uid), 'name'].values[0]
                         flevel_4 = QTreeWidgetItem(flevel_3, [name, uid])  # flevel_3 as parent -> lower level
                         self.FluidsTreeWidget.setItemWidget(flevel_4, 2, property_combo)
                         property_combo.currentIndexChanged.connect(lambda: self.toggle_property())
@@ -1770,29 +1753,29 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.FluidsTopologyTreeWidget.setItemsExpandable(True)
 
         if sec_uid:
-            filtered_topo = self.parent.fluids_coll.df.loc[
-                (self.parent.fluids_coll.df['x_section'] == sec_uid), 'topological_type']
+            filtered_topo = self.parent.entities_db.collection_by_name('fluids').df.loc[
+                (self.parent.entities_db.collection_by_name('fluids').df['x_section'] == sec_uid), 'topological_type']
             topo_types = pd_unique(filtered_topo)
         else:
-            topo_types = pd_unique(self.parent.fluids_coll.df['topological_type'])
+            topo_types = pd_unique(self.parent.entities_db.collection_by_name('fluids').df['topological_type'])
 
         for topo_type in topo_types:
             tlevel_1 = QTreeWidgetItem(self.FluidsTopologyTreeWidget,
                                        [topo_type])  # self.GeologyTreeWidget as parent -> top level
             tlevel_1.setFlags(tlevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
-            for scenario in pd_unique(self.parent.fluids_coll.df.loc[
-                                          self.parent.fluids_coll.df['topological_type'] == topo_type, 'scenario']):
+            for scenario in pd_unique(self.parent.entities_db.collection_by_name('fluids').df.loc[
+                                          self.parent.entities_db.collection_by_name('fluids').df['topological_type'] == topo_type, 'scenario']):
                 tlevel_2 = QTreeWidgetItem(tlevel_1, [scenario])  # tlevel_1 as parent -> middle level
                 tlevel_2.setFlags(tlevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
                 if sec_uid:
-                    uids = self.parent.fluids_coll.df.loc[
-                        (self.parent.fluids_coll.df['topological_type'] == topo_type) & (
-                                self.parent.fluids_coll.df['scenario'] == scenario) & (
-                                self.parent.fluids_coll.df['x_section'] == sec_uid), 'uid'].to_list()
+                    uids = self.parent.entities_db.collection_by_name('fluids').df.loc[
+                        (self.parent.entities_db.collection_by_name('fluids').df['topological_type'] == topo_type) & (
+                                self.parent.entities_db.collection_by_name('fluids').df['scenario'] == scenario) & (
+                                self.parent.entities_db.collection_by_name('fluids').df['x_section'] == sec_uid), 'uid'].to_list()
                 else:
-                    uids = self.parent.fluids_coll.df.loc[
-                        (self.parent.fluids_coll.df['topological_type'] == topo_type) & (
-                                self.parent.fluids_coll.df['scenario'] == scenario), 'uid'].to_list()
+                    uids = self.parent.entities_db.collection_by_name('fluids').df.loc[
+                        (self.parent.entities_db.collection_by_name('fluids').df['topological_type'] == topo_type) & (
+                                self.parent.entities_db.collection_by_name('fluids').df['scenario'] == scenario), 'uid'].to_list()
                 for uid in uids:
                     property_combo = QComboBox()
                     property_combo.uid = uid
@@ -1800,9 +1783,9 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                     property_combo.addItem("X")
                     property_combo.addItem("Y")
                     property_combo.addItem("Z")
-                    for prop in self.parent.fluids_coll.get_uid_properties_names(uid):
+                    for prop in self.parent.entities_db.collection_by_name('fluids').get_uid_properties_names(uid):
                         property_combo.addItem(prop)
-                    name = self.parent.fluids_coll.df.loc[self.parent.fluids_coll.df['uid'] == uid, 'name'].values[0]
+                    name = self.parent.entities_db.collection_by_name('fluids').df.loc[self.parent.entities_db.collection_by_name('fluids').df['uid'] == uid, 'name'].values[0]
                     tlevel_3 = QTreeWidgetItem(tlevel_2, [name, uid])  # tlevel_2 as parent -> lower level
                     self.FluidsTopologyTreeWidget.setItemWidget(tlevel_3, 2, property_combo)
                     property_combo.currentIndexChanged.connect(lambda: self.toggle_property())
@@ -1822,46 +1805,46 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         if sec_uid:
             for i, uid in enumerate(new_list['uid']):
                 if sec_uid != \
-                        self.parent.fluids_coll.df.loc[self.parent.fluids_coll.df['uid'] == uid, 'x_section'].values[0]:
+                        self.parent.entities_db.collection_by_name('fluids').df.loc[self.parent.entities_db.collection_by_name('fluids').df['uid'] == uid, 'x_section'].values[0]:
                     del uid_list[i]
         for uid in uid_list:
-            if self.FluidsTreeWidget.findItems(self.parent.fluids_coll.get_uid_fluid_type(uid), Qt.MatchExactly,
+            if self.FluidsTreeWidget.findItems(self.parent.entities_db.collection_by_name('fluids').get_uid_fluid_type(uid), Qt.MatchExactly,
                                                0) != []:
                 """Already exists a TreeItem (1 level) for the fluid type"""
                 counter_1 = 0
-                for child_1 in range(self.FluidsTreeWidget.findItems(self.parent.fluids_coll.get_uid_fluid_type(uid),
+                for child_1 in range(self.FluidsTreeWidget.findItems(self.parent.entities_db.collection_by_name('fluids').get_uid_fluid_type(uid),
                                                                      Qt.MatchExactly, 0)[0].childCount()):
                     """for cycle that loops n times as the number of subItems in the specific fluid type branch"""
-                    if self.FluidsTreeWidget.findItems(self.parent.fluids_coll.get_uid_fluid_type(uid), Qt.MatchExactly,
+                    if self.FluidsTreeWidget.findItems(self.parent.entities_db.collection_by_name('fluids').get_uid_fluid_type(uid), Qt.MatchExactly,
                                                        0)[0].child(child_1).text(
-                        0) == self.parent.fluids_coll.get_uid_fluid_feature(uid):
+                        0) == self.parent.entities_db.collection_by_name('fluids').get_uid_fluid_feature(uid):
                         counter_1 += 1
                 if counter_1 != 0:
                     for child_1 in range(
-                            self.FluidsTreeWidget.findItems(self.parent.fluids_coll.get_uid_fluid_type(uid),
+                            self.FluidsTreeWidget.findItems(self.parent.entities_db.collection_by_name('fluids').get_uid_fluid_type(uid),
                                                             Qt.MatchExactly, 0)[0].childCount()):
-                        if self.FluidsTreeWidget.findItems(self.parent.fluids_coll.get_uid_fluid_type(uid),
+                        if self.FluidsTreeWidget.findItems(self.parent.entities_db.collection_by_name('fluids').get_uid_fluid_type(uid),
                                                            Qt.MatchExactly, 0)[0].child(child_1).text(
-                            0) == self.parent.fluids_coll.get_uid_fluid_feature(uid):
+                            0) == self.parent.entities_db.collection_by_name('fluids').get_uid_fluid_feature(uid):
                             """Already exists a TreeItem (2 level) for the fluid feature"""
                             counter_2 = 0
                             for child_2 in range(self.FluidsTreeWidget.itemBelow(
-                                    self.FluidsTreeWidget.findItems(self.parent.fluids_coll.get_uid_fluid_type(uid),
+                                    self.FluidsTreeWidget.findItems(self.parent.entities_db.collection_by_name('fluids').get_uid_fluid_type(uid),
                                                                     Qt.MatchExactly, 0)[0]).childCount()):
                                 """for cycle that loops n times as the number of sub-subItems in the specific fluid type and fluid feature branch"""
                                 if self.FluidsTreeWidget.itemBelow(
-                                        self.FluidsTreeWidget.findItems(self.parent.fluids_coll.get_uid_fluid_type(uid),
+                                        self.FluidsTreeWidget.findItems(self.parent.entities_db.collection_by_name('fluids').get_uid_fluid_type(uid),
                                                                         Qt.MatchExactly, 0)[0]).child(child_2).text(
-                                    0) == self.parent.fluids_coll.get_uid_scenario(uid):
+                                    0) == self.parent.entities_db.collection_by_name('fluids').get_uid_scenario(uid):
                                     counter_2 += 1
                             if counter_2 != 0:
                                 for child_2 in range(self.FluidsTreeWidget.itemBelow(
-                                        self.FluidsTreeWidget.findItems(self.parent.fluids_coll.get_uid_fluid_type(uid),
+                                        self.FluidsTreeWidget.findItems(self.parent.entities_db.collection_by_name('fluids').get_uid_fluid_type(uid),
                                                                         Qt.MatchExactly, 0)[0]).childCount()):
                                     if self.FluidsTreeWidget.itemBelow(self.FluidsTreeWidget.findItems(
-                                            self.parent.fluids_coll.get_uid_fluid_type(uid), Qt.MatchExactly, 0)[
+                                            self.parent.entities_db.collection_by_name('fluids').get_uid_fluid_type(uid), Qt.MatchExactly, 0)[
                                                                            0]).child(child_2).text(
-                                        0) == self.parent.fluids_coll.get_uid_scenario(uid):
+                                        0) == self.parent.entities_db.collection_by_name('fluids').get_uid_scenario(uid):
                                         """Same fluid type, fluid feature and scenario"""
                                         property_combo = QComboBox()
                                         property_combo.uid = uid
@@ -1869,11 +1852,11 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                                         property_combo.addItem("X")
                                         property_combo.addItem("Y")
                                         property_combo.addItem("Z")
-                                        for prop in self.parent.fluids_coll.get_uid_properties_names(uid):
+                                        for prop in self.parent.entities_db.collection_by_name('fluids').get_uid_properties_names(uid):
                                             property_combo.addItem(prop)
-                                        name = self.parent.fluids_coll.get_uid_name(uid)
+                                        name = self.parent.entities_db.collection_by_name('fluids').get_uid_name(uid)
                                         flevel_4 = QTreeWidgetItem(self.FluidsTreeWidget.findItems(
-                                            self.parent.fluids_coll.get_uid_fluid_type(uid), Qt.MatchExactly, 0)[
+                                            self.parent.entities_db.collection_by_name('fluids').get_uid_fluid_type(uid), Qt.MatchExactly, 0)[
                                                                        0].child(child_1).child(child_2), [name, uid])
                                         self.FluidsTreeWidget.setItemWidget(flevel_4, 2, property_combo)
                                         property_combo.currentIndexChanged.connect(lambda: self.toggle_property())
@@ -1887,9 +1870,9 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                             else:
                                 """Same fluid type and fluid feature, different scenario"""
                                 flevel_3 = QTreeWidgetItem(
-                                    self.FluidsTreeWidget.findItems(self.parent.fluids_coll.get_uid_fluid_type(uid),
+                                    self.FluidsTreeWidget.findItems(self.parent.entities_db.collection_by_name('fluids').get_uid_fluid_type(uid),
                                                                     Qt.MatchExactly, 0)[0].child(child_1),
-                                    [self.parent.fluids_coll.get_uid_scenario(uid)])
+                                    [self.parent.entities_db.collection_by_name('fluids').get_uid_scenario(uid)])
                                 flevel_3.setFlags(flevel_3.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
                                 self.FluidsTreeWidget.insertTopLevelItem(0, flevel_3)
                                 property_combo = QComboBox()
@@ -1898,9 +1881,9 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                                 property_combo.addItem("X")
                                 property_combo.addItem("Y")
                                 property_combo.addItem("Z")
-                                for prop in self.parent.fluids_coll.get_uid_properties_names(uid):
+                                for prop in self.parent.entities_db.collection_by_name('fluids').get_uid_properties_names(uid):
                                     property_combo.addItem(prop)
-                                name = self.parent.fluids_coll.get_uid_name(uid)
+                                name = self.parent.entities_db.collection_by_name('fluids').get_uid_name(uid)
                                 flevel_4 = QTreeWidgetItem(flevel_3, [name, uid])
                                 self.FluidsTreeWidget.setItemWidget(flevel_4, 2, property_combo)
                                 property_combo.currentIndexChanged.connect(lambda: self.toggle_property())
@@ -1914,12 +1897,12 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                 else:
                     """Same fluid type, different fluid feature and scenario"""
                     flevel_2 = QTreeWidgetItem(
-                        self.FluidsTreeWidget.findItems(self.parent.fluids_coll.get_uid_fluid_type(uid),
+                        self.FluidsTreeWidget.findItems(self.parent.entities_db.collection_by_name('fluids').get_uid_fluid_type(uid),
                                                         Qt.MatchExactly, 0)[0],
-                        [self.parent.fluids_coll.get_uid_fluid_feature(uid)])
+                        [self.parent.entities_db.collection_by_name('fluids').get_uid_fluid_feature(uid)])
                     flevel_2.setFlags(flevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
                     self.FluidsTreeWidget.insertTopLevelItem(0, flevel_2)
-                    flevel_3 = QTreeWidgetItem(flevel_2, [self.parent.fluids_coll.get_uid_scenario(uid)])
+                    flevel_3 = QTreeWidgetItem(flevel_2, [self.parent.entities_db.collection_by_name('fluids').get_uid_scenario(uid)])
                     flevel_3.setFlags(flevel_3.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
                     self.FluidsTreeWidget.insertTopLevelItem(0, flevel_3)
                     property_combo = QComboBox()
@@ -1928,9 +1911,9 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                     property_combo.addItem("X")
                     property_combo.addItem("Y")
                     property_combo.addItem("Z")
-                    for prop in self.parent.fluids_coll.get_uid_properties_names(uid):
+                    for prop in self.parent.entities_db.collection_by_name('fluids').get_uid_properties_names(uid):
                         property_combo.addItem(prop)
-                    name = self.parent.fluids_coll.get_uid_name(uid)
+                    name = self.parent.entities_db.collection_by_name('fluids').get_uid_name(uid)
                     flevel_4 = QTreeWidgetItem(flevel_3, [name, uid])
                     self.FluidsTreeWidget.setItemWidget(flevel_4, 2, property_combo)
                     property_combo.currentIndexChanged.connect(lambda: self.toggle_property())
@@ -1943,13 +1926,13 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                     break
             else:
                 """Different fluid type, fluid feature and scenario"""
-                flevel_1 = QTreeWidgetItem(self.FluidsTreeWidget, [self.parent.fluids_coll.get_uid_fluid_type(uid)])
+                flevel_1 = QTreeWidgetItem(self.FluidsTreeWidget, [self.parent.entities_db.collection_by_name('fluids').get_uid_fluid_type(uid)])
                 flevel_1.setFlags(flevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
                 self.FluidsTreeWidget.insertTopLevelItem(0, flevel_1)
-                flevel_2 = QTreeWidgetItem(flevel_1, [self.parent.fluids_coll.get_uid_fluid_feature(uid)])
+                flevel_2 = QTreeWidgetItem(flevel_1, [self.parent.entities_db.collection_by_name('fluids').get_uid_fluid_feature(uid)])
                 flevel_2.setFlags(flevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
                 self.FluidsTreeWidget.insertTopLevelItem(0, flevel_2)
-                flevel_3 = QTreeWidgetItem(flevel_2, [self.parent.fluids_coll.get_uid_scenario(uid)])
+                flevel_3 = QTreeWidgetItem(flevel_2, [self.parent.entities_db.collection_by_name('fluids').get_uid_scenario(uid)])
                 flevel_3.setFlags(flevel_3.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
                 self.FluidsTreeWidget.insertTopLevelItem(0, flevel_3)
                 property_combo = QComboBox()
@@ -1958,9 +1941,9 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                 property_combo.addItem("X")
                 property_combo.addItem("Y")
                 property_combo.addItem("Z")
-                for prop in self.parent.fluids_coll.get_uid_properties_names(uid):
+                for prop in self.parent.entities_db.collection_by_name('fluids').get_uid_properties_names(uid):
                     property_combo.addItem(prop)
-                name = self.parent.fluids_coll.get_uid_name(uid)
+                name = self.parent.entities_db.collection_by_name('fluids').get_uid_name(uid)
                 flevel_4 = QTreeWidgetItem(flevel_3, [name, uid])
                 self.FluidsTreeWidget.setItemWidget(flevel_4, 2, property_combo)
                 property_combo.currentIndexChanged.connect(lambda: self.toggle_property())
@@ -2022,30 +2005,30 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         uid_list = list(new_list['uid'])
         if sec_uid:
             for i, uid in enumerate(new_list['uid']):
-                if sec_uid != self.parent.geol_coll.df.loc[self.parent.geol_coll.df['uid'] == uid, 'x_section'].values[
+                if sec_uid != self.parent.entities_db.collection_by_name('geol').df.loc[self.parent.entities_db.collection_by_name('geol').df['uid'] == uid, 'x_section'].values[
                     0]:
                     del uid_list[i]
         for uid in uid_list:
-            if self.FluidsTopologyTreeWidget.findItems(self.parent.fluids_coll.get_uid_topological_type(uid),
+            if self.FluidsTopologyTreeWidget.findItems(self.parent.entities_db.collection_by_name('fluids').get_uid_topological_type(uid),
                                                        Qt.MatchExactly, 0) != []:
                 """Already exists a TreeItem (1 level) for the topological type"""
                 counter_1 = 0
                 for child_1 in range(
-                        self.FluidsTopologyTreeWidget.findItems(self.parent.fluids_coll.get_uid_topological_type(uid),
+                        self.FluidsTopologyTreeWidget.findItems(self.parent.entities_db.collection_by_name('fluids').get_uid_topological_type(uid),
                                                                 Qt.MatchExactly, 0)[0].childCount()):
                     """for cycle that loops n times as the number of subItems in the specific topological type branch"""
-                    if self.FluidsTopologyTreeWidget.findItems(self.parent.fluids_coll.get_uid_topological_type(uid),
+                    if self.FluidsTopologyTreeWidget.findItems(self.parent.entities_db.collection_by_name('fluids').get_uid_topological_type(uid),
                                                                Qt.MatchExactly, 0)[0].child(child_1).text(
-                        0) == self.parent.fluids_coll.get_uid_scenario(uid):
+                        0) == self.parent.entities_db.collection_by_name('fluids').get_uid_scenario(uid):
                         counter_1 += 1
                 if counter_1 != 0:
                     for child_1 in range(self.FluidsTopologyTreeWidget.findItems(
-                            self.parent.fluids_coll.get_uid_topological_type(uid), Qt.MatchExactly, 0)[0].childCount()):
+                            self.parent.entities_db.collection_by_name('fluids').get_uid_topological_type(uid), Qt.MatchExactly, 0)[0].childCount()):
                         if \
                                 self.FluidsTopologyTreeWidget.findItems(
-                                    self.parent.fluids_coll.get_uid_topological_type(uid),
+                                    self.parent.entities_db.collection_by_name('fluids').get_uid_topological_type(uid),
                                     Qt.MatchExactly, 0)[0].child(child_1).text(
-                                    0) == self.parent.fluids_coll.get_uid_scenario(uid):
+                                    0) == self.parent.entities_db.collection_by_name('fluids').get_uid_scenario(uid):
                             """Same topological type and scenario"""
                             property_combo = QComboBox()
                             property_combo.uid = uid
@@ -2053,11 +2036,11 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                             property_combo.addItem("X")
                             property_combo.addItem("Y")
                             property_combo.addItem("Z")
-                            for prop in self.parent.fluids_coll.get_uid_properties_names(uid):
+                            for prop in self.parent.entities_db.collection_by_name('fluids').get_uid_properties_names(uid):
                                 property_combo.addItem(prop)
-                            name = self.parent.fluids_coll.get_uid_name(uid)
+                            name = self.parent.entities_db.collection_by_name('fluids').get_uid_name(uid)
                             tlevel_3 = QTreeWidgetItem(self.FluidsTopologyTreeWidget.findItems(
-                                self.parent.fluids_coll.get_uid_topological_type(uid), Qt.MatchExactly, 0)[0].child(
+                                self.parent.entities_db.collection_by_name('fluids').get_uid_topological_type(uid), Qt.MatchExactly, 0)[0].child(
                                 child_1), [name, uid])
                             self.FluidsTopologyTreeWidget.setItemWidget(tlevel_3, 2, property_combo)
                             property_combo.currentIndexChanged.connect(lambda: self.toggle_property())
@@ -2071,9 +2054,9 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                 else:
                     """Same topological type, different scenario"""
                     tlevel_2 = QTreeWidgetItem(
-                        self.FluidsTopologyTreeWidget.findItems(self.parent.fluids_coll.get_uid_topological_type(uid),
+                        self.FluidsTopologyTreeWidget.findItems(self.parent.entities_db.collection_by_name('fluids').get_uid_topological_type(uid),
                                                                 Qt.MatchExactly, 0)[0],
-                        [self.parent.fluids_coll.get_uid_scenario(uid)])
+                        [self.parent.entities_db.collection_by_name('fluids').get_uid_scenario(uid)])
                     tlevel_2.setFlags(tlevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
                     self.FluidsTopologyTreeWidget.insertTopLevelItem(0, tlevel_2)
                     property_combo = QComboBox()
@@ -2082,9 +2065,9 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                     property_combo.addItem("X")
                     property_combo.addItem("Y")
                     property_combo.addItem("Z")
-                    for prop in self.parent.fluids_coll.get_uid_properties_names(uid):
+                    for prop in self.parent.entities_db.collection_by_name('fluids').get_uid_properties_names(uid):
                         property_combo.addItem(prop)
-                    name = self.parent.fluids_coll.get_uid_name(uid)
+                    name = self.parent.entities_db.collection_by_name('fluids').get_uid_name(uid)
                     tlevel_3 = QTreeWidgetItem(tlevel_2, [name, uid])
                     self.FluidsTopologyTreeWidget.setItemWidget(tlevel_3, 2, property_combo)
                     property_combo.currentIndexChanged.connect(lambda: self.toggle_property())
@@ -2098,10 +2081,10 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             else:
                 """Different topological type and scenario"""
                 tlevel_1 = QTreeWidgetItem(self.FluidsTopologyTreeWidget,
-                                           [self.parent.fluids_coll.get_uid_topological_type(uid)])
+                                           [self.parent.entities_db.collection_by_name('fluids').get_uid_topological_type(uid)])
                 tlevel_1.setFlags(tlevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
                 self.FluidsTopologyTreeWidget.insertTopLevelItem(0, tlevel_1)
-                tlevel_2 = QTreeWidgetItem(tlevel_1, [self.parent.fluids_coll.get_uid_scenario(uid)])
+                tlevel_2 = QTreeWidgetItem(tlevel_1, [self.parent.entities_db.collection_by_name('fluids').get_uid_scenario(uid)])
                 tlevel_2.setFlags(tlevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
                 self.FluidsTopologyTreeWidget.insertTopLevelItem(0, tlevel_2)
                 property_combo = QComboBox()
@@ -2110,9 +2093,9 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                 property_combo.addItem("X")
                 property_combo.addItem("Y")
                 property_combo.addItem("Z")
-                for prop in self.parent.fluids_coll.get_uid_properties_names(uid):
+                for prop in self.parent.entities_db.collection_by_name('fluids').get_uid_properties_names(uid):
                     property_combo.addItem(prop)
-                name = self.parent.fluids_coll.get_uid_name(uid)
+                name = self.parent.entities_db.collection_by_name('fluids').get_uid_name(uid)
                 tlevel_3 = QTreeWidgetItem(tlevel_2, [name, uid])
                 self.FluidsTopologyTreeWidget.setItemWidget(tlevel_3, 2, property_combo)
                 property_combo.currentIndexChanged.connect(lambda: self.toggle_property())
@@ -2206,45 +2189,45 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.BackgroundsTreeWidget.hideColumn(1)  # hide the uid column
         self.BackgroundsTreeWidget.setItemsExpandable(True)
         if sec_uid:
-            background_types = pd_unique(self.parent.backgrounds_coll.df.loc[(
-                    self.parent.backgrounds_coll.df['x_section'] == sec_uid), 'background_type'])
+            background_types = pd_unique(self.parent.entities_db.collection_by_name('backgrounds').df.loc[(
+                    self.parent.entities_db.collection_by_name('backgrounds').df['x_section'] == sec_uid), 'background_type'])
         else:
-            background_types = pd_unique(self.parent.backgrounds_coll.df['background_type'])
+            background_types = pd_unique(self.parent.entities_db.collection_by_name('backgrounds').df['background_type'])
         for background_type in background_types:
             flevel_1 = QTreeWidgetItem(self.BackgroundsTreeWidget,
                                        [background_type])  # self.BackgroundsTreeWidget as parent -> top level
             flevel_1.setFlags(flevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
             if sec_uid:
-                background_features = pd_unique(self.parent.backgrounds_coll.df.loc[(self.parent.backgrounds_coll.df[
+                background_features = pd_unique(self.parent.entities_db.collection_by_name('backgrounds').df.loc[(self.parent.entities_db.collection_by_name('backgrounds').df[
                                                                                          'background_type'] == background_type) & (
-                                                                                            self.parent.backgrounds_coll.df[
+                                                                                            self.parent.entities_db.collection_by_name('backgrounds').df[
                                                                                                 'x_section'] == sec_uid), 'background_feature'])
             else:
-                background_features = pd_unique(self.parent.backgrounds_coll.df.loc[self.parent.backgrounds_coll.df[
+                background_features = pd_unique(self.parent.entities_db.collection_by_name('backgrounds').df.loc[self.parent.entities_db.collection_by_name('backgrounds').df[
                                                                                         'background_type'] == background_type, 'background_feature'])
             for feature in background_features:
                 flevel_2 = QTreeWidgetItem(flevel_1, [feature])  # flevel_1 as parent -> 1st middle level
                 flevel_2.setFlags(flevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
                 if sec_uid:
-                    uids = self.parent.backgrounds_coll.df.loc[
-                        (self.parent.backgrounds_coll.df['background_type'] == background_type) & (
-                                self.parent.backgrounds_coll.df['background_feature'] == feature) & (
-                                self.parent.backgrounds_coll.df['x_section'] == sec_uid), 'uid'].to_list()
+                    uids = self.parent.entities_db.collection_by_name('backgrounds').df.loc[
+                        (self.parent.entities_db.collection_by_name('backgrounds').df['background_type'] == background_type) & (
+                                self.parent.entities_db.collection_by_name('backgrounds').df['background_feature'] == feature) & (
+                                self.parent.entities_db.collection_by_name('backgrounds').df['x_section'] == sec_uid), 'uid'].to_list()
                 else:
-                    uids = self.parent.backgrounds_coll.df.loc[
-                        (self.parent.backgrounds_coll.df['background_type'] == background_type) & (
-                                self.parent.backgrounds_coll.df['background_feature'] == feature), 'uid'].to_list()
+                    uids = self.parent.entities_db.collection_by_name('backgrounds').df.loc[
+                        (self.parent.entities_db.collection_by_name('backgrounds').df['background_type'] == background_type) & (
+                                self.parent.entities_db.collection_by_name('backgrounds').df['background_feature'] == feature), 'uid'].to_list()
                 for uid in uids:
                     property_combo = QComboBox()
                     property_combo.uid = uid
                     property_combo.name = 'Annotations'
                     property_combo.addItem("none")
                     property_combo.addItem("name")
-                    for prop in self.parent.backgrounds_coll.get_uid_properties_names(uid):
+                    for prop in self.parent.entities_db.collection_by_name('backgrounds').get_uid_properties_names(uid):
                         property_combo.addItem(prop)
                     name = \
-                        self.parent.backgrounds_coll.df.loc[
-                            (self.parent.backgrounds_coll.df['uid'] == uid), 'name'].values[
+                        self.parent.entities_db.collection_by_name('backgrounds').df.loc[
+                            (self.parent.entities_db.collection_by_name('backgrounds').df['uid'] == uid), 'name'].values[
                             0]
                     flevel_3 = QTreeWidgetItem(flevel_2, [name, uid])  # flevel_3 as parent -> lower level
                     self.BackgroundsTreeWidget.setItemWidget(flevel_3, 2, property_combo)
@@ -2267,29 +2250,29 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.BackgroundsTopologyTreeWidget.hideColumn(1)  # hide the uid column
         self.BackgroundsTopologyTreeWidget.setItemsExpandable(True)
         if sec_uid:
-            filtered_topo = self.parent.backgrounds_coll.df.loc[
-                (self.parent.backgrounds_coll.df['x_section'] == sec_uid), 'topological_type']
+            filtered_topo = self.parent.entities_db.collection_by_name('backgrounds').df.loc[
+                (self.parent.entities_db.collection_by_name('backgrounds').df['x_section'] == sec_uid), 'topological_type']
             topo_types = pd_unique(filtered_topo)
         else:
-            topo_types = pd_unique(self.parent.backgrounds_coll.df['topological_type'])
+            topo_types = pd_unique(self.parent.entities_db.collection_by_name('backgrounds').df['topological_type'])
         for topo_type in topo_types:
             tlevel_1 = QTreeWidgetItem(self.BackgroundsTopologyTreeWidget,
                                        [topo_type])  # self.GeologyTreeWidget as parent -> top level
             tlevel_1.setFlags(tlevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
 
-            for background_type in pd_unique(self.parent.backgrounds_coll.df.loc[self.parent.backgrounds_coll.df[
+            for background_type in pd_unique(self.parent.entities_db.collection_by_name('backgrounds').df.loc[self.parent.entities_db.collection_by_name('backgrounds').df[
                                                                                      'topological_type'] == topo_type, 'background_type']):
                 tlevel_2 = QTreeWidgetItem(tlevel_1, [background_type])  # tlevel_1 as parent -> middle level
                 tlevel_2.setFlags(tlevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
                 if sec_uid:
-                    uids = self.parent.backgrounds_coll.df.loc[
-                        (self.parent.backgrounds_coll.df['topological_type'] == topo_type) & (
-                                self.parent.backgrounds_coll.df['background_type'] == background_type) & (
-                                self.parent.backgrounds_coll.df['x_section'] == sec_uid), 'uid'].to_list()
+                    uids = self.parent.entities_db.collection_by_name('backgrounds').df.loc[
+                        (self.parent.entities_db.collection_by_name('backgrounds').df['topological_type'] == topo_type) & (
+                                self.parent.entities_db.collection_by_name('backgrounds').df['background_type'] == background_type) & (
+                                self.parent.entities_db.collection_by_name('backgrounds').df['x_section'] == sec_uid), 'uid'].to_list()
                 else:
-                    uids = self.parent.backgrounds_coll.df.loc[
-                        (self.parent.backgrounds_coll.df['topological_type'] == topo_type) & (
-                                self.parent.backgrounds_coll.df[
+                    uids = self.parent.entities_db.collection_by_name('backgrounds').df.loc[
+                        (self.parent.entities_db.collection_by_name('backgrounds').df['topological_type'] == topo_type) & (
+                                self.parent.entities_db.collection_by_name('backgrounds').df[
                                     'background_type'] == background_type), 'uid'].to_list()
                 for uid in uids:
                     property_combo = QComboBox()
@@ -2297,11 +2280,11 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                     property_combo.name = 'Annotations'
                     property_combo.addItem("none")
                     property_combo.addItem("name")
-                    for prop in self.parent.backgrounds_coll.get_uid_properties_names(uid):
+                    for prop in self.parent.entities_db.collection_by_name('backgrounds').get_uid_properties_names(uid):
                         property_combo.addItem(prop)
                     name = \
-                        self.parent.backgrounds_coll.df.loc[
-                            self.parent.backgrounds_coll.df['uid'] == uid, 'name'].values[0]
+                        self.parent.entities_db.collection_by_name('backgrounds').df.loc[
+                            self.parent.entities_db.collection_by_name('backgrounds').df['uid'] == uid, 'name'].values[0]
                     tlevel_3 = QTreeWidgetItem(tlevel_2, [name, uid])  # tlevel_2 as parent -> lower level
                     self.BackgroundsTopologyTreeWidget.setItemWidget(tlevel_3, 2, property_combo)
                     property_combo.currentIndexChanged.connect(lambda: self.toggle_property())
@@ -2321,31 +2304,31 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         uid_list = list(new_list['uid'])
         if sec_uid:
             for i, uid in enumerate(new_list['uid']):
-                if sec_uid != self.parent.backgrounds_coll.df.loc[
-                    self.parent.backgrounds_coll.df['uid'] == uid, 'x_section'].values[0]:
+                if sec_uid != self.parent.entities_db.collection_by_name('backgrounds').df.loc[
+                    self.parent.entities_db.collection_by_name('backgrounds').df['uid'] == uid, 'x_section'].values[0]:
                     del uid_list[i]
         for uid in uid_list:
-            if self.BackgroundsTreeWidget.findItems(self.parent.backgrounds_coll.get_uid_background_type(uid),
+            if self.BackgroundsTreeWidget.findItems(self.parent.entities_db.collection_by_name('backgrounds').get_uid_background_type(uid),
                                                     Qt.MatchExactly, 0) != []:
                 """Already exists a TreeItem (1 level) for the background type"""
                 counter_1 = 0
                 for child_1 in range(
-                        self.BackgroundsTreeWidget.findItems(self.parent.backgrounds_coll.get_uid_background_type(uid),
+                        self.BackgroundsTreeWidget.findItems(self.parent.entities_db.collection_by_name('backgrounds').get_uid_background_type(uid),
                                                              Qt.MatchExactly, 0)[0].childCount()):
                     """for cycle that loops n times as the number of subItems in the specific background type branch"""
-                    if self.BackgroundsTreeWidget.findItems(self.parent.backgrounds_coll.get_uid_background_type(uid),
+                    if self.BackgroundsTreeWidget.findItems(self.parent.entities_db.collection_by_name('backgrounds').get_uid_background_type(uid),
                                                             Qt.MatchExactly, 0)[0].child(child_1).text(
-                        0) == self.parent.backgrounds_coll.get_uid_background_feature(uid):
+                        0) == self.parent.entities_db.collection_by_name('backgrounds').get_uid_background_feature(uid):
                         counter_1 += 1
                 if counter_1 != 0:
                     for child_1 in range(self.BackgroundsTreeWidget.findItems(
-                            self.parent.backgrounds_coll.get_uid_background_type(uid), Qt.MatchExactly, 0)[
+                            self.parent.entities_db.collection_by_name('backgrounds').get_uid_background_type(uid), Qt.MatchExactly, 0)[
                                              0].childCount()):
                         if \
                                 self.BackgroundsTreeWidget.findItems(
-                                    self.parent.backgrounds_coll.get_uid_background_type(uid),
+                                    self.parent.entities_db.collection_by_name('backgrounds').get_uid_background_type(uid),
                                     Qt.MatchExactly, 0)[0].child(child_1).text(
-                                    0) == self.parent.backgrounds_coll.get_uid_background_feature(uid):
+                                    0) == self.parent.entities_db.collection_by_name('backgrounds').get_uid_background_feature(uid):
                             """Already exists a TreeItem (2 level) for the background feature"""
 
                             """Same background type and background feature"""
@@ -2354,11 +2337,11 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                             property_combo.name = 'Annotations'
                             property_combo.addItem("none")
                             property_combo.addItem("name")
-                            for prop in self.parent.backgrounds_coll.get_uid_properties_names(uid):
+                            for prop in self.parent.entities_db.collection_by_name('backgrounds').get_uid_properties_names(uid):
                                 property_combo.addItem(prop)
-                            name = self.parent.backgrounds_coll.get_uid_name(uid)
+                            name = self.parent.entities_db.collection_by_name('backgrounds').get_uid_name(uid)
                             flevel_3 = QTreeWidgetItem(self.BackgroundsTreeWidget.findItems(
-                                self.parent.backgrounds_coll.get_uid_background_type(uid), Qt.MatchExactly, 0)[0].child(
+                                self.parent.entities_db.collection_by_name('backgrounds').get_uid_background_type(uid), Qt.MatchExactly, 0)[0].child(
                                 child_1), [name, uid])
                             self.BackgroundsTreeWidget.setItemWidget(flevel_3, 2, property_combo)
                             property_combo.currentIndexChanged.connect(lambda: self.toggle_property())
@@ -2372,9 +2355,9 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                 else:
                     """Same background type, different background feature"""
                     flevel_2 = QTreeWidgetItem(
-                        self.BackgroundsTreeWidget.findItems(self.parent.backgrounds_coll.get_uid_background_type(uid),
+                        self.BackgroundsTreeWidget.findItems(self.parent.entities_db.collection_by_name('backgrounds').get_uid_background_type(uid),
                                                              Qt.MatchExactly, 0)[0],
-                        [self.parent.backgrounds_coll.get_uid_background_feature(uid)])
+                        [self.parent.entities_db.collection_by_name('backgrounds').get_uid_background_feature(uid)])
                     flevel_2.setFlags(flevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
                     self.BackgroundsTreeWidget.insertTopLevelItem(0, flevel_2)
                     property_combo = QComboBox()
@@ -2382,9 +2365,9 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                     property_combo.name = 'Annotations'
                     property_combo.addItem("none")
                     property_combo.addItem("name")
-                    for prop in self.parent.backgrounds_coll.get_uid_properties_names(uid):
+                    for prop in self.parent.entities_db.collection_by_name('backgrounds').get_uid_properties_names(uid):
                         property_combo.addItem(prop)
-                    name = self.parent.backgrounds_coll.get_uid_name(uid)
+                    name = self.parent.entities_db.collection_by_name('backgrounds').get_uid_name(uid)
 
                     flevel_3 = QTreeWidgetItem(flevel_2, [name, uid])
                     self.BackgroundsTreeWidget.setItemWidget(flevel_3, 2, property_combo)
@@ -2399,10 +2382,10 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             else:
                 """Different background type and background feature"""
                 flevel_1 = QTreeWidgetItem(self.BackgroundsTreeWidget,
-                                           [self.parent.backgrounds_coll.get_uid_background_type(uid)])
+                                           [self.parent.entities_db.collection_by_name('backgrounds').get_uid_background_type(uid)])
                 flevel_1.setFlags(flevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
                 self.BackgroundsTreeWidget.insertTopLevelItem(0, flevel_1)
-                flevel_2 = QTreeWidgetItem(flevel_1, [self.parent.backgrounds_coll.get_uid_background_feature(uid)])
+                flevel_2 = QTreeWidgetItem(flevel_1, [self.parent.entities_db.collection_by_name('backgrounds').get_uid_background_feature(uid)])
                 flevel_2.setFlags(flevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
                 self.BackgroundsTreeWidget.insertTopLevelItem(0, flevel_2)
                 property_combo = QComboBox()
@@ -2410,9 +2393,9 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                 property_combo.name = 'Annotations'
                 property_combo.addItem("none")
                 property_combo.addItem("name")
-                for prop in self.parent.backgrounds_coll.get_uid_properties_names(uid):
+                for prop in self.parent.entities_db.collection_by_name('backgrounds').get_uid_properties_names(uid):
                     property_combo.addItem(prop)
-                name = self.parent.backgrounds_coll.get_uid_name(uid)
+                name = self.parent.entities_db.collection_by_name('backgrounds').get_uid_name(uid)
                 flevel_3 = QTreeWidgetItem(flevel_2, [name, uid])
                 self.BackgroundsTreeWidget.setItemWidget(flevel_3, 2, property_combo)
                 property_combo.currentIndexChanged.connect(lambda: self.toggle_property())
@@ -2470,40 +2453,40 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         uid_list = list(new_list['uid'])
         if sec_uid:
             for i, uid in enumerate(new_list['uid']):
-                if sec_uid != self.parent.backgrounds_coll.df.loc[
-                    self.parent.backgrounds_coll.df['uid'] == uid, 'x_section'].values[0]:
+                if sec_uid != self.parent.entities_db.collection_by_name('backgrounds').df.loc[
+                    self.parent.entities_db.collection_by_name('backgrounds').df['uid'] == uid, 'x_section'].values[0]:
                     del uid_list[i]
         for uid in uid_list:
-            if self.BackgroundsTopologyTreeWidget.findItems(self.parent.backgrounds_coll.get_uid_topological_type(uid),
+            if self.BackgroundsTopologyTreeWidget.findItems(self.parent.entities_db.collection_by_name('backgrounds').get_uid_topological_type(uid),
                                                             Qt.MatchExactly, 0) != []:
                 """Already exists a TreeItem (1 level) for the topological type"""
                 counter_1 = 0
                 for child_1 in range(self.BackgroundsTopologyTreeWidget.findItems(
-                        self.parent.backgrounds_coll.get_uid_topological_type(uid), Qt.MatchExactly, 0)[
+                        self.parent.entities_db.collection_by_name('backgrounds').get_uid_topological_type(uid), Qt.MatchExactly, 0)[
                                          0].childCount()):
                     """for cycle that loops n times as the number of subItems in the specific topological type branch"""
                     if self.BackgroundsTopologyTreeWidget.findItems(
-                            self.parent.backgrounds_coll.get_uid_topological_type(uid), Qt.MatchExactly, 0)[0].child(
-                        child_1).text(0) == self.parent.backgrounds_coll.get_uid_background_feature(uid):
+                            self.parent.entities_db.collection_by_name('backgrounds').get_uid_topological_type(uid), Qt.MatchExactly, 0)[0].child(
+                        child_1).text(0) == self.parent.entities_db.collection_by_name('backgrounds').get_uid_background_feature(uid):
                         counter_1 += 1
                 if counter_1 != 0:
                     for child_1 in range(self.BackgroundsTopologyTreeWidget.findItems(
-                            self.parent.backgrounds_coll.get_uid_topological_type(uid), Qt.MatchExactly, 0)[
+                            self.parent.entities_db.collection_by_name('backgrounds').get_uid_topological_type(uid), Qt.MatchExactly, 0)[
                                              0].childCount()):
                         if self.BackgroundsTopologyTreeWidget.findItems(
-                                self.parent.backgrounds_coll.get_uid_topological_type(uid), Qt.MatchExactly, 0)[
-                            0].child(child_1).text(0) == self.parent.backgrounds_coll.get_uid_background_feature(uid):
+                                self.parent.entities_db.collection_by_name('backgrounds').get_uid_topological_type(uid), Qt.MatchExactly, 0)[
+                            0].child(child_1).text(0) == self.parent.entities_db.collection_by_name('backgrounds').get_uid_background_feature(uid):
                             """Same topological type and feature"""
                             property_combo = QComboBox()
                             property_combo.uid = uid
                             property_combo.name = 'Annotations'
                             property_combo.addItem("none")
                             property_combo.addItem("name")
-                            for prop in self.parent.backgrounds_coll.get_uid_properties_names(uid):
+                            for prop in self.parent.entities_db.collection_by_name('backgrounds').get_uid_properties_names(uid):
                                 property_combo.addItem(prop)
-                            name = self.parent.backgrounds_coll.get_uid_name(uid)
+                            name = self.parent.entities_db.collection_by_name('backgrounds').get_uid_name(uid)
                             tlevel_3 = QTreeWidgetItem(self.BackgroundsTopologyTreeWidget.findItems(
-                                self.parent.backgrounds_coll.get_uid_topological_type(uid), Qt.MatchExactly, 0)[
+                                self.parent.entities_db.collection_by_name('backgrounds').get_uid_topological_type(uid), Qt.MatchExactly, 0)[
                                                            0].child(child_1), [name, uid])
                             self.BackgroundsTopologyTreeWidget.setItemWidget(tlevel_3, 2, property_combo)
                             property_combo.currentIndexChanged.connect(lambda: self.toggle_property())
@@ -2517,8 +2500,8 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                 else:
                     """Same topological type, different feature"""
                     tlevel_2 = QTreeWidgetItem(self.BackgroundsTopologyTreeWidget.findItems(
-                        self.parent.backgrounds_coll.get_uid_topological_type(uid), Qt.MatchExactly, 0)[0],
-                                               [self.parent.backgrounds_coll.get_uid_background_feature(uid)])
+                        self.parent.entities_db.collection_by_name('backgrounds').get_uid_topological_type(uid), Qt.MatchExactly, 0)[0],
+                                               [self.parent.entities_db.collection_by_name('backgrounds').get_uid_background_feature(uid)])
                     tlevel_2.setFlags(tlevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
                     self.BackgroundsTopologyTreeWidget.insertTopLevelItem(0, tlevel_2)
                     property_combo = QComboBox()
@@ -2526,9 +2509,9 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                     property_combo.name = 'Annotations'
                     property_combo.addItem("none")
                     property_combo.addItem("name")
-                    for prop in self.parent.backgrounds_coll.get_uid_properties_names(uid):
+                    for prop in self.parent.entities_db.collection_by_name('backgrounds').get_uid_properties_names(uid):
                         property_combo.addItem(prop)
-                    name = self.parent.backgrounds_coll.get_uid_name(uid)
+                    name = self.parent.entities_db.collection_by_name('backgrounds').get_uid_name(uid)
                     tlevel_3 = QTreeWidgetItem(tlevel_2, [name, uid])
                     self.BackgroundsTopologyTreeWidget.setItemWidget(tlevel_3, 2, property_combo)
                     property_combo.currentIndexChanged.connect(lambda: self.toggle_property())
@@ -2542,10 +2525,10 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             else:
                 """Different topological type and feature"""
                 tlevel_1 = QTreeWidgetItem(self.BackgroundsTopologyTreeWidget,
-                                           [self.parent.backgrounds_coll.get_uid_topological_type(uid)])
+                                           [self.parent.entities_db.collection_by_name('backgrounds').get_uid_topological_type(uid)])
                 tlevel_1.setFlags(tlevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
                 self.BackgroundsTopologyTreeWidget.insertTopLevelItem(0, tlevel_1)
-                tlevel_2 = QTreeWidgetItem(tlevel_1, [self.parent.backgrounds_coll.get_uid_background_feature(uid)])
+                tlevel_2 = QTreeWidgetItem(tlevel_1, [self.parent.entities_db.collection_by_name('backgrounds').get_uid_background_feature(uid)])
                 tlevel_2.setFlags(tlevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
                 self.BackgroundsTopologyTreeWidget.insertTopLevelItem(0, tlevel_2)
                 property_combo = QComboBox()
@@ -2553,9 +2536,9 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                 property_combo.name = 'Annotations'
                 property_combo.addItem("none")
                 property_combo.addItem("name")
-                for prop in self.parent.backgrounds_coll.get_uid_properties_names(uid):
+                for prop in self.parent.entities_db.collection_by_name('backgrounds').get_uid_properties_names(uid):
                     property_combo.addItem(prop)
-                name = self.parent.backgrounds_coll.get_uid_name(uid)
+                name = self.parent.entities_db.collection_by_name('backgrounds').get_uid_name(uid)
                 tlevel_3 = QTreeWidgetItem(tlevel_2, [name, uid])
                 self.BackgroundsTopologyTreeWidget.setItemWidget(tlevel_3, 2, property_combo)
                 property_combo.currentIndexChanged.connect(lambda: self.toggle_property())
@@ -2711,7 +2694,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         for uid in updated_list:
             if not self.actors_df.loc[self.actors_df['uid'] == uid, 'show_prop'].to_list() == []:
                 if not self.actors_df.loc[self.actors_df['uid'] == uid, 'show_prop'].values[
-                           0] in self.parent.geol_coll.get_uid_properties_names(uid):
+                           0] in self.parent.entities_db.collection_by_name('geol').get_uid_properties_names(uid):
                     show = self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].to_list()[0]
                     self.remove_actor_in_view(uid=uid)
                     this_actor = self.show_actor_with_property(uid=uid, collection='geol_coll', show_property=None,
@@ -2761,9 +2744,9 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.TopologyTreeWidget.itemChanged.disconnect()
         for uid in updated_list:
             """Case for color changed"""
-            wells_list = self.parent.well_coll.get_uids()
-            if self.parent.geol_coll.get_uid_x_section(uid) in wells_list:
-                self.change_actor_color(uid=self.parent.geol_coll.get_uid_x_section(uid), collection='well_coll')
+            wells_list = self.parent.entities_db.collection_by_name('well').get_uids()
+            if self.parent.entities_db.collection_by_name('geol').get_uid_x_section(uid) in wells_list:
+                self.change_actor_color(uid=self.parent.entities_db.collection_by_name('geol').get_uid_x_section(uid), collection='well_coll')
             self.change_actor_color(uid=uid, collection='geol_coll')
 
         """Re-connect signals."""
@@ -3036,7 +3019,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         for uid in updated_list:
             if not self.actors_df.loc[self.actors_df['uid'] == uid, 'show_prop'].to_list() == []:
                 if not self.actors_df.loc[self.actors_df['uid'] == uid, 'show_prop'].values[
-                           0] in self.parent.mesh3d_coll.get_uid_properties_names(uid):
+                           0] in self.parent.entities_db.collection_by_name('mesh3d').get_uid_properties_names(uid):
                     show = self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].to_list()[0]
                     self.remove_actor_in_view(uid=uid)
                     this_actor = self.show_actor_with_property(uid=uid, collection='mesh3d_coll', show_property=None,
@@ -3143,7 +3126,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         for uid in updated_list:
             if not self.actors_df.loc[self.actors_df['uid'] == uid, 'show_prop'].to_list() == []:
                 if not self.actors_df.loc[self.actors_df['uid'] == uid, 'show_prop'].values[
-                           0] in self.parent.dom_coll.get_uid_properties_names(uid):
+                           0] in self.parent.entities_db.collection_by_name('dom').get_uid_properties_names(uid):
                     show = self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].to_list()[0]
                     self.remove_actor_in_view(uid=uid)
                     this_actor = self.show_actor_with_property(uid=uid, collection='dom_coll', show_property=None,
@@ -3318,7 +3301,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         for uid in updated_list:
             if not self.actors_df.loc[self.actors_df['uid'] == uid, 'show_prop'].to_list() == []:
                 if not self.actors_df.loc[self.actors_df['uid'] == uid, 'show_prop'].values[
-                           0] in self.parent.geol_coll.get_uid_properties_names(uid):
+                           0] in self.parent.entities_db.collection_by_name('geol').get_uid_properties_names(uid):
                     show = self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].to_list()[0]
                     self.remove_actor_in_view(uid=uid)
                     this_actor = self.show_actor_with_property(uid=uid, collection='geol_coll', show_property=None,
@@ -3446,7 +3429,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         for uid in updated_list:
             if not self.actors_df.loc[self.actors_df['uid'] == uid, 'show_prop'].to_list() == []:
                 if not self.actors_df.loc[self.actors_df['uid'] == uid, 'show_prop'].values[
-                           0] in self.parent.fluids_coll.get_uid_properties_names(uid):
+                           0] in self.parent.entities_db.collection_by_name('fluids').get_uid_properties_names(uid):
                     show = self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].to_list()[0]
                     self.remove_actor_in_view(uid=uid)
                     this_actor = self.show_actor_with_property(uid=uid, collection='fluids_coll', show_property=None,
@@ -3496,9 +3479,9 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.FluidsTopologyTreeWidget.itemChanged.disconnect()
         for uid in updated_list:
             """Case for color changed"""
-            wells_list = self.parent.well_coll.get_uids()
-            if self.parent.fluids_coll.get_uid_x_section(uid) in wells_list:
-                self.change_actor_color(uid=self.parent.fluids_coll.get_uid_x_section(uid), collection='well_coll')
+            wells_list = self.parent.entities_db.collection_by_name('well').get_uids()
+            if self.parent.entities_db.collection_by_name('fluids').get_uid_x_section(uid) in wells_list:
+                self.change_actor_color(uid=self.parent.entities_db.collection_by_name('fluids').get_uid_x_section(uid), collection='well_coll')
             self.change_actor_color(uid=uid, collection='fluids_coll')
 
         """Re-connect signals."""
@@ -3611,7 +3594,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         for uid in updated_list:
             if not self.actors_df.loc[self.actors_df['uid'] == uid, 'show_prop'].to_list() == []:
                 if not self.actors_df.loc[self.actors_df['uid'] == uid, 'show_prop'].values[
-                           0] in self.parent.backgrounds_coll.get_uid_properties_names(uid):
+                           0] in self.parent.entities_db.collection_by_name('backgrounds').get_uid_properties_names(uid):
                     show = self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].to_list()[0]
                     self.remove_actor_in_view(uid=uid)
                     this_actor = self.show_actor_with_property(uid=uid, collection='backgrounds_coll',
@@ -3662,9 +3645,9 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.BackgroundsTopologyTreeWidget.itemChanged.disconnect()
         for uid in updated_list:
             """Case for color changed"""
-            wells_list = self.parent.well_coll.get_uids()
-            if self.parent.backgrounds_coll.get_uid_x_section(uid) in wells_list:
-                self.change_actor_color(uid=self.parent.backgrounds_coll.get_uid_x_section(uid), collection='well_coll')
+            wells_list = self.parent.entities_db.collection_by_name('well').get_uids()
+            if self.parent.entities_db.collection_by_name('backgrounds').get_uid_x_section(uid) in wells_list:
+                self.change_actor_color(uid=self.parent.entities_db.collection_by_name('backgrounds').get_uid_x_section(uid), collection='well_coll')
             self.change_actor_color(uid=uid, collection='backgrounds_coll')
 
         """Re-connect signals."""
@@ -3742,62 +3725,62 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         """Add all entities in project collections. This must be reimplemented for cross-sections in order
         to show entities belonging to the section only. All objects are visible by default -> show = True"""
 
-        for index, uid in enumerate(self.parent.geol_coll.df['uid'].tolist()):
+        for index, uid in enumerate(self.parent.entities_db.collection_by_name('geol').df['uid'].tolist()):
             this_actor = self.show_actor_with_property(uid=uid, collection='geol_coll', show_property=None,
                                                        visible=True)
             self.actors_df = self.actors_df.append(
                 {'uid': uid, 'actor': this_actor, 'show': True, 'collection': 'geol_coll', 'show_prop': None},
                 ignore_index=True)
 
-        for uid in self.parent.xsect_coll.df['uid'].tolist():
+        for uid in self.parent.entities_db.collection_by_name('xsect').df['uid'].tolist():
             this_actor = self.show_actor_with_property(uid=uid, collection='xsect_coll', show_property=None,
                                                        visible=False)
             self.actors_df = self.actors_df.append(
                 {'uid': uid, 'actor': this_actor, 'show': False, 'collection': 'xsect_coll', 'show_prop': None},
                 ignore_index=True)
 
-        for uid in self.parent.boundary_coll.df['uid'].tolist():
+        for uid in self.parent.entities_db.collection_by_name('boundary').df['uid'].tolist():
             this_actor = self.show_actor_with_property(uid=uid, collection='boundary_coll', show_property=None,
                                                        visible=False)
             self.actors_df = self.actors_df.append(
                 {'uid': uid, 'actor': this_actor, 'show': False, 'collection': 'boundary_coll', 'show_prop': None},
                 ignore_index=True)
 
-        for uid in self.parent.mesh3d_coll.df['uid'].tolist():
+        for uid in self.parent.entities_db.collection_by_name('mesh3d').df['uid'].tolist():
             this_actor = self.show_actor_with_property(uid=uid, collection='mesh3d_coll', show_property=None,
                                                        visible=False)
             self.actors_df = self.actors_df.append(
                 {'uid': uid, 'actor': this_actor, 'show': False, 'collection': 'mesh3d_coll', 'show_prop': None},
                 ignore_index=True)
 
-        for uid in self.parent.dom_coll.df['uid'].tolist():
+        for uid in self.parent.entities_db.collection_by_name('dom').df['uid'].tolist():
             this_actor = self.show_actor_with_property(uid=uid, collection='dom_coll', show_property=None,
                                                        visible=False)
             self.actors_df = self.actors_df.append(
                 {'uid': uid, 'actor': this_actor, 'show': False, 'collection': 'dom_coll', 'show_prop': None},
                 ignore_index=True)
 
-        for uid in self.parent.image_coll.df['uid'].tolist():
+        for uid in self.parent.entities_db.collection_by_name('image').df['uid'].tolist():
             this_actor = self.show_actor_with_property(uid=uid, collection='image_coll', show_property=None,
                                                        visible=False)
             self.actors_df = self.actors_df.append(
                 {'uid': uid, 'actor': this_actor, 'show': False, 'collection': 'image_coll', 'show_prop': None},
                 ignore_index=True)
 
-        for uid in self.parent.well_coll.df['uid'].tolist():
+        for uid in self.parent.entities_db.collection_by_name('well').df['uid'].tolist():
             this_actor = self.show_actor_with_property(uid=uid, collection='well_coll', show_property=None,
                                                        visible=False)
             self.actors_df = self.actors_df.append(
                 {'uid': uid, 'actor': this_actor, 'show': False, 'collection': 'well_coll', 'show_prop': None},
                 ignore_index=True)
 
-        for uid in self.parent.fluids_coll.df['uid'].tolist():
+        for uid in self.parent.entities_db.collection_by_name('fluids').df['uid'].tolist():
             this_actor = self.show_actor_with_property(uid=uid, collection='fluids_coll', show_property=None,
                                                        visible=False)
             self.actors_df = self.actors_df.append(
                 {'uid': uid, 'actor': this_actor, 'show': False, 'collection': 'fluids_coll', 'show_prop': None},
                 ignore_index=True)
-        for uid in self.parent.backgrounds_coll.df['uid'].tolist():
+        for uid in self.parent.entities_db.collection_by_name('backgrounds').df['uid'].tolist():
             this_actor = self.show_actor_with_property(uid=uid, collection='backgrounds_coll', show_property=None,
                                                        visible=False)
             self.actors_df = self.actors_df.append(
@@ -3821,37 +3804,37 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
 
     def change_actor_color(self, uid=None, collection=None):
         if collection == 'geol_coll':
-            color_R = self.parent.geol_coll.get_uid_legend(uid=uid)['color_R']
-            color_G = self.parent.geol_coll.get_uid_legend(uid=uid)['color_G']
-            color_B = self.parent.geol_coll.get_uid_legend(uid=uid)['color_B']
+            color_R = self.parent.entities_db.collection_by_name('geol').get_uid_legend(uid=uid)['color_R']
+            color_G = self.parent.entities_db.collection_by_name('geol').get_uid_legend(uid=uid)['color_G']
+            color_B = self.parent.entities_db.collection_by_name('geol').get_uid_legend(uid=uid)['color_B']
         elif collection == 'xsect_coll':
-            color_R = self.parent.xsect_coll.get_legend()['color_R']
-            color_G = self.parent.xsect_coll.get_legend()['color_G']
-            color_B = self.parent.xsect_coll.get_legend()['color_B']
+            color_R = self.parent.entities_db.collection_by_name('xsect').get_legend()['color_R']
+            color_G = self.parent.entities_db.collection_by_name('xsect').get_legend()['color_G']
+            color_B = self.parent.entities_db.collection_by_name('xsect').get_legend()['color_B']
         elif collection == 'boundary_coll':
-            color_R = self.parent.boundary_coll.get_legend()['color_R']
-            color_G = self.parent.boundary_coll.get_legend()['color_G']
-            color_B = self.parent.boundary_coll.get_legend()['color_B']
+            color_R = self.parent.entities_db.collection_by_name('boundary').get_legend()['color_R']
+            color_G = self.parent.entities_db.collection_by_name('boundary').get_legend()['color_G']
+            color_B = self.parent.entities_db.collection_by_name('boundary').get_legend()['color_B']
         elif collection == 'mesh3d_coll':
-            color_R = self.parent.mesh3d_coll.get_legend()['color_R']
-            color_G = self.parent.mesh3d_coll.get_legend()['color_G']
-            color_B = self.parent.mesh3d_coll.get_legend()['color_B']
+            color_R = self.parent.entities_db.collection_by_name('mesh3d').get_legend()['color_R']
+            color_G = self.parent.entities_db.collection_by_name('mesh3d').get_legend()['color_G']
+            color_B = self.parent.entities_db.collection_by_name('mesh3d').get_legend()['color_B']
         elif collection == 'dom_coll':
-            color_R = self.parent.dom_coll.get_legend()['color_R']
-            color_G = self.parent.dom_coll.get_legend()['color_G']
-            color_B = self.parent.dom_coll.get_legend()['color_B']
+            color_R = self.parent.entities_db.collection_by_name('dom').get_legend()['color_R']
+            color_G = self.parent.entities_db.collection_by_name('dom').get_legend()['color_G']
+            color_B = self.parent.entities_db.collection_by_name('dom').get_legend()['color_B']
         elif collection == 'well_coll':
-            color_R = self.parent.well_coll.get_uid_legend(uid=uid)['color_R']
-            color_G = self.parent.well_coll.get_uid_legend(uid=uid)['color_G']
-            color_B = self.parent.well_coll.get_uid_legend(uid=uid)['color_B']
+            color_R = self.parent.entities_db.collection_by_name('well').get_uid_legend(uid=uid)['color_R']
+            color_G = self.parent.entities_db.collection_by_name('well').get_uid_legend(uid=uid)['color_G']
+            color_B = self.parent.entities_db.collection_by_name('well').get_uid_legend(uid=uid)['color_B']
         elif collection == 'fluids_coll':
-            color_R = self.parent.fluids_coll.get_uid_legend(uid=uid)['color_R']
-            color_G = self.parent.fluids_coll.get_uid_legend(uid=uid)['color_G']
-            color_B = self.parent.fluids_coll.get_uid_legend(uid=uid)['color_B']
+            color_R = self.parent.entities_db.collection_by_name('fluids').get_uid_legend(uid=uid)['color_R']
+            color_G = self.parent.entities_db.collection_by_name('fluids').get_uid_legend(uid=uid)['color_G']
+            color_B = self.parent.entities_db.collection_by_name('fluids').get_uid_legend(uid=uid)['color_B']
         elif collection == 'backgrounds_coll':
-            color_R = self.parent.backgrounds_coll.get_uid_legend(uid=uid)['color_R']
-            color_G = self.parent.backgrounds_coll.get_uid_legend(uid=uid)['color_G']
-            color_B = self.parent.backgrounds_coll.get_uid_legend(uid=uid)['color_B']
+            color_R = self.parent.entities_db.collection_by_name('backgrounds').get_uid_legend(uid=uid)['color_R']
+            color_G = self.parent.entities_db.collection_by_name('backgrounds').get_uid_legend(uid=uid)['color_G']
+            color_B = self.parent.entities_db.collection_by_name('backgrounds').get_uid_legend(uid=uid)['color_B']
         """Note: no legend for image."""
         """Update color for actor uid"""
         color_RGB = [color_R / 255, color_G / 255, color_B / 255]
@@ -3859,23 +3842,23 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
 
     def change_actor_opacity(self, uid=None, collection=None):
         if collection == 'geol_coll':
-            opacity = self.parent.geol_coll.get_uid_legend(uid=uid)['opacity'] / 100
+            opacity = self.parent.entities_db.collection_by_name('geol').get_uid_legend(uid=uid)['opacity'] / 100
         elif collection == 'xsect_coll':
-            opacity = self.parent.xsect_coll.get_legend()['opacity'] / 100
+            opacity = self.parent.entities_db.collection_by_name('xsect').get_legend()['opacity'] / 100
         elif collection == 'boundary_coll':
-            opacity = self.parent.boundary_coll.get_legend()['opacity'] / 100
+            opacity = self.parent.entities_db.collection_by_name('boundary').get_legend()['opacity'] / 100
         elif collection == 'mesh3d_coll':
-            opacity = self.parent.mesh3d_coll.get_legend()['opacity'] / 100
+            opacity = self.parent.entities_db.collection_by_name('mesh3d').get_legend()['opacity'] / 100
         elif collection == 'dom_coll':
-            opacity = self.parent.dom_coll.get_legend()['opacity'] / 100
+            opacity = self.parent.entities_db.collection_by_name('dom').get_legend()['opacity'] / 100
         elif collection == 'well_coll':
-            opacity = self.parent.well_coll.get_uid_legend(uid=uid)['opacity'] / 100
+            opacity = self.parent.entities_db.collection_by_name('well').get_uid_legend(uid=uid)['opacity'] / 100
         elif collection == 'fluids_coll':
-            opacity = self.parent.fluids_coll.get_uid_legend(uid=uid)['opacity'] / 100
+            opacity = self.parent.entities_db.collection_by_name('fluids').get_uid_legend(uid=uid)['opacity'] / 100
         elif collection == 'backgrounds_coll':
-            opacity = self.parent.backgrounds_coll.get_uid_legend(uid=uid)['opacity'] / 100
+            opacity = self.parent.entities_db.collection_by_name('backgrounds').get_uid_legend(uid=uid)['opacity'] / 100
         elif collection == 'image_coll':
-            opacity = self.parent.image_coll.get_legend()['opacity'] / 100
+            opacity = self.parent.entities_db.collection_by_name('image').get_legend()['opacity'] / 100
         """Note: no legend for image."""
         """Update color for actor uid"""
         self.actors_df.loc[self.actors_df['uid'] == uid, 'actor'].values[0].GetProperty().SetOpacity(opacity)
@@ -3884,43 +3867,43 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         """Update line thickness for actor uid"""
 
         if collection == 'geol_coll':
-            line_thick = self.parent.geol_coll.get_uid_legend(uid=uid)['line_thick']
+            line_thick = self.parent.entities_db.collection_by_name('geol').get_uid_legend(uid=uid)['line_thick']
         elif collection == 'xsect_coll':
-            line_thick = self.parent.xsect_coll.get_legend()['line_thick']
+            line_thick = self.parent.entities_db.collection_by_name('xsect').get_legend()['line_thick']
         elif collection == 'boundary_coll':
-            line_thick = self.parent.boundary_coll.get_legend()['line_thick']
+            line_thick = self.parent.entities_db.collection_by_name('boundary').get_legend()['line_thick']
         elif collection == 'mesh3d_coll':
-            line_thick = self.parent.mesh3d_coll.get_legend()['line_thick']
+            line_thick = self.parent.entities_db.collection_by_name('mesh3d').get_legend()['line_thick']
         elif collection == 'dom_coll':
-            line_thick = self.parent.dom_coll.get_legend()['line_thick']
+            line_thick = self.parent.entities_db.collection_by_name('dom').get_legend()['line_thick']
             """Note: no legend for image."""
         elif collection == 'well_coll':
-            line_thick = self.parent.well_coll.get_uid_legend(uid=uid)['line_thick']
+            line_thick = self.parent.entities_db.collection_by_name('well').get_uid_legend(uid=uid)['line_thick']
         elif collection == 'fluids_coll':
-            line_thick = self.parent.fluids_coll.get_uid_legend(uid=uid)['line_thick']
+            line_thick = self.parent.entities_db.collection_by_name('fluids').get_uid_legend(uid=uid)['line_thick']
         elif collection == 'backgrounds_coll':
-            line_thick = self.parent.backgrounds_coll.get_uid_legend(uid=uid)['line_thick']
+            line_thick = self.parent.entities_db.collection_by_name('backgrounds').get_uid_legend(uid=uid)['line_thick']
         self.actors_df.loc[self.actors_df['uid'] == uid, 'actor'].values[0].GetProperty().SetLineWidth(line_thick)
 
     def change_actor_point_size(self, uid=None, collection=None):
         """Update point size for actor uid"""
         if collection == 'geol_coll':
-            point_size = self.parent.geol_coll.get_uid_legend(uid=uid)['point_size']
+            point_size = self.parent.entities_db.collection_by_name('geol').get_uid_legend(uid=uid)['point_size']
         elif collection == 'xsect_coll':
-            point_size = self.parent.xsect_coll.get_legend()['point_size']
+            point_size = self.parent.entities_db.collection_by_name('xsect').get_legend()['point_size']
         elif collection == 'boundary_coll':
-            point_size = self.parent.boundary_coll.get_legend()['point_size']
+            point_size = self.parent.entities_db.collection_by_name('boundary').get_legend()['point_size']
         elif collection == 'mesh3d_coll':
-            point_size = self.parent.mesh3d_coll.get_legend()['point_size']
+            point_size = self.parent.entities_db.collection_by_name('mesh3d').get_legend()['point_size']
         elif collection == 'dom_coll':
-            point_size = self.parent.dom_coll.get_legend()['point_size']
+            point_size = self.parent.entities_db.collection_by_name('dom').get_legend()['point_size']
             """Note: no legend for image."""
         elif collection == 'well_coll':
-            point_size = self.parent.well_coll.get_uid_legend(uid=uid)['point_size']
+            point_size = self.parent.entities_db.collection_by_name('well').get_uid_legend(uid=uid)['point_size']
         elif collection == 'fluids_coll':
-            point_size = self.parent.fluids_coll.get_uid_legend(uid=uid)['point_size']
+            point_size = self.parent.entities_db.collection_by_name('fluids').get_uid_legend(uid=uid)['point_size']
         elif collection == 'backgrounds_coll':
-            point_size = self.parent.backgrounds_coll.get_uid_legend(uid=uid)['point_size']
+            point_size = self.parent.entities_db.collection_by_name('backgrounds').get_uid_legend(uid=uid)['point_size']
         self.actors_df.loc[self.actors_df['uid'] == uid, 'actor'].values[0].GetProperty().SetPointSize(point_size)
 
     def set_actor_visible(self, uid=None, visible=None, name=None):
@@ -3977,87 +3960,87 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         show_property_title = show_property
         show_scalar_bar = True
         if collection == 'geol_coll':
-            color_R = self.parent.geol_coll.get_uid_legend(uid=uid)['color_R']
-            color_G = self.parent.geol_coll.get_uid_legend(uid=uid)['color_G']
-            color_B = self.parent.geol_coll.get_uid_legend(uid=uid)['color_B']
+            color_R = self.parent.entities_db.collection_by_name('geol').get_uid_legend(uid=uid)['color_R']
+            color_G = self.parent.entities_db.collection_by_name('geol').get_uid_legend(uid=uid)['color_G']
+            color_B = self.parent.entities_db.collection_by_name('geol').get_uid_legend(uid=uid)['color_B']
             color_RGB = [color_R / 255, color_G / 255, color_B / 255]
-            line_thick = self.parent.geol_coll.get_uid_legend(uid=uid)['line_thick']
-            point_size = self.parent.geol_coll.get_uid_legend(uid=uid)['point_size']
-            opacity = self.parent.geol_coll.get_uid_legend(uid=uid)['opacity'] / 100
+            line_thick = self.parent.entities_db.collection_by_name('geol').get_uid_legend(uid=uid)['line_thick']
+            point_size = self.parent.entities_db.collection_by_name('geol').get_uid_legend(uid=uid)['point_size']
+            opacity = self.parent.entities_db.collection_by_name('geol').get_uid_legend(uid=uid)['opacity'] / 100
 
-            plot_entity = self.parent.geol_coll.get_uid_vtk_obj(uid)
+            plot_entity = self.parent.entities_db.collection_by_name('geol').get_uid_vtk_obj(uid)
         elif collection == 'xsect_coll':
-            color_R = self.parent.xsect_coll.get_legend()['color_R']
-            color_G = self.parent.xsect_coll.get_legend()['color_G']
-            color_B = self.parent.xsect_coll.get_legend()['color_B']
+            color_R = self.parent.entities_db.collection_by_name('xsect').get_legend()['color_R']
+            color_G = self.parent.entities_db.collection_by_name('xsect').get_legend()['color_G']
+            color_B = self.parent.entities_db.collection_by_name('xsect').get_legend()['color_B']
             color_RGB = [color_R / 255, color_G / 255, color_B / 255]
-            line_thick = self.parent.xsect_coll.get_legend()['line_thick']
-            opacity = self.parent.xsect_coll.get_legend()['opacity'] / 100
+            line_thick = self.parent.entities_db.collection_by_name('xsect').get_legend()['line_thick']
+            opacity = self.parent.entities_db.collection_by_name('xsect').get_legend()['opacity'] / 100
 
-            plot_entity = self.parent.xsect_coll.get_uid_vtk_frame(uid)
+            plot_entity = self.parent.entities_db.collection_by_name('xsect').get_uid_vtk_frame(uid)
         elif collection == 'boundary_coll':
-            color_R = self.parent.boundary_coll.get_legend()['color_R']
-            color_G = self.parent.boundary_coll.get_legend()['color_G']
-            color_B = self.parent.boundary_coll.get_legend()['color_B']
+            color_R = self.parent.entities_db.collection_by_name('boundary').get_legend()['color_R']
+            color_G = self.parent.entities_db.collection_by_name('boundary').get_legend()['color_G']
+            color_B = self.parent.entities_db.collection_by_name('boundary').get_legend()['color_B']
             color_RGB = [color_R / 255, color_G / 255, color_B / 255]
-            line_thick = self.parent.boundary_coll.get_legend()['line_thick']
-            opacity = self.parent.boundary_coll.get_legend()['opacity'] / 100
+            line_thick = self.parent.entities_db.collection_by_name('boundary').get_legend()['line_thick']
+            opacity = self.parent.entities_db.collection_by_name('boundary').get_legend()['opacity'] / 100
 
-            plot_entity = self.parent.boundary_coll.get_uid_vtk_obj(uid)
+            plot_entity = self.parent.entities_db.collection_by_name('boundary').get_uid_vtk_obj(uid)
         elif collection == 'mesh3d_coll':
-            color_R = self.parent.mesh3d_coll.get_legend()['color_R']
-            color_G = self.parent.mesh3d_coll.get_legend()['color_G']
-            color_B = self.parent.mesh3d_coll.get_legend()['color_B']
+            color_R = self.parent.entities_db.collection_by_name('mesh3d').get_legend()['color_R']
+            color_G = self.parent.entities_db.collection_by_name('mesh3d').get_legend()['color_G']
+            color_B = self.parent.entities_db.collection_by_name('mesh3d').get_legend()['color_B']
             color_RGB = [color_R / 255, color_G / 255, color_B / 255]
-            line_thick = self.parent.mesh3d_coll.get_legend()['line_thick']
-            opacity = self.parent.mesh3d_coll.get_legend()['opacity'] / 100
+            line_thick = self.parent.entities_db.collection_by_name('mesh3d').get_legend()['line_thick']
+            opacity = self.parent.entities_db.collection_by_name('mesh3d').get_legend()['opacity'] / 100
 
-            plot_entity = self.parent.mesh3d_coll.get_uid_vtk_obj(uid)
+            plot_entity = self.parent.entities_db.collection_by_name('mesh3d').get_uid_vtk_obj(uid)
         elif collection == 'dom_coll':
-            color_R = self.parent.dom_coll.get_legend()['color_R']
-            color_G = self.parent.dom_coll.get_legend()['color_G']
-            color_B = self.parent.dom_coll.get_legend()['color_B']
+            color_R = self.parent.entities_db.collection_by_name('dom').get_legend()['color_R']
+            color_G = self.parent.entities_db.collection_by_name('dom').get_legend()['color_G']
+            color_B = self.parent.entities_db.collection_by_name('dom').get_legend()['color_B']
             color_RGB = [color_R / 255, color_G / 255, color_B / 255]
-            line_thick = self.parent.dom_coll.get_legend()['line_thick']
-            opacity = self.parent.dom_coll.get_legend()['opacity'] / 100
+            line_thick = self.parent.entities_db.collection_by_name('dom').get_legend()['line_thick']
+            opacity = self.parent.entities_db.collection_by_name('dom').get_legend()['opacity'] / 100
 
-            plot_entity = self.parent.dom_coll.get_uid_vtk_obj(uid)
+            plot_entity = self.parent.entities_db.collection_by_name('dom').get_uid_vtk_obj(uid)
         elif collection == 'image_coll':
             """Note: no legend for image."""
             color_RGB = [255, 255, 255]
             line_thick = 5.0
-            opacity = self.parent.image_coll.get_legend()['opacity'] / 100
+            opacity = self.parent.entities_db.collection_by_name('image').get_legend()['opacity'] / 100
 
-            plot_entity = self.parent.image_coll.get_uid_vtk_obj(uid)
+            plot_entity = self.parent.entities_db.collection_by_name('image').get_uid_vtk_obj(uid)
         elif collection == 'well_coll':
-            color_R = self.parent.well_coll.get_uid_legend(uid=uid)['color_R']
-            color_G = self.parent.well_coll.get_uid_legend(uid=uid)['color_G']
-            color_B = self.parent.well_coll.get_uid_legend(uid=uid)['color_B']
+            color_R = self.parent.entities_db.collection_by_name('well').get_uid_legend(uid=uid)['color_R']
+            color_G = self.parent.entities_db.collection_by_name('well').get_uid_legend(uid=uid)['color_G']
+            color_B = self.parent.entities_db.collection_by_name('well').get_uid_legend(uid=uid)['color_B']
             color_RGB = [color_R / 255, color_G / 255, color_B / 255]
-            line_thick = self.parent.well_coll.get_uid_legend(uid=uid)['line_thick']
-            opacity = self.parent.well_coll.get_uid_legend(uid=uid)['opacity'] / 100
+            line_thick = self.parent.entities_db.collection_by_name('well').get_uid_legend(uid=uid)['line_thick']
+            opacity = self.parent.entities_db.collection_by_name('well').get_uid_legend(uid=uid)['opacity'] / 100
 
-            plot_entity = self.parent.well_coll.get_uid_vtk_obj(uid)
+            plot_entity = self.parent.entities_db.collection_by_name('well').get_uid_vtk_obj(uid)
         elif collection == 'fluids_coll':
-            color_R = self.parent.fluids_coll.get_uid_legend(uid=uid)['color_R']
-            color_G = self.parent.fluids_coll.get_uid_legend(uid=uid)['color_G']
-            color_B = self.parent.fluids_coll.get_uid_legend(uid=uid)['color_B']
+            color_R = self.parent.entities_db.collection_by_name('fluids').get_uid_legend(uid=uid)['color_R']
+            color_G = self.parent.entities_db.collection_by_name('fluids').get_uid_legend(uid=uid)['color_G']
+            color_B = self.parent.entities_db.collection_by_name('fluids').get_uid_legend(uid=uid)['color_B']
             color_RGB = [color_R / 255, color_G / 255, color_B / 255]
-            line_thick = self.parent.fluids_coll.get_uid_legend(uid=uid)['line_thick']
-            point_size = self.parent.fluids_coll.get_uid_legend(uid=uid)['point_size']
-            opacity = self.parent.fluids_coll.get_uid_legend(uid=uid)['opacity'] / 100
+            line_thick = self.parent.entities_db.collection_by_name('fluids').get_uid_legend(uid=uid)['line_thick']
+            point_size = self.parent.entities_db.collection_by_name('fluids').get_uid_legend(uid=uid)['point_size']
+            opacity = self.parent.entities_db.collection_by_name('fluids').get_uid_legend(uid=uid)['opacity'] / 100
 
-            plot_entity = self.parent.fluids_coll.get_uid_vtk_obj(uid)
+            plot_entity = self.parent.entities_db.collection_by_name('fluids').get_uid_vtk_obj(uid)
         elif collection == 'backgrounds_coll':
-            color_R = self.parent.backgrounds_coll.get_uid_legend(uid=uid)['color_R']
-            color_G = self.parent.backgrounds_coll.get_uid_legend(uid=uid)['color_G']
-            color_B = self.parent.backgrounds_coll.get_uid_legend(uid=uid)['color_B']
+            color_R = self.parent.entities_db.collection_by_name('backgrounds').get_uid_legend(uid=uid)['color_R']
+            color_G = self.parent.entities_db.collection_by_name('backgrounds').get_uid_legend(uid=uid)['color_G']
+            color_B = self.parent.entities_db.collection_by_name('backgrounds').get_uid_legend(uid=uid)['color_B']
             color_RGB = [color_R / 255, color_G / 255, color_B / 255]
-            line_thick = self.parent.backgrounds_coll.get_uid_legend(uid=uid)['line_thick']
-            point_size = self.parent.backgrounds_coll.get_uid_legend(uid=uid)['point_size']
-            opacity = self.parent.backgrounds_coll.get_uid_legend(uid=uid)['opacity'] / 100
+            line_thick = self.parent.entities_db.collection_by_name('backgrounds').get_uid_legend(uid=uid)['line_thick']
+            point_size = self.parent.entities_db.collection_by_name('backgrounds').get_uid_legend(uid=uid)['point_size']
+            opacity = self.parent.entities_db.collection_by_name('backgrounds').get_uid_legend(uid=uid)['opacity'] / 100
 
-            plot_entity = self.parent.backgrounds_coll.get_uid_vtk_obj(uid)
+            plot_entity = self.parent.entities_db.collection_by_name('backgrounds').get_uid_vtk_obj(uid)
         else:
             print("no collection")
             print(collection)
@@ -4164,8 +4147,8 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         elif isinstance(plot_entity, DEM):
             """Show texture specified in show_property"""
             if show_property in \
-                    self.parent.dom_coll.df.loc[self.parent.dom_coll.df['uid'] == uid, "texture_uids"].values[0]:
-                active_image = self.parent.image_coll.get_uid_vtk_obj(show_property)
+                    self.parent.entities_db.collection_by_name('dom').df.loc[self.parent.entities_db.collection_by_name('dom').df['uid'] == uid, "texture_uids"].values[0]:
+                active_image = self.parent.entities_db.collection_by_name('image').get_uid_vtk_obj(show_property)
                 active_image_texture = active_image.texture
                 # active_image_properties_components = active_image.properties_components[0]  # IF USED THIS MUST BE FIXED FOR TEXTURES WITH MORE THAN 3 COMPONENTS
                 this_actor = self.plot_mesh(uid=uid, plot_entity=plot_entity, color_RGB=None, show_property=None,
@@ -4202,7 +4185,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             plot_rgb_option = None
             new_plot = pvPointSet()
             new_plot.ShallowCopy(plot_entity)  # this is temporary
-            file = self.parent.dom_coll.df.loc[self.parent.dom_coll.df['uid'] == uid, "name"].values[0]
+            file = self.parent.entities_db.collection_by_name('dom').df.loc[self.parent.entities_db.collection_by_name('dom').df['uid'] == uid, "name"].values[0]
             if isinstance(plot_entity.points, np_ndarray):
                 """This check is needed to avoid errors when trying to plot an empty
                 PolyData, just created at the beginning of a digitizing session."""
@@ -4231,8 +4214,8 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                     index = int(show_property[pos1 + 1:pos2])
                     show_property_value = plot_entity.get_point_data(original_prop)[:, index]
                 else:
-                    n_comp = self.parent.dom_coll.get_uid_properties_components(uid)[
-                        self.parent.dom_coll.get_uid_properties_names(uid).index(show_property)]
+                    n_comp = self.parent.entities_db.collection_by_name('dom').get_uid_properties_components(uid)[
+                        self.parent.entities_db.collection_by_name('dom').get_uid_properties_names(uid).index(show_property)]
                     '''[Gabriele] Get the n of components for the given property. If it's > 1 then do stuff depending on the type of property (e.g. show_rgb_option -> True if the property is RGB)'''
                     if n_comp > 1:
                         show_property_value = plot_entity.get_point_data(show_property)
@@ -4339,8 +4322,8 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         return this_actor
 
     def show_markers(self, uid=None, show_property=None):
-        plot_entity = self.parent.well_coll.get_uid_vtk_obj(uid)
-        marker_data = self.parent.well_coll.get_uid_marker_names(uid)
+        plot_entity = self.parent.entities_db.collection_by_name('well').get_uid_vtk_obj(uid)
+        marker_data = self.parent.entities_db.collection_by_name('well').get_uid_marker_names(uid)
 
         if show_property is None:
             show_scalar_bar = False
@@ -4362,40 +4345,40 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
 
     def show_labels(self, uid=None, collection=None, show_property=None):
         if collection == 'geol_coll':
-            plot_entity = self.parent.geol_coll.get_uid_vtk_obj(uid)
+            plot_entity = self.parent.entities_db.collection_by_name('geol').get_uid_vtk_obj(uid)
             point = plot_entity.GetCenter()
-            name_value = self.parent.geol_coll.get_uid_name(uid)
+            name_value = self.parent.entities_db.collection_by_name('geol').get_uid_name(uid)
         elif collection == 'xsect_coll':
-            plot_entity = self.parent.xsect_coll.get_uid_vtk_frame(uid)
+            plot_entity = self.parent.entities_db.collection_by_name('xsect').get_uid_vtk_frame(uid)
             point = plot_entity.GetCenter()
-            name_value = self.parent.xsect_coll.get_uid_name(uid)
+            name_value = self.parent.entities_db.collection_by_name('xsect').get_uid_name(uid)
         elif collection == 'boundary_coll':
-            plot_entity = self.parent.boundary_coll.get_uid_vtk_obj(uid)
+            plot_entity = self.parent.entities_db.collection_by_name('boundary').get_uid_vtk_obj(uid)
             point = plot_entity.GetCenter()
-            name_value = self.parent.boundary_coll.get_uid_name(uid)
+            name_value = self.parent.entities_db.collection_by_name('boundary').get_uid_name(uid)
         elif collection == 'mesh3d_coll':
-            plot_entity = self.parent.mesh3d_coll.get_uid_vtk_obj(uid)
+            plot_entity = self.parent.entities_db.collection_by_name('mesh3d').get_uid_vtk_obj(uid)
             point = plot_entity.GetCenter()
-            name_value = self.parent.mesh3d_coll.get_uid_name(uid)
+            name_value = self.parent.entities_db.collection_by_name('mesh3d').get_uid_name(uid)
         elif collection == 'dom_coll':
-            plot_entity = self.parent.dom_coll.get_uid_vtk_obj(uid)
+            plot_entity = self.parent.entities_db.collection_by_name('dom').get_uid_vtk_obj(uid)
             point = plot_entity.GetCenter()
-            name_value = self.parent.dom_coll.get_uid_name(uid)
+            name_value = self.parent.entities_db.collection_by_name('dom').get_uid_name(uid)
         elif collection == 'image_coll':
-            plot_entity = self.parent.image_coll.get_uid_vtk_obj(uid)
+            plot_entity = self.parent.entities_db.collection_by_name('image').get_uid_vtk_obj(uid)
             point = plot_entity.GetCenter()
-            name_value = self.parent.image_coll.get_uid_name(uid)
+            name_value = self.parent.entities_db.collection_by_name('image').get_uid_name(uid)
         elif collection == 'well_coll':
-            plot_entity = self.parent.well_coll.get_uid_vtk_obj(uid)
+            plot_entity = self.parent.entities_db.collection_by_name('well').get_uid_vtk_obj(uid)
             point = plot_entity.points[0].reshape(-1, 3)
-            name_value = [self.parent.well_coll.get_uid_well_locid(uid)]
+            name_value = [self.parent.entities_db.collection_by_name('well').get_uid_well_locid(uid)]
         elif collection == 'fluids_coll':
-            plot_entity = self.parent.fluids_coll.get_uid_vtk_obj(uid)
+            plot_entity = self.parent.entities_db.collection_by_name('fluids').get_uid_vtk_obj(uid)
             point = plot_entity.GetCenter()
-            name_value = self.parent.fluids_coll.get_uid_name(uid)
+            name_value = self.parent.entities_db.collection_by_name('fluids').get_uid_name(uid)
         elif collection == 'backgrounds_coll':
-            plot_entity = self.parent.backgrounds_coll.get_uid_vtk_obj(uid)
-            if self.parent.backgrounds_coll.get_uid_topological_type(uid) == 'PolyLine':
+            plot_entity = self.parent.entities_db.collection_by_name('backgrounds').get_uid_vtk_obj(uid)
+            if self.parent.entities_db.collection_by_name('backgrounds').get_uid_topological_type(uid) == 'PolyLine':
                 point = plot_entity.GetCenter()
             else:
                 point = plot_entity.points
@@ -4596,11 +4579,11 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
 
             if collection == 'geol_coll':
                 table = self.parent.GeologyTableView
-                df = self.parent.geol_coll.df
+                df = self.parent.entities_db.collection_by_name('geol').df
                 self.parent.tabCentral.setCurrentIndex(0) #set the correct tab to avoid problems
             elif collection == 'dom_coll':
                 table = self.parent.DOMsTableView
-                df = self.parent.dom_coll.df
+                df = self.parent.entities_db.collection_by_name('dom').df
                 self.parent.tabCentral.setCurrentIndex(4)
             else:
                 print('Selection not supported')
@@ -4761,19 +4744,19 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
     #     """Remove entities."""
     #     for uid in self.selected_uids:
     #         if self.actors_df.loc[self.actors_df['uid'] == uid, 'collection'].values[0] == 'geol_coll':
-    #             self.parent.geol_coll.remove_entity(uid=uid)
+    #             self.parent.entities_db.collection_by_name('geol').remove_entity(uid=uid)
     #         elif self.actors_df.loc[self.actors_df['uid'] == uid, 'collection'].values[0] == 'xsect_coll':
-    #             self.parent.xsect_coll.remove_entity(uid=uid)
+    #             self.parent.entities_db.collection_by_name('xsect').remove_entity(uid=uid)
     #         elif self.actors_df.loc[self.actors_df['uid'] == uid, 'collection'].values[0] == 'boundary_coll':
-    #             self.parent.boundary_coll.remove_entity(uid=uid)
+    #             self.parent.entities_db.collection_by_name('boundary').remove_entity(uid=uid)
     #         elif self.actors_df.loc[self.actors_df['uid'] == uid, 'collection'].values[0] == 'mesh3d_coll':
-    #             self.parent.mesh3d_coll.remove_entity(uid=uid)
+    #             self.parent.entities_db.collection_by_name('mesh3d').remove_entity(uid=uid)
     #         elif self.actors_df.loc[self.actors_df['uid'] == uid, 'collection'].values[0] == 'dom_coll':
-    #             self.parent.dom_coll.remove_entity(uid=uid)
+    #             self.parent.entities_db.collection_by_name('dom').remove_entity(uid=uid)
     #         elif self.actors_df.loc[self.actors_df['uid'] == uid, 'collection'].values[0] == 'image_coll':
-    #             self.parent.image_coll.remove_entity(uid=uid)
+    #             self.parent.entities_db.collection_by_name('image').remove_entity(uid=uid)
     #         elif self.actors_df.loc[self.actors_df['uid'] == uid, 'collection'].values[0] == 'well_coll':
-    #             self.parent.well_coll.remove_entity(uid=uid)
+    #             self.parent.entities_db.collection_by_name('well').remove_entity(uid=uid)
     #     """List of selected_uids is cleared"""
     #     self.selected_uids = []
 
@@ -4979,16 +4962,16 @@ class View3D(BaseView):
 
         # print(att_point)
 
-        if set_opt['name'] in self.parent.geol_coll.df['name'].values:
-            uid = self.parent.geol_coll.get_name_uid(set_opt['name'])
-            old_vtk_obj = self.parent.geol_coll.get_uid_vtk_obj(uid)
+        if set_opt['name'] in self.parent.entities_db.collection_by_name('geol').df['name'].values:
+            uid = self.parent.entities_db.collection_by_name('geol').get_name_uid(set_opt['name'])
+            old_vtk_obj = self.parent.entities_db.collection_by_name('geol').get_uid_vtk_obj(uid)
 
             old_vtk_obj.append_point(point_vector=plane_c)
             old_plane_n = old_vtk_obj.get_point_data('Normals')
             old_plane_n = np_append(old_plane_n, plane_n).reshape(-1, 3)
             old_vtk_obj.set_point_data('Normals', old_plane_n)
             old_vtk_obj.auto_cells()
-            self.parent.geol_coll.replace_vtk(uid, old_vtk_obj, const_color=True)
+            self.parent.entities_db.collection_by_name('geol').replace_vtk(uid, old_vtk_obj, const_color=True)
         else:
             att_point = Attitude()
 
@@ -5012,7 +4995,7 @@ class View3D(BaseView):
             curr_obj_dict['properties_components'] = properties_components
             curr_obj_dict['vtk_obj'] = att_point
             """Add to entity collection."""
-            self.parent.geol_coll.add_entity_from_dict(entity_dict=curr_obj_dict)
+            self.parent.entities_db.collection_by_name('geol').add_entity_from_dict(entity_dict=curr_obj_dict)
 
             del extr
             del sphere
@@ -5033,10 +5016,10 @@ class View3D(BaseView):
         else:
             uid = self.selected_uids[0]
 
-        vtk_obj = self.parent.dom_coll.get_uid_vtk_obj(uid)
+        vtk_obj = self.parent.entities_db.collection_by_name('dom').get_uid_vtk_obj(uid)
 
         if isinstance(vtk_obj, PCDom):
-            if 'dip direction' not in self.parent.dom_coll.get_uid_properties_names(uid):
+            if 'dip direction' not in self.parent.entities_db.collection_by_name('dom').get_uid_properties_names(uid):
                 print(
                     'dip directio/dip data not present in the dataset. Calculate from Normals using the specific function.')
                 return
@@ -5115,7 +5098,7 @@ class View3D(BaseView):
             curr_obj_dict['properties_components'] = properties_components
             curr_obj_dict['vtk_obj'] = seg_pc
             """Add to entity collection."""
-            self.parent.dom_coll.add_entity_from_dict(entity_dict=curr_obj_dict)
+            self.parent.entities_db.collection_by_name('dom').add_entity_from_dict(entity_dict=curr_obj_dict)
 
             del f1
             del pc_clean
@@ -5133,8 +5116,8 @@ class View3D(BaseView):
         else:
             uid = self.selected_uids[0]
 
-        vtk_obj = self.parent.dom_coll.get_uid_vtk_obj(uid)
-        name = self.parent.dom_coll.get_uid_name(uid)
+        vtk_obj = self.parent.entities_db.collection_by_name('dom').get_uid_vtk_obj(uid)
+        name = self.parent.entities_db.collection_by_name('dom').get_uid_name(uid)
         appender = vtkAppendPolyData()
         max_region = np_max(vtk_obj.get_point_data('ClusterId'))
         vtk_obj.GetPointData().SetActiveScalars('ClusterId')
@@ -5180,7 +5163,7 @@ class View3D(BaseView):
         curr_obj_dict['properties_components'] = properties_components
         curr_obj_dict['vtk_obj'] = points
         """Add to entity collection."""
-        self.parent.geol_coll.add_entity_from_dict(entity_dict=curr_obj_dict)
+        self.parent.entities_db.collection_by_name('geol').add_entity_from_dict(entity_dict=curr_obj_dict)
 
     def facets(self):
         if len(self.selected_uids) == 0:
@@ -5189,8 +5172,8 @@ class View3D(BaseView):
         else:
             uid = self.selected_uids[0]
 
-        vtk_obj = self.parent.dom_coll.get_uid_vtk_obj(uid)
-        name = self.parent.dom_coll.get_uid_name(uid)
+        vtk_obj = self.parent.entities_db.collection_by_name('dom').get_uid_vtk_obj(uid)
+        name = self.parent.entities_db.collection_by_name('dom').get_uid_name(uid)
         appender = vtkAppendPolyData()
         max_region = np_max(vtk_obj.get_point_data('ClusterId'))
         vtk_obj.GetPointData().SetActiveScalars('ClusterId')
@@ -5244,7 +5227,7 @@ class View3D(BaseView):
         curr_obj_dict['properties_components'] = properties_components
         curr_obj_dict['vtk_obj'] = facets
         """Add to entity collection."""
-        self.parent.geol_coll.add_entity_from_dict(entity_dict=curr_obj_dict)
+        self.parent.entities_db.collection_by_name('geol').add_entity_from_dict(entity_dict=curr_obj_dict)
 
     def plot_volume_3D(self, uid=None, plot_entity=None):
         if not self.actors_df.empty:
@@ -5308,7 +5291,7 @@ class View3D(BaseView):
     def show_octree(self):
         vis_uids = self.actors_df.loc[self.actors_df['show'] == True, 'uid']
         for uid in vis_uids:
-            vtk_obj = self.parent.dom_coll.get_uid_vtk_obj(uid)
+            vtk_obj = self.parent.entities_db.collection_by_name('dom').get_uid_vtk_obj(uid)
             oct = PolyData()  # [Gabriele] possible recursion problem
             # print(vtk_obj.locator)
             vtk_obj.locator.GenerateRepresentation(3, oct)
@@ -5317,7 +5300,7 @@ class View3D(BaseView):
 
     def change_bore_vis(self, method):
         actors = set(self.plotter.renderer.actors.copy())
-        wells = set(self.parent.well_coll.get_uids())
+        wells = set(self.parent.entities_db.collection_by_name('well').get_uids())
 
         well_actors = actors.intersection(wells)
         if method == 'trace':
@@ -5329,7 +5312,7 @@ class View3D(BaseView):
                 if '_geo' in uid:
                     pass
                 else:
-                    plot_entity = self.parent.well_coll.get_uid_vtk_obj(uid)
+                    plot_entity = self.parent.entities_db.collection_by_name('well').get_uid_vtk_obj(uid)
                     if self.toggle_bore_geo == 1:
                         self.plotter.remove_actor(f'{uid}_geo')
                     elif self.toggle_bore_geo == -1:
@@ -5344,7 +5327,7 @@ class View3D(BaseView):
                 if '_litho' in uid:
                     pass
                 else:
-                    plot_entity = self.parent.well_coll.get_uid_vtk_obj(uid)
+                    plot_entity = self.parent.entities_db.collection_by_name('well').get_uid_vtk_obj(uid)
                     if self.toggle_bore_litho == 1:
                         self.plotter.remove_actor(f'{uid}_litho')
                     elif self.toggle_bore_litho == -1:
@@ -5358,19 +5341,19 @@ class View3D(BaseView):
     '''[Gabriele] PC Filters ----------------------------------------------------'''
 
     def radial_filt(self):
-        uids = self.parent.dom_coll.get_dom_type_uids('PCDom')
+        uids = self.parent.entities_db.collection_by_name('dom').get_dom_type_uids('PCDom')
 
         for uid in uids:
-            vtk_obj = self.parent.dom_coll.get_uid_vtk_obj(uid)
+            vtk_obj = self.parent.entities_db.collection_by_name('dom').get_uid_vtk_obj(uid)
             vtk_obj.calc_radius()
-            self.parent.dom_coll.replace_vtk(uid, vtk_obj)
+            self.parent.entities_db.collection_by_name('dom').replace_vtk(uid, vtk_obj)
 
     def surf_den_filt(self):
         ...
 
     def thresh_filt(self):
         uid = self.actors_df.loc[self.actors_df['show'] == True,'uid'].values[0]
-        vtk_obj = self.parent.dom_coll.get_uid_vtk_obj(uid)
+        vtk_obj = self.parent.entities_db.collection_by_name('dom').get_uid_vtk_obj(uid)
         if isinstance(vtk_obj,PCDom):
             input_dict = {'prop_name': ['Select property name: ', vtk_obj.properties_names], 'l_t': ['Lower threshold: ', 0], 'u_t': ['Upper threshold: ', 10]}
             dialog = multiple_input_dialog(title='Threshold filter', input_dict=input_dict)
@@ -5385,17 +5368,17 @@ class View3D(BaseView):
             out.ShallowCopy(thresh.GetOutput())
             out.generate_cells()
             # out.plot()
-            # self.parent.dom_coll.replace_vtk(uid[0],out)
-            entity_dict = deepcopy(self.parent.dom_coll.dom_entity_dict)
+            # self.parent.entities_db.collection_by_name('dom').replace_vtk(uid[0],out)
+            entity_dict = deepcopy(self.parent.entities_db.collection_by_name('dom').dom_entity_dict)
             # print(entity_dict)
-            entity_dict['name'] = self.parent.dom_coll.get_uid_name(uid) + '_thresh_'+str(dialog['l_t'])+'_'+str(dialog['u_t'])
+            entity_dict['name'] = self.parent.entities_db.collection_by_name('dom').get_uid_name(uid) + '_thresh_'+str(dialog['l_t'])+'_'+str(dialog['u_t'])
             entity_dict['vtk_obj'] = out
             entity_dict['dom_type'] = 'PCDom'
-            entity_dict['properties_names'] = self.parent.dom_coll.get_uid_properties_names(uid)
+            entity_dict['properties_names'] = self.parent.entities_db.collection_by_name('dom').get_uid_properties_names(uid)
             entity_dict['dom_type'] = 'PCDom'
-            entity_dict['properties_components'] = self.parent.dom_coll.get_uid_properties_components(uid)
+            entity_dict['properties_components'] = self.parent.entities_db.collection_by_name('dom').get_uid_properties_components(uid)
             entity_dict['vtk_obj'] = out
-            self.parent.dom_coll.add_entity_from_dict(entity_dict)
+            self.parent.entities_db.collection_by_name('dom').add_entity_from_dict(entity_dict)
             del out
             del thresh
         else:
@@ -5420,7 +5403,7 @@ class View3D(BaseView):
             print('No entities selected, make sure to have the right tab open')
             return
         for uid in self.selected_uids:
-            vtk_obj = self.parent.dom_coll.get_uid_vtk_obj(uid)
+            vtk_obj = self.parent.entities_db.collection_by_name('dom').get_uid_vtk_obj(uid)
             prop_keys = vtk_obj.point_data_keys
             if 'Normals' not in prop_keys:
                 print('Normal data not present. Import or create normal data to proceed')
@@ -5435,7 +5418,7 @@ class View3D(BaseView):
                 vtk_obj.set_point_data('dip', dip)
                 vtk_obj.set_point_data('dip direction', dip_az)
 
-                self.parent.dom_coll.replace_vtk(uid, vtk_obj)
+                self.parent.entities_db.collection_by_name('dom').replace_vtk(uid, vtk_obj)
             # print(normals)
             # normals_neg = np.where(normals[:,2]<0)
             # normals[normals_neg] *= -1
@@ -5521,7 +5504,7 @@ class View2D(BaseView):
 
     def initialize_menu_tools(self):
         """Imports for this view."""
-        from .two_d_lines import draw_line, edit_line, sort_line_nodes, move_line, rotate_line, extend_line, \
+        from .two_d_lines import draw_line, edit_line, sort_line_nodes, rotate_line, extend_line, \
             split_line_line, split_line_existing_point, merge_lines, snap_line, resample_line_distance, \
             resample_line_number_points, simplify_line, copy_parallel, copy_kink, copy_similar, measure_distance
         """Customize menus and tools for this view"""
@@ -5687,25 +5670,25 @@ class View2D(BaseView):
     def change_actor_color(self, uid=None, collection=None):
         """Update color for actor uid"""
         if collection == 'geol_coll':
-            color_R = self.parent.geol_coll.get_uid_legend(uid=uid)['color_R']
-            color_G = self.parent.geol_coll.get_uid_legend(uid=uid)['color_G']
-            color_B = self.parent.geol_coll.get_uid_legend(uid=uid)['color_B']
+            color_R = self.parent.entities_db.collection_by_name('geol').get_uid_legend(uid=uid)['color_R']
+            color_G = self.parent.entities_db.collection_by_name('geol').get_uid_legend(uid=uid)['color_G']
+            color_B = self.parent.entities_db.collection_by_name('geol').get_uid_legend(uid=uid)['color_B']
         elif collection == 'xsect_coll':
-            color_R = self.parent.xsect_coll.get_legend()['color_R']
-            color_G = self.parent.xsect_coll.get_legend()['color_G']
-            color_B = self.parent.xsect_coll.get_legend()['color_B']
+            color_R = self.parent.entities_db.collection_by_name('xsect').get_legend()['color_R']
+            color_G = self.parent.entities_db.collection_by_name('xsect').get_legend()['color_G']
+            color_B = self.parent.entities_db.collection_by_name('xsect').get_legend()['color_B']
         elif collection == 'boundary_coll':
-            color_R = self.parent.boundary_coll.get_legend()['color_R']
-            color_G = self.parent.boundary_coll.get_legend()['color_G']
-            color_B = self.parent.boundary_coll.get_legend()['color_B']
+            color_R = self.parent.entities_db.collection_by_name('boundary').get_legend()['color_R']
+            color_G = self.parent.entities_db.collection_by_name('boundary').get_legend()['color_G']
+            color_B = self.parent.entities_db.collection_by_name('boundary').get_legend()['color_B']
         elif collection == 'mesh3d_coll':
-            color_R = self.parent.mesh3d_coll.get_legend()['color_R']
-            color_G = self.parent.mesh3d_coll.get_legend()['color_G']
-            color_B = self.parent.mesh3d_coll.get_legend()['color_B']
+            color_R = self.parent.entities_db.collection_by_name('mesh3d').get_legend()['color_R']
+            color_G = self.parent.entities_db.collection_by_name('mesh3d').get_legend()['color_G']
+            color_B = self.parent.entities_db.collection_by_name('mesh3d').get_legend()['color_B']
         elif collection == 'dom_coll':
-            color_R = self.parent.dom_coll.get_legend()['color_R']
-            color_G = self.parent.dom_coll.get_legend()['color_G']
-            color_B = self.parent.dom_coll.get_legend()['color_B']
+            color_R = self.parent.entities_db.collection_by_name('dom').get_legend()['color_R']
+            color_G = self.parent.entities_db.collection_by_name('dom').get_legend()['color_G']
+            color_B = self.parent.entities_db.collection_by_name('dom').get_legend()['color_B']
         """Note: no legend for image."""
         color_RGB = [color_R / 255, color_G / 255, color_B / 255]
         if isinstance(self.actors_df.loc[self.actors_df['uid'] == uid, 'actor'].values[0], Line2D):
@@ -5725,15 +5708,15 @@ class View2D(BaseView):
     def change_actor_line_thick(self, uid=None, collection=None):
         """Update line thickness for actor uid"""
         if collection == 'geol_coll':
-            line_thick = self.parent.geol_coll.get_uid_legend(uid=uid)['line_thick']
+            line_thick = self.parent.entities_db.collection_by_name('geol').get_uid_legend(uid=uid)['line_thick']
         elif collection == 'xsect_coll':
-            line_thick = self.parent.xsect_coll.get_legend()['line_thick']
+            line_thick = self.parent.entities_db.collection_by_name('xsect').get_legend()['line_thick']
         elif collection == 'boundary_coll':
-            line_thick = self.parent.boundary_coll.get_legend()['line_thick']
+            line_thick = self.parent.entities_db.collection_by_name('boundary').get_legend()['line_thick']
         elif collection == 'mesh3d_coll':
-            line_thick = self.parent.mesh3d_coll.get_legend()['line_thick']
+            line_thick = self.parent.entities_db.collection_by_name('mesh3d').get_legend()['line_thick']
         elif collection == 'dom_coll':
-            line_thick = self.parent.dom_coll.get_legend()['line_thick']
+            line_thick = self.parent.entities_db.collection_by_name('dom').get_legend()['line_thick']
         else:
             return
         """Note: no legend for image."""
@@ -6042,8 +6025,8 @@ class ViewMap(View2D):
         """Inheritance of common tools"""
         super().initialize_menu_tools()
         """Tools specific to map view"""
-        from .xsection_collection import section_from_azimuth, section_from_points, sections_from_file
-        from .boundary_collection import boundary_from_points
+        from pzero.collections.xsection_collection import section_from_azimuth, section_from_points, sections_from_file
+        from pzero.collections.boundary_collection import boundary_from_points
 
         self.sectionFromAzimuthButton = QAction('Section from Azimuth', self)  # create action
         self.sectionFromAzimuthButton.triggered.connect(
@@ -6074,61 +6057,61 @@ class ViewMap(View2D):
         https://github.com/pyvista/pyvista/blob/140b15be1d4021b81ded46b1c212c70e86a98ee7/pyvista/plotting/plotting.py#L1045"""
         """First get entity from collection."""
         if collection == 'geol_coll':
-            color_R = self.parent.geol_coll.get_uid_legend(uid=uid)['color_R']
-            color_G = self.parent.geol_coll.get_uid_legend(uid=uid)['color_G']
-            color_B = self.parent.geol_coll.get_uid_legend(uid=uid)['color_B']
+            color_R = self.parent.entities_db.collection_by_name('geol').get_uid_legend(uid=uid)['color_R']
+            color_G = self.parent.entities_db.collection_by_name('geol').get_uid_legend(uid=uid)['color_G']
+            color_B = self.parent.entities_db.collection_by_name('geol').get_uid_legend(uid=uid)['color_B']
             color_RGB = [color_R / 255, color_G / 255, color_B / 255]
-            line_thick = self.parent.geol_coll.get_uid_legend(uid=uid)['line_thick']
-            plot_entity = self.parent.geol_coll.get_uid_vtk_obj(uid)
+            line_thick = self.parent.entities_db.collection_by_name('geol').get_uid_legend(uid=uid)['line_thick']
+            plot_entity = self.parent.entities_db.collection_by_name('geol').get_uid_vtk_obj(uid)
         elif collection == 'xsect_coll':
-            color_R = self.parent.xsect_coll.get_legend()['color_R']
-            color_G = self.parent.xsect_coll.get_legend()['color_G']
-            color_B = self.parent.xsect_coll.get_legend()['color_B']
+            color_R = self.parent.entities_db.collection_by_name('xsect').get_legend()['color_R']
+            color_G = self.parent.entities_db.collection_by_name('xsect').get_legend()['color_G']
+            color_B = self.parent.entities_db.collection_by_name('xsect').get_legend()['color_B']
             color_RGB = [color_R / 255, color_G / 255, color_B / 255]
-            line_thick = self.parent.xsect_coll.get_legend()['line_thick']
-            plot_entity = self.parent.xsect_coll.get_uid_vtk_frame(uid)
+            line_thick = self.parent.entities_db.collection_by_name('xsect').get_legend()['line_thick']
+            plot_entity = self.parent.entities_db.collection_by_name('xsect').get_uid_vtk_frame(uid)
         elif collection == 'boundary_coll':
-            color_R = self.parent.boundary_coll.get_legend()['color_R']
-            color_G = self.parent.boundary_coll.get_legend()['color_G']
-            color_B = self.parent.boundary_coll.get_legend()['color_B']
+            color_R = self.parent.entities_db.collection_by_name('boundary').get_legend()['color_R']
+            color_G = self.parent.entities_db.collection_by_name('boundary').get_legend()['color_G']
+            color_B = self.parent.entities_db.collection_by_name('boundary').get_legend()['color_B']
             color_RGB = [color_R / 255, color_G / 255, color_B / 255]
-            line_thick = self.parent.boundary_coll.get_legend()['line_thick']
-            plot_entity = self.parent.boundary_coll.get_uid_vtk_obj(uid)
+            line_thick = self.parent.entities_db.collection_by_name('boundary').get_legend()['line_thick']
+            plot_entity = self.parent.entities_db.collection_by_name('boundary').get_uid_vtk_obj(uid)
         elif collection == 'mesh3d_coll':
-            color_R = self.parent.mesh3d_coll.get_legend()['color_R']
-            color_G = self.parent.mesh3d_coll.get_legend()['color_G']
-            color_B = self.parent.mesh3d_coll.get_legend()['color_B']
+            color_R = self.parent.entities_db.collection_by_name('mesh3d').get_legend()['color_R']
+            color_G = self.parent.entities_db.collection_by_name('mesh3d').get_legend()['color_G']
+            color_B = self.parent.entities_db.collection_by_name('mesh3d').get_legend()['color_B']
             color_RGB = [color_R / 255, color_G / 255, color_B / 255]
-            line_thick = self.parent.mesh3d_coll.get_legend()['line_thick']
-            plot_entity = self.parent.mesh3d_coll.get_uid_vtk_obj(uid)
+            line_thick = self.parent.entities_db.collection_by_name('mesh3d').get_legend()['line_thick']
+            plot_entity = self.parent.entities_db.collection_by_name('mesh3d').get_uid_vtk_obj(uid)
         elif collection == 'dom_coll':
-            color_R = self.parent.dom_coll.get_legend()['color_R']
-            color_G = self.parent.dom_coll.get_legend()['color_G']
-            color_B = self.parent.dom_coll.get_legend()['color_B']
+            color_R = self.parent.entities_db.collection_by_name('dom').get_legend()['color_R']
+            color_G = self.parent.entities_db.collection_by_name('dom').get_legend()['color_G']
+            color_B = self.parent.entities_db.collection_by_name('dom').get_legend()['color_B']
             color_RGB = [color_R / 255, color_G / 255, color_B / 255]
-            line_thick = self.parent.dom_coll.get_legend()['line_thick']
-            plot_entity = self.parent.dom_coll.get_uid_vtk_obj(uid)
+            line_thick = self.parent.entities_db.collection_by_name('dom').get_legend()['line_thick']
+            plot_entity = self.parent.entities_db.collection_by_name('dom').get_uid_vtk_obj(uid)
         elif collection == 'image_coll':
-            color_R = self.parent.image_coll.get_legend()['color_R']
-            color_G = self.parent.image_coll.get_legend()['color_G']
-            color_B = self.parent.image_coll.get_legend()['color_B']
+            color_R = self.parent.entities_db.collection_by_name('image').get_legend()['color_R']
+            color_G = self.parent.entities_db.collection_by_name('image').get_legend()['color_G']
+            color_B = self.parent.entities_db.collection_by_name('image').get_legend()['color_B']
             color_RGB = [color_R / 255, color_G / 255, color_B / 255]
-            line_thick = self.parent.image_coll.get_legend()['line_thick']
-            plot_entity = self.parent.image_coll.get_uid_vtk_obj(uid)
+            line_thick = self.parent.entities_db.collection_by_name('image').get_legend()['line_thick']
+            plot_entity = self.parent.entities_db.collection_by_name('image').get_uid_vtk_obj(uid)
         elif collection == 'well_coll':
-            color_R = self.parent.well_coll.get_uid_legend(uid=uid)['color_R']
-            color_G = self.parent.well_coll.get_uid_legend(uid=uid)['color_G']
-            color_B = self.parent.well_coll.get_uid_legend(uid=uid)['color_B']
+            color_R = self.parent.entities_db.collection_by_name('well').get_uid_legend(uid=uid)['color_R']
+            color_G = self.parent.entities_db.collection_by_name('well').get_uid_legend(uid=uid)['color_G']
+            color_B = self.parent.entities_db.collection_by_name('well').get_uid_legend(uid=uid)['color_B']
             color_RGB = [color_R / 255, color_G / 255, color_B / 255]
-            line_thick = self.parent.well_coll.get_uid_legend(uid=uid)['line_thick']
-            plot_entity = self.parent.well_coll.get_uid_vtk_obj(uid)
+            line_thick = self.parent.entities_db.collection_by_name('well').get_uid_legend(uid=uid)['line_thick']
+            plot_entity = self.parent.entities_db.collection_by_name('well').get_uid_vtk_obj(uid)
         elif collection == 'backgrounds_coll':
-            color_R = self.parent.backgrounds_coll.get_uid_legend(uid=uid)['color_R']
-            color_G = self.parent.backgrounds_coll.get_uid_legend(uid=uid)['color_G']
-            color_B = self.parent.backgrounds_coll.get_uid_legend(uid=uid)['color_B']
+            color_R = self.parent.entities_db.collection_by_name('backgrounds').get_uid_legend(uid=uid)['color_R']
+            color_G = self.parent.entities_db.collection_by_name('backgrounds').get_uid_legend(uid=uid)['color_G']
+            color_B = self.parent.entities_db.collection_by_name('backgrounds').get_uid_legend(uid=uid)['color_B']
             color_RGB = [color_R / 255, color_G / 255, color_B / 255]
-            line_thick = self.parent.backgrounds_coll.get_uid_legend(uid=uid)['line_thick']
-            plot_entity = self.parent.backgrounds_coll.get_uid_vtk_obj(uid)
+            line_thick = self.parent.entities_db.collection_by_name('backgrounds').get_uid_legend(uid=uid)['line_thick']
+            plot_entity = self.parent.entities_db.collection_by_name('backgrounds').get_uid_vtk_obj(uid)
         else:
             plot_entity = None
 
@@ -6297,15 +6280,15 @@ class ViewXsection(View2D):
     def __init__(self, parent=None, *args, **kwargs):
         """Set the Xsection"""
 
-        if parent.xsect_coll.get_names():
+        if parent.entities_db.collection_by_name('xsect').get_names():
             self.this_x_section_name = input_combo_dialog(parent=None, title="Xsection", label="Choose Xsection",
-                                                          choice_list=parent.xsect_coll.get_names())
+                                                          choice_list=parent.entities_db.collection_by_name('xsect').get_names())
         else:
             message_dialog(title="Xsection", message="No Xsection in project")
             return
         if self.this_x_section_name:
             self.this_x_section_uid = \
-                parent.xsect_coll.df.loc[parent.xsect_coll.df['name'] == self.this_x_section_name, 'uid'].values[0]
+                parent.entities_db.collection_by_name('xsect').df.loc[parent.entities_db.collection_by_name('xsect').df['name'] == self.this_x_section_name, 'uid'].values[0]
         else:
             return
 
@@ -6343,87 +6326,87 @@ class ViewXsection(View2D):
         """Show actor with scalar property (default None)
         https://github.com/pyvista/pyvista/blob/140b15be1d4021b81ded46b1c212c70e86a98ee7/pyvista/plotting/plotting.py#L1045"""
         if collection == 'geol_coll':
-            if (self.parent.geol_coll.get_uid_topological_type(
-                    uid) == "XsVertexSet" or self.parent.geol_coll.get_uid_topological_type(
-                uid) == "XsPolyLine") and self.parent.geol_coll.get_uid_x_section(uid) == self.this_x_section_uid:
-                color_R = self.parent.geol_coll.get_uid_legend(uid=uid)['color_R']
-                color_G = self.parent.geol_coll.get_uid_legend(uid=uid)['color_G']
-                color_B = self.parent.geol_coll.get_uid_legend(uid=uid)['color_B']
+            if (self.parent.entities_db.collection_by_name('geol').get_uid_topological_type(
+                    uid) == "XsVertexSet" or self.parent.entities_db.collection_by_name('geol').get_uid_topological_type(
+                uid) == "XsPolyLine") and self.parent.entities_db.collection_by_name('geol').get_uid_x_section(uid) == self.this_x_section_uid:
+                color_R = self.parent.entities_db.collection_by_name('geol').get_uid_legend(uid=uid)['color_R']
+                color_G = self.parent.entities_db.collection_by_name('geol').get_uid_legend(uid=uid)['color_G']
+                color_B = self.parent.entities_db.collection_by_name('geol').get_uid_legend(uid=uid)['color_B']
                 color_RGB = [color_R / 255, color_G / 255, color_B / 255]
-                line_thick = self.parent.geol_coll.get_uid_legend(uid=uid)['line_thick']
-                plot_entity = self.parent.geol_coll.get_uid_vtk_obj(uid)
+                line_thick = self.parent.entities_db.collection_by_name('geol').get_uid_legend(uid=uid)['line_thick']
+                plot_entity = self.parent.entities_db.collection_by_name('geol').get_uid_vtk_obj(uid)
             else:
                 plot_entity = None
         elif collection == 'xsect_coll':
             """To be updated in future for Xsection intersections_______________"""
             if uid == self.this_x_section_uid:
-                color_R = self.parent.xsect_coll.get_legend()['color_R']
-                color_G = self.parent.xsect_coll.get_legend()['color_G']
-                color_B = self.parent.xsect_coll.get_legend()['color_B']
+                color_R = self.parent.entities_db.collection_by_name('xsect').get_legend()['color_R']
+                color_G = self.parent.entities_db.collection_by_name('xsect').get_legend()['color_G']
+                color_B = self.parent.entities_db.collection_by_name('xsect').get_legend()['color_B']
                 color_RGB = [color_R / 255, color_G / 255, color_B / 255]
-                line_thick = self.parent.xsect_coll.get_legend()['line_thick']
-                plot_entity = self.parent.xsect_coll.get_uid_vtk_frame(uid)
+                line_thick = self.parent.entities_db.collection_by_name('xsect').get_legend()['line_thick']
+                plot_entity = self.parent.entities_db.collection_by_name('xsect').get_uid_vtk_frame(uid)
             else:
                 plot_entity = None
         elif collection == 'boundary_coll':
-            if self.parent.boundary_coll.get_uid_topological_type(
-                    uid) == "XsPolyLine" and self.parent.boundary_coll.get_uid_x_section(
+            if self.parent.entities_db.collection_by_name('boundary').get_uid_topological_type(
+                    uid) == "XsPolyLine" and self.parent.entities_db.collection_by_name('boundary').get_uid_x_section(
                 uid) == self.this_x_section_uid:
-                color_R = self.parent.boundary_coll.get_legend()['color_R']
-                color_G = self.parent.boundary_coll.get_legend()['color_G']
-                color_B = self.parent.boundary_coll.get_legend()['color_B']
+                color_R = self.parent.entities_db.collection_by_name('boundary').get_legend()['color_R']
+                color_G = self.parent.entities_db.collection_by_name('boundary').get_legend()['color_G']
+                color_B = self.parent.entities_db.collection_by_name('boundary').get_legend()['color_B']
                 color_RGB = [color_R / 255, color_G / 255, color_B / 255]
-                line_thick = self.parent.boundary_coll.get_legend()['line_thick']
-                plot_entity = self.parent.boundary_coll.get_uid_vtk_obj(uid)
+                line_thick = self.parent.entities_db.collection_by_name('boundary').get_legend()['line_thick']
+                plot_entity = self.parent.entities_db.collection_by_name('boundary').get_uid_vtk_obj(uid)
             else:
                 plot_entity = None
         elif collection == 'mesh3d_coll':
-            if self.parent.mesh3d_coll.get_uid_mesh3d_type(
-                    uid) == "XsVoxet" and self.parent.mesh3d_coll.get_uid_x_section(uid) == self.this_x_section_uid:
-                color_R = self.parent.mesh3d_coll.get_legend()['color_R']
-                color_G = self.parent.mesh3d_coll.get_legend()['color_G']
-                color_B = self.parent.mesh3d_coll.get_legend()['color_B']
+            if self.parent.entities_db.collection_by_name('mesh3d').get_uid_mesh3d_type(
+                    uid) == "XsVoxet" and self.parent.entities_db.collection_by_name('mesh3d').get_uid_x_section(uid) == self.this_x_section_uid:
+                color_R = self.parent.entities_db.collection_by_name('mesh3d').get_legend()['color_R']
+                color_G = self.parent.entities_db.collection_by_name('mesh3d').get_legend()['color_G']
+                color_B = self.parent.entities_db.collection_by_name('mesh3d').get_legend()['color_B']
                 color_RGB = [color_R / 255, color_G / 255, color_B / 255]
-                line_thick = self.parent.mesh3d_coll.get_legend()['line_thick']
-                plot_entity = self.parent.mesh3d_coll.get_uid_vtk_obj(uid)
+                line_thick = self.parent.entities_db.collection_by_name('mesh3d').get_legend()['line_thick']
+                plot_entity = self.parent.entities_db.collection_by_name('mesh3d').get_uid_vtk_obj(uid)
             else:
                 plot_entity = None
         elif collection == 'dom_coll':
-            if self.parent.dom_coll.get_uid_dom_type(uid) == "DomXs" and self.parent.dom_coll.get_uid_x_section(
+            if self.parent.entities_db.collection_by_name('dom').get_uid_dom_type(uid) == "DomXs" and self.parent.entities_db.collection_by_name('dom').get_uid_x_section(
                     uid) == self.this_x_section_uid:
-                color_R = self.parent.dom_coll.get_legend()['color_R']
-                color_G = self.parent.dom_coll.get_legend()['color_G']
-                color_B = self.parent.dom_coll.get_legend()['color_B']
+                color_R = self.parent.entities_db.collection_by_name('dom').get_legend()['color_R']
+                color_G = self.parent.entities_db.collection_by_name('dom').get_legend()['color_G']
+                color_B = self.parent.entities_db.collection_by_name('dom').get_legend()['color_B']
                 color_RGB = [color_R / 255, color_G / 255, color_B / 255]
-                line_thick = self.parent.dom_coll.get_legend()['line_thick']
-                plot_entity = self.parent.dom_coll.get_uid_vtk_obj(uid)
+                line_thick = self.parent.entities_db.collection_by_name('dom').get_legend()['line_thick']
+                plot_entity = self.parent.entities_db.collection_by_name('dom').get_uid_vtk_obj(uid)
             else:
                 plot_entity = None
         elif collection == 'image_coll':
-            if self.parent.image_coll.get_uid_image_type(uid) == "XsImage" and self.parent.image_coll.get_uid_x_section(
+            if self.parent.entities_db.collection_by_name('image').get_uid_image_type(uid) == "XsImage" and self.parent.entities_db.collection_by_name('image').get_uid_x_section(
                     uid) == self.this_x_section_uid:
-                color_R = self.parent.image_coll.get_legend()['color_R']
-                color_G = self.parent.image_coll.get_legend()['color_G']
-                color_B = self.parent.image_coll.get_legend()['color_B']
+                color_R = self.parent.entities_db.collection_by_name('image').get_legend()['color_R']
+                color_G = self.parent.entities_db.collection_by_name('image').get_legend()['color_G']
+                color_B = self.parent.entities_db.collection_by_name('image').get_legend()['color_B']
                 color_RGB = [color_R / 255, color_G / 255, color_B / 255]
-                line_thick = self.parent.image_coll.get_legend()['line_thick']
-                plot_entity = self.parent.image_coll.get_uid_vtk_obj(uid)
+                line_thick = self.parent.entities_db.collection_by_name('image').get_legend()['line_thick']
+                plot_entity = self.parent.entities_db.collection_by_name('image').get_uid_vtk_obj(uid)
             else:
                 plot_entity = None
         elif collection == 'well_coll':
-            color_R = self.parent.well_coll.get_uid_legend(uid=uid)['color_R']
-            color_G = self.parent.well_coll.get_uid_legend(uid=uid)['color_G']
-            color_B = self.parent.well_coll.get_uid_legend(uid=uid)['color_B']
+            color_R = self.parent.entities_db.collection_by_name('well').get_uid_legend(uid=uid)['color_R']
+            color_G = self.parent.entities_db.collection_by_name('well').get_uid_legend(uid=uid)['color_G']
+            color_B = self.parent.entities_db.collection_by_name('well').get_uid_legend(uid=uid)['color_B']
             color_RGB = [color_R / 255, color_G / 255, color_B / 255]
-            line_thick = self.parent.well_coll.get_uid_legend(uid=uid)['line_thick']
-            plot_entity = self.parent.well_coll.get_uid_vtk_obj(uid)
+            line_thick = self.parent.entities_db.collection_by_name('well').get_uid_legend(uid=uid)['line_thick']
+            plot_entity = self.parent.entities_db.collection_by_name('well').get_uid_vtk_obj(uid)
         elif collection == 'backgrounds_coll':
-            color_R = self.parent.backgrounds_coll.get_uid_legend(uid=uid)['color_R']
-            color_G = self.parent.backgrounds_coll.get_uid_legend(uid=uid)['color_G']
-            color_B = self.parent.backgrounds_coll.get_uid_legend(uid=uid)['color_B']
+            color_R = self.parent.entities_db.collection_by_name('backgrounds').get_uid_legend(uid=uid)['color_R']
+            color_G = self.parent.entities_db.collection_by_name('backgrounds').get_uid_legend(uid=uid)['color_G']
+            color_B = self.parent.entities_db.collection_by_name('backgrounds').get_uid_legend(uid=uid)['color_B']
             color_RGB = [color_R / 255, color_G / 255, color_B / 255]
-            line_thick = self.parent.backgrounds_coll.get_uid_legend(uid=uid)['line_thick']
-            plot_entity = self.parent.backgrounds_coll.get_uid_vtk_obj(uid)
+            line_thick = self.parent.entities_db.collection_by_name('backgrounds').get_uid_legend(uid=uid)['line_thick']
+            plot_entity = self.parent.entities_db.collection_by_name('backgrounds').get_uid_vtk_obj(uid)
         else:
             plot_entity = None
         if plot_entity:
@@ -6636,7 +6619,7 @@ class ViewXsection(View2D):
     """NONE AT THE MOMENT"""
 
     def navigator(self):
-        sec_list = self.parent.xsect_coll.get_names()
+        sec_list = self.parent.entities_db.collection_by_name('xsect').get_names()
         idx = sec_list.index(self.this_x_section_name)
         NavigatorWidget(self, sec_list, idx)
 
@@ -6706,8 +6689,8 @@ class ViewStereoplot(BaseView):
         self.GeologyTreeWidget.hideColumn(1)  # hide the uid column
         self.GeologyTreeWidget.setItemsExpandable(True)
 
-        filtered_geo = self.parent.geol_coll.df.loc[
-            (self.parent.geol_coll.df['topological_type'] == 'VertexSet'), 'geological_type']
+        filtered_geo = self.parent.entities_db.collection_by_name('geol').df.loc[
+            (self.parent.entities_db.collection_by_name('geol').df['topological_type'] == 'VertexSet'), 'geological_type']
         geo_types = pd_unique(filtered_geo)
 
         for geo_type in geo_types:
@@ -6715,28 +6698,28 @@ class ViewStereoplot(BaseView):
                                        [geo_type])  # self.GeologyTreeWidget as parent -> top level
             glevel_1.setFlags(glevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
 
-            filtered_geo_feat = self.parent.geol_coll.df.loc[
-                (self.parent.geol_coll.df['geological_type'] == geo_type) & (
-                        self.parent.geol_coll.df['topological_type'] == 'VertexSet'), 'geological_feature']
+            filtered_geo_feat = self.parent.entities_db.collection_by_name('geol').df.loc[
+                (self.parent.entities_db.collection_by_name('geol').df['geological_type'] == geo_type) & (
+                        self.parent.entities_db.collection_by_name('geol').df['topological_type'] == 'VertexSet'), 'geological_feature']
             geo_features = pd_unique(filtered_geo_feat)
 
             for feature in geo_features:
                 glevel_2 = QTreeWidgetItem(glevel_1, [feature])  # glevel_1 as parent -> 1st middle level
                 glevel_2.setFlags(glevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
 
-                geo_scenario = pd_unique(self.parent.geol_coll.df.loc[
-                                             (self.parent.geol_coll.df['geological_type'] == geo_type) & (
-                                                     self.parent.geol_coll.df[
+                geo_scenario = pd_unique(self.parent.entities_db.collection_by_name('geol').df.loc[
+                                             (self.parent.entities_db.collection_by_name('geol').df['geological_type'] == geo_type) & (
+                                                     self.parent.entities_db.collection_by_name('geol').df[
                                                          'geological_feature'] == feature), 'scenario'])
 
                 for scenario in geo_scenario:
                     glevel_3 = QTreeWidgetItem(glevel_2, [scenario])  # glevel_2 as parent -> 2nd middle level
                     glevel_3.setFlags(glevel_3.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
 
-                    uids = self.parent.geol_coll.df.loc[(self.parent.geol_coll.df['geological_type'] == geo_type) & (
-                            self.parent.geol_coll.df['geological_feature'] == feature) & (self.parent.geol_coll.df[
+                    uids = self.parent.entities_db.collection_by_name('geol').df.loc[(self.parent.entities_db.collection_by_name('geol').df['geological_type'] == geo_type) & (
+                            self.parent.entities_db.collection_by_name('geol').df['geological_feature'] == feature) & (self.parent.entities_db.collection_by_name('geol').df[
                                                                                               'scenario'] == scenario) & (
-                                                                self.parent.geol_coll.df[
+                                                                self.parent.entities_db.collection_by_name('geol').df[
                                                                     'topological_type'] == 'VertexSet'), 'uid'].to_list()
 
                     for uid in uids:
@@ -6745,7 +6728,7 @@ class ViewStereoplot(BaseView):
                         property_combo.addItem("Poles")
                         # property_combo.addItem("Planes")
 
-                        name = self.parent.geol_coll.df.loc[(self.parent.geol_coll.df['uid'] == uid), 'name'].values[0]
+                        name = self.parent.entities_db.collection_by_name('geol').df.loc[(self.parent.entities_db.collection_by_name('geol').df['uid'] == uid), 'name'].values[0]
                         glevel_4 = QTreeWidgetItem(glevel_3, [name, uid])  # glevel_3 as parent -> lower level
                         self.GeologyTreeWidget.setItemWidget(glevel_4, 2, property_combo)
                         property_combo.currentIndexChanged.connect(lambda: self.toggle_property())
@@ -6767,21 +6750,21 @@ class ViewStereoplot(BaseView):
         self.TopologyTreeWidget.hideColumn(1)  # hide the uid column
         self.TopologyTreeWidget.setItemsExpandable(True)
 
-        filtered_topo = self.parent.geol_coll.df.loc[
-            (self.parent.geol_coll.df['topological_type'] == 'VertexSet'), 'topological_type']
+        filtered_topo = self.parent.entities_db.collection_by_name('geol').df.loc[
+            (self.parent.entities_db.collection_by_name('geol').df['topological_type'] == 'VertexSet'), 'topological_type']
         topo_types = pd_unique(filtered_topo)
 
         for topo_type in topo_types:
             tlevel_1 = QTreeWidgetItem(self.TopologyTreeWidget,
                                        [topo_type])  # self.GeologyTreeWidget as parent -> top level
             tlevel_1.setFlags(tlevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
-            for scenario in pd_unique(self.parent.geol_coll.df.loc[
-                                          self.parent.geol_coll.df['topological_type'] == topo_type, 'scenario']):
+            for scenario in pd_unique(self.parent.entities_db.collection_by_name('geol').df.loc[
+                                          self.parent.entities_db.collection_by_name('geol').df['topological_type'] == topo_type, 'scenario']):
                 tlevel_2 = QTreeWidgetItem(tlevel_1, [scenario])  # tlevel_1 as parent -> middle level
                 tlevel_2.setFlags(tlevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
 
-                uids = self.parent.geol_coll.df.loc[(self.parent.geol_coll.df['topological_type'] == topo_type) & (
-                        self.parent.geol_coll.df['scenario'] == scenario) & (self.parent.geol_coll.df[
+                uids = self.parent.entities_db.collection_by_name('geol').df.loc[(self.parent.entities_db.collection_by_name('geol').df['topological_type'] == topo_type) & (
+                        self.parent.entities_db.collection_by_name('geol').df['scenario'] == scenario) & (self.parent.entities_db.collection_by_name('geol').df[
                                                                                  'topological_type'] == 'VertexSet'), 'uid'].to_list()
 
                 for uid in uids:
@@ -6789,7 +6772,7 @@ class ViewStereoplot(BaseView):
                     property_combo.uid = uid
                     property_combo.addItem("Poles")
                     # property_combo.addItem("Planes")
-                    name = self.parent.geol_coll.df.loc[self.parent.geol_coll.df['uid'] == uid, 'name'].values[0]
+                    name = self.parent.entities_db.collection_by_name('geol').df.loc[self.parent.entities_db.collection_by_name('geol').df['uid'] == uid, 'name'].values[0]
                     tlevel_3 = QTreeWidgetItem(tlevel_2, [name, uid])  # tlevel_2 as parent -> lower level
                     self.TopologyTreeWidget.setItemWidget(tlevel_3, 2, property_combo)
                     property_combo.currentIndexChanged.connect(lambda: self.toggle_property())
@@ -6807,54 +6790,54 @@ class ViewStereoplot(BaseView):
         """Update geology tree without creating a new model"""
         uid_list = list(new_list['uid'])
         for uid in uid_list:
-            if self.GeologyTreeWidget.findItems(self.parent.geol_coll.get_uid_geological_type(uid), Qt.MatchExactly,
+            if self.GeologyTreeWidget.findItems(self.parent.entities_db.collection_by_name('geol').get_uid_geological_type(uid), Qt.MatchExactly,
                                                 0) != []:
                 """Already exists a TreeItem (1 level) for the geological type"""
                 counter_1 = 0
                 for child_1 in range(
-                        self.GeologyTreeWidget.findItems(self.parent.geol_coll.get_uid_geological_type(uid),
+                        self.GeologyTreeWidget.findItems(self.parent.entities_db.collection_by_name('geol').get_uid_geological_type(uid),
                                                          Qt.MatchExactly, 0)[0].childCount()):
                     """for cycle that loops n times as the number of subItems in the specific geological type branch"""
-                    if self.GeologyTreeWidget.findItems(self.parent.geol_coll.get_uid_geological_type(uid),
+                    if self.GeologyTreeWidget.findItems(self.parent.entities_db.collection_by_name('geol').get_uid_geological_type(uid),
                                                         Qt.MatchExactly, 0)[0].child(child_1).text(
-                        0) == self.parent.geol_coll.get_uid_geological_feature(uid):
+                        0) == self.parent.entities_db.collection_by_name('geol').get_uid_geological_feature(uid):
                         counter_1 += 1
                 if counter_1 != 0:
                     for child_1 in range(
-                            self.GeologyTreeWidget.findItems(self.parent.geol_coll.get_uid_geological_type(uid),
+                            self.GeologyTreeWidget.findItems(self.parent.entities_db.collection_by_name('geol').get_uid_geological_type(uid),
                                                              Qt.MatchExactly, 0)[0].childCount()):
-                        if self.GeologyTreeWidget.findItems(self.parent.geol_coll.get_uid_geological_type(uid),
+                        if self.GeologyTreeWidget.findItems(self.parent.entities_db.collection_by_name('geol').get_uid_geological_type(uid),
                                                             Qt.MatchExactly, 0)[0].child(child_1).text(
-                            0) == self.parent.geol_coll.get_uid_geological_feature(uid):
+                            0) == self.parent.entities_db.collection_by_name('geol').get_uid_geological_feature(uid):
                             """Already exists a TreeItem (2 level) for the geological feature"""
                             counter_2 = 0
                             for child_2 in range(self.GeologyTreeWidget.itemBelow(
-                                    self.GeologyTreeWidget.findItems(self.parent.geol_coll.get_uid_geological_type(uid),
+                                    self.GeologyTreeWidget.findItems(self.parent.entities_db.collection_by_name('geol').get_uid_geological_type(uid),
                                                                      Qt.MatchExactly, 0)[0]).childCount()):
                                 """for cycle that loops n times as the number of sub-subItems in the specific geological type and geological feature branch"""
                                 if self.GeologyTreeWidget.itemBelow(self.GeologyTreeWidget.findItems(
-                                        self.parent.geol_coll.get_uid_geological_type(uid), Qt.MatchExactly, 0)[
+                                        self.parent.entities_db.collection_by_name('geol').get_uid_geological_type(uid), Qt.MatchExactly, 0)[
                                                                         0]).child(child_2).text(
-                                    0) == self.parent.geol_coll.get_uid_scenario(uid):
+                                    0) == self.parent.entities_db.collection_by_name('geol').get_uid_scenario(uid):
                                     counter_2 += 1
                             if counter_2 != 0:
                                 for child_2 in range(self.GeologyTreeWidget.itemBelow(self.GeologyTreeWidget.findItems(
-                                        self.parent.geol_coll.get_uid_geological_type(uid), Qt.MatchExactly, 0)[
+                                        self.parent.entities_db.collection_by_name('geol').get_uid_geological_type(uid), Qt.MatchExactly, 0)[
                                                                                           0]).childCount()):
                                     if self.GeologyTreeWidget.itemBelow(self.GeologyTreeWidget.findItems(
-                                            self.parent.geol_coll.get_uid_geological_type(uid), Qt.MatchExactly, 0)[
+                                            self.parent.entities_db.collection_by_name('geol').get_uid_geological_type(uid), Qt.MatchExactly, 0)[
                                                                             0]).child(child_2).text(
-                                        0) == self.parent.geol_coll.get_uid_scenario(uid):
+                                        0) == self.parent.entities_db.collection_by_name('geol').get_uid_scenario(uid):
                                         """Same geological type, geological feature and scenario"""
                                         property_combo = QComboBox()
                                         property_combo.uid = uid
                                         # property_combo.addItem("Planes")
                                         property_combo.addItem("Poles")
-                                        for prop in self.parent.geol_coll.get_uid_properties_names(uid):
+                                        for prop in self.parent.entities_db.collection_by_name('geol').get_uid_properties_names(uid):
                                             property_combo.addItem(prop)
-                                        name = self.parent.geol_coll.get_uid_name(uid)
+                                        name = self.parent.entities_db.collection_by_name('geol').get_uid_name(uid)
                                         glevel_4 = QTreeWidgetItem(self.GeologyTreeWidget.findItems(
-                                            self.parent.geol_coll.get_uid_geological_type(uid), Qt.MatchExactly, 0)[
+                                            self.parent.entities_db.collection_by_name('geol').get_uid_geological_type(uid), Qt.MatchExactly, 0)[
                                                                        0].child(child_1).child(child_2), [name, uid])
                                         self.GeologyTreeWidget.setItemWidget(glevel_4, 2, property_combo)
                                         property_combo.currentIndexChanged.connect(lambda: self.toggle_property())
@@ -6868,18 +6851,18 @@ class ViewStereoplot(BaseView):
                             else:
                                 """Same geological type and geological feature, different scenario"""
                                 glevel_3 = QTreeWidgetItem(
-                                    self.GeologyTreeWidget.findItems(self.parent.geol_coll.get_uid_geological_type(uid),
+                                    self.GeologyTreeWidget.findItems(self.parent.entities_db.collection_by_name('geol').get_uid_geological_type(uid),
                                                                      Qt.MatchExactly, 0)[0].child(child_1),
-                                    [self.parent.geol_coll.get_uid_scenario(uid)])
+                                    [self.parent.entities_db.collection_by_name('geol').get_uid_scenario(uid)])
                                 glevel_3.setFlags(glevel_3.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
                                 self.GeologyTreeWidget.insertTopLevelItem(0, glevel_3)
                                 property_combo = QComboBox()
                                 property_combo.uid = uid
                                 # property_combo.addItem("Planes")
                                 property_combo.addItem("Poles")
-                                for prop in self.parent.geol_coll.get_uid_properties_names(uid):
+                                for prop in self.parent.entities_db.collection_by_name('geol').get_uid_properties_names(uid):
                                     property_combo.addItem(prop)
-                                name = self.parent.geol_coll.get_uid_name(uid)
+                                name = self.parent.entities_db.collection_by_name('geol').get_uid_name(uid)
                                 glevel_4 = QTreeWidgetItem(glevel_3, [name, uid])
                                 self.GeologyTreeWidget.setItemWidget(glevel_4, 2, property_combo)
                                 property_combo.currentIndexChanged.connect(lambda: self.toggle_property())
@@ -6893,21 +6876,21 @@ class ViewStereoplot(BaseView):
                 else:
                     """Same geological type, different geological feature and scenario"""
                     glevel_2 = QTreeWidgetItem(
-                        self.GeologyTreeWidget.findItems(self.parent.geol_coll.get_uid_geological_type(uid),
+                        self.GeologyTreeWidget.findItems(self.parent.entities_db.collection_by_name('geol').get_uid_geological_type(uid),
                                                          Qt.MatchExactly, 0)[0],
-                        [self.parent.geol_coll.get_uid_geological_feature(uid)])
+                        [self.parent.entities_db.collection_by_name('geol').get_uid_geological_feature(uid)])
                     glevel_2.setFlags(glevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
                     self.GeologyTreeWidget.insertTopLevelItem(0, glevel_2)
-                    glevel_3 = QTreeWidgetItem(glevel_2, [self.parent.geol_coll.get_uid_scenario(uid)])
+                    glevel_3 = QTreeWidgetItem(glevel_2, [self.parent.entities_db.collection_by_name('geol').get_uid_scenario(uid)])
                     glevel_3.setFlags(glevel_3.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
                     self.GeologyTreeWidget.insertTopLevelItem(0, glevel_3)
                     property_combo = QComboBox()
                     property_combo.uid = uid
                     # property_combo.addItem("Planes")
                     property_combo.addItem("Poles")
-                    for prop in self.parent.geol_coll.get_uid_properties_names(uid):
+                    for prop in self.parent.entities_db.collection_by_name('geol').get_uid_properties_names(uid):
                         property_combo.addItem(prop)
-                    name = self.parent.geol_coll.get_uid_name(uid)
+                    name = self.parent.entities_db.collection_by_name('geol').get_uid_name(uid)
                     glevel_4 = QTreeWidgetItem(glevel_3, [name, uid])
                     self.GeologyTreeWidget.setItemWidget(glevel_4, 2, property_combo)
                     property_combo.currentIndexChanged.connect(lambda: self.toggle_property())
@@ -6920,22 +6903,22 @@ class ViewStereoplot(BaseView):
                     break
             else:
                 """Different geological type, geological feature and scenario"""
-                glevel_1 = QTreeWidgetItem(self.GeologyTreeWidget, [self.parent.geol_coll.get_uid_geological_type(uid)])
+                glevel_1 = QTreeWidgetItem(self.GeologyTreeWidget, [self.parent.entities_db.collection_by_name('geol').get_uid_geological_type(uid)])
                 glevel_1.setFlags(glevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
                 self.GeologyTreeWidget.insertTopLevelItem(0, glevel_1)
-                glevel_2 = QTreeWidgetItem(glevel_1, [self.parent.geol_coll.get_uid_geological_feature(uid)])
+                glevel_2 = QTreeWidgetItem(glevel_1, [self.parent.entities_db.collection_by_name('geol').get_uid_geological_feature(uid)])
                 glevel_2.setFlags(glevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
                 self.GeologyTreeWidget.insertTopLevelItem(0, glevel_2)
-                glevel_3 = QTreeWidgetItem(glevel_2, [self.parent.geol_coll.get_uid_scenario(uid)])
+                glevel_3 = QTreeWidgetItem(glevel_2, [self.parent.entities_db.collection_by_name('geol').get_uid_scenario(uid)])
                 glevel_3.setFlags(glevel_3.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
                 self.GeologyTreeWidget.insertTopLevelItem(0, glevel_3)
                 property_combo = QComboBox()
                 property_combo.uid = uid
                 # property_combo.addItem("Planes")
                 property_combo.addItem("Poles")
-                for prop in self.parent.geol_coll.get_uid_properties_names(uid):
+                for prop in self.parent.entities_db.collection_by_name('geol').get_uid_properties_names(uid):
                     property_combo.addItem(prop)
-                name = self.parent.geol_coll.get_uid_name(uid)
+                name = self.parent.entities_db.collection_by_name('geol').get_uid_name(uid)
                 glevel_4 = QTreeWidgetItem(glevel_3, [name, uid])
                 self.GeologyTreeWidget.setItemWidget(glevel_4, 2, property_combo)
                 property_combo.currentIndexChanged.connect(lambda: self.toggle_property())
@@ -6953,35 +6936,35 @@ class ViewStereoplot(BaseView):
         """Update topology tree without creating a new model"""
         uid_list = list(new_list['uid'])
         for uid in uid_list:
-            if self.TopologyTreeWidget.findItems(self.parent.geol_coll.get_uid_topological_type(uid), Qt.MatchExactly,
+            if self.TopologyTreeWidget.findItems(self.parent.entities_db.collection_by_name('geol').get_uid_topological_type(uid), Qt.MatchExactly,
                                                  0) != []:
                 """Already exists a TreeItem (1 level) for the topological type"""
                 counter_1 = 0
                 for child_1 in range(
-                        self.TopologyTreeWidget.findItems(self.parent.geol_coll.get_uid_topological_type(uid),
+                        self.TopologyTreeWidget.findItems(self.parent.entities_db.collection_by_name('geol').get_uid_topological_type(uid),
                                                           Qt.MatchExactly, 0)[0].childCount()):
                     """for cycle that loops n times as the number of subItems in the specific topological type branch"""
-                    if self.TopologyTreeWidget.findItems(self.parent.geol_coll.get_uid_topological_type(uid),
+                    if self.TopologyTreeWidget.findItems(self.parent.entities_db.collection_by_name('geol').get_uid_topological_type(uid),
                                                          Qt.MatchExactly, 0)[0].child(child_1).text(
-                        0) == self.parent.geol_coll.get_uid_scenario(uid):
+                        0) == self.parent.entities_db.collection_by_name('geol').get_uid_scenario(uid):
                         counter_1 += 1
                 if counter_1 != 0:
                     for child_1 in range(
-                            self.TopologyTreeWidget.findItems(self.parent.geol_coll.get_uid_topological_type(uid),
+                            self.TopologyTreeWidget.findItems(self.parent.entities_db.collection_by_name('geol').get_uid_topological_type(uid),
                                                               Qt.MatchExactly, 0)[0].childCount()):
-                        if self.TopologyTreeWidget.findItems(self.parent.geol_coll.get_uid_topological_type(uid),
+                        if self.TopologyTreeWidget.findItems(self.parent.entities_db.collection_by_name('geol').get_uid_topological_type(uid),
                                                              Qt.MatchExactly, 0)[0].child(child_1).text(
-                            0) == self.parent.geol_coll.get_uid_scenario(uid):
+                            0) == self.parent.entities_db.collection_by_name('geol').get_uid_scenario(uid):
                             """Same topological type and scenario"""
                             property_combo = QComboBox()
                             property_combo.uid = uid
                             # property_combo.addItem("Planes")
                             property_combo.addItem("Poles")
-                            for prop in self.parent.geol_coll.get_uid_properties_names(uid):
+                            for prop in self.parent.entities_db.collection_by_name('geol').get_uid_properties_names(uid):
                                 property_combo.addItem(prop)
-                            name = self.parent.geol_coll.get_uid_name(uid)
+                            name = self.parent.entities_db.collection_by_name('geol').get_uid_name(uid)
                             tlevel_3 = QTreeWidgetItem(
-                                self.TopologyTreeWidget.findItems(self.parent.geol_coll.get_uid_topological_type(uid),
+                                self.TopologyTreeWidget.findItems(self.parent.entities_db.collection_by_name('geol').get_uid_topological_type(uid),
                                                                   Qt.MatchExactly, 0)[0].child(child_1), [name, uid])
                             self.TopologyTreeWidget.setItemWidget(tlevel_3, 2, property_combo)
                             property_combo.currentIndexChanged.connect(lambda: self.toggle_property())
@@ -6995,18 +6978,18 @@ class ViewStereoplot(BaseView):
                 else:
                     """Same topological type, different scenario"""
                     tlevel_2 = QTreeWidgetItem(
-                        self.TopologyTreeWidget.findItems(self.parent.geol_coll.get_uid_topological_type(uid),
+                        self.TopologyTreeWidget.findItems(self.parent.entities_db.collection_by_name('geol').get_uid_topological_type(uid),
                                                           Qt.MatchExactly, 0)[0],
-                        [self.parent.geol_coll.get_uid_scenario(uid)])
+                        [self.parent.entities_db.collection_by_name('geol').get_uid_scenario(uid)])
                     tlevel_2.setFlags(tlevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
                     self.TopologyTreeWidget.insertTopLevelItem(0, tlevel_2)
                     property_combo = QComboBox()
                     property_combo.uid = uid
                     # property_combo.addItem("Planes")
                     property_combo.addItem("Poles")
-                    for prop in self.parent.geol_coll.get_uid_properties_names(uid):
+                    for prop in self.parent.entities_db.collection_by_name('geol').get_uid_properties_names(uid):
                         property_combo.addItem(prop)
-                    name = self.parent.geol_coll.get_uid_name(uid)
+                    name = self.parent.entities_db.collection_by_name('geol').get_uid_name(uid)
                     tlevel_3 = QTreeWidgetItem(tlevel_2, [name, uid])
                     self.TopologyTreeWidget.setItemWidget(tlevel_3, 2, property_combo)
                     property_combo.currentIndexChanged.connect(lambda: self.toggle_property())
@@ -7020,19 +7003,19 @@ class ViewStereoplot(BaseView):
             else:
                 """Different topological type and scenario"""
                 tlevel_1 = QTreeWidgetItem(self.TopologyTreeWidget,
-                                           [self.parent.geol_coll.get_uid_topological_type(uid)])
+                                           [self.parent.entities_db.collection_by_name('geol').get_uid_topological_type(uid)])
                 tlevel_1.setFlags(tlevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
                 self.TopologyTreeWidget.insertTopLevelItem(0, tlevel_1)
-                tlevel_2 = QTreeWidgetItem(tlevel_1, [self.parent.geol_coll.get_uid_scenario(uid)])
+                tlevel_2 = QTreeWidgetItem(tlevel_1, [self.parent.entities_db.collection_by_name('geol').get_uid_scenario(uid)])
                 tlevel_2.setFlags(tlevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
                 self.TopologyTreeWidget.insertTopLevelItem(0, tlevel_2)
                 property_combo = QComboBox()
                 property_combo.uid = uid
                 # property_combo.addItem("Planes")
                 property_combo.addItem("Poles")
-                for prop in self.parent.geol_coll.get_uid_properties_names(uid):
+                for prop in self.parent.entities_db.collection_by_name('geol').get_uid_properties_names(uid):
                     property_combo.addItem(prop)
-                name = self.parent.geol_coll.get_uid_name(uid)
+                name = self.parent.entities_db.collection_by_name('geol').get_uid_name(uid)
                 tlevel_3 = QTreeWidgetItem(tlevel_2, [name, uid])
                 self.TopologyTreeWidget.setItemWidget(tlevel_3, 2, property_combo)
                 property_combo.currentIndexChanged.connect(lambda: self.toggle_property())
@@ -7098,19 +7081,19 @@ class ViewStereoplot(BaseView):
         https://github.com/pyvista/pyvista/blob/140b15be1d4021b81ded46b1c212c70e86a98ee7/pyvista/plotting/plotting.py#L1045"""
         """First get entity from collection."""
         if collection == 'geol_coll':
-            color_R = self.parent.geol_coll.get_uid_legend(uid=uid)['color_R']
-            color_G = self.parent.geol_coll.get_uid_legend(uid=uid)['color_G']
-            color_B = self.parent.geol_coll.get_uid_legend(uid=uid)['color_B']
+            color_R = self.parent.entities_db.collection_by_name('geol').get_uid_legend(uid=uid)['color_R']
+            color_G = self.parent.entities_db.collection_by_name('geol').get_uid_legend(uid=uid)['color_G']
+            color_B = self.parent.entities_db.collection_by_name('geol').get_uid_legend(uid=uid)['color_B']
             color_RGB = [color_R / 255, color_G / 255, color_B / 255]
-            line_thick = self.parent.geol_coll.get_uid_legend(uid=uid)['line_thick']
-            plot_entity = self.parent.geol_coll.get_uid_vtk_obj(uid)
+            line_thick = self.parent.entities_db.collection_by_name('geol').get_uid_legend(uid=uid)['line_thick']
+            plot_entity = self.parent.entities_db.collection_by_name('geol').get_uid_vtk_obj(uid)
         elif collection == 'xsect_coll':
-            color_R = self.parent.xsect_coll.get_legend()['color_R']
-            color_G = self.parent.xsect_coll.get_legend()['color_G']
-            color_B = self.parent.xsect_coll.get_legend()['color_B']
+            color_R = self.parent.entities_db.collection_by_name('xsect').get_legend()['color_R']
+            color_G = self.parent.entities_db.collection_by_name('xsect').get_legend()['color_G']
+            color_B = self.parent.entities_db.collection_by_name('xsect').get_legend()['color_B']
             color_RGB = [color_R / 255, color_G / 255, color_B / 255]
-            line_thick = self.parent.xsect_coll.get_legend()['line_thick']
-            plot_entity = self.parent.xsect_coll.get_uid_vtk_frame(uid)
+            line_thick = self.parent.entities_db.collection_by_name('xsect').get_legend()['line_thick']
+            plot_entity = self.parent.entities_db.collection_by_name('xsect').get_uid_vtk_frame(uid)
         else:
             plot_entity = None
         """Then plot."""
@@ -7167,7 +7150,7 @@ class ViewStereoplot(BaseView):
         self.ViewFrameLayout.removeWidget(self.canvas)
         self.ViewFrameLayout.removeWidget(self.navi_toolbar)
         self.initialize_interactor(kind=kind, projection=self.proj_type)
-        uids = self.parent.geol_coll.df.loc[self.parent.geol_coll.df['topological_type'] == 'VertexSet', 'uid']
+        uids = self.parent.entities_db.collection_by_name('geol').df.loc[self.parent.entities_db.collection_by_name('geol').df['topological_type'] == 'VertexSet', 'uid']
 
         # print(uids)
         '''[Gabriele]It is not always the case that VertexSets have normal data (are attitude measurements). When importing from shp we should add a dialog to identify VertexSets as Attitude measurements
@@ -7175,7 +7158,7 @@ class ViewStereoplot(BaseView):
 
         # att_uid_list = []
         # for uid in uids:
-        #     obj = self.parent.geol_coll.get_uid_vtk_obj(uid)
+        #     obj = self.parent.entities_db.collection_by_name('geol').get_uid_vtk_obj(uid)
         #     if isinstance(obj, Attitude):
         #         att_uid_list.append(uid)
         # print(att_uid_list)
@@ -7193,7 +7176,7 @@ class ViewStereoplot(BaseView):
         self.ViewFrameLayout.removeWidget(self.canvas)
         self.ViewFrameLayout.removeWidget(self.navi_toolbar)
         self.initialize_interactor(kind=self.grid_kind, projection=self.proj_type)
-        uids = self.parent.geol_coll.df.loc[self.parent.geol_coll.df['topological_type'] == 'VertexSet', 'uid']
+        uids = self.parent.entities_db.collection_by_name('geol').df.loc[self.parent.entities_db.collection_by_name('geol').df['topological_type'] == 'VertexSet', 'uid']
         for uid in uids:
             show = self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]
             self.remove_actor_in_view(uid, redraw=False)
@@ -7212,7 +7195,7 @@ class ViewStereoplot(BaseView):
         self.ViewFrameLayout.removeWidget(self.navi_toolbar)
 
         self.initialize_interactor(kind=self.grid_kind, projection=self.proj_type)
-        uids = self.parent.geol_coll.df.loc[self.parent.geol_coll.df['topological_type'] == 'VertexSet', 'uid']
+        uids = self.parent.entities_db.collection_by_name('geol').df.loc[self.parent.entities_db.collection_by_name('geol').df['topological_type'] == 'VertexSet', 'uid']
 
         if self.tog_contours == -1:
             filled_opt = filled
@@ -7366,8 +7349,8 @@ class NewViewMap(NewView2D):
         self.plotter.view_xy()
 
     def initialize_menu_tools(self):
-        from .xsection_collection import section_from_azimuth, sections_from_file
-        from .boundary_collection import boundary_from_points
+        from pzero.collections.xsection_collection import section_from_azimuth, sections_from_file
+        from pzero.collections.boundary_collection import boundary_from_points
         super().initialize_menu_tools()
         self.sectionFromAzimuthButton = QAction('Section from azimuth', self)  # create action
         self.sectionFromAzimuthButton.triggered.connect(
@@ -7393,87 +7376,87 @@ class NewViewMap(NewView2D):
         show_property_title = show_property
         show_scalar_bar = True
         if collection == 'geol_coll':
-            color_R = self.parent.geol_coll.get_uid_legend(uid=uid)['color_R']
-            color_G = self.parent.geol_coll.get_uid_legend(uid=uid)['color_G']
-            color_B = self.parent.geol_coll.get_uid_legend(uid=uid)['color_B']
+            color_R = self.parent.entities_db.collection_by_name('geol').get_uid_legend(uid=uid)['color_R']
+            color_G = self.parent.entities_db.collection_by_name('geol').get_uid_legend(uid=uid)['color_G']
+            color_B = self.parent.entities_db.collection_by_name('geol').get_uid_legend(uid=uid)['color_B']
             color_RGB = [color_R / 255, color_G / 255, color_B / 255]
-            line_thick = self.parent.geol_coll.get_uid_legend(uid=uid)['line_thick']
-            point_size = self.parent.geol_coll.get_uid_legend(uid=uid)['point_size']
-            opacity = self.parent.geol_coll.get_uid_legend(uid=uid)['opacity'] / 100
+            line_thick = self.parent.entities_db.collection_by_name('geol').get_uid_legend(uid=uid)['line_thick']
+            point_size = self.parent.entities_db.collection_by_name('geol').get_uid_legend(uid=uid)['point_size']
+            opacity = self.parent.entities_db.collection_by_name('geol').get_uid_legend(uid=uid)['opacity'] / 100
 
-            plot_entity = self.parent.geol_coll.get_uid_vtk_obj(uid)
+            plot_entity = self.parent.entities_db.collection_by_name('geol').get_uid_vtk_obj(uid)
         elif collection == 'xsect_coll':
-            color_R = self.parent.xsect_coll.get_legend()['color_R']
-            color_G = self.parent.xsect_coll.get_legend()['color_G']
-            color_B = self.parent.xsect_coll.get_legend()['color_B']
+            color_R = self.parent.entities_db.collection_by_name('xsect').get_legend()['color_R']
+            color_G = self.parent.entities_db.collection_by_name('xsect').get_legend()['color_G']
+            color_B = self.parent.entities_db.collection_by_name('xsect').get_legend()['color_B']
             color_RGB = [color_R / 255, color_G / 255, color_B / 255]
-            line_thick = self.parent.xsect_coll.get_legend()['line_thick']
-            opacity = self.parent.xsect_coll.get_legend()['opacity'] / 100
+            line_thick = self.parent.entities_db.collection_by_name('xsect').get_legend()['line_thick']
+            opacity = self.parent.entities_db.collection_by_name('xsect').get_legend()['opacity'] / 100
 
-            plot_entity = self.parent.xsect_coll.get_uid_vtk_frame(uid)
+            plot_entity = self.parent.entities_db.collection_by_name('xsect').get_uid_vtk_frame(uid)
         elif collection == 'boundary_coll':
-            color_R = self.parent.boundary_coll.get_legend()['color_R']
-            color_G = self.parent.boundary_coll.get_legend()['color_G']
-            color_B = self.parent.boundary_coll.get_legend()['color_B']
+            color_R = self.parent.entities_db.collection_by_name('boundary').get_legend()['color_R']
+            color_G = self.parent.entities_db.collection_by_name('boundary').get_legend()['color_G']
+            color_B = self.parent.entities_db.collection_by_name('boundary').get_legend()['color_B']
             color_RGB = [color_R / 255, color_G / 255, color_B / 255]
-            line_thick = self.parent.boundary_coll.get_legend()['line_thick']
-            opacity = self.parent.boundary_coll.get_legend()['opacity'] / 100
+            line_thick = self.parent.entities_db.collection_by_name('boundary').get_legend()['line_thick']
+            opacity = self.parent.entities_db.collection_by_name('boundary').get_legend()['opacity'] / 100
 
-            plot_entity = self.parent.boundary_coll.get_uid_vtk_obj(uid)
+            plot_entity = self.parent.entities_db.collection_by_name('boundary').get_uid_vtk_obj(uid)
         elif collection == 'mesh3d_coll':
-            color_R = self.parent.mesh3d_coll.get_legend()['color_R']
-            color_G = self.parent.mesh3d_coll.get_legend()['color_G']
-            color_B = self.parent.mesh3d_coll.get_legend()['color_B']
+            color_R = self.parent.entities_db.collection_by_name('mesh3d').get_legend()['color_R']
+            color_G = self.parent.entities_db.collection_by_name('mesh3d').get_legend()['color_G']
+            color_B = self.parent.entities_db.collection_by_name('mesh3d').get_legend()['color_B']
             color_RGB = [color_R / 255, color_G / 255, color_B / 255]
-            line_thick = self.parent.mesh3d_coll.get_legend()['line_thick']
-            opacity = self.parent.mesh3d_coll.get_legend()['opacity'] / 100
+            line_thick = self.parent.entities_db.collection_by_name('mesh3d').get_legend()['line_thick']
+            opacity = self.parent.entities_db.collection_by_name('mesh3d').get_legend()['opacity'] / 100
 
-            plot_entity = self.parent.mesh3d_coll.get_uid_vtk_obj(uid)
+            plot_entity = self.parent.entities_db.collection_by_name('mesh3d').get_uid_vtk_obj(uid)
         elif collection == 'dom_coll':
-            color_R = self.parent.dom_coll.get_legend()['color_R']
-            color_G = self.parent.dom_coll.get_legend()['color_G']
-            color_B = self.parent.dom_coll.get_legend()['color_B']
+            color_R = self.parent.entities_db.collection_by_name('dom').get_legend()['color_R']
+            color_G = self.parent.entities_db.collection_by_name('dom').get_legend()['color_G']
+            color_B = self.parent.entities_db.collection_by_name('dom').get_legend()['color_B']
             color_RGB = [color_R / 255, color_G / 255, color_B / 255]
-            line_thick = self.parent.dom_coll.get_legend()['line_thick']
-            opacity = self.parent.dom_coll.get_legend()['opacity'] / 100
+            line_thick = self.parent.entities_db.collection_by_name('dom').get_legend()['line_thick']
+            opacity = self.parent.entities_db.collection_by_name('dom').get_legend()['opacity'] / 100
 
-            plot_entity = self.parent.dom_coll.get_uid_vtk_obj(uid)
+            plot_entity = self.parent.entities_db.collection_by_name('dom').get_uid_vtk_obj(uid)
         elif collection == 'image_coll':
             """Note: no legend for image."""
             color_RGB = [255, 255, 255]
             line_thick = 5.0
-            opacity = self.parent.image_coll.get_legend()['opacity'] / 100
+            opacity = self.parent.entities_db.collection_by_name('image').get_legend()['opacity'] / 100
 
-            plot_entity = self.parent.image_coll.get_uid_vtk_obj(uid)
+            plot_entity = self.parent.entities_db.collection_by_name('image').get_uid_vtk_obj(uid)
         elif collection == 'well_coll':
-            color_R = self.parent.well_coll.get_uid_legend(uid=uid)['color_R']
-            color_G = self.parent.well_coll.get_uid_legend(uid=uid)['color_G']
-            color_B = self.parent.well_coll.get_uid_legend(uid=uid)['color_B']
+            color_R = self.parent.entities_db.collection_by_name('well').get_uid_legend(uid=uid)['color_R']
+            color_G = self.parent.entities_db.collection_by_name('well').get_uid_legend(uid=uid)['color_G']
+            color_B = self.parent.entities_db.collection_by_name('well').get_uid_legend(uid=uid)['color_B']
             color_RGB = [color_R / 255, color_G / 255, color_B / 255]
-            line_thick = self.parent.well_coll.get_uid_legend(uid=uid)['line_thick']
-            opacity = self.parent.well_coll.get_uid_legend(uid=uid)['opacity'] / 100
+            line_thick = self.parent.entities_db.collection_by_name('well').get_uid_legend(uid=uid)['line_thick']
+            opacity = self.parent.entities_db.collection_by_name('well').get_uid_legend(uid=uid)['opacity'] / 100
 
-            plot_entity = self.parent.well_coll.get_uid_vtk_obj(uid)
+            plot_entity = self.parent.entities_db.collection_by_name('well').get_uid_vtk_obj(uid)
         elif collection == 'fluids_coll':
-            color_R = self.parent.fluids_coll.get_uid_legend(uid=uid)['color_R']
-            color_G = self.parent.fluids_coll.get_uid_legend(uid=uid)['color_G']
-            color_B = self.parent.fluids_coll.get_uid_legend(uid=uid)['color_B']
+            color_R = self.parent.entities_db.collection_by_name('fluids').get_uid_legend(uid=uid)['color_R']
+            color_G = self.parent.entities_db.collection_by_name('fluids').get_uid_legend(uid=uid)['color_G']
+            color_B = self.parent.entities_db.collection_by_name('fluids').get_uid_legend(uid=uid)['color_B']
             color_RGB = [color_R / 255, color_G / 255, color_B / 255]
-            line_thick = self.parent.fluids_coll.get_uid_legend(uid=uid)['line_thick']
-            point_size = self.parent.fluids_coll.get_uid_legend(uid=uid)['point_size']
-            opacity = self.parent.fluids_coll.get_uid_legend(uid=uid)['opacity'] / 100
+            line_thick = self.parent.entities_db.collection_by_name('fluids').get_uid_legend(uid=uid)['line_thick']
+            point_size = self.parent.entities_db.collection_by_name('fluids').get_uid_legend(uid=uid)['point_size']
+            opacity = self.parent.entities_db.collection_by_name('fluids').get_uid_legend(uid=uid)['opacity'] / 100
 
-            plot_entity = self.parent.fluids_coll.get_uid_vtk_obj(uid)
+            plot_entity = self.parent.entities_db.collection_by_name('fluids').get_uid_vtk_obj(uid)
         elif collection == 'backgrounds_coll':
-            color_R = self.parent.backgrounds_coll.get_uid_legend(uid=uid)['color_R']
-            color_G = self.parent.backgrounds_coll.get_uid_legend(uid=uid)['color_G']
-            color_B = self.parent.backgrounds_coll.get_uid_legend(uid=uid)['color_B']
+            color_R = self.parent.entities_db.collection_by_name('backgrounds').get_uid_legend(uid=uid)['color_R']
+            color_G = self.parent.entities_db.collection_by_name('backgrounds').get_uid_legend(uid=uid)['color_G']
+            color_B = self.parent.entities_db.collection_by_name('backgrounds').get_uid_legend(uid=uid)['color_B']
             color_RGB = [color_R / 255, color_G / 255, color_B / 255]
-            line_thick = self.parent.backgrounds_coll.get_uid_legend(uid=uid)['line_thick']
-            point_size = self.parent.backgrounds_coll.get_uid_legend(uid=uid)['point_size']
-            opacity = self.parent.backgrounds_coll.get_uid_legend(uid=uid)['opacity'] / 100
+            line_thick = self.parent.entities_db.collection_by_name('backgrounds').get_uid_legend(uid=uid)['line_thick']
+            point_size = self.parent.entities_db.collection_by_name('backgrounds').get_uid_legend(uid=uid)['point_size']
+            opacity = self.parent.entities_db.collection_by_name('backgrounds').get_uid_legend(uid=uid)['opacity'] / 100
 
-            plot_entity = self.parent.backgrounds_coll.get_uid_vtk_obj(uid)
+            plot_entity = self.parent.entities_db.collection_by_name('backgrounds').get_uid_vtk_obj(uid)
         else:
             print("no collection")
             print(collection)
@@ -7537,7 +7520,7 @@ class NewViewMap(NewView2D):
                     style = 'surface'
                     smooth_shading = True
                     appender = vtkAppendPolyData()
-                    r = self.parent.geol_coll.get_uid_legend(uid=uid)['point_size'] * 4
+                    r = self.parent.entities_db.collection_by_name('geol').get_uid_legend(uid=uid)['point_size'] * 4
                     normals = plot_entity.get_point_data('Normals')
                     _, dir_vectors, az_vectors = get_dip_dir_vectors(normals=normals, az=True)
                     line1 = pv_Line(pointa=(0, 0, 0), pointb=(r, 0, 0))
@@ -7575,8 +7558,8 @@ class NewViewMap(NewView2D):
         elif isinstance(plot_entity, DEM):
             """Show texture specified in show_property"""
             if show_property in \
-                    self.parent.dom_coll.df.loc[self.parent.dom_coll.df['uid'] == uid, "texture_uids"].values[0]:
-                active_image = self.parent.image_coll.get_uid_vtk_obj(show_property)
+                    self.parent.entities_db.collection_by_name('dom').df.loc[self.parent.entities_db.collection_by_name('dom').df['uid'] == uid, "texture_uids"].values[0]:
+                active_image = self.parent.entities_db.collection_by_name('image').get_uid_vtk_obj(show_property)
                 active_image_texture = active_image.texture
                 # active_image_properties_components = active_image.properties_components[0]  # IF USED THIS MUST BE FIXED FOR TEXTURES WITH MORE THAN 3 COMPONENTS
                 this_actor = self.plot_mesh(uid=uid, plot_entity=plot_entity, color_RGB=None, show_property=None,
@@ -7613,7 +7596,7 @@ class NewViewMap(NewView2D):
             plot_rgb_option = None
             new_plot = pvPointSet()
             new_plot.ShallowCopy(plot_entity)  # this is temporary
-            file = self.parent.dom_coll.df.loc[self.parent.dom_coll.df['uid'] == uid, "name"].values[0]
+            file = self.parent.entities_db.collection_by_name('dom').df.loc[self.parent.entities_db.collection_by_name('dom').df['uid'] == uid, "name"].values[0]
             if isinstance(plot_entity.points, np_ndarray):
                 """This check is needed to avoid errors when trying to plot an empty
                 PolyData, just created at the beginning of a digitizing session."""
@@ -7642,8 +7625,8 @@ class NewViewMap(NewView2D):
                     index = int(show_property[pos1 + 1:pos2])
                     show_property_value = plot_entity.get_point_data(original_prop)[:, index]
                 else:
-                    n_comp = self.parent.dom_coll.get_uid_properties_components(uid)[
-                        self.parent.dom_coll.get_uid_properties_names(uid).index(show_property)]
+                    n_comp = self.parent.entities_db.collection_by_name('dom').get_uid_properties_components(uid)[
+                        self.parent.entities_db.collection_by_name('dom').get_uid_properties_names(uid).index(show_property)]
                     '''[Gabriele] Get the n of components for the given property. If it's > 1 then do stuff depending on the type of property (e.g. show_rgb_option -> True if the property is RGB)'''
                     if n_comp > 1:
                         show_property_value = plot_entity.get_point_data(show_property)
@@ -7754,15 +7737,15 @@ class NewViewXsection(NewView2D):
 
     def __init__(self, parent=None, *args, **kwargs):
 
-        if parent.xsect_coll.get_names():
+        if parent.entities_db.collection_by_name('xsect').get_names():
             self.this_x_section_name = input_combo_dialog(parent=None, title="Xsection", label="Choose Xsection",
-                                                          choice_list=parent.xsect_coll.get_names())
+                                                          choice_list=parent.entities_db.collection_by_name('xsect').get_names())
         else:
             message_dialog(title="Xsection", message="No Xsection in project")
             return
         if self.this_x_section_name:
             self.this_x_section_uid = \
-                parent.xsect_coll.df.loc[parent.xsect_coll.df['name'] == self.this_x_section_name, 'uid'].values[0]
+                parent.entities_db.collection_by_name('xsect').df.loc[parent.entities_db.collection_by_name('xsect').df['name'] == self.this_x_section_name, 'uid'].values[0]
         else:
             return
 
@@ -7786,7 +7769,7 @@ class NewViewXsection(NewView2D):
         self.set_actor_visible(uid=self.this_x_section_uid, visible=True)
         self.update_xsection_checkboxes(uid=self.this_x_section_uid, uid_checkState=Qt.Checked)
 
-        section_plane = parent.xsect_coll.get_uid_vtk_plane(self.this_x_section_uid)
+        section_plane = parent.entities_db.collection_by_name('xsect').get_uid_vtk_plane(self.this_x_section_uid)
         center = np_array(section_plane.GetOrigin())
         direction = -np_array(section_plane.GetNormal())
 
@@ -7797,15 +7780,15 @@ class NewViewXsection(NewView2D):
     def add_all_entities(self):
         """Add all entities in project collections. All objects are visible by default -> show = True"""
         sec_uid = self.this_x_section_uid
-        for uid in self.parent.geol_coll.df['uid'].tolist():
-            if self.parent.geol_coll.get_uid_x_section(uid) == sec_uid:
+        for uid in self.parent.entities_db.collection_by_name('geol').df['uid'].tolist():
+            if self.parent.entities_db.collection_by_name('geol').get_uid_x_section(uid) == sec_uid:
                 this_actor = self.show_actor_with_property(uid=uid, collection='geol_coll', show_property=None,
                                                            visible=True)
                 self.actors_df = self.actors_df.append(
                     {'uid': uid, 'actor': this_actor, 'show': True, 'collection': 'geol_coll', 'show_prop': None},
                     ignore_index=True)
 
-        for uid in self.parent.xsect_coll.df['uid'].tolist():
+        for uid in self.parent.entities_db.collection_by_name('xsect').df['uid'].tolist():
             if uid == sec_uid:
                 this_actor = self.show_actor_with_property(uid=uid, collection='xsect_coll', show_property=None,
                                                            visible=False)
@@ -7813,49 +7796,49 @@ class NewViewXsection(NewView2D):
                     {'uid': uid, 'actor': this_actor, 'show': False, 'collection': 'xsect_coll', 'show_prop': None},
                     ignore_index=True)
 
-        for uid in self.parent.boundary_coll.df['uid'].tolist():
-            if self.parent.boundary_coll.get_uid_x_section(uid) == sec_uid:
+        for uid in self.parent.entities_db.collection_by_name('boundary').df['uid'].tolist():
+            if self.parent.entities_db.collection_by_name('boundary').get_uid_x_section(uid) == sec_uid:
                 this_actor = self.show_actor_with_property(uid=uid, collection='boundary_coll', show_property=None,
                                                            visible=False)
                 self.actors_df = self.actors_df.append(
                     {'uid': uid, 'actor': this_actor, 'show': False, 'collection': 'boundary_coll', 'show_prop': None},
                     ignore_index=True)
-        for uid in self.parent.mesh3d_coll.df['uid'].tolist():
-            if self.parent.mesh3d_coll.get_uid_x_section(uid) == sec_uid:
+        for uid in self.parent.entities_db.collection_by_name('mesh3d').df['uid'].tolist():
+            if self.parent.entities_db.collection_by_name('mesh3d').get_uid_x_section(uid) == sec_uid:
                 this_actor = self.show_actor_with_property(uid=uid, collection='mesh3d_coll', show_property=None,
                                                            visible=False)
                 self.actors_df = self.actors_df.append(
                     {'uid': uid, 'actor': this_actor, 'show': False, 'collection': 'mesh3d_coll', 'show_prop': None},
                     ignore_index=True)
-        for uid in self.parent.dom_coll.df['uid'].tolist():
-            if self.parent.dom_coll.get_uid_x_section(uid) == sec_uid:
+        for uid in self.parent.entities_db.collection_by_name('dom').df['uid'].tolist():
+            if self.parent.entities_db.collection_by_name('dom').get_uid_x_section(uid) == sec_uid:
                 this_actor = self.show_actor_with_property(uid=uid, collection='dom_coll', show_property=None,
                                                            visible=False)
                 self.actors_df = self.actors_df.append(
                     {'uid': uid, 'actor': this_actor, 'show': False, 'collection': 'dom_coll', 'show_prop': None},
                     ignore_index=True)
-        for uid in self.parent.image_coll.df['uid'].tolist():
-            if self.parent.image_coll.get_uid_x_section(uid) == sec_uid:
+        for uid in self.parent.entities_db.collection_by_name('image').df['uid'].tolist():
+            if self.parent.entities_db.collection_by_name('image').get_uid_x_section(uid) == sec_uid:
                 this_actor = self.show_actor_with_property(uid=uid, collection='image_coll', show_property=None,
                                                            visible=False)
                 self.actors_df = self.actors_df.append(
                     {'uid': uid, 'actor': this_actor, 'show': False, 'collection': 'image_coll', 'show_prop': None},
                     ignore_index=True)
-        for uid in self.parent.well_coll.df['uid'].tolist():
+        for uid in self.parent.entities_db.collection_by_name('well').df['uid'].tolist():
             this_actor = self.show_actor_with_property(uid=uid, collection='well_coll', show_property=None,
                                                        visible=False)
             self.actors_df = self.actors_df.append(
                 {'uid': uid, 'actor': this_actor, 'show': False, 'collection': 'well_coll', 'show_prop': None},
                 ignore_index=True)
-        for uid in self.parent.fluids_coll.df['uid'].tolist():
-            if self.parent.fluids_coll.get_uid_x_section(uid) == sec_uid:
+        for uid in self.parent.entities_db.collection_by_name('fluids').df['uid'].tolist():
+            if self.parent.entities_db.collection_by_name('fluids').get_uid_x_section(uid) == sec_uid:
                 this_actor = self.show_actor_with_property(uid=uid, collection='fluids_coll', show_property=None,
                                                            visible=False)
                 self.actors_df = self.actors_df.append(
                     {'uid': uid, 'actor': this_actor, 'show': False, 'collection': 'fluids_coll', 'show_prop': None},
                     ignore_index=True)
-        for uid in self.parent.backgrounds_coll.df['uid'].tolist():
-            if self.parent.backgrounds_coll.get_uid_x_section(uid) == sec_uid:
+        for uid in self.parent.entities_db.collection_by_name('backgrounds').df['uid'].tolist():
+            if self.parent.entities_db.collection_by_name('backgrounds').get_uid_x_section(uid) == sec_uid:
                 this_actor = self.show_actor_with_property(uid=uid, collection='backgrounds_coll', show_property=None,
                                                            visible=False)
                 self.actors_df = self.actors_df.append(
@@ -7872,37 +7855,37 @@ class NewViewXsection(NewView2D):
 
         if attr.get_uid_x_section(uid=uid) == sec_uid:
             if collection == 'geol_coll':
-                color_R = self.parent.geol_coll.get_uid_legend(uid=uid)['color_R']
-                color_G = self.parent.geol_coll.get_uid_legend(uid=uid)['color_G']
-                color_B = self.parent.geol_coll.get_uid_legend(uid=uid)['color_B']
+                color_R = self.parent.entities_db.collection_by_name('geol').get_uid_legend(uid=uid)['color_R']
+                color_G = self.parent.entities_db.collection_by_name('geol').get_uid_legend(uid=uid)['color_G']
+                color_B = self.parent.entities_db.collection_by_name('geol').get_uid_legend(uid=uid)['color_B']
             elif collection == 'xsect_coll':
-                color_R = self.parent.xsect_coll.get_legend()['color_R']
-                color_G = self.parent.xsect_coll.get_legend()['color_G']
-                color_B = self.parent.xsect_coll.get_legend()['color_B']
+                color_R = self.parent.entities_db.collection_by_name('xsect').get_legend()['color_R']
+                color_G = self.parent.entities_db.collection_by_name('xsect').get_legend()['color_G']
+                color_B = self.parent.entities_db.collection_by_name('xsect').get_legend()['color_B']
             elif collection == 'boundary_coll':
-                color_R = self.parent.boundary_coll.get_legend()['color_R']
-                color_G = self.parent.boundary_coll.get_legend()['color_G']
-                color_B = self.parent.boundary_coll.get_legend()['color_B']
+                color_R = self.parent.entities_db.collection_by_name('boundary').get_legend()['color_R']
+                color_G = self.parent.entities_db.collection_by_name('boundary').get_legend()['color_G']
+                color_B = self.parent.entities_db.collection_by_name('boundary').get_legend()['color_B']
             elif collection == 'mesh3d_coll':
-                color_R = self.parent.mesh3d_coll.get_legend()['color_R']
-                color_G = self.parent.mesh3d_coll.get_legend()['color_G']
-                color_B = self.parent.mesh3d_coll.get_legend()['color_B']
+                color_R = self.parent.entities_db.collection_by_name('mesh3d').get_legend()['color_R']
+                color_G = self.parent.entities_db.collection_by_name('mesh3d').get_legend()['color_G']
+                color_B = self.parent.entities_db.collection_by_name('mesh3d').get_legend()['color_B']
             elif collection == 'dom_coll':
-                color_R = self.parent.dom_coll.get_legend()['color_R']
-                color_G = self.parent.dom_coll.get_legend()['color_G']
-                color_B = self.parent.dom_coll.get_legend()['color_B']
+                color_R = self.parent.entities_db.collection_by_name('dom').get_legend()['color_R']
+                color_G = self.parent.entities_db.collection_by_name('dom').get_legend()['color_G']
+                color_B = self.parent.entities_db.collection_by_name('dom').get_legend()['color_B']
             elif collection == 'well_coll':
-                color_R = self.parent.well_coll.get_uid_legend(uid=uid)['color_R']
-                color_G = self.parent.well_coll.get_uid_legend(uid=uid)['color_G']
-                color_B = self.parent.well_coll.get_uid_legend(uid=uid)['color_B']
+                color_R = self.parent.entities_db.collection_by_name('well').get_uid_legend(uid=uid)['color_R']
+                color_G = self.parent.entities_db.collection_by_name('well').get_uid_legend(uid=uid)['color_G']
+                color_B = self.parent.entities_db.collection_by_name('well').get_uid_legend(uid=uid)['color_B']
             elif collection == 'fluids_coll':
-                color_R = self.parent.fluids_coll.get_uid_legend(uid=uid)['color_R']
-                color_G = self.parent.fluids_coll.get_uid_legend(uid=uid)['color_G']
-                color_B = self.parent.fluids_coll.get_uid_legend(uid=uid)['color_B']
+                color_R = self.parent.entities_db.collection_by_name('fluids').get_uid_legend(uid=uid)['color_R']
+                color_G = self.parent.entities_db.collection_by_name('fluids').get_uid_legend(uid=uid)['color_G']
+                color_B = self.parent.entities_db.collection_by_name('fluids').get_uid_legend(uid=uid)['color_B']
             elif collection == 'backgrounds_coll':
-                color_R = self.parent.backgrounds_coll.get_uid_legend(uid=uid)['color_R']
-                color_G = self.parent.backgrounds_coll.get_uid_legend(uid=uid)['color_G']
-                color_B = self.parent.backgrounds_coll.get_uid_legend(uid=uid)['color_B']
+                color_R = self.parent.entities_db.collection_by_name('backgrounds').get_uid_legend(uid=uid)['color_R']
+                color_G = self.parent.entities_db.collection_by_name('backgrounds').get_uid_legend(uid=uid)['color_G']
+                color_B = self.parent.entities_db.collection_by_name('backgrounds').get_uid_legend(uid=uid)['color_B']
             """Note: no legend for image."""
             """Update color for actor uid"""
             color_RGB = [color_R / 255, color_G / 255, color_B / 255]
@@ -7916,9 +7899,9 @@ class NewViewXsection(NewView2D):
 
         if collection == 'geol_coll':
             if attr.get_uid_x_section(uid) == sec_uid:
-                line_thick = self.parent.geol_coll.get_uid_legend(uid=uid)['line_thick']
-                if isinstance(self.parent.geol_coll.get_uid_vtk_obj(uid), VertexSet) or isinstance(
-                        self.parent.geol_coll.get_uid_vtk_obj(uid), XsVertexSet):
+                line_thick = self.parent.entities_db.collection_by_name('geol').get_uid_legend(uid=uid)['line_thick']
+                if isinstance(self.parent.entities_db.collection_by_name('geol').get_uid_vtk_obj(uid), VertexSet) or isinstance(
+                        self.parent.entities_db.collection_by_name('geol').get_uid_vtk_obj(uid), XsVertexSet):
                     self.actors_df.loc[self.actors_df['uid'] == uid, 'actor'].values[0].GetProperty().SetPointSize(
                         line_thick)
                 else:
@@ -7927,18 +7910,18 @@ class NewViewXsection(NewView2D):
 
         elif collection == 'xsect_coll':
             if attr.get_uid_x_section(uid) == sec_uid:
-                line_thick = self.parent.xsect_coll.get_legend()['line_thick']
+                line_thick = self.parent.entities_db.collection_by_name('xsect').get_legend()['line_thick']
         elif collection == 'boundary_coll':
             if attr.get_uid_x_section(uid) == sec_uid:
-                line_thick = self.parent.boundary_coll.get_legend()['line_thick']
+                line_thick = self.parent.entities_db.collection_by_name('boundary').get_legend()['line_thick']
         elif collection == 'mesh3d_coll':
             if attr.get_uid_x_section(uid) == sec_uid:
-                line_thick = self.parent.mesh3d_coll.get_legend()['line_thick']
+                line_thick = self.parent.entities_db.collection_by_name('mesh3d').get_legend()['line_thick']
         elif collection == 'dom_coll':
             if attr.get_uid_x_section(uid) == sec_uid:
-                line_thick = self.parent.dom_coll.get_legend()['line_thick']
+                line_thick = self.parent.entities_db.collection_by_name('dom').get_legend()['line_thick']
                 """Note: no legend for image."""
-                if isinstance(self.parent.dom_coll.get_uid_vtk_obj(uid), PCDom):
+                if isinstance(self.parent.entities_db.collection_by_name('dom').get_uid_vtk_obj(uid), PCDom):
                     """Use line_thick to set point size here."""
                     self.actors_df.loc[self.actors_df['uid'] == uid, 'actor'].values[0].GetProperty().SetPointSize(
                         line_thick)
@@ -7947,14 +7930,14 @@ class NewViewXsection(NewView2D):
                         line_thick)
         elif collection == 'well_coll':
             if attr.get_uid_x_section(uid) == sec_uid:
-                line_thick = self.parent.well_coll.get_uid_legend(uid=uid)['line_thick']
+                line_thick = self.parent.entities_db.collection_by_name('well').get_uid_legend(uid=uid)['line_thick']
                 self.actors_df.loc[self.actors_df['uid'] == uid, 'actor'].values[0].GetProperty().SetLineWidth(
                     line_thick)
         elif collection == 'fluids_coll':
             if attr.get_uid_x_section(uid) == sec_uid:
-                line_thick = self.parent.fluids_coll.get_uid_legend(uid=uid)['line_thick']
+                line_thick = self.parent.entities_db.collection_by_name('fluids').get_uid_legend(uid=uid)['line_thick']
 
-                if isinstance(self.parent.fluids_coll.get_uid_vtk_obj(uid), VertexSet):
+                if isinstance(self.parent.entities_db.collection_by_name('fluids').get_uid_vtk_obj(uid), VertexSet):
                     self.actors_df.loc[self.actors_df['uid'] == uid, 'actor'].values[0].GetProperty().SetPointSize(
                         line_thick)
                 else:
@@ -7963,9 +7946,9 @@ class NewViewXsection(NewView2D):
 
         elif collection == 'backgrounds_coll':
             if attr.get_uid_x_section(uid) == sec_uid:
-                line_thick = self.parent.backgrounds_coll.get_uid_legend(uid=uid)['line_thick']
+                line_thick = self.parent.entities_db.collection_by_name('backgrounds').get_uid_legend(uid=uid)['line_thick']
 
-                if isinstance(self.parent.backgrounds_coll.get_uid_vtk_obj(uid), VertexSet):
+                if isinstance(self.parent.entities_db.collection_by_name('backgrounds').get_uid_vtk_obj(uid), VertexSet):
                     self.actors_df.loc[self.actors_df['uid'] == uid, 'actor'].values[0].GetProperty().SetPointSize(
                         line_thick)
                 else:
@@ -7979,89 +7962,89 @@ class NewViewXsection(NewView2D):
         show_property_title = show_property
         show_scalar_bar = True
         sec_uid = self.this_x_section_uid
-        if collection == 'geol_coll' and self.parent.geol_coll.get_uid_x_section(uid) == sec_uid:
-            color_R = self.parent.geol_coll.get_uid_legend(uid=uid)['color_R']
-            color_G = self.parent.geol_coll.get_uid_legend(uid=uid)['color_G']
-            color_B = self.parent.geol_coll.get_uid_legend(uid=uid)['color_B']
+        if collection == 'geol_coll' and self.parent.entities_db.collection_by_name('geol').get_uid_x_section(uid) == sec_uid:
+            color_R = self.parent.entities_db.collection_by_name('geol').get_uid_legend(uid=uid)['color_R']
+            color_G = self.parent.entities_db.collection_by_name('geol').get_uid_legend(uid=uid)['color_G']
+            color_B = self.parent.entities_db.collection_by_name('geol').get_uid_legend(uid=uid)['color_B']
             color_RGB = [color_R / 255, color_G / 255, color_B / 255]
-            line_thick = self.parent.geol_coll.get_uid_legend(uid=uid)['line_thick']
-            point_size = self.parent.geol_coll.get_uid_legend(uid=uid)['point_size']
-            opacity = self.parent.geol_coll.get_uid_legend(uid=uid)['opacity'] / 100
+            line_thick = self.parent.entities_db.collection_by_name('geol').get_uid_legend(uid=uid)['line_thick']
+            point_size = self.parent.entities_db.collection_by_name('geol').get_uid_legend(uid=uid)['point_size']
+            opacity = self.parent.entities_db.collection_by_name('geol').get_uid_legend(uid=uid)['opacity'] / 100
 
-            plot_entity = self.parent.geol_coll.get_uid_vtk_obj(uid)
+            plot_entity = self.parent.entities_db.collection_by_name('geol').get_uid_vtk_obj(uid)
         elif collection == 'xsect_coll' and uid == sec_uid:
-            color_R = self.parent.xsect_coll.get_legend()['color_R']
-            color_G = self.parent.xsect_coll.get_legend()['color_G']
-            color_B = self.parent.xsect_coll.get_legend()['color_B']
+            color_R = self.parent.entities_db.collection_by_name('xsect').get_legend()['color_R']
+            color_G = self.parent.entities_db.collection_by_name('xsect').get_legend()['color_G']
+            color_B = self.parent.entities_db.collection_by_name('xsect').get_legend()['color_B']
             color_RGB = [color_R / 255, color_G / 255, color_B / 255]
-            line_thick = self.parent.xsect_coll.get_legend()['line_thick']
-            opacity = self.parent.xsect_coll.get_legend()['opacity'] / 100
+            line_thick = self.parent.entities_db.collection_by_name('xsect').get_legend()['line_thick']
+            opacity = self.parent.entities_db.collection_by_name('xsect').get_legend()['opacity'] / 100
 
-            plot_entity = self.parent.xsect_coll.get_uid_vtk_frame(uid)
-        elif collection == 'boundary_coll' and self.parent.boundary_coll.get_uid_x_section(uid) == sec_uid:
-            color_R = self.parent.boundary_coll.get_legend()['color_R']
-            color_G = self.parent.boundary_coll.get_legend()['color_G']
-            color_B = self.parent.boundary_coll.get_legend()['color_B']
+            plot_entity = self.parent.entities_db.collection_by_name('xsect').get_uid_vtk_frame(uid)
+        elif collection == 'boundary_coll' and self.parent.entities_db.collection_by_name('boundary').get_uid_x_section(uid) == sec_uid:
+            color_R = self.parent.entities_db.collection_by_name('boundary').get_legend()['color_R']
+            color_G = self.parent.entities_db.collection_by_name('boundary').get_legend()['color_G']
+            color_B = self.parent.entities_db.collection_by_name('boundary').get_legend()['color_B']
             color_RGB = [color_R / 255, color_G / 255, color_B / 255]
-            line_thick = self.parent.boundary_coll.get_legend()['line_thick']
-            opacity = self.parent.boundary_coll.get_legend()['opacity'] / 100
+            line_thick = self.parent.entities_db.collection_by_name('boundary').get_legend()['line_thick']
+            opacity = self.parent.entities_db.collection_by_name('boundary').get_legend()['opacity'] / 100
 
-            plot_entity = self.parent.boundary_coll.get_uid_vtk_obj(uid)
-        elif collection == 'mesh3d_coll' and self.parent.mesh3d_coll.get_uid_x_section(uid) == sec_uid:
-            color_R = self.parent.mesh3d_coll.get_legend()['color_R']
-            color_G = self.parent.mesh3d_coll.get_legend()['color_G']
-            color_B = self.parent.mesh3d_coll.get_legend()['color_B']
+            plot_entity = self.parent.entities_db.collection_by_name('boundary').get_uid_vtk_obj(uid)
+        elif collection == 'mesh3d_coll' and self.parent.entities_db.collection_by_name('mesh3d').get_uid_x_section(uid) == sec_uid:
+            color_R = self.parent.entities_db.collection_by_name('mesh3d').get_legend()['color_R']
+            color_G = self.parent.entities_db.collection_by_name('mesh3d').get_legend()['color_G']
+            color_B = self.parent.entities_db.collection_by_name('mesh3d').get_legend()['color_B']
             color_RGB = [color_R / 255, color_G / 255, color_B / 255]
-            line_thick = self.parent.mesh3d_coll.get_legend()['line_thick']
-            opacity = self.parent.mesh3d_coll.get_legend()['opacity'] / 100
+            line_thick = self.parent.entities_db.collection_by_name('mesh3d').get_legend()['line_thick']
+            opacity = self.parent.entities_db.collection_by_name('mesh3d').get_legend()['opacity'] / 100
 
-            plot_entity = self.parent.mesh3d_coll.get_uid_vtk_obj(uid)
-        elif collection == 'dom_coll' and self.parent.dom_coll.get_uid_x_section(uid) == sec_uid:
-            color_R = self.parent.dom_coll.get_legend()['color_R']
-            color_G = self.parent.dom_coll.get_legend()['color_G']
-            color_B = self.parent.dom_coll.get_legend()['color_B']
+            plot_entity = self.parent.entities_db.collection_by_name('mesh3d').get_uid_vtk_obj(uid)
+        elif collection == 'dom_coll' and self.parent.entities_db.collection_by_name('dom').get_uid_x_section(uid) == sec_uid:
+            color_R = self.parent.entities_db.collection_by_name('dom').get_legend()['color_R']
+            color_G = self.parent.entities_db.collection_by_name('dom').get_legend()['color_G']
+            color_B = self.parent.entities_db.collection_by_name('dom').get_legend()['color_B']
             color_RGB = [color_R / 255, color_G / 255, color_B / 255]
-            line_thick = self.parent.dom_coll.get_legend()['line_thick']
-            opacity = self.parent.dom_coll.get_legend()['opacity'] / 100
+            line_thick = self.parent.entities_db.collection_by_name('dom').get_legend()['line_thick']
+            opacity = self.parent.entities_db.collection_by_name('dom').get_legend()['opacity'] / 100
 
-            plot_entity = self.parent.dom_coll.get_uid_vtk_obj(uid)
+            plot_entity = self.parent.entities_db.collection_by_name('dom').get_uid_vtk_obj(uid)
 
-        elif collection == 'image_coll' and self.parent.image_coll.get_uid_x_section(uid) == sec_uid:
+        elif collection == 'image_coll' and self.parent.entities_db.collection_by_name('image').get_uid_x_section(uid) == sec_uid:
             """Note: no legend for image."""
             color_RGB = [255, 255, 255]
             line_thick = 5.0
-            opacity = self.parent.image_coll.get_legend()['opacity'] / 100
+            opacity = self.parent.entities_db.collection_by_name('image').get_legend()['opacity'] / 100
 
-            plot_entity = self.parent.image_coll.get_uid_vtk_obj(uid)
-        elif collection == 'well_coll' and self.parent.well_coll.get_uid_x_section(uid) == sec_uid:
-            color_R = self.parent.well_coll.get_uid_legend(uid=uid)['color_R']
-            color_G = self.parent.well_coll.get_uid_legend(uid=uid)['color_G']
-            color_B = self.parent.well_coll.get_uid_legend(uid=uid)['color_B']
+            plot_entity = self.parent.entities_db.collection_by_name('image').get_uid_vtk_obj(uid)
+        elif collection == 'well_coll' and self.parent.entities_db.collection_by_name('well').get_uid_x_section(uid) == sec_uid:
+            color_R = self.parent.entities_db.collection_by_name('well').get_uid_legend(uid=uid)['color_R']
+            color_G = self.parent.entities_db.collection_by_name('well').get_uid_legend(uid=uid)['color_G']
+            color_B = self.parent.entities_db.collection_by_name('well').get_uid_legend(uid=uid)['color_B']
             color_RGB = [color_R / 255, color_G / 255, color_B / 255]
-            line_thick = self.parent.well_coll.get_uid_legend(uid=uid)['line_thick']
-            opacity = self.parent.well_coll.get_uid_legend(uid=uid)['opacity'] / 100
+            line_thick = self.parent.entities_db.collection_by_name('well').get_uid_legend(uid=uid)['line_thick']
+            opacity = self.parent.entities_db.collection_by_name('well').get_uid_legend(uid=uid)['opacity'] / 100
 
-            plot_entity = self.parent.well_coll.get_uid_vtk_obj(uid)
-        elif collection == 'fluids_coll' and self.parent.fluids_coll.get_uid_x_section(uid) == sec_uid:
-            color_R = self.parent.fluids_coll.get_uid_legend(uid=uid)['color_R']
-            color_G = self.parent.fluids_coll.get_uid_legend(uid=uid)['color_G']
-            color_B = self.parent.fluids_coll.get_uid_legend(uid=uid)['color_B']
+            plot_entity = self.parent.entities_db.collection_by_name('well').get_uid_vtk_obj(uid)
+        elif collection == 'fluids_coll' and self.parent.entities_db.collection_by_name('fluids').get_uid_x_section(uid) == sec_uid:
+            color_R = self.parent.entities_db.collection_by_name('fluids').get_uid_legend(uid=uid)['color_R']
+            color_G = self.parent.entities_db.collection_by_name('fluids').get_uid_legend(uid=uid)['color_G']
+            color_B = self.parent.entities_db.collection_by_name('fluids').get_uid_legend(uid=uid)['color_B']
             color_RGB = [color_R / 255, color_G / 255, color_B / 255]
-            line_thick = self.parent.fluids_coll.get_uid_legend(uid=uid)['line_thick']
-            point_size = self.parent.fluids_coll.get_uid_legend(uid=uid)['point_size']
-            opacity = self.parent.fluids_coll.get_uid_legend(uid=uid)['opacity'] / 100
+            line_thick = self.parent.entities_db.collection_by_name('fluids').get_uid_legend(uid=uid)['line_thick']
+            point_size = self.parent.entities_db.collection_by_name('fluids').get_uid_legend(uid=uid)['point_size']
+            opacity = self.parent.entities_db.collection_by_name('fluids').get_uid_legend(uid=uid)['opacity'] / 100
 
-            plot_entity = self.parent.fluids_coll.get_uid_vtk_obj(uid)
-        elif collection == 'backgrounds_coll' and self.parent.backgrounds_coll.get_uid_x_section(uid) == sec_uid:
-            color_R = self.parent.backgrounds_coll.get_uid_legend(uid=uid)['color_R']
-            color_G = self.parent.backgrounds_coll.get_uid_legend(uid=uid)['color_G']
-            color_B = self.parent.backgrounds_coll.get_uid_legend(uid=uid)['color_B']
+            plot_entity = self.parent.entities_db.collection_by_name('fluids').get_uid_vtk_obj(uid)
+        elif collection == 'backgrounds_coll' and self.parent.entities_db.collection_by_name('backgrounds').get_uid_x_section(uid) == sec_uid:
+            color_R = self.parent.entities_db.collection_by_name('backgrounds').get_uid_legend(uid=uid)['color_R']
+            color_G = self.parent.entities_db.collection_by_name('backgrounds').get_uid_legend(uid=uid)['color_G']
+            color_B = self.parent.entities_db.collection_by_name('backgrounds').get_uid_legend(uid=uid)['color_B']
             color_RGB = [color_R / 255, color_G / 255, color_B / 255]
-            line_thick = self.parent.backgrounds_coll.get_uid_legend(uid=uid)['line_thick']
-            point_size = self.parent.backgrounds_coll.get_uid_legend(uid=uid)['point_size']
-            opacity = self.parent.backgrounds_coll.get_uid_legend(uid=uid)['opacity'] / 100
+            line_thick = self.parent.entities_db.collection_by_name('backgrounds').get_uid_legend(uid=uid)['line_thick']
+            point_size = self.parent.entities_db.collection_by_name('backgrounds').get_uid_legend(uid=uid)['point_size']
+            opacity = self.parent.entities_db.collection_by_name('backgrounds').get_uid_legend(uid=uid)['opacity'] / 100
 
-            plot_entity = self.parent.backgrounds_coll.get_uid_vtk_obj(uid)
+            plot_entity = self.parent.entities_db.collection_by_name('backgrounds').get_uid_vtk_obj(uid)
         else:
             print("no collection")
             print(collection)
@@ -8124,11 +8107,11 @@ class NewViewXsection(NewView2D):
                     show_property = None
                     style = 'surface'
                     appender = vtkAppendPolyData()
-                    r = self.parent.geol_coll.get_uid_legend(uid=uid)['point_size'] * 4
+                    r = self.parent.entities_db.collection_by_name('geol').get_uid_legend(uid=uid)['point_size'] * 4
                     normals = plot_entity.get_point_data('Normals')
                     dip_vectors, _ = get_dip_dir_vectors(normals=normals)
 
-                    plane_n = -np_array(self.parent.xsect_coll.get_uid_vtk_plane(self.this_x_section_uid).GetNormal())
+                    plane_n = -np_array(self.parent.entities_db.collection_by_name('xsect').get_uid_vtk_plane(self.this_x_section_uid).GetNormal())
                     vector2 = np_cross(plane_n, dip_vectors)
                     line1 = pv_Line(pointa=(0, 0, 0), pointb=(r, 0, 0))
                     line2 = pv_Line(pointa=(0, 0, 0), pointb=(r*0.25, 0, 0))
@@ -8165,8 +8148,8 @@ class NewViewXsection(NewView2D):
         elif isinstance(plot_entity, DEM):
             """Show texture specified in show_property"""
             if show_property in \
-                    self.parent.dom_coll.df.loc[self.parent.dom_coll.df['uid'] == uid, "texture_uids"].values[0]:
-                active_image = self.parent.image_coll.get_uid_vtk_obj(show_property)
+                    self.parent.entities_db.collection_by_name('dom').df.loc[self.parent.entities_db.collection_by_name('dom').df['uid'] == uid, "texture_uids"].values[0]:
+                active_image = self.parent.entities_db.collection_by_name('image').get_uid_vtk_obj(show_property)
                 active_image_texture = active_image.texture
                 # active_image_properties_components = active_image.properties_components[0]  # IF USED THIS MUST BE FIXED FOR TEXTURES WITH MORE THAN 3 COMPONENTS
                 this_actor = self.plot_mesh(uid=uid, plot_entity=plot_entity, color_RGB=None, show_property=None,
@@ -8203,7 +8186,7 @@ class NewViewXsection(NewView2D):
             plot_rgb_option = None
             new_plot = pvPointSet()
             new_plot.ShallowCopy(plot_entity)  # this is temporary
-            file = self.parent.dom_coll.df.loc[self.parent.dom_coll.df['uid'] == uid, "name"].values[0]
+            file = self.parent.entities_db.collection_by_name('dom').df.loc[self.parent.entities_db.collection_by_name('dom').df['uid'] == uid, "name"].values[0]
             if isinstance(plot_entity.points, np_ndarray):
                 """This check is needed to avoid errors when trying to plot an empty
                 PolyData, just created at the beginning of a digitizing session."""
@@ -8232,8 +8215,8 @@ class NewViewXsection(NewView2D):
                     index = int(show_property[pos1 + 1:pos2])
                     show_property_value = plot_entity.get_point_data(original_prop)[:, index]
                 else:
-                    n_comp = self.parent.dom_coll.get_uid_properties_components(uid)[
-                        self.parent.dom_coll.get_uid_properties_names(uid).index(show_property)]
+                    n_comp = self.parent.entities_db.collection_by_name('dom').get_uid_properties_components(uid)[
+                        self.parent.entities_db.collection_by_name('dom').get_uid_properties_names(uid).index(show_property)]
                     '''[Gabriele] Get the n of components for the given property. If it's > 1 then do stuff depending on the type of property (e.g. show_rgb_option -> True if the property is RGB)'''
                     if n_comp > 1:
                         show_property_value = plot_entity.get_point_data(show_property)

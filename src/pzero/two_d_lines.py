@@ -1,8 +1,6 @@
 from copy import deepcopy
 
 import numpy as np
-from numpy import asarray as np_asarray
-from numpy import vstack as np_vstack
 from numpy import column_stack as np_column_stack
 from numpy import array as np_array
 from numpy import zeros as np_zeros
@@ -11,12 +9,11 @@ from numpy import sqrt as np_sqrt
 from numpy import flip as np_flip
 from numpy import arange as np_arange
 from numpy import round as np_round
-from vtk import vtkTransform, vtkTransformPolyDataFilter
 
-from .geological_collection import GeologicalCollection
-from .helper_dialogs import multiple_input_dialog, input_one_value_dialog, message_dialog, tic, toc,general_input_dialog
+from pzero.collections.geological_collection import GeologicalCollection
+from .helper_dialogs import multiple_input_dialog, input_one_value_dialog, message_dialog
 from .helper_widgets import Editor, Tracer
-from .windows_factory import ViewMap, ViewXsection, NavigationToolbar, NewViewMap, NewViewXsection
+from .windows_factory import ViewMap, ViewXsection, NewViewMap, NewViewXsection
 from .entities_factory import PolyLine, XsPolyLine
 from shapely import affinity
 from shapely.geometry import LineString, Point, MultiLineString
@@ -26,9 +23,6 @@ from shapely.affinity import scale
 from PyQt5.QtWidgets import QAction
 
 from geopandas import GeoDataFrame as geodataframe
-from time import sleep
-
-import matplotlib.pyplot as plt
 
 """Implementation of functions specific to this view (e.g. particular editing or visualization functions)"""
 

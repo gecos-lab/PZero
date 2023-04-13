@@ -6,7 +6,7 @@ import uuid
 import os
 from vtk.util import numpy_support
 from .entities_factory import MapImage, XsImage
-from .image_collection import ImageCollection
+from pzero.collections.image_collection import ImageCollection
 from .helper_dialogs import multiple_input_dialog
 
 from numpy import pi as np_pi

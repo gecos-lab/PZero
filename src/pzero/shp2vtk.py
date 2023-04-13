@@ -3,7 +3,6 @@ PZero© Andrea Bistacchi"""
 
 from copy import deepcopy
 
-from matplotlib.text import Annotation
 from .entities_factory import PolyLine, VertexSet, Attitude
 from numpy import array as np_array
 from numpy import asarray as np_asarray
@@ -13,13 +12,9 @@ from numpy import column_stack as np_column_stack
 from pandas import Series as pd_series
 from geopandas import read_file as gpd_read_file
 from vtk import vtkAppendPolyData
-from .geological_collection import GeologicalCollection
-from .fluid_collection import FluidsCollection
-from .background_collection import BackgroundCollection
-from .two_d_lines import left_right
-from shapely import affinity
-from shapely.geometry import LineString, Point, MultiLineString
-from shapely.ops import split, snap
+from pzero.collections.geological_collection import GeologicalCollection
+from pzero.collections.fluid_collection import FluidsCollection
+from pzero.collections.background_collection import BackgroundCollection
 
 from .orientation_analysis import dip_directions2normals
 """Importer for SHP files and other GIS formats, to be improved IN THE FUTURE.
