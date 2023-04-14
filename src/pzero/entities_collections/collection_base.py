@@ -94,6 +94,13 @@ class CollectionBase(QAbstractTableModel):
         """Get list of uids."""
         return self._df['uid'].to_list()
 
+    def remove_entity(self, uid=None):
+        raise NotImplementedError
+
+    def has_uid(self, uid=None):
+        """Check if uid is in collection."""
+        return uid in self._df['uid'].to_list()
+
     def get_topological_type_uids(self, topological_type=None):
         """Get list of uids of a given topological_type."""
         return self._df.loc[self._df['topological_type'] == topological_type, 'uid'].to_list()

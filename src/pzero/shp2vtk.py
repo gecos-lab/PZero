@@ -12,9 +12,9 @@ from numpy import column_stack as np_column_stack
 from pandas import Series as pd_series
 from geopandas import read_file as gpd_read_file
 from vtk import vtkAppendPolyData
-from pzero.collections.geological_collection import GeologicalCollection
-from pzero.collections.fluid_collection import FluidsCollection
-from pzero.collections.background_collection import BackgroundCollection
+from pzero.entities_collections.geological_collection import GeologicalCollection
+from pzero.entities_collections.fluid_collection import FluidsCollection
+from pzero.entities_collections.background_collection import BackgroundCollection
 
 from .orientation_analysis import dip_directions2normals
 """Importer for SHP files and other GIS formats, to be improved IN THE FUTURE.

@@ -17,7 +17,7 @@ from numpy import repeat as np_repeat
 from numpy import dot as np_dot
 from numpy import matmul as np_matmul
 
-from pzero.collections.collection_base import CollectionBase
+from pzero.entities_collections.collection_base import CollectionBase
 from pzero.orientation_analysis import dip_directions2normals, get_dip_dir_vectors
 
 import pandas as pd

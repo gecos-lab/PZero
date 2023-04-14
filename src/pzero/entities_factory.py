@@ -65,7 +65,7 @@ We also expose as much as possible VTK attributes and methods as Numpy arrays an
 the code more compact, readable and "Pythonic" (also thanks to vtk.numpy_interface.dataset_adapter = dsa).
 
 We do not use vtkFieldData since metadata for each entity are recorded in the Pandas dataframe of the
-collections for geological, cross-sections, DOMs, etc. entities. This is more flexible since field
+entities_collections for geological, cross-sections, DOMs, etc. entities. This is more flexible since field
 data cannot store strings, for instance.
 
 Non-geological objects, such as cross sections, DEMs, images, etc., are not defined in the geological classes,

@@ -53,7 +53,7 @@ class PropertiesCMaps(QObject):
         """Update the properties colormap dataframe and widget. This is different from legend manager,
         where the geol_legend_df dataframe is managed directly by the geol_coll class. The reason for
         this difference is that property colormaps are managed at the whole project level, across the
-        geological, dom and mesh3d collections."""
+        geological, dom and mesh3d entities_collections."""
         """The pattern to extract a cell value from a Pandas dataframe is: dataframe.loc[boolean_index_rows, boolean_index_columns].values[cell_id]
         The boolean indexes used by loc can be:
         - the name of a column (e.g. "color")
@@ -67,7 +67,7 @@ class PropertiesCMaps(QObject):
         all_props = ['X', 'Y', 'Z']
         add_props = []
         """Make a list of all properties (unique values)."""
-        for collection in parent.entities_db.collections_with_properties():
+        for collection in parent.entities_db.get_collections_with_properties():
             coll_props = collection._df['properties_names'].to_list()
             coll_props = list(pd_flatten(coll_props))
             coll_prop_comps = collection._df['properties_components'].to_list()
@@ -78,7 +78,7 @@ class PropertiesCMaps(QObject):
                 elif coll_prop_comps[i] == 1:
                     add_props = add_props + [coll_props[i]]
         
-        if parent.entities_db.collection_by_name("well")._df['properties_names'].to_list():
+        if parent.entities_db.get_collection_by_name("well")._df['properties_names'].to_list():
             add_props.append('MD')
 
         

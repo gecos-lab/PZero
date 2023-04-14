@@ -7,8 +7,8 @@ from numpy import shape as np_shape
 from vtk import vtkPoints, vtkCellArray, vtkDataArrayCollection, vtkFloatArray, vtkLine, vtkTriangle, vtkVertex 
 import uuid
 from .entities_factory import VertexSet, PolyLine, TriSurf, XsVertexSet, XsPolyLine
-from pzero.collections.geological_collection import GeologicalCollection
-from pzero.collections.boundary_collection import BoundaryCollection
+from pzero.entities_collections.geological_collection import GeologicalCollection
+from pzero.entities_collections.boundary_collection import BoundaryCollection
 from .helper_dialogs import input_text_dialog, input_combo_dialog, options_dialog
 
 """We import only come Gocad object attributes.

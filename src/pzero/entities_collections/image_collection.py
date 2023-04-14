@@ -7,7 +7,7 @@ import uuid
 from copy import deepcopy
 from PyQt5.QtCore import Qt, QVariant
 
-from pzero.collections.collection_base import CollectionBase
+from pzero.entities_collections.collection_base import CollectionBase
 from pzero.entities_factory import MapImage, XsImage, Seismics, Image3D
 
 """Options to print Pandas dataframes in console for testing."""
@@ -93,9 +93,10 @@ class ImageCollection(CollectionBase):
     def remove_entity(self, uid=None):
         """Remove entity from collection. Remove row from dataframe and reset data model."""
         """First remove textures, if defined."""
-        for dom_uid in self.main_window.dom_coll.get_uids():
-            if uid in self.main_window.dom_coll.get_uid_texture_uids(dom_uid):
-                self.main_window.dom_coll.remove_map_texture_from_dom(dom_uid=dom_uid, map_image_uid=uid)
+        dom_coll = self.main_window.entities_db.get_collection_by_name("dom")
+        for dom_uid in dom_coll.get_uids():
+            if uid in dom_coll.get_uid_texture_uids(dom_uid):
+                dom_coll.remove_map_texture_from_dom(dom_uid=dom_uid, map_image_uid=uid)
         """Then remove image"""
         self._df.drop(self._df[self._df['uid'] == uid].index, inplace=True)
         self.modelReset.emit()  # is this really necessary?

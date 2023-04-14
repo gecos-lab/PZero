@@ -1,7 +1,7 @@
 """boundary_collection.py
 PZero© Andrea Bistacchi"""
 
-from pzero.collections.collection_base import CollectionBase
+from pzero.entities_collections.collection_base import CollectionBase
 
 """Import as much as possible as from <module> import <class> or <class as ...>"""
 from vtk import vtkPoints

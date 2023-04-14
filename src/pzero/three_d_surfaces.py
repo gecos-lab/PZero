@@ -25,7 +25,7 @@ from numpy import float32 as np_float32
 from pandas import DataFrame as pd_DataFrame
 from vtkmodules.vtkCommonDataModel import vtkBoundingBox
 
-from pzero.collections.geological_collection import GeologicalCollection
+from pzero.entities_collections.geological_collection import GeologicalCollection
 from .helper_dialogs import multiple_input_dialog, input_one_value_dialog, input_text_dialog, input_combo_dialog, input_checkbox_dialog, tic, toc, progress_dialog, general_input_dialog
 from .entities_factory import TriSurf, XsPolyLine, PolyLine, VertexSet, Voxet, XsVoxet, XsVertexSet,Attitude
 

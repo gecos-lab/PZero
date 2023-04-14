@@ -20,9 +20,9 @@ from .entities_factory import Well, VertexSet
 from uuid import uuid4
 # from .entities_factory import WellData
 
-from pzero.collections.well_collection import WellCollection
-from pzero.collections.geological_collection import GeologicalCollection
-from pzero.collections.background_collection import BackgroundCollection
+from pzero.entities_collections.well_collection import WellCollection
+from pzero.entities_collections.geological_collection import GeologicalCollection
+from pzero.entities_collections.background_collection import BackgroundCollection
 import pandas as pd
 # import lasio as ls
 
