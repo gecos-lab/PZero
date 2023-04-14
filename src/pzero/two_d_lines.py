@@ -324,20 +324,20 @@ def split_line_line(self):
             """Create empty dictionary for the output lines."""
             new_line = deepcopy(self.parent.geol_coll.geological_entity_dict)
             new_line['name'] = \
-                self.parent.geol_coll.df.loc[self.parent.geol_coll.df['uid'] == current_uid_paper, 'name'].values[
+                self.parent.geol_coll._df.loc[self.parent.geol_coll._df['uid'] == current_uid_paper, 'name'].values[
                     0] + '_split'
             new_line['topological_type'] = \
-                self.parent.geol_coll.df.loc[
-                    self.parent.geol_coll.df['uid'] == current_uid_paper, 'topological_type'].values[0]
+                self.parent.geol_coll._df.loc[
+                    self.parent.geol_coll._df['uid'] == current_uid_paper, 'topological_type'].values[0]
             new_line['geological_type'] = \
-                self.parent.geol_coll.df.loc[
-                    self.parent.geol_coll.df['uid'] == current_uid_paper, 'geological_type'].values[0]
+                self.parent.geol_coll._df.loc[
+                    self.parent.geol_coll._df['uid'] == current_uid_paper, 'geological_type'].values[0]
             new_line['geological_feature'] = \
-                self.parent.geol_coll.df.loc[
-                    self.parent.geol_coll.df['uid'] == current_uid_paper, 'geological_feature'].values[
+                self.parent.geol_coll._df.loc[
+                    self.parent.geol_coll._df['uid'] == current_uid_paper, 'geological_feature'].values[
                     0]
             new_line['scenario'] = \
-                self.parent.geol_coll.df.loc[self.parent.geol_coll.df['uid'] == current_uid_paper, 'scenario'].values[0]
+                self.parent.geol_coll._df.loc[self.parent.geol_coll._df['uid'] == current_uid_paper, 'scenario'].values[0]
             outU = np_array(line)[:, 0]
             outV = np_array(line)[:, 1]
             if isinstance(self, NewViewMap):
@@ -386,15 +386,15 @@ def split_line_existing_point(self):
         new_line_1 = deepcopy(self.parent.geol_coll.geological_entity_dict)
         new_line_2 = deepcopy(self.parent.geol_coll.geological_entity_dict)
         new_line_2['name'] = \
-            self.parent.geol_coll.df.loc[self.parent.geol_coll.df['uid'] == uid, 'name'].values[0] + '_split'
+            self.parent.geol_coll._df.loc[self.parent.geol_coll._df['uid'] == uid, 'name'].values[0] + '_split'
         new_line_2['topological_type'] = \
-            self.parent.geol_coll.df.loc[self.parent.geol_coll.df['uid'] == uid, 'topological_type'].values[0]
+            self.parent.geol_coll._df.loc[self.parent.geol_coll._df['uid'] == uid, 'topological_type'].values[0]
         new_line_2['geological_type'] = \
-            self.parent.geol_coll.df.loc[self.parent.geol_coll.df['uid'] == uid, 'geological_type'].values[0]
+            self.parent.geol_coll._df.loc[self.parent.geol_coll._df['uid'] == uid, 'geological_type'].values[0]
         new_line_2['geological_feature'] = \
-            self.parent.geol_coll.df.loc[self.parent.geol_coll.df['uid'] == uid, 'geological_feature'].values[0]
+            self.parent.geol_coll._df.loc[self.parent.geol_coll._df['uid'] == uid, 'geological_feature'].values[0]
         new_line_2['scenario'] = \
-            self.parent.geol_coll.df.loc[self.parent.geol_coll.df['uid'] == uid, 'scenario'].values[0]
+            self.parent.geol_coll._df.loc[self.parent.geol_coll._df['uid'] == uid, 'scenario'].values[0]
         if isinstance(self, NewViewMap):
             inU_line = deepcopy(self.parent.geol_coll.get_uid_vtk_obj(uid).points[:, 0])
             inV_line = deepcopy(self.parent.geol_coll.get_uid_vtk_obj(uid).points[:, 1])
@@ -967,7 +967,7 @@ def copy_parallel(self):  # this must be done per-part__________________________
         self.enable_actions()
         return
 
-    in_line_name = self.parent.geol_coll.df.loc[self.parent.geol_coll.df['uid'] == input_uid, 'name'].values[0]
+    in_line_name = self.parent.geol_coll._df.loc[self.parent.geol_coll._df['uid'] == input_uid, 'name'].values[0]
     out_line_name = in_line_name + '_para_' + '%d' % distance
 
     """Create empty dictionary for the output line and set name and geological_type.
@@ -975,7 +975,7 @@ def copy_parallel(self):  # this must be done per-part__________________________
     line_dict = deepcopy(self.parent.geol_coll.geological_entity_dict)
     line_dict['name'] = out_line_name
     line_dict['geological_type'] = \
-        self.parent.geol_coll.df.loc[self.parent.geol_coll.df['uid'] == input_uid, 'geological_type'].values[0]
+        self.parent.geol_coll._df.loc[self.parent.geol_coll._df['uid'] == input_uid, 'geological_type'].values[0]
     line_dict['geological_feature'] = self.parent.geol_coll.get_uid_geological_feature(self.selected_uids[0])
     line_dict['scenario'] = self.parent.geol_coll.get_uid_scenario(self.selected_uids[0])
     if isinstance(self, (ViewMap, NewViewMap)):
@@ -1062,7 +1062,7 @@ def copy_kink(self):  # this must be done per-part______________________________
         self.enable_actions()
         return
 
-    in_line_name = self.parent.geol_coll.df.loc[self.parent.geol_coll.df['uid'] == input_uid, 'name'].values[0]
+    in_line_name = self.parent.geol_coll._df.loc[self.parent.geol_coll._df['uid'] == input_uid, 'name'].values[0]
     out_line_name = in_line_name + '_kink_' + '%d' % distance
 
     """Create empty dictionary for the output line and set name and geological_type.
@@ -1070,7 +1070,7 @@ def copy_kink(self):  # this must be done per-part______________________________
     line_dict = deepcopy(self.parent.geol_coll.geological_entity_dict)
     line_dict['name'] = out_line_name
     line_dict['geological_type'] = \
-        self.parent.geol_coll.df.loc[self.parent.geol_coll.df['uid'] == input_uid, 'geological_type'].values[0]
+        self.parent.geol_coll._df.loc[self.parent.geol_coll._df['uid'] == input_uid, 'geological_type'].values[0]
     line_dict['geological_feature'] = self.parent.geol_coll.get_uid_geological_feature(self.selected_uids[0])
     line_dict['scenario'] = self.parent.geol_coll.get_uid_scenario(self.selected_uids[0])
     if isinstance(self, (ViewMap,NewViewMap)):
@@ -1147,7 +1147,7 @@ def copy_similar(self, vector):  # this must be done per-part___________________
     IN THE FUTURE see if other metadata should be automatically set."""
     line_dict = deepcopy(self.parent.geol_coll.geological_entity_dict)
     line_dict['geological_type'] = \
-        self.parent.geol_coll.df.loc[self.parent.geol_coll.df['uid'] == input_uid, 'geological_type'].values[0]
+        self.parent.geol_coll._df.loc[self.parent.geol_coll._df['uid'] == input_uid, 'geological_type'].values[0]
     line_dict['geological_feature'] = self.parent.geol_coll.get_uid_geological_feature(self.selected_uids[0])
     line_dict['scenario'] = self.parent.geol_coll.get_uid_scenario(self.selected_uids[0])
     if isinstance(self, NewViewMap):
@@ -1176,7 +1176,7 @@ def copy_similar(self, vector):  # this must be done per-part___________________
     line_dict['vtk_obj'].points = outXYZ
     line_dict['vtk_obj'].auto_cells()
     """Set output line name."""
-    in_line_name = self.parent.geol_coll.df.loc[self.parent.geol_coll.df['uid'] == input_uid, 'name'].values[0]
+    in_line_name = self.parent.geol_coll._df.loc[self.parent.geol_coll._df['uid'] == input_uid, 'name'].values[0]
     distance = vector.length
     out_line_name = f'{in_line_name}_simi_{round(distance, 2)}'
 
@@ -1301,13 +1301,13 @@ def clean_intersection(self):
     '''
     data = []
     if isinstance(self, NewViewMap):
-        for i, line in self.parent.geol_coll.df.loc[self.parent.geol_coll.df['topological_type'] == 'PolyLine'].iterrows():
+        for i, line in self.parent.geol_coll._df.loc[self.parent.geol_coll._df['topological_type'] == 'PolyLine'].iterrows():
             vtkgeom = line['vtk_obj']
             uid = line['uid']
             geom = LineString(vtkgeom.points[:, :2])
             data.append({'uid': uid, 'geometry': geom})
     elif isinstance(self, NewViewXsection):
-        for i, line in self.parent.geol_coll.df.loc[self.parent.geol_coll.df['topological_type'] == 'XsPolyLine'].iterrows():
+        for i, line in self.parent.geol_coll._df.loc[self.parent.geol_coll._df['topological_type'] == 'XsPolyLine'].iterrows():
             vtkgeom = line['vtk_obj']
             uid = line['uid']
             inU, inV = vtkgeom.world2plane()

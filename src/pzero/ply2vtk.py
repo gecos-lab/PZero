@@ -13,9 +13,9 @@ def vtk2ply(self=None, out_dir_name=None):
     ply_writer.SetFileTypeToBinary()
     ply_writer.SetColorModeToUniformCellColor()
     """Loop for each entity."""
-    for uid in self.geol_coll.df['uid']:
+    for uid in self.geol_coll._df['uid']:
         if isinstance(self.geol_coll.get_uid_vtk_obj(uid), TriSurf):
-            out_file_name = (str(out_dir_name) + "/" + uid + "_" + self.geol_coll.df.loc[self.geol_coll.df['uid'] == uid, 'name'].values[0] + ".stl")
+            out_file_name = (str(out_dir_name) + "/" + uid + "_" + self.geol_coll._df.loc[self.geol_coll._df['uid'] == uid, 'name'].values[0] + ".stl")
             vtk_entity = self.geol_coll.get_uid_vtk_obj(uid)
             color_R = self.geol_coll.get_uid_legend(uid=uid)['color_R']
             color_G = self.geol_coll.get_uid_legend(uid=uid)['color_G']
@@ -25,9 +25,9 @@ def vtk2ply(self=None, out_dir_name=None):
             ply_writer.SetInputData(vtk_entity)
             ply_writer.SetColor(color_R, color_G, color_B)
             ply_writer.Write()
-    for uid in self.boundary_coll.df['uid']:
+    for uid in self.boundary_coll._df['uid']:
         if isinstance(self.boundary_coll.get_uid_vtk_obj(uid), TriSurf):
-            out_file_name = (str(out_dir_name) + "/" + uid + "_" + self.boundary_coll.df.loc[self.boundary_coll.df['uid'] == uid, 'name'].values[0] + ".stl")
+            out_file_name = (str(out_dir_name) + "/" + uid + "_" + self.boundary_coll._df.loc[self.boundary_coll._df['uid'] == uid, 'name'].values[0] + ".stl")
             vtk_entity = self.boundary_coll.get_uid_vtk_obj(uid)
             color_R = self.boundary_coll.get_uid_legend(uid=uid)['color_R']
             color_G = self.boundary_coll.get_uid_legend(uid=uid)['color_G']

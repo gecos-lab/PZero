@@ -68,9 +68,9 @@ class PropertiesCMaps(QObject):
         add_props = []
         """Make a list of all properties (unique values)."""
         for collection in parent.entities_db.collections_with_properties():
-            coll_props = collection.df['properties_names'].to_list()
+            coll_props = collection._df['properties_names'].to_list()
             coll_props = list(pd_flatten(coll_props))
-            coll_prop_comps = collection.df['properties_components'].to_list()
+            coll_prop_comps = collection._df['properties_components'].to_list()
             coll_prop_comps = list(pd_flatten(coll_prop_comps))
             for i in range(len(coll_props)):
                 if coll_prop_comps[i] == 3:
@@ -78,7 +78,7 @@ class PropertiesCMaps(QObject):
                 elif coll_prop_comps[i] == 1:
                     add_props = add_props + [coll_props[i]]
         
-        if parent.entities_db.collection_by_name("well").df['properties_names'].to_list():
+        if parent.entities_db.collection_by_name("well")._df['properties_names'].to_list():
             add_props.append('MD')
 
         

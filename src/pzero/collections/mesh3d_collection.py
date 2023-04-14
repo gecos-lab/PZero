@@ -6,13 +6,12 @@ from numpy import set_printoptions as np_set_set_printoptions
 
 
 from pandas import set_option as pd_set_option
-from pandas import DataFrame as pd_DataFrame
 
 import uuid
 from copy import deepcopy
-from PyQt5.QtCore import QAbstractTableModel, Qt, QVariant
+from PyQt5.QtCore import Qt, QVariant
 
-from pzero.collection_base import CollectionBase
+from pzero.collections.collection_base import CollectionBase
 
 """Options to print Pandas dataframes in console for testing."""
 pd_desired_width = 800
@@ -65,7 +64,7 @@ class Mesh3DCollection(CollectionBase):
 
     @property
     def editable_columns(self):
-        return self.df.columns.get_indexer(["name"])
+        return self._df.columns.get_indexer(["name"])
 
 
     def add_entity_from_dict(self, entity_dict=None):
@@ -75,7 +74,7 @@ class Mesh3DCollection(CollectionBase):
             entity_dict['uid'] = str(uuid.uuid4())
         """"Append new row to dataframe. Note that the 'append()' method for Pandas dataframes DOES NOT
         work in place, hence a NEW dataframe is created every time and then substituted to the old one."""
-        self.df = self.df.append(entity_dict, ignore_index=True)
+        self._df = self._df.append(entity_dict, ignore_index=True)
         """Reset data model"""
         self.modelReset.emit()
         """Update properties colormaps if needed"""
@@ -89,7 +88,7 @@ class Mesh3DCollection(CollectionBase):
 
     def remove_entity(self, uid=None):
         """Remove entity from collection. Remove row from dataframe and reset data model."""
-        self.df.drop(self.df[self.df['uid'] == uid].index, inplace=True)
+        self._df.drop(self._df[self._df['uid'] == uid].index, inplace=True)
         self.modelReset.emit()  # is this really necessary?
         self.main_window.prop_legend.update_widget(self.main_window)
         """When done, send a signal over to the views."""
@@ -97,8 +96,8 @@ class Mesh3DCollection(CollectionBase):
         return uid
 
     def replace_vtk(self, uid=None, vtk_object=None):
-        if isinstance(vtk_object, type(self.df.loc[self.df['uid'] == uid, 'vtk_obj'].values[0])):
-            new_dict = deepcopy(self.df.loc[self.df['uid'] == uid, self.df.columns != 'vtk_obj'].to_dict('records')[0])
+        if isinstance(vtk_object, type(self._df.loc[self._df['uid'] == uid, 'vtk_obj'].values[0])):
+            new_dict = deepcopy(self._df.loc[self._df['uid'] == uid, self._df.columns != 'vtk_obj'].to_dict('records')[0])
             new_dict['vtk_obj'] = vtk_object
             self.remove_entity(uid)
             self.add_entity_from_dict(entity_dict=new_dict)
@@ -111,7 +110,7 @@ class Mesh3DCollection(CollectionBase):
 
     def get_mesh3d_type_uids(self, mesh3d_type=None):
         """Get list of uids of a given image_type."""
-        return self.df.loc[self.df['mesh3d_type'] == mesh3d_type, 'uid'].to_list()
+        return self._df.loc[self._df['mesh3d_type'] == mesh3d_type, 'uid'].to_list()
 
     def get_legend(self):
         """Get legend.
@@ -123,37 +122,37 @@ class Mesh3DCollection(CollectionBase):
 
     def get_uid_mesh3d_type(self, uid=None):
         """Get value(s) stored in dataframe (as pointer) from uid."""
-        return self.df.loc[self.df['uid'] == uid, 'mesh3d_type'].values[0]
+        return self._df.loc[self._df['uid'] == uid, 'mesh3d_type'].values[0]
 
     def set_uid_mesh3d_type(self, uid=None, mesh3d_type=None):
         """Set value(s) stored in dataframe (as pointer) from uid."""
-        self.df.loc[self.df['uid'] == uid, 'mesh3d_type'] = mesh3d_type
+        self._df.loc[self._df['uid'] == uid, 'mesh3d_type'] = mesh3d_type
 
     def get_uid_properties_names(self, uid=None):
         """Get value(s) stored in dataframe (as pointer) from uid. This is a LIST even if we extract it with values[0]!"""
-        return self.df.loc[self.df['uid'] == uid, 'properties_names'].values[0]
+        return self._df.loc[self._df['uid'] == uid, 'properties_names'].values[0]
 
     def set_uid_properties_names(self, uid=None, properties_names=None):
         """Set value(s) stored in dataframe (as pointer) from uid. This is a LIST and "at" must be used!"""
-        row = self.df[self.df['uid'] == uid].index.values[0]
-        self.df.at[row, 'properties_names'] = properties_names
+        row = self._df[self._df['uid'] == uid].index.values[0]
+        self._df.at[row, 'properties_names'] = properties_names
 
     def get_uid_properties_components(self, uid=None):
         """Get value(s) stored in dataframe (as pointer) from uid. This is a LIST even if we extract it with values[0]!"""
-        return self.df.loc[self.df['uid'] == uid, 'properties_components'].values[0]
+        return self._df.loc[self._df['uid'] == uid, 'properties_components'].values[0]
 
     def set_uid_properties_components(self, uid=None, properties_components=None):
         """Set value(s) stored in dataframe (as pointer) from uid. This is a LIST and "at" must be used!"""
-        row = self.df[self.df['uid'] == uid].index.values[0]
-        self.df.at[row, 'properties_components'] = properties_components
+        row = self._df[self._df['uid'] == uid].index.values[0]
+        self._df.at[row, 'properties_components'] = properties_components
 
     def get_uid_x_section(self, uid=None):
         """Get value(s) stored in dataframe (as pointer) from uid."""
-        return self.df.loc[self.df['uid'] == uid, 'x_section'].values[0]
+        return self._df.loc[self._df['uid'] == uid, 'x_section'].values[0]
 
     def set_uid_x_section(self, uid=None, x_section=None):
         """Set value(s) stored in dataframe (as pointer) from uid."""
-        self.df.loc[self.df['uid'] == uid, 'x_section'] = x_section
+        self._df.loc[self._df['uid'] == uid, 'x_section'] = x_section
 
 
 
@@ -195,10 +194,10 @@ class Mesh3DCollection(CollectionBase):
         "self.main_window is" is used to point to parent, because the standard Qt setData
         method does not allow for extra variables to be passed into this method."""
         if index.isValid():
-            self.df.iloc[index.row(), index.column()] = value
+            self._df.iloc[index.row(), index.column()] = value
             if self.data(index, Qt.DisplayRole) == value:
                 self.dataChanged.emit(index, index)
-                uid = self.df.iloc[index.row(), 0]
+                uid = self._df.iloc[index.row(), 0]
                 self.main_window.mesh3d_metadata_modified_signal.emit([uid])  # a list of uids is emitted, even if the entity is just one
                 return True
         return QVariant()

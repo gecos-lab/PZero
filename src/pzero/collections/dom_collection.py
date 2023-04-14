@@ -3,12 +3,11 @@ PZero© Andrea Bistacchi"""
 
 from numpy import set_printoptions as np_set_print_options
 from pandas import set_option as pd_set_option
-from pandas import DataFrame as pd_DataFrame
 import uuid
 from copy import deepcopy
-from PyQt5.QtCore import QAbstractTableModel, Qt, QVariant
+from PyQt5.QtCore import Qt, QVariant
 
-from pzero.collection_base import CollectionBase
+from pzero.collections.collection_base import CollectionBase
 
 """Options to print Pandas dataframes in console when testing."""
 pd_desired_width = 800
@@ -64,7 +63,7 @@ class DomCollection(CollectionBase):
 
     @property
     def editable_columns(self):
-        return self.df.columns.get_indexer(["name"])
+        return self._df.columns.get_indexer(["name"])
 
     """Custom methods used to add or remove entities, query the dataframe, etc."""
 
@@ -75,7 +74,7 @@ class DomCollection(CollectionBase):
             entity_dict['uid'] = str(uuid.uuid4())
         """"Append new row to dataframe. Note that the 'append()' method for Pandas dataframes DOES NOT
         work in place, hence a NEW dataframe is created every time and then substituted to the old one."""
-        self.df = self.df.append(entity_dict, ignore_index=True)
+        self._df = self._df.append(entity_dict, ignore_index=True)
         """Reset data model"""
         self.modelReset.emit()
         self.main_window.prop_legend.update_widget(self.main_window)
@@ -85,7 +84,7 @@ class DomCollection(CollectionBase):
 
     def remove_entity(self, uid=None):
         """Remove entity from collection. Remove row from dataframe and reset data model."""
-        self.df.drop(self.df[self.df['uid'] == uid].index, inplace=True)
+        self._df.drop(self._df[self._df['uid'] == uid].index, inplace=True)
         self.modelReset.emit()  # is this really necessary?
         self.main_window.prop_legend.update_widget(self.main_window)
         """When done, send a signal over to the views."""
@@ -93,8 +92,8 @@ class DomCollection(CollectionBase):
         return uid
 
     def replace_vtk(self, uid=None, vtk_object=None):
-        if isinstance(vtk_object, type(self.df.loc[self.df['uid'] == uid, 'vtk_obj'].values[0])):
-            new_dict = deepcopy(self.df.loc[self.df['uid'] == uid, self.df.columns != 'vtk_obj'].to_dict('records')[0])
+        if isinstance(vtk_object, type(self._df.loc[self._df['uid'] == uid, 'vtk_obj'].values[0])):
+            new_dict = deepcopy(self._df.loc[self._df['uid'] == uid, self._df.columns != 'vtk_obj'].to_dict('records')[0])
             keys = vtk_object.point_data_keys
             for key in keys:
                 if key not in new_dict['properties_names'] and 'tag_' not in key:
@@ -112,7 +111,7 @@ class DomCollection(CollectionBase):
 
     def get_dom_type_uids(self, dom_type=None):
         """Get list of uids of a given dom_type."""
-        return self.df.loc[self.df['dom_type'] == dom_type, 'uid'].to_list()
+        return self._df.loc[self._df['dom_type'] == dom_type, 'uid'].to_list()
 
     def get_legend(self):
         legend_dict = self.main_window.others_legend_df.loc[self.main_window.others_legend_df['other_type'] == 'DOM'].to_dict('records')
@@ -122,53 +121,53 @@ class DomCollection(CollectionBase):
 
     def get_uid_dom_type(self, uid=None):
         """Get value(s) stored in dataframe (as pointer) from uid."""
-        return self.df.loc[self.df['uid'] == uid, 'dom_type'].values[0]
+        return self._df.loc[self._df['uid'] == uid, 'dom_type'].values[0]
 
     def set_uid_dom_type(self, uid=None, dom_type=None):
         """Set value(s) stored in dataframe (as pointer) from uid.."""
-        self.df.loc[self.df['uid'] == uid, 'dom_type'] = dom_type
+        self._df.loc[self._df['uid'] == uid, 'dom_type'] = dom_type
 
     def get_uid_texture_uids(self, uid=None):
         """Get value(s) stored in dataframe (as pointer) from uid."""
-        return self.df.loc[self.df['uid'] == uid, 'texture_uids'].values[0]
+        return self._df.loc[self._df['uid'] == uid, 'texture_uids'].values[0]
 
     def set_uid_texture_uids(self, uid=None, texture_uids=None):
         """Set value(s) stored in dataframe (as pointer) from uid.."""
-        self.df.loc[self.df['uid'] == uid, 'texture_uids'] = texture_uids
+        self._df.loc[self._df['uid'] == uid, 'texture_uids'] = texture_uids
 
     def get_uid_properties_names(self, uid=None):
         """Get value(s) stored in dataframe (as pointer) from uid. This is a LIST even if we extract it with values[0]!"""
-        return self.df.loc[self.df['uid'] == uid, 'properties_names'].values[0]
+        return self._df.loc[self._df['uid'] == uid, 'properties_names'].values[0]
 
     def set_uid_properties_names(self, uid=None, properties_names=None):
         """Set value(s) stored in dataframe (as pointer) from uid. This is a LIST and "at" must be used!"""
-        row = self.df[self.df['uid'] == uid].index.values[0]
-        self.df.at[row, 'properties_names'] = properties_names
+        row = self._df[self._df['uid'] == uid].index.values[0]
+        self._df.at[row, 'properties_names'] = properties_names
 
     def get_uid_properties_components(self, uid=None):
         """Get value(s) stored in dataframe (as pointer) from uid. This is a LIST even if we extract it with values[0]!"""
-        return self.df.loc[self.df['uid'] == uid, 'properties_components'].values[0]
+        return self._df.loc[self._df['uid'] == uid, 'properties_components'].values[0]
 
     def set_uid_properties_components(self, uid=None, properties_components=None):
         """Set value(s) stored in dataframe (as pointer) from uid. This is a LIST and "at" must be used!"""
-        row = self.df[self.df['uid'] == uid].index.values[0]
-        self.df.at[row, 'properties_components'] = properties_components
+        row = self._df[self._df['uid'] == uid].index.values[0]
+        self._df.at[row, 'properties_components'] = properties_components
 
     def get_uid_x_section(self, uid=None):
         """Get value(s) stored in dataframe (as pointer) from uid."""
-        return self.df.loc[self.df['uid'] == uid, 'x_section'].values[0]
+        return self._df.loc[self._df['uid'] == uid, 'x_section'].values[0]
 
     def set_uid_x_section(self, uid=None, x_section=None):
         """Set value(s) stored in dataframe (as pointer) from uid."""
-        self.df.loc[self.df['uid'] == uid, 'x_section'] = x_section
+        self._df.loc[self._df['uid'] == uid, 'x_section'] = x_section
 
     def get_uid_vtk_obj(self, uid=None):
         """Get value(s) stored in dataframe (as pointer) from uid."""
-        return self.df.loc[self.df['uid'] == uid, 'vtk_obj'].values[0]
+        return self._df.loc[self._df['uid'] == uid, 'vtk_obj'].values[0]
 
     def set_uid_vtk_obj(self, uid=None, vtk_obj=None):
         """Set value(s) stored in dataframe (as pointer) from uid."""
-        self.df.loc[self.df['uid'] == uid, 'vtk_obj'] = vtk_obj
+        self._df.loc[self._df['uid'] == uid, 'vtk_obj'] = vtk_obj
 
     def append_uid_property(self, uid=None, property_name=None, property_components=None):
         """Add property name and components to an uid and create empty property on vtk object.
@@ -200,17 +199,17 @@ class DomCollection(CollectionBase):
         self.main_window.dom_data_keys_removed_signal.emit([uid])
 
     def add_map_texture_to_dom(self, dom_uid=None, map_image_uid=None):
-        row = self.df[self.df['uid'] == dom_uid].index.values[0]
-        if map_image_uid not in self.df.at[row, 'texture_uids']:
+        row = self._df[self._df['uid'] == dom_uid].index.values[0]
+        if map_image_uid not in self._df.at[row, 'texture_uids']:
             self.get_uid_vtk_obj(dom_uid).add_texture(map_image=self.main_window.image_coll.get_uid_vtk_obj(map_image_uid), map_image_uid=map_image_uid)
-            self.df.at[row, 'texture_uids'].append(map_image_uid)
+            self._df.at[row, 'texture_uids'].append(map_image_uid)
             self.main_window.dom_metadata_modified_signal.emit([dom_uid])
 
     def remove_map_texture_from_dom(self, dom_uid=None, map_image_uid=None):
-        row = self.df[self.df['uid'] == dom_uid].index.values[0]
-        if map_image_uid in self.df.at[row, 'texture_uids']:
+        row = self._df[self._df['uid'] == dom_uid].index.values[0]
+        if map_image_uid in self._df.at[row, 'texture_uids']:
             self.get_uid_vtk_obj(dom_uid).remove_texture(map_image_uid=map_image_uid)
-            self.df.at[row, 'texture_uids'].remove(map_image_uid)
+            self._df.at[row, 'texture_uids'].remove(map_image_uid)
             self.main_window.dom_data_keys_removed_signal.emit([dom_uid])
             # self.main_window.dom_metadata_modified_signal.emit([dom_uid])
 
@@ -225,10 +224,10 @@ class DomCollection(CollectionBase):
         "self.main_window is" is used to point to parent, because the standard Qt setData
         method does not allow for extra variables to be passed into this method."""
         if index.isValid():
-            self.df.iloc[index.row(), index.column()] = value
+            self._df.iloc[index.row(), index.column()] = value
             if self.data(index, Qt.DisplayRole) == value:
                 self.dataChanged.emit(index, index)
-                uid = self.df.iloc[index.row(), 0]
+                uid = self._df.iloc[index.row(), 0]
                 self.main_window.dom_metadata_modified_signal.emit([uid])  # a list of uids is emitted, even if the entity is just one
                 return True
         return QVariant()

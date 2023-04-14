@@ -3,12 +3,11 @@ PZero© Andrea Bistacchi"""
 
 import numpy as np
 from pandas import set_option as pd_set_option
-from pandas import DataFrame as pd_DataFrame
 import uuid
 from copy import deepcopy
-from PyQt5.QtCore import QAbstractTableModel, Qt, QVariant
+from PyQt5.QtCore import Qt, QVariant
 
-from pzero.collection_base import CollectionBase
+from pzero.collections.collection_base import CollectionBase
 from pzero.entities_factory import MapImage, XsImage, Seismics, Image3D
 
 """Options to print Pandas dataframes in console for testing."""
@@ -65,7 +64,7 @@ class ImageCollection(CollectionBase):
     
     @property
     def editable_columns(self):
-        return self.df.columns.get_indexer(["name"])
+        return self._df.columns.get_indexer(["name"])
 
     """Custom methods used to add or remove entities, query the dataframe, etc."""
 
@@ -77,7 +76,7 @@ class ImageCollection(CollectionBase):
             entity_dict['uid'] = str(uuid.uuid4())
         """"Append new row to dataframe. Note that the 'append()' method for Pandas dataframes DOES NOT
         work in place, hence a NEW dataframe is created every time and then substituted to the old one."""
-        self.df = self.df.append(entity_dict, ignore_index=True)
+        self._df = self._df.append(entity_dict, ignore_index=True)
         """Reset data model"""
         self.modelReset.emit()
         """Update properties colormaps if needed"""
@@ -98,7 +97,7 @@ class ImageCollection(CollectionBase):
             if uid in self.main_window.dom_coll.get_uid_texture_uids(dom_uid):
                 self.main_window.dom_coll.remove_map_texture_from_dom(dom_uid=dom_uid, map_image_uid=uid)
         """Then remove image"""
-        self.df.drop(self.df[self.df['uid'] == uid].index, inplace=True)
+        self._df.drop(self._df[self._df['uid'] == uid].index, inplace=True)
         self.modelReset.emit()  # is this really necessary?
         self.main_window.prop_legend.update_widget(self.main_window)
         """When done, send a signal over to the views."""
@@ -106,8 +105,8 @@ class ImageCollection(CollectionBase):
         return uid
 
     def replace_vtk(self, uid=None, vtk_object=None):
-        if isinstance(vtk_object, type(self.df.loc[self.df['uid'] == uid, 'vtk_obj'].values[0])):
-            new_dict = deepcopy(self.df.loc[self.df['uid'] == uid, self.df.columns != 'vtk_obj'].to_dict('records')[0])
+        if isinstance(vtk_object, type(self._df.loc[self._df['uid'] == uid, 'vtk_obj'].values[0])):
+            new_dict = deepcopy(self._df.loc[self._df['uid'] == uid, self._df.columns != 'vtk_obj'].to_dict('records')[0])
             new_dict['vtk_obj'] = vtk_object
             """Check properties attributes"""
             if isinstance(self, MapImage):  # "TSDomImage"???
@@ -139,32 +138,32 @@ class ImageCollection(CollectionBase):
 
     def get_image_type_uids(self, image_type=None):
         """Get list of uids of a given image_type."""
-        return self.df.loc[self.df['image_type'] == image_type, 'uid'].to_list()
+        return self._df.loc[self._df['image_type'] == image_type, 'uid'].to_list()
 
 
     def get_uid_image_type(self, uid=None):
         """Get value(s) stored in dataframe (as pointer) from uid."""
-        return self.df.loc[self.df['uid'] == uid, 'image_type'].values[0]
+        return self._df.loc[self._df['uid'] == uid, 'image_type'].values[0]
 
     def set_uid_image_type(self, uid=None, image_type=None):
         """Set value(s) stored in dataframe (as pointer) from uid."""
-        self.df.loc[self.df['uid'] == uid, 'image_type'] = image_type
+        self._df.loc[self._df['uid'] == uid, 'image_type'] = image_type
 
     def get_uid_properties_names(self, uid=None):
         """Get value(s) stored in dataframe (as pointer) from uid.. This is a LIST even if we extract it with values[0]!"""
-        return self.df.loc[self.df['uid'] == uid, 'properties_names'].values[0]
+        return self._df.loc[self._df['uid'] == uid, 'properties_names'].values[0]
 
     def set_uid_properties_names(self, uid=None, properties_names=None):
         """Set value(s) stored in dataframe (as pointer) from uid."""
-        self.df.loc[self.df['uid'] == uid, 'properties_names'] = properties_names
+        self._df.loc[self._df['uid'] == uid, 'properties_names'] = properties_names
 
     def get_uid_properties_components(self, uid=None):
         """Get value(s) stored in dataframe (as pointer) from uid.. This is a LIST even if we extract it with values[0]!"""
-        return self.df.loc[self.df['uid'] == uid, 'properties_components'].values[0]
+        return self._df.loc[self._df['uid'] == uid, 'properties_components'].values[0]
 
     def set_uid_properties_components(self, uid=None, properties_components=None):
         """Set value(s) stored in dataframe (as pointer) from uid."""
-        self.df.loc[self.df['uid'] == uid, 'properties_components'] = properties_components
+        self._df.loc[self._df['uid'] == uid, 'properties_components'] = properties_components
 
     def get_uid_properties_types(self, uid=None):
         """Get value(s) stored in dataframe (as pointer) from uid. This is a LIST even if we extract it with values[0]!"""
@@ -172,15 +171,15 @@ class ImageCollection(CollectionBase):
 
     def set_uid_properties_types(self, uid=None, properties_types=None):
         """Set value(s) stored in dataframe (as pointer) from uid."""
-        self.df.loc[self.df['uid'] == uid, 'properties_types'] = properties_types
+        self._df.loc[self._df['uid'] == uid, 'properties_types'] = properties_types
 
     def get_uid_x_section(self, uid=None):
         """Get value(s) stored in dataframe (as pointer) from uid."""
-        return self.df.loc[self.df['uid'] == uid, 'x_section'].values[0]
+        return self._df.loc[self._df['uid'] == uid, 'x_section'].values[0]
 
     def set_uid_x_section(self, uid=None, x_section=None):
         """Set value(s) stored in dataframe (as pointer) from uid."""
-        self.df.loc[self.df['uid'] == uid, 'x_section'] = x_section
+        self._df.loc[self._df['uid'] == uid, 'x_section'] = x_section
 
 
 
@@ -190,10 +189,10 @@ class ImageCollection(CollectionBase):
         "self.main_window is" is used to point to parent, because the standard Qt setData
         method does not allow for extra variables to be passed into this method."""
         if index.isValid():
-            self.df.iloc[index.row(), index.column()] = value
+            self._df.iloc[index.row(), index.column()] = value
             if self.data(index, Qt.DisplayRole) == value:
                 self.dataChanged.emit(index, index)
-                uid = self.df.iloc[index.row(), 0]
+                uid = self._df.iloc[index.row(), 0]
                 self.main_window.image_metadata_modified_signal.emit([uid])  # a list of uids is emitted, even if the entity is just one
                 return True
         return QVariant()

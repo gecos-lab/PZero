@@ -268,7 +268,7 @@ def implicit_model_loop_structural(self):
     if options_dict is None:
         options_dict['boundary'] = self.boundary_coll.get_names()[0]
         options_dict['method'] = 'PLI'
-    boundary_uid = self.boundary_coll.df.loc[self.boundary_coll.df['name'] == options_dict['boundary'], 'uid'].values[0]
+    boundary_uid = self.boundary_coll._df.loc[self.boundary_coll._df['name'] == options_dict['boundary'], 'uid'].values[0]
     origin_x = self.boundary_coll.get_uid_vtk_obj(boundary_uid).GetBounds()[0]
     origin_y = self.boundary_coll.get_uid_vtk_obj(boundary_uid).GetBounds()[2]
     maximum_x = self.boundary_coll.get_uid_vtk_obj(boundary_uid).GetBounds()[1]
@@ -837,7 +837,7 @@ def intersection_xs(self):
         return
     # xsect_uids = []
     for sec_name in xsect_names: #this is redundant
-        xsect_uid = self.xsect_coll.df.loc[self.xsect_coll.df['name'] == sec_name, 'uid'].values[0]
+        xsect_uid = self.xsect_coll._df.loc[self.xsect_coll._df['name'] == sec_name, 'uid'].values[0]
         postfix = f'_int_{sec_name}'
         if self.shown_table == "tabGeology":
             for uid in input_uids:
@@ -1084,7 +1084,7 @@ def project_2_dem(self):
     dom_name = input_combo_dialog(title='Project to Surface', label='Input surface for projection', choice_list=dom_list_names)
     if dom_name is None:
         return
-    dom_uid = self.dom_coll.df.loc[self.dom_coll.df['name'] == dom_name, 'uid'].values[0]
+    dom_uid = self.dom_coll._df.loc[self.dom_coll._df['name'] == dom_name, 'uid'].values[0]
 #     print("dom_uid ", dom_uid)
 #     """Convert DEM (vtkStructuredGrid) in vtkImageData to perform the projection with vtkProjectedTerrainPath"""
 #     dem_to_image = vtk.vtkDEMReader()
@@ -1183,7 +1183,7 @@ def project_2_xs(self):
         return
     xs_name = options_dict['xs_name']
     xs_dist = options_dict['dist_sec']
-    xs_uid = self.xsect_coll.df.loc[self.xsect_coll.df['name'] == xs_name, 'uid'].values[0]
+    xs_uid = self.xsect_coll._df.loc[self.xsect_coll._df['name'] == xs_name, 'uid'].values[0]
     proj_plunge = np_float64(options_dict['proj_plunge'])
     proj_trend = np_float64(options_dict['proj_trend'])
     """Constrain to 0-180."""

@@ -61,6 +61,6 @@ class EntitiesDB(QObject):
 
 
     def collections_with_properties(self):
-        return [c for c in self.collections.values() if "properties_names" in c.df.columns]
+        return [c for c in self.collections.values() if "properties_names" in c._df.columns]
 
 

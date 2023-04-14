@@ -13,7 +13,7 @@ def vtk2dxf(self=None, out_dir_name=None):
     """Add entities."""
     list_uids = []
     list_names = []
-    for uid in self.geol_coll.df['uid']:
+    for uid in self.geol_coll._df['uid']:
         if isinstance(self.geol_coll.get_uid_vtk_obj(uid), TriSurf):
             legend = self.geol_coll.get_uid_legend(uid=uid)
             R = legend['color_R']
@@ -33,7 +33,7 @@ def vtk2dxf(self=None, out_dir_name=None):
                 # test_pc.ShallowCopy(vtk_entity)
                 # test_pc.plot()
 
-                layer = f'{self.geol_coll.df.loc[self.geol_coll.df["uid"] == uid, "geological_feature"].values[0]}'
+                layer = f'{self.geol_coll._df.loc[self.geol_coll._df["uid"] == uid, "geological_feature"].values[0]}'
 
                 layer_b = f'{layer}_boundary'
 
@@ -109,9 +109,9 @@ def vtk2dxf(self=None, out_dir_name=None):
             #     for i in range(vtk_entity.GetNumberOfCells()):
             #         dxf_model.add_polyline3d((vtk_entity.GetCell(i).GetPoints().GetPoint(0),
             #                                   vtk_entity.GetCell(i).GetPoints().GetPoint(1)))
-    for uid in self.boundary_coll.df['uid']:
+    for uid in self.boundary_coll._df['uid']:
         if isinstance(self.boundary_coll.get_uid_vtk_obj(uid), TriSurf):
-            layer = uid + "_" + self.boundary_coll.df.loc[self.boundary_coll.df['uid'] == uid, 'name'].values[0]
+            layer = uid + "_" + self.boundary_coll._df.loc[self.boundary_coll._df['uid'] == uid, 'name'].values[0]
             vtk_entity = self.boundary_coll.get_uid_vtk_obj(uid)
             """3D faces"""
             for i in range(vtk_entity.GetNumberOfCells()):
@@ -123,7 +123,7 @@ def vtk2dxf(self=None, out_dir_name=None):
             #     border_points = numpy_support.vtk_to_numpy(vtk_border.GetCell(cell).GetPoints().GetData())
             #     dxf_model.add_polyline3d(border_points, dxfattribs={'layer': layer})
             print("entity exported\n")
-    for uid in self.well_coll.df['uid']:
+    for uid in self.well_coll._df['uid']:
         legend = self.well_coll.get_uid_legend(uid=uid)
         vtk_entity = self.well_coll.get_uid_vtk_obj(uid)
         R = legend['color_R']
@@ -133,7 +133,7 @@ def vtk2dxf(self=None, out_dir_name=None):
         dxf_model = dxf_out.modelspace()
         # print(part)
         df = pd_DataFrame()
-        layer = f'{self.well_coll.df.loc[self.well_coll.df["uid"] == uid, "geological_feature"].values[0]}'
+        layer = f'{self.well_coll._df.loc[self.well_coll._df["uid"] == uid, "geological_feature"].values[0]}'
 
         xyz = numpy_support.vtk_to_numpy(vtk_entity.GetPoints().GetData())
 

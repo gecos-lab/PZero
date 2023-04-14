@@ -1,12 +1,11 @@
 from numpy import random as np_random
 from numpy import round as np_round
-from pandas import DataFrame as pd_DataFrame
 from pandas import unique as pd_unique
 import uuid
 from copy import deepcopy
-from PyQt5.QtCore import QAbstractTableModel, Qt, QVariant
+from PyQt5.QtCore import Qt, QVariant
 
-from pzero.collection_base import CollectionBase
+from pzero.collections.collection_base import CollectionBase
 
 
 class WellCollection(CollectionBase):
@@ -50,7 +49,7 @@ class WellCollection(CollectionBase):
 
     @property
     def editable_columns(self):
-        return self.df.columns.get_indexer(["name"])
+        return self._df.columns.get_indexer(["name"])
 
 
     def add_entity_from_dict(self, entity_dict=None, color=None):
@@ -60,7 +59,7 @@ class WellCollection(CollectionBase):
             entity_dict['uid'] = str(uuid.uuid4())
         """"Append new row to dataframe. Note that the 'append()' method for Pandas dataframes DOES NOT
         work in place, hence a NEW dataframe is created every time and then substituted to the old one."""
-        self.df = self.df.append(entity_dict, ignore_index=True)
+        self._df = self._df.append(entity_dict, ignore_index=True)
         """Reset data model"""
         self.modelReset.emit()
         self.main_window.prop_legend.update_widget(self.main_window)
@@ -84,7 +83,7 @@ class WellCollection(CollectionBase):
 
     def remove_entity(self, uid=None):
         """Remove entity from collection. Remove row from dataframe and reset data model."""
-        self.df.drop(self.df[self.df['uid'] == uid].index, inplace=True)
+        self._df.drop(self._df[self._df['uid'] == uid].index, inplace=True)
         self.modelReset.emit()  # is this really necessary?
         self.main_window.prop_legend.update_widget(self.main_window)
         """When done, send a signal over to the views."""
@@ -92,8 +91,8 @@ class WellCollection(CollectionBase):
         return uid
 
     def replace_vtk(self, uid=None, vtk_object=None):
-        if isinstance(vtk_object, type(self.df.loc[self.df['uid'] == uid, 'vtk_obj'].values[0])):
-            new_dict = deepcopy(self.df.loc[self.df['uid'] == uid, self.df.columns != 'vtk_obj'].to_dict('records')[0])
+        if isinstance(vtk_object, type(self._df.loc[self._df['uid'] == uid, 'vtk_obj'].values[0])):
+            new_dict = deepcopy(self._df.loc[self._df['uid'] == uid, self._df.columns != 'vtk_obj'].to_dict('records')[0])
             new_dict['vtk_obj'] = vtk_object
             self.remove_entity(uid)
             self.add_entity_from_dict(entity_dict=new_dict)
@@ -106,14 +105,14 @@ class WellCollection(CollectionBase):
         locid_in_legend = pd_unique(self.main_window.well_legend_df['Loc ID'])
         features_in_legend = pd_unique(self.main_window.well_legend_df['geological_feature'])
         for loc_id in locid_in_legend:
-            if self.main_window.well_coll.df.loc[self.main_window.well_coll.df['Loc ID'] == loc_id].empty:
+            if self.main_window.well_coll._df.loc[self.main_window.well_coll._df['Loc ID'] == loc_id].empty:
                 """Get index of row to be removed, then remove it in place with .drop()."""
                 idx_remove = self.main_window.well_legend_df[self.main_window.well_legend_df['Loc ID'] == locid].index
                 self.main_window.well_legend_df.drop(idx_remove, inplace=True)
                 table_updated = table_updated or True
             for feature in features_in_legend:
-                if self.main_window.well_coll.df.loc[(self.main_window.well_coll.df['Loc ID'] == locid) & (
-                        self.main_window.well_coll.df['geological_feature'] == feature)].empty:
+                if self.main_window.well_coll._df.loc[(self.main_window.well_coll._df['Loc ID'] == locid) & (
+                        self.main_window.well_coll._df['geological_feature'] == feature)].empty:
                     """Get index of row to be removed, then remove it in place with .drop()."""
                     idx_remove = self.main_window.well_legend_df[(self.main_window.well_legend_df['Loc ID'] == locid) & (
                                 self.main_window.well_legend_df['geological_feature'] == feature)].index
@@ -121,7 +120,7 @@ class WellCollection(CollectionBase):
                     table_updated = table_updated or True
 
         for feature in features_in_legend:
-            if self.main_window.well_coll.df.loc[self.main_window.well_coll.df['geological_feature'] == feature].empty:
+            if self.main_window.well_coll._df.loc[self.main_window.well_coll._df['geological_feature'] == feature].empty:
                 """Get index of row to be removed, then remove it in place with .drop()."""
                 idx_remove = self.main_window.well_legend_df[
                     self.main_window.well_legend_df['geological_feature'] == feature].index
@@ -129,9 +128,9 @@ class WellCollection(CollectionBase):
                 table_updated = table_updated or True
 
         """Then add new locid / feature"""
-        for uid in self.main_window.well_coll.df['uid'].to_list():
-            locid = self.main_window.well_coll.df.loc[self.main_window.well_coll.df['uid'] == uid, "Loc ID"].values[0]
-            feature = self.main_window.well_coll.df.loc[self.main_window.well_coll.df['uid'] == uid, "geological_feature"].values[
+        for uid in self.main_window.well_coll._df['uid'].to_list():
+            locid = self.main_window.well_coll._df.loc[self.main_window.well_coll._df['uid'] == uid, "Loc ID"].values[0]
+            feature = self.main_window.well_coll._df.loc[self.main_window.well_coll._df['uid'] == uid, "geological_feature"].values[
                 0]
             if self.main_window.well_legend_df.loc[(self.main_window.well_legend_df['Loc ID'] == locid) & (
                     self.main_window.well_legend_df['geological_feature'] == feature)].empty:
@@ -154,7 +153,7 @@ class WellCollection(CollectionBase):
 
     def get_uid_legend(self, uid=None):
         """Get legend as dictionary from uid."""
-        locid = self.df.loc[self.df['uid'] == uid, 'Loc ID'].values[0]
+        locid = self._df.loc[self._df['uid'] == uid, 'Loc ID'].values[0]
 
         legend_dict = self.main_window.well_legend_df.loc[self.main_window.well_legend_df['Loc ID'] == locid].to_dict('records')
         # print(legend_dict[0])
@@ -164,45 +163,45 @@ class WellCollection(CollectionBase):
 
     def get_well_locid_uids(self, locid=None):
         """Get list of uids of a given locid."""
-        return self.df.loc[self.df['Loc ID'] == locid, 'uid'].to_list()
+        return self._df.loc[self._df['Loc ID'] == locid, 'uid'].to_list()
 
 
     def get_uid_well_locid(self, uid=None):
         """Get value(s) stored in dataframe (as pointer) from uid."""
-        return self.df.loc[self.df['uid'] == uid, 'Loc ID'].values[0]
+        return self._df.loc[self._df['uid'] == uid, 'Loc ID'].values[0]
 
     def set_uid_well_locid(self, uid=None, locid=None):
         """Set value(s) stored in dataframe (as pointer) from uid.."""
-        self.df.loc[self.df['uid'] == uid, 'Loc ID'] = locid
+        self._df.loc[self._df['uid'] == uid, 'Loc ID'] = locid
 
     def get_uid_geological_feature(self, uid=None):
         """Get value(s) stored in dataframe (as pointer) from uid."""
-        return self.df.loc[self.df['uid'] == uid, 'geological_feature'].values[0]
+        return self._df.loc[self._df['uid'] == uid, 'geological_feature'].values[0]
 
     def set_uid_geological_feature(self, uid=None, geological_feature=None):
         """Set value(s) stored in dataframe (as pointer) from uid."""
-        self.df.loc[self.df['uid'] == uid, 'geological_feature'] = geological_feature
+        self._df.loc[self._df['uid'] == uid, 'geological_feature'] = geological_feature
 
     def get_uid_properties_names(self, uid=None):
         """Get value(s) stored in dataframe (as pointer) from uid. This is a LIST even if we extract it with values[0]!"""
-        return self.df.loc[self.df['uid'] == uid, 'properties_names'].values[0]
+        return self._df.loc[self._df['uid'] == uid, 'properties_names'].values[0]
 
     def set_uid_properties_names(self, uid=None, properties_names=None):
         """Set value(s) stored in dataframe (as pointer) from uid. This is a LIST and "at" must be used!"""
-        row = self.df[self.df['uid'] == uid].index.values[0]
-        self.df.at[row, 'properties_names'] = properties_names
+        row = self._df[self._df['uid'] == uid].index.values[0]
+        self._df.at[row, 'properties_names'] = properties_names
 
     def get_uid_properties_components(self, uid=None):
         """Get value(s) stored in dataframe (as pointer) from uid. This is a LIST even if we extract it with values[0]!"""
-        return self.df.loc[self.df['uid'] == uid, 'properties_components'].values[0]
+        return self._df.loc[self._df['uid'] == uid, 'properties_components'].values[0]
 
     def set_uid_properties_components(self, uid=None, properties_components=None):
         """Set value(s) stored in dataframe (as pointer) from uid. This is a LIST and "at" must be used!"""
-        row = self.df[self.df['uid'] == uid].index.values[0]
-        self.df.at[row, 'properties_components'] = properties_components
+        row = self._df[self._df['uid'] == uid].index.values[0]
+        self._df.at[row, 'properties_components'] = properties_components
 
     def get_uid_marker_names(self, uid=None):
-        return self.df.loc[self.df['uid'] == uid, 'markers'].values[0]
+        return self._df.loc[self._df['uid'] == uid, 'markers'].values[0]
 
     def append_uid_property(self, uid=None, property_name=None, property_components=None):
         """Add property name and components to an uid and create empty property on vtk object.
@@ -241,10 +240,10 @@ class WellCollection(CollectionBase):
         "self.main_window is" is used to point to parent, because the standard Qt setData
         method does not allow for extra variables to be passed into this method."""
         if index.isValid():
-            self.df.iloc[index.row(), index.column()] = value
+            self._df.iloc[index.row(), index.column()] = value
             if self.data(index, Qt.DisplayRole) == value:
                 self.dataChanged.emit(index, index)
-                uid = self.df.iloc[index.row(), 0]
+                uid = self._df.iloc[index.row(), 0]
                 self.well_attr_modified_update_legend_table()
                 self.main_window.well_metadata_modified_signal.emit(
                     [uid])  # a list of uids is emitted, even if the entity is just one

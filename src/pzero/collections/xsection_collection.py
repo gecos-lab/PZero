@@ -1,18 +1,14 @@
 """xsection_collection.py
 PZero© Andrea Bistacchi"""
-import vtkmodules.vtkCommonDataModel
 from vtk import vtkPoints, vtkCellArray, vtkLine
 # import numpy_interface.dataset_adapter as dsa
 # import numpy_interface.algorithms as algs
 from copy import deepcopy
 import uuid
-import pyvista as pv
 
 from numpy import cos as np_cos
 from numpy import sin as np_sin
 from numpy import pi as np_pi
-from numpy import arctan2 as np_arctan2
-from numpy import sqrt as np_sqrt
 from numpy import set_printoptions as np_set_printoptions
 from numpy import array as np_array
 from numpy import deg2rad as np_deg2rad
@@ -20,19 +16,16 @@ from numpy.linalg import inv as np_linalg_inv
 from numpy import repeat as np_repeat
 from numpy import dot as np_dot
 from numpy import matmul as np_matmul
-from numpy import mean as np_mean
 
-from pzero.collection_base import CollectionBase
+from pzero.collections.collection_base import CollectionBase
 from pzero.orientation_analysis import dip_directions2normals, get_dip_dir_vectors
 
 import pandas as pd
-from PyQt5.QtCore import QAbstractTableModel, Qt, QVariant
+from PyQt5.QtCore import Qt, QVariant
 # from PyQt5.QtGui import QStandardItem, QImage
 from pzero.entities_factory import Plane, XsPolyLine
 from pzero.helper_dialogs import general_input_dialog, open_file_dialog
 from pzero.helper_functions import auto_sep
-from pzero.windows_factory import NavigationToolbar
-from PyQt5.QtWidgets import QAction
 
 """Options to print Pandas dataframes in console"""
 pd_desired_width = 800
@@ -305,7 +298,7 @@ class XSectionCollection(CollectionBase):
 
     @property
     def editable_columns(self):
-        return self.df.columns.get_indexer(["name"])
+        return self._df.columns.get_indexer(["name"])
 
     def add_entity_from_dict(self, entity_dict=None):
         """Add entity to collection from dictionary."""
@@ -314,7 +307,7 @@ class XSectionCollection(CollectionBase):
             entity_dict['uid'] = str(uuid.uuid4())
         """Append new row to dataframe. Note that the 'append()' method for Pandas dataframes DOES NOT
         work in place, hence a NEW dataframe is created every time and then substituted to the old one."""
-        self.df = self.df.append(entity_dict, ignore_index=True)
+        self._df = self._df.append(entity_dict, ignore_index=True)
         self.set_geometry(uid=entity_dict['uid'])
         """Reset data model"""
         self.modelReset.emit()
@@ -328,7 +321,7 @@ class XSectionCollection(CollectionBase):
         """NOTE THAT AT THE MOMENT REMOVING A SECTION DOES NOT REMOVE THE ASSOCIATED OBJECTS."""
         if not uid in self.get_uids():
             return
-        self.df.drop(self.df[self.df['uid'] == uid].index, inplace=True)
+        self._df.drop(self._df[self._df['uid'] == uid].index, inplace=True)
         self.modelReset.emit()  # is this really necessary?
         self.main_window.xsect_removed_signal.emit([uid])  # a list of uids is emitted, even if the entity is just one
         return uid
@@ -343,143 +336,143 @@ class XSectionCollection(CollectionBase):
 
     def get_uid_base_x(self, uid=None):
         """Get value(s) stored in dataframe (as pointer) from uid."""
-        return self.df.loc[self.df['uid'] == uid, 'base_x'].values[0]
+        return self._df.loc[self._df['uid'] == uid, 'base_x'].values[0]
 
     def set_uid_base_x(self, uid=None, base_x=None):
         """Set value(s) stored in dataframe (as pointer) from uid."""
-        self.df.loc[self.df['uid'] == uid, 'base_x'] = base_x
+        self._df.loc[self._df['uid'] == uid, 'base_x'] = base_x
 
     def get_uid_base_y(self, uid=None):
         """Get value(s) stored in dataframe (as pointer) from uid."""
-        return self.df.loc[self.df['uid'] == uid, 'base_y'].values[0]
+        return self._df.loc[self._df['uid'] == uid, 'base_y'].values[0]
 
     def set_uid_base_y(self, uid=None, base_y=None):
         """Set value(s) stored in dataframe (as pointer) from uid."""
-        self.df.loc[self.df['uid'] == uid, 'base_y'] = base_y
+        self._df.loc[self._df['uid'] == uid, 'base_y'] = base_y
 
     def get_uid_base_z(self, uid=None):
         """Get value(s) stored in dataframe (as pointer) from uid."""
-        return self.df.loc[self.df['uid'] == uid, 'base_z'].values[0]
+        return self._df.loc[self._df['uid'] == uid, 'base_z'].values[0]
 
     def set_uid_base_z(self, uid=None, base_z=None):
         """Set value(s) stored in dataframe (as pointer) from uid."""
-        self.df.loc[self.df['uid'] == uid, 'base_z'] = base_z
+        self._df.loc[self._df['uid'] == uid, 'base_z'] = base_z
 
     def get_uid_end_x(self, uid=None):
         """Get value(s) stored in dataframe (as pointer) from uid."""
-        return self.df.loc[self.df['uid'] == uid, 'end_x'].values[0]
+        return self._df.loc[self._df['uid'] == uid, 'end_x'].values[0]
 
     def set_uid_end_x(self, uid=None, end_x=None):
         """Set value(s) stored in dataframe (as pointer) from uid."""
-        self.df.loc[self.df['uid'] == uid, 'end_x'] = end_x
+        self._df.loc[self._df['uid'] == uid, 'end_x'] = end_x
 
     def get_uid_end_y(self, uid=None):
         """Get value(s) stored in dataframe (as pointer) from uid."""
-        return self.df.loc[self.df['uid'] == uid, 'end_y'].values[0]
+        return self._df.loc[self._df['uid'] == uid, 'end_y'].values[0]
 
     def set_uid_end_y(self, uid=None, end_y=None):
         """Set value(s) stored in dataframe (as pointer) from uid."""
-        self.df.loc[self.df['uid'] == uid, 'end_y'] = end_y
+        self._df.loc[self._df['uid'] == uid, 'end_y'] = end_y
 
     def get_uid_end_z(self, uid=None):
         """Get value(s) stored in dataframe (as pointer) from uid."""
-        return self.df.loc[self.df['uid'] == uid, 'end_z'].values[0]
+        return self._df.loc[self._df['uid'] == uid, 'end_z'].values[0]
 
     def set_uid_end_z(self, uid=None, end_z=None):
         """Set value(s) stored in dataframe (as pointer) from uid."""
-        self.df.loc[self.df['uid'] == uid, 'end_z'] = end_z
+        self._df.loc[self._df['uid'] == uid, 'end_z'] = end_z
 
     def get_uid_normal_x(self, uid=None):
         """Get value(s) stored in dataframe (as pointer) from uid."""
-        return self.df.loc[self.df['uid'] == uid, 'normal_x'].values[0]
+        return self._df.loc[self._df['uid'] == uid, 'normal_x'].values[0]
 
     def set_uid_normal_x(self, uid=None, normal_x=None):
         """Set value(s) stored in dataframe (as pointer) from uid."""
-        self.df.loc[self.df['uid'] == uid, 'normal_x'] = normal_x
+        self._df.loc[self._df['uid'] == uid, 'normal_x'] = normal_x
 
     def get_uid_normal_y(self, uid=None):
         """Get value(s) stored in dataframe (as pointer) from uid."""
-        return self.df.loc[self.df['uid'] == uid, 'normal_y'].values[0]
+        return self._df.loc[self._df['uid'] == uid, 'normal_y'].values[0]
 
     def set_uid_normal_y(self, uid=None, normal_y=None):
         """Set value(s) stored in dataframe (as pointer) from uid."""
-        self.df.loc[self.df['uid'] == uid, 'normal_y'] = normal_y
+        self._df.loc[self._df['uid'] == uid, 'normal_y'] = normal_y
 
     def get_uid_normal_z(self, uid=None):
         """Get value(s) stored in dataframe (as pointer) from uid."""
-        return self.df.loc[self.df['uid'] == uid, 'normal_z'].values[0]
+        return self._df.loc[self._df['uid'] == uid, 'normal_z'].values[0]
 
     def set_uid_normal_z(self, uid=None, normal_z=None):
         """Set value(s) stored in dataframe (as pointer) from uid."""
-        self.df.loc[self.df['uid'] == uid, 'normal_z'] = normal_z
+        self._df.loc[self._df['uid'] == uid, 'normal_z'] = normal_z
 
     def get_uid_azimuth(self, uid=None):
         """Get value(s) stored in dataframe (as pointer) from uid."""
-        return self.df.loc[self.df['uid'] == uid, 'azimuth'].values[0]
+        return self._df.loc[self._df['uid'] == uid, 'azimuth'].values[0]
 
     def set_uid_azimuth(self, uid=None, azimuth=None):
         """Set value(s) stored in dataframe (as pointer) from uid."""
-        self.df.loc[self.df['uid'] == uid, 'azimuth'] = azimuth
+        self._df.loc[self._df['uid'] == uid, 'azimuth'] = azimuth
 
     def get_uid_length(self, uid=None):
         """Get value(s) stored in dataframe (as pointer) from uid."""
-        return self.df.loc[self.df['uid'] == uid, 'length'].values[0]
+        return self._df.loc[self._df['uid'] == uid, 'length'].values[0]
 
     def set_uid_length(self, uid=None, length=None):
         """Set value(s) stored in dataframe (as pointer) from uid."""
-        self.df.loc[self.df['uid'] == uid, 'length'] = length
+        self._df.loc[self._df['uid'] == uid, 'length'] = length
 
     def get_uid_top(self, uid=None):
         """Get value(s) stored in dataframe (as pointer) from uid."""
-        return self.df.loc[self.df['uid'] == uid, 'top'].values[0]
+        return self._df.loc[self._df['uid'] == uid, 'top'].values[0]
 
     def set_uid_top(self, uid=None, top=None):
         """Set value(s) stored in dataframe (as pointer) from uid."""
-        self.df.loc[self.df['uid'] == uid, 'top'] = top
+        self._df.loc[self._df['uid'] == uid, 'top'] = top
 
     def get_uid_bottom(self, uid=None):
         """Get value(s) stored in dataframe (as pointer) from uid."""
-        return self.df.loc[self.df['uid'] == uid, 'bottom'].values[0]
+        return self._df.loc[self._df['uid'] == uid, 'bottom'].values[0]
 
     def set_uid_bottom(self, uid=None, bottom=None):
         """Set value(s) stored in dataframe (as pointer) from uid."""
-        self.df.loc[self.df['uid'] == uid, 'bottom'] = bottom
+        self._df.loc[self._df['uid'] == uid, 'bottom'] = bottom
 
     def get_uid_vtk_plane(self, uid=None):
         """Get value(s) stored in dataframe (as pointer) from uid."""
-        return self.df.loc[self.df['uid'] == uid, 'vtk_plane'].values[0]
+        return self._df.loc[self._df['uid'] == uid, 'vtk_plane'].values[0]
 
     def set_uid_vtk_plane(self, uid=None, vtk_plane=None):
         """Set value(s) stored in dataframe (as pointer) from uid."""
-        self.df.loc[self.df['uid'] == uid, 'vtk_plane'] = vtk_plane
+        self._df.loc[self._df['uid'] == uid, 'vtk_plane'] = vtk_plane
 
     def get_uid_vtk_frame(self, uid=None):
         """Get value(s) stored in dataframe (as pointer) from uid."""
-        return self.df.loc[self.df['uid'] == uid, 'vtk_frame'].values[0]
+        return self._df.loc[self._df['uid'] == uid, 'vtk_frame'].values[0]
 
     def set_uid_vtk_frame(self, uid=None, vtk_frame=None):
         """Set value(s) stored in dataframe (as pointer) from uid."""
-        self.df.loc[self.df['uid'] == uid, 'vtk_frame'] = vtk_frame
+        self._df.loc[self._df['uid'] == uid, 'vtk_frame'] = vtk_frame
 
     """Methods used to set parameters and the geometry of a single cross section."""
 
     def set_parameters_in_table(self, uid=None, name=None, base_point=None, end_point=None, normal=None, azimuth=None,
                                 length=None, top=None, bottom=None):
         """Write parameters in Xsections Pandas dataframe"""
-        self.df.loc[self.df['uid'] == uid, 'name'] = name
-        self.df.loc[self.df['uid'] == uid, 'base_x'] = base_point[0]
-        self.df.loc[self.df['uid'] == uid, 'base_y'] = base_point[1]
-        self.df.loc[self.df['uid'] == uid, 'base_z'] = base_point[2]
-        self.df.loc[self.df['uid'] == uid, 'end_x'] = end_point[0]
-        self.df.loc[self.df['uid'] == uid, 'end_y'] = end_point[1]
-        self.df.loc[self.df['uid'] == uid, 'end_z'] = end_point[2]
-        self.df.loc[self.df['uid'] == uid, 'normal_x'] = normal[0]
-        self.df.loc[self.df['uid'] == uid, 'normal_y'] = normal[1]
-        self.df.loc[self.df['uid'] == uid, 'normal_z'] = normal[2]
-        self.df.loc[self.df['uid'] == uid, 'azimuth'] = azimuth
-        self.df.loc[self.df['uid'] == uid, 'length'] = length
-        self.df.loc[self.df['uid'] == uid, 'top'] = top
-        self.df.loc[self.df['uid'] == uid, 'bottom'] = bottom
+        self._df.loc[self._df['uid'] == uid, 'name'] = name
+        self._df.loc[self._df['uid'] == uid, 'base_x'] = base_point[0]
+        self._df.loc[self._df['uid'] == uid, 'base_y'] = base_point[1]
+        self._df.loc[self._df['uid'] == uid, 'base_z'] = base_point[2]
+        self._df.loc[self._df['uid'] == uid, 'end_x'] = end_point[0]
+        self._df.loc[self._df['uid'] == uid, 'end_y'] = end_point[1]
+        self._df.loc[self._df['uid'] == uid, 'end_z'] = end_point[2]
+        self._df.loc[self._df['uid'] == uid, 'normal_x'] = normal[0]
+        self._df.loc[self._df['uid'] == uid, 'normal_y'] = normal[1]
+        self._df.loc[self._df['uid'] == uid, 'normal_z'] = normal[2]
+        self._df.loc[self._df['uid'] == uid, 'azimuth'] = azimuth
+        self._df.loc[self._df['uid'] == uid, 'length'] = length
+        self._df.loc[self._df['uid'] == uid, 'top'] = top
+        self._df.loc[self._df['uid'] == uid, 'bottom'] = bottom
 
     def set_from_table(self, uid=None):
         """Get parameters from x_section table and set them on x_section"""
@@ -487,16 +480,16 @@ class XSectionCollection(CollectionBase):
 
     def get_XY_from_W(self, section_uid=None, W=None):
         """Gets X, Y coordinates from W coordinate (distance along the Xsection horizontal axis)"""
-        azimuth = self.df.loc[self.df['uid'] == section_uid, 'azimuth'].values[0]
-        base_x = self.df.loc[self.df['uid'] == section_uid, 'base_x'].values[0]
-        base_y = self.df.loc[self.df['uid'] == section_uid, 'base_y'].values[0]
+        azimuth = self._df.loc[self._df['uid'] == section_uid, 'azimuth'].values[0]
+        base_x = self._df.loc[self._df['uid'] == section_uid, 'base_x'].values[0]
+        base_y = self._df.loc[self._df['uid'] == section_uid, 'base_y'].values[0]
         X = W * np_sin(azimuth * np_pi / 180) + base_x
         Y = W * np_cos(azimuth * np_pi / 180) + base_y
         return X, Y
 
     def get_deltaXY_from_deltaW(self, section_uid=None, deltaW=None):
         """Gets X, Y coordinates from W coordinate (distance along the Xsection horizontal axis)"""
-        azimuth = self.df.loc[self.df['uid'] == section_uid, 'azimuth'].values[0]
+        azimuth = self._df.loc[self._df['uid'] == section_uid, 'azimuth'].values[0]
         deltaX = deltaW * np_sin(azimuth * np_pi / 180)
         deltaY = deltaW * np_cos(azimuth * np_pi / 180)
         return deltaX, deltaY
@@ -524,21 +517,21 @@ class XSectionCollection(CollectionBase):
         """"Given all parameters, sets the vtkPlane origin and normal properties, and builds the frame used for
         visualization"""
 
-        base_point = [self.df.loc[self.df['uid'] == uid, 'base_x'].values[0],
-                      self.df.loc[self.df['uid'] == uid, 'base_y'].values[0],
-                      self.df.loc[self.df['uid'] == uid, 'base_z'].values[0]]
-        end_point = [self.df.loc[self.df['uid'] == uid, 'end_x'].values[0],
-                     self.df.loc[self.df['uid'] == uid, 'end_y'].values[0],
-                     self.df.loc[self.df['uid'] == uid, 'end_z'].values[0]]
-        normal = [self.df.loc[self.df['uid'] == uid, 'normal_x'].values[0],
-                  self.df.loc[self.df['uid'] == uid, 'normal_y'].values[0],
-                  self.df.loc[self.df['uid'] == uid, 'normal_z'].values[0]]
+        base_point = [self._df.loc[self._df['uid'] == uid, 'base_x'].values[0],
+                      self._df.loc[self._df['uid'] == uid, 'base_y'].values[0],
+                      self._df.loc[self._df['uid'] == uid, 'base_z'].values[0]]
+        end_point = [self._df.loc[self._df['uid'] == uid, 'end_x'].values[0],
+                     self._df.loc[self._df['uid'] == uid, 'end_y'].values[0],
+                     self._df.loc[self._df['uid'] == uid, 'end_z'].values[0]]
+        normal = [self._df.loc[self._df['uid'] == uid, 'normal_x'].values[0],
+                  self._df.loc[self._df['uid'] == uid, 'normal_y'].values[0],
+                  self._df.loc[self._df['uid'] == uid, 'normal_z'].values[0]]
 
-        dip = np_deg2rad(self.df.loc[self.df['uid'] == uid, 'dip'].values[0])
-        azimuth = np_deg2rad((self.df.loc[self.df['uid'] == uid, 'azimuth'].values[0] + 180) % 360)
+        dip = np_deg2rad(self._df.loc[self._df['uid'] == uid, 'dip'].values[0])
+        azimuth = np_deg2rad((self._df.loc[self._df['uid'] == uid, 'azimuth'].values[0] + 180) % 360)
 
-        width = self.df.loc[self.df['uid'] == uid, 'width'].values[0]
-        bottom = self.df.loc[self.df['uid'] == uid, 'bottom'].values[0]
+        width = self._df.loc[self._df['uid'] == uid, 'width'].values[0]
+        bottom = self._df.loc[self._df['uid'] == uid, 'bottom'].values[0]
 
         vtk_frame = XsPolyLine(x_section_uid=uid, parent=self.main_window)
 
@@ -570,8 +563,8 @@ class XSectionCollection(CollectionBase):
         vtk_plane = Plane()
         vtk_plane.SetOrigin(base_point)
         vtk_plane.SetNormal(normal)
-        self.df.loc[self.df['uid'] == uid, 'vtk_plane'] = vtk_plane
-        self.df.loc[self.df['uid'] == uid, 'vtk_frame'] = vtk_frame
+        self._df.loc[self._df['uid'] == uid, 'vtk_plane'] = vtk_plane
+        self._df.loc[self._df['uid'] == uid, 'vtk_frame'] = vtk_frame
 
     """Standard QT methods slightly adapted to the data source."""
 
@@ -581,13 +574,13 @@ class XSectionCollection(CollectionBase):
         """This is the method allowing to edit the table and the underlying dataframe.
         "self.main_window is" is used to point to parent, because the standard Qt setData
         method does not allow for extra variables to be passed into this method."""
-        uid = self.df.iloc[index.row(), 0]
+        uid = self._df.iloc[index.row(), 0]
         if index.isValid():
-            self.df.iloc[index.row(), index.column()] = value
+            self._df.iloc[index.row(), index.column()] = value
             if self.data(index, Qt.DisplayRole) == value:
                 """The following check is needed to avoid duplicate names that are not allowed for cross sections."""
-                if self.df["name"].duplicated().sum() > 0:
-                    self.df.iloc[index.row(), index.column()] = value + "_" + uid
+                if self._df["name"].duplicated().sum() > 0:
+                    self._df.iloc[index.row(), index.column()] = value + "_" + uid
                 self.dataChanged.emit(index, index)
                 self.main_window.xsect_metadata_modified_signal.emit(
                     [uid])  # a list of uids is emitted, even if the entity is just one

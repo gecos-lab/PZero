@@ -1,7 +1,7 @@
 """boundary_collection.py
 PZero© Andrea Bistacchi"""
 
-from pzero.collection_base import CollectionBase
+from pzero.collections.collection_base import CollectionBase
 
 """Import as much as possible as from <module> import <class> or <class as ...>"""
 from vtk import vtkPoints
@@ -150,7 +150,7 @@ class BoundaryCollection(CollectionBase):
 
     @property
     def editable_columns(self):
-        return self.df.columns.get_indexer(["name"])
+        return self._df.columns.get_indexer(["name"])
 
     def add_entity_from_dict(self, entity_dict=None):
         """Add entity to collection from dictionary.
@@ -159,7 +159,7 @@ class BoundaryCollection(CollectionBase):
             entity_dict['uid'] = str(uuid_uuid4())
         """"Append new row to dataframe. Note that the 'append()' method for Pandas dataframes DOES NOT
         work in place, hence a NEW dataframe is created every time and then substituted to the old one."""
-        self.df = self.df.append(entity_dict, ignore_index=True)
+        self._df = self._df.append(entity_dict, ignore_index=True)
         """Reset data model"""
         self.modelReset.emit()
         """Then emit signal to update the views."""
@@ -169,15 +169,15 @@ class BoundaryCollection(CollectionBase):
 
     def remove_entity(self, uid=None):
         """Remove entity from collection. Remove row from dataframe and reset data model."""
-        self.df.drop(self.df[self.df['uid'] == uid].index, inplace=True)
+        self._df.drop(self._df[self._df['uid'] == uid].index, inplace=True)
         self.modelReset.emit()  # is this really necessary?
         """When done, send a signal over to the views."""
         self.main_window.boundary_removed_signal.emit([uid])  # a list of uids is emitted, even if the entity is just one
         return uid
 
     def replace_vtk(self, uid=None, vtk_object=None):
-        if isinstance(vtk_object, type(self.df.loc[self.df['uid'] == uid, 'vtk_obj'].values[0])):
-            new_dict = deepcopy(self.df.loc[self.df['uid'] == uid, self.df.columns != 'vtk_obj'].to_dict('records')[0])
+        if isinstance(vtk_object, type(self._df.loc[self._df['uid'] == uid, 'vtk_obj'].values[0])):
+            new_dict = deepcopy(self._df.loc[self._df['uid'] == uid, self._df.columns != 'vtk_obj'].to_dict('records')[0])
             new_dict['vtk_obj'] = vtk_object
             self.remove_entity(uid)
             self.add_entity_from_dict(entity_dict=new_dict)
@@ -192,11 +192,11 @@ class BoundaryCollection(CollectionBase):
 
     def get_uid_x_section(self, uid=None):
         """Get value(s) stored in dataframe (as pointer) from uid."""
-        return self.df.loc[self.df['uid'] == uid, 'x_section'].values[0]
+        return self._df.loc[self._df['uid'] == uid, 'x_section'].values[0]
 
     def set_uid_x_section(self, uid=None, x_section=None):
         """Set value(s) stored in dataframe (as pointer) from uid."""
-        self.df.loc[self.df['uid'] == uid, 'x_section'] = x_section
+        self._df.loc[self._df['uid'] == uid, 'x_section'] = x_section
 
     """Standard QT methods slightly adapted to the data source."""
 
@@ -205,10 +205,10 @@ class BoundaryCollection(CollectionBase):
         "self.main_window is" is used to point to parent, because the standard Qt setData
         method does not allow for extra variables to be passed into this method."""
         if index.isValid():
-            self.df.iloc[index.row(), index.column()] = value
+            self._df.iloc[index.row(), index.column()] = value
             if self.data(index, Qt.DisplayRole) == value:
                 self.dataChanged.emit(index, index)
-                uid = self.df.iloc[index.row(), 0]
+                uid = self._df.iloc[index.row(), 0]
                 self.main_window.boundary_metadata_modified_signal.emit(
                     [uid])  # a list of uids is emitted, even if the entity is just one
                 return True

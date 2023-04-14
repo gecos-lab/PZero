@@ -804,18 +804,18 @@ def vtk2gocad(self=None, out_file_name=None):
     """Open file"""
     fout = open(out_file_name, 'w')
     """Write entities"""
-    for uid in self.geol_coll.df['uid'].to_list():
+    for uid in self.geol_coll._df['uid'].to_list():
         """Loop over uids"""
-        topological_type = self.geol_coll.df.loc[self.geol_coll.df['uid'] == uid, 'topological_type'].values[0]
+        topological_type = self.geol_coll._df.loc[self.geol_coll._df['uid'] == uid, 'topological_type'].values[0]
         """Check if this uid is compatible with Gocad Ascii"""
         if topological_type in ['VertexSet', 'PolyLine', 'TriSurf', 'TetraSolid', 'XsVertexSet', 'XsPolyLine']:
             """Get properties and convert to properly formatted strings"""
             color_R = self.geol_coll.get_uid_legend(uid=uid)['color_R'] / 255
             color_G = self.geol_coll.get_uid_legend(uid=uid)['color_G'] / 255
             color_B = self.geol_coll.get_uid_legend(uid=uid)['color_B'] / 255
-            geological_feature = self.geol_coll.df.loc[self.geol_coll.df['uid'] == uid, 'geological_feature'].values[0]
-            geological_type = self.geol_coll.df.loc[self.geol_coll.df['uid'] == uid, 'geological_type'].values[0]
-            geological_age = self.geol_coll.df.loc[self.geol_coll.df['uid'] == uid, 'geological_age'].values[0]
+            geological_feature = self.geol_coll._df.loc[self.geol_coll._df['uid'] == uid, 'geological_feature'].values[0]
+            geological_type = self.geol_coll._df.loc[self.geol_coll._df['uid'] == uid, 'geological_type'].values[0]
+            geological_age = self.geol_coll._df.loc[self.geol_coll._df['uid'] == uid, 'geological_age'].values[0]
             geological_time = self.a_t_df.loc[self.a_t_df['uid'] == uid, 'geological_time'].values[0]
             properties_names = self.a_t_df.loc[self.a_t_df['uid'] == uid, 'properties_names'].values[0]
             if properties_names != '':

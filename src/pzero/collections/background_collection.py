@@ -7,7 +7,7 @@ import uuid
 from copy import deepcopy
 from PyQt5.QtCore import Qt, QVariant
 
-from pzero.collection_base import CollectionBase
+from pzero.collections.collection_base import CollectionBase
 
 """Options to print Pandas dataframes in console when testing."""
 pd_desired_width = 800
@@ -77,7 +77,7 @@ class BackgroundCollection(CollectionBase):
     
     @property
     def editable_columns(self):
-        return self.df.columns.get_indexer(["name", "type", "feature"])
+        return self._df.columns.get_indexer(["name", "type", "feature"])
     
 
     """Initialize BackgroundCollection table. Column headers are taken from
@@ -92,7 +92,7 @@ class BackgroundCollection(CollectionBase):
             entity_dict['uid'] = str(uuid.uuid4())
         """"Append new row to dataframe. Note that the 'append()' method for Pandas dataframes DOES NOT
         work in place, hence a NEW dataframe is created every time and then substituted to the old one."""
-        self.df = self.df.append(entity_dict, ignore_index=True)
+        self._df = self._df.append(entity_dict, ignore_index=True)
         """Reset data model"""
         self.modelReset.emit()
         """Then add new background_type / feature to the legend if needed."""
@@ -126,7 +126,7 @@ class BackgroundCollection(CollectionBase):
         """Remove row from dataframe and reset data model."""
         if not uid in self.get_uids():
             return
-        self.df.drop(self.main_window.backgrounds_coll.df[self.main_window.backgrounds_coll.df['uid'] == uid].index, inplace=True)
+        self._df.drop(self.main_window.backgrounds_coll._df[self.main_window.backgrounds_coll._df['uid'] == uid].index, inplace=True)
         self.modelReset.emit()  # is this really necessary?
         """Then remove background_type / feature from legend if needed."""
         """table_updated is used to record if the table is updated or not"""
@@ -134,16 +134,16 @@ class BackgroundCollection(CollectionBase):
         backgrounds_types_in_legend = pd.unique(self.main_window.backgrounds_legend_df['background_type'])
         features_in_legend = pd.unique(self.main_window.backgrounds_legend_df['background_feature'])
         for background_type in backgrounds_types_in_legend:
-            if self.main_window.backgrounds_coll.df.loc[self.main_window.backgrounds_coll.df['background_type'] == background_type].empty:
+            if self.main_window.backgrounds_coll._df.loc[self.main_window.backgrounds_coll._df['background_type'] == background_type].empty:
                 """Get index of row to be removed, then remove it in place with .drop()."""
                 idx_remove = self.main_window.backgrounds_legend_df[
                     self.main_window.backgrounds_legend_df['background_type'] == background_type].index
                 self.main_window.backgrounds_legend_df.drop(idx_remove, inplace=True)
                 table_updated = table_updated or True
             for feature in features_in_legend:
-                if self.main_window.backgrounds_coll.df.loc[
-                    (self.main_window.backgrounds_coll.df['background_type'] == background_type) & (
-                            self.main_window.backgrounds_coll.df['background_feature'] == feature)].empty:
+                if self.main_window.backgrounds_coll._df.loc[
+                    (self.main_window.backgrounds_coll._df['background_type'] == background_type) & (
+                            self.main_window.backgrounds_coll._df['background_feature'] == feature)].empty:
                     """Get index of row to be removed, then remove it in place with .drop()."""
                     idx_remove = self.main_window.backgrounds_legend_df[
                         (self.main_window.backgrounds_legend_df['background_type'] == background_type) & (
@@ -151,7 +151,7 @@ class BackgroundCollection(CollectionBase):
                     self.main_window.backgrounds_legend_df.drop(idx_remove, inplace=True)
                     table_updated = table_updated or True
         for feature in features_in_legend:
-            if self.main_window.backgrounds_coll.df.loc[self.main_window.backgrounds_coll.df['background_feature'] == feature].empty:
+            if self.main_window.backgrounds_coll._df.loc[self.main_window.backgrounds_coll._df['background_feature'] == feature].empty:
                 """Get index of row to be removed, then remove it in place with .drop()."""
                 idx_remove = self.main_window.backgrounds_legend_df[
                     self.main_window.backgrounds_legend_df['background_feature'] == feature].index
@@ -182,8 +182,8 @@ class BackgroundCollection(CollectionBase):
         return out_uid
 
     def replace_vtk(self, uid=None, vtk_object=None, const_color=False):
-        if isinstance(vtk_object, type(self.df.loc[self.df['uid'] == uid, 'vtk_obj'].values[0])):
-            new_dict = deepcopy(self.df.loc[self.df['uid'] == uid, self.df.columns != 'vtk_obj'].to_dict('records')[0])
+        if isinstance(vtk_object, type(self._df.loc[self._df['uid'] == uid, 'vtk_obj'].values[0])):
+            new_dict = deepcopy(self._df.loc[self._df['uid'] == uid, self._df.columns != 'vtk_obj'].to_dict('records')[0])
             new_dict['vtk_obj'] = vtk_object
             if const_color:
                 R = self.get_uid_legend(uid=uid)['color_R']
@@ -207,16 +207,16 @@ class BackgroundCollection(CollectionBase):
         backgrounds_types_in_legend = pd.unique(self.main_window.backgrounds_legend_df['background_type'])
         features_in_legend = pd.unique(self.main_window.backgrounds_legend_df['background_feature'])
         for background_type in backgrounds_types_in_legend:
-            if self.main_window.backgrounds_coll.df.loc[self.main_window.backgrounds_coll.df['background_type'] == background_type].empty:
+            if self.main_window.backgrounds_coll._df.loc[self.main_window.backgrounds_coll._df['background_type'] == background_type].empty:
                 """Get index of row to be removed, then remove it in place with .drop()."""
                 idx_remove = self.main_window.backgrounds_legend_df[
                     self.main_window.backgrounds_legend_df['background_type'] == background_type].index
                 self.main_window.backgrounds_legend_df.drop(idx_remove, inplace=True)
                 table_updated = table_updated or True
             for feature in features_in_legend:
-                if self.main_window.backgrounds_coll.df.loc[
-                    (self.main_window.backgrounds_coll.df['background_type'] == background_type) & (
-                            self.main_window.backgrounds_coll.df['background_feature'] == feature)].empty:
+                if self.main_window.backgrounds_coll._df.loc[
+                    (self.main_window.backgrounds_coll._df['background_type'] == background_type) & (
+                            self.main_window.backgrounds_coll._df['background_feature'] == feature)].empty:
                     """Get index of row to be removed, then remove it in place with .drop()."""
                     idx_remove = self.main_window.backgrounds_legend_df[
                         (self.main_window.backgrounds_legend_df['background_type'] == background_type) & (
@@ -224,18 +224,18 @@ class BackgroundCollection(CollectionBase):
                     self.main_window.backgrounds_legend_df.drop(idx_remove, inplace=True)
                     table_updated = table_updated or True
         for feature in features_in_legend:
-            if self.main_window.backgrounds_coll.df.loc[self.main_window.backgrounds_coll.df['background_feature'] == feature].empty:
+            if self.main_window.backgrounds_coll._df.loc[self.main_window.backgrounds_coll._df['background_feature'] == feature].empty:
                 """Get index of row to be removed, then remove it in place with .drop()."""
                 idx_remove = self.main_window.backgrounds_legend_df[
                     self.main_window.backgrounds_legend_df['background_feature'] == feature].index
                 self.main_window.backgrounds_legend_df.drop(idx_remove, inplace=True)
                 table_updated = table_updated or True
         """Then add new background_type / feature"""
-        for uid in self.main_window.backgrounds_coll.df['uid'].to_list():
+        for uid in self.main_window.backgrounds_coll._df['uid'].to_list():
             background_type = \
-                self.main_window.backgrounds_coll.df.loc[self.main_window.backgrounds_coll.df['uid'] == uid, "type"].values[0]
+                self.main_window.backgrounds_coll._df.loc[self.main_window.backgrounds_coll._df['uid'] == uid, "type"].values[0]
             feature = \
-                self.main_window.backgrounds_coll.df.loc[self.main_window.backgrounds_coll.df['uid'] == uid, "feature"].values[0]
+                self.main_window.backgrounds_coll._df.loc[self.main_window.backgrounds_coll._df['uid'] == uid, "feature"].values[0]
             if self.main_window.backgrounds_legend_df.loc[
                 (self.main_window.backgrounds_legend_df['background_type'] == background_type) & (
                         self.main_window.backgrounds_legend_df['background_feature'] == feature)].empty:
@@ -254,8 +254,8 @@ class BackgroundCollection(CollectionBase):
 
     def get_uid_legend(self, uid=None):
         """Get legend as dictionary from uid."""
-        background_type = self.df.loc[self.df['uid'] == uid, 'background_type'].values[0]
-        feature = self.df.loc[self.df['uid'] == uid, 'background_feature'].values[0]
+        background_type = self._df.loc[self._df['uid'] == uid, 'background_type'].values[0]
+        feature = self._df.loc[self._df['uid'] == uid, 'background_feature'].values[0]
         legend_dict = self.main_window.backgrounds_legend_df.loc[
             (self.main_window.backgrounds_legend_df['background_type'] == background_type) & (
                     self.main_window.backgrounds_legend_df['background_feature'] == feature)].to_dict('records')
@@ -265,85 +265,85 @@ class BackgroundCollection(CollectionBase):
 
     def get_backgrounds_type_uids(self, type=None):
         """Get list of uids of a given type."""
-        return self.df.loc[self.df['background_type'] == type, 'uid'].to_list()
+        return self._df.loc[self._df['background_type'] == type, 'uid'].to_list()
 
     def get_name_uid(self, name=None):
-        return self.df.loc[self.df['name'] == name, 'uid'].values[0]
+        return self._df.loc[self._df['name'] == name, 'uid'].values[0]
 
     def get_uid_topological_type(self, uid=None):
         """Get value(s) stored in dataframe (as pointer) from uid."""
-        return self.df.loc[self.df['uid'] == uid, 'topological_type'].values[0]
+        return self._df.loc[self._df['uid'] == uid, 'topological_type'].values[0]
 
     def set_uid_topological_type(self, uid=None, topological_type=None):
         """Set value(s) stored in dataframe (as pointer) from uid."""
-        self.df.loc[self.df['uid'] == uid, 'topological_type'] = topological_type
+        self._df.loc[self._df['uid'] == uid, 'topological_type'] = topological_type
 
     def get_uid_background_type(self, uid=None):
         """Get value(s) stored in dataframe (as pointer) from uid."""
-        return self.df.loc[self.df['uid'] == uid, 'background_type'].values[0]
+        return self._df.loc[self._df['uid'] == uid, 'background_type'].values[0]
 
     def set_uid_background_type(self, uid=None, type=None):
         """Set value(s) stored in dataframe (as pointer) from uid."""
-        self.df.loc[self.df['uid'] == uid, 'background_type'] = type
+        self._df.loc[self._df['uid'] == uid, 'background_type'] = type
 
     def get_uid_background_feature(self, uid=None):
         """Get value(s) stored in dataframe (as pointer) from uid."""
-        return self.df.loc[self.df['uid'] == uid, 'background_feature'].values[0]
+        return self._df.loc[self._df['uid'] == uid, 'background_feature'].values[0]
 
     def set_uid_background_feature(self, uid=None, feature=None):
         """Set value(s) stored in dataframe (as pointer) from uid."""
-        self.df.loc[self.df['uid'] == uid, 'background_feature'] = feature
+        self._df.loc[self._df['uid'] == uid, 'background_feature'] = feature
 
     def get_uid_properties_names(self, uid=None):
         """Get value(s) stored in dataframe (as pointer) from uid. This is a LIST even if we extract it with values[0]!"""
-        return self.df.loc[self.df['uid'] == uid, 'properties_names'].values[0]
+        return self._df.loc[self._df['uid'] == uid, 'properties_names'].values[0]
 
     def set_uid_properties_names(self, uid=None, properties_names=None):
         """Set value(s) stored in dataframe (as pointer) from uid. This is a LIST and "at" must be used!"""
-        row = self.df[self.df['uid'] == uid].index.values[0]
-        self.df.at[row, 'properties_names'] = properties_names
+        row = self._df[self._df['uid'] == uid].index.values[0]
+        self._df.at[row, 'properties_names'] = properties_names
 
     def get_uid_properties_components(self, uid=None):
         """Get value(s) stored in dataframe (as pointer) from uid. This is a LIST even if we extract it with values[0]!"""
-        return self.df.loc[self.df['uid'] == uid, 'properties_components'].values[0]
+        return self._df.loc[self._df['uid'] == uid, 'properties_components'].values[0]
 
     def set_uid_properties_components(self, uid=None, properties_components=None):
         """Set value(s) stored in dataframe (as pointer) from uid. This is a LIST and "at" must be used!"""
-        row = self.df[self.df['uid'] == uid].index.values[0]
-        self.df.at[row, 'properties_components'] = properties_components
+        row = self._df[self._df['uid'] == uid].index.values[0]
+        self._df.at[row, 'properties_components'] = properties_components
 
     def get_uid_x_section(self, uid=None):
         """Get value(s) stored in dataframe (as pointer) from uid."""
-        return self.df.loc[self.df['uid'] == uid, 'x_section'].values[0]
+        return self._df.loc[self._df['uid'] == uid, 'x_section'].values[0]
 
     def set_uid_x_section(self, uid=None, x_section=None):
         """Set value(s) stored in dataframe (as pointer) from uid."""
-        self.df.loc[self.df['uid'] == uid, 'x_section'] = x_section
+        self._df.loc[self._df['uid'] == uid, 'x_section'] = x_section
 
     def get_xuid_uid(self, xuid=None):
         '''[Gabriele] Get the uids of the background objects for the corresponding xsec uid (parent)'''
-        return self.df.loc[self.df['x_section'] == xuid, 'uid']
+        return self._df.loc[self._df['x_section'] == xuid, 'uid']
 
     def get_buid_uid(self, buid=None):
         '''[Gabriele] Get the uids of the background objects for the corresponding bore uid (parent)'''
 
-        return self.df.loc[self.df['borehole'] == buid, 'uid']
+        return self._df.loc[self._df['borehole'] == buid, 'uid']
 
     def get_uid_borehole(self, uid=None):
 
-        return self.df.loc[self.df['uid'] == uid, 'borehole'].values[0]
+        return self._df.loc[self._df['uid'] == uid, 'borehole'].values[0]
 
     def set_uid_borehole(self, uid=None, borehole=None):
         """Set value(s) stored in dataframe (as pointer) from uid."""
-        self.df.loc[self.df['uid'] == uid, 'x_section'] = borehole
+        self._df.loc[self._df['uid'] == uid, 'x_section'] = borehole
 
     def get_uid_vtk_obj(self, uid=None):
         """Get value(s) stored in dataframe (as pointer) from uid."""
-        return self.df.loc[self.df['uid'] == uid, 'vtk_obj'].values[0]
+        return self._df.loc[self._df['uid'] == uid, 'vtk_obj'].values[0]
 
     def set_uid_vtk_obj(self, uid=None, vtk_obj=None):
         """Set value(s) stored in dataframe (as pointer) from uid."""
-        self.df.loc[self.df['uid'] == uid, 'vtk_obj'] = vtk_obj
+        self._df.loc[self._df['uid'] == uid, 'vtk_obj'] = vtk_obj
 
     def append_uid_property(self, uid=None, property_name=None, property_components=None):
         """Add property name and components to an uid and create empty property on vtk object.
@@ -387,10 +387,10 @@ class BackgroundCollection(CollectionBase):
         "self.main_window is" is used to point to parent, because the standard Qt setData
         method does not allow for extra variables to be passed into this method."""
         if index.isValid():
-            self.df.iloc[index.row(), index.column()] = value
+            self._df.iloc[index.row(), index.column()] = value
             if self.data(index, Qt.DisplayRole) == value:
                 self.dataChanged.emit(index, index)
-                uid = self.df.iloc[index.row(), 0]
+                uid = self._df.iloc[index.row(), 0]
                 self.backgrounds_attr_modified_update_legend_table()
                 self.main_window.background_metadata_modified_signal.emit(
                     [uid])  # a list of uids is emitted, even if the entity is just one

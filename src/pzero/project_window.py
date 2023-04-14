@@ -5,17 +5,19 @@ import os
 from copy import deepcopy
 from datetime import datetime
 
-from PyQt5.QtWidgets import QMainWindow, QMessageBox
+from PyQt5.QtWidgets import QMainWindow, QMessageBox, QTableView
 from PyQt5.QtCore import Qt, pyqtSignal
-from vtk import vtkPolyData,vtkAppendPolyData, vtkOctreePointLocator, vtkXMLPolyDataWriter, vtkXMLStructuredGridWriter, vtkXMLImageDataWriter, vtkXMLStructuredGridReader, vtkXMLPolyDataReader, vtkXMLImageDataReader
+from vtk import vtkPolyData, vtkAppendPolyData, vtkOctreePointLocator, vtkXMLPolyDataWriter, vtkXMLStructuredGridWriter, \
+    vtkXMLImageDataWriter, vtkXMLStructuredGridReader, vtkXMLPolyDataReader, vtkXMLImageDataReader
 from pandas import DataFrame as pd_DataFrame
 from pandas import read_json as pd_read_json
 from pandas import read_csv as pd_read_csv
 
 from .entities_db import EntitiesDB
 from .project_window_ui import Ui_ProjectWindow
-from .entities_factory import VertexSet, PolyLine, TriSurf, XsVertexSet, XsPolyLine, DEM, MapImage, Voxet, Seismics, XsVoxet, \
-    PCDom, TSDom, Well,Attitude,XsImage
+from .entities_factory import VertexSet, PolyLine, TriSurf, XsVertexSet, XsPolyLine, DEM, MapImage, Voxet, Seismics, \
+    XsVoxet, \
+    PCDom, TSDom, Well, Attitude, XsImage
 from pzero.collections.geological_collection import GeologicalCollection
 from pzero.collections.xsection_collection import XSectionCollection
 from pzero.collections.dom_collection import DomCollection
@@ -39,13 +41,16 @@ from .windows_factory import View3D
 from .windows_factory import NewViewMap
 from .windows_factory import NewViewXsection
 from .windows_factory import ViewStereoplot
-from .helper_dialogs import options_dialog, save_file_dialog, open_file_dialog, input_combo_dialog, message_dialog, multiple_input_dialog, input_one_value_dialog, progress_dialog, import_dialog,PreviewWidget
+from .helper_dialogs import options_dialog, save_file_dialog, open_file_dialog, input_combo_dialog, message_dialog, \
+    multiple_input_dialog, input_one_value_dialog, progress_dialog, import_dialog, PreviewWidget
 from .image2vtk import geo_image2vtk, xs_image2vtk
 from .stl2vtk import vtk2stl, vtk2stl_dilation
 from .obj2vtk import vtk2obj
 from .ply2vtk import vtk2ply
 from .lxml2vtk import vtk2lxml
-from .three_d_surfaces import interpolation_delaunay_2d, poisson_interpolation, implicit_model_loop_structural, surface_smoothing, linear_extrusion, decimation_pro_resampling, decimation_quadric_resampling, subdivision_resampling, intersection_xs, project_2_dem, project_2_xs, split_surf,retopo
+from .three_d_surfaces import interpolation_delaunay_2d, poisson_interpolation, implicit_model_loop_structural, \
+    surface_smoothing, linear_extrusion, decimation_pro_resampling, decimation_quadric_resampling, \
+    subdivision_resampling, intersection_xs, project_2_dem, project_2_xs, split_surf, retopo
 from .orientation_analysis import set_normals
 from .point_clouds import decimate_pc
 
@@ -67,7 +72,6 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
     geology_legend_thick_modified_signal = pyqtSignal(list)
     geology_legend_point_size_modified_signal = pyqtSignal(list)
     geology_legend_opacity_modified_signal = pyqtSignal(list)
-
 
     xsect_added_signal = pyqtSignal(list)
     xsect_removed_signal = pyqtSignal(list)
@@ -146,12 +150,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
 
     """Add other signals above this line ----------------------------------------"""
 
-
-
-
     def __init__(self, *args, **kwargs):
         super(ProjectWindow, self).__init__(*args, **kwargs)
-        self.out_dir_name = save_file_dialog(parent=self, caption="Select save directory.", directory=True)
+        
 
         self.prop_legend_df = None
         self.backgrounds_legend_df = None
@@ -169,12 +170,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.well_legend_df = None
         self.geol_legend_df = None
 
-        self.entities_db = EntitiesDB(self)
-
-
-
-
-
+        self.entities_db = EntitiesDB(parent=self)
 
         """Import GUI from project_window_ui.py"""
         self.setupUi(self)
@@ -183,7 +179,8 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.actionQuit.triggered.connect(self.close)
 
         """Welcome message"""
-        self.TextTerminal.appendPlainText("Welcome to PZero!\n3D modelling application by Andrea Bistacchi, started June 3rd 2020.")
+        self.TextTerminal.appendPlainText(
+            "Welcome to PZero!\n3D modelling application by Andrea Bistacchi, started June 3rd 2020.")
 
         """Initialize empty project."""
         self.create_empty()
@@ -259,12 +256,15 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.actionViewStereoplot.triggered.connect(lambda: ViewStereoplot(parent=self))
 
         self.update_actors = True
+
     def closeEvent(self, event):
         """Re-implement the standard closeEvent method of QWidget and ask (1) to save project, and (2) for confirmation to quit."""
-        reply = QMessageBox.question(self, 'Closing Pzero', 'Save the project?', QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+        reply = QMessageBox.question(self, 'Closing Pzero', 'Save the project?', QMessageBox.Yes | QMessageBox.No,
+                                     QMessageBox.No)
         if reply == QMessageBox.Yes:
             self.save_project()
-        reply = QMessageBox.question(self, 'Closing Pzero', 'Confirm quit?', QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+        reply = QMessageBox.question(self, 'Closing Pzero', 'Confirm quit?', QMessageBox.Yes | QMessageBox.No,
+                                     QMessageBox.No)
         if reply == QMessageBox.Yes:
             self.project_close_signal.emit()  # this is used to delete open windows when the current project is closed
             event.accept()
@@ -279,67 +279,78 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         return self.tabCentral.currentWidget().objectName()
 
     @property
+    def tab_name_to_collection_name(self):
+        """Returns a dictionary with the name of the table tab and the name of the corresponding collection."""
+        return {"tabGeology": "geol", "tabXSections": "xsection", "tabBoundaries": "boundary", "tabPoints": "point",
+                "tabLines": "line", "tabSurfaces": "surface", "tabVolumes": "volume", "tabImages": "image",
+                "tabWells": "well"}
+
+    @property
+    def tab_name_to_attribute_name(self):
+        return {"tabGeology":  "GeologyTableView", "tabXSections": "XSectionsTableView",
+                "tabBoundaries": "BoundariesTableView", "tabPoints": "PointsTableView",
+                "tabLines": "LinesTableView", "tabSurfaces": "SurfacesTableView",
+                "tabVolumes": "VolumesTableView", "tabImages": "ImagesTableView",
+                "tabWells": "WellsTableView"}
+
+    @property
+    def current_table_view(self):
+        """Returns the current table view."""
+        return self.tabCentral.currentWidget().findChild(QTableView)
+
+    @property
     def selected_uids(self):
         """Returns a list of uids selected in the table view. Just rows completely selected are returned."""
         selected_idxs = []
-        selected_uids = []
-        if self.shown_table == "tabGeology":
-            selected_idxs_proxy = self.GeologyTableView.selectionModel().selectedRows()
-            for idx_proxy in selected_idxs_proxy:
-                selected_idxs.append(self.proxy_geol_coll.mapToSource(idx_proxy))
-            for idx in selected_idxs:
-                selected_uids.append(self.entities_db.collection_by_name("geol").data(index=idx, role=Qt.DisplayRole))
-        elif self.shown_table == "tabXSections":
-            selected_idxs_proxy = self.XSectionsTableView.selectionModel().selectedRows()
-            for idx_proxy in selected_idxs_proxy:
-                selected_idxs.append(self.proxy_xsect_coll.mapToSource(idx_proxy))
-            for idx in selected_idxs:
-                selected_uids.append(self.entities_db.collection_by_name("xsect").data(index=idx, role=Qt.DisplayRole))
-        elif self.shown_table == "tabMeshes3D":
-            selected_idxs_proxy = self.Meshes3DTableView.selectionModel().selectedRows()
-            for idx_proxy in selected_idxs_proxy:
-                selected_idxs.append(self.proxy_mesh3d_coll.mapToSource(idx_proxy))
-            for idx in selected_idxs:
-                selected_uids.append(self.entities_db.collection_by_name("mesh3d").data(index=idx, role=Qt.DisplayRole))
-        elif self.shown_table == "tabDOMs":
-            selected_idxs_proxy = self.DOMsTableView.selectionModel().selectedRows()
-            for idx_proxy in selected_idxs_proxy:
-                selected_idxs.append(self.proxy_dom_coll.mapToSource(idx_proxy))
-            for idx in selected_idxs:
-                selected_uids.append(self.entities_db.collection_by_name("dom").data(index=idx, role=Qt.DisplayRole))
-        elif self.shown_table == "tabImages":
-            selected_idxs_proxy = self.ImagesTableView.selectionModel().selectedRows()
-            for idx_proxy in selected_idxs_proxy:
-                selected_idxs.append(self.proxy_image_coll.mapToSource(idx_proxy))
-            for idx in selected_idxs:
-                selected_uids.append(self.entities_db.collection_by_name("image").data(index=idx, role=Qt.DisplayRole))
-        elif self.shown_table == "tabBoundaries":
-            selected_idxs_proxy = self.BoundariesTableView.selectionModel().selectedRows()
-            for idx_proxy in selected_idxs_proxy:
-                selected_idxs.append(self.proxy_boundary_coll.mapToSource(idx_proxy))
-            for idx in selected_idxs:
-                selected_uids.append(self.entities_db.collection_by_name("boundary").data(index=idx, role=Qt.DisplayRole))
-        elif self.shown_table == "tabWells":
-            selected_idxs_proxy = self.WellsTableView.selectionModel().selectedRows()
-            for idx_proxy in selected_idxs_proxy:
-                selected_idxs.append(self.proxy_well_coll.mapToSource(idx_proxy))
-            for idx in selected_idxs:
-                selected_uids.append(self.well_coll.data(index=idx, role=Qt.DisplayRole))
-        elif self.shown_table == "tabFluids":
-            selected_idxs_proxy = self.FluidsTableView.selectionModel().selectedRows()
-            for idx_proxy in selected_idxs_proxy:
-                selected_idxs.append(self.proxy_fluids_coll.mapToSource(idx_proxy))
-            for idx in selected_idxs:
-                selected_uids.append(self.fluids_coll.data(index=idx, role=Qt.DisplayRole))
-        elif self.shown_table == "tabBackgrounds":
-            selected_idxs_proxy = self.BackgroundsTableView.selectionModel().selectedRows()
-            for idx_proxy in selected_idxs_proxy:
-                selected_idxs.append(self.proxy_backgrounds_coll.mapToSource(idx_proxy))
-            for idx in selected_idxs:
-                selected_uids.append(self.backgrounds_coll.data(index=idx, role=Qt.DisplayRole))
-        return selected_uids
+        out_uids = []
+        try:
+            shown_tab = self.shown_table
+            collection_name = self.tab_name_to_collection_name[shown_tab]
+            coll = self.entities_db.collection_by_name(collection_name)
+            proxy = self.entities_db.collections_to_proxy[collection_name]
 
-    #[Gabriele] This is should be used for cross collection operations (e.g. cut surfaces in the geology table with the DEM).
+            tab = self.current_table_view
+
+            selected_idxs_proxy = tab.selectionModel().selectedRows()
+
+            for idx_proxy in selected_idxs_proxy:
+                selected_idxs.append(proxy.mapToSource(idx_proxy))
+
+
+            for idx in selected_idxs:
+                out_uids.append(coll.data(index=idx, role=Qt.DisplayRole))
+
+            return out_uids
+        except Exception as e:
+            print(f"Error {e} ")
+
+
+
+    # @property
+    # def selected_uids(self):
+    #     """Returns a list of uids selected in the table view. Just rows completely selected are returned."""
+    #     selected_idxs = []
+    #     selected_uids = []
+    # 
+    #     shown_tab = self.shown_table
+    # 
+    #     collection_name = self.tab_name_to_collection_name[shown_tab]
+    #     coll = self.entities_db.collection_by_name(collection_name)
+    #     proxy  = self.entities_db.collections_to_proxy[collection_name]
+    # 
+    #     selected_idxs_proxy = proxy.selectionModel().selectedRows()
+    #     for idx_proxy in selected_idxs_proxy:
+    #         selected_idxs.append(proxy.mapToSource(idx_proxy))
+    #     for idx in selected_idxs:
+    #         selected_uids.append(coll.data(index=idx, role=Qt.DisplayRole))
+    # 
+    #     return selected_uids
+
+
+
+
+
+    # [Gabriele] This is should be used for cross collection operations (e.g. cut surfaces in the geology table with the DEM).
     # We could use this instead of selected_uids but we should impose validity checks for the different functions
     # @property
     # def selected_uids_all(self):
@@ -442,7 +453,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             elif self.shown_table == "tabBackgrounds":
                 self.backgrounds_coll.remove_entity(uid=uid)
         self.update_actors = True
-    def entities_merge(self):  # ____________________________________________________ CHECK (1) HOW PROPERTIES AND TEXTURES ARE AFFECTED BY MERGING, (2) HOW IT WORKS FOR DOMs
+
+    def entities_merge(
+            self):  # ____________________________________________________ CHECK (1) HOW PROPERTIES AND TEXTURES ARE AFFECTED BY MERGING, (2) HOW IT WORKS FOR DOMs
         """Merge entities of the same type - VertexSet, PolyLine, TriSurf, ..."""
         if not self.selected_uids:
             return
@@ -521,7 +534,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         else:
             return
         """Ask whether to keep or removed merged entities."""
-        remove_merged_option = options_dialog(title='Remove merged entities?', message='Do you want to keep or remove merged entities?', yes_role='Keep', no_role='Remove', reject_role='Quit merging')
+        remove_merged_option = options_dialog(title='Remove merged entities?',
+                                              message='Do you want to keep or remove merged entities?', yes_role='Keep',
+                                              no_role='Remove', reject_role='Quit merging')
         if not (remove_merged_option == 0 or remove_merged_option == 1):
             return
         """Create a vtkAppendPolyData filter to merge all input vtk objects"""
@@ -550,18 +565,22 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         if not self.selected_uids:
             return
         """Map Image selection dialog."""
-        map_image_names = self.entities_db.collection_by_name("image").df.loc[self.entities_db.collection_by_name("image").df['image_type'] == "MapImage", 'name'].to_list()
-        map_image_name = input_combo_dialog(parent=None, title="Add texture to DEM", label="Choose Map Image", choice_list=map_image_names)
+        map_image_names = self.entities_db.collection_by_name("image")._df.loc[
+            self.entities_db.collection_by_name("image")._df['image_type'] == "MapImage", 'name'].to_list()
+        map_image_name = input_combo_dialog(parent=None, title="Add texture to DEM", label="Choose Map Image",
+                                            choice_list=map_image_names)
         if not map_image_name:
             return
-        map_image_uid = self.entities_db.collection_by_name("image").df.loc[self.entities_db.collection_by_name("image").df['name'] == map_image_name, 'uid'].values[0]
+        map_image_uid = self.entities_db.collection_by_name("image")._df.loc[
+            self.entities_db.collection_by_name("image")._df['name'] == map_image_name, 'uid'].values[0]
         if map_image_uid not in self.entities_db.collection_by_name("image").get_uids():
             return
         """Add textures."""
         dom_uids = self.selected_uids
         for dom_uid in dom_uids:
             if isinstance(self.entities_db.collection_by_name("dom").get_uid_vtk_obj(dom_uid), DEM):
-                self.entities_db.collection_by_name("dom").add_map_texture_to_dom(dom_uid=dom_uid, map_image_uid=map_image_uid)
+                self.entities_db.collection_by_name("dom").add_map_texture_to_dom(dom_uid=dom_uid,
+                                                                                  map_image_uid=map_image_uid)
 
     def texture_remove(self):
         """Remove texture to selected DEMs. Just rows completely selected are considered."""
@@ -570,19 +589,22 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         if not self.selected_uids:
             return
         """Map Image selection dialog."""
-        map_image_names = self.entities_db.collection_by_name("image").df.loc[self.entities_db.collection_by_name("image").df['image_type'] == "MapImage", 'name'].to_list()
+        map_image_names = self.entities_db.collection_by_name("image")._df.loc[
+            self.entities_db.collection_by_name("image")._df['image_type'] == "MapImage", 'name'].to_list()
         map_image_name = input_combo_dialog(parent=None, title="Remove texture from DEM", label="Choose Map Image",
                                             choice_list=map_image_names)
         if not map_image_name:
             return
-        map_image_uid = self.entities_db.collection_by_name("image").df.loc[self.entities_db.collection_by_name("image").df['name'] == map_image_name, 'uid'].values[0]
+        map_image_uid = self.entities_db.collection_by_name("image")._df.loc[
+            self.entities_db.collection_by_name("image")._df['name'] == map_image_name, 'uid'].values[0]
         if map_image_uid not in self.entities_db.collection_by_name("image").get_uids():
             return
         """Remove textures."""
         if map_image_uid in self.entities_db.collection_by_name("image").get_uids():
             dom_uids = self.selected_uids
             for dom_uid in dom_uids:
-                self.entities_db.collection_by_name("dom").remove_map_texture_from_dom(dom_uid=dom_uid, map_image_uid=map_image_uid)
+                self.entities_db.collection_by_name("dom").remove_map_texture_from_dom(dom_uid=dom_uid,
+                                                                                       map_image_uid=map_image_uid)
 
     def property_add(self):  # ____________________________________________________ ADD IMAGES
         """Add empty property on geological entity"""
@@ -590,22 +612,29 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             return
         if not self.selected_uids:
             return
-        input_dict = {'property_name': ['Property name: ', 'new_property'], 'property_components': ['Property components: ', 1]}
+        input_dict = {'property_name': ['Property name: ', 'new_property'],
+                      'property_components': ['Property components: ', 1]}
         if not input_dict:
             return
         updt_dict = multiple_input_dialog(title='Add empty property', input_dict=input_dict)
         if self.shown_table == "tabGeology":
             for uid in self.selected_uids:
-                if not updt_dict['property_name'] in self.entities_db.collection_by_name("geol").get_uid_properties_names(uid):
-                    self.entities_db.collection_by_name("geol").append_uid_property(uid=uid, property_name=updt_dict['property_name'], property_components=updt_dict['property_components'])
+                if not updt_dict['property_name'] in self.entities_db.collection_by_name(
+                        "geol").get_uid_properties_names(uid):
+                    self.entities_db.collection_by_name("geol").append_uid_property(uid=uid, property_name=updt_dict[
+                        'property_name'], property_components=updt_dict['property_components'])
         elif self.shown_table == "tabMeshes3D":
             for uid in self.selected_uids:
-                if not updt_dict['property_name'] in self.entities_db.collection_by_name("mesh3d").get_uid_properties_names(uid):
-                    self.entities_db.collection_by_name("mesh3d").append_uid_property(uid=uid, property_name=updt_dict['property_name'], property_components=updt_dict['property_components'])
+                if not updt_dict['property_name'] in self.entities_db.collection_by_name(
+                        "mesh3d").get_uid_properties_names(uid):
+                    self.entities_db.collection_by_name("mesh3d").append_uid_property(uid=uid, property_name=updt_dict[
+                        'property_name'], property_components=updt_dict['property_components'])
         elif self.shown_table == "tabDOMs":
             for uid in self.selected_uids:
-                if not updt_dict['property_name'] in self.entities_db.collection_by_name("dom").get_uid_properties_names(uid):
-                    self.entities_db.collection_by_name("dom").append_uid_property(uid=uid, property_name=updt_dict['property_name'], property_components=updt_dict['property_components'])
+                if not updt_dict['property_name'] in self.entities_db.collection_by_name(
+                        "dom").get_uid_properties_names(uid):
+                    self.entities_db.collection_by_name("dom").append_uid_property(uid=uid, property_name=updt_dict[
+                        'property_name'], property_components=updt_dict['property_components'])
         """Finally update properties legend."""
         self.prop_legend.update_widget(self)
 
@@ -615,45 +644,56 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         if not self.selected_uids:
             return
         if self.shown_table == "tabGeology":
-            property_name_list = self.entities_db.collection_by_name("geol").get_uid_properties_names(uid=self.selected_uids[0])
+            property_name_list = self.entities_db.collection_by_name("geol").get_uid_properties_names(
+                uid=self.selected_uids[0])
             if len(self.selected_uids) > 1:
                 for uid in self.selected_uids[1:]:
-                    property_name_list = list(set(property_name_list) & set(self.entities_db.collection_by_name("geol").get_uid_properties_names(uid=uid)))
+                    property_name_list = list(set(property_name_list) & set(
+                        self.entities_db.collection_by_name("geol").get_uid_properties_names(uid=uid)))
             if property_name_list == []:
                 return
-            property_name = input_combo_dialog(parent=None, title="Remove selected property", label="Remove property", choice_list=property_name_list)
+            property_name = input_combo_dialog(parent=None, title="Remove selected property", label="Remove property",
+                                               choice_list=property_name_list)
             for uid in self.selected_uids:
                 self.entities_db.collection_by_name("geol").remove_uid_property(uid=uid, property_name=property_name)
         elif self.shown_table == "tabMeshes3D":
-            property_name_list = self.entities_db.collection_by_name("mesh3d").get_uid_properties_names(uid=self.selected_uids[0])
+            property_name_list = self.entities_db.collection_by_name("mesh3d").get_uid_properties_names(
+                uid=self.selected_uids[0])
             if len(self.selected_uids) > 1:
                 for uid in self.selected_uids[1:]:
-                    property_name_list = list(set(property_name_list) & set(self.entities_db.collection_by_name("mesh3d").get_uid_properties_names(uid=uid)))
+                    property_name_list = list(set(property_name_list) & set(
+                        self.entities_db.collection_by_name("mesh3d").get_uid_properties_names(uid=uid)))
             if property_name_list == []:
                 return
-            property_name = input_combo_dialog(parent=None, title="Remove selected property", label="Remove property", choice_list=property_name_list)
+            property_name = input_combo_dialog(parent=None, title="Remove selected property", label="Remove property",
+                                               choice_list=property_name_list)
             for uid in self.selected_uids:
                 self.entities_db.collection_by_name("mesh3d").remove_uid_property(uid=uid, property_name=property_name)
         elif self.shown_table == "tabDOMs":
-            property_name_list = self.entities_db.collection_by_name("dom").get_uid_properties_names(uid=self.selected_uids[0])
+            property_name_list = self.entities_db.collection_by_name("dom").get_uid_properties_names(
+                uid=self.selected_uids[0])
             if len(self.selected_uids) > 1:
                 for uid in self.selected_uids[1:]:
-                    property_name_list = list(set(property_name_list) & set(self.entities_db.collection_by_name("dom").get_uid_properties_names(uid=uid)))
+                    property_name_list = list(set(property_name_list) & set(
+                        self.entities_db.collection_by_name("dom").get_uid_properties_names(uid=uid)))
             if property_name_list == []:
                 return
-            property_name = input_combo_dialog(parent=None, title="Remove selected property", label="Remove property", choice_list=property_name_list)
+            property_name = input_combo_dialog(parent=None, title="Remove selected property", label="Remove property",
+                                               choice_list=property_name_list)
             for uid in self.selected_uids:
                 self.entities_db.collection_by_name("dom").remove_uid_property(uid=uid, property_name=property_name)
         """Finally update properties legend."""
         self.prop_legend.update_widget(self)
 
-    def normals_calculate(self):  # ____________________________________________________ ADD MORE CASES FOR POINT CLOUDS ETC.
+    def normals_calculate(
+            self):  # ____________________________________________________ ADD MORE CASES FOR POINT CLOUDS ETC.
         """Calculate Normals on geological entities (add point clouds and DOMS in the future)."""
         if self.shown_table in ["tabGeology", "tabMeshes3D", "tabDOMs"]:
             if self.selected_uids:
                 set_normals(self)
 
-    def lineations_calculate(self):  # ____________________________________________________ IMPLEMENT THIS FOR POINTS WITH PLUNGE/TREND AND FOR POLYLINES
+    def lineations_calculate(
+            self):  # ____________________________________________________ IMPLEMENT THIS FOR POINTS WITH PLUNGE/TREND AND FOR POLYLINES
         """Calculate lineations on geological entities."""
         pass
 
@@ -682,14 +722,18 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
 
     def decimate_pc_dialog(self):
         if self.selected_uids:
-            fac = input_one_value_dialog(parent=self, title="Decimation factor", label="Set the decimation factor (% of the original)", default_value=100.0)/100
+            fac = input_one_value_dialog(parent=self, title="Decimation factor",
+                                         label="Set the decimation factor (% of the original)",
+                                         default_value=100.0) / 100
             for uid in self.selected_uids:
                 if self.shown_table == "tabDOMs":
                     collection = self.entities_db.collection_by_name("dom")
                     entity = collection.get_uid_vtk_obj(uid)
 
-                    vtk_object = decimate_pc(entity,fac)
-                    vtk_out_dict = deepcopy(collection.df.loc[collection.df['uid'] == uid].drop(['uid', 'vtk_obj'], axis=1).to_dict('records')[0])
+                    vtk_object = decimate_pc(entity, fac)
+                    vtk_out_dict = deepcopy(
+                        collection._df.loc[collection._df['uid'] == uid].drop(['uid', 'vtk_obj'], axis=1).to_dict(
+                            'records')[0])
                     name = vtk_out_dict["name"]
                     vtk_out_dict['uid'] = None
                     vtk_out_dict['name'] = f'{name}_subsamp_{fac}'
@@ -701,10 +745,10 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         else:
             print('No entity selected')
 
-
     def smooth_dialog(self):
-        input_dict = {'convergence_value':['Convergence value:',1],'boundary_smoothing':['Boundary smoothing',False],'edge_smoothing':['Edge smoothing',False]}
-        surf_dict_updt = multiple_input_dialog(title='Surface smoothing', input_dict=input_dict,return_widget=True)
+        input_dict = {'convergence_value': ['Convergence value:', 1],
+                      'boundary_smoothing': ['Boundary smoothing', False], 'edge_smoothing': ['Edge smoothing', False]}
+        surf_dict_updt = multiple_input_dialog(title='Surface smoothing', input_dict=input_dict, return_widget=True)
 
         sel_uids = self.selected_uids
         if len(sel_uids) > 1:
@@ -716,13 +760,13 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         for uid in sel_uids:
             mesh = self.entities_db.collection_by_name("geol").get_uid_vtk_obj(uid)
 
+        PreviewWidget(parent=self, titles=['Original mesh', 'Smoothed mesh'],
+                      mesh=mesh, opt_widget=surf_dict_updt, function=surface_smoothing)
 
-
-        PreviewWidget(parent=self,titles = ['Original mesh','Smoothed mesh'],
-                             mesh=mesh, opt_widget=surf_dict_updt,function=surface_smoothing)
     def subd_res_dialog(self):
-        input_dict = {'type':['Subdivision type:',['linear','butterfly','loop']],'n_subd':['Number of iterations',2]}
-        subd_input = multiple_input_dialog('Subdivision dialog',input_dict,return_widget=True)
+        input_dict = {'type': ['Subdivision type:', ['linear', 'butterfly', 'loop']],
+                      'n_subd': ['Number of iterations', 2]}
+        subd_input = multiple_input_dialog('Subdivision dialog', input_dict, return_widget=True)
 
         sel_uids = self.selected_uids
         if len(sel_uids) > 1:
@@ -734,14 +778,15 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         for uid in sel_uids:
             mesh = self.entities_db.collection_by_name("geol").get_uid_vtk_obj(uid)
 
-        PreviewWidget(parent=self,titles = ['Original mesh','Subdivided mesh'],
-                             mesh=mesh, opt_widget=subd_input,function=subdivision_resampling)
+        PreviewWidget(parent=self, titles=['Original mesh', 'Subdivided mesh'],
+                      mesh=mesh, opt_widget=subd_input, function=subdivision_resampling)
         # subdivision_resampling(self,type=subd_input['type'],n_subd=subd_input['n_subd'])
 
     def retopologize_surface(self):
 
-        input_dict = {'dec_int': ['Decimation intensity: ', 0], 'n_iter': ['Number of iterations: ', 40], 'rel_fac': ['Relaxation factor: ', 0.1]}
-        retop_par_widg = multiple_input_dialog(title='Retopologize surface', input_dict=input_dict,return_widget=True)
+        input_dict = {'dec_int': ['Decimation intensity: ', 0], 'n_iter': ['Number of iterations: ', 40],
+                      'rel_fac': ['Relaxation factor: ', 0.1]}
+        retop_par_widg = multiple_input_dialog(title='Retopologize surface', input_dict=input_dict, return_widget=True)
 
         sel_uids = self.selected_uids
         if len(sel_uids) > 1:
@@ -753,11 +798,8 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         for uid in sel_uids:
             mesh = self.entities_db.collection_by_name("geol").get_uid_vtk_obj(uid)
 
-
-        PreviewWidget(parent=self,titles = ['Original mesh','Retopologized mesh'],
-                      opt_widget=retop_par_widg,function=retopo)
-
-
+        PreviewWidget(parent=self, titles=['Original mesh', 'Retopologized mesh'],
+                      opt_widget=retop_par_widg, function=retopo)
 
     def connected_parts(self):
         """Calculate connectivity of PolyLine and TriSurf entities."""
@@ -792,13 +834,14 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 return
             for uid in self.selected_uids:
                 if isinstance(collection.get_uid_vtk_obj(uid), (PolyLine, TriSurf)):
-                    if  "RegionId" not in collection.get_uid_properties_names(uid):
+                    if "RegionId" not in collection.get_uid_properties_names(uid):
                         collection.append_uid_property(uid=uid, property_name="RegionId", property_components=1)
                     vtk_out_list = collection.get_uid_vtk_obj(uid).split_parts()
 
-
-                    for i,vtk_object in enumerate(vtk_out_list):
-                        vtk_out_dict = deepcopy(collection.df.loc[collection.df['uid'] == uid].drop(['uid', 'vtk_obj'], axis=1).to_dict('records')[0])
+                    for i, vtk_object in enumerate(vtk_out_list):
+                        vtk_out_dict = deepcopy(
+                            collection._df.loc[collection._df['uid'] == uid].drop(['uid', 'vtk_obj'], axis=1).to_dict(
+                                'records')[0])
                         name = vtk_out_dict["name"]
                         vtk_out_dict['uid'] = None
                         vtk_out_dict['name'] = f'{name}_{i}'
@@ -837,14 +880,12 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.legend = Legend()
         self.legend.update_widget(parent=self)
 
-
         """Create the prop_legend_df table (a Pandas dataframe), create the corresponding QT
         PropertiesCMaps table widget self.prop_legend (a Qt QTableWidget that is internally connected to its data source),
         and update the widget."""  # ____________________________________________________________________________________ UPDATE THIS TO ALLOW SORTING BY PROPERTY NAME
         self.prop_legend_df = pd_DataFrame(PropertiesCMaps.prop_cmap_dict)
         self.prop_legend = PropertiesCMaps()
         self.prop_legend.update_widget(parent=self)
-
 
     def save_project(self):
         """Save project to file and folder"""
@@ -856,7 +897,8 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         if not self.out_file_name:
             return
         out_dir_name = self.out_file_name[:-3] + '_p0/rev_' + now
-        self.TextTerminal.appendPlainText(("Saving project as VTK files and csv tables with metada and legend.\n" + "In file/folder: """ + self.out_file_name + " / " + out_dir_name + "\n"))
+        self.TextTerminal.appendPlainText((
+                                                      "Saving project as VTK files and csv tables with metada and legend.\n" + "In file/folder: """ + self.out_file_name + " / " + out_dir_name + "\n"))
         """Create the folder if it does not exist already."""
         if not os.path.isdir(self.out_file_name[:-3] + '_p0'):
             os.mkdir(self.out_file_name[:-3] + '_p0')
@@ -889,19 +931,23 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         """--------------------- SAVE tables ---------------------"""
 
         """Save x_section table to JSON file."""
-        out_cols = list(self.entities_db.collection_by_name("xsect").df.columns)
+        out_cols = list(self.entities_db.collection_by_name("xsect")._df.columns)
         out_cols.remove('vtk_plane')
         out_cols.remove('vtk_frame')
-        self.entities_db.collection_by_name("xsect").df[out_cols].to_json(out_dir_name + '/xsection_table.json', orient='index')
+        self.entities_db.collection_by_name("xsect")._df[out_cols].to_json(out_dir_name + '/xsection_table.json',
+                                                                           orient='index')
         # self.entities_db.collection_by_name("xsect").df[out_cols].to_csv(out_dir_name + '/xsection_table.csv', encoding='utf-8', index=False)
 
         """Save geological collection table to JSON file and entities as VTK."""
-        out_cols = list(self.entities_db.collection_by_name("geol").df.columns)
+        out_cols = list(self.entities_db.collection_by_name("geol")._df.columns)
         out_cols.remove('vtk_obj')
-        self.entities_db.collection_by_name("geol").df[out_cols].to_json(out_dir_name + '/geological_table.json', orient='index')
+        self.entities_db.collection_by_name("geol")._df[out_cols].to_json(out_dir_name + '/geological_table.json',
+                                                                          orient='index')
         # self.entities_db.collection_by_name("geol").df[out_cols].to_csv(out_dir_name + '/geological_table.csv', encoding='utf-8', index=False)
-        prgs_bar = progress_dialog(max_value=self.entities_db.collection_by_name("geol").df.shape[0], title_txt="Save geology", label_txt="Saving geological objects...", cancel_txt=None, parent=self)
-        for uid in self.entities_db.collection_by_name("geol").df['uid'].to_list():
+        prgs_bar = progress_dialog(max_value=self.entities_db.collection_by_name("geol")._df.shape[0],
+                                   title_txt="Save geology", label_txt="Saving geological objects...", cancel_txt=None,
+                                   parent=self)
+        for uid in self.entities_db.collection_by_name("geol")._df['uid'].to_list():
             pd_writer = vtkXMLPolyDataWriter()
             pd_writer.SetFileName(out_dir_name + "/" + uid + ".vtp")
             pd_writer.SetInputData(self.entities_db.collection_by_name("geol").get_uid_vtk_obj(uid))
@@ -909,25 +955,32 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             prgs_bar.add_one()
 
         """Save DOM collection table to JSON file and entities as VTK."""
-        out_cols = list(self.entities_db.collection_by_name("dom").df.columns)
+        out_cols = list(self.entities_db.collection_by_name("dom")._df.columns)
         out_cols.remove('vtk_obj')
-        self.entities_db.collection_by_name("dom").df[out_cols].to_json(out_dir_name + '/dom_table.json', orient='index')
+        self.entities_db.collection_by_name("dom")._df[out_cols].to_json(out_dir_name + '/dom_table.json',
+                                                                         orient='index')
         # self.entities_db.collection_by_name("dom").df[out_cols].to_csv(out_dir_name + '/dom_table.csv', encoding='utf-8', index=False)
-        prgs_bar = progress_dialog(max_value=self.entities_db.collection_by_name("dom").df.shape[0], title_txt="Save DOM", label_txt="Saving DOM objects...", cancel_txt=None, parent=self)
-        for uid in self.entities_db.collection_by_name("dom").df['uid'].to_list():
-            if self.entities_db.collection_by_name("dom").df.loc[self.entities_db.collection_by_name("dom").df['uid'] == uid, 'dom_type'].values[0] == "DEM":
+        prgs_bar = progress_dialog(max_value=self.entities_db.collection_by_name("dom")._df.shape[0],
+                                   title_txt="Save DOM", label_txt="Saving DOM objects...", cancel_txt=None,
+                                   parent=self)
+        for uid in self.entities_db.collection_by_name("dom")._df['uid'].to_list():
+            if self.entities_db.collection_by_name("dom")._df.loc[
+                self.entities_db.collection_by_name("dom")._df['uid'] == uid, 'dom_type'].values[0] == "DEM":
                 sg_writer = vtkXMLStructuredGridWriter()
                 sg_writer.SetFileName(out_dir_name + "/" + uid + ".vts")
                 sg_writer.SetInputData(self.entities_db.collection_by_name("dom").get_uid_vtk_obj(uid))
                 sg_writer.Write()
                 prgs_bar.add_one()
-            elif self.entities_db.collection_by_name("dom").df.loc[self.entities_db.collection_by_name("dom").df['uid'] == uid, 'dom_type'].values[0] == "DomXs":
+            elif self.entities_db.collection_by_name("dom")._df.loc[
+                self.entities_db.collection_by_name("dom")._df['uid'] == uid, 'dom_type'].values[0] == "DomXs":
                 pl_writer = vtkXMLPolyDataWriter()
                 pl_writer.SetFileName(out_dir_name + "/" + uid + ".vtp")
                 pl_writer.SetInputData(self.entities_db.collection_by_name("dom").get_uid_vtk_obj(uid))
                 pl_writer.Write()
                 prgs_bar.add_one()
-            elif self.entities_db.collection_by_name("dom").df.loc[self.entities_db.collection_by_name("dom").df['uid'] == uid, 'dom_type'].values[0] == "PCDom":  # _____________ PROBABLY THE SAME WILL WORK FOR TSDOMs
+            elif self.entities_db.collection_by_name("dom")._df.loc[
+                self.entities_db.collection_by_name("dom")._df['uid'] == uid, 'dom_type'].values[
+                0] == "PCDom":  # _____________ PROBABLY THE SAME WILL WORK FOR TSDOMs
                 """Save PCDOm collection entities as VTK"""
                 pd_writer = vtkXMLPolyDataWriter()
                 pd_writer.SetFileName(out_dir_name + "/" + uid + ".vtp")
@@ -936,32 +989,44 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 prgs_bar.add_one()
 
         """Save image collection table to JSON file and entities as VTK."""
-        out_cols = list(self.entities_db.collection_by_name("image").df.columns)
+        out_cols = list(self.entities_db.collection_by_name("image")._df.columns)
         out_cols.remove('vtk_obj')
-        self.entities_db.collection_by_name("image").df[out_cols].to_json(out_dir_name + '/image_table.json', orient='index')
+        self.entities_db.collection_by_name("image")._df[out_cols].to_json(out_dir_name + '/image_table.json',
+                                                                           orient='index')
         # self.entities_db.collection_by_name("image").df[out_cols].to_csv(out_dir_name + '/image_table.csv', encoding='utf-8', index=False)
-        prgs_bar = progress_dialog(max_value=self.entities_db.collection_by_name("image").df.shape[0], title_txt="Save image", label_txt="Saving image objects...", cancel_txt=None, parent=self)
-        for uid in self.entities_db.collection_by_name("image").df['uid'].to_list():
-            if self.entities_db.collection_by_name("image").df.loc[self.entities_db.collection_by_name("image").df['uid'] == uid, 'image_type'].values[0] in ["MapImage", "XsImage", "TSDomImage"]:
+        prgs_bar = progress_dialog(max_value=self.entities_db.collection_by_name("image")._df.shape[0],
+                                   title_txt="Save image", label_txt="Saving image objects...", cancel_txt=None,
+                                   parent=self)
+        for uid in self.entities_db.collection_by_name("image")._df['uid'].to_list():
+            if self.entities_db.collection_by_name("image")._df.loc[
+                self.entities_db.collection_by_name("image")._df['uid'] == uid, 'image_type'].values[0] in ["MapImage",
+                                                                                                           "XsImage",
+                                                                                                           "TSDomImage"]:
                 im_writer = vtkXMLImageDataWriter()
                 im_writer.SetFileName(out_dir_name + "/" + uid + ".vti")
                 im_writer.SetInputData(self.entities_db.collection_by_name("image").get_uid_vtk_obj(uid))
                 im_writer.Write()
                 prgs_bar.add_one()
-            elif self.entities_db.collection_by_name("image").df.loc[self.entities_db.collection_by_name("image").df['uid'] == uid, 'image_type'].values[0] in ["Seismics"]:
+            elif self.entities_db.collection_by_name("image")._df.loc[
+                self.entities_db.collection_by_name("image")._df['uid'] == uid, 'image_type'].values[0] in ["Seismics"]:
                 sg_writer = vtkXMLStructuredGridWriter()
                 sg_writer.SetFileName(out_dir_name + "/" + uid + ".vts")
                 sg_writer.SetInputData(self.entities_db.collection_by_name("image").get_uid_vtk_obj(uid))
                 sg_writer.Write()
 
         """Save mesh3d collection table to JSON file and entities as VTK."""
-        out_cols = list(self.entities_db.collection_by_name("mesh3d").df.columns)
+        out_cols = list(self.entities_db.collection_by_name("mesh3d")._df.columns)
         out_cols.remove('vtk_obj')
-        self.entities_db.collection_by_name("mesh3d").df[out_cols].to_json(out_dir_name + '/mesh3d_table.json', orient='index')
+        self.entities_db.collection_by_name("mesh3d")._df[out_cols].to_json(out_dir_name + '/mesh3d_table.json',
+                                                                            orient='index')
         # self.entities_db.collection_by_name("mesh3d").df[out_cols].to_csv(out_dir_name + '/mesh3d_table.csv', encoding='utf-8', index=False)
-        prgs_bar = progress_dialog(max_value=self.entities_db.collection_by_name("mesh3d").df.shape[0], title_txt="Save 3D mesh", label_txt="Saving 3D mesh objects...", cancel_txt=None, parent=self)
-        for uid in self.entities_db.collection_by_name("mesh3d").df['uid'].to_list():
-            if self.entities_db.collection_by_name("mesh3d").df.loc[self.entities_db.collection_by_name("mesh3d").df['uid'] == uid, 'mesh3d_type'].values[0] in ["Voxet", "XsVoxet"]:
+        prgs_bar = progress_dialog(max_value=self.entities_db.collection_by_name("mesh3d")._df.shape[0],
+                                   title_txt="Save 3D mesh", label_txt="Saving 3D mesh objects...", cancel_txt=None,
+                                   parent=self)
+        for uid in self.entities_db.collection_by_name("mesh3d")._df['uid'].to_list():
+            if self.entities_db.collection_by_name("mesh3d")._df.loc[
+                self.entities_db.collection_by_name("mesh3d")._df['uid'] == uid, 'mesh3d_type'].values[0] in ["Voxet",
+                                                                                                             "XsVoxet"]:
                 im_writer = vtkXMLImageDataWriter()
                 im_writer.SetFileName(out_dir_name + "/" + uid + ".vti")
                 im_writer.SetInputData(self.entities_db.collection_by_name("mesh3d").get_uid_vtk_obj(uid))
@@ -969,12 +1034,15 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             prgs_bar.add_one()
 
         """Save boundaries collection table to JSON file and entities as VTK."""
-        out_cols = list(self.entities_db.collection_by_name("boundary").df.columns)
+        out_cols = list(self.entities_db.collection_by_name("boundary")._df.columns)
         out_cols.remove('vtk_obj')
-        self.entities_db.collection_by_name("boundary").df[out_cols].to_json(out_dir_name + '/boundary_table.json', orient='index')
+        self.entities_db.collection_by_name("boundary")._df[out_cols].to_json(out_dir_name + '/boundary_table.json',
+                                                                              orient='index')
         # self.entities_db.collection_by_name("boundary").df[out_cols].to_csv(out_dir_name + '/boundary_table.csv', encoding='utf-8', index=False)
-        prgs_bar = progress_dialog(max_value=self.entities_db.collection_by_name("boundary").df.shape[0], title_txt="Save boundary", label_txt="Saving boundary objects...", cancel_txt=None, parent=self)
-        for uid in self.entities_db.collection_by_name("boundary").df['uid'].to_list():
+        prgs_bar = progress_dialog(max_value=self.entities_db.collection_by_name("boundary")._df.shape[0],
+                                   title_txt="Save boundary", label_txt="Saving boundary objects...", cancel_txt=None,
+                                   parent=self)
+        for uid in self.entities_db.collection_by_name("boundary")._df['uid'].to_list():
             pd_writer = vtkXMLPolyDataWriter()
             pd_writer.SetFileName(out_dir_name + "/" + uid + ".vtp")
             pd_writer.SetInputData(self.entities_db.collection_by_name("boundary").get_uid_vtk_obj(uid))
@@ -983,12 +1051,13 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
 
         """Save wells collection table to JSON file and entities as VTK."""
 
-        out_cols = list(self.well_coll.df.columns)
+        out_cols = list(self.well_coll._df.columns)
         out_cols.remove('vtk_obj')
-        self.well_coll.df[out_cols].to_json(out_dir_name + '/well_table.json', orient='index')
+        self.well_coll._df[out_cols].to_json(out_dir_name + '/well_table.json', orient='index')
         # self.entities_db.collection_by_name("boundary").df[out_cols].to_csv(out_dir_name + '/boundary_table.csv', encoding='utf-8', index=False)
-        prgs_bar = progress_dialog(max_value=self.well_coll.df.shape[0], title_txt="Save wells", label_txt="Saving well objects...", cancel_txt=None, parent=self)
-        for uid in self.well_coll.df['uid'].to_list():
+        prgs_bar = progress_dialog(max_value=self.well_coll._df.shape[0], title_txt="Save wells",
+                                   label_txt="Saving well objects...", cancel_txt=None, parent=self)
+        for uid in self.well_coll._df['uid'].to_list():
             pd_writer = vtkXMLPolyDataWriter()
             pd_writer.SetFileName(out_dir_name + "/" + uid + ".vtp")
             pd_writer.SetInputData(self.well_coll.get_uid_vtk_obj(uid))
@@ -996,12 +1065,13 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             prgs_bar.add_one()
 
         """Save fluids collection table to JSON file and entities as VTK."""
-        out_cols = list(self.fluids_coll.df.columns)
+        out_cols = list(self.fluids_coll._df.columns)
         out_cols.remove('vtk_obj')
-        self.fluids_coll.df[out_cols].to_json(out_dir_name + '/fluids_table.json', orient='index')
+        self.fluids_coll._df[out_cols].to_json(out_dir_name + '/fluids_table.json', orient='index')
         # self.entities_db.collection_by_name("geol").df[out_cols].to_csv(out_dir_name + '/geological_table.csv', encoding='utf-8', index=False)
-        prgs_bar = progress_dialog(max_value=self.fluids_coll.df.shape[0], title_txt="Save fluids", label_txt="Saving fluid objects...", cancel_txt=None, parent=self)
-        for uid in self.fluids_coll.df['uid'].to_list():
+        prgs_bar = progress_dialog(max_value=self.fluids_coll._df.shape[0], title_txt="Save fluids",
+                                   label_txt="Saving fluid objects...", cancel_txt=None, parent=self)
+        for uid in self.fluids_coll._df['uid'].to_list():
             pd_writer = vtkXMLPolyDataWriter()
             pd_writer.SetFileName(out_dir_name + "/" + uid + ".vtp")
             pd_writer.SetInputData(self.fluids_coll.get_uid_vtk_obj(uid))
@@ -1009,24 +1079,26 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             prgs_bar.add_one()
 
         """Save Backgrounds collection table to JSON file and entities as VTK."""
-        out_cols = list(self.backgrounds_coll.df.columns)
+        out_cols = list(self.backgrounds_coll._df.columns)
         out_cols.remove('vtk_obj')
-        self.backgrounds_coll.df[out_cols].to_json(out_dir_name + '/backgrounds_table.json', orient='index')
+        self.backgrounds_coll._df[out_cols].to_json(out_dir_name + '/backgrounds_table.json', orient='index')
         # self.entities_db.collection_by_name("geol").df[out_cols].to_csv(out_dir_name + '/geological_table.csv', encoding='utf-8', index=False)
-        prgs_bar = progress_dialog(max_value=self.backgrounds_coll.df.shape[0], title_txt="Save Backgrounds", label_txt="Saving Backgrounds objects...", cancel_txt=None, parent=self)
-        for uid in self.backgrounds_coll.df['uid'].to_list():
+        prgs_bar = progress_dialog(max_value=self.backgrounds_coll._df.shape[0], title_txt="Save Backgrounds",
+                                   label_txt="Saving Backgrounds objects...", cancel_txt=None, parent=self)
+        for uid in self.backgrounds_coll._df['uid'].to_list():
             pd_writer = vtkXMLPolyDataWriter()
             pd_writer.SetFileName(out_dir_name + "/" + uid + ".vtp")
             pd_writer.SetInputData(self.backgrounds_coll.get_uid_vtk_obj(uid))
             pd_writer.Write()
             prgs_bar.add_one()
 
-
     def new_project(self):
         """Creates a new empty project, after having cleared all variables."""
         """Ask confirmation if the project already contains entities in the geological collection."""
         if self.entities_db.collection_by_name("geol").get_number_of_entities() > 0:
-            confirm_new = QMessageBox.question(self, 'New Project', 'Clear all entities and variables of the present project?', QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+            confirm_new = QMessageBox.question(self, 'New Project',
+                                               'Clear all entities and variables of the present project?',
+                                               QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
             if confirm_new == QMessageBox.No:
                 return
         """Create empty containers."""
@@ -1040,7 +1112,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
 
         """Create empty containers. This clears all previous objects and also allows for missing tables below."""
         if self.entities_db.collection_by_name("geol").get_number_of_entities() > 0:
-            confirm_new = QMessageBox.question(self, 'Open Project', 'Save all entities and variables of the present project?', QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+            confirm_new = QMessageBox.question(self, 'Open Project',
+                                               'Save all entities and variables of the present project?',
+                                               QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
             if confirm_new == QMessageBox.Yes:
                 self.save_project()
 
@@ -1070,11 +1144,14 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         """--------------------- READ LEGENDS ---------------------"""
 
         """Read geological legend tables."""
-        if os.path.isfile((in_dir_name + '/geol_legend_table.csv')) or os.path.isfile((in_dir_name + '/geol_legend_table.json')):
+        if os.path.isfile((in_dir_name + '/geol_legend_table.csv')) or os.path.isfile(
+                (in_dir_name + '/geol_legend_table.json')):
             if os.path.isfile((in_dir_name + '/geol_legend_table.json')):
-                new_geol_legend_df = pd_read_json(in_dir_name + '/geol_legend_table.json', orient='index', dtype=Legend.legend_type_dict)
+                new_geol_legend_df = pd_read_json(in_dir_name + '/geol_legend_table.json', orient='index',
+                                                  dtype=Legend.legend_type_dict)
             else:
-                new_geol_legend_df = pd_read_csv(in_dir_name + '/geol_legend_table.csv', encoding='utf-8', dtype=Legend.legend_type_dict, keep_default_na=False)
+                new_geol_legend_df = pd_read_csv(in_dir_name + '/geol_legend_table.csv', encoding='utf-8',
+                                                 dtype=Legend.legend_type_dict, keep_default_na=False)
             if not new_geol_legend_df.empty:
                 self.geol_legend_df = new_geol_legend_df
 
@@ -1087,15 +1164,16 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 self.geol_legend_df[diff] = Legend.geol_legend_dict[diff]
             self.geol_legend_df.sort_values(by='geological_time', ascending=True, inplace=True)
 
-
-
         """Read well legend tables."""
 
-        if os.path.isfile((in_dir_name + '/well_legend_table.csv')) or os.path.isfile((in_dir_name + '/well_legend_table.json')):
+        if os.path.isfile((in_dir_name + '/well_legend_table.csv')) or os.path.isfile(
+                (in_dir_name + '/well_legend_table.json')):
             if os.path.isfile((in_dir_name + '/well_legend_table.json')):
-                new_well_legend_df = pd_read_json(in_dir_name + '/well_legend_table.json', orient='index', dtype=Legend.legend_type_dict)
+                new_well_legend_df = pd_read_json(in_dir_name + '/well_legend_table.json', orient='index',
+                                                  dtype=Legend.legend_type_dict)
             else:
-                new_well_legend_df = pd_read_csv(in_dir_name + '/well_legend_table.csv', encoding='utf-8', dtype=Legend.legend_type_dict, keep_default_na=False)
+                new_well_legend_df = pd_read_csv(in_dir_name + '/well_legend_table.csv', encoding='utf-8',
+                                                 dtype=Legend.legend_type_dict, keep_default_na=False)
             if not new_well_legend_df.empty:
                 self.well_legend_df = new_well_legend_df
             in_keys = set(self.well_legend_df.keys())
@@ -1108,11 +1186,14 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             self.well_legend_df.sort_values(by='Loc ID', ascending=True, inplace=True)
         """Read fluids legend tables."""
 
-        if os.path.isfile((in_dir_name + '/fluids_legend_table.csv')) or os.path.isfile((in_dir_name + '/fluids_legend_table.json')):
+        if os.path.isfile((in_dir_name + '/fluids_legend_table.csv')) or os.path.isfile(
+                (in_dir_name + '/fluids_legend_table.json')):
             if os.path.isfile((in_dir_name + '/fluids_legend_table.json')):
-                new_fluids_legend_df = pd_read_json(in_dir_name + '/fluids_legend_table.json', orient='index', dtype=Legend.legend_type_dict)
+                new_fluids_legend_df = pd_read_json(in_dir_name + '/fluids_legend_table.json', orient='index',
+                                                    dtype=Legend.legend_type_dict)
             else:
-                new_fluids_legend_df = pd_read_csv(in_dir_name + '/fluids_legend_table.csv', encoding='utf-8', dtype=Legend.legend_type_dict, keep_default_na=False)
+                new_fluids_legend_df = pd_read_csv(in_dir_name + '/fluids_legend_table.csv', encoding='utf-8',
+                                                   dtype=Legend.legend_type_dict, keep_default_na=False)
             if not new_fluids_legend_df.empty:
                 self.fluids_legend_df = new_fluids_legend_df
             in_keys = set(self.fluids_legend_df.keys())
@@ -1124,14 +1205,16 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 self.fluids_legend_df[diff] = Legend.fluids_legend_dict[diff]
             self.fluids_legend_df.sort_values(by='fluid_time', ascending=True, inplace=True)
 
-
         """Read Backgrounds legend tables."""
 
-        if os.path.isfile((in_dir_name + '/backgrounds_legend_table.csv')) or os.path.isfile((in_dir_name + '/backgrounds_legend_table.json')):
+        if os.path.isfile((in_dir_name + '/backgrounds_legend_table.csv')) or os.path.isfile(
+                (in_dir_name + '/backgrounds_legend_table.json')):
             if os.path.isfile((in_dir_name + '/backgrounds_legend_table.json')):
-                new_backgrounds_legend_df = pd_read_json(in_dir_name + '/backgrounds_legend_table.json', orient='index', dtype=Legend.legend_type_dict)
+                new_backgrounds_legend_df = pd_read_json(in_dir_name + '/backgrounds_legend_table.json', orient='index',
+                                                         dtype=Legend.legend_type_dict)
             else:
-                new_backgrounds_legend_df = pd_read_csv(in_dir_name + '/backgrounds_legend_table.csv', encoding='utf-8', dtype=Legend.legend_type_dict, keep_default_na=False)
+                new_backgrounds_legend_df = pd_read_csv(in_dir_name + '/backgrounds_legend_table.csv', encoding='utf-8',
+                                                        dtype=Legend.legend_type_dict, keep_default_na=False)
             if not new_backgrounds_legend_df.empty:
                 self.backgrounds_legend_df = new_backgrounds_legend_df
             in_keys = set(self.backgrounds_legend_df.keys())
@@ -1144,11 +1227,14 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
 
         """Read other legend tables."""
 
-        if os.path.isfile((in_dir_name + '/others_legend_table.csv')) or os.path.isfile((in_dir_name + '/others_legend_table.json')):
+        if os.path.isfile((in_dir_name + '/others_legend_table.csv')) or os.path.isfile(
+                (in_dir_name + '/others_legend_table.json')):
             if os.path.isfile((in_dir_name + '/others_legend_table.json')):
-                new_others_legend_df = pd_read_json(in_dir_name + '/others_legend_table.json', orient='index', dtype=Legend.legend_type_dict)
+                new_others_legend_df = pd_read_json(in_dir_name + '/others_legend_table.json', orient='index',
+                                                    dtype=Legend.legend_type_dict)
             else:
-                new_others_legend_df = pd_read_csv(in_dir_name + '/others_legend_table.csv', encoding='utf-8', dtype=Legend.legend_type_dict, keep_default_na=False)
+                new_others_legend_df = pd_read_csv(in_dir_name + '/others_legend_table.csv', encoding='utf-8',
+                                                   dtype=Legend.legend_type_dict, keep_default_na=False)
             in_keys = set(self.others_legend_df.keys())
             def_keys = set(Legend.others_legend_dict.keys())
 
@@ -1157,15 +1243,15 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             for diff in diffs:
                 self.others_legend_df[diff] = Legend.others_legend_dict[diff]
 
-        if os.path.isfile((in_dir_name + '/prop_legend_df.csv')) or os.path.isfile((in_dir_name + '/prop_legend_df.json')):
+        if os.path.isfile((in_dir_name + '/prop_legend_df.csv')) or os.path.isfile(
+                (in_dir_name + '/prop_legend_df.json')):
             if os.path.isfile((in_dir_name + '/prop_legend_df.json')):
-                new_prop_legend_df = pd_read_json(in_dir_name + '/prop_legend_df.json', orient='index', dtype=PropertiesCMaps.prop_cmap_type_dict)
+                new_prop_legend_df = pd_read_json(in_dir_name + '/prop_legend_df.json', orient='index',
+                                                  dtype=PropertiesCMaps.prop_cmap_type_dict)
                 if not new_prop_legend_df.empty:
                     self.prop_legend_df = new_prop_legend_df
             else:
                 self.prop_legend.update_widget(parent=self)
-
-
 
         """Update all legends."""
         self.legend.update_widget(parent=self)
@@ -1173,19 +1259,24 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         """--------------------- READ TABLES ---------------------"""
 
         """Read x_section table and build cross-sections. Note beginResetModel() and endResetModel()."""
-        if os.path.isfile((in_dir_name + '/xsection_table.csv')) or os.path.isfile((in_dir_name + '/xsection_table.json')):
+        if os.path.isfile((in_dir_name + '/xsection_table.csv')) or os.path.isfile(
+                (in_dir_name + '/xsection_table.json')):
             self.entities_db.collection_by_name("xsect").beginResetModel()
             if os.path.isfile((in_dir_name + '/xsection_table.json')):
-                new_xsect_coll_df = pd_read_json(in_dir_name + '/xsection_table.json', orient='index', dtype=XSectionCollection().type_dict)
+                new_xsect_coll_df = pd_read_json(in_dir_name + '/xsection_table.json', orient='index',
+                                                 dtype=XSectionCollection().type_dict)
                 if not new_xsect_coll_df.empty:
                     if not 'dip' in new_xsect_coll_df:
                         new_xsect_coll_df.insert(12, 'dip', 90.0)
                     if not 'width' in new_xsect_coll_df:
                         new_xsect_coll_df.insert(14, 'width', new_xsect_coll_df.top - new_xsect_coll_df.bottom)
-                    self.entities_db.collection_by_name("xsect").df = new_xsect_coll_df
+                    self.entities_db.collection_by_name("xsect")._df = new_xsect_coll_df
             else:
-                self.entities_db.collection_by_name("xsect").df = pd_read_csv(in_dir_name + '/xsection_table.csv', encoding='utf-8', dtype=XSectionCollection().type_dict, keep_default_na=False)
-            for uid in self.entities_db.collection_by_name("xsect").df["uid"].tolist():
+                self.entities_db.collection_by_name("xsect")._df = pd_read_csv(in_dir_name + '/xsection_table.csv',
+                                                                               encoding='utf-8',
+                                                                               dtype=XSectionCollection().type_dict,
+                                                                               keep_default_na=False)
+            for uid in self.entities_db.collection_by_name("xsect")._df["uid"].tolist():
                 self.entities_db.collection_by_name("xsect").set_geometry(uid=uid)
             self.entities_db.collection_by_name("xsect").endResetModel()
 
@@ -1193,13 +1284,19 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         if os.path.isfile((in_dir_name + '/dom_table.csv')) or os.path.isfile((in_dir_name + '/dom_table.json')):
             self.entities_db.collection_by_name("dom").beginResetModel()
             if os.path.isfile((in_dir_name + '/dom_table.json')):
-                new_dom_coll_df = pd_read_json(in_dir_name + '/dom_table.json', orient='index', dtype=DomCollection().type_dict)
+                new_dom_coll_df = pd_read_json(in_dir_name + '/dom_table.json', orient='index',
+                                               dtype=DomCollection().type_dict)
                 if not new_dom_coll_df.empty:
-                    self.entities_db.collection_by_name("dom").df = new_dom_coll_df
+                    self.entities_db.collection_by_name("dom")._df = new_dom_coll_df
             else:
-                self.entities_db.collection_by_name("dom").df = pd_read_csv(in_dir_name + '/dom_table.csv', encoding='utf-8', dtype=DomCollection().entity_dict, keep_default_na=False)
-            prgs_bar = progress_dialog(max_value=self.entities_db.collection_by_name("dom").df.shape[0], title_txt="Open DOM", label_txt="Opening DOM objects...", cancel_txt=None, parent=self)
-            for uid in self.entities_db.collection_by_name("dom").df['uid'].to_list():
+                self.entities_db.collection_by_name("dom")._df = pd_read_csv(in_dir_name + '/dom_table.csv',
+                                                                             encoding='utf-8',
+                                                                             dtype=DomCollection().entity_dict,
+                                                                             keep_default_na=False)
+            prgs_bar = progress_dialog(max_value=self.entities_db.collection_by_name("dom")._df.shape[0],
+                                       title_txt="Open DOM", label_txt="Opening DOM objects...", cancel_txt=None,
+                                       parent=self)
+            for uid in self.entities_db.collection_by_name("dom")._df['uid'].to_list():
                 if self.entities_db.collection_by_name("dom").get_uid_dom_type(uid) == "DEM":
                     if not os.path.isfile((in_dir_name + "/" + uid + ".vts")):
                         print("error: missing VTK file")
@@ -1218,10 +1315,12 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     pl_reader.Update()
                     vtk_object.ShallowCopy(pl_reader.GetOutput())
                     vtk_object.Modified()
-                elif self.entities_db.collection_by_name("dom").df.loc[self.entities_db.collection_by_name("dom").df['uid'] == uid, 'dom_type'].values[0] == 'TSDom':
+                elif self.entities_db.collection_by_name("dom")._df.loc[
+                    self.entities_db.collection_by_name("dom")._df['uid'] == uid, 'dom_type'].values[0] == 'TSDom':
                     """Add code to read TSDOM here__________"""
                     vtk_object = TSDom()
-                elif self.entities_db.collection_by_name("dom").df.loc[self.entities_db.collection_by_name("dom").df['uid'] == uid, 'dom_type'].values[0] == 'PCDom':
+                elif self.entities_db.collection_by_name("dom")._df.loc[
+                    self.entities_db.collection_by_name("dom")._df['uid'] == uid, 'dom_type'].values[0] == 'PCDom':
                     """Open saved PCDoms data"""
                     vtk_object = PCDom()
                     pd_reader = vtkXMLPolyDataReader()
@@ -1237,14 +1336,22 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         if os.path.isfile((in_dir_name + '/image_table.csv')) or os.path.isfile((in_dir_name + '/image_table.json')):
             self.entities_db.collection_by_name("image").beginResetModel()
             if os.path.isfile((in_dir_name + '/image_table.json')):
-                new_image_coll_df = pd_read_json(in_dir_name + '/image_table.json', orient='index', dtype=ImageCollection().entity_dict)
+                new_image_coll_df = pd_read_json(in_dir_name + '/image_table.json', orient='index',
+                                                 dtype=ImageCollection().entity_dict)
                 if not new_image_coll_df.empty:
-                    self.entities_db.collection_by_name("image").df = new_image_coll_df
+                    self.entities_db.collection_by_name("image")._df = new_image_coll_df
             else:
-                self.entities_db.collection_by_name("image").df = pd_read_csv(in_dir_name + '/image_table.csv', encoding='utf-8', dtype=ImageCollection().entity_dict, keep_default_na=False)
-            prgs_bar = progress_dialog(max_value=self.entities_db.collection_by_name("image").df.shape[0], title_txt="Open image", label_txt="Opening image objects...", cancel_txt=None, parent=self)
-            for uid in self.entities_db.collection_by_name("image").df['uid'].to_list():
-                if self.entities_db.collection_by_name("image").df.loc[self.entities_db.collection_by_name("image").df['uid'] == uid, 'image_type'].values[0] in ["MapImage", "TSDomImage"]:
+                self.entities_db.collection_by_name("image")._df = pd_read_csv(in_dir_name + '/image_table.csv',
+                                                                               encoding='utf-8',
+                                                                               dtype=ImageCollection().entity_dict,
+                                                                               keep_default_na=False)
+            prgs_bar = progress_dialog(max_value=self.entities_db.collection_by_name("image")._df.shape[0],
+                                       title_txt="Open image", label_txt="Opening image objects...", cancel_txt=None,
+                                       parent=self)
+            for uid in self.entities_db.collection_by_name("image")._df['uid'].to_list():
+                if self.entities_db.collection_by_name("image")._df.loc[
+                    self.entities_db.collection_by_name("image")._df['uid'] == uid, 'image_type'].values[0] in [
+                    "MapImage", "TSDomImage"]:
                     if not os.path.isfile((in_dir_name + "/" + uid + ".vti")):
                         print("error: missing image file")
                         return
@@ -1254,17 +1361,22 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     im_reader.Update()
                     vtk_object.ShallowCopy(im_reader.GetOutput())
                     vtk_object.Modified()
-                elif self.entities_db.collection_by_name("image").df.loc[self.entities_db.collection_by_name("image").df['uid'] == uid, 'image_type'].values[0] in ["XsImage"]:
+                elif self.entities_db.collection_by_name("image")._df.loc[
+                    self.entities_db.collection_by_name("image")._df['uid'] == uid, 'image_type'].values[0] in [
+                    "XsImage"]:
                     if not os.path.isfile((in_dir_name + "/" + uid + ".vti")):
                         print("error: missing image file")
                         return
-                    vtk_object = XsImage(parent=self,x_section_uid=self.entities_db.collection_by_name("image").df.loc[self.entities_db.collection_by_name("image").df['uid'] == uid, 'x_section'].values[0])
+                    vtk_object = XsImage(parent=self, x_section_uid=self.entities_db.collection_by_name("image")._df.loc[
+                        self.entities_db.collection_by_name("image")._df['uid'] == uid, 'x_section'].values[0])
                     im_reader = vtkXMLImageDataReader()
                     im_reader.SetFileName(in_dir_name + "/" + uid + ".vti")
                     im_reader.Update()
                     vtk_object.ShallowCopy(im_reader.GetOutput())
                     vtk_object.Modified()
-                elif self.entities_db.collection_by_name("image").df.loc[self.entities_db.collection_by_name("image").df['uid'] == uid, 'image_type'].values[0] in ["Seismics"]:
+                elif self.entities_db.collection_by_name("image")._df.loc[
+                    self.entities_db.collection_by_name("image")._df['uid'] == uid, 'image_type'].values[0] in [
+                    "Seismics"]:
                     if not os.path.isfile((in_dir_name + "/" + uid + ".vts")):
                         print("error: missing VTK file")
                         return
@@ -1282,14 +1394,22 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         if os.path.isfile((in_dir_name + '/mesh3d_table.csv')) or os.path.isfile((in_dir_name + '/mesh3d_table.json')):
             self.entities_db.collection_by_name("mesh3d").beginResetModel()
             if os.path.isfile((in_dir_name + '/mesh3d_table.json')):
-                new_mesh3d_coll_df = pd_read_json(in_dir_name + '/mesh3d_table.json', orient='index', dtype=Mesh3DCollection().entity_dict)
+                new_mesh3d_coll_df = pd_read_json(in_dir_name + '/mesh3d_table.json', orient='index',
+                                                  dtype=Mesh3DCollection().entity_dict)
                 if not new_mesh3d_coll_df.empty:
-                    self.entities_db.collection_by_name("mesh3d").df = new_mesh3d_coll_df
+                    self.entities_db.collection_by_name("mesh3d")._df = new_mesh3d_coll_df
             else:
-                self.entities_db.collection_by_name("mesh3d").df = pd_read_csv(in_dir_name + '/mesh3d_table.csv', encoding='utf-8', dtype=Mesh3DCollection().entity_dict, keep_default_na=False)
-            prgs_bar = progress_dialog(max_value=self.entities_db.collection_by_name("mesh3d").df.shape[0], title_txt="Open 3D mesh", label_txt="Opening 3D mesh objects...", cancel_txt=None, parent=self)
-            for uid in self.entities_db.collection_by_name("mesh3d").df['uid'].to_list():
-                if self.entities_db.collection_by_name("mesh3d").df.loc[self.entities_db.collection_by_name("mesh3d").df['uid'] == uid, 'mesh3d_type'].values[0] in ["Voxet"]:
+                self.entities_db.collection_by_name("mesh3d")._df = pd_read_csv(in_dir_name + '/mesh3d_table.csv',
+                                                                                encoding='utf-8',
+                                                                                dtype=Mesh3DCollection().entity_dict,
+                                                                                keep_default_na=False)
+            prgs_bar = progress_dialog(max_value=self.entities_db.collection_by_name("mesh3d")._df.shape[0],
+                                       title_txt="Open 3D mesh", label_txt="Opening 3D mesh objects...",
+                                       cancel_txt=None, parent=self)
+            for uid in self.entities_db.collection_by_name("mesh3d")._df['uid'].to_list():
+                if self.entities_db.collection_by_name("mesh3d")._df.loc[
+                    self.entities_db.collection_by_name("mesh3d")._df['uid'] == uid, 'mesh3d_type'].values[0] in [
+                    "Voxet"]:
                     if not os.path.isfile((in_dir_name + "/" + uid + ".vti")):
                         print("error: missing .mesh3d file")
                         return
@@ -1299,11 +1419,15 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     im_reader.Update()
                     vtk_object.ShallowCopy(im_reader.GetOutput())
                     vtk_object.Modified()
-                elif self.entities_db.collection_by_name("mesh3d").df.loc[self.entities_db.collection_by_name("mesh3d").df['uid'] == uid, 'mesh3d_type'].values[0] in ["XsVoxet"]:
+                elif self.entities_db.collection_by_name("mesh3d")._df.loc[
+                    self.entities_db.collection_by_name("mesh3d")._df['uid'] == uid, 'mesh3d_type'].values[0] in [
+                    "XsVoxet"]:
                     if not os.path.isfile((in_dir_name + "/" + uid + ".vti")):
                         print("error: missing .mesh3d file")
                         return
-                    vtk_object = XsVoxet(x_section_uid=self.entities_db.collection_by_name("mesh3d").df.loc[self.entities_db.collection_by_name("mesh3d").df['uid'] == uid, 'x_section'].values[0], parent=self)
+                    vtk_object = XsVoxet(x_section_uid=self.entities_db.collection_by_name("mesh3d")._df.loc[
+                        self.entities_db.collection_by_name("mesh3d")._df['uid'] == uid, 'x_section'].values[0],
+                                         parent=self)
                     im_reader = vtkXMLImageDataReader()
                     im_reader.SetFileName(in_dir_name + "/" + uid + ".vti")
                     im_reader.Update()
@@ -1314,16 +1438,23 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             self.entities_db.collection_by_name("mesh3d").endResetModel()
 
         """Read boundaries collection and files"""
-        if os.path.isfile((in_dir_name + '/boundary_table.csv')) or os.path.isfile((in_dir_name + '/boundary_table.json')):
+        if os.path.isfile((in_dir_name + '/boundary_table.csv')) or os.path.isfile(
+                (in_dir_name + '/boundary_table.json')):
             self.entities_db.collection_by_name("boundary").beginResetModel()
             if os.path.isfile((in_dir_name + '/boundary_table.json')):
-                new_boundary_coll_df = pd_read_json(in_dir_name + '/boundary_table.json', orient='index', dtype=BoundaryCollection().entity_dict)
+                new_boundary_coll_df = pd_read_json(in_dir_name + '/boundary_table.json', orient='index',
+                                                    dtype=BoundaryCollection().entity_dict)
                 if not new_boundary_coll_df.empty:
-                    self.entities_db.collection_by_name("boundary").df = new_boundary_coll_df
+                    self.entities_db.collection_by_name("boundary")._df = new_boundary_coll_df
             else:
-                self.entities_db.collection_by_name("boundary").df = pd_read_csv(in_dir_name + '/boundary_table.csv', encoding='utf-8', dtype=BoundaryCollection().entity_dict, keep_default_na=False)
-            prgs_bar = progress_dialog(max_value=self.entities_db.collection_by_name("boundary").df.shape[0], title_txt="Open boundary", label_txt="Opening boundary objects...", cancel_txt=None, parent=self)
-            for uid in self.entities_db.collection_by_name("boundary").df['uid'].to_list():
+                self.entities_db.collection_by_name("boundary")._df = pd_read_csv(in_dir_name + '/boundary_table.csv',
+                                                                                  encoding='utf-8',
+                                                                                  dtype=BoundaryCollection().entity_dict,
+                                                                                  keep_default_na=False)
+            prgs_bar = progress_dialog(max_value=self.entities_db.collection_by_name("boundary")._df.shape[0],
+                                       title_txt="Open boundary", label_txt="Opening boundary objects...",
+                                       cancel_txt=None, parent=self)
+            for uid in self.entities_db.collection_by_name("boundary")._df['uid'].to_list():
                 if not os.path.isfile((in_dir_name + "/" + uid + ".vtp")):
                     print("error: missing VTK file")
                     return
@@ -1344,13 +1475,16 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         if os.path.isfile((in_dir_name + '/well_table.csv')) or os.path.isfile((in_dir_name + '/well_table.json')):
             self.well_coll.beginResetModel()
             if os.path.isfile((in_dir_name + '/well_table.json')):
-                new_well_coll_df = pd_read_json(in_dir_name + '/well_table.json', orient='index', dtype=WellCollection().entity_dict)
+                new_well_coll_df = pd_read_json(in_dir_name + '/well_table.json', orient='index',
+                                                dtype=WellCollection().entity_dict)
                 if not new_well_coll_df.empty:
-                    self.well_coll.df = new_well_coll_df
+                    self.well_coll._df = new_well_coll_df
             else:
-                self.well_coll.df = pd_read_csv(in_dir_name + '/well_table.csv', encoding='utf-8', dtype=WellCollection().entity_dict, keep_default_na=False)
-            prgs_bar = progress_dialog(max_value=self.well_coll.df.shape[0], title_txt="Open wells", label_txt="Opening well objects...", cancel_txt=None, parent=self)
-            for uid in self.well_coll.df['uid'].to_list():
+                self.well_coll._df = pd_read_csv(in_dir_name + '/well_table.csv', encoding='utf-8',
+                                                 dtype=WellCollection().entity_dict, keep_default_na=False)
+            prgs_bar = progress_dialog(max_value=self.well_coll._df.shape[0], title_txt="Open wells",
+                                       label_txt="Opening well objects...", cancel_txt=None, parent=self)
+            for uid in self.well_coll._df['uid'].to_list():
                 if not os.path.isfile((in_dir_name + "/" + uid + ".vtp")):
                     print("error: missing VTK file")
                     return
@@ -1360,33 +1494,38 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 pd_reader.Update()
                 vtk_object.trace = pd_reader.GetOutput()
 
-
                 self.well_coll.set_uid_vtk_obj(uid=uid, vtk_obj=vtk_object.trace)
-                #Don't know if I like it.
-                #Maybe it's better to always add to the vtkobject column the
+                # Don't know if I like it.
+                # Maybe it's better to always add to the vtkobject column the
                 # Well and not the WellTrace instance and then call well.trace/head where needed
                 prgs_bar.add_one()
             self.well_coll.endResetModel()
         self.prop_legend.update_widget(parent=self)
 
-
         """Read geological table and files. Note beginResetModel() and endResetModel()."""
-        if os.path.isfile((in_dir_name + '/geological_table.csv')) or os.path.isfile((in_dir_name + '/geological_table.json')):
+        if os.path.isfile((in_dir_name + '/geological_table.csv')) or os.path.isfile(
+                (in_dir_name + '/geological_table.json')):
             self.entities_db.collection_by_name("geol").beginResetModel()
             if os.path.isfile((in_dir_name + '/geological_table.json')):
-                new_geol_coll_df = pd_read_json(in_dir_name + '/geological_table.json', orient='index', dtype=GeologicalCollection().entity_dict)
+                new_geol_coll_df = pd_read_json(in_dir_name + '/geological_table.json', orient='index',
+                                                dtype=GeologicalCollection().type_dict)
                 if not new_geol_coll_df.empty:
-                    self.entities_db.collection_by_name("geol").df = new_geol_coll_df
+                    self.entities_db.collection_by_name("geol")._df = new_geol_coll_df
             else:
-                self.entities_db.collection_by_name("geol").df = pd_read_csv(in_dir_name + '/geological_table.csv', encoding='utf-8', dtype=GeologicalCollection().entity_dict, keep_default_na=False)
-            prgs_bar = progress_dialog(max_value=self.entities_db.collection_by_name("geol").df.shape[0], title_txt="Open geology", label_txt="Opening geological objects...", cancel_txt=None, parent=self)
-            for uid in self.entities_db.collection_by_name("geol").df['uid'].to_list():
+                self.entities_db.collection_by_name("geol")._df = pd_read_csv(in_dir_name + '/geological_table.csv',
+                                                                              encoding='utf-8',
+                                                                              dtype=GeologicalCollection().type_dict,
+                                                                              keep_default_na=False)
+            prgs_bar = progress_dialog(max_value=self.entities_db.collection_by_name("geol")._df.shape[0],
+                                       title_txt="Open geology", label_txt="Opening geological objects...",
+                                       cancel_txt=None, parent=self)
+            for uid in self.entities_db.collection_by_name("geol")._df['uid'].to_list():
                 if not os.path.isfile((in_dir_name + "/" + uid + ".vtp")):
                     print("error: missing VTK file")
                     return
                 if self.entities_db.collection_by_name("geol").get_uid_topological_type(uid) == 'VertexSet':
                     if 'dip' in self.entities_db.collection_by_name("geol").get_uid_properties_names(uid):
-                        vtk_object=Attitude()
+                        vtk_object = Attitude()
                     else:
                         vtk_object = VertexSet()
                 elif self.entities_db.collection_by_name("geol").get_uid_topological_type(uid) == 'PolyLine':
@@ -1394,9 +1533,11 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 elif self.entities_db.collection_by_name("geol").get_uid_topological_type(uid) == 'TriSurf':
                     vtk_object = TriSurf()
                 elif self.entities_db.collection_by_name("geol").get_uid_topological_type(uid) == 'XsVertexSet':
-                    vtk_object = XsVertexSet(self.entities_db.collection_by_name("geol").get_uid_x_section(uid), parent=self)
+                    vtk_object = XsVertexSet(self.entities_db.collection_by_name("geol").get_uid_x_section(uid),
+                                             parent=self)
                 elif self.entities_db.collection_by_name("geol").get_uid_topological_type(uid) == 'XsPolyLine':
-                    vtk_object = XsPolyLine(self.entities_db.collection_by_name("geol").get_uid_x_section(uid), parent=self)
+                    vtk_object = XsPolyLine(self.entities_db.collection_by_name("geol").get_uid_x_section(uid),
+                                            parent=self)
                 pd_reader = vtkXMLPolyDataReader()
                 pd_reader.SetFileName(in_dir_name + "/" + uid + ".vtp")
                 pd_reader.Update()
@@ -1412,13 +1553,16 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         if os.path.isfile((in_dir_name + '/fluids_table.csv')) or os.path.isfile((in_dir_name + '/fluids_table.json')):
             self.fluids_coll.beginResetModel()
             if os.path.isfile((in_dir_name + '/fluids_table.json')):
-                new_fluids_coll_df = pd_read_json(in_dir_name + '/fluids_table.json', orient='index', dtype=FluidsCollection().entity_dict)
+                new_fluids_coll_df = pd_read_json(in_dir_name + '/fluids_table.json', orient='index',
+                                                  dtype=FluidsCollection().entity_dict)
                 if not new_fluids_coll_df.empty:
-                    self.fluids_coll.df = new_fluids_coll_df
+                    self.fluids_coll._df = new_fluids_coll_df
             else:
-                self.fluids_coll.df = pd_read_csv(in_dir_name + '/fluids_table.csv', encoding='utf-8', dtype=FluidsCollection().entity_dict, keep_default_na=False)
-            prgs_bar = progress_dialog(max_value=self.fluids_coll.df.shape[0], title_txt="Open fluids", label_txt="Opening fluid objects...", cancel_txt=None, parent=self)
-            for uid in self.fluids_coll.df['uid'].to_list():
+                self.fluids_coll._df = pd_read_csv(in_dir_name + '/fluids_table.csv', encoding='utf-8',
+                                                   dtype=FluidsCollection().entity_dict, keep_default_na=False)
+            prgs_bar = progress_dialog(max_value=self.fluids_coll._df.shape[0], title_txt="Open fluids",
+                                       label_txt="Opening fluid objects...", cancel_txt=None, parent=self)
+            for uid in self.fluids_coll._df['uid'].to_list():
                 if not os.path.isfile((in_dir_name + "/" + uid + ".vtp")):
                     print("error: missing VTK file")
                     return
@@ -1444,16 +1588,20 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.prop_legend.update_widget(parent=self)
 
         """Read Backgrounds table and files. Note beginResetModel() and endResetModel()."""
-        if os.path.isfile((in_dir_name + '/backgrounds_table.csv')) or os.path.isfile((in_dir_name + '/backgrounds_table.json')):
+        if os.path.isfile((in_dir_name + '/backgrounds_table.csv')) or os.path.isfile(
+                (in_dir_name + '/backgrounds_table.json')):
             self.backgrounds_coll.beginResetModel()
             if os.path.isfile((in_dir_name + '/backgrounds_table.json')):
-                new_backgrounds_coll_df = pd_read_json(in_dir_name + '/backgrounds_table.json', orient='index', dtype=FluidsCollection().entity_dict)
+                new_backgrounds_coll_df = pd_read_json(in_dir_name + '/backgrounds_table.json', orient='index',
+                                                       dtype=FluidsCollection().entity_dict)
                 if not new_backgrounds_coll_df.empty:
-                    self.backgrounds_coll.df = new_backgrounds_coll_df
+                    self.backgrounds_coll._df = new_backgrounds_coll_df
             else:
-                self.backgrounds_coll.df = pd_read_csv(in_dir_name + '/backgrounds_table.csv', encoding='utf-8', dtype=FluidsCollection().entity_dict, keep_default_na=False)
-            prgs_bar = progress_dialog(max_value=self.backgrounds_coll.df.shape[0], title_txt="Open fluids", label_txt="Opening fluid objects...", cancel_txt=None, parent=self)
-            for uid in self.backgrounds_coll.df['uid'].to_list():
+                self.backgrounds_coll._df = pd_read_csv(in_dir_name + '/backgrounds_table.csv', encoding='utf-8',
+                                                        dtype=FluidsCollection().entity_dict, keep_default_na=False)
+            prgs_bar = progress_dialog(max_value=self.backgrounds_coll._df.shape[0], title_txt="Open fluids",
+                                       label_txt="Opening fluid objects...", cancel_txt=None, parent=self)
+            for uid in self.backgrounds_coll._df['uid'].to_list():
                 if not os.path.isfile((in_dir_name + "/" + uid + ".vtp")):
                     print("error: missing VTK file")
                     return
@@ -1477,14 +1625,17 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             self.backgrounds_coll.endResetModel()
         """Update legend."""
         self.prop_legend.update_widget(parent=self)
+
     """Methods used to import entities from other file formats."""
 
     def import_gocad(self):
         """Import Gocad ASCII file and update geological collection."""
         self.TextTerminal.appendPlainText("Importing Gocad ASCII format")
-        self.TextTerminal.appendPlainText("Properties are discarded if they are not 1D, 2D, 3D, 4D, 6D or 9D (due to VTK limitations)")
+        self.TextTerminal.appendPlainText(
+            "Properties are discarded if they are not 1D, 2D, 3D, 4D, 6D or 9D (due to VTK limitations)")
         """Select and open input file"""
-        in_file_name = open_file_dialog(parent=self, caption='Import entities from Gocad ASCII file', filter="Gocad ASCII (*.*)")
+        in_file_name = open_file_dialog(parent=self, caption='Import entities from Gocad ASCII file',
+                                        filter="Gocad ASCII (*.*)")
         if in_file_name:
             self.TextTerminal.appendPlainText('in_file_name: ' + in_file_name)
             gocad2vtk(self=self, in_file_name=in_file_name, uid_from_name=False)
@@ -1493,19 +1644,24 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
     def import_gocad_section(self):
         """Import Gocad ASCII file and update geological collection."""
         self.TextTerminal.appendPlainText("Importing Gocad ASCII format")
-        self.TextTerminal.appendPlainText("Properties are discarded if they are not 1D, 2D, 3D, 4D, 6D or 9D (due to VTK limitations)")
+        self.TextTerminal.appendPlainText(
+            "Properties are discarded if they are not 1D, 2D, 3D, 4D, 6D or 9D (due to VTK limitations)")
         """Select and open input file"""
-        in_file_name = open_file_dialog(parent=self, caption='Import entities from Gocad ASCII file', filter="Gocad ASCII (*.*)")
+        in_file_name = open_file_dialog(parent=self, caption='Import entities from Gocad ASCII file',
+                                        filter="Gocad ASCII (*.*)")
         if in_file_name:
             self.TextTerminal.appendPlainText('in_file_name: ' + in_file_name)
             """Select the Xsection"""
             if self.entities_db.collection_by_name("xsect").get_uids():
-                x_section_name = input_combo_dialog(parent=None, title="Xsection", label="Choose Xsection", choice_list=self.entities_db.collection_by_name("xsect").get_names())
+                x_section_name = input_combo_dialog(parent=None, title="Xsection", label="Choose Xsection",
+                                                    choice_list=self.entities_db.collection_by_name(
+                                                        "xsect").get_names())
             else:
                 message_dialog(title="Xsection", message="No Xsection in project")
                 return
             if x_section_name:
-                x_section_uid = self.entities_db.collection_by_name("xsect").df.loc[self.entities_db.collection_by_name("xsect").df['name'] == x_section_name, 'uid'].values[0]
+                x_section_uid = self.entities_db.collection_by_name("xsect")._df.loc[
+                    self.entities_db.collection_by_name("xsect")._df['name'] == x_section_name, 'uid'].values[0]
                 gocad2vtk_section(self=self, in_file_name=in_file_name, uid_from_name=False, x_section=x_section_uid)
                 self.prop_legend.update_widget(parent=self)
 
@@ -1514,7 +1670,8 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.TextTerminal.appendPlainText("Importing Gocad ASCII format as boundary")
         self.TextTerminal.appendPlainText("Properties are discarded - only mesh imported.")
         """Select and open input file"""
-        in_file_name = open_file_dialog(parent=self, caption='Import entities from Gocad ASCII file', filter="Gocad ASCII (*.*)")
+        in_file_name = open_file_dialog(parent=self, caption='Import entities from Gocad ASCII file',
+                                        filter="Gocad ASCII (*.*)")
         if in_file_name:
             self.TextTerminal.appendPlainText('in_file_name: ' + in_file_name)
             gocad2vtk_boundary(self=self, in_file_name=in_file_name, uid_from_name=False)
@@ -1522,46 +1679,51 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
     def import_PC(self):
         """Import point cloud data. File extension dependent (.txt, .xyz, .las) -> Ui_ImportOptionsWindow ui to preview the data (similar to stereonet)"""
 
-        default_attr_list = ['As is', 'X', 'Y', 'Z', 'Red', 'Green', 'Blue', 'Intensity', 'Nx','Ny','Nz', 'User defined', 'N.a.']
+        default_attr_list = ['As is', 'X', 'Y', 'Z', 'Red', 'Green', 'Blue', 'Intensity', 'Nx', 'Ny', 'Nz',
+                             'User defined', 'N.a.']
 
         ext_filter = "All supported (*.txt *.csv *.xyz *.asc *.ply *.las *.laz);;Text files (*.txt *.csv *.xyz *.asc);;PLY files (*.ply);;LAS/LAZ files (*.las *.laz)"
 
-        add_opt = [['check255Box','Display RGB values within the 0-255 range']]
+        add_opt = [['check255Box', 'Display RGB values within the 0-255 range']]
 
-        args = import_dialog(self,default_attr_list=default_attr_list,ext_filter=ext_filter,caption='Import point cloud data',add_opt=add_opt).args
+        args = import_dialog(self, default_attr_list=default_attr_list, ext_filter=ext_filter,
+                             caption='Import point cloud data', add_opt=add_opt).args
         if args:
-            in_file_name,col_names,row_range,index_list,delimiter,origin = args
+            in_file_name, col_names, row_range, index_list, delimiter, origin = args
             self.TextTerminal.appendPlainText('in_file_name: ' + in_file_name)
-            pc2vtk(in_file_name=in_file_name, col_names=col_names, row_range=row_range, usecols=index_list, delimiter=delimiter, self=origin, header_row=0)
+            pc2vtk(in_file_name=in_file_name, col_names=col_names, row_range=row_range, usecols=index_list,
+                   delimiter=delimiter, self=origin, header_row=0)
 
-    def import_SHP(self):  # __________________________________________________________________ UPDATE IN shp2vtk.py OR DUPLICATE THIS TO IMPORT SHP GEOLOGY OR BOUNDARY
+    def import_SHP(
+            self):  # __________________________________________________________________ UPDATE IN shp2vtk.py OR DUPLICATE THIS TO IMPORT SHP GEOLOGY OR BOUNDARY
         """Import SHP file and update geological collection."""
         self.TextTerminal.appendPlainText("Importing SHP file")
-        list = ['Geology','Fluid contacts','Background data']
+        list = ['Geology', 'Fluid contacts', 'Background data']
         """Select and open input file"""
         in_file_name = open_file_dialog(parent=self, caption='Import SHP file', filter="shp (*.shp)")
-        coll = input_combo_dialog(parent=self,title='Collection',label='Assign collection',choice_list=list)
+        coll = input_combo_dialog(parent=self, title='Collection', label='Assign collection', choice_list=list)
         if in_file_name:
             self.TextTerminal.appendPlainText('in_file_name: ' + in_file_name)
-            shp2vtk(self=self, in_file_name=in_file_name,collection=coll)
+            shp2vtk(self=self, in_file_name=in_file_name, collection=coll)
 
     def import_DEM(self):
         """Import DEM file and update DEM collection."""
         self.TextTerminal.appendPlainText("Importing DEM in supported format (geotiff)")
-        list = ['DEMs and DOMs','Fluid contacts']
+        list = ['DEMs and DOMs', 'Fluid contacts']
 
         """Select and open input file"""
         in_file_name = open_file_dialog(parent=self, caption='Import DEM from file', filter="Geotiff (*.tif)")
-        coll = input_combo_dialog(parent=self,title='Collection',label='Assign collection',choice_list=list)
+        coll = input_combo_dialog(parent=self, title='Collection', label='Assign collection', choice_list=list)
         if in_file_name:
             self.TextTerminal.appendPlainText('in_file_name: ' + in_file_name)
-            dem2vtk(self=self, in_file_name=in_file_name,collection='DEMs and DOMs')
+            dem2vtk(self=self, in_file_name=in_file_name, collection='DEMs and DOMs')
 
     def import_mapimage(self):
         """Import map image and update image collection."""
         self.TextTerminal.appendPlainText("Importing image from supported format (GDAL)")
         """Select and open input file"""
-        in_file_name = open_file_dialog(parent=self, caption='Import image from file', filter="Image (*.tif *.jpg *.png *.bmp)")
+        in_file_name = open_file_dialog(parent=self, caption='Import image from file',
+                                        filter="Image (*.tif *.jpg *.png *.bmp)")
         if in_file_name:
             self.TextTerminal.appendPlainText('in_file_name: ' + in_file_name)
             geo_image2vtk(self=self, in_file_name=in_file_name)
@@ -1570,23 +1732,27 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         """Import XSimage and update image collection."""
         self.TextTerminal.appendPlainText("Importing image from supported format (GDAL)")
         """Select and open input file"""
-        in_file_name = open_file_dialog(parent=self, caption='Import image from file', filter="Image (*.tif *.jpg *.png *.bmp)")
+        in_file_name = open_file_dialog(parent=self, caption='Import image from file',
+                                        filter="Image (*.tif *.jpg *.png *.bmp)")
         if in_file_name:
             self.TextTerminal.appendPlainText('in_file_name: ' + in_file_name)
             """Select the Xsection"""
             if self.entities_db.collection_by_name("xsect").get_uids():
-                x_section_name = input_combo_dialog(parent=None, title="Xsection", label="Choose Xsection", choice_list=self.entities_db.collection_by_name("xsect").get_names())
+                x_section_name = input_combo_dialog(parent=None, title="Xsection", label="Choose Xsection",
+                                                    choice_list=self.entities_db.collection_by_name(
+                                                        "xsect").get_names())
             else:
                 message_dialog(title="Xsection", message="No Xsection in project")
                 return
             if x_section_name:
-                x_section_uid = self.entities_db.collection_by_name("xsect").df.loc[self.entities_db.collection_by_name("xsect").df['name'] == x_section_name, 'uid'].values[0]
+                x_section_uid = self.entities_db.collection_by_name("xsect")._df.loc[
+                    self.entities_db.collection_by_name("xsect")._df['name'] == x_section_name, 'uid'].values[0]
                 xs_image2vtk(self=self, in_file_name=in_file_name, x_section_uid=x_section_uid)
                 self.prop_legend.update_widget(parent=self)
 
     def import_welldata(self):
 
-        path = open_file_dialog(parent=self,caption='Import well data',filter="XLXS files (*.xlsx)")
+        path = open_file_dialog(parent=self, caption='Import well data', filter="XLXS files (*.xlsx)")
 
         if path:
             well2vtk(self, path=path)
@@ -1604,7 +1770,6 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
 
         # dataargs = import_dialog(parent=self,default_attr_list=data_attr_list,ext_filter=ext_filter,caption='Import well data',multiple=True).args
 
-
         # if locargs and dataargs:
         #     in_file_name = [locargs[0],dataargs[0]]
         #     col_names = [locargs[1],dataargs[1]]
@@ -1614,8 +1779,8 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         #     # self.TextTerminal.appendPlainText('in_file_name: ' + in_file_name)
         #     well2vtk(in_file_name=in_file_name, col_names=col_names, usecols=index_list, delimiter=delimiter, self=self, header_row=0)
 
-
-    def import_SEGY(self):  # ___________________________________________________________ TO BE REVIEWED AND UPDATED IN MODULE segy2vtk
+    def import_SEGY(
+            self):  # ___________________________________________________________ TO BE REVIEWED AND UPDATED IN MODULE segy2vtk
         """Import SEGY file and update Mesh3D collection."""
         self.TextTerminal.appendPlainText("Importing SEGY seismics file.")
         """Select and open input file"""
@@ -1628,7 +1793,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
 
     def export_cad(self):  # ________________________________________________________________ IMPLEMENT GOCAD EXPORT
         """Base method to choose a CAD format for exporting geological entities."""
-        cad_format = input_combo_dialog(parent=self, title="CAD format", label="Choose CAD format", choice_list=["DXF", "GOCAD", "OBJ", "PLY", "STL", "STL with 1m dilation","LandXML"])
+        cad_format = input_combo_dialog(parent=self, title="CAD format", label="Choose CAD format",
+                                        choice_list=["DXF", "GOCAD", "OBJ", "PLY", "STL", "STL with 1m dilation",
+                                                     "LandXML"])
         out_dir_name = save_file_dialog(parent=self, caption="Export geological entities as CAD meshes.")
         if not out_dir_name:
             return
@@ -1653,7 +1820,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         elif cad_format == "STL with 1m dilation":
             vtk2stl_dilation(self=self, out_dir_name=out_dir_name, tol=1)
         elif cad_format == "LandXML":
-            vtk2lxml(self=self,out_dir_name=out_dir_name)
+            vtk2lxml(self=self, out_dir_name=out_dir_name)
         else:
             return
         """Save geological legend table to CSV and JSON files."""
@@ -1663,51 +1830,65 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.others_legend_df.to_csv(out_dir_name + '/others_legend_table.csv', encoding='utf-8', index=False)
         self.others_legend_df.to_json(out_dir_name + '/others_legend_table.json', orient='index')
         """Save x_section table to CSV and JSON files."""
-        out_cols = list(self.entities_db.collection_by_name("xsect").df.columns)
+        out_cols = list(self.entities_db.collection_by_name("xsect")._df.columns)
         out_cols.remove('vtk_plane')
         out_cols.remove('vtk_frame')
-        self.entities_db.collection_by_name("xsect").df[out_cols].to_csv(out_dir_name + '/xsection_table.csv', encoding='utf-8', index=False)
-        self.entities_db.collection_by_name("xsect").df[out_cols].to_json(out_dir_name + '/xsection_table.json', orient='index')
+        self.entities_db.collection_by_name("xsect")._df[out_cols].to_csv(out_dir_name + '/xsection_table.csv',
+                                                                          encoding='utf-8', index=False)
+        self.entities_db.collection_by_name("xsect")._df[out_cols].to_json(out_dir_name + '/xsection_table.json',
+                                                                           orient='index')
         """Save geological collection table to CSV and JSON files."""
-        out_cols = list(self.entities_db.collection_by_name("geol").df.columns)
+        out_cols = list(self.entities_db.collection_by_name("geol")._df.columns)
         out_cols.remove('vtk_obj')
-        self.entities_db.collection_by_name("geol").df[out_cols].to_csv(out_dir_name + '/geological_table.csv', encoding='utf-8', index=False)
-        self.entities_db.collection_by_name("geol").df[out_cols].to_json(out_dir_name + '/geological_table.json', orient='index')
+        self.entities_db.collection_by_name("geol")._df[out_cols].to_csv(out_dir_name + '/geological_table.csv',
+                                                                         encoding='utf-8', index=False)
+        self.entities_db.collection_by_name("geol")._df[out_cols].to_json(out_dir_name + '/geological_table.json',
+                                                                          orient='index')
         """Save DOM collection table to CSV and JSON files."""
-        out_cols = list(self.entities_db.collection_by_name("dom").df.columns)
+        out_cols = list(self.entities_db.collection_by_name("dom")._df.columns)
         out_cols.remove('vtk_obj')
-        self.entities_db.collection_by_name("dom").df[out_cols].to_csv(out_dir_name + '/dom_table.csv', encoding='utf-8', index=False)
-        self.entities_db.collection_by_name("dom").df[out_cols].to_json(out_dir_name + '/dom_table.json', orient='index')
+        self.entities_db.collection_by_name("dom")._df[out_cols].to_csv(out_dir_name + '/dom_table.csv',
+                                                                        encoding='utf-8', index=False)
+        self.entities_db.collection_by_name("dom")._df[out_cols].to_json(out_dir_name + '/dom_table.json',
+                                                                         orient='index')
         """Save image collection table to CSV and JSON files."""
-        out_cols = list(self.entities_db.collection_by_name("image").df.columns)
+        out_cols = list(self.entities_db.collection_by_name("image")._df.columns)
         out_cols.remove('vtk_obj')
-        self.entities_db.collection_by_name("image").df[out_cols].to_csv(out_dir_name + '/image_table.csv', encoding='utf-8', index=False)
-        self.entities_db.collection_by_name("image").df[out_cols].to_json(out_dir_name + '/image_table.json', orient='index')
+        self.entities_db.collection_by_name("image")._df[out_cols].to_csv(out_dir_name + '/image_table.csv',
+                                                                          encoding='utf-8', index=False)
+        self.entities_db.collection_by_name("image")._df[out_cols].to_json(out_dir_name + '/image_table.json',
+                                                                           orient='index')
         """Save mesh3d collection table to CSV and JSON files."""
-        out_cols = list(self.entities_db.collection_by_name("mesh3d").df.columns)
+        out_cols = list(self.entities_db.collection_by_name("mesh3d")._df.columns)
         out_cols.remove('vtk_obj')
-        self.entities_db.collection_by_name("mesh3d").df[out_cols].to_csv(out_dir_name + '/mesh3d_table.csv', encoding='utf-8', index=False)
-        self.entities_db.collection_by_name("mesh3d").df[out_cols].to_json(out_dir_name + '/mesh3d_table.json', orient='index')
+        self.entities_db.collection_by_name("mesh3d")._df[out_cols].to_csv(out_dir_name + '/mesh3d_table.csv',
+                                                                           encoding='utf-8', index=False)
+        self.entities_db.collection_by_name("mesh3d")._df[out_cols].to_json(out_dir_name + '/mesh3d_table.json',
+                                                                            orient='index')
         """Save boundary collection table to CSV and JSON files."""
-        out_cols = list(self.entities_db.collection_by_name("boundary").df.columns)
+        out_cols = list(self.entities_db.collection_by_name("boundary")._df.columns)
         out_cols.remove('vtk_obj')
-        self.entities_db.collection_by_name("boundary").df[out_cols].to_csv(out_dir_name + '/boundary_table.csv', encoding='utf-8', index=False)
-        self.entities_db.collection_by_name("boundary").df[out_cols].to_json(out_dir_name + '/boundary_table.json', orient='index')
+        self.entities_db.collection_by_name("boundary")._df[out_cols].to_csv(out_dir_name + '/boundary_table.csv',
+                                                                             encoding='utf-8', index=False)
+        self.entities_db.collection_by_name("boundary")._df[out_cols].to_json(out_dir_name + '/boundary_table.json',
+                                                                              orient='index')
 
         """Save well collection table to CSV and JSON files."""
-        out_cols = list(self.well_coll.df.columns)
+        out_cols = list(self.well_coll._df.columns)
         out_cols.remove('vtk_obj')
-        self.well_coll.df[out_cols].to_json(out_dir_name + '/well_table.json', orient='index')
-        self.well_coll.df[out_cols].to_csv(out_dir_name + '/well_table.csv',encoding='utf-8', index=False)
+        self.well_coll._df[out_cols].to_json(out_dir_name + '/well_table.json', orient='index')
+        self.well_coll._df[out_cols].to_csv(out_dir_name + '/well_table.csv', encoding='utf-8', index=False)
         print("All files saved.")
+
     def export_vtk(self):
         '''[Gabriele] Function used to export selected objects as vtk files'''
         if not self.selected_uids:
             return
 
         else:
+            self.out_dir_name = save_file_dialog(parent=self, caption="Select save directory.", directory=True)
             # print(self.out_file_name)
-            for uid in self.selected_uids: #[gabriele] this could be generalized with a helper function
+            for uid in self.selected_uids:  # [gabriele] this could be generalized with a helper function
                 if self.shown_table == "tabGeology":
                     entity = self.entities_db.collection_by_name("geol").get_uid_vtk_obj(uid)
 
@@ -1737,7 +1918,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 elif self.shown_table == "tabDOMs":
                     entity = self.entities_db.collection_by_name("dom").get_uid_vtk_obj(uid)
                     temp = vtkPolyData()
-                    temp.ShallowCopy(entity) #I hate this
+                    temp.ShallowCopy(entity)  # I hate this
                     pd_writer = vtkXMLPolyDataWriter()
                     pd_writer.SetFileName(f'{self.out_dir_name}/{uid}.vtp')
                     pd_writer.SetInputData(temp)

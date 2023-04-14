@@ -3,6 +3,7 @@ from abc import abstractmethod
 import pandas as pd
 from PyQt5.QtCore import QAbstractTableModel, Qt, QObject
 import logging as log
+import deprecated
 
 class CollectionBase(QAbstractTableModel):
 
@@ -11,12 +12,13 @@ class CollectionBase(QAbstractTableModel):
 
 
         """Initialize Pandas dataframe."""
-        self.df = pd.DataFrame(columns=list(self.entity_dict.keys()))
+        self._df = pd.DataFrame(columns=list(self.entity_dict.keys()))
 
 
     @property
+    @deprecated.deprecated("Accessing main window from a collection is discouraged" )
     def main_window(self):
-        log.warning("Accessing main window from a collection. this beahvior is scheduled to be removed.")
+        log.debug("Accessing main window from a collection. this beahvior is scheduled to be removed.")
         return self.parent().parent()
 
     @property
@@ -59,24 +61,24 @@ class CollectionBase(QAbstractTableModel):
         .column() index points to an element in the list created on the fly
         based on the column headers stored in the dictionary."""
         if role == Qt.DisplayRole:
-            value = self.df.iloc[index.row(), index.column()]
+            value = self._df.iloc[index.row(), index.column()]
             return str(value)
 
     def headerData(self, section, orientation, role):
         """Set header from pandas dataframe. "section" is a standard Qt variable."""
         if role == Qt.DisplayRole:
             if orientation == Qt.Horizontal:
-                return str(self.df.columns[section])
+                return str(self._df.columns[section])
             if orientation == Qt.Vertical:
-                return str(self.df.index[section])
+                return str(self._df.index[section])
 
     def rowCount(self, index):
         """Set row count from pandas dataframe"""
-        return self.df.shape[0]
+        return self._df.shape[0]
 
     def columnCount(self, index):
         """Set column count from pandas dataframe"""
-        return self.df.shape[1]
+        return self._df.shape[1]
 
     def flags(self, index):
         """Set editable columns."""
@@ -86,43 +88,52 @@ class CollectionBase(QAbstractTableModel):
 
     def get_number_of_entities(self):
         """Get number of entities stored in Pandas dataframe."""
-        return self.df.shape[0]
+        return self._df.shape[0]
 
     def get_uids(self):
         """Get list of uids."""
-        return self.df['uid'].to_list()
+        return self._df['uid'].to_list()
 
     def get_topological_type_uids(self, topological_type=None):
         """Get list of uids of a given topological_type."""
-        return self.df.loc[self.df['topological_type'] == topological_type, 'uid'].to_list()
+        return self._df.loc[self._df['topological_type'] == topological_type, 'uid'].to_list()
 
     def get_uid_name(self, uid=None):
         """Get value(s) stored in dataframe (as pointer) from uid."""
-        return self.df.loc[self.df['uid'] == uid, 'name'].values[0]
+        return self._df.loc[self._df['uid'] == uid, 'name'].values[0]
 
     def set_uid_name(self, uid=None, name=None):
         """Set value(s) stored in dataframe (as pointer) from uid."""
-        self.df.loc[self.df['uid'] == uid, 'name'] = name
+        self._df.loc[self._df['uid'] == uid, 'name'] = name
 
     def get_names(self):
         """Get list of names."""
-        return self.df['name'].to_list()
+        return self._df['name'].to_list()
 
     def set_uid_vtk_obj(self, uid=None, vtk_obj=None):
         """Set value(s) stored in dataframe (as pointer) from uid."""
-        self.df.loc[self.df['uid'] == uid, 'vtk_obj'] = vtk_obj
+        self._df.loc[self._df['uid'] == uid, 'vtk_obj'] = vtk_obj
 
     def get_uid_vtk_obj(self, uid=None):
         """Get value(s) stored in dataframe (as pointer) from uid."""
-        return self.df.loc[self.df['uid'] == uid, 'vtk_obj'].values[0]
+        return self._df.loc[self._df['uid'] == uid, 'vtk_obj'].values[0]
 
     def set_uid_topological_type(self, uid=None, topological_type=None):
         """Set value(s) stored in dataframe (as pointer) from uid."""
-        self.df.loc[self.df['uid'] == uid, 'topological_type'] = topological_type
+        self._df.loc[self._df['uid'] == uid, 'topological_type'] = topological_type
 
     def get_uid_topological_type(self, uid=None):
         """Get value(s) stored in dataframe (as pointer) from uid."""
-        return self.df.loc[self.df['uid'] == uid, 'topological_type'].values[0]
+        return self._df.loc[self._df['uid'] == uid, 'topological_type'].values[0]
 
     def get_name_uid(self, name=None):
-        return self.df.loc[self.df['name'] == name, 'uid'].values[0]
+        return self._df.loc[self._df['name'] == name, 'uid'].values[0]
+
+    def drop_df_entry_by_uid(self, uid=None):
+        """Drop an entry in the dataframe by uid."""
+        if not uid in self.get_uids():
+            log.warning("uid not found in collection")
+            return
+
+        self._df.drop(self._df[self._df['uid'] == uid].index, inplace=True)
+        self.modelReset.emit()

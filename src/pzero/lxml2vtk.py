@@ -32,7 +32,7 @@ def vtk2lxml(self,out_dir_name=None):
     
     surfaces = et.SubElement(landxml,'Surfaces') # all of the different surfaces are grouped here
 
-    for uid in self.geol_coll.df['uid']:
+    for uid in self.geol_coll._df['uid']:
 
         obj = self.geol_coll.get_uid_vtk_obj(uid)
 
