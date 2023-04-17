@@ -30,6 +30,7 @@ from uuid import uuid4
 
 
 def normals2dd(self):
+    """Function used to calculate dip and dip direction of a point cloud given the point normals"""
     if len(self.selected_uids) == 0:
         print('No entities selected, make sure to have the right tab open')
         return
@@ -50,9 +51,12 @@ def normals2dd(self):
             vtk_obj.set_point_data('dip direction', dip_az)
 
             self.parent.dom_coll.replace_vtk(uid, vtk_obj)
+            self.clear_selection()
 
 
 def extract_id(vtk_obj, ids):
+
+    """ Generic function used to extract selected points using Ids"""
 
     selection_node = vtkSelectionNode()
     selection_node.SetFieldType(vtkSelectionNode.POINT)
@@ -76,6 +80,7 @@ def extract_id(vtk_obj, ids):
 
 
 def cut_pc(self):
+    """ Function used to cut portions of a point cloud. Returns the points inside and outside the loop"""
     def end_digitize(event):
         self.plotter.untrack_click_position()
         uid = self.selected_uids[0]
@@ -126,6 +131,7 @@ def cut_pc(self):
 
 
 def decimate_pc(vtk_obj, fac):
+    """ Function used to decimate (randomly) a given point cloud"""
     dec_fac = int(vtk_obj.GetNumberOfPoints() * fac)
     random = np_random.choice(vtk_obj.GetNumberOfPoints(), dec_fac)
 
@@ -140,6 +146,8 @@ def decimate_pc(vtk_obj, fac):
 
 
 def extract_pc(vtk_obj, implicit_func):
+    """ Generic function to extract points inside and outside a given implicit function
+    """
     clip = vtkExtractGeometry()
     clip.SetInputData(vtk_obj)
     clip.SetImplicitFunction(implicit_func)
@@ -158,6 +166,7 @@ def extract_pc(vtk_obj, implicit_func):
 
 
 def segment_pc(self):
+    """Function used to segment a point cloud using dip and dip direction"""
 
     if len(self.selected_uids) == 0:
         print('No entities selected, make sure to have the right tab open')
@@ -256,9 +265,11 @@ def segment_pc(self):
 
     else:
         print('Entity not point cloud or multiple entities visible')
+    self.clear_selection()
 
 
 def facets_pc(self):
+    """Function used to create polygons starting from a region of points"""
     if len(self.selected_uids) == 0:
         print('No entities selected, make sure to have the right tab open')
         return
@@ -326,6 +337,7 @@ def facets_pc(self):
     curr_obj_dict['vtk_obj'] = facets
     """Add to entity collection."""
     self.parent.geol_coll.add_entity_from_dict(entity_dict=curr_obj_dict)
+    self.clear_selection()
 
 
 def calibration_pc(vtk_objs):
@@ -361,7 +373,7 @@ def calibration_pc(vtk_objs):
 
 
 def auto_pick(self):
-
+    """ Function used to pick automatically the regions from the segmentation"""
     if len(self.selected_uids) == 0:
         print('No entities selected, make sure to have the right tab open')
         return
@@ -416,15 +428,14 @@ def auto_pick(self):
     curr_obj_dict['vtk_obj'] = points
     """Add to entity collection."""
     self.parent.geol_coll.add_entity_from_dict(entity_dict=curr_obj_dict)
-
-
+    self.clear_selection()
 
 
 '''[Gabriele] PC Filters ----------------------------------------------------'''
 
 
 def thresh_filt(self):
-
+    """ Function used to filter the point cloud using a given property"""
     uid = self.actors_df.loc[self.actors_df['show'] == True, 'uid'].values[0]
     vtk_obj = self.parent.dom_coll.get_uid_vtk_obj(uid)
     if isinstance(vtk_obj,PCDom):
@@ -456,6 +467,7 @@ def thresh_filt(self):
         del thresh
     else:
         print('Entity not point cloud or multiple entities visible')
+    self.clear_selection()
 
 
 def radial_filt(self):
