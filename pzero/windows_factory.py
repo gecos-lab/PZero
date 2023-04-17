@@ -6,9 +6,6 @@ from vtkmodules.vtkFiltersCore import vtkThresholdPoints, vtkDelaunay2D
 from vtkmodules.vtkFiltersPoints import vtkRadiusOutlierRemoval, vtkEuclideanClusterExtraction, vtkProjectPointsToPlane
 from vtkmodules.vtkRenderingCore import vtkPropPicker
 
-from .dom_collection import DomCollection
-from .orientation_analysis import get_dip_dir_vectors
-
 """QT imports"""
 from PyQt5.QtWidgets import *
 from PyQt5.QtCore import Qt
@@ -21,9 +18,12 @@ from .entities_factory import VertexSet, PolyLine, TriSurf, TetraSolid, XsVertex
 from .helper_dialogs import input_one_value_dialog, input_text_dialog, input_combo_dialog, message_dialog, \
     options_dialog, multiple_input_dialog, tic, toc, open_file_dialog, progress_dialog, save_file_dialog,general_input_dialog
 from .geological_collection import GeologicalCollection
-from copy import deepcopy
-from uuid import uuid4
+from .dom_collection import DomCollection
+from .orientation_analysis import get_dip_dir_vectors
 from .helper_functions import best_fitting_plane, gen_frame
+from .helper_widgets import Vector
+from .signals_handler import disconnect_all_signals
+
 from time import sleep
 
 """Maths imports"""
@@ -48,6 +48,9 @@ from numpy import where as np_where
 
 from pandas import DataFrame as pd_DataFrame
 from pandas import unique as pd_unique
+
+from copy import deepcopy
+from uuid import uuid4
 
 """"VTK imports"""
 """"VTK Numpy interface imports"""
@@ -88,13 +91,12 @@ import matplotlib.style as mplstyle
 # from matplotlib.backend_bases import FigureCanvasBase
 import mplstereonet
 
-from .helper_widgets import Vector
-
-from uuid import UUID
 
 """Probably not-required imports"""
 # import sys
 # from time import sleep
+# from uuid import UUID (there is already above 'from uuid import uuid4')
+
 
 mplstyle.use(['dark_background', 'fast'])
 """Background color for matplotlib plots.
@@ -125,7 +127,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         # SEE DISCUSSIONS ON QPointer AND WA_DeleteOnClose ON THE INTERNET
         # self.setAttribute(Qt.WA_DeleteOnClose, True)
         self.parent = parent
-
+        self.setAttribute(Qt.WA_DeleteOnClose, True)
         """Connect actionQuit.triggered SIGNAL to self.close SLOT"""
         self.actionClose.triggered.connect(self.close)
 
@@ -329,6 +331,87 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
 
         self.parent.prop_legend_cmap_modified_signal.connect(
             lambda this_property: self.prop_legend_cmap_modified_update_views(this_property=this_property))
+
+        """ Gather all the signals inside a signals list, 
+            this is needed when closing because we need to dereference them"""
+        self.signals = []
+        self.signals.append(self.actionClose.triggered)
+        self.signals.append(self.parent.project_close_signal)
+        self.signals.append(self.parent.geology_added_signal)
+        self.signals.append(self.parent.geology_removed_signal)
+        self.signals.append(self.parent.geology_geom_modified_signal)
+        self.signals.append(self.parent.geology_data_keys_removed_signal)
+        self.signals.append(self.parent.geology_data_val_modified_signal)
+        self.signals.append(self.parent.geology_metadata_modified_signal)
+        self.signals.append(self.parent.geology_legend_color_modified_signal)
+        self.signals.append(self.parent.geology_legend_thick_modified_signal)
+        self.signals.append(self.parent.geology_legend_point_size_modified_signal)
+        self.signals.append(self.parent.geology_legend_opacity_modified_signal)
+        self.signals.append(self.parent.xsect_added_signal)
+        self.signals.append(self.parent.xsect_removed_signal)
+        self.signals.append(self.parent.xsect_geom_modified_signal)
+        self.signals.append(self.parent.xsect_metadata_modified_signal)
+        self.signals.append(self.parent.xsect_legend_color_modified_signal)
+        self.signals.append(self.parent.xsect_legend_thick_modified_signal)
+        self.signals.append(self.parent.xsect_legend_opacity_modified_signal)
+        self.signals.append(self.parent.boundary_added_signal)
+        self.signals.append(self.parent.boundary_removed_signal)
+        self.signals.append(self.parent.boundary_geom_modified_signal)
+        self.signals.append(self.parent.boundary_metadata_modified_signal)
+        self.signals.append(self.parent.boundary_legend_color_modified_signal)
+        self.signals.append(self.parent.boundary_legend_thick_modified_signal)
+        self.signals.append(self.parent.boundary_legend_opacity_modified_signal)
+        self.signals.append(self.parent.mesh3d_added_signal)
+        self.signals.append(self.parent.mesh3d_removed_signal)
+        self.signals.append(self.parent.mesh3d_data_keys_removed_signal)
+        self.signals.append(self.parent.mesh3d_data_val_modified_signal)
+        self.signals.append(self.parent.mesh3d_metadata_modified_signal)
+        self.signals.append(self.parent.mesh3d_legend_color_modified_signal)
+        self.signals.append(self.parent.mesh3d_legend_thick_modified_signal)
+        self.signals.append(self.parent.mesh3d_legend_opacity_modified_signal)
+        self.signals.append(self.parent.dom_added_signal)
+        self.signals.append(self.parent.dom_removed_signal)
+        self.signals.append(self.parent.dom_data_keys_removed_signal)
+        self.signals.append(self.parent.dom_data_val_modified_signal)
+        self.signals.append(self.parent.dom_metadata_modified_signal)
+        self.signals.append(self.parent.dom_legend_color_modified_signal)
+        self.signals.append(self.parent.dom_legend_thick_modified_signal)
+        self.signals.append(self.parent.dom_legend_point_size_modified_signal)
+        self.signals.append(self.parent.dom_legend_opacity_modified_signal)
+        self.signals.append(self.parent.image_added_signal)
+        self.signals.append(self.parent.image_removed_signal)
+        self.signals.append(self.parent.image_metadata_modified_signal)
+        self.signals.append(self.parent.image_legend_opacity_modified_signal)
+        self.signals.append(self.parent.well_added_signal)
+        self.signals.append(self.parent.well_removed_signal)
+        self.signals.append(self.parent.well_data_keys_removed_signal)
+        self.signals.append(self.parent.well_data_val_modified_signal)
+        self.signals.append(self.parent.well_metadata_modified_signal)
+        self.signals.append(self.parent.well_legend_color_modified_signal)
+        self.signals.append(self.parent.well_legend_thick_modified_signal)
+        self.signals.append(self.parent.well_legend_opacity_modified_signal)
+        self.signals.append(self.parent.fluid_added_signal)
+        self.signals.append(self.parent.fluid_removed_signal)
+        self.signals.append(self.parent.fluid_geom_modified_signal)
+        self.signals.append(self.parent.fluid_data_keys_removed_signal)
+        self.signals.append(self.parent.fluid_data_val_modified_signal)
+        self.signals.append(self.parent.fluid_metadata_modified_signal)
+        self.signals.append(self.parent.fluid_legend_color_modified_signal)
+        self.signals.append(self.parent.fluid_legend_thick_modified_signal)
+        self.signals.append(self.parent.fluid_legend_point_size_modified_signal)
+        self.signals.append(self.parent.fluid_legend_opacity_modified_signal)
+        self.signals.append(self.parent.background_added_signal)
+        self.signals.append(self.parent.background_removed_signal)
+        self.signals.append(self.parent.background_geom_modified_signal)
+        self.signals.append(self.parent.background_data_keys_removed_signal)
+        self.signals.append(self.parent.background_data_val_modified_signal)
+        self.signals.append(self.parent.background_metadata_modified_signal)
+        self.signals.append(self.parent.background_legend_color_modified_signal)
+        self.signals.append(self.parent.background_legend_thick_modified_signal)
+        self.signals.append(self.parent.background_legend_point_size_modified_signal)
+        self.signals.append(self.parent.background_legend_opacity_modified_signal)
+        self.signals.append(self.parent.prop_legend_cmap_modified_signal)
+
 
     def show_qt_canvas(self):
         """Show the Qt Window"""
@@ -4489,7 +4572,8 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         reply = QMessageBox.question(self, 'Closing window', 'Close this window?', QMessageBox.Yes | QMessageBox.No,
                                      QMessageBox.No)
         if reply == QMessageBox.Yes:
-            if not isinstance(self,ViewStereoplot):
+            disconnect_all_signals(self.signals)
+            if not isinstance(self, ViewStereoplot):
                 self.plotter.close()  # needed to cleanly close the vtk plotter
             event.accept()
         else:
