@@ -10,7 +10,10 @@ from vtkmodules.vtkFiltersCore import vtkThreshold, vtkAppendPolyData, vtkThresh
 from vtkmodules.vtkFiltersExtraction import vtkExtractGeometry, vtkExtractSelection
 from vtkmodules.vtkFiltersPoints import vtkEuclideanClusterExtraction, vtkRadiusOutlierRemoval, vtkProjectPointsToPlane
 
-from .entities_factory import PCDom, TriSurf
+from .dom_collection import DomCollection
+from .entities_factory import PCDom, TriSurf, Attitude
+from .geological_collection import GeologicalCollection
+from .helper_dialogs import multiple_input_dialog
 from .helper_functions import best_fitting_plane
 from .helper_widgets import Scissors
 
@@ -22,6 +25,31 @@ from numpy import arctan2 as np_arctan2
 from numpy import arcsin as np_arcsin
 from numpy import zeros_like as np_zeros_like
 from numpy import std as np_std
+
+from uuid import uuid4
+
+
+def normals2dd(self):
+    if len(self.selected_uids) == 0:
+        print('No entities selected, make sure to have the right tab open')
+        return
+    for uid in self.selected_uids:
+        vtk_obj = self.parent.dom_coll.get_uid_vtk_obj(uid)
+        prop_keys = vtk_obj.point_data_keys
+        if 'Normals' not in prop_keys:
+            print('Normal data not present. Import or create normal data to proceed')
+        else:
+            dip = vtk_obj.points_map_dip
+            dip_az = vtk_obj.points_map_dip_azimuth
+
+            # print(np.rad2deg(dir))
+            vtk_obj.init_point_data('dip', 1)
+            vtk_obj.init_point_data('dip direction', 1)
+
+            vtk_obj.set_point_data('dip', dip)
+            vtk_obj.set_point_data('dip direction', dip_az)
+
+            self.parent.dom_coll.replace_vtk(uid, vtk_obj)
 
 
 def extract_id(vtk_obj, ids):
@@ -51,25 +79,12 @@ def cut_pc(self):
     def end_digitize(event):
         self.plotter.untrack_click_position()
         uid = self.selected_uids[0]
-        data = self.parent.dom_coll.get_uid_vtk_obj(uid)
+        vtk_obj = self.parent.dom_coll.get_uid_vtk_obj(uid)
         # Signal called to end the digitization of a trace. It returns a new polydata
         loop = vtkImplicitSelectionLoop()
-        tem = vtkPolyData()
-        scissors.GetContourRepresentation().GetNodePolyData(tem)
         loop.SetLoop(scissors.GetContourRepresentation().GetContourRepresentationAsPolyData().GetPoints())
-        clip = vtkExtractGeometry()
-        clip.SetInputData(data)
-        clip.SetImplicitFunction(loop)
-        clip.ExtractInsideOn()
-        clip.Update()
 
-        clip_in = PCDom()
-        clip_in.ShallowCopy(clip.GetOutput())
-        clip.ExtractInsideOff()
-        clip.Modified()
-        clip.Update()
-        clip_out = PCDom()
-        clip_out.ShallowCopy(clip.GetOutput())
+        clip_out, clip_in = extract_pc(vtk_obj, loop)
         entity_dict = deepcopy(self.parent.dom_coll.dom_entity_dict)
         # print(entity_dict)
         entity_dict['name'] = self.parent.dom_coll.get_uid_name(uid) + '_cut_in'
@@ -107,12 +122,12 @@ def cut_pc(self):
 
     scissors = Scissors(self)
     scissors.EnabledOn()
-    self.plotter.track_click_position(side='right', callback= end_digitize)
+    self.plotter.track_click_position(side='right', callback=end_digitize)
 
 
 def decimate_pc(vtk_obj, fac):
     dec_fac = int(vtk_obj.GetNumberOfPoints() * fac)
-    random = np_random.choice(vtk_obj.GetNumberOfPoints(),dec_fac)
+    random = np_random.choice(vtk_obj.GetNumberOfPoints(), dec_fac)
 
     ids = vtkIdTypeArray()
 
@@ -124,111 +139,134 @@ def decimate_pc(vtk_obj, fac):
     return selection
 
 
-def thresh_pc(vtk_obj, prop, lt, ht):
-    thresh = vtkThreshold()
-    thresh.SetInputData(vtk_obj)
-    thresh.SetInputArrayToProcess(0, 0, 0, vtkDataObject.FIELD_ASSOCIATION_POINTS, prop)
-    thresh.SetLowerThreshold(float(lt))
-    thresh.SetUpperThreshold(float(ht))
-    thresh.Update()
-    out = PCDom()
-    out.ShallowCopy(thresh.GetOutput())
-    out.generate_cells()
-    return out
+def extract_pc(vtk_obj, implicit_func):
+    clip = vtkExtractGeometry()
+    clip.SetInputData(vtk_obj)
+    clip.SetImplicitFunction(implicit_func)
+    clip.ExtractInsideOn()
+    clip.Update()
+
+    clip_in = PCDom()
+    clip_in.ShallowCopy(clip.GetOutput())
+    clip.ExtractInsideOff()
+    clip.Modified()
+    clip.Update()
+    clip_out = PCDom()
+    clip_out.ShallowCopy(clip.GetOutput())
+
+    return clip_out, clip_in
 
 
-def rad_pc(vtk_obj, rad, nn):
-    r = vtkRadiusOutlierRemoval()
-    r.SetInputData(vtk_obj)
-    r.SetRadius(rad)
-    r.SetNumberOfNeighbors(nn)
-    r.GenerateOutliersOff()
+def segment_pc(self):
 
-    _update_alg(r, True, 'Cleaning pc')
-    pc_clean = r.GetOutput()
-    return pc_clean
+    if len(self.selected_uids) == 0:
+        print('No entities selected, make sure to have the right tab open')
+        return
+    else:
+        uid = self.selected_uids[0]
+
+    vtk_obj = self.parent.dom_coll.get_uid_vtk_obj(uid)
+
+    if isinstance(vtk_obj, PCDom):
+        if 'dip direction' not in self.parent.dom_coll.get_uid_properties_names(uid):
+            print(
+                'dip directio/dip data not present in the dataset. Calculate from Normals using the specific function.')
+            return
+        input_dict = {'name': ['Name result: ', 'segmented_'],
+                      'dd1': ['Dip direction lower threshold: ', 0],
+                      'dd2': ['Dip direction upper threshold: ', 10],
+                      'd1': ['Dip lower threshold: ', 0],
+                      'd2': ['Dip upper threshold: ', 10],
+                      'rad': ['Search radius: ', 0.0],
+                      'nn': ['Minimum number of neighbors: ', 15]}
+        dialog = multiple_input_dialog(title='Segmentation filter', input_dict=input_dict)
+
+        # print(dialog)
+
+        vtk_obj.GetPointData().SetActiveScalars('dip direction')
+        connectivity_filter_dd = vtkEuclideanClusterExtraction()
+        connectivity_filter_dd.SetInputData(vtk_obj)
+        connectivity_filter_dd.SetRadius(dialog['rad'])
+        connectivity_filter_dd.SetExtractionModeToAllClusters()
+        connectivity_filter_dd.ScalarConnectivityOn()
+        connectivity_filter_dd.SetScalarRange(dialog['dd1'], dialog['dd2'])
+        _update_alg(connectivity_filter_dd, True, 'Segmenting on dip directions')
+        f1 = connectivity_filter_dd.GetOutput()
+        # print(f1)
+        f1.GetPointData().SetActiveScalars('dip')
+        # print(f1.GetNumberOfPoints())
+        #
+        connectivity_filter_dip = vtkEuclideanClusterExtraction()
+        connectivity_filter_dip.SetInputData(f1)
+        connectivity_filter_dip.SetRadius(dialog['rad'])
+        connectivity_filter_dip.SetExtractionModeToAllClusters()
+        connectivity_filter_dip.ColorClustersOn()
+        connectivity_filter_dip.ScalarConnectivityOn()
+        connectivity_filter_dip.SetScalarRange(dialog['d1'], dialog['d2'])
+
+        _update_alg(connectivity_filter_dip, True, 'Segmenting dips')
+
+        n_clusters = connectivity_filter_dip.GetNumberOfExtractedClusters()
+
+        # print(n_clusters)
+
+        # r = vtkRadiusOutlierRemoval()
+        # r.SetInputData(connectivity_filter_dip.GetOutput())
+        # r.SetRadius(dialog['rad'])
+        # r.SetNumberOfNeighbors(dialog['nn'])
+        # r.GenerateOutliersOff()
+        #
+        # _update_alg(r, True, 'Cleaning pc')
+        pc = connectivity_filter_dip.GetOutput()
+        pc.GetPointData().SetActiveScalars('ClusterId')
+        appender_pc = vtkAppendPolyData()
+        for i in range(n_clusters):
+            print(f'{i}/{n_clusters}', end='\r')
+
+            thresh = vtkThresholdPoints()
+
+            thresh.SetInputData(pc)
+            thresh.ThresholdBetween(i, i)
+
+            thresh.Update()
+            if thresh.GetOutput().GetNumberOfPoints() > dialog['nn']:
+                appender_pc.AddInputData(thresh.GetOutput())
+        appender_pc.Update()
+
+        seg_pc = PCDom()
+        seg_pc.ShallowCopy(appender_pc.GetOutput())
+        seg_pc.generate_cells()
+        properties_name = seg_pc.point_data_keys
+        properties_components = [seg_pc.get_point_data_shape(i)[1] for i in properties_name]
+
+        curr_obj_dict = deepcopy(DomCollection.dom_entity_dict)
+        curr_obj_dict['uid'] = str(uuid4())
+        curr_obj_dict['name'] = f'pc_{dialog["name"]}'
+        curr_obj_dict['dom_type'] = "PCDom"
+        curr_obj_dict['properties_names'] = properties_name
+        curr_obj_dict['properties_components'] = properties_components
+        curr_obj_dict['vtk_obj'] = seg_pc
+        """Add to entity collection."""
+        self.parent.dom_coll.add_entity_from_dict(entity_dict=curr_obj_dict)
+
+        del f1
+        del seg_pc
+        del properties_name
+        del properties_components
+
+    else:
+        print('Entity not point cloud or multiple entities visible')
 
 
-def extract_pc(vtk_obj, scissors):
+def facets_pc(self):
+    if len(self.selected_uids) == 0:
+        print('No entities selected, make sure to have the right tab open')
+        return
+    else:
+        uid = self.selected_uids[0]
 
-    loop = vtkImplicitSelectionLoop()
-    loop.SetLoop(scissors.GetContourRepresentation().GetContourRepresentationAsPolyData().GetPoints())
-    clip_out = vtkExtractGeometry()
-    clip_out.SetInputData(vtk_obj)
-    clip_out.SetImplicitFunction(loop)
-    clip_out.SetExtractInside(False)
-    clip_out.Update()
-
-    clip_in = vtkExtractGeometry()
-    clip_in.SetInputData(vtk_obj)
-    clip_in.SetImplicitFunction(loop)
-    clip_in.SetExtractInside(True)
-    clip_in.Update()
-
-    clipped_out = clip_out.GetOutput()
-    clipped_in = clip_in.GetOutput()
-
-    out_ent = PCDom()
-    in_ent = PCDom()
-    out_ent.ShallowCopy(clipped_out)
-    in_ent.ShallowCopy(clipped_in)
-
-    return out_ent, in_ent
-
-
-def segment_pc(vtk_obj, ldd, hdd, ld, hd, rad, nn):
-
-    vtk_obj.GetPointData().SetActiveScalars('dip direction')
-    connectivity_filter_dd = vtkEuclideanClusterExtraction()
-    connectivity_filter_dd.SetInputData(vtk_obj)
-    connectivity_filter_dd.SetRadius(rad)
-    connectivity_filter_dd.SetExtractionModeToAllClusters()
-    connectivity_filter_dd.ScalarConnectivityOn()
-    connectivity_filter_dd.SetScalarRange(ldd, hdd)
-    _update_alg(connectivity_filter_dd, True, 'Segmenting on dip directions')
-    f1 = connectivity_filter_dd.GetOutput()
-    # print(f1)
-    f1.GetPointData().SetActiveScalars('dip')
-    # print(f1.GetNumberOfPoints())
-    #
-    connectivity_filter_dip = vtkEuclideanClusterExtraction()
-    connectivity_filter_dip.SetInputData(f1)
-    connectivity_filter_dip.SetRadius(rad)
-    connectivity_filter_dip.SetExtractionModeToAllClusters()
-    connectivity_filter_dip.ColorClustersOn()
-    connectivity_filter_dip.ScalarConnectivityOn()
-    connectivity_filter_dip.SetScalarRange(ld, hd)
-
-    _update_alg(connectivity_filter_dip, True, 'Segmenting dips')
-
-    n_clusters = connectivity_filter_dip.GetNumberOfExtractedClusters()
-
-    # print(n_clusters)
-
-    pc = connectivity_filter_dip.GetOutput()
-    pc.GetPointData().SetActiveScalars('ClusterId')
-    appender_pc = vtkAppendPolyData()
-    for i in range(n_clusters):
-        print(f'{i}/{n_clusters}', end='\r')
-
-        thresh = vtkThresholdPoints()
-
-        thresh.SetInputData(pc)
-        thresh.ThresholdBetween(i, i)
-
-        thresh.Update()
-        if thresh.GetOutput().GetNumberOfPoints() >= nn:
-            appender_pc.AddInputData(thresh.GetOutput())
-    appender_pc.Update()
-
-    seg_pc = PCDom()
-    seg_pc.ShallowCopy(appender_pc.GetOutput())
-    seg_pc.generate_cells()
-    return seg_pc
-
-
-def facets_pc(vtk_obj):
-
+    vtk_obj = self.parent.dom_coll.get_uid_vtk_obj(uid)
+    name = self.parent.dom_coll.get_uid_name(uid)
     appender = vtkAppendPolyData()
     max_region = np_max(vtk_obj.get_point_data('ClusterId'))
     vtk_obj.GetPointData().SetActiveScalars('ClusterId')
@@ -260,22 +298,34 @@ def facets_pc(vtk_obj):
             delaunay.SetProjectionPlaneMode(2)
             delaunay.Update()
             facet.ShallowCopy(delaunay.GetOutput())
+
+            mass = vtkMassProperties()
+            mass.SetInputData(facet)
+            area = np_repeat(mass.GetSurfaceArea(), n_points)
             facet.remove_point_data('Normals')
             facet.set_point_data('dip direction', dd)
             facet.set_point_data('dip', d)
-            mass = vtkMassProperties()
-            mass.SetInputData(facet)
-            mass.Update()
-            area = np_repeat(mass.GetSurfaceArea(), n_points)
-            facet.set_point_data('surf_area', area)
+            facet.set_point_data('area', area)
             appender.AddInputData(facet)
 
     appender.Update()
 
     facets = TriSurf()
     facets.ShallowCopy(appender.GetOutput())
+    properties_name = facets.point_data_keys
+    properties_components = [facets.get_point_data_shape(i)[1] for i in properties_name]
 
-    return facets
+    curr_obj_dict = deepcopy(GeologicalCollection.geological_entity_dict)
+    curr_obj_dict['uid'] = str(uuid4())
+    curr_obj_dict['name'] = f'{name}facets'
+    curr_obj_dict['geological_type'] = 'undef'
+    curr_obj_dict['topological_type'] = "TriSurf"
+    curr_obj_dict['geological_feature'] = name
+    curr_obj_dict['properties_names'] = properties_name
+    curr_obj_dict['properties_components'] = properties_components
+    curr_obj_dict['vtk_obj'] = facets
+    """Add to entity collection."""
+    self.parent.geol_coll.add_entity_from_dict(entity_dict=curr_obj_dict)
 
 
 def calibration_pc(vtk_objs):
@@ -308,3 +358,121 @@ def calibration_pc(vtk_objs):
         # Calculate surface density for given facet and volume density (how?)
         # Calculate loading scores.
         # Calculate N of neighbours
+
+
+def auto_pick(self):
+
+    if len(self.selected_uids) == 0:
+        print('No entities selected, make sure to have the right tab open')
+        return
+    else:
+        uid = self.selected_uids[0]
+
+    vtk_obj = self.parent.dom_coll.get_uid_vtk_obj(uid)
+    name = self.parent.dom_coll.get_uid_name(uid)
+    appender = vtkAppendPolyData()
+    max_region = np_max(vtk_obj.get_point_data('ClusterId'))
+    vtk_obj.GetPointData().SetActiveScalars('ClusterId')
+    for i in range(max_region):
+        print(f'{i}/{max_region}', end='\r')
+        thresh = vtkThresholdPoints()
+
+        thresh.SetInputData(vtk_obj)
+        thresh.ThresholdBetween(i, i)
+
+        thresh.Update()
+
+        points = numpy_support.vtk_to_numpy(thresh.GetOutput().GetPoints().GetData())
+        # print(points)
+        if thresh.GetOutput().GetNumberOfPoints() > 0:
+            # print(thresh.GetOutput())
+            c, n = best_fitting_plane(points)
+            # n = np.mean(numpy_support.vtk_to_numpy(thresh.GetOutput().GetPointData().GetArray('Normals')),axis=0)
+            # c = np.mean(points,axis=0)
+            if n[2] >= 0:
+                n *= -1
+            # plane = pv.Plane(center = c, direction= n)
+            att_point = Attitude()
+            att_point.append_point(point_vector=c)
+            att_point.auto_cells()
+            att_point.set_point_data(data_key='Normals', attribute_matrix=n)
+            appender.AddInputData(att_point)
+
+    appender.Update()
+
+    points = Attitude()
+    points.ShallowCopy(appender.GetOutput())
+    properties_name = points.point_data_keys
+    properties_components = [points.get_point_data_shape(i)[1] for i in properties_name]
+
+    curr_obj_dict = deepcopy(GeologicalCollection.geological_entity_dict)
+    curr_obj_dict['uid'] = str(uuid4())
+    curr_obj_dict['name'] = f'{name}auto_pick'
+    curr_obj_dict['geological_type'] = 'undef'
+    curr_obj_dict['topological_type'] = "VertexSet"
+    curr_obj_dict['geological_feature'] = name
+    curr_obj_dict['properties_names'] = properties_name
+    curr_obj_dict['properties_components'] = properties_components
+    curr_obj_dict['vtk_obj'] = points
+    """Add to entity collection."""
+    self.parent.geol_coll.add_entity_from_dict(entity_dict=curr_obj_dict)
+
+
+
+
+'''[Gabriele] PC Filters ----------------------------------------------------'''
+
+
+def thresh_filt(self):
+
+    uid = self.actors_df.loc[self.actors_df['show'] == True, 'uid'].values[0]
+    vtk_obj = self.parent.dom_coll.get_uid_vtk_obj(uid)
+    if isinstance(vtk_obj,PCDom):
+        input_dict = {'prop_name': ['Select property name: ', vtk_obj.properties_names], 'l_t': ['Lower threshold: ', 0], 'u_t': ['Upper threshold: ', 10]}
+        dialog = multiple_input_dialog(title='Threshold filter', input_dict=input_dict)
+
+        thresh = vtkThreshold()
+        thresh.SetInputData(vtk_obj)
+        thresh.SetInputArrayToProcess(0, 0, 0, vtkDataObject.FIELD_ASSOCIATION_POINTS, dialog['prop_name'])
+        thresh.SetLowerThreshold(float(dialog['l_t']))
+        thresh.SetUpperThreshold(float(dialog['u_t']))
+        thresh.Update()
+        out = PCDom()
+        out.ShallowCopy(thresh.GetOutput())
+        out.generate_cells()
+        # out.plot()
+        # self.parent.dom_coll.replace_vtk(uid[0],out)
+        entity_dict = deepcopy(self.parent.dom_coll.dom_entity_dict)
+        # print(entity_dict)
+        entity_dict['name'] = self.parent.dom_coll.get_uid_name(uid) + '_thresh_'+str(dialog['l_t'])+'_'+str(dialog['u_t'])
+        entity_dict['vtk_obj'] = out
+        entity_dict['dom_type'] = 'PCDom'
+        entity_dict['properties_names'] = self.parent.dom_coll.get_uid_properties_names(uid)
+        entity_dict['dom_type'] = 'PCDom'
+        entity_dict['properties_components'] = self.parent.dom_coll.get_uid_properties_components(uid)
+        entity_dict['vtk_obj'] = out
+        self.parent.dom_coll.add_entity_from_dict(entity_dict)
+        del out
+        del thresh
+    else:
+        print('Entity not point cloud or multiple entities visible')
+
+
+def radial_filt(self):
+    ...
+
+
+def surf_den_filt(self):
+    ...
+
+
+def rough_filt(self):
+    ...
+
+
+def curv_filt(self):
+    ...
+
+
+def col_filt(self):
+    ...
