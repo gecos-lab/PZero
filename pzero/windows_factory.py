@@ -2,6 +2,7 @@
 PZero© Andrea Bistacchi"""
 from pyvista.core.filters import _update_alg
 from vtkmodules.vtkCommonCore import vtkCommand
+from vtkmodules.vtkCommonDataModel import vtkBoundingBox
 from vtkmodules.vtkFiltersCore import vtkThresholdPoints, vtkDelaunay2D
 from vtkmodules.vtkFiltersPoints import vtkRadiusOutlierRemoval, vtkEuclideanClusterExtraction, vtkProjectPointsToPlane
 from vtkmodules.vtkRenderingCore import vtkPropPicker
@@ -66,7 +67,7 @@ from pyvista import global_theme as pv_global_theme
 from pyvistaqt import QtInteractor as pvQtInteractor
 from pyvista import _vtk
 from pyvista import read_texture
-from pyvista import Plane as pv_Plane
+from pyvista import Box as pv_Box
 from pyvista import Line as pv_Line
 from pyvista import Disc as pv_Disc
 
@@ -4522,6 +4523,8 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         """Manage home view"""
         self.default_view = self.plotter.camera_position
 
+        self.plotter.track_click_position(lambda pos: self.plotter.camera.SetFocalPoint(pos), side='left', double=True)
+
     def initialize_menu_tools(self):
         self.saveHomeView = QAction("Save home view", self)  # create action
         self.saveHomeView.triggered.connect(self.save_home_view)  # connect action to function
@@ -4561,7 +4564,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         """Show the Qt Window"""
 
         self.show()
-        if isinstance(self,View3D):
+        if isinstance(self, View3D):
             self.init_zoom = self.plotter.camera.distance
             self.cam_orient_widget.On()  # [Gabriele] The orientation widget needs to be turned on AFTER the canvas is shown
         # self.picker = self.plotter.enable_mesh_picking(callback= self.pkd_mesh,show_message=False)
@@ -4736,6 +4739,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.plotter.iren.interactor.RemoveObservers('LeftButtonPressEvent')  # Remove the selector observer
         self.plotter.untrack_click_position(side='right')  # Remove the right click observer
         self.plotter.untrack_click_position(side='left')  # Remove the left click observer
+        self.plotter.track_click_position(lambda pos: self.plotter.camera.SetFocalPoint(pos), side='left', double=True)
         if isinstance(self, View3D):
             self.plotter.enable_trackball_style()
         elif isinstance(self, NewView2D):
@@ -4782,17 +4786,16 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                 sel_actor = self.actors_df.loc[self.actors_df['uid'] == sel_uid, 'actor'].values[0]
                 collection = self.actors_df.loc[self.actors_df['uid'] == sel_uid, 'collection'].values[0]
                 mesh = sel_actor.GetMapper().GetInput()
+                name = f'{sel_uid}_silh'
+                name_list.add(name)
                 if collection == 'dom_coll':
-                    self.plotter.add_bounding_box(line_width=5, color='Yellow')
-                else:
-                    name = f'{sel_uid}_silh'
-                    name_list.add(name)
+                    bounds = sel_actor.GetBounds()
+                    mesh = pv_Box(bounds)
 
-                    self.plotter.add_mesh(mesh, pickable=False, name=name, color='Yellow', style='wireframe', line_width=5)
-
-                    for av_actor in actors.difference(name_list):
-                        if '_silh' in av_actor:
-                            self.plotter.remove_actor(av_actor)
+                self.plotter.add_mesh(mesh, pickable=False, name=name, color='Yellow', style='wireframe', line_width=5)
+                for av_actor in actors.difference(name_list):
+                    if '_silh' in av_actor:
+                        self.plotter.remove_actor(av_actor)
 
             self.actor_in_table(self.selected_uids)
         else:
@@ -4891,6 +4894,7 @@ class View3D(BaseView):
 
     def initialize_menu_tools(self):
         """Customize menus and tools for this view"""
+        from .point_clouds import cut_pc
         super().initialize_menu_tools()
         self.menuBaseView.setTitle("Edit")
         self.actionBase_Tool.setText("Edit")
@@ -4919,7 +4923,7 @@ class View3D(BaseView):
         self.actionRoughnessf.triggered.connect(lambda: self.rough_filt())
         self.actionCurvaturef.triggered.connect(lambda: self.curv_filt())
         self.actionNormalsf.triggered.connect(lambda: self.norm_filt())
-        self.actionManualf.triggered.connect(lambda: self.manual_filt())
+        self.actionManualf.triggered.connect(lambda: cut_pc(self))
 
 
         self.actionManual_picking.triggered.connect(lambda: self.act_att())
@@ -5493,9 +5497,6 @@ class View3D(BaseView):
 
     def col_filt(self):
         print('Color filtering')
-
-    def manual_filt(self):
-        print('Manual filtering')
 
     '''[Gabriele] PC Edit ----------------------------------------------------'''
 

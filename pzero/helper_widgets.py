@@ -147,3 +147,21 @@ class Editor(vtkContourWidget):
         for point in p_flip:
             self.GetContourRepresentation().AddNodeAtWorldPosition(point)
         self.Render()
+
+
+class Scissors(vtkContourWidget):
+    def __init__(self, parent=None, pass_func=None, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.parent = parent
+        self.SetInteractor(self.parent.plotter.iren.interactor)
+        head = pv_wrap(self.GetContourRepresentation().GetActiveCursorShape())
+        self.GetContourRepresentation().SetCursorShape(head)
+        self.GetContourRepresentation().SetLineInterpolator(vtkLinearContourLineInterpolator())
+        self.GetContourRepresentation().GetLinesProperty().SetLineWidth(3)
+        self.GetContourRepresentation().GetProperty().SetColor((255, 255, 255))
+        self.GetContourRepresentation().GetActiveProperty().SetColor((255, 0, 0))
+
+        self.ContinuousDrawOff()
+        self.FollowCursorOn()
+        self.event_translator = self.GetEventTranslator()
+        self.event_translator.RemoveTranslation(vtkCommand.RightButtonPressEvent)

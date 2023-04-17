@@ -9,6 +9,11 @@ from numpy import cov as np_cov
 from numpy import linalg as np_linalg
 from numpy import dot as np_dot
 from numpy import pi as np_pi
+from numpy import deg2rad as np_deg2rad
+from numpy import sin as np_sin
+from numpy import cos as np_cos
+from numpy import array as np_array
+
 
 from PIL import Image
 
@@ -207,3 +212,21 @@ def gen_frame(arr):
     im.info['transparency'] = 255
 
     return im
+
+
+def rotate_vec_along(vector, axis, degrees):
+    angle = np_deg2rad(degrees)
+    if axis.lower() == 'x':
+        R = np_array([[1, 0, 0],
+                       [0, np_cos(angle), -np_sin(angle)],
+                       [0, np_sin(angle), np_cos(angle)]])
+    elif axis.lower() == 'y':
+        R = np_array([[np_cos(angle), 0, np_sin(angle)],
+                      [0, 1, 0],
+                      [-np_sin(angle), 0, np_cos(angle)]])
+    elif axis.lower() == 'z':
+        R = np_array([[np_cos(angle), -np_sin(angle), 0],
+                       [np_sin(angle), np_cos(angle), 0],
+                       [0, 0, 1]])
+    rot_vec = vector.dot(R)
+    return rot_vec
