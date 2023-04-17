@@ -15,17 +15,16 @@ from pandas import read_csv as pd_read_csv
 
 from .entities_db import EntitiesDB
 from .project_window_ui import Ui_ProjectWindow
-from .entities_factory import VertexSet, PolyLine, TriSurf, XsVertexSet, XsPolyLine, DEM, MapImage, Voxet, Seismics, \
+from pzero.entities.entities_factory import VertexSet, PolyLine, TriSurf, XsVertexSet, XsPolyLine, DEM, MapImage, Voxet, Seismics, \
     XsVoxet, \
     PCDom, TSDom, Well, Attitude, XsImage
-from pzero.entities_collections.geological_collection import GeologicalCollection
-from pzero.entities_collections.xsection_collection import XSectionCollection
-from pzero.entities_collections.dom_collection import DomCollection
-from pzero.entities_collections.image_collection import ImageCollection
-from pzero.entities_collections.mesh3d_collection import Mesh3DCollection
-from pzero.entities_collections.boundary_collection import BoundaryCollection
-from pzero.entities_collections.well_collection import WellCollection
-from pzero.entities_collections.fluid_collection import FluidsCollection
+from pzero.collections.xsection import XSectionCollection
+from pzero.collections.dom import DomCollection
+from pzero.collections.image import ImageCollection
+from pzero.collections.mesh3d import Mesh3DCollection
+from pzero.collections.boundary import BoundaryCollection
+from pzero.collections.well import WellCollection
+from pzero.collections.fluid import FluidsCollection
 from .legend_manager import Legend
 from .properties_manager import PropertiesCMaps
 from .gocad2vtk import gocad2vtk, gocad2vtk_section, gocad2vtk_boundary
@@ -1250,372 +1249,325 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         """--------------------- READ TABLES ---------------------"""
 
         """Read x_section table and build cross-sections. Note beginResetModel() and endResetModel()."""
-        if os.path.isfile((in_dir_name + '/xsection_table.csv')) or os.path.isfile(
-                (in_dir_name + '/xsection_table.json')):
-            self.entities_db.get_collection_by_name("xsect").beginResetModel()
-            if os.path.isfile((in_dir_name + '/xsection_table.json')):
-                new_xsect_coll_df = pd_read_json(in_dir_name + '/xsection_table.json', orient='index',
-                                                 dtype=XSectionCollection().type_dict)
-                if not new_xsect_coll_df.empty:
-                    if not 'dip' in new_xsect_coll_df:
-                        new_xsect_coll_df.insert(12, 'dip', 90.0)
-                    if not 'width' in new_xsect_coll_df:
-                        new_xsect_coll_df.insert(14, 'width', new_xsect_coll_df.top - new_xsect_coll_df.bottom)
-                    self.entities_db.get_collection_by_name("xsect")._df = new_xsect_coll_df
-            else:
-                self.entities_db.get_collection_by_name("xsect")._df = pd_read_csv(in_dir_name + '/xsection_table.csv',
-                                                                                   encoding='utf-8',
-                                                                                   dtype=XSectionCollection().type_dict,
-                                                                                   keep_default_na=False)
-            for uid in self.entities_db.get_collection_by_name("xsect")._df["uid"].tolist():
-                self.entities_db.get_collection_by_name("xsect").set_geometry(uid=uid)
-            self.entities_db.get_collection_by_name("xsect").endResetModel()
+
+        xsect_coll = self.entities_db.get_collection_by_name("xsect")
+
+        xsect_coll.beginResetModel()
+        xsect_coll.read(in_dir_name)
+
+        for uid in xsect_coll._df["uid"].tolist(): # this should also be delegated
+            xsect_coll.set_geometry(uid=uid)
+
+        xsect_coll.endResetModel()
+
+
+
 
         """Read DOM table and files. Note beginResetModel() and endResetModel()."""
-        if os.path.isfile((in_dir_name + '/dom_table.csv')) or os.path.isfile((in_dir_name + '/dom_table.json')):
-            self.entities_db.get_collection_by_name("dom").beginResetModel()
-            if os.path.isfile((in_dir_name + '/dom_table.json')):
-                new_dom_coll_df = pd_read_json(in_dir_name + '/dom_table.json', orient='index',
-                                               dtype=DomCollection().type_dict)
-                if not new_dom_coll_df.empty:
-                    self.entities_db.get_collection_by_name("dom")._df = new_dom_coll_df
-            else:
-                self.entities_db.get_collection_by_name("dom")._df = pd_read_csv(in_dir_name + '/dom_table.csv',
-                                                                                 encoding='utf-8',
-                                                                                 dtype=DomCollection().entity_dict,
-                                                                                 keep_default_na=False)
-            prgs_bar = progress_dialog(max_value=self.entities_db.get_collection_by_name("dom")._df.shape[0],
-                                       title_txt="Open DOM", label_txt="Opening DOM objects...", cancel_txt=None,
-                                       parent=self)
-            for uid in self.entities_db.get_collection_by_name("dom")._df['uid'].to_list():
-                if self.entities_db.get_collection_by_name("dom").get_uid_dom_type(uid) == "DEM":
-                    if not os.path.isfile((in_dir_name + "/" + uid + ".vts")):
-                        print("error: missing VTK file")
-                        return
-                    vtk_object = DEM()
-                    sg_reader = vtkXMLStructuredGridReader()
-                    sg_reader.SetFileName(in_dir_name + "/" + uid + ".vts")
-                    sg_reader.Update()
-                    vtk_object.ShallowCopy(sg_reader.GetOutput())
-                    vtk_object.Modified()
-                elif self.entities_db.get_collection_by_name("dom").get_uid_dom_type(uid) == "DomXs":
-                    xsect_uid = self.entities_db.get_collection_by_name("dom").get_uid_x_section(uid)
-                    vtk_object = XsPolyLine(x_section_uid=xsect_uid, parent=self)
-                    pl_reader = vtkXMLPolyDataReader()
-                    pl_reader.SetFileName(in_dir_name + "/" + uid + ".vtp")
-                    pl_reader.Update()
-                    vtk_object.ShallowCopy(pl_reader.GetOutput())
-                    vtk_object.Modified()
-                elif self.entities_db.get_collection_by_name("dom")._df.loc[
-                    self.entities_db.get_collection_by_name("dom")._df['uid'] == uid, 'dom_type'].values[0] == 'TSDom':
-                    """Add code to read TSDOM here__________"""
-                    vtk_object = TSDom()
-                elif self.entities_db.get_collection_by_name("dom")._df.loc[
-                    self.entities_db.get_collection_by_name("dom")._df['uid'] == uid, 'dom_type'].values[0] == 'PCDom':
-                    """Open saved PCDoms data"""
-                    vtk_object = PCDom()
-                    pd_reader = vtkXMLPolyDataReader()
-                    pd_reader.SetFileName(in_dir_name + "/" + uid + ".vtp")
-                    pd_reader.Update()
-                    vtk_object.ShallowCopy(pd_reader.GetOutput())
-                    vtk_object.Modified()
-                self.entities_db.get_collection_by_name("dom").set_uid_vtk_obj(uid=uid, vtk_obj=vtk_object)
-                prgs_bar.add_one()
-            self.entities_db.get_collection_by_name("dom").endResetModel()
+
+
+        dom_coll = self.entities_db.get_collection_by_name("dom")
+
+        dom_coll.beginResetModel()
+        dom_coll.read(in_dir_name)
+
+        prgs_bar = progress_dialog(max_value=dom_coll._df.shape[0],
+                                   title_txt="Open DOM", label_txt="Opening DOM objects...", cancel_txt=None,
+                                   parent=self)
+
+        # deserialize vtk objects
+        for uid in dom_coll._df['uid'].to_list():
+            if dom_coll.get_uid_dom_type(uid) == "DEM":
+                if not os.path.isfile((in_dir_name + "/" + uid + ".vts")):
+                    print("error: missing VTK file")
+                    return
+                vtk_object = DEM()
+                sg_reader = vtkXMLStructuredGridReader()
+                sg_reader.SetFileName(in_dir_name + "/" + uid + ".vts")
+                sg_reader.Update()
+                vtk_object.ShallowCopy(sg_reader.GetOutput())
+                vtk_object.Modified()
+            elif dom_coll.get_uid_dom_type(uid) == "DomXs":
+                xsect_uid = dom_coll.get_uid_x_section(uid)
+                vtk_object = XsPolyLine(x_section_uid=xsect_uid, parent=self)
+                pl_reader = vtkXMLPolyDataReader()
+                pl_reader.SetFileName(in_dir_name + "/" + uid + ".vtp")
+                pl_reader.Update()
+                vtk_object.ShallowCopy(pl_reader.GetOutput())
+                vtk_object.Modified()
+            elif dom_coll._df.loc[
+                dom_coll._df['uid'] == uid, 'dom_type'].values[0] == 'TSDom':
+                """Add code to read TSDOM here__________"""
+                vtk_object = TSDom()
+            elif dom_coll._df.loc[
+                dom_coll._df['uid'] == uid, 'dom_type'].values[0] == 'PCDom':
+                """Open saved PCDoms data"""
+                vtk_object = PCDom()
+                pd_reader = vtkXMLPolyDataReader()
+                pd_reader.SetFileName(in_dir_name + "/" + uid + ".vtp")
+                pd_reader.Update()
+                vtk_object.ShallowCopy(pd_reader.GetOutput())
+                vtk_object.Modified()
+            dom_coll.set_uid_vtk_obj(uid=uid, vtk_obj=vtk_object)
+            prgs_bar.add_one()
+        dom_coll.endResetModel()
 
         """Read image collection and files"""
-        if os.path.isfile((in_dir_name + '/image_table.csv')) or os.path.isfile((in_dir_name + '/image_table.json')):
-            self.entities_db.get_collection_by_name("image").beginResetModel()
-            if os.path.isfile((in_dir_name + '/image_table.json')):
-                new_image_coll_df = pd_read_json(in_dir_name + '/image_table.json', orient='index',
-                                                 dtype=ImageCollection().type_dict)
-                if not new_image_coll_df.empty:
-                    self.entities_db.get_collection_by_name("image")._df = new_image_coll_df
-            else:
-                self.entities_db.get_collection_by_name("image")._df = pd_read_csv(in_dir_name + '/image_table.csv',
-                                                                                   encoding='utf-8',
-                                                                                   dtype=ImageCollection().type_dict,
-                                                                                   keep_default_na=False)
-            prgs_bar = progress_dialog(max_value=self.entities_db.get_collection_by_name("image")._df.shape[0],
+
+        image_coll = self.entities_db.get_collection_by_name("image")
+
+        image_coll.beginResetModel()
+        image_coll.read(in_dir_name)
+
+
+
+
+        prgs_bar = progress_dialog(max_value=image_coll._df.shape[0],
                                        title_txt="Open image", label_txt="Opening image objects...", cancel_txt=None,
                                        parent=self)
-            for uid in self.entities_db.get_collection_by_name("image")._df['uid'].to_list():
-                if self.entities_db.get_collection_by_name("image")._df.loc[
-                    self.entities_db.get_collection_by_name("image")._df['uid'] == uid, 'image_type'].values[0] in [
-                    "MapImage", "TSDomImage"]:
-                    if not os.path.isfile((in_dir_name + "/" + uid + ".vti")):
-                        print("error: missing image file")
-                        return
-                    vtk_object = MapImage()
-                    im_reader = vtkXMLImageDataReader()
-                    im_reader.SetFileName(in_dir_name + "/" + uid + ".vti")
-                    im_reader.Update()
-                    vtk_object.ShallowCopy(im_reader.GetOutput())
-                    vtk_object.Modified()
-                elif self.entities_db.get_collection_by_name("image")._df.loc[
-                    self.entities_db.get_collection_by_name("image")._df['uid'] == uid, 'image_type'].values[0] in [
-                    "XsImage"]:
-                    if not os.path.isfile((in_dir_name + "/" + uid + ".vti")):
-                        print("error: missing image file")
-                        return
-                    vtk_object = XsImage(parent=self, x_section_uid=self.entities_db.get_collection_by_name("image")._df.loc[
-                        self.entities_db.get_collection_by_name("image")._df['uid'] == uid, 'x_section'].values[0])
-                    im_reader = vtkXMLImageDataReader()
-                    im_reader.SetFileName(in_dir_name + "/" + uid + ".vti")
-                    im_reader.Update()
-                    vtk_object.ShallowCopy(im_reader.GetOutput())
-                    vtk_object.Modified()
-                elif self.entities_db.get_collection_by_name("image")._df.loc[
-                    self.entities_db.get_collection_by_name("image")._df['uid'] == uid, 'image_type'].values[0] in [
-                    "Seismics"]:
-                    if not os.path.isfile((in_dir_name + "/" + uid + ".vts")):
-                        print("error: missing VTK file")
-                        return
-                    vtk_object = Seismics()
-                    sg_reader = vtkXMLStructuredGridReader()
-                    sg_reader.SetFileName(in_dir_name + "/" + uid + ".vts")
-                    sg_reader.Update()
-                    vtk_object.ShallowCopy(sg_reader.GetOutput())
-                    vtk_object.Modified()
-                self.entities_db.get_collection_by_name("image").set_uid_vtk_obj(uid=uid, vtk_obj=vtk_object)
-                prgs_bar.add_one()
-            self.entities_db.get_collection_by_name("image").endResetModel()
+        for uid in image_coll._df['uid'].to_list():
+            if image_coll._df.loc[
+                image_coll._df['uid'] == uid, 'image_type'].values[0] in [
+                "MapImage", "TSDomImage"]:
+                if not os.path.isfile((in_dir_name + "/" + uid + ".vti")):
+                    print("error: missing image file")
+                    return
+                vtk_object = MapImage()
+                im_reader = vtkXMLImageDataReader()
+                im_reader.SetFileName(in_dir_name + "/" + uid + ".vti")
+                im_reader.Update()
+                vtk_object.ShallowCopy(im_reader.GetOutput())
+                vtk_object.Modified()
+            elif image_coll._df.loc[
+                image_coll._df['uid'] == uid, 'image_type'].values[0] in [
+                "XsImage"]:
+                if not os.path.isfile((in_dir_name + "/" + uid + ".vti")):
+                    print("error: missing image file")
+                    return
+                vtk_object = XsImage(parent=self, x_section_uid=image_coll._df.loc[
+                    image_coll._df['uid'] == uid, 'x_section'].values[0])
+                im_reader = vtkXMLImageDataReader()
+                im_reader.SetFileName(in_dir_name + "/" + uid + ".vti")
+                im_reader.Update()
+                vtk_object.ShallowCopy(im_reader.GetOutput())
+                vtk_object.Modified()
+            elif image_coll._df.loc[
+                image_coll._df['uid'] == uid, 'image_type'].values[0] in [
+                "Seismics"]:
+                if not os.path.isfile((in_dir_name + "/" + uid + ".vts")):
+                    print("error: missing VTK file")
+                    return
+                vtk_object = Seismics()
+                sg_reader = vtkXMLStructuredGridReader()
+                sg_reader.SetFileName(in_dir_name + "/" + uid + ".vts")
+                sg_reader.Update()
+                vtk_object.ShallowCopy(sg_reader.GetOutput())
+                vtk_object.Modified()
+            image_coll.set_uid_vtk_obj(uid=uid, vtk_obj=vtk_object)
+            prgs_bar.add_one()
+        image_coll.endResetModel()
 
         """Read mesh3d collection and files"""
-        if os.path.isfile((in_dir_name + '/mesh3d_table.csv')) or os.path.isfile((in_dir_name + '/mesh3d_table.json')):
-            self.entities_db.get_collection_by_name("mesh3d").beginResetModel()
-            if os.path.isfile((in_dir_name + '/mesh3d_table.json')):
-                new_mesh3d_coll_df = pd_read_json(in_dir_name + '/mesh3d_table.json', orient='index',
-                                                  dtype=Mesh3DCollection().type_dict)
-                if not new_mesh3d_coll_df.empty:
-                    self.entities_db.get_collection_by_name("mesh3d")._df = new_mesh3d_coll_df
-            else:
-                self.entities_db.get_collection_by_name("mesh3d")._df = pd_read_csv(in_dir_name + '/mesh3d_table.csv',
-                                                                                    encoding='utf-8',
-                                                                                    dtype=Mesh3DCollection().type_dict,
-                                                                                    keep_default_na=False)
-            prgs_bar = progress_dialog(max_value=self.entities_db.get_collection_by_name("mesh3d")._df.shape[0],
-                                       title_txt="Open 3D mesh", label_txt="Opening 3D mesh objects...",
-                                       cancel_txt=None, parent=self)
-            for uid in self.entities_db.get_collection_by_name("mesh3d")._df['uid'].to_list():
-                if self.entities_db.get_collection_by_name("mesh3d")._df.loc[
-                    self.entities_db.get_collection_by_name("mesh3d")._df['uid'] == uid, 'mesh3d_type'].values[0] in [
-                    "Voxet"]:
-                    if not os.path.isfile((in_dir_name + "/" + uid + ".vti")):
-                        print("error: missing .mesh3d file")
-                        return
-                    vtk_object = Voxet()
-                    im_reader = vtkXMLImageDataReader()
-                    im_reader.SetFileName(in_dir_name + "/" + uid + ".vti")
-                    im_reader.Update()
-                    vtk_object.ShallowCopy(im_reader.GetOutput())
-                    vtk_object.Modified()
-                elif self.entities_db.get_collection_by_name("mesh3d")._df.loc[
-                    self.entities_db.get_collection_by_name("mesh3d")._df['uid'] == uid, 'mesh3d_type'].values[0] in [
-                    "XsVoxet"]:
-                    if not os.path.isfile((in_dir_name + "/" + uid + ".vti")):
-                        print("error: missing .mesh3d file")
-                        return
-                    vtk_object = XsVoxet(x_section_uid=self.entities_db.get_collection_by_name("mesh3d")._df.loc[
-                        self.entities_db.get_collection_by_name("mesh3d")._df['uid'] == uid, 'x_section'].values[0],
-                                         parent=self)
-                    im_reader = vtkXMLImageDataReader()
-                    im_reader.SetFileName(in_dir_name + "/" + uid + ".vti")
-                    im_reader.Update()
-                    vtk_object.ShallowCopy(im_reader.GetOutput())
-                    vtk_object.Modified()
-                self.entities_db.get_collection_by_name("mesh3d").set_uid_vtk_obj(uid=uid, vtk_obj=vtk_object)
-                prgs_bar.add_one()
-            self.entities_db.get_collection_by_name("mesh3d").endResetModel()
 
-        """Read boundaries collection and files"""
-        if os.path.isfile((in_dir_name + '/boundary_table.csv')) or os.path.isfile(
-                (in_dir_name + '/boundary_table.json')):
-            self.entities_db.get_collection_by_name("boundary").beginResetModel()
-            if os.path.isfile((in_dir_name + '/boundary_table.json')):
-                new_boundary_coll_df = pd_read_json(in_dir_name + '/boundary_table.json', orient='index',
-                                                    dtype=BoundaryCollection().type_dict)
-                if not new_boundary_coll_df.empty:
-                    self.entities_db.get_collection_by_name("boundary")._df = new_boundary_coll_df
-            else:
-                self.entities_db.get_collection_by_name("boundary")._df = pd_read_csv(in_dir_name + '/boundary_table.csv',
-                                                                                      encoding='utf-8',
-                                                                                      dtype=BoundaryCollection().type_dict,
-                                                                                      keep_default_na=False)
-            prgs_bar = progress_dialog(max_value=self.entities_db.get_collection_by_name("boundary")._df.shape[0],
-                                       title_txt="Open boundary", label_txt="Opening boundary objects...",
-                                       cancel_txt=None, parent=self)
-            for uid in self.entities_db.get_collection_by_name("boundary")._df['uid'].to_list():
-                if not os.path.isfile((in_dir_name + "/" + uid + ".vtp")):
-                    print("error: missing VTK file")
+        mesh3d_coll = self.entities_db.get_collection_by_name("mesh3d")
+
+        mesh3d_coll.beginResetModel()
+        mesh3d_coll.read(in_dir_name)
+
+
+        prgs_bar = progress_dialog(max_value=mesh3d_coll._df.shape[0],
+                                   title_txt="Open 3D mesh", label_txt="Opening 3D mesh objects...",
+                                   cancel_txt=None, parent=self)
+        for uid in mesh3d_coll._df['uid'].to_list():
+            if mesh3d_coll._df.loc[
+                mesh3d_coll._df['uid'] == uid, 'mesh3d_type'].values[0] in [
+                "Voxet"]:
+                if not os.path.isfile((in_dir_name + "/" + uid + ".vti")):
+                    print("error: missing .mesh3d file")
                     return
-                if self.entities_db.get_collection_by_name("boundary").get_uid_topological_type(uid) == 'PolyLine':
-                    vtk_object = PolyLine()
-                elif self.entities_db.get_collection_by_name("boundary").get_uid_topological_type(uid) == 'TriSurf':
-                    vtk_object = TriSurf()
-                pd_reader = vtkXMLPolyDataReader()
-                pd_reader.SetFileName(in_dir_name + "/" + uid + ".vtp")
-                pd_reader.Update()
-                vtk_object.ShallowCopy(pd_reader.GetOutput())
+                vtk_object = Voxet()
+                im_reader = vtkXMLImageDataReader()
+                im_reader.SetFileName(in_dir_name + "/" + uid + ".vti")
+                im_reader.Update()
+                vtk_object.ShallowCopy(im_reader.GetOutput())
                 vtk_object.Modified()
-                self.entities_db.get_collection_by_name("boundary").set_uid_vtk_obj(uid=uid, vtk_obj=vtk_object)
-                prgs_bar.add_one()
-            self.entities_db.get_collection_by_name("boundary").endResetModel()
+            elif mesh3d_coll._df.loc[
+                mesh3d_coll._df['uid'] == uid, 'mesh3d_type'].values[0] in [
+                "XsVoxet"]:
+                if not os.path.isfile((in_dir_name + "/" + uid + ".vti")):
+                    print("error: missing .mesh3d file")
+                    return
+                vtk_object = XsVoxet(x_section_uid=mesh3d_coll._df.loc[
+                    mesh3d_coll._df['uid'] == uid, 'x_section'].values[0],
+                                     parent=self)
+                im_reader = vtkXMLImageDataReader()
+                im_reader.SetFileName(in_dir_name + "/" + uid + ".vti")
+                im_reader.Update()
+                vtk_object.ShallowCopy(im_reader.GetOutput())
+                vtk_object.Modified()
+            mesh3d_coll.set_uid_vtk_obj(uid=uid, vtk_obj=vtk_object)
+            prgs_bar.add_one()
+        mesh3d_coll.endResetModel()
+
+
+        boundary_coll = self.entities_db.get_collection_by_name("boundary")
+        boundary_coll.beginResetModel()
+        boundary_coll.read(in_dir_name)
+
+
+        prgs_bar = progress_dialog(max_value=boundary_coll._df.shape[0],
+                                   title_txt="Open boundary", label_txt="Opening boundary objects...",
+                                   cancel_txt=None, parent=self)
+        for uid in boundary_coll._df['uid'].to_list():
+            if not os.path.isfile((in_dir_name + "/" + uid + ".vtp")):
+                print("error: missing VTK file")
+                return
+            if boundary_coll.get_uid_topological_type(uid) == 'PolyLine':
+                vtk_object = PolyLine()
+            elif boundary_coll.get_uid_topological_type(uid) == 'TriSurf':
+                vtk_object = TriSurf()
+            pd_reader = vtkXMLPolyDataReader()
+            pd_reader.SetFileName(in_dir_name + "/" + uid + ".vtp")
+            pd_reader.Update()
+            vtk_object.ShallowCopy(pd_reader.GetOutput())
+            vtk_object.Modified()
+            boundary_coll.set_uid_vtk_obj(uid=uid, vtk_obj=vtk_object)
+            prgs_bar.add_one()
+        boundary_coll.endResetModel()
 
         """Read well table and files"""
-        if os.path.isfile((in_dir_name + '/well_table.csv')) or os.path.isfile((in_dir_name + '/well_table.json')):
-            self.well_coll.beginResetModel()
-            if os.path.isfile((in_dir_name + '/well_table.json')):
-                new_well_coll_df = pd_read_json(in_dir_name + '/well_table.json', orient='index',
-                                                dtype=WellCollection().type_dict)
-                if not new_well_coll_df.empty:
-                    self.well_coll._df = new_well_coll_df
-            else:
-                self.well_coll._df = pd_read_csv(in_dir_name + '/well_table.csv', encoding='utf-8',
-                                                 dtype=WellCollection().type_dict, keep_default_na=False)
-            prgs_bar = progress_dialog(max_value=self.well_coll._df.shape[0], title_txt="Open wells",
-                                       label_txt="Opening well objects...", cancel_txt=None, parent=self)
-            for uid in self.well_coll._df['uid'].to_list():
-                if not os.path.isfile((in_dir_name + "/" + uid + ".vtp")):
-                    print("error: missing VTK file")
-                    return
-                vtk_object = Well()
-                pd_reader = vtkXMLPolyDataReader()
-                pd_reader.SetFileName(in_dir_name + "/" + uid + ".vtp")
-                pd_reader.Update()
-                vtk_object.trace = pd_reader.GetOutput()
 
-                self.well_coll.set_uid_vtk_obj(uid=uid, vtk_obj=vtk_object.trace)
-                # Don't know if I like it.
-                # Maybe it's better to always add to the vtkobject column the
-                # Well and not the WellTrace instance and then call well.trace/head where needed
-                prgs_bar.add_one()
-            self.well_coll.endResetModel()
+        well_coll = self.entities_db.get_collection_by_name("well")
+        well_coll.beginResetModel()
+
+        well_coll.read(in_dir_name)
+
+
+
+        prgs_bar = progress_dialog(max_value=well_coll._df.shape[0], title_txt="Open wells",
+                                   label_txt="Opening well objects...", cancel_txt=None, parent=self)
+        for uid in well_coll._df['uid'].to_list():
+            if not os.path.isfile((in_dir_name + "/" + uid + ".vtp")):
+                print("error: missing VTK file")
+                return
+            vtk_object = Well()
+            pd_reader = vtkXMLPolyDataReader()
+            pd_reader.SetFileName(in_dir_name + "/" + uid + ".vtp")
+            pd_reader.Update()
+            vtk_object.trace = pd_reader.GetOutput()
+
+            well_coll.set_uid_vtk_obj(uid=uid, vtk_obj=vtk_object.trace)
+            # Don't know if I like it.
+            # Maybe it's better to always add to the vtkobject column the
+            # Well and not the WellTrace instance and then call well.trace/head where needed
+            prgs_bar.add_one()
+        well_coll.endResetModel()
+
+        ## update prop legenf widhet
         self.prop_legend.update_widget(parent=self)
 
-        """Read geological table and files. Note beginResetModel() and endResetModel()."""
-        if os.path.isfile((in_dir_name + '/geological_table.csv')) or os.path.isfile(
-                (in_dir_name + '/geological_table.json')):
 
-            geol_coll = self.entities_db.get_collection_by_name("geol")
-            geol_coll.beginResetModel()
-            if os.path.isfile((in_dir_name + '/geological_table.json')):
-                new_geol_coll_df = pd_read_json(in_dir_name + '/geological_table.json', orient='index',
-                                                dtype=GeologicalCollection().type_dict)
-                if not new_geol_coll_df.empty:
-                    geol_coll._df = new_geol_coll_df
-            else:
-                geol_coll._df = pd_read_csv(in_dir_name + '/geological_table.csv',
-                                                                                  encoding='utf-8',
-                                                                                  dtype=GeologicalCollection().type_dict,
-                                                                                  keep_default_na=False)
-            prgs_bar = progress_dialog(max_value=self.entities_db.get_collection_by_name("geol")._df.shape[0],
-                                       title_txt="Open geology", label_txt="Opening geological objects...",
-                                       cancel_txt=None, parent=self)
-            for uid in geol_coll._df['uid'].to_list():
-                if not os.path.isfile((in_dir_name + "/" + uid + ".vtp")):
-                    print("error: missing VTK file")
-                    return
-                if geol_coll.get_uid_topological_type(uid) == 'VertexSet':
-                    if 'dip' in geol_coll.get_uid_properties_names(uid):
-                        vtk_object = Attitude()
-                    else:
-                        vtk_object = VertexSet()
-                elif geol_coll.get_uid_topological_type(uid) == 'PolyLine':
-                    vtk_object = PolyLine()
-                elif geol_coll.get_uid_topological_type(uid) == 'TriSurf':
-                    vtk_object = TriSurf()
-                elif geol_coll.get_uid_topological_type(uid) == 'XsVertexSet':
-                    vtk_object = XsVertexSet(self.entities_db.get_collection_by_name("geol").get_uid_x_section(uid),
-                                             parent=self)
-                elif geol_coll.get_uid_topological_type(uid) == 'XsPolyLine':
-                    vtk_object = XsPolyLine(self.entities_db.get_collection_by_name("geol").get_uid_x_section(uid),
-                                            parent=self)
-                pd_reader = vtkXMLPolyDataReader()
-                pd_reader.SetFileName(in_dir_name + "/" + uid + ".vtp")
-                pd_reader.Update()
-                vtk_object.ShallowCopy(pd_reader.GetOutput())
-                vtk_object.Modified()
-                self.entities_db.get_collection_by_name("geol").set_uid_vtk_obj(uid=uid, vtk_obj=vtk_object)
-                prgs_bar.add_one()
-            self.entities_db.get_collection_by_name("geol").endResetModel()
+        geol_coll = self.entities_db.get_collection_by_name("geol")
+        geol_coll.beginResetModel()
+        geol_coll.read(in_dir_name)
+
+        prgs_bar = progress_dialog(max_value=geol_coll._df.shape[0],
+                                   title_txt="Open geology", label_txt="Opening geological objects...",
+                                   cancel_txt=None, parent=self)
+        for uid in geol_coll._df['uid'].to_list():
+            if not os.path.isfile((in_dir_name + "/" + uid + ".vtp")):
+                print("error: missing VTK file")
+                return
+            if geol_coll.get_uid_topological_type(uid) == 'VertexSet':
+                if 'dip' in geol_coll.get_uid_properties_names(uid):
+                    vtk_object = Attitude()
+                else:
+                    vtk_object = VertexSet()
+            elif geol_coll.get_uid_topological_type(uid) == 'PolyLine':
+                vtk_object = PolyLine()
+            elif geol_coll.get_uid_topological_type(uid) == 'TriSurf':
+                vtk_object = TriSurf()
+            elif geol_coll.get_uid_topological_type(uid) == 'XsVertexSet':
+                vtk_object = XsVertexSet(geol_coll.get_uid_x_section(uid),
+                                         parent=self)
+            elif geol_coll.get_uid_topological_type(uid) == 'XsPolyLine':
+                vtk_object = XsPolyLine(geol_coll.get_uid_x_section(uid),
+                                        parent=self)
+            pd_reader = vtkXMLPolyDataReader()
+            pd_reader.SetFileName(in_dir_name + "/" + uid + ".vtp")
+            pd_reader.Update()
+            vtk_object.ShallowCopy(pd_reader.GetOutput())
+            vtk_object.Modified()
+            geol_coll.set_uid_vtk_obj(uid=uid, vtk_obj=vtk_object)
+            prgs_bar.add_one()
+        geol_coll.endResetModel()
         """Update legend."""
         self.prop_legend.update_widget(parent=self)
 
         """Read fluids table and files. Note beginResetModel() and endResetModel()."""
-        if os.path.isfile((in_dir_name + '/fluids_table.csv')) or os.path.isfile((in_dir_name + '/fluids_table.json')):
-            self.fluids_coll.beginResetModel()
-            if os.path.isfile((in_dir_name + '/fluids_table.json')):
-                new_fluids_coll_df = pd_read_json(in_dir_name + '/fluids_table.json', orient='index',
-                                                  dtype=FluidsCollection().entity_dict)
-                if not new_fluids_coll_df.empty:
-                    self.fluids_coll._df = new_fluids_coll_df
-            else:
-                self.fluids_coll._df = pd_read_csv(in_dir_name + '/fluids_table.csv', encoding='utf-8',
-                                                   dtype=FluidsCollection().entity_dict, keep_default_na=False)
-            prgs_bar = progress_dialog(max_value=self.fluids_coll._df.shape[0], title_txt="Open fluids",
-                                       label_txt="Opening fluid objects...", cancel_txt=None, parent=self)
-            for uid in self.fluids_coll._df['uid'].to_list():
-                if not os.path.isfile((in_dir_name + "/" + uid + ".vtp")):
-                    print("error: missing VTK file")
-                    return
-                if self.fluids_coll.get_uid_topological_type(uid) == 'VertexSet':
-                    vtk_object = VertexSet()
-                elif self.fluids_coll.get_uid_topological_type(uid) == 'PolyLine':
-                    vtk_object = PolyLine()
-                elif self.fluids_coll.get_uid_topological_type(uid) == 'TriSurf':
-                    vtk_object = TriSurf()
-                elif self.fluids_coll.get_uid_topological_type(uid) == 'XsVertexSet':
-                    vtk_object = XsVertexSet(self.fluids_coll.get_uid_x_section(uid), parent=self)
-                elif self.fluids_coll.get_uid_topological_type(uid) == 'XsPolyLine':
-                    vtk_object = XsPolyLine(self.fluids_coll.get_uid_x_section(uid), parent=self)
-                pd_reader = vtkXMLPolyDataReader()
-                pd_reader.SetFileName(in_dir_name + "/" + uid + ".vtp")
-                pd_reader.Update()
-                vtk_object.ShallowCopy(pd_reader.GetOutput())
-                vtk_object.Modified()
-                self.fluids_coll.set_uid_vtk_obj(uid=uid, vtk_obj=vtk_object)
-                prgs_bar.add_one()
-            self.fluids_coll.endResetModel()
+
+        fluids_coll = self.entities_db.get_collection_by_name("fluids")
+        fluids_coll.beginResetModel()
+        fluids_coll.read(in_dir_name)
+
+
+        prgs_bar = progress_dialog(max_value=fluids_coll._df.shape[0], title_txt="Open fluids",
+                                   label_txt="Opening fluid objects...", cancel_txt=None, parent=self)
+        for uid in fluids_coll._df['uid'].to_list():
+            if not os.path.isfile((in_dir_name + "/" + uid + ".vtp")):
+                print("error: missing VTK file")
+                return
+            if fluids_coll.get_uid_topological_type(uid) == 'VertexSet':
+                vtk_object = VertexSet()
+            elif fluids_coll.get_uid_topological_type(uid) == 'PolyLine':
+                vtk_object = PolyLine()
+            elif fluids_coll.get_uid_topological_type(uid) == 'TriSurf':
+                vtk_object = TriSurf()
+            elif fluids_coll.get_uid_topological_type(uid) == 'XsVertexSet':
+                vtk_object = XsVertexSet(fluids_coll.get_uid_x_section(uid), parent=self)
+            elif fluids_coll.get_uid_topological_type(uid) == 'XsPolyLine':
+                vtk_object = XsPolyLine(fluids_coll.get_uid_x_section(uid), parent=self)
+            pd_reader = vtkXMLPolyDataReader()
+            pd_reader.SetFileName(in_dir_name + "/" + uid + ".vtp")
+            pd_reader.Update()
+            vtk_object.ShallowCopy(pd_reader.GetOutput())
+            vtk_object.Modified()
+            fluids_coll.set_uid_vtk_obj(uid=uid, vtk_obj=vtk_object)
+            prgs_bar.add_one()
+        fluids_coll.endResetModel()
         """Update legend."""
         self.prop_legend.update_widget(parent=self)
 
         """Read Backgrounds table and files. Note beginResetModel() and endResetModel()."""
-        if os.path.isfile((in_dir_name + '/backgrounds_table.csv')) or os.path.isfile(
-                (in_dir_name + '/backgrounds_table.json')):
-            self.backgrounds_coll.beginResetModel()
-            if os.path.isfile((in_dir_name + '/backgrounds_table.json')):
-                new_backgrounds_coll_df = pd_read_json(in_dir_name + '/backgrounds_table.json', orient='index',
-                                                       dtype=FluidsCollection().entity_dict)
-                if not new_backgrounds_coll_df.empty:
-                    self.backgrounds_coll._df = new_backgrounds_coll_df
-            else:
-                self.backgrounds_coll._df = pd_read_csv(in_dir_name + '/backgrounds_table.csv', encoding='utf-8',
-                                                        dtype=FluidsCollection().entity_dict, keep_default_na=False)
-            prgs_bar = progress_dialog(max_value=self.backgrounds_coll._df.shape[0], title_txt="Open fluids",
-                                       label_txt="Opening fluid objects...", cancel_txt=None, parent=self)
-            for uid in self.backgrounds_coll._df['uid'].to_list():
-                if not os.path.isfile((in_dir_name + "/" + uid + ".vtp")):
-                    print("error: missing VTK file")
-                    return
-                if self.backgrounds_coll.get_uid_topological_type(uid) == 'VertexSet':
-                    vtk_object = VertexSet()
-                elif self.backgrounds_coll.get_uid_topological_type(uid) == 'PolyLine':
-                    vtk_object = PolyLine()
-                # elif self.backgrounds_coll.get_uid_topological_type(uid) == 'TriSurf':
-                #     vtk_object = TriSurf()
-                # elif self.backgrounds_coll.get_uid_topological_type(uid) == 'XsVertexSet':
-                #     vtk_object = XsVertexSet(self.backgrounds_coll.get_uid_x_section(uid), parent=self)
-                # elif self.backgrounds_coll.get_uid_topological_type(uid) == 'XsPolyLine':
-                #     vtk_object = XsPolyLine(self.backgrounds_coll.get_uid_x_section(uid), parent=self)
-                pd_reader = vtkXMLPolyDataReader()
-                pd_reader.SetFileName(in_dir_name + "/" + uid + ".vtp")
-                pd_reader.Update()
-                vtk_object.ShallowCopy(pd_reader.GetOutput())
-                vtk_object.Modified()
-                self.backgrounds_coll.set_uid_vtk_obj(uid=uid, vtk_obj=vtk_object)
-                prgs_bar.add_one()
-            self.backgrounds_coll.endResetModel()
+        backgrounds_coll = self.entities_db.get_collection_by_name("backgrounds")
+        backgrounds_coll.beginResetModel()
+        backgrounds_coll.read(in_dir_name)
+
+
+        prgs_bar = progress_dialog(max_value=backgrounds_coll._df.shape[0], title_txt="Open fluids",
+                                   label_txt="Opening fluid objects...", cancel_txt=None, parent=self)
+        for uid in backgrounds_coll._df['uid'].to_list():
+            if not os.path.isfile((in_dir_name + "/" + uid + ".vtp")):
+                print("error: missing VTK file")
+                return
+            if backgrounds_coll.get_uid_topological_type(uid) == 'VertexSet':
+                vtk_object = VertexSet()
+            elif backgrounds_coll.get_uid_topological_type(uid) == 'PolyLine':
+                vtk_object = PolyLine()
+            # elif self.backgrounds_coll.get_uid_topological_type(uid) == 'TriSurf':
+            #     vtk_object = TriSurf()
+            # elif self.backgrounds_coll.get_uid_topological_type(uid) == 'XsVertexSet':
+            #     vtk_object = XsVertexSet(self.backgrounds_coll.get_uid_x_section(uid), parent=self)
+            # elif self.backgrounds_coll.get_uid_topological_type(uid) == 'XsPolyLine':
+            #     vtk_object = XsPolyLine(self.backgrounds_coll.get_uid_x_section(uid), parent=self)
+            pd_reader = vtkXMLPolyDataReader()
+            pd_reader.SetFileName(in_dir_name + "/" + uid + ".vtp")
+            pd_reader.Update()
+            vtk_object.ShallowCopy(pd_reader.GetOutput())
+            vtk_object.Modified()
+            backgrounds_coll.set_uid_vtk_obj(uid=uid, vtk_obj=vtk_object)
+            prgs_bar.add_one()
+        backgrounds_coll.endResetModel()
         """Update legend."""
         self.prop_legend.update_widget(parent=self)
 

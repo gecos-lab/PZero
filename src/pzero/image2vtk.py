@@ -5,8 +5,8 @@ from copy import deepcopy
 import uuid
 import os
 from vtk.util import numpy_support
-from .entities_factory import MapImage, XsImage
-from pzero.entities_collections.image_collection import ImageCollection
+from pzero.entities.entities_factory import MapImage, XsImage
+from pzero.collections.image import ImageCollection
 from .helper_dialogs import multiple_input_dialog
 
 from numpy import pi as np_pi

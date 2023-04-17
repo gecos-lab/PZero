@@ -1,4 +1,4 @@
-"""image_collection.py
+"""image.py
 PZero© Andrea Bistacchi"""
 
 import numpy as np
@@ -7,8 +7,8 @@ import uuid
 from copy import deepcopy
 from PyQt5.QtCore import Qt, QVariant
 
-from pzero.entities_collections.collection_base import CollectionBase
-from pzero.entities_factory import MapImage, XsImage, Seismics, Image3D
+from pzero.collections.collection_base import CollectionBase
+from pzero.entities.entities_factory import MapImage, XsImage, Seismics, Image3D
 
 """Options to print Pandas dataframes in console for testing."""
 pd_desired_width = 800
@@ -67,6 +67,11 @@ class ImageCollection(CollectionBase):
         return self._df.columns.get_indexer(["name"])
 
     """Custom methods used to add or remove entities, query the dataframe, etc."""
+
+
+    @property
+    def default_save_table_filename(self):
+        return "image"
 
     def add_entity_from_dict(self, entity_dict=None):
         """Add entity to collection from dictionary.

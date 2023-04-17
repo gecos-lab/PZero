@@ -5,7 +5,7 @@ from vtkmodules.vtkFiltersCore import vtkThresholdPoints, vtkDelaunay2D
 from vtkmodules.vtkFiltersPoints import vtkRadiusOutlierRemoval, vtkEuclideanClusterExtraction, vtkProjectPointsToPlane
 from vtkmodules.vtkRenderingCore import vtkPropPicker
 
-from pzero.entities_collections.dom_collection import DomCollection
+from pzero.collections.dom import DomCollection
 from .orientation_analysis import get_dip_dir_vectors
 
 
@@ -15,11 +15,11 @@ from PyQt5.QtCore import Qt
 
 """PZero imports"""
 from .base_view_window_ui import Ui_BaseViewWindow
-from .entities_factory import VertexSet, PolyLine, TriSurf, XsVertexSet, XsPolyLine, DEM, PCDom, MapImage, \
+from pzero.entities.entities_factory import VertexSet, PolyLine, TriSurf, XsVertexSet, XsPolyLine, DEM, PCDom, MapImage, \
     Voxet, XsVoxet, Seismics, XsImage, PolyData, Well, WellMarker, WellTrace, Attitude
 from .helper_dialogs import input_one_value_dialog, input_combo_dialog, message_dialog, \
     multiple_input_dialog, progress_dialog, save_file_dialog
-from pzero.entities_collections.geological_collection import GeologicalCollection
+from pzero.collections.geological import GeologicalCollection
 from copy import deepcopy
 from uuid import uuid4
 from .helper_functions import best_fitting_plane, gen_frame
@@ -3722,7 +3722,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                 ignore_index=True)  # self.set_actor_visible(uid=uid, visible=show)
 
     def add_all_entities(self):
-        """Add all entities in project entities_collections. This must be reimplemented for cross-sections in order
+        """Add all entities in project collections. This must be reimplemented for cross-sections in order
         to show entities belonging to the section only. All objects are visible by default -> show = True"""
 
         for index, uid in enumerate(self.parent.entities_db.get_collection_by_name('geol')._df['uid'].tolist()):
@@ -6025,8 +6025,8 @@ class ViewMap(View2D):
         """Inheritance of common tools"""
         super().initialize_menu_tools()
         """Tools specific to map view"""
-        from pzero.entities_collections.xsection_collection import section_from_azimuth, section_from_points, sections_from_file
-        from pzero.entities_collections.boundary_collection import boundary_from_points
+        from pzero.collections.xsection import section_from_azimuth, section_from_points, sections_from_file
+        from pzero.collections.boundary import boundary_from_points
 
         self.sectionFromAzimuthButton = QAction('Section from Azimuth', self)  # create action
         self.sectionFromAzimuthButton.triggered.connect(
@@ -7349,8 +7349,8 @@ class NewViewMap(NewView2D):
         self.plotter.view_xy()
 
     def initialize_menu_tools(self):
-        from pzero.entities_collections.xsection_collection import section_from_azimuth, sections_from_file
-        from pzero.entities_collections.boundary_collection import boundary_from_points
+        from pzero.collections.xsection import section_from_azimuth, sections_from_file
+        from pzero.collections.boundary import boundary_from_points
         super().initialize_menu_tools()
         self.sectionFromAzimuthButton = QAction('Section from azimuth', self)  # create action
         self.sectionFromAzimuthButton.triggered.connect(
@@ -7778,7 +7778,7 @@ class NewViewXsection(NewView2D):
         self.plotter.reset_camera()
 
     def add_all_entities(self):
-        """Add all entities in project entities_collections. All objects are visible by default -> show = True"""
+        """Add all entities in project collections. All objects are visible by default -> show = True"""
         sec_uid = self.this_x_section_uid
         for uid in self.parent.entities_db.get_collection_by_name('geol')._df['uid'].tolist():
             if self.parent.entities_db.get_collection_by_name('geol').get_uid_x_section(uid) == sec_uid:

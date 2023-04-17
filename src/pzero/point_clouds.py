@@ -1,7 +1,7 @@
 from vtk import vtkSelectionNode, vtkSelection, vtkExtractSelection, vtkIdTypeArray
 import numpy as np
 
-from .entities_factory import PCDom
+from pzero.entities.entities_factory import PCDom
 
 
 

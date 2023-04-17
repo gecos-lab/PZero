@@ -2,7 +2,7 @@
 PZero© Andrea Bistacchi"""
 
 from vtk import vtkOBJWriter
-from .entities_factory import TriSurf
+from pzero.entities.entities_factory import TriSurf
 
 
 def vtk2obj(self=None, out_dir_name=None):

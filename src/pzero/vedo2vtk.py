@@ -3,7 +3,7 @@ PZero© Andrea Bistacchi"""
 
 from PyQt5.QtWidgets import QFileDialog
 import uuid
-from .entities_factory import VertexSet, PolyLine, TriSurf, TetraSolid, PolyData
+from pzero.entities.entities_factory import VertexSet, PolyLine, TriSurf, TetraSolid
 import vedo as vd
 
 """MUST BE COMPLETELY REVISED___________________"""

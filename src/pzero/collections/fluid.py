@@ -7,7 +7,7 @@ import uuid
 from copy import deepcopy
 from PyQt5.QtCore import Qt, QVariant
 
-from pzero.entities_collections.collection_base import CollectionBase
+from pzero.collections.collection_base import CollectionBase
 
 """Options to print Pandas dataframes in console when testing."""
 pd_desired_width = 800
@@ -83,7 +83,9 @@ class FluidsCollection(CollectionBase):
         return self._df.columns.get_indexer(["name", "fluid_type", "fluid_feature", "scenario"])
 
 
-
+    @property
+    def default_save_table_filename(self):
+        return "fluids"
 
     def add_entity_from_dict(self, entity_dict=None, color=None):
         """Add entity to collection from dictionary."""

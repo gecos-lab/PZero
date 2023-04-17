@@ -25,9 +25,9 @@ from numpy import float32 as np_float32
 from pandas import DataFrame as pd_DataFrame
 from vtkmodules.vtkCommonDataModel import vtkBoundingBox
 
-from pzero.entities_collections.geological_collection import GeologicalCollection
+from pzero.collections.geological import GeologicalCollection
 from .helper_dialogs import multiple_input_dialog, input_one_value_dialog, input_text_dialog, input_combo_dialog, input_checkbox_dialog, tic, toc, progress_dialog, general_input_dialog
-from .entities_factory import TriSurf, XsPolyLine, PolyLine, VertexSet, Voxet, XsVoxet, XsVertexSet,Attitude
+from pzero.entities.entities_factory import TriSurf, XsPolyLine, PolyLine, VertexSet, Voxet, XsVoxet, XsVertexSet,Attitude
 
 import pyvista as pv
 
@@ -200,7 +200,7 @@ def implicit_model_loop_structural(self):
     X - x component of the cartesian coordinates
     Y - y component of the cartesian coordinates
     Z - z component of the cartesian coordinates
-    feature_name - unique name of the geological feature being modelled - this is not the geological_feature generally defined in geological_collection.py, but the geological_sequence defined in legend_manager.py
+    feature_name - unique name of the geological feature being modelled - this is not the geological_feature generally defined in geological.py, but the geological_sequence defined in legend_manager.py
     val - value observations of the scalar field - this is the geological_time defined in legend_manager.py
     interface - unique identifier for an interface containing similar scalar field values
     nx - x component of the gradient norm

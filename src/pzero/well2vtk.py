@@ -16,13 +16,13 @@ from numpy import nan as np_nan
 from numpy import random as np_random
 
 from copy import deepcopy
-from .entities_factory import Well, VertexSet
+from pzero.entities.entities_factory import Well, VertexSet
 from uuid import uuid4
 # from .entities_factory import WellData
 
-from pzero.entities_collections.well_collection import WellCollection
-from pzero.entities_collections.geological_collection import GeologicalCollection
-from pzero.entities_collections.background_collection import BackgroundCollection
+from pzero.collections.well import WellCollection
+from pzero.collections.geological import GeologicalCollection
+from pzero.collections.background import BackgroundCollection
 import pandas as pd
 # import lasio as ls
 

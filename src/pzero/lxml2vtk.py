@@ -4,7 +4,7 @@ from numpy import shape as np_shape
 from numpy import zeros as np_zeros
 from vtk.util import numpy_support
 
-from pzero.entities_factory import TriSurf
+from pzero.entities.entities_factory import TriSurf
 
 
 def vtk2lxml(self,out_dir_name=None):

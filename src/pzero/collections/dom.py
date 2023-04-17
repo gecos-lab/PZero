@@ -1,4 +1,4 @@
-"""dom_collection.py
+"""dom.py
 PZero© Andrea Bistacchi"""
 
 from numpy import set_printoptions as np_set_print_options
@@ -7,7 +7,7 @@ import uuid
 from copy import deepcopy
 from PyQt5.QtCore import Qt, QVariant
 
-from pzero.entities_collections.collection_base import CollectionBase
+from pzero.collections.collection_base import CollectionBase
 
 """Options to print Pandas dataframes in console when testing."""
 pd_desired_width = 800
@@ -64,6 +64,10 @@ class DomCollection(CollectionBase):
     @property
     def editable_columns(self):
         return self._df.columns.get_indexer(["name"])
+
+    @property
+    def default_save_table_filename(self):
+        return "dom"
 
     """Custom methods used to add or remove entities, query the dataframe, etc."""
 

@@ -10,11 +10,11 @@ from numpy import flip as np_flip
 from numpy import arange as np_arange
 from numpy import round as np_round
 
-from pzero.entities_collections.geological_collection import GeologicalCollection
+from pzero.collections.geological import GeologicalCollection
 from .helper_dialogs import multiple_input_dialog, input_one_value_dialog, message_dialog
 from .helper_widgets import Editor, Tracer
 from .windows_factory import ViewMap, ViewXsection, NewViewMap, NewViewXsection
-from .entities_factory import PolyLine, XsPolyLine
+from pzero.entities.entities_factory import PolyLine, XsPolyLine
 from shapely import affinity
 from shapely.geometry import LineString, Point, MultiLineString
 from shapely.ops import split

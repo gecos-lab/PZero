@@ -1,4 +1,4 @@
-"""mesh3d_collection.py
+"""mesh3d.py
 PZero© Andrea Bistacchi"""
 
 
@@ -11,7 +11,7 @@ import uuid
 from copy import deepcopy
 from PyQt5.QtCore import Qt, QVariant
 
-from pzero.entities_collections.collection_base import CollectionBase
+from pzero.collections.collection_base import CollectionBase
 
 """Options to print Pandas dataframes in console for testing."""
 pd_desired_width = 800
@@ -65,6 +65,10 @@ class Mesh3DCollection(CollectionBase):
     @property
     def editable_columns(self):
         return self._df.columns.get_indexer(["name"])
+
+    @property
+    def default_save_table_filename(self):
+        return "mesh3d"
 
 
     def add_entity_from_dict(self, entity_dict=None):

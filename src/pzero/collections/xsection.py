@@ -1,4 +1,4 @@
-"""xsection_collection.py
+"""xsection.py
 PZero© Andrea Bistacchi"""
 from vtk import vtkPoints, vtkCellArray, vtkLine
 # import numpy_interface.dataset_adapter as dsa
@@ -16,14 +16,14 @@ from numpy.linalg import inv as np_linalg_inv
 from numpy import repeat as np_repeat
 from numpy import dot as np_dot
 from numpy import matmul as np_matmul
-
-from pzero.entities_collections.collection_base import CollectionBase
+import logging as log
+from pzero.collections.collection_base import CollectionBase
 from pzero.orientation_analysis import dip_directions2normals, get_dip_dir_vectors
 
 import pandas as pd
 from PyQt5.QtCore import Qt, QVariant
 # from PyQt5.QtGui import QStandardItem, QImage
-from pzero.entities_factory import Plane, XsPolyLine
+from pzero.entities.entities_factory import Plane, XsPolyLine
 from pzero.helper_dialogs import general_input_dialog, open_file_dialog
 from pzero.helper_functions import auto_sep
 
@@ -299,6 +299,19 @@ class XSectionCollection(CollectionBase):
     @property
     def editable_columns(self):
         return self._df.columns.get_indexer(["name"])
+
+    @property
+    def default_save_table_filename(self):
+        return "xsection"
+
+
+    def post_json_read(self):
+        log.debug("performing post read operations")
+        if not self._df.empty:
+            if not 'dip' in self._df:
+                self._df.insert(12, 'dip', 90.0)
+            if not 'width' in self._df:
+                self._df.insert(14, 'width', self._df.top - self._df.bottom)
 
     def add_entity_from_dict(self, entity_dict=None):
         """Add entity to collection from dictionary."""

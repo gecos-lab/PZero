@@ -5,8 +5,8 @@ import os
 from copy import deepcopy
 import uuid
 from vtk import vtkSegYReader
-from .entities_factory import Seismics
-from pzero.entities_collections.image_collection import ImageCollection
+from pzero.entities.entities_factory import Seismics
+from pzero.collections.image import ImageCollection
 
 """Very basic SEG-Y importer. TO BE IMPROVED IN THE FUTURE."""
 

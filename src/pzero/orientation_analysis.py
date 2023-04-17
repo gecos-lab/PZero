@@ -8,7 +8,6 @@ from numpy import asarray as np_asarray
 from numpy import deg2rad as np_deg2rad
 from numpy import sin as np_sin
 from numpy import cos as np_cos
-from numpy import tan as np_tan
 from numpy import squeeze as np_squeeze
 from numpy import number as np_number
 from numpy import cross as np_cross
@@ -90,7 +89,7 @@ def dip_directions2normals(dips=None, directions=None, return_dip_dir_vec=False)
 
 
 def vset_set_normals(VertexSet=None, dip_name=None, dir_name=None):
-    from .entities_factory import VertexSet
+    from pzero.entities.entities_factory import VertexSet
 
     dips_array = VertexSet.get_point_data(dip_name)
     dirs_array = VertexSet.get_point_data(dir_name)
@@ -100,7 +99,7 @@ def vset_set_normals(VertexSet=None, dip_name=None, dir_name=None):
 
 
 def set_normals(self):
-    from .entities_factory import TriSurf, VertexSet, XsVertexSet
+    from pzero.entities.entities_factory import TriSurf, VertexSet, XsVertexSet
 
     """General function to set normals on different entities.
     It branches to other functions depending on the selected entity

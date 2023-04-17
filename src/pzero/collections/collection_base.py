@@ -1,43 +1,41 @@
 from abc import abstractmethod
+from pathlib import Path
 
 import pandas as pd
 from PyQt5.QtCore import QAbstractTableModel, Qt, QObject
 import logging as log
 import deprecated
 
+from pandas import read_json
+from pandas import read_csv
+
+
 class CollectionBase(QAbstractTableModel):
 
     def __init__(self, parent=None):
         super(CollectionBase, self).__init__(parent=parent)
-
-
         """Initialize Pandas dataframe."""
         self._df = pd.DataFrame(columns=list(self.entity_dict.keys()))
 
-
     @property
-    @deprecated.deprecated("Accessing main window from a collection is discouraged" )
+    @deprecated.deprecated("Accessing main window from a collection is discouraged")
     def main_window(self):
         log.debug("Accessing main window from a collection. this beahvior is scheduled to be removed.")
         return self.parent().parent()
 
     @property
-    @abstractmethod
     def entity_dict(self):
         raise NotImplementedError("BoundaryCollection.entity_dict() is not implemented yet.")
 
     @property
-    @abstractmethod
     def type_dict(self):
         raise NotImplementedError("BoundaryCollection.type_dict() is not implemented yet.")
 
     @property
-    @abstractmethod
     def valid_topological_type(self):
         raise NotImplementedError("BoundaryCollection.valid_topological_type() is not implemented yet.")
 
     @property
-    @abstractmethod
     def valid_types(self):
         raise NotImplementedError("BoundaryCollection.valid_types() is not implemented yet.")
 
@@ -46,6 +44,51 @@ class CollectionBase(QAbstractTableModel):
     def editable_columns(self):
         raise NotImplementedError("BoundaryCollection.editable_columns() is not implemented yet.")
 
+    @property
+    @abstractmethod
+    def default_save_table_filename(self):
+        raise NotImplementedError("default filename not implemented in subclass.")
+
+    def post_json_read(self):
+        pass
+
+    def post_csv_read(self):
+        pass
+
+    def read(self, project_root, filename=None):
+        log.debug(f"Reading {self.__class__.__name__} from {project_root} with filename {filename}")
+        if not filename:
+            filename = self.default_save_table_filename
+
+        expected_filename = Path(project_root).joinpath(f"{filename}_table")
+
+        if expected_filename.with_suffix(".json").exists():
+            type = "JSON"
+            filename = expected_filename.with_suffix(".json")
+
+
+        elif expected_filename.with_suffix(
+                ".csv").exists():  # here we should use a serialization factory. So that in the future we can target additional formats (binary, e.g. feather, pickle etc).
+            type = "CSV"
+            filename = expected_filename.with_suffix(".csv")
+
+        else:
+            log.warning(f"Could not find {expected_filename} in {project_root}. Table not loaded.")
+            return dict(type=None, filename=None)
+
+        if type == "JSON":
+            got = read_json(filename, orient='index', dtype=self.entity_dict)
+            if not got.empty:
+                self._df = got
+                self.post_json_read()
+
+        elif type == "CSV":
+            got = read_csv(filename, encoding='utf-8', dtype=self.type_dict, keep_default_na=False)
+            if not got.empty:
+                self._df = got
+                self.post_csv_read()
+
+        return dict(type=type, filename=filename)
 
     # # @property
     # # def parent(self) :

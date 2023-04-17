@@ -45,10 +45,10 @@ from numpy import zeros as np_zeros
 from numpy import dot as np_dot
 from vtkmodules.vtkFiltersPoints import vtkConvertToPointCloud
 
-from .orientation_analysis import get_dip_dir_vectors
+from pzero.orientation_analysis import get_dip_dir_vectors
 from vtkmodules.vtkFiltersCore import vtkGlyph3D
 
-from .helper_functions import profiler
+from pzero.helper_functions import profiler
 
 """
 Some notes on the way we derive our classes from VTK.
@@ -65,7 +65,7 @@ We also expose as much as possible VTK attributes and methods as Numpy arrays an
 the code more compact, readable and "Pythonic" (also thanks to vtk.numpy_interface.dataset_adapter = dsa).
 
 We do not use vtkFieldData since metadata for each entity are recorded in the Pandas dataframe of the
-entities_collections for geological, cross-sections, DOMs, etc. entities. This is more flexible since field
+collections for geological, cross-sections, DOMs, etc. entities. This is more flexible since field
 data cannot store strings, for instance.
 
 Non-geological objects, such as cross sections, DEMs, images, etc., are not defined in the geological classes,

@@ -1,4 +1,4 @@
-"""geological_collection.py
+"""geological.py
 PZero© Andrea Bistacchi"""
 
 from numpy import set_printoptions as np_set_set_printoptions
@@ -11,7 +11,7 @@ import uuid
 from copy import deepcopy
 from PyQt5.QtCore import Qt, QVariant
 
-from pzero.entities_collections.collection_base import CollectionBase
+from pzero.collections.collection_base import CollectionBase
 
 """Options to print Pandas dataframes in console when testing."""
 pd_desired_width = 800
@@ -88,6 +88,10 @@ class GeologicalCollection(CollectionBase):
     @property
     def editable_columns(self):
         return self._df.columns.get_indexer(["name", "geological_type", "geological_feature", "scenario"])
+
+    @property
+    def default_save_table_filename(self):
+        return "geological"
 
     def add_entity_from_dict(self, entity_dict=None, color=None):
         """Add entity to collection from dictionary."""

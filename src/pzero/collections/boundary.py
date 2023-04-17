@@ -1,7 +1,7 @@
-"""boundary_collection.py
+"""boundary.py
 PZero© Andrea Bistacchi"""
 
-from pzero.entities_collections.collection_base import CollectionBase
+from pzero.collections.collection_base import CollectionBase
 
 """Import as much as possible as from <module> import <class> or <class as ...>"""
 from vtk import vtkPoints
@@ -12,7 +12,7 @@ from uuid import uuid4 as uuid_uuid4
 from copy import deepcopy
 from PyQt5.QtCore import Qt, QVariant
 from pzero.helper_dialogs import general_input_dialog
-from pzero.entities_factory import PolyLine, TriSurf
+from pzero.entities.entities_factory import PolyLine, TriSurf
 
 """Options to print Pandas dataframes in console for testing."""
 pd_desired_width = 800
@@ -151,6 +151,10 @@ class BoundaryCollection(CollectionBase):
     @property
     def editable_columns(self):
         return self._df.columns.get_indexer(["name"])
+
+    @property
+    def default_save_table_filename(self):
+        return "boundary"
 
     def add_entity_from_dict(self, entity_dict=None):
         """Add entity to collection from dictionary.

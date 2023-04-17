@@ -1,14 +1,14 @@
 from PyQt5.QtCore import QObject, pyqtSignal, QSortFilterProxyModel
 
-from pzero.entities_collections.background_collection import BackgroundCollection
-from pzero.entities_collections.boundary_collection import BoundaryCollection
-from pzero.entities_collections.dom_collection import DomCollection
-from pzero.entities_collections.fluid_collection import FluidsCollection
-from pzero.entities_collections.geological_collection import GeologicalCollection
-from pzero.entities_collections.image_collection import ImageCollection
-from pzero.entities_collections.mesh3d_collection import Mesh3DCollection
-from pzero.entities_collections.well_collection import WellCollection
-from pzero.entities_collections.xsection_collection import XSectionCollection
+from pzero.collections.background import BackgroundCollection
+from pzero.collections.boundary import BoundaryCollection
+from pzero.collections.dom import DomCollection
+from pzero.collections.fluid import FluidsCollection
+from pzero.collections.geological import GeologicalCollection
+from pzero.collections.image import ImageCollection
+from pzero.collections.mesh3d import Mesh3DCollection
+from pzero.collections.well import WellCollection
+from pzero.collections.xsection import XSectionCollection
 
 import logging as log
 
@@ -26,7 +26,7 @@ collections_to_instantiate = dict(
 
 class EntitiesDB(QObject):
     """
-    Entities are grouped into entities_collections
+    Entities are grouped into collections
     """
     clearing_entities_db_signal = pyqtSignal(name="ClearingEntitiesDB")
 
@@ -70,7 +70,7 @@ class EntitiesDB(QObject):
         return None
 
     def remove_uid(self, uid):
-        print(  f"Removing uid {uid} from all entities_collections" )
+        print(  f"Removing uid {uid} from all collections" )
         collection = self.get_collection_with_uid(uid)
         if collection is not None:
             collection.remove_entity(uid)

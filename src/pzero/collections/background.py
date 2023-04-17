@@ -7,7 +7,7 @@ import uuid
 from copy import deepcopy
 from PyQt5.QtCore import Qt, QVariant
 
-from pzero.entities_collections.collection_base import CollectionBase
+from pzero.collections.collection_base import CollectionBase
 
 """Options to print Pandas dataframes in console when testing."""
 pd_desired_width = 800
@@ -78,6 +78,11 @@ class BackgroundCollection(CollectionBase):
     @property
     def editable_columns(self):
         return self._df.columns.get_indexer(["name", "type", "feature"])
+
+    @property
+    def default_save_table_filename(self):
+        return "background"
+
     
 
     """Initialize BackgroundCollection table. Column headers are taken from
@@ -381,6 +386,8 @@ class BackgroundCollection(CollectionBase):
         return self.get_uid_vtk_obj(uid).get_point_data(property_name)
 
     """Standard QT methods slightly adapted to the data source."""
+
+
 
     def setData(self, index, value, role=Qt.EditRole):
         """This is the method allowing to edit the table and the underlying dataframe.
