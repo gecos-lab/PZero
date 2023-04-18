@@ -1,3 +1,5 @@
+from typing import List
+
 from numpy import random as np_random
 from numpy import round as np_round
 from pandas import unique as pd_unique
@@ -5,10 +7,10 @@ import uuid
 from copy import deepcopy
 from PyQt5.QtCore import Qt, QVariant
 
-from pzero.collections.collection_base import CollectionBase
+from pzero.collections.collection_base import Collection
 
 
-class WellCollection(CollectionBase):
+class WellCollection(Collection):
     """
     Initialize WellCollection table.
     Column headers are taken from WellCollection.well_entity_dict.keys()
@@ -45,6 +47,10 @@ class WellCollection(CollectionBase):
 
     @property
     def valid_topological_type(self):
+        return []
+
+    @property
+    def valid_types(self) -> List[str]:
         return []
 
     @property

@@ -1,5 +1,6 @@
 """dom.py
 PZero© Andrea Bistacchi"""
+from typing import List
 
 from numpy import set_printoptions as np_set_print_options
 from pandas import set_option as pd_set_option
@@ -7,7 +8,7 @@ import uuid
 from copy import deepcopy
 from PyQt5.QtCore import Qt, QVariant
 
-from pzero.collections.collection_base import CollectionBase
+from pzero.collections.collection_base import Collection
 
 """Options to print Pandas dataframes in console when testing."""
 pd_desired_width = 800
@@ -21,7 +22,7 @@ pd_set_option('display.precision', pd_show_precision)
 pd_set_option('display.max_colwidth', pd_max_colwidth)
 
 
-class DomCollection(CollectionBase):
+class DomCollection(Collection):
     """
     Initialize DomCollection table.
     Column headers are taken from DomCollection.dom_entity_dict.keys()
@@ -71,6 +72,10 @@ class DomCollection(CollectionBase):
 
     """Custom methods used to add or remove entities, query the dataframe, etc."""
 
+    @property
+    def valid_topological_type(self) -> List[str]:
+        return []
+
     def add_entity_from_dict(self, entity_dict=None):
         """Add entity to collection from dictionary.
         Create a new uid if it is not included in the dictionary."""
@@ -80,7 +85,7 @@ class DomCollection(CollectionBase):
         work in place, hence a NEW dataframe is created every time and then substituted to the old one."""
         self._df = self._df.append(entity_dict, ignore_index=True)
         """Reset data model"""
-        self.modelReset.emit()
+        self.table_model.modelReset.emit()
         self.main_window.prop_legend.update_widget(self.main_window)
         """Then emit signal to update the views."""
         self.main_window.dom_added_signal.emit([entity_dict['uid']])  # a list of uids is emitted, even if the entity is just one
@@ -89,7 +94,7 @@ class DomCollection(CollectionBase):
     def remove_entity(self, uid=None):
         """Remove entity from collection. Remove row from dataframe and reset data model."""
         self._df.drop(self._df[self._df['uid'] == uid].index, inplace=True)
-        self.modelReset.emit()  # is this really necessary?
+        self.table_model.modelReset.emit()  # is this really necessary?
         self.main_window.prop_legend.update_widget(self.main_window)
         """When done, send a signal over to the views."""
         self.main_window.dom_removed_signal.emit([uid])  # a list of uids is emitted, even if the entity is just one
@@ -120,8 +125,6 @@ class DomCollection(CollectionBase):
     def get_legend(self):
         legend_dict = self.main_window.others_legend_df.loc[self.main_window.others_legend_df['other_type'] == 'DOM'].to_dict('records')
         return legend_dict[0]
-
-
 
     def get_uid_dom_type(self, uid=None):
         """Get value(s) stored in dataframe (as pointer) from uid."""

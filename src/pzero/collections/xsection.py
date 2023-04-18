@@ -17,7 +17,7 @@ from numpy import repeat as np_repeat
 from numpy import dot as np_dot
 from numpy import matmul as np_matmul
 import logging as log
-from pzero.collections.collection_base import CollectionBase
+from pzero.collections.collection_base import Collection
 from pzero.orientation_analysis import dip_directions2normals, get_dip_dir_vectors
 
 import pandas as pd
@@ -231,7 +231,7 @@ def sections_from_file(self):
                 section_from_points(self, drawn=False, section_dict_updt=section_dict_updt)
 
 
-class XSectionCollection(CollectionBase):
+class XSectionCollection(Collection):
     """
     Initialize XSectionCollection table.
     Column headers are taken from XSectionCollection.section_dict.keys()
@@ -335,7 +335,7 @@ class XSectionCollection(CollectionBase):
         if not uid in self.get_uids():
             return
         self._df.drop(self._df[self._df['uid'] == uid].index, inplace=True)
-        self.modelReset.emit()  # is this really necessary?
+        self.table_model.modelReset.emit()  # is this really necessary?
         self.main_window.xsect_removed_signal.emit([uid])  # a list of uids is emitted, even if the entity is just one
         return uid
 

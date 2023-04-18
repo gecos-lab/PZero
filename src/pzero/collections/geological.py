@@ -11,7 +11,7 @@ import uuid
 from copy import deepcopy
 from PyQt5.QtCore import Qt, QVariant
 
-from pzero.collections.collection_base import CollectionBase
+from pzero.collections.collection_base import Collection
 
 """Options to print Pandas dataframes in console when testing."""
 pd_desired_width = 800
@@ -25,7 +25,7 @@ pd_set_option('display.precision', pd_show_precision)
 pd_set_option('display.max_colwidth', pd_max_colwidth)
 
 
-class GeologicalCollection(CollectionBase):
+class GeologicalCollection(Collection):
     """
     Initialize GeologicalCollection table.
     Column headers are taken from GeologicalCollection.geological_entity_dict.keys()

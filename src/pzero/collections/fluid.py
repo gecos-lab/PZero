@@ -7,7 +7,7 @@ import uuid
 from copy import deepcopy
 from PyQt5.QtCore import Qt, QVariant
 
-from pzero.collections.collection_base import CollectionBase
+from pzero.collections.collection_base import Collection
 
 """Options to print Pandas dataframes in console when testing."""
 pd_desired_width = 800
@@ -21,7 +21,7 @@ pd.set_option('display.precision', pd_show_precision)
 pd.set_option('display.max_colwidth', pd_max_colwidth)
 
 
-class FluidsCollection(CollectionBase):
+class FluidsCollection(Collection):
     """
     Initialize FluidsCollection table.
     Column headers are taken from FluidsCollection.fluid_entity_dict.keys()

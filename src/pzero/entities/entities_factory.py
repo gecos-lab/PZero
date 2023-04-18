@@ -1,5 +1,7 @@
 """entities_factory.py
 PZero© Andrea Bistacchi"""
+from abc import ABC, abstractmethod
+
 import numpy as np
 from vtk import vtkPolyData, vtkPoints, vtkCellCenters, vtkIdFilter, vtkCleanPolyData, vtkPolyDataNormals, vtkPlane, \
     vtkCellArray, vtkLine, vtkIdList, vtkTriangleFilter, vtkTriangle, vtkFeatureEdges, vtkCleanPolyData, vtkStripper, \
@@ -167,7 +169,14 @@ valid_topological_types = ["VertexSet",
                            "Voxet"]
 
 
-class PolyData(vtkPolyData):
+
+class Entity(ABC):
+    @property
+    @abstractmethod
+    def pz_type(self):
+        ...
+
+class PolyData(vtkPolyData, Entity):
     """PolyData is an abstract class used as a base for all entities with a geological meaning, such as
     triangulated surfaces, polylines (also in cross sections), pointsets, etc., and possibly in other
     cases (e.g. DOMs and boundaries). Basically this is the standard vtk.PolyData class, but exposes methods from
@@ -1549,9 +1558,13 @@ class Seismics(vtkStructuredGrid):  # ___________________________________ MUST B
         return frame
 
 
-class DEM(vtkStructuredGrid):
+class DEM(vtkStructuredGrid, Entity):
     """DEM is a Digital Elevation Model derived from vtkStructuredGrid,
     saved in the project folder as .vts. Many methods are similar to PolyData."""
+
+    @property
+    def pz_type(self):
+        return   "DEM"
 
     def __init__(self, *args, **kwargs):
         super(DEM, self).__init__(*args, **kwargs)
@@ -2333,3 +2346,18 @@ class Attitude(VertexSet):
         att_copy = Attitude()
         att_copy.DeepCopy(self)
         return att_copy
+
+
+class EntitiesFactory():
+    def create(self, type):
+        if type == 'well':
+            return Well()
+        elif type == 'well_trace':
+            return WellTrace()
+        elif type == 'well_marker':
+            return WellMarker()
+        elif type == 'attitude':
+            return Attitude()
+        else:
+            return None
+

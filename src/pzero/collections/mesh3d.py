@@ -11,7 +11,7 @@ import uuid
 from copy import deepcopy
 from PyQt5.QtCore import Qt, QVariant
 
-from pzero.collections.collection_base import CollectionBase
+from pzero.collections.collection_base import Collection
 
 """Options to print Pandas dataframes in console for testing."""
 pd_desired_width = 800
@@ -25,7 +25,7 @@ pd_set_option('display.precision', pd_show_precision)
 pd_set_option('display.max_colwidth', pd_max_colwidth)
 
 
-class Mesh3DCollection(CollectionBase):
+class Mesh3DCollection(Collection):
     """
     Initialize Mesh3DCollection table.
     Column headers are taken from Mesh3DCollection.mesh3d_entity_dict.keys()
@@ -69,6 +69,11 @@ class Mesh3DCollection(CollectionBase):
     @property
     def default_save_table_filename(self):
         return "mesh3d"
+
+    @property
+    def valid_topological_type(self) -> dict:
+        return []
+
 
 
     def add_entity_from_dict(self, entity_dict=None):

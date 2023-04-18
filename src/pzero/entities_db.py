@@ -2,6 +2,7 @@ from PyQt5.QtCore import QObject, pyqtSignal, QSortFilterProxyModel
 
 from pzero.collections.background import BackgroundCollection
 from pzero.collections.boundary import BoundaryCollection
+from pzero.collections.collection_base import AbstractCollection
 from pzero.collections.dom import DomCollection
 from pzero.collections.fluid import FluidsCollection
 from pzero.collections.geological import GeologicalCollection
@@ -56,9 +57,12 @@ class EntitiesDB(QObject):
         return name in list(self.collections.keys())
 
     def instantiate_collection(self, name, cls_to_instantiate):
-        self.collections[name] = cls_to_instantiate(parent=self)
-        self.collections_to_proxy[name] = QSortFilterProxyModel(self)
-        self.collections_to_proxy[name].setSourceModel(self.collections[name])
+        collection: AbstractCollection = cls_to_instantiate(parent = self)
+        self.collections[name] = collection
+        proxy_model = QSortFilterProxyModel(self)
+        proxy_model.setSourceModel(collection.table_model)
+        self.collections_to_proxy[name] = proxy_model
+
 
     def get_collections_with_properties(self):
         return [c for c in self.collections.values() if "properties_names" in c._df.columns]

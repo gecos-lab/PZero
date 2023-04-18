@@ -1,8 +1,9 @@
-from abc import abstractmethod
+from abc import abstractmethod, ABC
 from pathlib import Path
+from typing import List
 
 import pandas as pd
-from PyQt5.QtCore import QAbstractTableModel, Qt, QObject
+from PyQt5.QtCore import QAbstractTableModel, Qt, QObject, QModelIndex, QVariant
 import logging as log
 import deprecated
 
@@ -10,44 +11,128 @@ from pandas import read_json
 from pandas import read_csv
 
 
-class CollectionBase(QAbstractTableModel):
+class AbstractCollection(ABC):
 
-    def __init__(self, parent=None):
-        super(CollectionBase, self).__init__(parent=parent)
+    @property
+    @abstractmethod
+    def entity_dict(self) -> dict:
+        ...
+
+    @property
+    @abstractmethod
+    def type_dict(self) -> dict:
+        ...
+
+    @property
+    @abstractmethod
+    def valid_topological_type(self) -> List[str]:
+        ...
+
+    @property
+    @abstractmethod
+    def valid_types(self) -> List[str]:
+        ...
+
+    @property
+    @abstractmethod
+    def default_save_table_filename(self) -> str:
+        ...
+
+    @abstractmethod
+    def read(self, project_root, filename=None):
+        ...
+
+    @property
+    @abstractmethod
+    def table_model(self) -> "CollectionTableModel":
+        ...
+
+    @property
+    @abstractmethod
+    def editable_columns(self) -> List[str]:
+        ...
+
+    @abstractmethod
+    def post_json_read(self):
+        ...
+
+    @abstractmethod
+    def post_csv_read(self):
+        ...
+
+
+class CollectionTableModel(QAbstractTableModel):
+    def __init__(self, collection:  "Collection", *args, **kwargs):
+        super(CollectionTableModel, self).__init__(*args, **kwargs)
+        self.collection = collection
+
+    def data(self, index: QModelIndex, role: int):
+        """Data is updated on the fly:
+        .row() index points to an entity in the vtkCollection
+        .column() index points to an element in the list created on the fly
+        based on the column headers stored in the dictionary."""
+        if role == Qt.DisplayRole:
+            value = self.collection._df.iloc[index.row(), index.column()]
+            return str(value)
+
+    def setData(self, index, value, role=Qt.EditRole):
+        """This is the method allowing to edit the table and the underlying dataframe.
+        "self.main_window is" is used to point to parent, because the standard Qt setData
+        method does not allow for extra variables to be passed into this method."""
+        if index.isValid():
+            self.collection._df.iloc[index.row(), index.column()] = value
+            if self.data(index, Qt.DisplayRole) == value:
+                self.dataChanged.emit(index, index)
+                uid = self.collection._df.iloc[index.row(), 0]
+                self.collection.main_window.dom_metadata_modified_signal.emit([uid])  # a list of uids is emitted, even if the entity is just one
+                return True
+        return QVariant()
+
+    def headerData(self, section, orientation, role):
+        """Set header from pandas dataframe. "section" is a standard Qt variable."""
+        if role == Qt.DisplayRole:
+            if orientation == Qt.Horizontal:
+                return str(self.collection._df.columns[section])
+            if orientation == Qt.Vertical:
+                return str(self.collection._df.index[section])
+
+    def rowCount(self, index):
+        """Set row count from pandas dataframe"""
+        return self.collection._df.shape[0]
+
+    def columnCount(self, index):
+        """Set column count from pandas dataframe"""
+        return self.collection._df.shape[1]
+
+    def flags(self, index):
+        """Set editable columns."""
+        if index.column() in self.collection.editable_columns:
+            return Qt.ItemFlags(QAbstractTableModel.flags(self, index) | Qt.ItemIsEditable)
+        return Qt.ItemIsEnabled | Qt.ItemIsSelectable
+
+
+class MixinCollection(type(AbstractCollection), type(QObject)):
+    pass
+
+
+class Collection(AbstractCollection, QObject, metaclass=MixinCollection):
+    def __init__(self, parent):
+        self._model = None
         """Initialize Pandas dataframe."""
         self._df = pd.DataFrame(columns=list(self.entity_dict.keys()))
+        super(QObject, self).__init__(parent)
 
     @property
     @deprecated.deprecated("Accessing main window from a collection is discouraged")
     def main_window(self):
-        log.debug("Accessing main window from a collection. this beahvior is scheduled to be removed.")
+        log.debug("Accessing main window from a collection. this behavior is scheduled to be removed.")
         return self.parent().parent()
 
     @property
-    def entity_dict(self):
-        raise NotImplementedError("BoundaryCollection.entity_dict() is not implemented yet.")
-
-    @property
-    def type_dict(self):
-        raise NotImplementedError("BoundaryCollection.type_dict() is not implemented yet.")
-
-    @property
-    def valid_topological_type(self):
-        raise NotImplementedError("BoundaryCollection.valid_topological_type() is not implemented yet.")
-
-    @property
-    def valid_types(self):
-        raise NotImplementedError("BoundaryCollection.valid_types() is not implemented yet.")
-
-    @property
-    @abstractmethod
-    def editable_columns(self):
-        raise NotImplementedError("BoundaryCollection.editable_columns() is not implemented yet.")
-
-    @property
-    @abstractmethod
-    def default_save_table_filename(self):
-        raise NotImplementedError("default filename not implemented in subclass.")
+    def table_model(self):
+        if self._model is None:
+            self._model = CollectionTableModel(self)
+        return self._model
 
     def post_json_read(self):
         pass
@@ -66,9 +151,7 @@ class CollectionBase(QAbstractTableModel):
             type = "JSON"
             filename = expected_filename.with_suffix(".json")
 
-
-        elif expected_filename.with_suffix(
-                ".csv").exists():  # here we should use a serialization factory. So that in the future we can target additional formats (binary, e.g. feather, pickle etc).
+        elif expected_filename.with_suffix(".csv").exists():
             type = "CSV"
             filename = expected_filename.with_suffix(".csv")
 
@@ -77,7 +160,7 @@ class CollectionBase(QAbstractTableModel):
             return dict(type=None, filename=None)
 
         if type == "JSON":
-            got = read_json(filename, orient='index', dtype=self.entity_dict)
+            got = read_json(filename, orient='index', dtype=self.type_dict)
             if not got.empty:
                 self._df = got
                 self.post_json_read()
@@ -89,45 +172,6 @@ class CollectionBase(QAbstractTableModel):
                 self.post_csv_read()
 
         return dict(type=type, filename=filename)
-
-    # # @property
-    # # def parent(self) :
-    # #     return super(CollectionBase).parent()
-    #
-    # @parent.setter
-    # def parent(self, parent) :
-    #     QObject.setParent(self, parent)
-
-    def data(self, index, role):
-        """Data is updated on the fly:
-        .row() index points to an entity in the vtkCollection
-        .column() index points to an element in the list created on the fly
-        based on the column headers stored in the dictionary."""
-        if role == Qt.DisplayRole:
-            value = self._df.iloc[index.row(), index.column()]
-            return str(value)
-
-    def headerData(self, section, orientation, role):
-        """Set header from pandas dataframe. "section" is a standard Qt variable."""
-        if role == Qt.DisplayRole:
-            if orientation == Qt.Horizontal:
-                return str(self._df.columns[section])
-            if orientation == Qt.Vertical:
-                return str(self._df.index[section])
-
-    def rowCount(self, index):
-        """Set row count from pandas dataframe"""
-        return self._df.shape[0]
-
-    def columnCount(self, index):
-        """Set column count from pandas dataframe"""
-        return self._df.shape[1]
-
-    def flags(self, index):
-        """Set editable columns."""
-        if index.column() in self.editable_columns:
-            return Qt.ItemFlags(QAbstractTableModel.flags(self, index) | Qt.ItemIsEditable)
-        return Qt.ItemIsEnabled | Qt.ItemIsSelectable
 
     def get_number_of_entities(self):
         """Get number of entities stored in Pandas dataframe."""
@@ -186,4 +230,4 @@ class CollectionBase(QAbstractTableModel):
             return
 
         self._df.drop(self._df[self._df['uid'] == uid].index, inplace=True)
-        self.modelReset.emit()
+        self.table_model.modelReset.emit()

@@ -7,7 +7,7 @@ import uuid
 from copy import deepcopy
 from PyQt5.QtCore import Qt, QVariant
 
-from pzero.collections.collection_base import CollectionBase
+from pzero.collections.collection_base import Collection
 
 """Options to print Pandas dataframes in console when testing."""
 pd_desired_width = 800
@@ -21,7 +21,7 @@ pd.set_option('display.precision', pd_show_precision)
 pd.set_option('display.max_colwidth', pd_max_colwidth)
 
 
-class BackgroundCollection(CollectionBase):
+class BackgroundCollection(Collection):
     """
     Initialize BackgroundCollection table.
     Column headers are taken from BackgroundCollection.background_entity_dict.keys()
@@ -63,7 +63,7 @@ class BackgroundCollection(CollectionBase):
 
 
     @property
-    def valid_type(self):
+    def valid_types(self):
         """List of valid background types."""
         return ["undef",
                 "Annotations",

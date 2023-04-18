@@ -1,7 +1,7 @@
 """boundary.py
 PZero© Andrea Bistacchi"""
 
-from pzero.collections.collection_base import CollectionBase
+from pzero.collections.collection_base import Collection
 
 """Import as much as possible as from <module> import <class> or <class as ...>"""
 from vtk import vtkPoints
@@ -113,7 +113,7 @@ def boundary_from_points(self, vector):
     self.enable_actions()
 
 
-class BoundaryCollection(CollectionBase):
+class BoundaryCollection(Collection):
     """
     Initialize BoundaryCollection table.
     Column headers are taken from BoundaryCollection.boundary_entity_dict.keys()

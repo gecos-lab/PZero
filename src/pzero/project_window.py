@@ -323,9 +323,8 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         for idx_proxy in selected_idxs_proxy:
             selected_idxs.append(proxy.mapToSource(idx_proxy))
 
-
         for idx in selected_idxs:
-            out_uids.append(coll.data(index=idx, role=Qt.DisplayRole))
+            out_uids.append(coll.table_model.data(index=idx, role=Qt.DisplayRole))
 
         return out_uids
 
@@ -1252,13 +1251,13 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
 
         xsect_coll = self.entities_db.get_collection_by_name("xsect")
 
-        xsect_coll.beginResetModel()
+        xsect_coll.table_model.beginResetModel()
         xsect_coll.read(in_dir_name)
 
         for uid in xsect_coll._df["uid"].tolist(): # this should also be delegated
             xsect_coll.set_geometry(uid=uid)
 
-        xsect_coll.endResetModel()
+        xsect_coll.table_model.endResetModel()
 
 
 
@@ -1268,7 +1267,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
 
         dom_coll = self.entities_db.get_collection_by_name("dom")
 
-        dom_coll.beginResetModel()
+        dom_coll.table_model.beginResetModel()
         dom_coll.read(in_dir_name)
 
         prgs_bar = progress_dialog(max_value=dom_coll._df.shape[0],
@@ -1310,13 +1309,13 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 vtk_object.Modified()
             dom_coll.set_uid_vtk_obj(uid=uid, vtk_obj=vtk_object)
             prgs_bar.add_one()
-        dom_coll.endResetModel()
+        dom_coll.table_model.endResetModel()
 
         """Read image collection and files"""
 
         image_coll = self.entities_db.get_collection_by_name("image")
 
-        image_coll.beginResetModel()
+        image_coll.table_model.beginResetModel()
         image_coll.read(in_dir_name)
 
 
@@ -1365,13 +1364,13 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 vtk_object.Modified()
             image_coll.set_uid_vtk_obj(uid=uid, vtk_obj=vtk_object)
             prgs_bar.add_one()
-        image_coll.endResetModel()
+        image_coll.table_model.endResetModel()
 
         """Read mesh3d collection and files"""
 
         mesh3d_coll = self.entities_db.get_collection_by_name("mesh3d")
 
-        mesh3d_coll.beginResetModel()
+        mesh3d_coll.table_model.beginResetModel()
         mesh3d_coll.read(in_dir_name)
 
 
@@ -1407,11 +1406,11 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 vtk_object.Modified()
             mesh3d_coll.set_uid_vtk_obj(uid=uid, vtk_obj=vtk_object)
             prgs_bar.add_one()
-        mesh3d_coll.endResetModel()
+        mesh3d_coll.table_model.endResetModel()
 
 
         boundary_coll = self.entities_db.get_collection_by_name("boundary")
-        boundary_coll.beginResetModel()
+        boundary_coll.table_model.beginResetModel()
         boundary_coll.read(in_dir_name)
 
 
@@ -1433,12 +1432,12 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             vtk_object.Modified()
             boundary_coll.set_uid_vtk_obj(uid=uid, vtk_obj=vtk_object)
             prgs_bar.add_one()
-        boundary_coll.endResetModel()
+        boundary_coll.table_model.endResetModel()
 
         """Read well table and files"""
 
         well_coll = self.entities_db.get_collection_by_name("well")
-        well_coll.beginResetModel()
+        well_coll.table_model.beginResetModel()
 
         well_coll.read(in_dir_name)
 
@@ -1461,14 +1460,14 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             # Maybe it's better to always add to the vtkobject column the
             # Well and not the WellTrace instance and then call well.trace/head where needed
             prgs_bar.add_one()
-        well_coll.endResetModel()
+        well_coll.table_model.endResetModel()
 
         ## update prop legenf widhet
         self.prop_legend.update_widget(parent=self)
 
 
         geol_coll = self.entities_db.get_collection_by_name("geol")
-        geol_coll.beginResetModel()
+        geol_coll.table_model.beginResetModel()
         geol_coll.read(in_dir_name)
 
         prgs_bar = progress_dialog(max_value=geol_coll._df.shape[0],
@@ -1500,14 +1499,14 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             vtk_object.Modified()
             geol_coll.set_uid_vtk_obj(uid=uid, vtk_obj=vtk_object)
             prgs_bar.add_one()
-        geol_coll.endResetModel()
+        geol_coll.table_model.endResetModel()
         """Update legend."""
         self.prop_legend.update_widget(parent=self)
 
         """Read fluids table and files. Note beginResetModel() and endResetModel()."""
 
         fluids_coll = self.entities_db.get_collection_by_name("fluids")
-        fluids_coll.beginResetModel()
+        fluids_coll.table_model.beginResetModel()
         fluids_coll.read(in_dir_name)
 
 
@@ -1534,13 +1533,13 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             vtk_object.Modified()
             fluids_coll.set_uid_vtk_obj(uid=uid, vtk_obj=vtk_object)
             prgs_bar.add_one()
-        fluids_coll.endResetModel()
+        fluids_coll.table_model.endResetModel()
         """Update legend."""
         self.prop_legend.update_widget(parent=self)
 
         """Read Backgrounds table and files. Note beginResetModel() and endResetModel()."""
         backgrounds_coll = self.entities_db.get_collection_by_name("backgrounds")
-        backgrounds_coll.beginResetModel()
+        backgrounds_coll.table_model.beginResetModel()
         backgrounds_coll.read(in_dir_name)
 
 
@@ -1567,7 +1566,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             vtk_object.Modified()
             backgrounds_coll.set_uid_vtk_obj(uid=uid, vtk_obj=vtk_object)
             prgs_bar.add_one()
-        backgrounds_coll.endResetModel()
+        backgrounds_coll.table_model.endResetModel()
         """Update legend."""
         self.prop_legend.update_widget(parent=self)
 

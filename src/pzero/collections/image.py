@@ -7,7 +7,7 @@ import uuid
 from copy import deepcopy
 from PyQt5.QtCore import Qt, QVariant
 
-from pzero.collections.collection_base import CollectionBase
+from pzero.collections.collection_base import Collection
 from pzero.entities.entities_factory import MapImage, XsImage, Seismics, Image3D
 
 """Options to print Pandas dataframes in console for testing."""
@@ -22,7 +22,7 @@ pd_set_option('display.precision', pd_show_precision)
 pd_set_option('display.max_colwidth', pd_max_colwidth)
 
 
-class ImageCollection(CollectionBase):
+class ImageCollection(Collection):
     """
     Initialize ImageCollection table.
     Column headers are taken from ImageCollection.image_entity_dict.keys()
@@ -67,6 +67,12 @@ class ImageCollection(CollectionBase):
         return self._df.columns.get_indexer(["name"])
 
     """Custom methods used to add or remove entities, query the dataframe, etc."""
+
+
+    @property
+    def valid_topological_type(self) -> dict:
+        return []
+
 
 
     @property
