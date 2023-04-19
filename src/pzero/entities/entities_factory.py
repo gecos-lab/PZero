@@ -46,6 +46,7 @@ from numpy import where as np_where
 from numpy import zeros as np_zeros
 from numpy import dot as np_dot
 from vtkmodules.vtkFiltersPoints import vtkConvertToPointCloud
+from vtkmodules.vtkIOXML import vtkXMLStructuredGridReader
 
 from pzero.orientation_analysis import get_dip_dir_vectors
 from vtkmodules.vtkFiltersCore import vtkGlyph3D
@@ -176,7 +177,19 @@ class Entity(ABC):
     def pz_type(self):
         ...
 
-class PolyData(vtkPolyData, Entity):
+    @abstractmethod
+    def load_from_file(self, filename):
+        ...
+
+
+class BaseEntity(Entity):
+    def __init__(self, entities_db, uid):
+        self._entities_db = entities_db
+        self._uid = uid
+
+
+
+class PolyData(vtkPolyData):
     """PolyData is an abstract class used as a base for all entities with a geological meaning, such as
     triangulated surfaces, polylines (also in cross sections), pointsets, etc., and possibly in other
     cases (e.g. DOMs and boundaries). Basically this is the standard vtk.PolyData class, but exposes methods from
@@ -1558,16 +1571,25 @@ class Seismics(vtkStructuredGrid):  # ___________________________________ MUST B
         return frame
 
 
-class DEM(vtkStructuredGrid, Entity):
+class DEM(vtkStructuredGrid, BaseEntity):
     """DEM is a Digital Elevation Model derived from vtkStructuredGrid,
     saved in the project folder as .vts. Many methods are similar to PolyData."""
 
+    def load_from_file(self, filename):
+        sg_reader = vtkXMLStructuredGridReader()
+        sg_reader.SetFileName(filename)
+        sg_reader.Update()
+        self.ShallowCopy(sg_reader.GetOutput())
+        self.Modified()
+
+
     @property
     def pz_type(self):
-        return   "DEM"
+        return "DEM"
 
-    def __init__(self, *args, **kwargs):
-        super(DEM, self).__init__(*args, **kwargs)
+    def __init__(self, entities_db, uid, *args, **kwargs):
+        BaseEntity.__init__(self, entities_db, uid)
+        vtkStructuredGrid.__init__(self, *args, **kwargs) # this is due to inheritance rather than composition
 
     def deep_copy(self):
         dem_copy = DEM()
@@ -2349,15 +2371,11 @@ class Attitude(VertexSet):
 
 
 class EntitiesFactory():
-    def create(self, type):
-        if type == 'well':
-            return Well()
-        elif type == 'well_trace':
-            return WellTrace()
-        elif type == 'well_marker':
-            return WellMarker()
-        elif type == 'attitude':
-            return Attitude()
+    def get_cls(self, type):
+        if type == 'DEM':
+            return DEM
         else:
             return None
+
+
 

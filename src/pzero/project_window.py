@@ -15,9 +15,10 @@ from pandas import read_csv as pd_read_csv
 
 from .entities_db import EntitiesDB
 from .project_window_ui import Ui_ProjectWindow
-from pzero.entities.entities_factory import VertexSet, PolyLine, TriSurf, XsVertexSet, XsPolyLine, DEM, MapImage, Voxet, Seismics, \
+from pzero.entities.entities_factory import VertexSet, PolyLine, TriSurf, XsVertexSet, XsPolyLine, DEM, MapImage, Voxet, \
+    Seismics, \
     XsVoxet, \
-    PCDom, TSDom, Well, Attitude, XsImage
+    PCDom, TSDom, Well, Attitude, XsImage, EntitiesFactory
 from pzero.collections.xsection import XSectionCollection
 from pzero.collections.dom import DomCollection
 from pzero.collections.image import ImageCollection
@@ -1274,18 +1275,19 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                                    title_txt="Open DOM", label_txt="Opening DOM objects...", cancel_txt=None,
                                    parent=self)
 
+        factory = EntitiesFactory()
         # deserialize vtk objects
         for uid in dom_coll._df['uid'].to_list():
             if dom_coll.get_uid_dom_type(uid) == "DEM":
-                if not os.path.isfile((in_dir_name + "/" + uid + ".vts")):
-                    print("error: missing VTK file")
+                cls = factory.get_cls(dom_coll.get_uid_dom_type(uid))
+                vtk_object = cls(self.entities_db, uid)
+                try:
+                    vtk_object.load_from_file(in_dir_name + "/" + uid + ".vts")
+                except:
                     return
-                vtk_object = DEM()
-                sg_reader = vtkXMLStructuredGridReader()
-                sg_reader.SetFileName(in_dir_name + "/" + uid + ".vts")
-                sg_reader.Update()
-                vtk_object.ShallowCopy(sg_reader.GetOutput())
-                vtk_object.Modified()
+
+
+
             elif dom_coll.get_uid_dom_type(uid) == "DomXs":
                 xsect_uid = dom_coll.get_uid_x_section(uid)
                 vtk_object = XsPolyLine(x_section_uid=xsect_uid, parent=self)
