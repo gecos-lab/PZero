@@ -1,5 +1,5 @@
-from pzero.image_collection import ImageCollection
-from pzero.dom_collection import DomCollection
+from pzero.collections.image_collection import ImageCollection
+from pzero.collections.dom_collection import DomCollection
 
 from PyQt5.QtWidgets import QMainWindow
 

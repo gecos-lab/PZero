@@ -8,14 +8,13 @@ from numpy import asarray as np_asarray
 from numpy import deg2rad as np_deg2rad
 from numpy import sin as np_sin
 from numpy import cos as np_cos
-from numpy import tan as np_tan
 from numpy import squeeze as np_squeeze
 from numpy import number as np_number
 from numpy import cross as np_cross
 from numpy import where as np_where
 from numpy import array as np_array
 
-from .helper_dialogs import multiple_input_dialog
+from pzero.helpers.helper_dialogs import multiple_input_dialog
 
 """IN THE FUTURE add functions for orientation analysis."""
 

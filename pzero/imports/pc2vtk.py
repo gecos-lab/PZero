@@ -20,8 +20,8 @@ from copy import deepcopy
 from vtk import vtkPoints
 from vtkmodules.util.numpy_support import numpy_to_vtk
 from uuid import uuid4
-from .entities_factory import PCDom
-from .dom_collection import DomCollection
+from pzero.entities_factory import PCDom
+from pzero.collections.dom_collection import DomCollection
 # import pyvista as pv
 from pandas import DataFrame as pd_df
 from pandas import to_numeric as pd_to_numeric

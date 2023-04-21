@@ -1,4 +1,4 @@
-from pzero.dom_collection import DomCollection
+from pzero.collections.dom_collection import DomCollection
 from pzero.legend_manager import Legend
 from pzero.entities_factory import DEM
 

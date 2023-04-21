@@ -4,9 +4,9 @@ PZero© Andrea Bistacchi"""
 import os
 from copy import deepcopy
 import uuid
-from .entities_factory import DEM
-from .dom_collection import DomCollection
-from .fluid_collection import FluidsCollection
+from pzero.entities_factory import DEM
+from pzero.collections.dom_collection import DomCollection
+from pzero.collections.fluid_collection import FluidsCollection
 from pyvista import StructuredGrid as pv_StructuredGrid
 import xarray as xr
 from numpy import asarray as np_asarray

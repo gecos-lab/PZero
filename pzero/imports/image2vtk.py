@@ -5,9 +5,9 @@ from copy import deepcopy
 import uuid
 import os
 from vtkmodules.util import numpy_support
-from .entities_factory import MapImage, XsImage
-from .image_collection import ImageCollection
-from .helper_dialogs import multiple_input_dialog
+from pzero.entities_factory import MapImage, XsImage
+from pzero.collections.image_collection import ImageCollection
+from pzero.helpers.helper_dialogs import multiple_input_dialog
 
 from numpy import pi as np_pi
 from numpy import sin as np_sin

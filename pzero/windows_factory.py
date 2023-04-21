@@ -1,52 +1,33 @@
 """windows_factory.py
 PZero© Andrea Bistacchi"""
-from pyvista.core.filters import _update_alg
-from vtkmodules.vtkCommonCore import vtkCommand
-from vtkmodules.vtkCommonDataModel import vtkBoundingBox
-from vtkmodules.vtkFiltersCore import vtkThresholdPoints, vtkDelaunay2D
-from vtkmodules.vtkFiltersPoints import vtkRadiusOutlierRemoval, vtkEuclideanClusterExtraction, vtkProjectPointsToPlane
 from vtkmodules.vtkRenderingCore import vtkPropPicker
 
 """QT imports"""
 from PyQt5.QtWidgets import *
 from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QCloseEvent, QFont
 
 """PZero imports"""
-from .base_view_window_ui import Ui_BaseViewWindow
-from .entities_factory import VertexSet, PolyLine, TriSurf, TetraSolid, XsVertexSet, XsPolyLine, DEM, PCDom, MapImage, \
-    Voxet, XsVoxet, Plane, Seismics, XsTriSurf, XsImage, PolyData, Well, WellMarker, WellTrace, Attitude
-from .helper_dialogs import input_one_value_dialog, input_text_dialog, input_combo_dialog, message_dialog, \
-    options_dialog, multiple_input_dialog, tic, toc, open_file_dialog, progress_dialog, save_file_dialog, \
-    general_input_dialog, NavigatorWidget
-from .geological_collection import GeologicalCollection
-from .dom_collection import DomCollection
+from pzero.ui.base_view_window_ui import Ui_BaseViewWindow
+from .entities_factory import VertexSet, PolyLine, TriSurf, XsVertexSet, XsPolyLine, DEM, PCDom, MapImage, \
+    Voxet, XsVoxet, Seismics, XsImage, PolyData, Well, WellMarker, WellTrace, Attitude
+from pzero.helpers.helper_dialogs import input_one_value_dialog, input_combo_dialog, message_dialog, \
+    multiple_input_dialog, progress_dialog, save_file_dialog, \
+    NavigatorWidget
+from pzero.collections.geological_collection import GeologicalCollection
 from .orientation_analysis import get_dip_dir_vectors
-from .helper_functions import best_fitting_plane, gen_frame
-from .helper_widgets import Vector
-from .signals_handler import disconnect_all_signals
-
-from time import sleep
+from pzero.helpers.helper_functions import best_fitting_plane, gen_frame
+from pzero.helpers.helper_widgets import Vector
 
 """Maths imports"""
 from math import degrees, sqrt, atan2
 from numpy import append as np_append
 from numpy import ndarray as np_ndarray
-from numpy import abs as np_abs
 from numpy import sin as np_sin
-from numpy import arcsin as np_arcsin
 from numpy import cos as np_cos
-from numpy import arctan2 as np_arctan2
-from numpy import sqrt as np_sqrt
 from numpy import pi as np_pi
 from numpy import array as np_array
-from numpy import square as np_square
 from numpy import all as np_all
-from numpy import zeros_like as np_zeros_like
 from numpy import cross as np_cross
-from numpy import max as np_max
-from numpy import repeat as np_repeat
-from numpy import where as np_where
 
 from pandas import DataFrame as pd_DataFrame
 from pandas import unique as pd_unique
@@ -58,25 +39,18 @@ from uuid import uuid4
 """"VTK Numpy interface imports"""
 # import vtk.numpy_interface.dataset_adapter as dsa
 from vtkmodules.util import numpy_support
-from vtkmodules.vtkInteractionWidgets import vtkCameraOrientationWidget, vtkContourWidget, \
-    vtkLinearContourLineInterpolator, vtkDijkstraImageContourLineInterpolator, vtkBezierContourLineInterpolator, \
-    vtkPolyDataContourLineInterpolator, vtkPolygonalSurfaceContourLineInterpolator, vtkTerrainContourLineInterpolator
-from vtk import vtkExtractPoints, vtkSphere, vtkAreaPicker, vtkImageTracerWidget, vtkDistanceWidget, vtkAppendPolyData
+from vtkmodules.vtkInteractionWidgets import vtkCameraOrientationWidget
+from vtk import vtkExtractPoints, vtkSphere, vtkAppendPolyData
 
 """3D plotting imports"""
 from pyvista import global_theme as pv_global_theme
 from pyvistaqt import QtInteractor as pvQtInteractor
-from pyvista import _vtk
-from pyvista import read_texture
 from pyvista import Box as pv_Box
 from pyvista import Line as pv_Line
 from pyvista import Disc as pv_Disc
 
-from pyvista import PolyData as pvPolyData
 from pyvista import PointSet as pvPointSet
 from pyvista import Plotter as pv_plot
-from pyvista import lines_from_points as pv_lines_from_points
-import pyvista as pv
 
 """2D plotting imports"""
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
@@ -84,7 +58,7 @@ from matplotlib.backends.backend_qt5agg import \
     NavigationToolbar2QT  # this is customized in subclass NavigationToolbar a few lines below
 # DO NOT USE import matplotlib.pyplot as plt  IT CREATES A DUPLICATE WINDOW IN NOTEBOOK
 from matplotlib.figure import Figure
-from matplotlib.offsetbox import TextArea, AnnotationBbox
+from matplotlib.offsetbox import TextArea
 from matplotlib.lines import Line2D
 from matplotlib.image import AxesImage
 from matplotlib.collections import PathCollection
@@ -5184,7 +5158,7 @@ class View2D(BaseView):
 
     def initialize_menu_tools(self):
         """Imports for this view."""
-        from .two_d_lines import draw_line, edit_line, sort_line_nodes, move_line, rotate_line, extend_line, \
+        from .two_d_lines import draw_line, edit_line, sort_line_nodes, rotate_line, extend_line, \
             split_line_line, split_line_existing_point, merge_lines, snap_line, resample_line_distance, \
             resample_line_number_points, simplify_line, copy_parallel, copy_kink, copy_similar, measure_distance
         """Customize menus and tools for this view"""
@@ -5705,9 +5679,9 @@ class ViewMap(View2D):
         """Inheritance of common tools"""
         super().initialize_menu_tools()
         """Tools specific to map view"""
-        from .xsection_collection import section_from_azimuth, sections_from_file
+        from pzero.collections.xsection_collection import section_from_azimuth, sections_from_file
         # from .xsection_collection import section_from_points
-        from .boundary_collection import boundary_from_points
+        from pzero.collections.boundary_collection import boundary_from_points
 
         self.sectionFromAzimuthButton = QAction('Section from Azimuth', self)  # create action
         self.sectionFromAzimuthButton.triggered.connect(
@@ -7031,8 +7005,8 @@ class NewViewMap(NewView2D):
         self.plotter.view_xy()
 
     def initialize_menu_tools(self):
-        from .xsection_collection import section_from_azimuth, sections_from_file
-        from .boundary_collection import boundary_from_points
+        from pzero.collections.xsection_collection import section_from_azimuth, sections_from_file
+        from pzero.collections.boundary_collection import boundary_from_points
         super().initialize_menu_tools()
         self.sectionFromAzimuthButton = QAction('Section from azimuth', self)  # create action
         self.sectionFromAzimuthButton.triggered.connect(

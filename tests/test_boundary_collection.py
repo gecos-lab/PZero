@@ -1,5 +1,5 @@
 from PyQt5.QtWidgets import QMainWindow
-from pzero.boundary_collection import BoundaryCollection
+from pzero.collections.boundary_collection import BoundaryCollection
 from pzero.entities_factory import DEM
 
 

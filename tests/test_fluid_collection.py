@@ -1,4 +1,4 @@
-from pzero.fluid_collection import FluidsCollection
+from pzero.collections.fluid_collection import FluidsCollection
 from pzero.legend_manager import Legend
 from pzero.entities_factory import DEM
 

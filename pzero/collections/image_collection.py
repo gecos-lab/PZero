@@ -7,7 +7,7 @@ from pandas import DataFrame as pd_DataFrame
 import uuid
 from copy import deepcopy
 from PyQt5.QtCore import QAbstractTableModel, Qt, QVariant
-from .entities_factory import MapImage, XsImage, Seismics, Image3D
+from pzero.entities_factory import MapImage, XsImage, Seismics, Image3D
 
 """Options to print Pandas dataframes in console for testing."""
 pd_desired_width = 800

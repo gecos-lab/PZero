@@ -15,7 +15,6 @@ from numpy import ndarray as np_ndarray
 from numpy import abs as np_abs
 from numpy import sin as np_sin
 from numpy import cos as np_cos
-from numpy import tan as np_tan
 from numpy import pi as np_pi
 from numpy import float64 as np_float64
 from numpy import sqrt as np_sqrt
@@ -25,10 +24,9 @@ from numpy import float32 as np_float32
 
 from pandas import DataFrame as pd_DataFrame
 from vtkmodules.vtkCommonDataModel import vtkBoundingBox
-from vtkmodules.vtkFiltersGeneral import vtkIntersectionPolyDataFilter
 
-from .geological_collection import GeologicalCollection
-from .helper_dialogs import multiple_input_dialog, input_one_value_dialog, input_text_dialog, input_combo_dialog, input_checkbox_dialog, tic, toc, progress_dialog, general_input_dialog
+from pzero.collections.geological_collection import GeologicalCollection
+from pzero.helpers.helper_dialogs import multiple_input_dialog, input_one_value_dialog, input_text_dialog, input_combo_dialog, input_checkbox_dialog, tic, toc, progress_dialog, general_input_dialog
 from .entities_factory import TriSurf, XsPolyLine, PolyLine, VertexSet, Voxet, XsVoxet, XsVertexSet,Attitude
 
 import pyvista as pv

@@ -1,4 +1,4 @@
-from pzero.well_collection import WellCollection
+from pzero.collections.well_collection import WellCollection
 from pzero.entities_factory import Well
 from pzero.entities_factory import PolyLine
 from pzero.legend_manager import Legend

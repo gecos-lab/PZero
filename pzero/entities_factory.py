@@ -1,17 +1,15 @@
 """entities_factory.py
 PZero© Andrea Bistacchi"""
-import numpy as np
-from vtk import vtkPolyData, vtkPoints, vtkCellCenters, vtkIdFilter, vtkCleanPolyData, vtkPolyDataNormals, vtkPlane, \
+from vtk import vtkPolyData, vtkPoints, vtkCellCenters, vtkIdFilter, vtkPolyDataNormals, vtkPlane, \
     vtkCellArray, vtkLine, vtkIdList, vtkTriangleFilter, vtkTriangle, vtkFeatureEdges, vtkCleanPolyData, vtkStripper, \
     vtkPolygon, vtkUnstructuredGrid, vtkTetra, vtkImageData, vtkStructuredGrid, vtkPolyDataConnectivityFilter, \
     vtkPolyDataMapper, vtkPCANormalEstimation, vtkEuclideanClusterExtraction, vtkCenterOfMass, vtkArcPlotter, \
-    vtkTubeFilter, vtkActor, vtkLocator, vtkPointSet
+    vtkTubeFilter, vtkActor, vtkLocator
 from vtkmodules.util.numpy_support import vtk_to_numpy
 from vtkmodules.numpy_interface.dataset_adapter import WrapDataObject, vtkDataArrayToVTKArray
 # old vtk import from vtk.numpy_interface.dataset_adapter import WrapDataObject, vtkDataArrayToVTKArray
 from pyvista import helpers as pv_helpers  # very useful. Can be used when dsa fails
 from pyvista import PolyData as pv_PolyData  # this should be removed
-from pyvista import Arrow as pv_Arrow
 from pyvista import Spline  # this should be removed
 from pyvista import Plotter  # this should be removed
 from pyvista import image_to_texture as pv_image_to_texture
@@ -22,7 +20,6 @@ from numpy import arctan2 as np_arctan2
 from numpy import arctan as np_arctan
 from numpy import tan as np_tan
 from numpy import cos as np_cos
-from numpy import sin as np_sin
 from numpy import arcsin as np_arcsin
 from numpy import pi as np_pi
 from numpy import empty as np_empty
@@ -47,9 +44,7 @@ from numpy import dot as np_dot
 from vtkmodules.vtkFiltersPoints import vtkConvertToPointCloud
 
 from .orientation_analysis import get_dip_dir_vectors
-from vtkmodules.vtkFiltersCore import vtkGlyph3D, vtkThresholdPoints
-
-from .helper_functions import profiler
+from vtkmodules.vtkFiltersCore import vtkThresholdPoints
 
 """
 Some notes on the way we derive our classes from VTK.

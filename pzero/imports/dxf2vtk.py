@@ -1,7 +1,7 @@
 """gocad2vtk.py
 PZero© Andrea Bistacchi"""
 
-from .entities_factory import TriSurf
+from pzero.entities_factory import TriSurf
 import ezdxf
 from vtkmodules.util import numpy_support
 from pandas import DataFrame as pd_DataFrame 

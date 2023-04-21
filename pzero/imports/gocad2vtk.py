@@ -6,10 +6,10 @@ from numpy import column_stack as np_column_stack
 from numpy import shape as np_shape
 from vtk import vtkPoints, vtkCellArray, vtkDataArrayCollection, vtkFloatArray, vtkLine, vtkTriangle, vtkVertex 
 import uuid
-from .entities_factory import VertexSet, PolyLine, TriSurf, XsVertexSet, XsPolyLine
-from .geological_collection import GeologicalCollection
-from .boundary_collection import BoundaryCollection
-from .helper_dialogs import input_text_dialog, input_combo_dialog, options_dialog
+from pzero.entities_factory import VertexSet, PolyLine, TriSurf, XsVertexSet, XsPolyLine
+from pzero.collections.geological_collection import GeologicalCollection
+from pzero.collections.boundary_collection import BoundaryCollection
+from pzero.helpers.helper_dialogs import input_text_dialog, input_combo_dialog, options_dialog
 
 """We import only come Gocad object attributes.
 Other Gocad ASCII properties/fields/keys not implemented in PZero are:

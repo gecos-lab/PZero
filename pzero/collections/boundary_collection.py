@@ -10,10 +10,8 @@ from pandas import set_option as pd_set_option
 from uuid import uuid4 as uuid_uuid4
 from copy import deepcopy
 from PyQt5.QtCore import QAbstractTableModel, Qt, QVariant
-from .windows_factory import NavigationToolbar
-from PyQt5.QtWidgets import QAction
-from .helper_dialogs import general_input_dialog
-from .entities_factory import PolyLine, TriSurf
+from pzero.helpers.helper_dialogs import general_input_dialog
+from pzero.entities_factory import PolyLine, TriSurf
 
 """Options to print Pandas dataframes in console for testing."""
 pd_desired_width = 800

@@ -1,4 +1,4 @@
-from pzero.background_collection import BackgroundCollection
+from pzero.collections.background_collection import BackgroundCollection
 from pzero.legend_manager import Legend
 
 from pandas import DataFrame as pd_DataFrame

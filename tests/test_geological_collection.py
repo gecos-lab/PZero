@@ -1,4 +1,4 @@
-from pzero.geological_collection import GeologicalCollection
+from pzero.collections.geological_collection import GeologicalCollection
 from pzero.legend_manager import Legend
 
 from pandas import DataFrame as pd_DataFrame

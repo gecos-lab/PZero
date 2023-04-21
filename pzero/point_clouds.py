@@ -3,24 +3,23 @@ from copy import deepcopy
 from pyvista.core.filters import _update_alg
 from vtkmodules.util import numpy_support
 from vtkmodules.vtkCommonCore import vtkIdTypeArray
-from vtkmodules.vtkCommonDataModel import vtkDataObject, vtkImplicitSelectionLoop, vtkPolyData, vtkSelectionNode, \
+from vtkmodules.vtkCommonDataModel import vtkDataObject, vtkImplicitSelectionLoop, vtkSelectionNode, \
     vtkSelection, vtkPlane
 from vtkmodules.vtkFiltersCore import vtkThreshold, vtkAppendPolyData, vtkThresholdPoints, vtkDelaunay2D, \
     vtkMassProperties
 from vtkmodules.vtkFiltersExtraction import vtkExtractGeometry, vtkExtractSelection
 from vtkmodules.vtkFiltersPoints import vtkEuclideanClusterExtraction, vtkRadiusOutlierRemoval, vtkProjectPointsToPlane
 
-from .dom_collection import DomCollection
+from pzero.collections.dom_collection import DomCollection
 from .entities_factory import PCDom, TriSurf, Attitude
-from .geological_collection import GeologicalCollection
-from .helper_dialogs import multiple_input_dialog
-from .helper_functions import best_fitting_plane,srf
-from .helper_widgets import Scissors
+from pzero.collections.geological_collection import GeologicalCollection
+from pzero.helpers.helper_dialogs import multiple_input_dialog
+from pzero.helpers.helper_functions import best_fitting_plane,srf
+from pzero.helpers.helper_widgets import Scissors
 
 from numpy import max as np_max
 from numpy import min as np_min
 from numpy import random as np_random
-from numpy import repeat as np_repeat
 from numpy import pi as np_pi
 from numpy import arctan2 as np_arctan2
 from numpy import arcsin as np_arcsin
@@ -31,7 +30,6 @@ from numpy import std as np_std
 
 import matplotlib.pyplot as plt
 import seaborn as sns
-from matplotlib.gridspec import GridSpec
 import matplotlib.style as mplstyle
 
 from uuid import uuid4

@@ -1,4 +1,4 @@
-from pzero.mesh3d_collection import Mesh3DCollection
+from pzero.collections.mesh3d_collection import Mesh3DCollection
 
 from PyQt5.QtWidgets import QMainWindow
 

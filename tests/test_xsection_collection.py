@@ -1,4 +1,4 @@
-from pzero.xsection_collection import XSectionCollection
+from pzero.collections.xsection_collection import XSectionCollection
 from PyQt5.QtWidgets import QMainWindow
 
 

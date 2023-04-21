@@ -1,18 +1,14 @@
 """xsection_collection.py
 PZero© Andrea Bistacchi"""
-import vtkmodules.vtkCommonDataModel
 from vtk import vtkPoints, vtkCellArray, vtkLine
 # import numpy_interface.dataset_adapter as dsa
 # import numpy_interface.algorithms as algs
 from copy import deepcopy
 import uuid
-import pyvista as pv
 
 from numpy import cos as np_cos
 from numpy import sin as np_sin
 from numpy import pi as np_pi
-from numpy import arctan2 as np_arctan2
-from numpy import sqrt as np_sqrt
 from numpy import set_printoptions as np_set_printoptions
 from numpy import array as np_array
 from numpy import deg2rad as np_deg2rad
@@ -20,18 +16,15 @@ from numpy.linalg import inv as np_linalg_inv
 from numpy import repeat as np_repeat
 from numpy import dot as np_dot
 from numpy import matmul as np_matmul
-from numpy import mean as np_mean
 
-from .orientation_analysis import dip_directions2normals,get_dip_dir_vectors
+from pzero.orientation_analysis import dip_directions2normals,get_dip_dir_vectors
 
 import pandas as pd
 from PyQt5.QtCore import QAbstractTableModel, Qt, QVariant
 # from PyQt5.QtGui import QStandardItem, QImage
-from .entities_factory import Plane, XsPolyLine
-from .helper_dialogs import general_input_dialog, open_file_dialog
-from .helper_functions import auto_sep
-from .windows_factory import NavigationToolbar
-from PyQt5.QtWidgets import QAction
+from pzero.entities_factory import Plane, XsPolyLine
+from pzero.helpers.helper_dialogs import general_input_dialog, open_file_dialog
+from pzero.helpers.helper_functions import auto_sep
 
 """Options to print Pandas dataframes in console"""
 pd_desired_width = 800

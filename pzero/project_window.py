@@ -14,45 +14,42 @@ from vtk import vtkPolyData, vtkAppendPolyData, vtkOctreePointLocator, vtkXMLPol
 from pandas import DataFrame as pd_DataFrame
 from pandas import read_json as pd_read_json
 from pandas import read_csv as pd_read_csv
-from pandas import isna as pd_isna
-from .project_window_ui import Ui_ProjectWindow
-from .entities_factory import Plane, VertexSet, PolyLine, TriSurf, XsVertexSet, XsPolyLine, DEM, MapImage, Voxet, \
-    Seismics, XsVoxet, TetraSolid, PCDom, TSDom, Well,Attitude,XsImage,Image
-from .geological_collection import GeologicalCollection
-from .xsection_collection import XSectionCollection
-from .dom_collection import DomCollection
-from .image_collection import ImageCollection
-from .mesh3d_collection import Mesh3DCollection
-from .boundary_collection import BoundaryCollection
-from .well_collection import WellCollection
-from .fluid_collection import FluidsCollection
-from .background_collection import BackgroundCollection
+from pzero.ui.project_window_ui import Ui_ProjectWindow
+from .entities_factory import VertexSet, PolyLine, TriSurf, XsVertexSet, XsPolyLine, DEM, MapImage, Voxet, \
+    Seismics, XsVoxet, PCDom, TSDom, Well,Attitude,XsImage
+from pzero.collections.geological_collection import GeologicalCollection
+from pzero.collections.xsection_collection import XSectionCollection
+from pzero.collections.dom_collection import DomCollection
+from pzero.collections.image_collection import ImageCollection
+from pzero.collections.mesh3d_collection import Mesh3DCollection
+from pzero.collections.boundary_collection import BoundaryCollection
+from pzero.collections.well_collection import WellCollection
+from pzero.collections.fluid_collection import FluidsCollection
+from pzero.collections.background_collection import BackgroundCollection
 from .legend_manager import Legend
 from .properties_manager import PropertiesCMaps
-from .gocad2vtk import gocad2vtk, gocad2vtk_section, gocad2vtk_boundary
-from .pc2vtk import pc2vtk
-from .pyvista2vtk import pyvista2vtk
-from .vedo2vtk import vedo2vtk
-from .shp2vtk import shp2vtk
-from .dem2vtk import dem2vtk
-from .dxf2vtk import vtk2dxf
-from .well2vtk import well2vtk
-from .segy2vtk import segy2vtk
+from pzero.imports.gocad2vtk import gocad2vtk, gocad2vtk_section, gocad2vtk_boundary
+from pzero.imports.pc2vtk import pc2vtk
+from pzero.imports.pyvista2vtk import pyvista2vtk
+from pzero.imports.vedo2vtk import vedo2vtk
+from pzero.imports.shp2vtk import shp2vtk
+from pzero.imports.dem2vtk import dem2vtk
+from pzero.imports.dxf2vtk import vtk2dxf
+from pzero.imports.well2vtk import well2vtk
+from pzero.imports.segy2vtk import segy2vtk
 from .windows_factory import View3D
-from .windows_factory import ViewMap,NewViewMap
-from .windows_factory import ViewXsection,NewViewXsection
+from .windows_factory import NewViewMap
+from .windows_factory import NewViewXsection
 from .windows_factory import ViewStereoplot
-from .helper_dialogs import options_dialog, save_file_dialog, open_file_dialog, input_combo_dialog, message_dialog, multiple_input_dialog, input_one_value_dialog, progress_dialog, import_dialog,PreviewWidget
-from .image2vtk import geo_image2vtk, xs_image2vtk
-from .stl2vtk import vtk2stl, vtk2stl_dilation
-from .obj2vtk import vtk2obj
-from .ply2vtk import vtk2ply
-from .lxml2vtk import vtk2lxml
+from pzero.helpers.helper_dialogs import options_dialog, save_file_dialog, open_file_dialog, input_combo_dialog, message_dialog, multiple_input_dialog, input_one_value_dialog, progress_dialog, import_dialog,PreviewWidget
+from pzero.imports.image2vtk import geo_image2vtk, xs_image2vtk
+from pzero.imports.stl2vtk import vtk2stl, vtk2stl_dilation
+from pzero.imports.obj2vtk import vtk2obj
+from pzero.imports.ply2vtk import vtk2ply
+from pzero.imports.lxml2vtk import vtk2lxml
 from .three_d_surfaces import interpolation_delaunay_2d, poisson_interpolation, implicit_model_loop_structural, surface_smoothing, linear_extrusion, decimation_pro_resampling, decimation_quadric_resampling, subdivision_resampling, intersection_xs, project_2_dem, project_2_xs, split_surf,retopo
 from .orientation_analysis import set_normals
 from .point_clouds import decimate_pc
-
-from uuid import uuid4
 
 
 class ProjectWindow(QMainWindow, Ui_ProjectWindow):
