@@ -46,7 +46,7 @@ from numpy import dot as np_dot
 from vtkmodules.vtkFiltersPoints import vtkConvertToPointCloud
 
 from .orientation_analysis import get_dip_dir_vectors
-from vtkmodules.vtkFiltersCore import vtkGlyph3D
+from vtkmodules.vtkFiltersCore import vtkGlyph3D, vtkThresholdPoints
 
 from .helper_functions import profiler
 
@@ -898,6 +898,15 @@ class TriSurf(PolyData):
         trisurf_copy.Modified()
         return trisurf_copy
 
+    def world2plane(self, normal=None):
+        dip_vec, dir_vec = get_dip_dir_vectors(normal)
+        uv = np_zeros((self.GetNumberOfPoints(), 2))
+
+        for i, point in enumerate(self.points):
+            uv[i, 0] = np_dot(dir_vec[0], point) #u
+            uv[i, 1] = -np_dot(dip_vec[0], point) #v is negative because of the right hand rule
+
+        return uv
 
 class XSectionBaseEntity:
     """This abstract class is used just to implement the method to calculate the W coordinate for all geometrical/topological entities belonging to a XSection.
@@ -907,9 +916,10 @@ class XSectionBaseEntity:
         self.x_section_uid = x_section_uid
         self.parent = parent
 
-    def world2plane(self):
-        plane = self.parent.xsect_coll.get_uid_vtk_plane(self.x_section_uid)
-        normal = np_array([plane.GetNormal()])
+    def world2plane(self, normal=None):
+        if normal is None:
+            plane = self.parent.xsect_coll.get_uid_vtk_plane(self.x_section_uid)
+            normal = np_array([plane.GetNormal()])
         dip_vec, dir_vec = get_dip_dir_vectors(normal)
         uv = np_zeros((self.GetNumberOfPoints(), 2))
 
@@ -1769,6 +1779,27 @@ class PCDom(PolyData):  # _______________________ DO WE NEED ADDITIONAL METHODS 
         # print(connectivity_filter.GetOutput().GetPointData().GetArray('RegionId'))
         self.GetPointData().SetScalars(connectivity_filter.GetOutput().GetPointData().GetArray('ClusterId'))
         self.Modified()
+
+    def split_parts(self):
+
+
+        if 'ClusterId' not in self.point_data_keys:
+            print('No Clusters present, please segment pointcloud first')
+            return None
+        self.GetPointData().SetActiveScalars('ClusterId')
+
+        regions = set(self.get_point_data('ClusterId'))
+        vtk_out_list = []
+        for rid in regions:
+            thresh = vtkThresholdPoints()
+            thresh.SetInputData(self)
+            thresh.ThresholdBetween(rid, rid)
+            thresh.Update()
+            vtk_out_obj = PCDom()
+            vtk_out_obj.DeepCopy(thresh.GetOutput())
+            vtk_out_obj.generate_cells()
+            vtk_out_list.append(vtk_out_obj)
+        return vtk_out_list
 
     # @profiler('/home/gabriele/STORAGE/Unibro/Libri-e-dispense/Tesi/profiler_data/normals_calc/brolla_proxy',10)
     def vtk_set_normals(self):

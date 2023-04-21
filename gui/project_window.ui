@@ -558,6 +558,7 @@
     <addaction name="separator"/>
     <addaction name="actionExportCAD"/>
     <addaction name="actionExportVTK"/>
+    <addaction name="actionExportCSV"/>
     <addaction name="separator"/>
     <addaction name="actionQuit"/>
    </widget>
@@ -935,6 +936,11 @@
   <action name="actionDecimatePointCloud">
    <property name="text">
     <string>Decimate point cloud</string>
+   </property>
+  </action>
+  <action name="actionExportCSV">
+   <property name="text">
+    <string>Export CSV</string>
    </property>
   </action>
  </widget>

@@ -4819,7 +4819,7 @@ class View3D(BaseView):
 
     def initialize_menu_tools(self):
         """Customize menus and tools for this view"""
-        from .point_clouds import cut_pc, segment_pc, facets_pc, auto_pick, thresh_filt, normals2dd
+        from .point_clouds import cut_pc, segment_pc, facets_pc, auto_pick, thresh_filt, normals2dd, calibration_pc
         super().initialize_menu_tools()
         self.menuBaseView.setTitle("Edit")
         self.actionBase_Tool.setText("Edit")
@@ -4848,8 +4848,13 @@ class View3D(BaseView):
         self.actionRoughnessf.triggered.connect(lambda: self.rough_filt())
         self.actionCurvaturef.triggered.connect(lambda: self.curv_filt())
         self.actionNormalsf.triggered.connect(lambda: self.norm_filt())
-        self.actionManualf.triggered.connect(lambda: cut_pc(self))
+        self.actionManualBoth.triggered.connect(lambda: cut_pc(self))
+        self.actionManualInner.triggered.connect(lambda: cut_pc(self,'inner'))
+        self.actionManualOuter.triggered.connect(lambda: cut_pc(self,'outer'))
 
+
+
+        self.actionCalibration.triggered.connect(lambda: calibration_pc(self))
         self.actionManual_picking.triggered.connect(lambda: self.act_att())
         self.actionSegment.triggered.connect(lambda: segment_pc(self))
         self.actionPick.triggered.connect(lambda: auto_pick(self))
@@ -4899,7 +4904,7 @@ class View3D(BaseView):
 
     def export_screen(self):
         out_file_name = save_file_dialog(parent=self, caption="Export 3D view as HTML.", filter="png (*.png);; jpeg (*.jpg)")
-        self.plotter.screenshot(out_file_name)
+        self.plotter.screenshot(out_file_name,transparent_background=True,window_size=(1920,1080))
     def export_html(self):
         out_file_name = save_file_dialog(parent=self, caption="Export 3D view as HTML.", filter="html (*.html)")
         self.plotter.export_html(out_file_name)

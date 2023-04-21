@@ -5,6 +5,7 @@ import os
 from copy import deepcopy
 from datetime import datetime
 
+import pandas as pd
 from PyQt5.QtWidgets import QMainWindow, QMessageBox
 from PyQt5.QtCore import Qt, QSortFilterProxyModel, pyqtSignal
 from vtk import vtkPolyData,vtkAppendPolyData, vtkOctreePointLocator, vtkXMLPolyDataWriter, vtkXMLStructuredGridWriter, vtkXMLImageDataWriter, vtkXMLStructuredGridReader, vtkXMLPolyDataReader, vtkXMLImageDataReader
@@ -193,6 +194,8 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         """File>Export actions -> slots"""
         self.actionExportCAD.triggered.connect(self.export_cad)
         self.actionExportVTK.triggered.connect(self.export_vtk)
+        self.actionExportCSV.triggered.connect(self.export_csv)
+
 
         """Edit actions -> slots"""
         self.actionEditEntityRemove.triggered.connect(self.entity_remove)
@@ -765,10 +768,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 return
             for uid in self.selected_uids:
                 if isinstance(collection.get_uid_vtk_obj(uid), (PolyLine, TriSurf)):
-                    if  "RegionId" not in collection.get_uid_properties_names(uid):
+                    if "RegionId" not in collection.get_uid_properties_names(uid):
                         collection.append_uid_property(uid=uid, property_name="RegionId", property_components=1)
                     vtk_out_list = collection.get_uid_vtk_obj(uid).split_parts()
-
 
                     for i,vtk_object in enumerate(vtk_out_list):
                         vtk_out_dict = deepcopy(collection.df.loc[collection.df['uid'] == uid].drop(['uid', 'vtk_obj'], axis=1).to_dict('records')[0])
@@ -778,6 +780,17 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                         vtk_out_dict['vtk_obj'] = vtk_object
                         collection.add_entity_from_dict(entity_dict=vtk_out_dict)
                     collection.remove_entity(uid)
+                if isinstance(collection.get_uid_vtk_obj(uid), PCDom):
+                    vtk_out_list = collection.get_uid_vtk_obj(uid).split_parts()
+                    for i, vtk_object in enumerate(vtk_out_list):
+                        vtk_out_dict = deepcopy(collection.df.loc[collection.df['uid'] == uid].drop(['uid', 'vtk_obj'], axis=1).to_dict('records')[0])
+                        name = vtk_out_dict["name"]
+                        vtk_out_dict['uid'] = None
+                        vtk_out_dict['name'] = f'{name}_{i}'
+                        vtk_out_dict['vtk_obj'] = vtk_object
+                        collection.add_entity_from_dict(entity_dict=vtk_out_dict)
+                    collection.remove_entity(uid)
+
             self.prop_legend.update_widget(self)
 
     """Methods used to save/open/create new projects."""
@@ -1799,3 +1812,45 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     pd_writer.SetInputData(entity)
                     pd_writer.Write()
                 print(f'exported {uid}')
+
+    # Everything here is very bad, but I am short on time
+    def export_csv(self):
+        if not self.selected_uids:
+            return
+
+        else:
+            self.out_dir_name = save_file_dialog(parent=self, caption="Select save directory.", directory=True)
+            # print(self.out_file_name)
+            for uid in self.selected_uids: #[gabriele] this could be generalized with a helper function
+                if self.shown_table == "tabGeology":
+                    entity = self.geol_coll.get_uid_vtk_obj(uid)
+
+                    df = pd.DataFrame()
+                    if isinstance(entity, TriSurf):
+                        for key in entity.get_field_data_keys():
+                            if key == 'Normals' or key == 'Centers':
+                                data = entity.get_field_data(key).reshape(-1,3)
+                            else:
+                                data = entity.get_field_data(key)
+                            if data.ndim == 1:
+                                df[key] = data
+                            else:
+                                for i in range(data.ndim+1):
+                                    df[f'{key}_{i}'] = data[:, i]
+
+                    else:
+                        for key in entity.point_data_keys:
+                            data = entity.get_point_data(key)
+
+                            if key == 'Normals':
+                                df['dip dir'] = entity.points_map_dip_azimuth
+                                df['dip'] = entity.points_map_dip
+                            if data.ndim == 1:
+                                df[key] = data
+                            else:
+                                for i in range(data.ndim):
+                                    df[f'{key}_{i}'] = data[:, i]
+
+                    df.to_csv(f'{self.out_dir_name}/{uid}.csv')
+                else:
+                    print('Only geology objects are supported')

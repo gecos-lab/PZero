@@ -13,6 +13,9 @@ from numpy import deg2rad as np_deg2rad
 from numpy import sin as np_sin
 from numpy import cos as np_cos
 from numpy import array as np_array
+from numpy import sum as np_sum
+from numpy import square as np_square
+from numpy import sqrt as np_sqrt
 
 
 from PIL import Image
@@ -230,3 +233,14 @@ def rotate_vec_along(vector, axis, degrees):
                        [0, 0, 1]])
     rot_vec = vector.dot(R)
     return rot_vec
+
+
+def srf(vectors):
+    n = len(vectors)
+    x = np_sum(vectors[:, 0])
+    y = np_sum(vectors[:, 1])
+    z = np_sum(vectors[:, 2])
+
+    result = np_sqrt(np_square(x)+np_square(y)+np_square(z))/n
+
+    return result
