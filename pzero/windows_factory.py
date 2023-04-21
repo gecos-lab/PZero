@@ -17,7 +17,8 @@ from .base_view_window_ui import Ui_BaseViewWindow
 from .entities_factory import VertexSet, PolyLine, TriSurf, TetraSolid, XsVertexSet, XsPolyLine, DEM, PCDom, MapImage, \
     Voxet, XsVoxet, Plane, Seismics, XsTriSurf, XsImage, PolyData, Well, WellMarker, WellTrace, Attitude
 from .helper_dialogs import input_one_value_dialog, input_text_dialog, input_combo_dialog, message_dialog, \
-    options_dialog, multiple_input_dialog, tic, toc, open_file_dialog, progress_dialog, save_file_dialog,general_input_dialog
+    options_dialog, multiple_input_dialog, tic, toc, open_file_dialog, progress_dialog, save_file_dialog, \
+    general_input_dialog, NavigatorWidget
 from .geological_collection import GeologicalCollection
 from .dom_collection import DomCollection
 from .orientation_analysis import get_dip_dir_vectors
@@ -56,7 +57,7 @@ from uuid import uuid4
 """"VTK imports"""
 """"VTK Numpy interface imports"""
 # import vtk.numpy_interface.dataset_adapter as dsa
-from vtk.util import numpy_support
+from vtkmodules.util import numpy_support
 from vtkmodules.vtkInteractionWidgets import vtkCameraOrientationWidget, vtkContourWidget, \
     vtkLinearContourLineInterpolator, vtkDijkstraImageContourLineInterpolator, vtkBezierContourLineInterpolator, \
     vtkPolyDataContourLineInterpolator, vtkPolygonalSurfaceContourLineInterpolator, vtkTerrainContourLineInterpolator
@@ -128,7 +129,6 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         # SEE DISCUSSIONS ON QPointer AND WA_DeleteOnClose ON THE INTERNET
         # self.setAttribute(Qt.WA_DeleteOnClose, True)
         self.parent = parent
-        self.setAttribute(Qt.WA_DeleteOnClose, True)
         """Connect actionQuit.triggered SIGNAL to self.close SLOT"""
         self.actionClose.triggered.connect(self.close)
 
@@ -335,8 +335,8 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
 
         """ Gather all the signals inside a signals list, 
             this is needed when closing because we need to dereference them"""
-        self.signals = []
-        self.signals.append(self.actionClose.triggered)
+        # self.signals = []
+        # self.signals.append(self.actionClose.triggered)
 
 
     def show_qt_canvas(self):
@@ -4500,7 +4500,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         reply = QMessageBox.question(self, 'Closing window', 'Close this window?', QMessageBox.Yes | QMessageBox.No,
                                      QMessageBox.No)
         if reply == QMessageBox.Yes:
-            disconnect_all_signals(self.signals)
+            # disconnect_all_signals(self.signals)
             if not isinstance(self, ViewStereoplot):
                 self.plotter.close()  # needed to cleanly close the vtk plotter
             event.accept()
@@ -5705,7 +5705,8 @@ class ViewMap(View2D):
         """Inheritance of common tools"""
         super().initialize_menu_tools()
         """Tools specific to map view"""
-        from .xsection_collection import section_from_azimuth, section_from_points, sections_from_file
+        from .xsection_collection import section_from_azimuth, sections_from_file
+        # from .xsection_collection import section_from_points
         from .boundary_collection import boundary_from_points
 
         self.sectionFromAzimuthButton = QAction('Section from Azimuth', self)  # create action
@@ -5715,8 +5716,9 @@ class ViewMap(View2D):
         self.toolBarBase.addAction(self.sectionFromAzimuthButton)  # add action to toolbar
 
         self.sectionFromPointsButton = QAction('Section from 2 points', self)  # create action
-        self.sectionFromPointsButton.triggered.connect(
-            lambda: section_from_points(self))  # connect action to function with additional argument parent
+        # Commented because section_from_points doesn't exist actually
+        # self.sectionFromPointsButton.triggered.connect(
+        #    lambda: section_from_points(self))  # connect action to function with additional argument parent
         self.menuBaseView.addAction(self.sectionFromPointsButton)  # add action to menu
         self.toolBarBase.addAction(self.sectionFromPointsButton)  # add action to toolbar
 

@@ -1,7 +1,8 @@
 """helper_dialogs.py
 PZero© Andrea Bistacchi"""
 
-from PyQt5.QtWidgets import QMessageBox, QInputDialog, QLineEdit, QPushButton, QFileDialog, QWidget, QProgressDialog, QMainWindow, QComboBox, QGridLayout, QLabel, QCheckBox, QTableWidgetItem, QHeaderView, QApplication,QFormLayout
+from PyQt5.QtWidgets import QMessageBox, QInputDialog, QLineEdit, QPushButton, QFileDialog, QWidget, QProgressDialog, \
+    QMainWindow, QComboBox, QGridLayout, QLabel, QCheckBox, QTableWidgetItem, QHeaderView, QApplication,QFormLayout
 # from PyQt5.QtWidgets import QSpinBox, QDoubleSpinBox
 from PyQt5.QtGui import QColor
 from PyQt5.QtCore import QEventLoop, Qt, QAbstractTableModel

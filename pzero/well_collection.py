@@ -106,14 +106,14 @@ class WellCollection(QAbstractTableModel):
         for loc_id in locid_in_legend:
             if self.parent.well_coll.df.loc[self.parent.well_coll.df['Loc ID'] == loc_id].empty:
                 """Get index of row to be removed, then remove it in place with .drop()."""
-                idx_remove = self.parent.well_legend_df[self.parent.well_legend_df['Loc ID'] == locid].index
+                idx_remove = self.parent.well_legend_df[self.parent.well_legend_df['Loc ID'] == loc_id].index
                 self.parent.well_legend_df.drop(idx_remove, inplace=True)
                 table_updated = table_updated or True
             for feature in features_in_legend:
-                if self.parent.well_coll.df.loc[(self.parent.well_coll.df['Loc ID'] == locid) & (
+                if self.parent.well_coll.df.loc[(self.parent.well_coll.df['Loc ID'] == loc_id) & (
                         self.parent.well_coll.df['geological_feature'] == feature)].empty:
                     """Get index of row to be removed, then remove it in place with .drop()."""
-                    idx_remove = self.parent.well_legend_df[(self.parent.well_legend_df['Loc ID'] == locid) & (
+                    idx_remove = self.parent.well_legend_df[(self.parent.well_legend_df['Loc ID'] == loc_id) & (
                                 self.parent.well_legend_df['geological_feature'] == feature)].index
                     self.parent.well_legend_df.drop(idx_remove, inplace=True)
                     table_updated = table_updated or True

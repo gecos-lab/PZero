@@ -2,7 +2,7 @@ from datetime import datetime
 import lxml.etree as et
 from numpy import shape as np_shape
 from numpy import zeros as np_zeros
-from vtk.util import numpy_support
+from vtkmodules.util import numpy_support
 
 from pzero.entities_factory import TriSurf
 

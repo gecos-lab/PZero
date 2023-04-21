@@ -4,7 +4,6 @@ PZero© Andrea Bistacchi"""
 
 from numpy import set_printoptions as np_set_set_printoptions
 
-
 from pandas import set_option as pd_set_option
 from pandas import DataFrame as pd_DataFrame
 

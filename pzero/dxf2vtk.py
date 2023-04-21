@@ -3,7 +3,7 @@ PZero© Andrea Bistacchi"""
 
 from .entities_factory import TriSurf
 import ezdxf
-from vtk.util import numpy_support
+from vtkmodules.util import numpy_support
 from pandas import DataFrame as pd_DataFrame 
 
 

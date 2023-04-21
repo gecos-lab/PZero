@@ -18,7 +18,7 @@ from numpy import where as np_where
 import os
 from copy import deepcopy
 from vtk import vtkPoints
-from vtk.util.numpy_support import numpy_to_vtk
+from vtkmodules.util.numpy_support import numpy_to_vtk
 from uuid import uuid4
 from .entities_factory import PCDom
 from .dom_collection import DomCollection

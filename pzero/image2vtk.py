@@ -4,7 +4,7 @@ PZero© Andrea Bistacchi"""
 from copy import deepcopy
 import uuid
 import os
-from vtk.util import numpy_support
+from vtkmodules.util import numpy_support
 from .entities_factory import MapImage, XsImage
 from .image_collection import ImageCollection
 from .helper_dialogs import multiple_input_dialog

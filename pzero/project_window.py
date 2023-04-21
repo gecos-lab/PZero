@@ -8,13 +8,16 @@ from datetime import datetime
 import pandas as pd
 from PyQt5.QtWidgets import QMainWindow, QMessageBox
 from PyQt5.QtCore import Qt, QSortFilterProxyModel, pyqtSignal
-from vtk import vtkPolyData,vtkAppendPolyData, vtkOctreePointLocator, vtkXMLPolyDataWriter, vtkXMLStructuredGridWriter, vtkXMLImageDataWriter, vtkXMLStructuredGridReader, vtkXMLPolyDataReader, vtkXMLImageDataReader
+from vtk import vtkPolyData, vtkAppendPolyData, vtkOctreePointLocator, vtkXMLPolyDataWriter, \
+    vtkXMLStructuredGridWriter, vtkXMLImageDataWriter, vtkXMLStructuredGridReader, vtkXMLPolyDataReader, \
+    vtkXMLImageDataReader
 from pandas import DataFrame as pd_DataFrame
 from pandas import read_json as pd_read_json
 from pandas import read_csv as pd_read_csv
 from pandas import isna as pd_isna
 from .project_window_ui import Ui_ProjectWindow
-from .entities_factory import Plane, VertexSet, PolyLine, TriSurf, XsVertexSet, XsPolyLine, DEM, MapImage, Voxet, Seismics, XsVoxet, TetraSolid, PCDom, TSDom, Well,Attitude,XsImage,Image
+from .entities_factory import Plane, VertexSet, PolyLine, TriSurf, XsVertexSet, XsPolyLine, DEM, MapImage, Voxet, \
+    Seismics, XsVoxet, TetraSolid, PCDom, TSDom, Well,Attitude,XsImage,Image
 from .geological_collection import GeologicalCollection
 from .xsection_collection import XSectionCollection
 from .dom_collection import DomCollection

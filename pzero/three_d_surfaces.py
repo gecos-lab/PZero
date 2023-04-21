@@ -2,7 +2,7 @@
 PZero© Andrea Bistacchi"""
 
 from copy import deepcopy
-from vtk.util import numpy_support
+from vtkmodules.util import numpy_support
 from scipy.interpolate import griddata
 from uuid import uuid4
 import vtk

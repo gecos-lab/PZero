@@ -6,8 +6,9 @@ from vtk import vtkPolyData, vtkPoints, vtkCellCenters, vtkIdFilter, vtkCleanPol
     vtkPolygon, vtkUnstructuredGrid, vtkTetra, vtkImageData, vtkStructuredGrid, vtkPolyDataConnectivityFilter, \
     vtkPolyDataMapper, vtkPCANormalEstimation, vtkEuclideanClusterExtraction, vtkCenterOfMass, vtkArcPlotter, \
     vtkTubeFilter, vtkActor, vtkLocator, vtkPointSet
-from vtk.util.numpy_support import vtk_to_numpy
-from vtk.numpy_interface.dataset_adapter import WrapDataObject, vtkDataArrayToVTKArray
+from vtkmodules.util.numpy_support import vtk_to_numpy
+from vtkmodules.numpy_interface.dataset_adapter import WrapDataObject, vtkDataArrayToVTKArray
+# old vtk import from vtk.numpy_interface.dataset_adapter import WrapDataObject, vtkDataArrayToVTKArray
 from pyvista import helpers as pv_helpers  # very useful. Can be used when dsa fails
 from pyvista import PolyData as pv_PolyData  # this should be removed
 from pyvista import Arrow as pv_Arrow
