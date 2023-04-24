@@ -1,6 +1,6 @@
-from PyQt5.QtWidgets import QMessageBox, QLabel
-
-from pzero.helpers.helper_dialogs import options_dialog, progress_dialog
+# from PyQt5.QtWidgets import QMessageBox, QLabel
+from PyQt5.QtWidgets import QMainWindow
+from pzero.helpers.helper_dialogs import options_dialog, progress_dialog, import_dialog
 
 """
 def test_option_dialogs(self, qtbot):
@@ -13,6 +13,12 @@ def test_option_dialogs(self, qtbot):
     # if pressed no res == 1, otherwise res == 0
     assert res == 1
 """
+
+
+# Test Window Class
+class TestWindow(QMainWindow):
+    def __init__(self):
+        super(TestWindow, self).__init__()
 
 
 # Testing the class progress_dialog()
@@ -84,10 +90,3 @@ class TestProgressDialog:
         progress_dialog_instance.setLabelText(change_label)
 
         assert progress_dialog_instance.labelText() == change_label
-
-
-"""
-class TestPCDataModel:
-
-    def
-"""

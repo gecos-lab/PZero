@@ -1,22 +1,24 @@
-# import time
 import pytest
-from pzero.entities_factory import DEM
 
+from pzero.entities_factory import VertexSet
 from pzero.project_window import ProjectWindow
 
-from PyQt5.QtWidgets import QWidget
+from PyQt5.QtWidgets import QWidget, QMessageBox
+from PyQt5.QtTest import QTest
+from PyQt5.QtCore import Qt, QSize
 
 # Global Var to set if the test are automatic or not
 automatic_test = True
 
 
-# Class for testing the project window, qtbot part of a plugin of pytestQt
+# Class for testing the ProjectWindow, qtbot part of a plugin of pytestQt
 class TestProjectWindow:
-    test_vtk_obj = DEM()
+    test_vtk_obj = VertexSet()
+    test_vtk_obj2 = VertexSet()
 
     geological_entity_dict = {'uid': "0",
                               'name': "geoname",
-                              'topological_type': "topol",
+                              'topological_type': "VertexSet",
                               'geological_type': "undef",
                               'geological_feature': "undef",
                               'scenario': "sc1",
@@ -24,6 +26,17 @@ class TestProjectWindow:
                               'properties_components': [],
                               'x_section': "",
                               'vtk_obj': test_vtk_obj}
+
+    geological_entity_dict2 = {'uid': "2",
+                               'name': "geoname2",
+                               'topological_type': "VertexSet",
+                               'geological_type': "undef",
+                               'geological_feature': "undef",
+                               'scenario': "sc2",
+                               'properties_names': [],
+                               'properties_components': [],
+                               'x_section': "",
+                               'vtk_obj': test_vtk_obj2}
 
     def ignore(self):
         return
@@ -38,7 +51,8 @@ class TestProjectWindow:
     def test_window_name(self, qtbot):
         project_window = ProjectWindow()
 
-        assert project_window.windowTitle() == "PZero"
+        assert project_window.windowTitle() == "PZero" \
+            and project_window.size() == QSize(1418, 800)
 
     def test_shown_table(self, qtbot):
         project_window = ProjectWindow()
@@ -95,6 +109,30 @@ class TestProjectWindow:
 
         assert len(project_window.selected_uids) == 0
 
+    # Testing the entities merge - running only manually, to try change the var automatic_test to false
+    # or comment the next @pytest line
+    @pytest.mark.skipif(automatic_test, reason="Button-clicks not implemented yet")
+    def test_entities_merge(self, qtbot):
+        # These next two ints are needed in the two case: the first one is used when we remove the entities merged,
+        # the second one is when we decide to keep the merged entities
+        remove_merge_int = 0
+        keep_merge_int = 2
+
+        project_window = ProjectWindow()
+
+        # add an entity and then select all the entities on the geology View
+        project_window.geol_coll.add_entity_from_dict(self.geological_entity_dict)
+        project_window.geol_coll.add_entity_from_dict(self.geological_entity_dict2)
+
+        # select all the entities (which are two in this case) on the geology table and merge them
+        project_window.GeologyTableView.selectAll()
+        project_window.entities_merge()
+
+        # reselect all the rows inside the Geology table
+        project_window.GeologyTableView.selectAll()
+
+        assert len(project_window.selected_uids) == remove_merge_int
+
     # Testing the add property event - running only manually, to try change the var automatic_test to false
     # or comment the next @pytest line
     @pytest.mark.skipif(automatic_test, reason="Button-clicks not implemented yet")
@@ -121,4 +159,5 @@ class TestProjectWindow:
         project_window.property_remove()
 
         assert project_window.geol_coll.get_uid_properties_names(uid="0") == []
+
 
