@@ -3,7 +3,7 @@ name: Unit Testing
 on:
   push:
     branches:
-      - 'main'
+      - 'new_2D'
 
 jobs:
   # Linux
