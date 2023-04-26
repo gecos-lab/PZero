@@ -1,0 +1,134 @@
+name: Unit Testing
+
+on:
+  push:
+    branches:
+      - 'main'
+
+jobs:
+  # Linux
+  linux-testing:
+    name: Linux Unit Testing
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash -el {0}
+    permissions:
+      checks: write
+      pull-requests: write
+
+
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v3
+
+      - name: Create Environment from .yml
+        uses: conda-incubator/setup-miniconda@v2
+        with:
+          mamba-version: "*"
+          channels: conda-forge,defaults
+          channel-priority: true
+          activate-environment: pzero
+          environment-file: environment.yml
+          python-version: 3.9
+          auto-activate-base: false
+
+      - name: Check Conda version
+        run: |
+          conda info
+          conda list
+
+      - name: Test with pytest
+        run: |
+          pytest --doctest-modules --junitxml=junit/test-results-ubuntu.xml
+
+      - name: Publish Test Results
+        uses: EnricoMi/publish-unit-test-result-action@v2
+        if: always()
+        with:
+          files: |
+            junit/test-results-ubuntu.xml
+
+  # Windows
+  windows-testing:
+    name: Windows Unit Testing
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash -el {0}
+    permissions:
+      checks: write
+      pull-requests: write
+
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v3
+
+      - name: Create Environment from .yml
+        uses: conda-incubator/setup-miniconda@v2
+        with:
+          mamba-version: "*"
+          channels: conda-forge,defaults
+          channel-priority: true
+          activate-environment: pzero
+          environment-file: environment.yml
+          python-version: 3.9
+          auto-activate-base: false
+
+      - name: Check Conda version
+        run: |
+          conda info
+          conda list
+
+      - name: Test with pytest
+        run: |
+          pytest --doctest-modules --junitxml=junit/test-results-windows.xml
+
+      - name: Publish Test Results
+        uses: EnricoMi/publish-unit-test-result-action/composite@v2
+        if: always()
+        with:
+          files: |
+            junit/test-results-windows.xml
+
+  # MacOS
+  macOS-testing:
+    name: Mac OS Unit Testing
+    runs-on: macos-latest
+    defaults:
+      run:
+        shell: bash -el {0}
+    permissions:
+        checks: write
+        pull-requests: write
+
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v3
+
+      - name: Create Environment from .yml
+        uses: conda-incubator/setup-miniconda@v2
+        with:
+          mamba-version: "*"
+          channels: conda-forge,defaults
+          channel-priority: true
+          activate-environment: pzero
+          environment-file: environment.yml
+          python-version: 3.9
+          auto-activate-base: false
+
+      - name: Check Conda version
+        run: |
+          conda info
+          conda list
+
+      - name: Test with pytest
+        run: |
+          pytest --doctest-modules --junitxml=junit/test-results-macos.xml
+
+      - name: Publish Test Results
+        uses: EnricoMi/publish-unit-test-result-action/composite@v2
+        if: always()
+        with:
+          files: |
+            junit/test-results-macos.xml
