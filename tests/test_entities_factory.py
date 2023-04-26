@@ -1,6 +1,7 @@
 import pytest
 from pytest import raises
-from pzero.entities_factory import VertexSet, PolyLine, TriSurf, PolyData, XsVertexSet, XsPolyLine, TetraSolid
+from pzero.entities_factory import VertexSet, PolyLine, TriSurf, PolyData, XsVertexSet, XsPolyLine, TetraSolid, \
+    Voxet, XsVoxet
 
 import numpy as np
 
@@ -50,7 +51,7 @@ class TestPolyLine:
     def test_bounds(self):
         assert self.poly_line_instance.bounds == (1.0, -1.0, 1.0, -1.0, 1.0, -1.0)
 
-    # Testing VertexSet deep_copy
+    # Testing PolyLine deep_copy
     def test_deep_copy(self):
         deep_copy = self.poly_line_instance.deep_copy()
         deep_copy2 = self.poly_line_instance.deep_copy()
@@ -64,7 +65,7 @@ class TestPolyLine:
     def test_auto_cells(self):
         deep_copy = self.poly_line_instance.deep_copy()
 
-        # calling on both vertex autocells
+        # calling on both PolyLine autocells
         self.poly_line_instance.auto_cells()
         deep_copy.auto_cells()
 
@@ -111,7 +112,7 @@ class TestTriSurf:
     def test_bounds(self):
         assert self.tri_surf_instance.bounds == (1.0, -1.0, 1.0, -1.0, 1.0, -1.0)
 
-    # Testing VertexSet deep_copy
+    # Testing TriSurf deep_copy
     def test_deep_copy(self):
         deep_copy = self.tri_surf_instance.deep_copy()
         deep_copy2 = self.tri_surf_instance.deep_copy()
@@ -174,7 +175,7 @@ class TestXsPolyLine:
     def test_bounds(self):
         assert self.xs_polyline_instance.bounds == (1.0, -1.0, 1.0, -1.0, 1.0, -1.0)
 
-    # testing XSVertexSet deep_copy
+    # testing XsPolyLine deep_copy
     def test_deep_copy(self):
         deep_copy = self.xs_polyline_instance.deep_copy()
         deep_copy2 = self.xs_polyline_instance.deep_copy()
@@ -184,3 +185,257 @@ class TestXsPolyLine:
         assert deep_copy.cells_number == deep_copy2.cells_number
         assert self.xs_polyline_instance.cells_number == deep_copy2.cells_number
 
+
+# Testing TetraSolid
+class TestTetraSolid:
+
+    np_array = np.array([1, 2, 3, 4])
+    tetra_solid_instance = TetraSolid()
+
+    # testing default values / initialization
+    def test_bounds(self):
+        assert self.tetra_solid_instance.GetBounds() == (1.0, -1.0, 1.0, -1.0, 1.0, -1.0)
+
+    # testing TetraSolid deep_copy
+    def test_deep_copy(self):
+        deep_copy = self.tetra_solid_instance.deep_copy()
+        deep_copy2 = self.tetra_solid_instance.deep_copy()
+
+        assert isinstance(deep_copy, TetraSolid)
+        assert isinstance(deep_copy2, TetraSolid)
+
+    # Testing append_cell with a numpy array 4 * 1
+    @pytest.mark.skip(reason="TypeError: no overloads of SetCells() take 1 argument")
+    def test_append_cell(self):
+        # this will store how much times we append a cell inside the poly_line
+        test_number = 1000
+
+        for i in range(test_number):
+            # with raises(TypeError):
+            self.tetra_solid_instance.append_cell(self.np_array)
+
+        # assert self.tetra_solid_instance.cells == test_number
+
+    # Testing get_clean_boundary and deep_copy
+    def test_get_clean_boundary(self):
+        deep_copy = self.tetra_solid_instance.deep_copy()
+        deep_copy2 = self.tetra_solid_instance.deep_copy()
+
+        assert deep_copy.GetBounds() == deep_copy2.GetBounds()
+
+
+# Testing Voxet vtkImageData
+class TestVoxet:
+
+    np_array = np.array([1, 2, 3, 4])
+    voxet_instance = Voxet()
+
+    # testing default values / initialization
+    def test_bounds(self):
+        assert self.voxet_instance.GetBounds() == (1.0, -1.0, 1.0, -1.0, 1.0, -1.0)
+
+    # testing Voxet deep_copy
+    def test_deep_copy(self):
+        deep_copy = self.voxet_instance.deep_copy()
+        deep_copy2 = self.voxet_instance.deep_copy()
+
+        assert isinstance(deep_copy, Voxet)
+        assert isinstance(deep_copy2, Voxet)
+        assert deep_copy.cells_number == deep_copy2.cells_number
+        assert self.voxet_instance.cells_number == deep_copy2.cells_number
+
+    # Test standard origin point
+    def test_origin(self):
+        assert self.voxet_instance.origin == (0, 0, 0)
+
+    # Testing setting origin point
+    def test_setting_origin(self):
+        three_d_point = (10, 10, 10)
+        self.voxet_instance.origin = three_d_point
+
+        assert self.voxet_instance.origin == three_d_point
+
+    # Testing std spacing
+    def test_spacing(self):
+        std_spacing = (1.0, 1.0, 1.0)
+        assert self.voxet_instance.spacing == std_spacing
+
+    # Testing setting spacing
+    def test_setting_spacing(self):
+        spacing = (12, 140, 3)
+        self.voxet_instance.spacing = spacing
+        assert self.voxet_instance.spacing == spacing
+
+    # Testing standard Voxel dimensions
+    def test_dimensions(self):
+        std_dimensions = (0, 0, 0)
+        assert self.voxet_instance.dimensions == std_dimensions
+
+    # Testing setting Voxel dimensions
+    def test_setting_dimensions(self):
+        dimensions = (132, 12, -1)
+        self.voxet_instance.dimensions = dimensions
+        assert self.voxet_instance.dimensions == dimensions
+
+    # Testing first dimension
+    def test_u_n(self):
+        std_dimensions = (0, 0, 0)
+        assert self.voxet_instance.U_n == std_dimensions[0]
+
+    # Test first dimension combined with changing all the dimensions
+    def test_setting_u_n(self):
+        changing_dimensions = (-2, 1, 1)
+        self.voxet_instance.dimensions = changing_dimensions
+
+        assert self.voxet_instance.U_n == changing_dimensions[0]
+
+    # Testing second dimension
+    def test_v_n(self):
+        std_dimensions = (0, 0, 0)
+        assert self.voxet_instance.V_n == std_dimensions[1]
+
+    # Test second dimension combined with changing all the dimensions
+    def test_setting_v_n(self):
+        changing_dimensions = (-2, 5612, 1)
+        self.voxet_instance.dimensions = changing_dimensions
+
+        assert self.voxet_instance.V_n == changing_dimensions[1]
+
+    # Testing second dimension
+    def test_w_n(self):
+        std_dimensions = (0, 0, 0)
+        assert self.voxet_instance.W_n == std_dimensions[2]
+
+    # Test second dimension combined with changing all the dimensions
+    def test_setting_w_n(self):
+        changing_dimensions = (-2, 1, -4554)
+        self.voxet_instance.dimensions = changing_dimensions
+
+        assert self.voxet_instance.W_n == changing_dimensions[2]
+
+    # Testing first dimension spacing
+    def test_u_step(self):
+        std_spacing = (1.0, 1.0, 1.0)
+        assert self.voxet_instance.U_step == std_spacing[0]
+
+    # Testing setting first dimension spacing
+    def test_setting_u_step(self):
+        spacing = (122, 140, 3)
+        self.voxet_instance.spacing = spacing
+        assert self.voxet_instance.U_step == spacing[0]
+
+    # Testing second dimension spacing
+    def test_v_step(self):
+        std_spacing = (1.0, 1.0, 1.0)
+        assert self.voxet_instance.V_step == std_spacing[1]
+
+    # Testing setting second dimension spacing
+    def test_setting_v_step(self):
+        spacing = (122, -343, 3)
+        self.voxet_instance.spacing = spacing
+        assert self.voxet_instance.V_step == spacing[1]
+
+    # Testing third dimension spacing
+    def test_w_step(self):
+        std_spacing = (1.0, 1.0, 1.0)
+        assert self.voxet_instance.W_step == std_spacing[2]
+
+    # Testing setting third dimension spacing
+    def test_setting_w_step(self):
+        spacing = (122, -343, -1231233)
+        self.voxet_instance.spacing = spacing
+        assert self.voxet_instance.W_step == spacing[2]
+
+    # Testing standard points_number
+    def test_points_number(self):
+        assert self.voxet_instance.points_number == 0
+
+    # Testing standard cells_number
+    def test_cells_number(self):
+        assert self.voxet_instance.cells_number == 0
+
+    # Testing cells
+    @pytest.mark.skip(reason="Cells not implemented yet")
+    def test_cells_number(self):
+        assert ...
+
+    # Testing standard point_data_keys
+    def test_point_data_keys(self):
+        assert self.voxet_instance.point_data_keys == []
+
+    # Testing standard point_data_components
+    def test_point_data_components(self):
+        assert self.voxet_instance.point_data_components == []
+
+    # Testing setting point data name and dimensions
+    def test_init_point_data(self):
+        test_name = "Test_Name"
+        test_dimensions = 9
+        self.voxet_instance.init_point_data(data_key=test_name,  dimension=test_dimensions)
+
+        assert self.voxet_instance.point_data_components == [test_dimensions]
+        assert self.voxet_instance.point_data_keys == [test_name]
+
+    # Testing removing point data by name
+    def test_remove_point_data(self):
+        test_name = "Test_Name_Bis"
+        test_dimensions = 123
+
+        # Adding an empty array with a given name and given dimensions
+        self.voxet_instance.init_point_data(data_key=test_name,  dimension=test_dimensions)
+        self.voxet_instance.remove_point_data(test_name)
+
+        assert self.voxet_instance.point_data_components == []
+        assert self.voxet_instance.point_data_keys == []
+
+    # Testing get point data/shape of the vtkarray
+    def test_get_point_data(self):
+        test_name = "Test_Name"
+        test_dimensions = 4
+        shape = (0, 0, 4)
+        self.voxet_instance.init_point_data(data_key=test_name,  dimension=test_dimensions)
+
+        assert self.voxet_instance.get_point_data(test_name).shape == shape
+
+    # Testing range of a point data
+    def test_get_point_data_range(self):
+        test_name = "Test_Name"
+        test_dimensions = 6
+        min_max = (1e+299, -1e+299)
+
+        self.voxet_instance.init_point_data(data_key=test_name, dimension=test_dimensions)
+
+        assert self.voxet_instance.get_point_data_range(test_name) == min_max
+
+    # Testing cell data
+    @pytest.mark.skip(reason="Cell data not implemented yet")
+    def test_list_cell_data(self):
+        assert ...
+
+
+# Testing class XsVoxets
+class TestXsVoxet:
+
+    xs_voxet_instance = XsVoxet()
+
+    # testing default values / initialization
+    def test_bounds(self):
+        assert self.xs_voxet_instance.bounds == (1.0, -1.0, 1.0, -1.0, 1.0, -1.0)
+
+    # testing XsVoxet deep_copy
+    def test_deep_copy(self):
+        deep_copy = self.xs_voxet_instance.deep_copy()
+        deep_copy2 = self.xs_voxet_instance.deep_copy()
+
+        assert isinstance(deep_copy, XsVoxet)
+        assert isinstance(deep_copy2, XsVoxet)
+        assert deep_copy.cells_number == deep_copy2.cells_number
+        assert self.xs_voxet_instance.cells_number == deep_copy2.cells_number
+
+    # Testing standard columns_n
+    def test_columns_n(self):
+        assert self.xs_voxet_instance.columns_n == 0
+
+    # Testing standard rows_n
+    def test_rows_n(self):
+        assert self.xs_voxet_instance.rows_n == 0
