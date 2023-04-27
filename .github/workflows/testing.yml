@@ -28,7 +28,7 @@ jobs:
           mamba-version: "*"
           channels: conda-forge,defaults
           channel-priority: true
-          activate-environment: test-env
+          activate-environment: pzero-test
           environment-file: environment.yml
           python-version: 3.9
           auto-activate-base: false
@@ -37,9 +37,10 @@ jobs:
         run: |
           conda info
           conda list
-
+          
       - name: Test with pytest
         run: |
+          find . -name \*.pyc -delete
           pytest --doctest-modules --junitxml=junit/test-results-ubuntu.xml
 
   # Windows
@@ -63,7 +64,7 @@ jobs:
           mamba-version: "*"
           channels: conda-forge,defaults
           channel-priority: true
-          activate-environment: test-env
+          activate-environment: pzero-test
           environment-file: environment.yml
           python-version: 3.9
           auto-activate-base: false
@@ -98,7 +99,7 @@ jobs:
           mamba-version: "*"
           channels: conda-forge,defaults
           channel-priority: true
-          activate-environment: test-env
+          activate-environment: pzero-test
           environment-file: environment.yml
           python-version: 3.9
           auto-activate-base: false
