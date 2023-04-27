@@ -133,6 +133,19 @@ class TestProjectWindow:
 
         assert len(project_window.selected_uids) == remove_merge_int
 
+    # Testing adding, selecting and getting geological entities
+    def test_getting_entitites(self, qtbot):
+        project_window = ProjectWindow()
+
+        project_window.geol_coll.add_entity_from_dict(self.geological_entity_dict)
+        project_window.geol_coll.add_entity_from_dict(self.geological_entity_dict2)
+
+        project_window.GeologyTableView.selectAll()
+
+        assert self.geological_entity_dict['uid'] in project_window.selected_uids
+        assert self.geological_entity_dict2['uid'] in project_window.selected_uids
+
+
     # Testing the add property event - running only manually, to try change the var automatic_test to false
     # or comment the next @pytest line
     @pytest.mark.skipif(automatic_test, reason="Button-clicks not implemented yet")
@@ -159,5 +172,24 @@ class TestProjectWindow:
         project_window.property_remove()
 
         assert project_window.geol_coll.get_uid_properties_names(uid="0") == []
+
+    # Testing lineations calculate
+    @pytest.mark.skip(reason="lineations_calculate not implemented yet")
+    def test_lineations_calculate(self):
+        assert ...
+
+    # Testing create_empty
+    def test_create_empty(self, qtbot):
+        project_window = ProjectWindow()
+
+        # Add to the empty project two entities and selecting them
+        project_window.geol_coll.add_entity_from_dict(self.geological_entity_dict)
+        project_window.geol_coll.add_entity_from_dict(self.geological_entity_dict2)
+        project_window.GeologyTableView.selectAll()
+
+        # Create empty, so the selected_uids should be empty
+        project_window.create_empty()
+
+        assert project_window.selected_uids == []
 
 

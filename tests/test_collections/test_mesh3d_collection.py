@@ -4,29 +4,29 @@ from PyQt5.QtWidgets import QMainWindow
 
 
 # Class used as a substitute of pyqt-signals/emit
-class TestSignal:
+class FakeSignal:
     def emit(self, uid):
         return
 
 
 # Class used as a substitute of Legend
-class TestLegend:
+class FakeLegend:
     def update_widget(self, parent):
         return
 
 
 # Class used for test the main window (project_window) as a parent
-class TestWindow(QMainWindow):
+class FakeWindow(QMainWindow):
     def __init__(self):
-        super(TestWindow, self).__init__()
+        super(FakeWindow, self).__init__()
 
-    mesh3d_added_signal = TestSignal()
-    mesh3d_removed_signal = TestSignal()
-    prop_legend = TestLegend()
+    mesh3d_added_signal = FakeSignal()
+    mesh3d_removed_signal = FakeSignal()
+    prop_legend = FakeLegend()
 
 
 class TestMesh3dCollection:
-    mesh_3d_coll_istance = Mesh3DCollection(TestWindow)
+    mesh_3d_coll_istance = Mesh3DCollection(FakeWindow)
 
     mesh3d_entity_dict = {'uid': "0",
                           'name': "meshtest",

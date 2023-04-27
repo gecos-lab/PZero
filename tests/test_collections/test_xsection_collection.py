@@ -3,24 +3,24 @@ from PyQt5.QtWidgets import QMainWindow
 
 
 # Class used as a substitute of pyqt-signals/emit
-class TestSignal:
+class FakeSignal:
     def emit(self, uid):
         return
 
 
 # Class used as a substitute of Legend
-class TestLegend:
+class FakeLegend:
     def update_widget(self, parent):
         return
 
 
 # Class used for test the main window (project_window) as a parent
-class TestWindow(QMainWindow):
+class FakeWindow(QMainWindow):
     def __init__(self):
-        super(TestWindow, self).__init__()
+        super(FakeWindow, self).__init__()
 
-    xsect_added_signal = TestSignal()
-    xsect_removed_signal = TestSignal()
+    xsect_added_signal = FakeSignal()
+    xsect_removed_signal = FakeSignal()
 
 
 class TestXSectionCollection:
@@ -35,7 +35,7 @@ class TestXSectionCollection:
                               'x_section': "",
                               'vtk_obj': None}
 
-    x_section_coll_istance = XSectionCollection(TestWindow)
+    x_section_coll_istance = XSectionCollection(FakeWindow)
 
     def test_add_entity_from_dict(self):
         # add an entity

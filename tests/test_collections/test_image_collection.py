@@ -5,30 +5,30 @@ from PyQt5.QtWidgets import QMainWindow
 
 
 # Class used as a substitute of pyqt-signals/emit
-class TestSignal:
+class FakeSignal:
     def emit(self, uid):
         return
 
 
 # Class used as a substitute of Legend
-class TestLegend:
+class FakeLegend:
     def update_widget(self, parent):
         return
 
 
 # Class used for test the main window (project_window) as a parent
-class TestWindow(QMainWindow):
+class FakeWindow(QMainWindow):
     def __init__(self):
-        super(TestWindow, self).__init__()
+        super(FakeWindow, self).__init__()
 
-    image_added_signal = TestSignal()
-    image_removed_signal = TestSignal()
+    image_added_signal = FakeSignal()
+    image_removed_signal = FakeSignal()
     dom_coll = DomCollection()
-    prop_legend = TestLegend()
+    prop_legend = FakeLegend()
 
 
 class TestXSectionCollection:
-    image_coll_istance = ImageCollection(TestWindow)
+    image_coll_istance = ImageCollection(FakeWindow)
 
     image_entity_dict = {'uid': "22",
                          'name': "image-test",

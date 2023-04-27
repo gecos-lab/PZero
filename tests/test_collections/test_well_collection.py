@@ -9,33 +9,33 @@ from PyQt5.QtWidgets import QMainWindow
 
 
 # Class used as a substitute of pyqt-signals/emit
-class TestSignal:
+class FakeSignal:
     def emit(self, uid):
         return
 
 
 # Class used as a substitute of Legend
-class TestLegend:
+class FakeLegend:
     def update_widget(self, parent):
         return
 
 
 # Class used for test the main window (project_window) as a parent
-class TestWindow(QMainWindow):
+class FakeWindow(QMainWindow):
     def __init__(self):
-        super(TestWindow, self).__init__()
+        super(FakeWindow, self).__init__()
 
-    legend = TestLegend()
-    prop_legend = TestLegend()
+    legend = FakeLegend()
+    prop_legend = FakeLegend()
     well_legend_df = pd_DataFrame(columns=list(Legend.well_legend_dict.keys()))
-    well_added_signal = TestSignal()
-    well_removed_signal = TestSignal()
+    well_added_signal = FakeSignal()
+    well_removed_signal = FakeSignal()
 
 
 class TestWellConnection:
     vtk_obj = PolyLine()
     vtk_obj2 = Well().trace
-    well_istance = WellCollection(TestWindow)
+    well_istance = WellCollection(FakeWindow)
 
     well_entity_dict_1 = {'uid': "14",
                           'Loc ID': "3",

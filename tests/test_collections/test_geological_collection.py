@@ -6,32 +6,32 @@ from PyQt5.QtWidgets import QMainWindow
 
 
 # Class used as a substitute of pyqt-signals/emit
-class TestSignal:
+class FakeSignal:
     def emit(self, uid):
         return
 
 
 # Class used as a substitute of Legend
-class TestLegend:
+class FakeLegend:
     def update_widget(self, parent):
         return
 
 
 # Class used for test the main window (project_window) as a parent
-class TestWindow(QMainWindow):
+class FakeWindow(QMainWindow):
     def __init__(self):
-        super(TestWindow, self).__init__()
+        super(FakeWindow, self).__init__()
 
     geol_legend_df = pd_DataFrame(columns=list(Legend.geol_legend_dict.keys()))
-    legend = TestLegend()
-    prop_legend = TestLegend()
-    geology_added_signal = TestSignal()
-    geology_removed_signal = TestSignal()
+    legend = FakeLegend()
+    prop_legend = FakeLegend()
+    geology_added_signal = FakeSignal()
+    geology_removed_signal = FakeSignal()
 
 
 # Class for testing geological_collection.py
 class TestGeologicalCollection:
-    geo_coll_istance = GeologicalCollection(TestWindow)
+    geo_coll_istance = GeologicalCollection(FakeWindow)
 
     geological_entity_dict1 = {'uid': "0",
                                'name': "geoname",

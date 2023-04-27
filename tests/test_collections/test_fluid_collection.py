@@ -7,32 +7,32 @@ from PyQt5.QtWidgets import QMainWindow
 
 
 # Class used as a substitute of pyqt-signals/emit
-class TestSignal:
+class FakeSignal:
     def emit(self, uid):
         return
 
 
 # Class used as a substitute of Legend
-class TestLegend:
+class FakeLegend:
     def update_widget(self, parent):
         return
 
 
 # Class used for test the main window (project_window) as a parent
-class TestWindow(QMainWindow):
+class FakeWindow(QMainWindow):
     def __init__(self):
-        super(TestWindow, self).__init__()
+        super(FakeWindow, self).__init__()
 
     fluids_legend_df = pd_DataFrame(columns=list(Legend.fluids_legend_dict.keys()))
-    legend = TestLegend()
-    prop_legend = TestLegend()
-    fluid_added_signal = TestSignal()
-    fluid_removed_signal = TestSignal()
+    legend = FakeLegend()
+    prop_legend = FakeLegend()
+    fluid_added_signal = FakeSignal()
+    fluid_removed_signal = FakeSignal()
     fluids_coll = FluidsCollection()
 
 
 class TestFluidCollection:
-    fluid_coll_istance = FluidsCollection(TestWindow)
+    fluid_coll_istance = FluidsCollection(FakeWindow)
     test_vtk_obj = DEM()
     test_vtk_obj2 = DEM()
     fluid_entity_dict = {'uid': "4",

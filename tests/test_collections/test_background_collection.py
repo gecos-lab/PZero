@@ -18,19 +18,19 @@ background_entity_dict = {'uid': "53",
 
 
 # Class used as a substitute of pyqt-signals/emit
-class TestSignal:
+class FakeSignal:
     def emit(self, uid):
         return
 
 
 # Class used as a substitute of Legend
-class TestLegend:
+class FakeLegend:
     def update_widget(self, parent):
         return
 
 
 # Class used as a substitute of BackgroundCollection
-class TestBGCollection:
+class FakeBGCollection:
     df = pd_DataFrame(columns=list(background_entity_dict.keys()))
 
 
@@ -40,13 +40,13 @@ class TestWindow(QMainWindow):
         super(TestWindow, self).__init__()
 
     backgrounds_legend_df = pd_DataFrame(columns=list(Legend.backgrounds_legend_dict.keys()))
-    backgrounds_coll = TestBGCollection()
+    backgrounds_coll = FakeBGCollection()
 
-    legend = TestLegend()
-    prop_legend = TestLegend()
+    legend = FakeLegend()
+    prop_legend = FakeLegend()
 
-    background_added_signal = TestSignal()
-    background_removed_signal = TestSignal()
+    background_added_signal = FakeSignal()
+    background_removed_signal = FakeSignal()
 
 
 class TestBackgroundCollection:

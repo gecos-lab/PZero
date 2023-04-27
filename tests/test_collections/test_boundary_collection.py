@@ -4,23 +4,21 @@ from pzero.entities_factory import DEM
 
 
 # Class used for test signals
-class TestSignal:
+class FakeSignal:
     def emit(self, uid):
         return
 
 
 # Class used for test the main window (project_window) as a parent
-class TestWindow(QMainWindow):
-    boundary_added_signal = TestSignal()
-    boundary_removed_signal = TestSignal()
+class FakeWindow(QMainWindow):
 
-    def __init__(self):
-        super(TestWindow, self).__init__()
+    boundary_added_signal = FakeSignal()
+    boundary_removed_signal = FakeSignal()
 
 
 # Class for testing the boundary collection
 class TestBoundaryCollection:
-    boundary_coll_istance = BoundaryCollection(parent=TestWindow)
+    boundary_coll_istance = BoundaryCollection(parent=FakeWindow)
     test_vtk_obj = DEM()
     test_vtk_obj2 = DEM()
 
