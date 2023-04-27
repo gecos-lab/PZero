@@ -37,10 +37,11 @@ jobs:
         run: |
           conda info
           conda list
+          conda uninstall pytest
+          conda install pytest
           
       - name: Test with pytest
         run: |
-          find . -name \*.pyc -delete
           pytest --doctest-modules --junitxml=junit/test-results-ubuntu.xml
 
   # Windows
