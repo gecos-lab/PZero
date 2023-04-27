@@ -10,7 +10,7 @@ dependencies:
   - pyqt=5.12
   - rasterio=1.2
   - shapely=1.8
-  - vtk=9.2
+  - vtk=9.1
   
   - xarray
   - pyvista
