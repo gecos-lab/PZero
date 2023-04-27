@@ -28,7 +28,7 @@ jobs:
           mamba-version: "*"
           channels: conda-forge,defaults
           channel-priority: true
-          activate-environment: pzero-test
+          activate-environment: pzero-testing
           environment-file: environment.yml
           python-version: 3.9
           auto-activate-base: false
@@ -37,8 +37,6 @@ jobs:
         run: |
           conda info
           conda list
-          conda uninstall pytest
-          conda install pytest
           
       - name: Test with pytest
         run: |
@@ -65,7 +63,7 @@ jobs:
           mamba-version: "*"
           channels: conda-forge,defaults
           channel-priority: true
-          activate-environment: pzero-test
+          activate-environment: pzero-testing
           environment-file: environment.yml
           python-version: 3.9
           auto-activate-base: false
@@ -100,7 +98,7 @@ jobs:
           mamba-version: "*"
           channels: conda-forge,defaults
           channel-priority: true
-          activate-environment: pzero-test
+          activate-environment: pzero-testing
           environment-file: environment.yml
           python-version: 3.9
           auto-activate-base: false
