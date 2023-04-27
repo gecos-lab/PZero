@@ -7,27 +7,27 @@ from PyQt5.QtWidgets import QMainWindow
 
 
 # Class used as a substitute of pyqt-signals/emit
-class TestSignal:
+class FakeSignal:
     def emit(self, uid):
         return
 
 
 # Class used as a substitute of Legend
-class TestLegend:
+class FakeLegend:
     def update_widget(self, parent):
         return
 
 
 # Class used for test the main window (project_window) as a parent
-class TestWindow(QMainWindow):
+class FakeWindow(QMainWindow):
     def __init__(self):
-        super(TestWindow, self).__init__()
+        super(FakeWindow, self).__init__()
 
     backgrounds_legend_df = pd_DataFrame(columns=list(Legend.backgrounds_legend_dict.keys()))
-    legend = TestLegend()
-    prop_legend = TestLegend()
-    dom_added_signal = TestSignal()
-    dom_removed_signal = TestSignal()
+    legend = FakeLegend()
+    prop_legend = FakeLegend()
+    dom_added_signal = FakeSignal()
+    dom_removed_signal = FakeSignal()
 
 
 # Class for testing the dom_collection
@@ -45,7 +45,7 @@ class TestDomCollection:
                               'x_section': "",
                               'vtk_obj': test_vtk_obj}
 
-    dom_istance = DomCollection(TestWindow)
+    dom_istance = DomCollection(FakeWindow)
 
     def test_add_entity_from_dict(self):
         # add an entity
