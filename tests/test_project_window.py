@@ -3,8 +3,7 @@ import pytest
 from pzero.entities_factory import VertexSet
 from pzero.project_window import ProjectWindow
 
-from PyQt5.QtWidgets import QWidget, QMessageBox
-from PyQt5.QtTest import QTest
+from PyQt5.QtWidgets import QWidget, QMessageBox, QFileDialog
 from PyQt5.QtCore import Qt, QSize
 
 # Global Var to set if the test are automatic or not
@@ -40,6 +39,12 @@ class TestProjectWindow:
 
     def ignore(self):
         return
+
+
+    def fake_open_file_dialog(self):
+        q_file_dialog = QFileDialog()
+        q_file_dialog.show()
+        return q_file_dialog
 
     def test_is_window(self, qtbot):
         project_window = ProjectWindow()
@@ -191,5 +196,25 @@ class TestProjectWindow:
         project_window.create_empty()
 
         assert project_window.selected_uids == []
+
+    # Testing save_project
+    @pytest.mark.skipif(automatic_test, reason="Button-clicks not implemented yet")
+    def test_save_project(self, qtbot):
+        project_window = ProjectWindow()
+
+        # Add to the empty project two entities and selecting them
+        project_window.geol_coll.add_entity_from_dict(self.geological_entity_dict)
+        project_window.geol_coll.add_entity_from_dict(self.geological_entity_dict2)
+        project_window.GeologyTableView.selectAll()
+
+        project_window.save_project()
+        
+        assert project_window.selected_uids == []
+
+    # Testing dialog inside import_gocad
+    def test_import_gocad(self, qtbot):
+        qt_file_dialog = self.fake_open_file_dialog()
+
+        assert qt_file_dialog.isVisible() is True
 
 

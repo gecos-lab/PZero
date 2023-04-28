@@ -35,9 +35,9 @@ class FakeBGCollection:
 
 
 # Class used for test the main window (project_window) as a parent
-class TestWindow(QMainWindow):
+class FakeWindow(QMainWindow):
     def __init__(self):
-        super(TestWindow, self).__init__()
+        super(FakeWindow, self).__init__()
 
     backgrounds_legend_df = pd_DataFrame(columns=list(Legend.backgrounds_legend_dict.keys()))
     backgrounds_coll = FakeBGCollection()
@@ -50,7 +50,7 @@ class TestWindow(QMainWindow):
 
 
 class TestBackgroundCollection:
-    background_coll_istance = BackgroundCollection(TestWindow)
+    background_coll_istance = BackgroundCollection(FakeWindow)
 
     def test_add_entity_from_dict(self):
         # add an entity
