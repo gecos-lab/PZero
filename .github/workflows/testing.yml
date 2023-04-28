@@ -30,7 +30,7 @@ jobs:
           channel-priority: true
           activate-environment: pzero-testing
           environment-file: environment.yml
-          python-version: 3.9
+          python-version: 3.10
           auto-activate-base: false
 
       - name: Check Conda version
