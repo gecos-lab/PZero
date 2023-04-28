@@ -30,7 +30,7 @@ jobs:
           channel-priority: true
           activate-environment: pzero-testing
           environment-file: environment.yml
-          python-version: 3.8
+          python-version: 3.9
           auto-activate-base: false
 
       - name: Check Conda version
@@ -41,5 +41,5 @@ jobs:
       - name: Test with pytest
         run: |
           py3clean .
-          PY_IGNORE_IMPORTMISMATCH=1 pytest --doctest-modules --junitxml=junit/test-results-ubuntu.xml
+          PY_IGNORE_IMPORTMISMATCH=1 pytest tests/
 
