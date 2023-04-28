@@ -33,4 +33,4 @@ dependencies:
   - scipy
   - matplotlib
 
-  - pytest=7.1
+  - pytest
