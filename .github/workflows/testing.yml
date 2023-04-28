@@ -43,3 +43,70 @@ jobs:
           py3clean .
           PY_IGNORE_IMPORTMISMATCH=1 pytest tests/
 
+  # Windows
+  windows-testing:
+    name: Windows Unit Testing
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash -el {0}
+    permissions:
+      checks: write
+      pull-requests: write
+
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v3
+
+      - name: Create Environment from .yml
+        uses: conda-incubator/setup-miniconda@v2
+        with:
+          mamba-version: "*"
+          channels: conda-forge,defaults
+          channel-priority: true
+          activate-environment: pzero-test
+          environment-file: environment.yml
+          python-version: 3.9
+          auto-activate-base: false
+
+      - name: Check Conda version
+        run: |
+          conda info
+          conda list
+      - name: Test with pytest
+        run: |
+          pytest tests/
+
+  # MacOS
+  macOS-testing:
+    name: Mac OS Unit Testing
+    runs-on: macos-latest
+    defaults:
+      run:
+        shell: bash -el {0}
+    permissions:
+        checks: write
+        pull-requests: write
+
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v3
+
+      - name: Create Environment from .yml
+        uses: conda-incubator/setup-miniconda@v2
+        with:
+          mamba-version: "*"
+          channels: conda-forge,defaults
+          channel-priority: true
+          activate-environment: pzero-test
+          environment-file: environment.yml
+          python-version: 3.9
+          auto-activate-base: false
+
+      - name: Check Conda version
+        run: |
+          conda info
+          conda list
+      - name: Test with pytest
+        run: |
+          pytest tests/
