@@ -194,7 +194,7 @@ class BackgroundCollection(QAbstractTableModel):
     def backgrounds_attr_modified_update_legend_table(self):
         """Update legend table, adding or removing items, based on metadata table.
         This is called when editing the background dataframe with setData(). Slightly different versions
-        are found in add_ and remove_entity methods."""
+        are found in add_entity_from_dict and remove_entity methods."""
         """table_updated is used to record if the table is updated or not"""
         table_updated = False
         """First remove unused background_type / feature"""
@@ -224,7 +224,7 @@ class BackgroundCollection(QAbstractTableModel):
                     self.parent.backgrounds_legend_df['background_feature'] == feature].index
                 self.parent.backgrounds_legend_df.drop(idx_remove, inplace=True)
                 table_updated = table_updated or True
-        """Then add new background_type / feature"""
+        """Then add new background_type or feature"""
         for uid in self.parent.backgrounds_coll.df['uid'].to_list():
             background_type = \
                 self.parent.backgrounds_coll.df.loc[self.parent.backgrounds_coll.df['uid'] == uid, "type"].values[0]

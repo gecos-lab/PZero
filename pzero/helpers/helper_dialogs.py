@@ -2,7 +2,7 @@
 PZero© Andrea Bistacchi"""
 
 from PyQt5.QtWidgets import QMessageBox, QInputDialog, QLineEdit, QPushButton, QFileDialog, QWidget, QProgressDialog, \
-    QMainWindow, QComboBox, QGridLayout, QLabel, QCheckBox, QTableWidgetItem, QHeaderView, QApplication,QFormLayout
+    QMainWindow, QComboBox, QGridLayout, QLabel, QCheckBox, QTableWidgetItem, QHeaderView, QApplication, QFormLayout
 # from PyQt5.QtWidgets import QSpinBox, QDoubleSpinBox
 from PyQt5.QtGui import QColor
 from PyQt5.QtCore import QEventLoop, Qt, QAbstractTableModel
@@ -23,6 +23,7 @@ from difflib import SequenceMatcher
 from .helper_functions import auto_sep
 
 from pyvistaqt import QtInteractor as pvQtInteractor
+
 
 def options_dialog(title=None, message=None, yes_role=None, no_role=None, reject_role=None):
     """Generic message box with title, message, and three buttons.
@@ -105,33 +106,42 @@ def message_dialog(title=None, message=None):
     return
 
 
-def multiple_input_dialog(title="title", input_dict=None,return_widget=False):
-    """Generic widget for input of several variables. It takes as input:
-    1) title of the widget
-    2) a dictionary of the form -->
-        dict = {'key_0': ['label_0', 'default_value_0'],
-                'key_1': ['label_1', ['default_value_1.0', 'default_value_1.1', 'default_value_1.2'],set_value],
-                'key_2': ['label_2', 'default_value_2']}
-        The values can be either strings, doubles, integers, or lists. In case of lists a combo box is used for input.
-    Based on the length of dict, the widget builds the right number of QLineEdits and QComboBoxes.
-    Two additional QPushButton are generated: Cancel to exit the widget, and OK to get the input values and pass them to the main code in a dictionary."""
-    """Create the widget and set size and title."""
+def multiple_input_dialog(title="title", input_dict=None, return_widget=False):
+    """Generic widget for input of several variables.
+
+        It takes as input:
+            1) title of the widget
+            2) a dictionary of the form -->
+                dict = {'key_0': ['label_0', 'default_value_0'],
+                        'key_1': ['label_1', ['default_value_1.0', 'default_value_1.1', 'default_value_1.2'],set_value],
+                        'key_2': ['label_2', 'default_value_2']}
+                The values can be either strings, doubles, integers, or lists. In case of lists a combo box is used for input.
+        Based on the length of dict, the widget builds the right number of QLineEdits and QComboBoxes.
+        Two additional QPushButton are generated: Cancel to exit the widget,
+        and OK to get the input values and pass them to the main code in a dictionary.
+        @param title:
+        @param input_dict:
+        @param return_widget:
+        @return: widget (not always)"""
+
+    # Create the widget and set size and title.
     widget = QWidget()
     widget.resize(len(input_dict) * 100, len(input_dict))
     widget.setWindowTitle(title)
-    """Define a grid layout."""
+
+    # Define a grid layout.
     gridLayout = QGridLayout(widget)
     objects_qt = {}
     i = 0
-    """FOR loop that builds labels and boxes according to the input_dict."""
+    # FOR loop that builds labels and boxes according to the input_dict.
     for key in input_dict:
-        """Create dynamic variables."""
+        # Create dynamic variables.
         objects_qt[key] = [None, None]
-        """Create QLabels, assign them to the grid layout, and set the text."""
+        # Create QLabels, assign them to the grid layout, and set the text.
         objects_qt[key][0] = QLabel(widget)
         objects_qt[key][0].setText(input_dict[key][0])
         gridLayout.addWidget(objects_qt[key][0], i + 1, 1)
-        """Create QLineEdits and QComboBoxes."""
+        # Create QLineEdits and QComboBoxes.
         if isinstance(input_dict[key][1], list):
             objects_qt[key][1] = QComboBox(widget, objectName=f'par_{key}')
             if len(input_dict[key]) == 3:
@@ -285,17 +295,19 @@ def input_checkbox_dialog(title="title", label="label", choice_list=None):
 
 def general_input_dialog(title="title", input_dict=None):
     """Most general input dialog.
-    Dictionary must have the form:
-    eg: dict = {'key_0': ['label_0', 'message_to_show', 'QLabel'],
-            'key_1': ['label_1', ['default_value_1.0', 'default_value_1.1', 'default_value_1.2'], 'QComboBox'],
-            'key_2': ['label_2', 'default_value_2', 'QLineEdit'],
-            'key_3': ['label_3', 'message_to_show', 'QCheckBox']}
-    The dialog can handle: QLabel, QComboBox, QLineEdit, QCheckBox --- and even more in the future."""
-    """Create the widget and set size and title."""
+
+        Dictionary must have the form:
+            eg: dict = {'key_0': ['label_0', 'message_to_show', 'QLabel'],
+                    'key_1': ['label_1', ['default_value_1.0', 'default_value_1.1', 'default_value_1.2'], 'QComboBox'],
+                    'key_2': ['label_2', 'default_value_2', 'QLineEdit'],
+                    'key_3': ['label_3', 'message_to_show', 'QCheckBox']}
+        The dialog can handle: QLabel, QComboBox, QLineEdit, QCheckBox --- and even more in the future."""
+
+    # Create the widget and set size and title.
     widget = QWidget()
     # widget.resize(len(input_dict) * 100, len(input_dict))
     widget.setWindowTitle(title)
-    """Define a grid layout."""
+    # Define a grid layout.
     gridLayout = QGridLayout(widget)
     objects_qt = {}
     i = 0
@@ -353,7 +365,7 @@ def general_input_dialog(title="title", input_dict=None):
             gridLayout.addWidget(objects_qt[key][0], i + 1, 1)
         elif input_dict[key][2] == "QSpinBox":
             """---- to be implemented ----"""
-            pass
+            return
         elif input_dict[key][2] == "QPushButton":
             # func = input_dict[key][3]
             objects_qt[key][0] = QPushButton(widget)
@@ -362,8 +374,7 @@ def general_input_dialog(title="title", input_dict=None):
             # objects_qt[key][0].clicked.connect(func)
             gridLayout.addWidget(objects_qt[key][0], i + 1, 1)
         i += 1
-    # if input_dict[key][2] == "QPushButton":
-    #     return widget
+
     """Create OK Button, add it to the grid layout an set name and state."""
     button_ok = QPushButton(widget)
     gridLayout.addWidget(button_ok, i + 2, 1)
@@ -477,17 +488,20 @@ class PCDataModel(QAbstractTableModel):
         self.data = data
         self.index_list = index_list
 
-    def columnCount(self, parent=None):  # [Gabriele] the n of columns is = to the number of columns of the input data set (.shape[1])
+    def columnCount(self,
+                    parent=None):  # [Gabriele] the n of columns is = to the number of columns of the input data set (.shape[1])
         return self.data.shape[1]
 
-    def rowCount(self, parent=None):  # [Gabriele] the n of rows is = to the number of rows of the input data set (.shape[0])
+    def rowCount(self,
+                 parent=None):  # [Gabriele] the n of rows is = to the number of rows of the input data set (.shape[0])
         return self.data.shape[0]
 
     def data(self, index, role):
         # print(index.column())
         if index.isValid():
             if role == Qt.DisplayRole:
-                return str(self.data.iloc[index.row(), index.column()])  # if role == Qt.BackgroundRole and index.column() in self.index_list:  # return QColor(Qt.green)
+                return str(self.data.iloc[
+                               index.row(), index.column()])  # if role == Qt.BackgroundRole and index.column() in self.index_list:  # return QColor(Qt.green)
             if role == Qt.BackgroundRole and index.column() in self.index_list:
                 return QColor(Qt.green)  # [Gabriele] Set the color
         return None
@@ -520,7 +534,8 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
     '''[Gabriele]  Different types of separators. By writing not using the symbol as a display we can avoid possible confusion between similar separators (e.g tab and space)-> the separator is auto assigned with the auto_sep function'''
     sep_dict = {'<space>': ' ', '<comma>': ',', '<semi-col>': ';', '<tab>': '   '}
 
-    def __init__(self, parent=None, default_attr_list=None,ext_filter=None,caption=None,add_opt=None,multiple=False,*args, **kwargs):
+    def __init__(self, parent=None, default_attr_list=None, ext_filter=None, caption=None, add_opt=None, multiple=False,
+                 *args, **kwargs):
 
         self.loop = QEventLoop()  # Create a QEventLoop necessary to stop the main loop
         super(import_dialog, self).__init__(parent, *args, **kwargs)
@@ -537,13 +552,17 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
         self.PathtoolButton.clicked.connect(lambda: self.import_file(multiple=multiple))
         self.PathlineEdit.editingFinished.connect(lambda: self.import_file(path=self.PathlineEdit.text()))
 
-        self.StartRowspinBox.valueChanged.connect(lambda: self.import_options(self.StartRowspinBox.objectName(), self.StartRowspinBox.value()))
+        self.StartRowspinBox.valueChanged.connect(
+            lambda: self.import_options(self.StartRowspinBox.objectName(), self.StartRowspinBox.value()))
 
-        self.EndRowspinBox.valueChanged.connect(lambda: self.import_options(self.EndRowspinBox.objectName(), self.EndRowspinBox.value()))
+        self.EndRowspinBox.valueChanged.connect(
+            lambda: self.import_options(self.EndRowspinBox.objectName(), self.EndRowspinBox.value()))
 
         ''' [Gabriele] The text separator value is confronted with the dict values and then assigned the correct symbol. <comma> --> ","'''
 
-        self.SeparatorcomboBox.currentTextChanged.connect(lambda: self.import_options(self.SeparatorcomboBox.objectName(), self.sep_dict[self.SeparatorcomboBox.currentText()]))
+        self.SeparatorcomboBox.currentTextChanged.connect(
+            lambda: self.import_options(self.SeparatorcomboBox.objectName(),
+                                        self.sep_dict[self.SeparatorcomboBox.currentText()]))
 
         self.PreviewButton.clicked.connect(lambda: self.preview_file(self.input_data_df))
 
@@ -556,14 +575,14 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
         self.AssignTable.setColumnWidth(2, 300)
 
         if add_opt is not None:
-            for i,opt in enumerate(add_opt):
+            for i, opt in enumerate(add_opt):
                 opt_name = opt[0]
                 opt_label = opt[1]
-                setattr(self,opt_name,QCheckBox(self.OptionsFrame))
-                opt = getattr(self,opt_name)
+                setattr(self, opt_name, QCheckBox(self.OptionsFrame))
+                opt = getattr(self, opt_name)
                 opt.setObjectName(opt_name)
                 opt.setText(opt_label)
-                self.formLayout.setWidget(3+i, QFormLayout.FieldRole, opt)
+                self.formLayout.setWidget(3 + i, QFormLayout.FieldRole, opt)
 
         self.show_qt_canvas()
 
@@ -576,10 +595,11 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
         self.show()
         self.loop.exec_()  # Execute the QEventLoop
 
-    def import_file(self, path=None,multiple=False):
+    def import_file(self, path=None, multiple=False):
         '''[Gabriele] Function used to read and preview a PC data file. The open_file_dialog function is used to obtain the file path. Once the file is chosen a different parser is used depending on the extension. Once the file is read the properties are autoassigned (where possible)'''
         if path == None:
-            self.import_options_dict['in_path'] = open_file_dialog(parent=self, caption='Import point cloud data', filter=self.ext_filter,multiple=multiple)
+            self.import_options_dict['in_path'] = open_file_dialog(parent=self, caption='Import point cloud data',
+                                                                   filter=self.ext_filter, multiple=multiple)
             if multiple:
                 path = self.import_options_dict["in_path"][0]
                 self.PathlineEdit.setText(f'Multiple file chosen in {os_path.dirname(path)}')
@@ -593,7 +613,7 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
 
             _, extension = os_path.splitext(path)
 
-            if extension == '.las' or extension == '.laz': #this could be a problem with .las files (boreholes)
+            if extension == '.las' or extension == '.laz':  # this could be a problem with .las files (boreholes)
                 self.input_data_df = self.las2df(path)
 
             elif extension == '.ply':
@@ -602,8 +622,6 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
                 ...
             else:
                 self.input_data_df = self.csv2df(path)
-
-
 
             '''[Gabriele]  Auto-assign values using the difflib library (internal). If there is no match then the column is not imported (N.a.). In this step the rename_dict dictionary is compiled where:
             - the keys correspond to the column index of the input df
@@ -616,11 +634,13 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
             col_names = list(self.input_data_df.columns)
             self.rename_dict = {}
 
-            remove_char_dict = {"/": "", "\\": "", "?": "", "!": "", "-": "", "_": ""}  # [Gabriele] Forbidden characters that are removed from the names using the translate function
+            remove_char_dict = {"/": "", "\\": "", "?": "", "!": "", "-": "",
+                                "_": ""}  # [Gabriele] Forbidden characters that are removed from the names using the translate function
 
             for i, attr in enumerate(col_names):
                 table = attr.maketrans(remove_char_dict)
-                matches = [SequenceMatcher(None, attr.translate(table).lower(), string.lower()).ratio() for string in self.default_attr_list]
+                matches = [SequenceMatcher(None, attr.translate(table).lower(), string.lower()).ratio() for string in
+                           self.default_attr_list]
                 match = max(matches)
 
                 if match > 0.8:
@@ -671,8 +691,7 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
 
         ''' [Gabriele] X and Y are not always called exactly like this and they can occupy other positions. The clean_dict is reverse searched (get the key using a given valdue) to obtain the index positions of the X Y columns in the raw df.'''
 
-
-        self.args = [path,col_names,row_range,index_list,delimiter,self]
+        self.args = [path, col_names, row_range, index_list, delimiter, self]
         self.close()
         self.loop.quit()
         # [Gabriele] Would be more convinient to import from here. This way we can modify the import parameters without opening every time the dialog.
@@ -748,7 +767,8 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
                 elif 'end_header' in line:
                     end_line = i
                     break
-        df = pd_read_csv(path, skiprows=end_line + 1, delimiter=' ', names=header, engine='c', index_col=False, nrows=50)
+        df = pd_read_csv(path, skiprows=end_line + 1, delimiter=' ', names=header, engine='c', index_col=False,
+                         nrows=50)
         return df
 
     def assign_data(self):
@@ -799,7 +819,6 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
             row = int(sel_combo.objectName().split('_')[1])
             print(row)
 
-
             '''[Gabriele] Use a dict to rename the columns. The keys are the column index of the original df while the values are the new names. '''
 
             if sel_combo.currentText() == 'User defined':
@@ -832,20 +851,20 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
             self.rename_dict[row] = scal_name
             sel_line.setText(scal_name)
             self.preview_file(self.input_data_df)
+
     def close_ui(self):
         self.close()
         self.loop.quit()
 
 
-class NavigatorWidget(QMainWindow,Ui_NavWindow):
-
+class NavigatorWidget(QMainWindow, Ui_NavWindow):
     ''' Navigator widget prototype for Xsections. This widget can be used to
     change the different Xsections without opening a new window.
 
     FOR NOW IS INACTIVE.
     '''
 
-    def __init__(self, parent=None,val_list=None,start_idx=None,*args, **kwargs):
+    def __init__(self, parent=None, val_list=None, start_idx=None, *args, **kwargs):
 
         self.loop = QEventLoop()  # Create a QEventLoop necessary to stop the main loop
         super(NavigatorWidget, self).__init__(parent, *args, **kwargs)
@@ -868,9 +887,9 @@ class NavigatorWidget(QMainWindow,Ui_NavWindow):
         self.loop.exec_()  # Execute the QEventLoop
 
     def forward(self):
-        self.idx +=1
+        self.idx += 1
         print(self.idx)
-        if self.idx > len(self.value_list)-1:
+        if self.idx > len(self.value_list) - 1:
             self.idx = 0
 
         curr_obj = self.value_list[self.idx]
@@ -878,19 +897,17 @@ class NavigatorWidget(QMainWindow,Ui_NavWindow):
         return curr_obj
 
     def back(self):
-        self.idx -=1
+        self.idx -= 1
         print(self.idx)
         if self.idx < 0:
-            self.idx = len(self.value_list)-1
-
+            self.idx = len(self.value_list) - 1
 
         curr_obj = self.value_list[self.idx]
         self.SectionLabel.setText(curr_obj)
         return curr_obj
 
 
-class PreviewWidget(QMainWindow,Ui_PreviewWindow):
-
+class PreviewWidget(QMainWindow, Ui_PreviewWindow):
     ''' Widget used to attach a pyvista plotter instance to a dialog (such as
     general input dialog). This can be useful to view the final object before
     applying the given function (e.g. resample, simplify ...).
@@ -905,7 +922,7 @@ class PreviewWidget(QMainWindow,Ui_PreviewWindow):
     is executed for all surfaces (the preview plotting is skipped).
     '''
 
-    def __init__(self, parent=None,titles=None,mesh=None,opt_widget=None,function=None,*args, **kwargs):
+    def __init__(self, parent=None, titles=None, mesh=None, opt_widget=None, function=None, *args, **kwargs):
 
         self.loop = QEventLoop()  # Create a QEventLoop necessary to stop the main loop
         super(PreviewWidget, self).__init__(parent, *args, **kwargs)
@@ -930,7 +947,6 @@ class PreviewWidget(QMainWindow,Ui_PreviewWindow):
 
         self.show_qt_canvas()
 
-
     def show_qt_canvas(self):
         """Show the Qt Window"""
         self.show()
@@ -940,16 +956,14 @@ class PreviewWidget(QMainWindow,Ui_PreviewWindow):
         self.preview_plotter.close()  # needed to cleanly close the vtk plotter
         event.accept()
 
-
     def initialize_interactor(self):
         """Add the pyvista interactor object to self.ViewFrameLayout ->
         the layout of an empty frame generated with Qt Designer"""
-        self.preview_plotter = pvQtInteractor(self.PreviewVerticalFrame,shape=(1,2))
+        self.preview_plotter = pvQtInteractor(self.PreviewVerticalFrame, shape=(1, 2))
         self.preview_plotter.set_background('black')  # background color - could be made interactive in the future
         self.PreviewLayout.addWidget(self.preview_plotter.interactor)
         uid = self.parent.selected_uids[0]
         self.mesh = self.parent.geol_coll.get_uid_vtk_obj(uid)
-
 
         self.preview_plotter.subplot(0, 0)
         self.preview_plotter.add_text(self.title1, font_size=10)
@@ -965,16 +979,14 @@ class PreviewWidget(QMainWindow,Ui_PreviewWindow):
         parameters = []
 
         for par in self.parameters:
-            if isinstance(par,QLineEdit):
+            if isinstance(par, QLineEdit):
                 parameters.append(par.text())
-            elif isinstance(par,QComboBox):
+            elif isinstance(par, QComboBox):
                 parameters.append(par.currentText())
-            elif isinstance(par,QCheckBox):
+            elif isinstance(par, QCheckBox):
                 parameters.append(par.checkState())
 
-
-
-        mod_mesh = self.function(self.parent,1,*parameters)
+        mod_mesh = self.function(self.parent, 1, *parameters)
         self.preview_plotter.clear()
         self.preview_plotter.subplot(0, 0)
         self.preview_plotter.add_text(self.title1, font_size=10)
@@ -987,14 +999,12 @@ class PreviewWidget(QMainWindow,Ui_PreviewWindow):
         parameters = []
 
         for par in self.parameters:
-            if isinstance(par,QLineEdit):
+            if isinstance(par, QLineEdit):
                 parameters.append(par.text())
-            elif isinstance(par,QComboBox):
+            elif isinstance(par, QComboBox):
                 parameters.append(par.currentText())
-            elif isinstance(par,QCheckBox):
+            elif isinstance(par, QCheckBox):
                 parameters.append(par.checkState())
 
-
-
-        mod_mesh = self.function(self.parent,0,*parameters)
+        mod_mesh = self.function(self.parent, 0, *parameters)
         self.close()

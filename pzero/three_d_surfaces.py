@@ -762,9 +762,9 @@ def decimation_quadric_resampling(self):
         print(" -- empty object -- ")
 
 
-def subdivision_resampling(self,mode=0,type='linear',n_subd=2):
-    """ Different types of subdivisions. Subdivides a triangular, polygonal surface; four new triangles are created
-    for each triangle of the polygonal surface.:
+def subdivision_resampling(self, mode=0, type='linear', n_subd=2):
+    """ Different types of subdivisions. Subdivides a triangular, polygonal surface; four new triangles are created for each triangle of the polygonal surface.:
+
      1. vtkLinearSubdivisionFilter (shape preserving)
      2. vtkButterflySubdivisionFilter  (not shape preserving)
      3. vtkLoopSubdivisionFilter (not shape preserving)"""
@@ -777,7 +777,8 @@ def subdivision_resampling(self,mode=0,type='linear',n_subd=2):
         print("No input data selected.")
         return
     else:
-        """Deep copy list of selected uids needed otherwise problems can arise if the main geology table is deseselcted while the dataframe is being built"""
+        """Deep copy list of selected uids needed otherwise problems can arise if the main geology table is 
+            deseselcted while the dataframe is being built"""
         input_uids = deepcopy(self.selected_uids)
     for uid in input_uids:
         if isinstance(self.geol_coll.get_uid_vtk_obj(uid), TriSurf):
@@ -793,12 +794,13 @@ def subdivision_resampling(self,mode=0,type='linear',n_subd=2):
             subdiv_filter.SetInputData(self.geol_coll.get_uid_vtk_obj(uid))
             subdiv_filter.SetNumberOfSubdivisions(int(n_subd))
             subdiv_filter.Update()
-            """ShallowCopy is the way to copy the new interpolated surface into the TriSurf instance created at the beginning"""
+            """ShallowCopy is the way to copy the new interpolated surface into the 
+                TriSurf instance created at the beginning"""
 
             if mode:
                 return subdiv_filter.GetOutput()
             else:
-            # """Add new entity from surf_dict. Function add_entity_from_dict creates a new uid"""
+                # Add new entity from surf_dict. Function add_entity_from_dict creates a new uid
                 """Create deepcopy of the geological entity dictionary."""
                 surf_dict = deepcopy(self.geol_coll.geological_entity_dict)
                 surf_dict['name'] = self.geol_coll.get_uid_name(uid) + '_subdivided'
@@ -824,15 +826,19 @@ def intersection_xs(self):
     HOW TO USE: select one or more Geological objects, DOMs or 3D Meshes (Source data), then function asks for XSection
     (input data) for the filter."""
     print("Intersection with XSection: intersect Geological entities, 3D Meshes and DEM & DOMs")
+
     """Check if some vtkPolyData is selected"""
     if not self.selected_uids:
         print("No input data selected.")
         return
     else:
-        """Deep copy list of selected uids needed otherwise problems can arise if the main geology table is deseselcted while the dataframe is being built"""
+        """Deep copy list of selected uids needed otherwise problems can arise if the 
+            main geology table is deseselcted while the dataframe is being built"""
         input_uids = deepcopy(self.selected_uids)
+
     """Input selection dialog"""
-    xsect_names = input_checkbox_dialog(title="Intersection XSection", label="Choose XSections to intersect", choice_list=self.xsect_coll.get_names())
+    xsect_names = input_checkbox_dialog(title="Intersection XSection", label="Choose XSections to intersect",
+                                        choice_list=self.xsect_coll.get_names())
     if xsect_names is None:
         return
     # xsect_uids = []

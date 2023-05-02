@@ -219,7 +219,7 @@ class GeologicalCollection(QAbstractTableModel):
     def geology_attr_modified_update_legend_table(self):
         """Update legend table, adding or removing items, based on metadata table.
         This is called when editing the geological dataframe with setData(). Slightly different versions
-        are found in add_ and remove_entity methods."""
+        are found in add_entity_from_dict and remove_entity methods."""
         """table_updated is used to record if the table is updated or not"""
         table_updated = False
         """First remove unused geo_type / feature"""
