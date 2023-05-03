@@ -40,8 +40,18 @@ jobs:
           
       - name: Test with pytest
         run: |
-          pytest tests/
-
+          conda install pytest-html
+          pytest --html=ubu-test-report.html tests/
+          
+      - name: Upload pytest test results
+        uses: actions/upload-artifact@v3
+        with:
+          name: pytest-results-win
+          path: ubu-test-report.html
+        # Use always() to always run this step to publish test results when there are test failures
+        if: ${{ always() }}
+        
+        
   # Windows
   windows-testing:
     name: Windows Unit Testing
@@ -74,8 +84,18 @@ jobs:
           conda list
       - name: Test with pytest
         run: |
-          pytest tests/
-
+          conda install pytest-html
+          pytest --html=win-test-report.html tests/
+          
+      - name: Upload pytest test results
+        uses: actions/upload-artifact@v3
+        with:
+          name: pytest-results-win
+          path: win-test-report.html
+        # Use always() to always run this step to publish test results when there are test failures
+        if: ${{ always() }}
+      
+      
   # MacOS
   macOS-testing:
     name: Mac OS Unit Testing
@@ -108,4 +128,15 @@ jobs:
           conda list
       - name: Test with pytest
         run: |
-          pytest tests/
+          conda install pytest-html
+          pytest --html=macos-test-report.html tests/
+        
+      - name: Upload pytest test results
+        uses: actions/upload-artifact@v3
+        with:
+          name: pytest-results-macos
+          path: macos-test-report.html
+        # Use always() to always run this step to publish test results when there are test failures
+        if: ${{ always() }}
+
+      
