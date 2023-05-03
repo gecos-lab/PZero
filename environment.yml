@@ -32,6 +32,8 @@ dependencies:
   
   - scipy
   - matplotlib
+  - seaborn
 
   - pytest
-  - seaborn
+  - sphinx
+  - sphinx_rtd_theme
