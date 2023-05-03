@@ -51,6 +51,12 @@ jobs:
         # Use always() to always run this step to publish test results when there are test failures
         if: ${{ always() }}
         
+      - name: Generate Sphinx doc
+        run: |
+          cd docs
+          make clean html
+          make html
+
         
   # Windows
   windows-testing:
