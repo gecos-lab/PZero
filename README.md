@@ -216,5 +216,7 @@ anaconda-clean --yes
 
 To develop ***PZero*** we use the **[PyCharm IDE](https://www.jetbrains.com/pycharm/)**, but also **[Visual Studio Code](https://code.visualstudio.com/)** has been tested successfully.
 
+If you want to know more about the project or want to contribute, our [GitHub Wiki](https://github.com/andrea-bistacchi/PZero/wiki) can help!
+
 \
 [![DOI](https://zenodo.org/badge/439080627.svg)](https://zenodo.org/badge/latestdoi/439080627)
