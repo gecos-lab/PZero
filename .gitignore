@@ -5,3 +5,4 @@
 *.DS_Store
 /installers
 *.pyc
+/docs/_build
