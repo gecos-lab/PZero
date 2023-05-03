@@ -31,6 +31,7 @@ class TestBaseView:
                                'x_section': "",
                                'vtk_obj': None}
 
+    @pytest.fixture
     # Testing if the windows is initialized and showed
     def test_show_canvas(self, qtbot):
         parent = ProjectWindow()
@@ -40,6 +41,7 @@ class TestBaseView:
         assert base_view.isWindow() is True \
             and base_view.isVisible() is True
 
+    @pytest.fixture
     # Testing create_geology_tree
     def test_create_geology_tree(self, qtbot):
         parent = ProjectWindow()
@@ -52,6 +54,7 @@ class TestBaseView:
         assert base_view.GeologyTreeWidget.isWidgetType() is True
         assert base_view.GeologyTreeWidget.isVisible()
 
+    @pytest.fixture
     # Testing create_topology_tree
     def test_create_topology_tree(self, qtbot):
         parent = ProjectWindow()
@@ -63,6 +66,7 @@ class TestBaseView:
         # check if it is a widget
         assert base_view.TopologyTreeWidget.isWidgetType() is True
 
+    @pytest.fixture
     # Testing create_xsections_tree
     def test_create_xsections_tree(self, qtbot):
         parent = ProjectWindow()
@@ -74,6 +78,7 @@ class TestBaseView:
         # check if it is a widget
         assert base_view.XSectionTreeWidget.isWidgetType() is True
 
+    @pytest.fixture
     # Testing create_boundary_list
     def test_create_boundary_list(self, qtbot):
         parent = ProjectWindow()
@@ -85,6 +90,7 @@ class TestBaseView:
         # check if it is a widget
         assert base_view.BoundariesTableWidget.isWidgetType() is True
 
+    @pytest.fixture
     # Testing create_mesh3d_list
     def test_create_mesh3d_list(self, qtbot):
         parent = ProjectWindow()
@@ -96,6 +102,7 @@ class TestBaseView:
         # check if it is a widget
         assert base_view.Mesh3DTableWidget.isWidgetType() is True
 
+    @pytest.fixture
     # Testing create_dom_list
     def test_create_dom_list(self, qtbot):
         parent = ProjectWindow()
@@ -107,6 +114,7 @@ class TestBaseView:
         # check if it is a widget
         assert base_view.DOMsTableWidget.isWidgetType() is True
 
+    @pytest.fixture
     # Testing create_image_list
     def test_create_image_list(self, qtbot):
         parent = ProjectWindow()
@@ -118,6 +126,7 @@ class TestBaseView:
         # check if it is a widget
         assert base_view.ImagesTableWidget.isWidgetType() is True
 
+    @pytest.fixture
     # Testing create_well_tree
     def test_create_well_tree(self, qtbot):
         parent = ProjectWindow()
@@ -129,6 +138,7 @@ class TestBaseView:
         # check if it is a widget
         assert base_view.WellsTreeWidget.isWidgetType() is True
 
+    @pytest.fixture
     # Testing create_fluids_tree
     def test_create_fluids_tree(self, qtbot):
         parent = ProjectWindow()
@@ -140,6 +150,7 @@ class TestBaseView:
         # check if it is a widget
         assert base_view.FluidsTreeWidget.isWidgetType() is True
 
+    @pytest.fixture
     # Testing create_fluids_topology_tree
     def test_create_fluids_topology_tree(self, qtbot):
         parent = ProjectWindow()
@@ -151,6 +162,7 @@ class TestBaseView:
         # check if it is a widget
         assert base_view.FluidsTopologyTreeWidget.isWidgetType() is True
 
+    @pytest.fixture
     # Testing create_backgrounds_tree
     def test_create_backgrounds_tree(self, qtbot):
         parent = ProjectWindow()
@@ -162,6 +174,7 @@ class TestBaseView:
         # check if it is a widget
         assert base_view.BackgroundsTreeWidget.isWidgetType() is True
 
+    @pytest.fixture
     # Testing create_backgrounds_topology_tree
     def test_create_backgrounds_topology_tree(self, qtbot):
         parent = ProjectWindow()

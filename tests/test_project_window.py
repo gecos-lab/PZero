@@ -40,12 +40,12 @@ class TestProjectWindow:
     def ignore(self):
         return
 
-
     def fake_open_file_dialog(self):
         q_file_dialog = QFileDialog()
         q_file_dialog.show()
         return q_file_dialog
 
+    @pytest.fixture
     def test_is_window(self, qtbot):
         project_window = ProjectWindow()
 
@@ -53,12 +53,14 @@ class TestProjectWindow:
 
         assert project_window.isWindow() is True
 
+    @pytest.fixture
     def test_window_name(self, qtbot):
         project_window = ProjectWindow()
 
         assert project_window.windowTitle() == "PZero" \
             and project_window.size() == QSize(1418, 800)
 
+    @pytest.fixture
     def test_shown_table(self, qtbot):
         project_window = ProjectWindow()
 
@@ -67,6 +69,7 @@ class TestProjectWindow:
 
         assert shown_table == 'tabGeology'
 
+    @pytest.fixture
     def test_shown_table_change(self, qtbot):
         project_window = ProjectWindow()
 
@@ -79,11 +82,13 @@ class TestProjectWindow:
 
         assert shown_table == tab_img
 
+    @pytest.fixture
     def test_none_selected_uids(self, qtbot):
         project_window = ProjectWindow()
 
         assert project_window.selected_uids == []
 
+    @pytest.fixture
     def test_selected_uids(self, qtbot):
         project_window = ProjectWindow()
 
@@ -94,6 +99,7 @@ class TestProjectWindow:
         # check that the length of the selected uids is equal to the added entity inside the geol coll
         assert len(project_window.selected_uids) == 1
 
+    @pytest.fixture
     def test_entity_remove(self, qtbot, monkeypatch):
         # monkeypatch/mock function
         def mock_entity_remove():
@@ -138,6 +144,7 @@ class TestProjectWindow:
 
         assert len(project_window.selected_uids) == remove_merge_int
 
+    @pytest.fixture
     # Testing adding, selecting and getting geological entities
     def test_getting_entitites(self, qtbot):
         project_window = ProjectWindow()
@@ -149,7 +156,6 @@ class TestProjectWindow:
 
         assert self.geological_entity_dict['uid'] in project_window.selected_uids
         assert self.geological_entity_dict2['uid'] in project_window.selected_uids
-
 
     # Testing the add property event - running only manually, to try change the var automatic_test to false
     # or comment the next @pytest line
@@ -183,6 +189,7 @@ class TestProjectWindow:
     def test_lineations_calculate(self):
         assert ...
 
+    @pytest.fixture
     # Testing create_empty
     def test_create_empty(self, qtbot):
         project_window = ProjectWindow()
@@ -211,6 +218,7 @@ class TestProjectWindow:
         
         assert project_window.selected_uids == []
 
+    @pytest.fixture
     # Testing dialog inside import_gocad
     def test_import_gocad(self, qtbot):
         qt_file_dialog = self.fake_open_file_dialog()
