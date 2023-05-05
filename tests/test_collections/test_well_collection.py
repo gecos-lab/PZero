@@ -60,7 +60,6 @@ class TestWellConnection:
 
         # remove an entity
         self.well_istance.remove_entity(self.well_entity_dict_1['uid'])
-        print(self.well_istance.df)
 
         # check if the entities number is equal to the add_entity calls minus the remove_entity calls
         # and if the uid inserted and then removed is not in the uids of the collection

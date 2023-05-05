@@ -43,9 +43,6 @@ class TestXSectionCollection:
         # add an entity
         self.image_coll_istance.add_entity_from_dict(self.image_entity_dict)
 
-        # print check
-        print(self.image_coll_istance.df)
-
         # check if the entities number is equal to the add_entity calls
         # and if the uid inserted is in the uids of the collection
         assert self.image_coll_istance.get_number_of_entities() == 1 \
@@ -57,7 +54,6 @@ class TestXSectionCollection:
 
         # remove an entity
         self.image_coll_istance.remove_entity(self.image_entity_dict['uid'])
-        # print(self.image_coll_istance.df)
 
         # check if the entities number is equal to the add_entity calls minus the remove_entity calls
         # and if the uid inserted and then removed is not in the uids of the collection

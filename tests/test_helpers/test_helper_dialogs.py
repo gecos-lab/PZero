@@ -1,6 +1,6 @@
-# from PyQt5.QtWidgets import QMessageBox, QLabel
-from PyQt5.QtWidgets import QMainWindow
-from pzero.helpers.helper_dialogs import options_dialog, progress_dialog, import_dialog
+
+from pzero.helpers.helper_dialogs import progress_dialog
+import pytest
 
 """
 def test_option_dialogs(self, qtbot):
@@ -15,16 +15,11 @@ def test_option_dialogs(self, qtbot):
 """
 
 
-# Test Window Class
-class TestWindow(QMainWindow):
-    def __init__(self):
-        super(TestWindow, self).__init__()
-
-
 # Testing the class progress_dialog()
 class TestProgressDialog:
 
     # testing if the initial dialog values are correct
+    @pytest.fixture
     def test_init_dialog(self, qtbot):
         max_value = 1
         title = "Title_test"
@@ -39,6 +34,7 @@ class TestProgressDialog:
             and progress_dialog_instance.labelText() == label
 
     # Testing the add_one function
+    @pytest.fixture
     def test_add_one(self, qtbot):
         max_value = 5000
         title = "Title_test"
@@ -54,6 +50,7 @@ class TestProgressDialog:
         assert progress_dialog_instance.value() == max_value - 1
 
     # Testing was_canceled in the progress dialog
+    @pytest.fixture
     def test_was_canceled(self, qtbot):
         max_value = 1
         title = "Title_test"
@@ -66,6 +63,7 @@ class TestProgressDialog:
         assert progress_dialog_instance.wasCanceled() is False
 
     # Testing with calling the cancel button in the progress dialog
+    @pytest.fixture
     def test_was_canceled_true(self, qtbot):
         max_value = 1
         title = "Title_test"
@@ -79,6 +77,7 @@ class TestProgressDialog:
         assert progress_dialog_instance.wasCanceled() is True
 
     # Testing change in the dialog
+    @pytest.fixture
     def test_change_dialog_label(self, qtbot):
         max_value = 5000
         title = "Title_test"

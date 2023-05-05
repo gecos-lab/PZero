@@ -54,7 +54,7 @@ class TestBoundaryCollection:
         self.boundary_coll_istance.add_entity_from_dict(self.boundary_entity_dict)
 
         # print check
-        print(self.boundary_coll_istance.df)
+        # print(self.boundary_coll_istance.df)
 
         # check if the entities number is equal to the add_entity calls
         # and if the uid inserted is in the uids of the collection

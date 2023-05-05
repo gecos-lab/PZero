@@ -3,8 +3,8 @@ import pytest
 from pzero.entities_factory import VertexSet
 from pzero.project_window import ProjectWindow
 
-from PyQt5.QtWidgets import QWidget, QMessageBox, QFileDialog
-from PyQt5.QtCore import Qt, QSize
+from PyQt5.QtWidgets import QWidget, QFileDialog
+from PyQt5.QtCore import QSize
 
 # Global Var to set if the test are automatic or not
 automatic_test = True
@@ -120,6 +120,7 @@ class TestProjectWindow:
 
         assert len(project_window.selected_uids) == 0
 
+    # @pytest.fixture
     # Testing the entities merge - running only manually, to try change the var automatic_test to false
     # or comment the next @pytest line
     @pytest.mark.skipif(automatic_test, reason="Button-clicks not implemented yet")
@@ -157,6 +158,7 @@ class TestProjectWindow:
         assert self.geological_entity_dict['uid'] in project_window.selected_uids
         assert self.geological_entity_dict2['uid'] in project_window.selected_uids
 
+    # @pytest.fixture
     # Testing the add property event - running only manually, to try change the var automatic_test to false
     # or comment the next @pytest line
     @pytest.mark.skipif(automatic_test, reason="Button-clicks not implemented yet")
@@ -170,6 +172,7 @@ class TestProjectWindow:
 
         assert project_window.geol_coll.get_uid_properties_names(uid="0") == ["new_property"]
 
+    # @pytest.fixture
     # Testing the add and remove property event - running only manually, to try change the var automatic_test to false
     # or comment @pytest line
     @pytest.mark.skipif(automatic_test, reason="Button-clicks not implemented yet")
@@ -184,6 +187,7 @@ class TestProjectWindow:
 
         assert project_window.geol_coll.get_uid_properties_names(uid="0") == []
 
+    # @pytest.fixture
     # Testing lineations calculate
     @pytest.mark.skip(reason="lineations_calculate not implemented yet")
     def test_lineations_calculate(self):
@@ -204,6 +208,7 @@ class TestProjectWindow:
 
         assert project_window.selected_uids == []
 
+    # @pytest.fixture
     # Testing save_project
     @pytest.mark.skipif(automatic_test, reason="Button-clicks not implemented yet")
     def test_save_project(self, qtbot):
@@ -224,5 +229,3 @@ class TestProjectWindow:
         qt_file_dialog = self.fake_open_file_dialog()
 
         assert qt_file_dialog.isVisible() is True
-
-

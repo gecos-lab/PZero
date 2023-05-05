@@ -40,9 +40,6 @@ class TestMesh3dCollection:
         # add an entity
         self.mesh_3d_coll_istance.add_entity_from_dict(self.mesh3d_entity_dict)
 
-        # print check
-        print(self.mesh_3d_coll_istance.df)
-
         # check if the entities number is equal to the add_entity calls
         # and if the uid inserted is in the uids of the collection
         assert self.mesh_3d_coll_istance.get_number_of_entities() == 1 \

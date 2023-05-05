@@ -63,7 +63,7 @@ class TestDomCollection:
 
         # remove an entity
         self.dom_istance.remove_entity(self.geological_entity_dict['uid'])
-        print(self.dom_istance.df)
+
 
         # check if the entities number is equal to the add_entity calls minus the remove_entity calls
         # and if the uid inserted and then removed is not in the uids of the collection
