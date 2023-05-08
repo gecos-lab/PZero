@@ -6,34 +6,31 @@ channels:
 dependencies:
   - python=3.9
   
+  - vtk>9.2
   - geopandas=0.10
-  - pyqt=5.12
+  - pyqt=5.15
   - rasterio=1.2
   - shapely=1.8
-  - vtk=9.1
   - pandas<2
   - xarray
+  - vedo
   - pyvista
   - pyvistaqt
-  - vedo
-  
   - loopstructural
-  
+
   - cmocean
   - colorcet
   - mplstereonet
-  
   - laspy
-  - ezdxf  
+  - ezdxf
   - lxml
-  - openpyxl  
+  - openpyxl
   - pythreejs
   - pyinstaller
-  
   - scipy
   - matplotlib
-  - seaborn
 
   - pytest
+  - seaborn
   - sphinx
   - sphinx_rtd_theme
