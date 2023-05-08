@@ -3,7 +3,7 @@ name: Unit Testing
 on:
   push:
     branches:
-      - 'auto-testing'
+      - 'master'
 
 jobs:
   # Linux
