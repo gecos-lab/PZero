@@ -1,0 +1,136 @@
+name: Unit Testing
+
+on:
+  push:
+    branches:
+      - 'auto-testing'
+
+jobs:
+  # Linux
+  linux-testing:
+    name: Linux Unit Testing
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash -el {0}
+    permissions:
+      checks: write
+      pull-requests: write
+
+
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v3
+
+      - name: Create Environment from .yml
+        uses: conda-incubator/setup-miniconda@v2
+        with:
+          mamba-version: "*"
+          channels: conda-forge,defaults
+          channel-priority: true
+          activate-environment: pzero-testing
+          environment-file: environment.yml
+          python-version: 3.9
+          auto-activate-base: false
+
+      - name: Install vtk from pip and check Conda version
+        run: |
+          conda info
+          conda list
+      - name: Test with pytest
+        run: |
+          conda install pytest-html
+          pytest --html=ubu-test-report.html tests/
+      - name: Upload pytest test results
+        uses: actions/upload-artifact@v3
+        with:
+          name: pytest-results-ubuntu
+          path: ubu-test-report.html
+        # Use always() to always run this step to publish test results when there are test failures
+        if: ${{ always() }}
+
+
+  # Windows
+  windows-testing:
+    name: Windows Unit Testing
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash -el {0}
+    permissions:
+      checks: write
+      pull-requests: write
+
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v3
+
+      - name: Create Environment from .yml
+        uses: conda-incubator/setup-miniconda@v2
+        with:
+          mamba-version: "*"
+          channels: conda-forge,defaults
+          channel-priority: true
+          activate-environment: pzero-test
+          environment-file: environment.yml
+          python-version: 3.9
+          auto-activate-base: false
+
+      - name: Install vtk from pip and check Conda version
+        run: |
+          conda info
+          conda list
+      - name: Test with pytest
+        run: |
+          conda install pytest-html
+          pytest --html=win-test-report.html tests/
+      - name: Upload pytest test results
+        uses: actions/upload-artifact@v3
+        with:
+          name: pytest-results-win
+          path: win-test-report.html
+        # Use always() to always run this step to publish test results when there are test failures
+        if: ${{ always() }}
+
+
+  # MacOS
+  macOS-testing:
+    name: Mac OS Unit Testing
+    runs-on: macos-latest
+    defaults:
+      run:
+        shell: bash -el {0}
+    permissions:
+        checks: write
+        pull-requests: write
+
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v3
+
+      - name: Create Environment from .yml
+        uses: conda-incubator/setup-miniconda@v2
+        with:
+          mamba-version: "*"
+          channels: conda-forge,defaults
+          channel-priority: true
+          activate-environment: pzero-test
+          environment-file: environment.yml
+          python-version: 3.9
+          auto-activate-base: false
+
+      - name: Install vtk from pip and check Conda version
+        run: |
+          conda info
+          conda list
+      - name: Test with pytest
+        run: |
+          conda install pytest-html
+          pytest --html=macos-test-report.html tests/
+      - name: Upload pytest test results
+        uses: actions/upload-artifact@v3
+        with:
+          name: pytest-results-macos
+          path: macos-test-report.html
+        # Use always() to always run this step to publish test results when there are test failures
+        if: ${{ always() }}
