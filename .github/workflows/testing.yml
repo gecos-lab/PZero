@@ -30,7 +30,7 @@ jobs:
           channel-priority: true
           activate-environment: pzero-testing
           environment-file: environment.yml
-          python-version: 3.8
+          python-version: 3.8.16
           auto-activate-base: false
 
       - name: Install vtk from pip and check Conda version
@@ -73,7 +73,7 @@ jobs:
           channel-priority: true
           activate-environment: pzero-test
           environment-file: environment.yml
-          python-version: 3.8
+          python-version: 3.8.16
           auto-activate-base: false
 
       - name: Install vtk from pip and check Conda version
@@ -116,7 +116,7 @@ jobs:
           channel-priority: true
           activate-environment: pzero-test
           environment-file: environment.yml
-          python-version: 3.8
+          python-version: 3.8.16
           auto-activate-base: false
 
       - name: Install vtk from pip and check Conda version
