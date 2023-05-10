@@ -101,7 +101,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         # THE FOLLOWING ACTUALLY DELETES ANY REFERENCE TO CLOSED WINDOWS, HENCE FREEING
         # MEMORY, BUT COULD CREATE PROBLEMS WITH SIGNALS THAT ARE STILL ACTIVE
         # SEE DISCUSSIONS ON QPointer AND WA_DeleteOnClose ON THE INTERNET
-        # self.setAttribute(Qt.WA_DeleteOnClose, True)
+        self.setAttribute(Qt.WA_DeleteOnClose, True)
         self.parent = parent
         """Connect actionQuit.triggered SIGNAL to self.close SLOT"""
         self.actionClose.triggered.connect(self.close)
@@ -149,163 +149,231 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         """Connect signals to update functions. Use lambda functions where we need to pass additional
         arguments such as parent in addition to the signal itself - the updated_list."""
 
-        self.parent.geology_added_signal.connect(
-            lambda updated_list: self.geology_added_update_views(updated_list=updated_list))
-        self.parent.geology_removed_signal.connect(
-            lambda updated_list: self.geology_removed_update_views(updated_list=updated_list))
-        self.parent.geology_geom_modified_signal.connect(
-            lambda updated_list: self.geology_geom_modified_update_views(updated_list=updated_list))
-        self.parent.geology_data_keys_removed_signal.connect(
-            lambda updated_list: self.geology_data_keys_modified_update_views(updated_list=updated_list))
-        self.parent.geology_data_val_modified_signal.connect(
-            lambda updated_list: self.geology_data_val_modified_update_views(updated_list=updated_list))
-        self.parent.geology_metadata_modified_signal.connect(
-            lambda updated_list: self.geology_metadata_modified_update_views(updated_list=updated_list))
-        self.parent.geology_legend_color_modified_signal.connect(
-            lambda updated_list: self.geology_legend_color_modified_update_views(updated_list=updated_list))
-        self.parent.geology_legend_thick_modified_signal.connect(
-            lambda updated_list: self.geology_legend_thick_modified_update_views(updated_list=updated_list))
-        self.parent.geology_legend_point_size_modified_signal.connect(
-            lambda updated_list: self.geology_legend_point_size_modified_update_views(updated_list=updated_list))
-        self.parent.geology_legend_opacity_modified_signal.connect(
-            lambda updated_list: self.geology_legend_opacity_modified_update_views(updated_list=updated_list))
+        # Geology lamda functions and signals
+        self.upd_list_geo_add = lambda updated_list: self.geology_added_update_views(updated_list=updated_list)
+        self.upd_list_geo_rm = lambda updated_list: self.geology_removed_update_views(updated_list=updated_list)
+        self.upd_list_geo_mod = lambda updated_list: self.geology_geom_modified_update_views(updated_list=updated_list)
+        self.upd_list_geo_datakeys_mod = lambda updated_list: self.geology_data_keys_modified_update_views(updated_list=updated_list)
+        self.upd_list_geo_dataval_mod = lambda updated_list: self.geology_data_val_modified_update_views(updated_list=updated_list)
+        self.upd_list_geo_metadata_mod = lambda updated_list: self.geology_metadata_modified_update_views(updated_list=updated_list)
+        self.upd_list_geo_leg_col_mod = lambda updated_list: self.geology_legend_color_modified_update_views(updated_list=updated_list)
+        self.upd_list_geo_leg_thick_mod = lambda updated_list: self.geology_legend_thick_modified_update_views(updated_list=updated_list)
+        self.upd_list_geo_leg_point_mod = lambda updated_list: self.geology_legend_point_size_modified_update_views(updated_list=updated_list)
+        self.upd_list_geo_leg_op_mod = lambda updated_list: self.geology_legend_opacity_modified_update_views(updated_list=updated_list)
 
-        self.parent.xsect_added_signal.connect(
-            lambda updated_list: self.xsect_added_update_views(updated_list=updated_list))
-        self.parent.xsect_removed_signal.connect(
-            lambda updated_list: self.xsect_removed_update_views(updated_list=updated_list))
-        self.parent.xsect_geom_modified_signal.connect(
-            lambda updated_list: self.xsect_geom_modified_update_views(updated_list=updated_list))
-        self.parent.xsect_metadata_modified_signal.connect(
-            lambda updated_list: self.xsect_metadata_modified_update_views(updated_list=updated_list))
-        self.parent.xsect_legend_color_modified_signal.connect(
-            lambda updated_list: self.xsect_legend_color_modified_update_views(updated_list=updated_list))
-        self.parent.xsect_legend_thick_modified_signal.connect(
-            lambda updated_list: self.xsect_legend_thick_modified_update_views(updated_list=updated_list))
-        self.parent.xsect_legend_opacity_modified_signal.connect(
-            lambda updated_list: self.xsect_legend_opacity_modified_update_views(updated_list=updated_list))
+        self.parent.geology_added_signal.connect(self.upd_list_geo_add)
+        self.parent.geology_removed_signal.connect(self.upd_list_geo_rm)
+        self.parent.geology_geom_modified_signal.connect(self.upd_list_geo_mod)
+        self.parent.geology_data_keys_removed_signal.connect(self.upd_list_geo_datakeys_mod)
+        self.parent.geology_data_val_modified_signal.connect(self.upd_list_geo_dataval_mod)
+        self.parent.geology_metadata_modified_signal.connect(self.upd_list_geo_metadata_mod)
+        self.parent.geology_legend_color_modified_signal.connect(self.upd_list_geo_leg_col_mod)
+        self.parent.geology_legend_thick_modified_signal.connect(self.upd_list_geo_leg_thick_mod)
+        self.parent.geology_legend_point_size_modified_signal.connect(self.upd_list_geo_leg_point_mod)
+        self.parent.geology_legend_opacity_modified_signal.connect(self.upd_list_geo_leg_op_mod)
 
-        self.parent.boundary_added_signal.connect(
-            lambda updated_list: self.boundary_added_update_views(updated_list=updated_list))
-        self.parent.boundary_removed_signal.connect(
-            lambda updated_list: self.boundary_removed_update_views(updated_list=updated_list))
-        self.parent.boundary_geom_modified_signal.connect(
-            lambda updated_list: self.boundary_geom_modified_update_views(updated_list=updated_list))
-        self.parent.boundary_metadata_modified_signal.connect(
-            lambda updated_list: self.boundary_metadata_modified_update_views(updated_list=updated_list))
-        self.parent.boundary_legend_color_modified_signal.connect(
-            lambda updated_list: self.boundary_legend_color_modified_update_views(updated_list=updated_list))
-        self.parent.boundary_legend_thick_modified_signal.connect(
-            lambda updated_list: self.boundary_legend_thick_modified_update_views(updated_list=updated_list))
-        self.parent.boundary_legend_opacity_modified_signal.connect(
-            lambda updated_list: self.boundary_legend_opacity_modified_update_views(updated_list=updated_list))
 
-        self.parent.mesh3d_added_signal.connect(
-            lambda updated_list: self.mesh3d_added_update_views(updated_list=updated_list))
-        self.parent.mesh3d_removed_signal.connect(
-            lambda updated_list: self.mesh3d_removed_update_views(updated_list=updated_list))
-        self.parent.mesh3d_data_keys_removed_signal.connect(
-            lambda updated_list: self.mesh3d_data_keys_modified_update_views(updated_list=updated_list))
-        self.parent.mesh3d_data_val_modified_signal.connect(
-            lambda updated_list: self.mesh3d_data_val_modified_update_views(updated_list=updated_list))
-        self.parent.mesh3d_metadata_modified_signal.connect(
-            lambda updated_list: self.mesh3d_metadata_modified_update_views(updated_list=updated_list))
-        self.parent.mesh3d_legend_color_modified_signal.connect(
-            lambda updated_list: self.mesh3d_legend_color_modified_update_views(updated_list=updated_list))
-        self.parent.mesh3d_legend_thick_modified_signal.connect(
-            lambda updated_list: self.mesh3d_legend_thick_modified_update_views(updated_list=updated_list))
-        self.parent.mesh3d_legend_opacity_modified_signal.connect(
-            lambda updated_list: self.mesh3d_legend_opacity_modified_update_views(updated_list=updated_list))
+        # X Section lamda functions and signals
+        self.upd_list_x_add = lambda updated_list: self.xsect_added_update_views(updated_list=updated_list)
+        self.upd_list_x_rm = lambda updated_list: self.xsect_removed_update_views(updated_list=updated_list)
+        self.upd_list_x_mod = lambda updated_list: self.xsect_geom_modified_update_views(updated_list=updated_list)
+        self.upd_list_x_metadata_mod = lambda updated_list: self.xsect_metadata_modified_update_views(updated_list=updated_list)
+        self.upd_list_x_leg_col_mod = lambda updated_list: self.xsect_legend_color_modified_update_views(updated_list=updated_list)
+        self.upd_list_x_leg_thick_mod = lambda updated_list: self.xsect_legend_thick_modified_update_views(updated_list=updated_list)
+        self.upd_list_x_leg_op_mod = lambda updated_list: self.xsect_legend_opacity_modified_update_views(updated_list=updated_list)
 
-        self.parent.dom_added_signal.connect(
-            lambda updated_list: self.dom_added_update_views(updated_list=updated_list))
-        self.parent.dom_removed_signal.connect(
-            lambda updated_list: self.dom_removed_update_views(updated_list=updated_list))
-        self.parent.dom_data_keys_removed_signal.connect(
-            lambda updated_list: self.dom_data_keys_modified_update_views(updated_list=updated_list))
-        self.parent.dom_data_val_modified_signal.connect(
-            lambda updated_list: self.dom_data_val_modified_update_views(updated_list=updated_list))
-        self.parent.dom_metadata_modified_signal.connect(
-            lambda updated_list: self.dom_metadata_modified_update_views(updated_list=updated_list))
-        self.parent.dom_legend_color_modified_signal.connect(
-            lambda updated_list: self.dom_legend_color_modified_update_views(updated_list=updated_list))
-        self.parent.dom_legend_thick_modified_signal.connect(
-            lambda updated_list: self.dom_legend_thick_modified_update_views(updated_list=updated_list))
-        self.parent.dom_legend_point_size_modified_signal.connect(
-            lambda updated_list: self.dom_legend_point_size_modified_update_views(updated_list=updated_list))
-        self.parent.dom_legend_opacity_modified_signal.connect(
-            lambda updated_list: self.dom_legend_opacity_modified_update_views(updated_list=updated_list))
+        self.parent.xsect_added_signal.connect(self.upd_list_x_add)
+        self.parent.xsect_removed_signal.connect(self.upd_list_x_rm)
+        self.parent.xsect_geom_modified_signal.connect(self.upd_list_x_mod)
+        self.parent.xsect_metadata_modified_signal.connect(self.upd_list_x_metadata_mod)
+        self.parent.xsect_legend_color_modified_signal.connect(self.upd_list_x_leg_col_mod)
+        self.parent.xsect_legend_thick_modified_signal.connect(self.upd_list_x_leg_thick_mod)
+        self.parent.xsect_legend_opacity_modified_signal.connect(self.upd_list_x_leg_op_mod)
 
-        self.parent.image_added_signal.connect(
-            lambda updated_list: self.image_added_update_views(updated_list=updated_list))
-        self.parent.image_removed_signal.connect(
-            lambda updated_list: self.image_removed_update_views(updated_list=updated_list))
-        self.parent.image_metadata_modified_signal.connect(
-            lambda updated_list: self.image_metadata_modified_update_views(updated_list=updated_list))
-        self.parent.image_legend_opacity_modified_signal.connect(
-            lambda updated_list: self.image_legend_opacity_modified_update_views(updated_list=updated_list))
 
-        self.parent.well_added_signal.connect(
-            lambda updated_list: self.well_added_update_views(updated_list=updated_list))
-        self.parent.well_removed_signal.connect(
-            lambda updated_list: self.well_removed_update_views(updated_list=updated_list))
-        self.parent.well_data_keys_removed_signal.connect(
-            lambda updated_list: self.well_data_keys_modified_update_views(updated_list=updated_list))
-        self.parent.well_data_val_modified_signal.connect(
-            lambda updated_list: self.well_data_val_modified_update_views(updated_list=updated_list))
-        self.parent.well_metadata_modified_signal.connect(
-            lambda updated_list: self.well_metadata_modified_update_views(updated_list=updated_list))
-        self.parent.well_legend_color_modified_signal.connect(
-            lambda updated_list: self.well_legend_color_modified_update_views(updated_list=updated_list))
-        self.parent.well_legend_thick_modified_signal.connect(
-            lambda updated_list: self.well_legend_thick_modified_update_views(updated_list=updated_list))
-        self.parent.well_legend_opacity_modified_signal.connect(
-            lambda updated_list: self.well_legend_opacity_modified_update_views(updated_list=updated_list))
+        # Boundary lamda functions and signals
+        self.upd_list_bound_add = lambda updated_list: self.boundary_added_update_views(updated_list=updated_list)
+        self.upd_list_bound_rm = lambda updated_list: self.boundary_removed_update_views(updated_list=updated_list)
+        self.upd_list_bound_geo_mod = lambda updated_list: self.boundary_geom_modified_update_views(updated_list=updated_list)
+        self.upd_list_bound_metadata_mod = lambda updated_list: self.boundary_metadata_modified_update_views(updated_list=updated_list)
+        self.upd_list_bound_leg_col_mod = lambda updated_list: self.boundary_legend_color_modified_update_views(updated_list=updated_list)
+        self.upd_list_bound_leg_thick_mod = lambda updated_list: self.boundary_legend_thick_modified_update_views(updated_list=updated_list)
+        self.upd_list_bound_leg_op_mod = lambda updated_list: self.boundary_legend_opacity_modified_update_views(updated_list=updated_list)
 
-        self.parent.fluid_added_signal.connect(
-            lambda updated_list: self.fluid_added_update_views(updated_list=updated_list))
-        self.parent.fluid_removed_signal.connect(
-            lambda updated_list: self.fluid_removed_update_views(updated_list=updated_list))
-        self.parent.fluid_geom_modified_signal.connect(
-            lambda updated_list: self.fluid_geom_modified_update_views(updated_list=updated_list))
-        self.parent.fluid_data_keys_removed_signal.connect(
-            lambda updated_list: self.fluid_data_keys_modified_update_views(updated_list=updated_list))
-        self.parent.fluid_data_val_modified_signal.connect(
-            lambda updated_list: self.fluid_data_val_modified_update_views(updated_list=updated_list))
-        self.parent.fluid_metadata_modified_signal.connect(
-            lambda updated_list: self.fluid_metadata_modified_update_views(updated_list=updated_list))
-        self.parent.fluid_legend_color_modified_signal.connect(
-            lambda updated_list: self.fluid_legend_color_modified_update_views(updated_list=updated_list))
-        self.parent.fluid_legend_thick_modified_signal.connect(
-            lambda updated_list: self.fluid_legend_thick_modified_update_views(updated_list=updated_list))
-        self.parent.fluid_legend_point_size_modified_signal.connect(
-            lambda updated_list: self.fluid_legend_point_size_modified_update_views(updated_list=updated_list))
-        self.parent.fluid_legend_opacity_modified_signal.connect(
-            lambda updated_list: self.fluid_legend_opacity_modified_update_views(updated_list=updated_list))
+        self.parent.boundary_added_signal.connect(self.upd_list_bound_add)
+        self.parent.boundary_removed_signal.connect(self.upd_list_bound_rm)
+        self.parent.boundary_geom_modified_signal.connect(self.upd_list_bound_geo_mod)
+        self.parent.boundary_metadata_modified_signal.connect(self.upd_list_bound_metadata_mod)
+        self.parent.boundary_legend_color_modified_signal.connect(self.upd_list_bound_leg_col_mod)
+        self.parent.boundary_legend_thick_modified_signal.connect(self.upd_list_bound_leg_thick_mod)
+        self.parent.boundary_legend_opacity_modified_signal.connect(self.upd_list_bound_leg_op_mod)
 
-        self.parent.background_added_signal.connect(
-            lambda updated_list: self.background_added_update_views(updated_list=updated_list))
-        self.parent.background_removed_signal.connect(
-            lambda updated_list: self.background_removed_update_views(updated_list=updated_list))
-        self.parent.background_geom_modified_signal.connect(
-            lambda updated_list: self.background_geom_modified_update_views(updated_list=updated_list))
-        self.parent.background_data_keys_removed_signal.connect(
-            lambda updated_list: self.background_data_keys_modified_update_views(updated_list=updated_list))
-        self.parent.background_data_val_modified_signal.connect(
-            lambda updated_list: self.background_data_val_modified_update_views(updated_list=updated_list))
-        self.parent.background_metadata_modified_signal.connect(
-            lambda updated_list: self.background_metadata_modified_update_views(updated_list=updated_list))
-        self.parent.background_legend_color_modified_signal.connect(
-            lambda updated_list: self.background_legend_color_modified_update_views(updated_list=updated_list))
-        self.parent.background_legend_thick_modified_signal.connect(
-            lambda updated_list: self.background_legend_thick_modified_update_views(updated_list=updated_list))
-        self.parent.background_legend_point_size_modified_signal.connect(
-            lambda updated_list: self.background_legend_point_size_modified_update_views(updated_list=updated_list))
-        self.parent.background_legend_opacity_modified_signal.connect(
-            lambda updated_list: self.background_legend_opacity_modified_update_views(updated_list=updated_list))
 
-        self.parent.prop_legend_cmap_modified_signal.connect(
-            lambda this_property: self.prop_legend_cmap_modified_update_views(this_property=this_property))
+        # Mesh 3D lamda functions and signals
+        self.upd_list_mesh3d_add = lambda updated_list: self.mesh3d_added_update_views(updated_list=updated_list)
+        self.upd_list_mesh3d_rm = lambda updated_list: self.mesh3d_removed_update_views(updated_list=updated_list)
+        self.upd_list_mesh3d_data_keys_mod = lambda updated_list: self.mesh3d_data_keys_modified_update_views(
+            updated_list=updated_list)
+        self.upd_list_mesh3d_data_val_mod = lambda updated_list: self.mesh3d_data_val_modified_update_views(
+            updated_list=updated_list)
+        self.upd_list_mesh3d_metadata_mod = lambda updated_list: self.mesh3d_metadata_modified_update_views(
+            updated_list=updated_list)
+        self.upd_list_mesh3d_leg_col_mod = lambda updated_list: self.mesh3d_legend_color_modified_update_views(
+            updated_list=updated_list)
+        self.upd_list_mesh3d_leg_thick_mod = lambda updated_list: self.mesh3d_legend_thick_modified_update_views(
+            updated_list=updated_list)
+        self.upd_list_mesh3d_leg_op_mod = lambda updated_list: self.mesh3d_legend_opacity_modified_update_views(
+            updated_list=updated_list)
+
+        self.parent.mesh3d_added_signal.connect(self.upd_list_mesh3d_add)
+        self.parent.mesh3d_removed_signal.connect(self.upd_list_mesh3d_rm)
+        self.parent.mesh3d_data_keys_removed_signal.connect(self.upd_list_mesh3d_data_keys_mod)
+        self.parent.mesh3d_data_val_modified_signal.connect(self.upd_list_mesh3d_data_val_mod)
+        self.parent.mesh3d_metadata_modified_signal.connect(self.upd_list_mesh3d_metadata_mod)
+        self.parent.mesh3d_legend_color_modified_signal.connect(self.upd_list_mesh3d_leg_col_mod)
+        self.parent.mesh3d_legend_thick_modified_signal.connect(self.upd_list_mesh3d_leg_thick_mod)
+        self.parent.mesh3d_legend_opacity_modified_signal.connect(self.upd_list_mesh3d_leg_op_mod)
+
+
+        # Dom lamda functions and signals
+        self.upd_list_dom_add = lambda updated_list: self.dom_added_update_views(updated_list=updated_list)
+        self.upd_list_dom_rm = lambda updated_list: self.dom_removed_update_views(updated_list=updated_list)
+        self.upd_list_dom_data_keys_mod = lambda updated_list: self.dom_data_keys_modified_update_views(
+            updated_list=updated_list)
+        self.upd_list_dom_data_val_mod = lambda updated_list: self.dom_data_val_modified_update_views(
+            updated_list=updated_list)
+        self.upd_list_dom_metadata_mod = lambda updated_list: self.dom_metadata_modified_update_views(
+            updated_list=updated_list)
+        self.upd_list_dom_leg_col_mod = lambda updated_list: self.dom_legend_color_modified_update_views(
+            updated_list=updated_list)
+        self.upd_list_dom_leg_thick_mod = lambda updated_list: self.dom_legend_thick_modified_update_views(
+            updated_list=updated_list)
+        self.upd_list_dom_leg_point_mod = lambda updated_list: self.dom_legend_point_size_modified_update_views(
+            updated_list=updated_list)
+        self.upd_list_dom_leg_op_mod = lambda updated_list: self.dom_legend_opacity_modified_update_views(
+            updated_list=updated_list)
+
+        self.parent.dom_added_signal.connect(self.upd_list_dom_add)
+        self.parent.dom_removed_signal.connect(self.upd_list_dom_rm)
+        self.parent.dom_data_keys_removed_signal.connect(self.upd_list_dom_data_keys_mod)
+        self.parent.dom_data_val_modified_signal.connect(self.upd_list_dom_data_val_mod)
+        self.parent.dom_metadata_modified_signal.connect(self.upd_list_dom_metadata_mod)
+        self.parent.dom_legend_color_modified_signal.connect(self.upd_list_dom_leg_col_mod)
+        self.parent.dom_legend_thick_modified_signal.connect(self.upd_list_dom_leg_thick_mod)
+        self.parent.dom_legend_point_size_modified_signal.connect(self.upd_list_dom_leg_point_mod)
+        self.parent.dom_legend_opacity_modified_signal.connect(self.upd_list_dom_leg_op_mod)
+
+
+        # Image lamda functions and signals
+        self.upd_list_img_add = lambda updated_list: self.image_added_update_views(updated_list=updated_list)
+        self.upd_list_img_rm = lambda updated_list: self.image_removed_update_views(updated_list=updated_list)
+        self.upd_list_metadata_mod = lambda updated_list: self.image_metadata_modified_update_views(
+            updated_list=updated_list)
+        self.upd_list_img_leg_op_mod = lambda updated_list: self.image_legend_opacity_modified_update_views(
+            updated_list=updated_list)
+
+        self.parent.image_added_signal.connect(self.upd_list_img_add)
+        self.parent.image_removed_signal.connect(self.upd_list_img_rm)
+        self.parent.image_metadata_modified_signal.connect(self.upd_list_metadata_mod)
+        self.parent.image_legend_opacity_modified_signal.connect(self.upd_list_img_leg_op_mod)
+
+
+        # Well lamda functions and signals
+        self.upd_list_well_add = lambda updated_list: self.well_added_update_views(updated_list=updated_list)
+        self.upd_list_well_rm = lambda updated_list: self.well_removed_update_views(updated_list=updated_list)
+        self.upd_list_well_data_keys_mod = lambda updated_list: self.well_data_keys_modified_update_views(
+            updated_list=updated_list)
+        self.upd_list_well_data_val_mod = lambda updated_list: self.well_data_val_modified_update_views(
+            updated_list=updated_list)
+        self.upd_list_well_metadata_mod = lambda updated_list: self.well_metadata_modified_update_views(
+            updated_list=updated_list)
+        self.upd_list_well_leg_col_mod = lambda updated_list: self.well_legend_color_modified_update_views(
+            updated_list=updated_list)
+        self.upd_list_well_leg_thick_mod = lambda updated_list: self.well_legend_thick_modified_update_views(
+            updated_list=updated_list)
+        self.upd_list_well_leg_op_mod = lambda updated_list: self.well_legend_opacity_modified_update_views(
+            updated_list=updated_list)
+
+        self.parent.well_added_signal.connect(self.upd_list_well_add)
+        self.parent.well_removed_signal.connect(self.upd_list_well_rm)
+        self.parent.well_data_keys_removed_signal.connect(self.upd_list_well_data_keys_mod)
+        self.parent.well_data_val_modified_signal.connect(self.upd_list_well_data_val_mod)
+        self.parent.well_metadata_modified_signal.connect(self.upd_list_well_metadata_mod)
+        self.parent.well_legend_color_modified_signal.connect(self.upd_list_well_leg_col_mod)
+        self.parent.well_legend_thick_modified_signal.connect(self.upd_list_well_leg_thick_mod)
+        self.parent.well_legend_opacity_modified_signal.connect(self.upd_list_well_leg_op_mod)
+
+
+        # Fluid lamda functions and signals
+        self.upd_list_fluid_add = lambda updated_list: self.fluid_added_update_views(updated_list=updated_list)
+        self.upd_list_fluid_rm = lambda updated_list: self.fluid_removed_update_views(updated_list=updated_list)
+        self.upd_list_fluid_geo_mod = lambda updated_list: self.fluid_geom_modified_update_views(
+            updated_list=updated_list)
+        self.upd_list_fluid_data_keys_mod = lambda updated_list: self.fluid_data_keys_modified_update_views(
+            updated_list=updated_list)
+        self.upd_list_fluid_data_val_mod = lambda updated_list: self.fluid_data_val_modified_update_views(
+            updated_list=updated_list)
+        self.upd_list_fluid_metadata_mod = lambda updated_list: self.fluid_metadata_modified_update_views(
+            updated_list=updated_list)
+        self.upd_list_fluid_leg_col_mod = lambda updated_list: self.fluid_legend_color_modified_update_views(
+            updated_list=updated_list)
+        self.upd_list_fluid_leg_thick_mod = lambda updated_list: self.fluid_legend_thick_modified_update_views(
+            updated_list=updated_list)
+        self.upd_list_fluid_leg_point_mod = lambda updated_list: self.fluid_legend_point_size_modified_update_views(
+            updated_list=updated_list)
+        self.upd_list_fluid_leg_op_mod = lambda updated_list: self.fluid_legend_opacity_modified_update_views(
+            updated_list=updated_list)
+
+        self.parent.fluid_added_signal.connect(self.upd_list_fluid_add)
+        self.parent.fluid_removed_signal.connect(self.upd_list_fluid_rm)
+        self.parent.fluid_geom_modified_signal.connect(self.upd_list_fluid_geo_mod)
+        self.parent.fluid_data_keys_removed_signal.connect(self.upd_list_fluid_data_keys_mod)
+        self.parent.fluid_data_val_modified_signal.connect(self.upd_list_fluid_data_val_mod)
+        self.parent.fluid_metadata_modified_signal.connect(self.upd_list_fluid_metadata_mod)
+        self.parent.fluid_legend_color_modified_signal.connect(self.upd_list_fluid_leg_col_mod)
+        self.parent.fluid_legend_thick_modified_signal.connect(self.upd_list_fluid_leg_thick_mod)
+        self.parent.fluid_legend_point_size_modified_signal.connect(self.upd_list_fluid_leg_point_mod)
+        self.parent.fluid_legend_opacity_modified_signal.connect(self.upd_list_fluid_leg_op_mod)
+
+
+        # Background lamda functions and signals
+        self.upd_list_background_add = lambda updated_list: self.background_added_update_views(
+            updated_list=updated_list)
+        self.upd_list_background_rm = lambda updated_list: self.background_removed_update_views(
+            updated_list=updated_list)
+        self.upd_list_background_geo_mod = lambda updated_list: self.background_geom_modified_update_views(
+            updated_list=updated_list)
+        self.upd_list_background_data_keys = lambda updated_list: self.background_data_keys_modified_update_views(
+            updated_list=updated_list)
+        self.upd_list_background_data_val = lambda updated_list: self.background_data_val_modified_update_views(
+            updated_list=updated_list)
+        self.upd_list_background_metadata = lambda updated_list: self.background_metadata_modified_update_views(
+            updated_list=updated_list)
+        self.upd_list_background_leg_col = lambda updated_list: self.background_legend_color_modified_update_views(
+            updated_list=updated_list)
+        self.upd_list_background_leg_thick = lambda updated_list: self.background_legend_thick_modified_update_views(
+            updated_list=updated_list)
+        self.upd_list_background_leg_point = lambda \
+            updated_list: self.background_legend_point_size_modified_update_views(updated_list=updated_list)
+        self.upd_list_background_leg_op = lambda updated_list: self.background_legend_opacity_modified_update_views(
+            updated_list=updated_list)
+
+        self.parent.background_added_signal.connect(self.upd_list_background_add)
+        self.parent.background_removed_signal.connect(self.upd_list_background_rm)
+        self.parent.background_geom_modified_signal.connect(self.upd_list_background_geo_mod)
+        self.parent.background_data_keys_removed_signal.connect(self.upd_list_background_data_keys)
+        self.parent.background_data_val_modified_signal.connect(self.upd_list_background_data_val)
+        self.parent.background_metadata_modified_signal.connect(self.upd_list_background_metadata)
+        self.parent.background_legend_color_modified_signal.connect(self.upd_list_background_leg_col)
+        self.parent.background_legend_thick_modified_signal.connect(self.upd_list_background_leg_thick)
+        self.parent.background_legend_point_size_modified_signal.connect(self.upd_list_background_leg_point)
+        self.parent.background_legend_opacity_modified_signal.connect(self.upd_list_background_leg_op)
+
+
+        # Prop Legend lamda functions and signals
+        self.prop_legend_lambda = lambda this_property: self.prop_legend_cmap_modified_update_views(this_property=this_property)
+
+        self.parent.prop_legend_cmap_modified_signal.connect(self.prop_legend_lambda)
 
         """ Gather all the signals inside a signals list, 
             this is needed when closing because we need to dereference them"""
@@ -323,6 +391,102 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
     # ================================  build and update ================================
 
     """Methods used to build and update the geology and topology trees."""
+
+    # Help to disconnect all windows signals correctly, if this method is removed it will crash in this case
+    def disconnect_all_lambda_signals(self):
+        # Disconnect geology signals
+        self.parent.geology_added_signal.disconnect(self.upd_list_geo_add)
+        self.parent.geology_removed_signal.disconnect(self.upd_list_geo_rm)
+        self.parent.geology_geom_modified_signal.disconnect(self.upd_list_geo_mod)
+        self.parent.geology_data_keys_removed_signal.disconnect(self.upd_list_geo_datakeys_mod)
+        self.parent.geology_data_val_modified_signal.disconnect(self.upd_list_geo_dataval_mod)
+        self.parent.geology_metadata_modified_signal.disconnect(self.upd_list_geo_metadata_mod)
+        self.parent.geology_legend_color_modified_signal.disconnect(self.upd_list_geo_leg_col_mod)
+        self.parent.geology_legend_thick_modified_signal.disconnect(self.upd_list_geo_leg_thick_mod)
+        self.parent.geology_legend_point_size_modified_signal.disconnect(self.upd_list_geo_leg_point_mod)
+        self.parent.geology_legend_opacity_modified_signal.disconnect(self.upd_list_geo_leg_op_mod)
+
+        # Disconnect XSect signals
+        self.parent.xsect_added_signal.disconnect(self.upd_list_x_add)
+        self.parent.xsect_removed_signal.disconnect(self.upd_list_x_rm)
+        self.parent.xsect_geom_modified_signal.disconnect(self.upd_list_x_mod)
+        self.parent.xsect_metadata_modified_signal.disconnect(self.upd_list_x_metadata_mod)
+        self.parent.xsect_legend_color_modified_signal.disconnect(self.upd_list_x_leg_col_mod)
+        self.parent.xsect_legend_thick_modified_signal.disconnect(self.upd_list_x_leg_thick_mod)
+        self.parent.xsect_legend_opacity_modified_signal.disconnect(self.upd_list_x_leg_op_mod)
+
+        # Disconnect Boundary signals
+        self.parent.boundary_added_signal.disconnect(self.upd_list_bound_add)
+        self.parent.boundary_removed_signal.disconnect(self.upd_list_bound_rm)
+        self.parent.boundary_geom_modified_signal.disconnect(self.upd_list_bound_geo_mod)
+        self.parent.boundary_metadata_modified_signal.disconnect(self.upd_list_bound_metadata_mod)
+        self.parent.boundary_legend_color_modified_signal.disconnect(self.upd_list_bound_leg_col_mod)
+        self.parent.boundary_legend_thick_modified_signal.disconnect(self.upd_list_bound_leg_thick_mod)
+        self.parent.boundary_legend_opacity_modified_signal.disconnect(self.upd_list_bound_leg_op_mod)
+
+        # Disconnect Mesh3D signals
+        self.parent.mesh3d_added_signal.disconnect(self.upd_list_mesh3d_add)
+        self.parent.mesh3d_removed_signal.disconnect(self.upd_list_mesh3d_rm)
+        self.parent.mesh3d_data_keys_removed_signal.disconnect(self.upd_list_mesh3d_data_keys_mod)
+        self.parent.mesh3d_data_val_modified_signal.disconnect(self.upd_list_mesh3d_data_val_mod)
+        self.parent.mesh3d_metadata_modified_signal.disconnect(self.upd_list_mesh3d_metadata_mod)
+        self.parent.mesh3d_legend_color_modified_signal.disconnect(self.upd_list_mesh3d_leg_col_mod)
+        self.parent.mesh3d_legend_thick_modified_signal.disconnect(self.upd_list_mesh3d_leg_thick_mod)
+        self.parent.mesh3d_legend_opacity_modified_signal.disconnect(self.upd_list_mesh3d_leg_op_mod)
+
+        # Disconnect Dom signals
+        self.parent.dom_added_signal.disconnect(self.upd_list_dom_add)
+        self.parent.dom_removed_signal.disconnect(self.upd_list_dom_rm)
+        self.parent.dom_data_keys_removed_signal.disconnect(self.upd_list_dom_data_keys_mod)
+        self.parent.dom_data_val_modified_signal.disconnect(self.upd_list_dom_data_val_mod)
+        self.parent.dom_metadata_modified_signal.disconnect(self.upd_list_dom_metadata_mod)
+        self.parent.dom_legend_color_modified_signal.disconnect(self.upd_list_dom_leg_col_mod)
+        self.parent.dom_legend_thick_modified_signal.disconnect(self.upd_list_dom_leg_thick_mod)
+        self.parent.dom_legend_point_size_modified_signal.disconnect(self.upd_list_dom_leg_point_mod)
+        self.parent.dom_legend_opacity_modified_signal.disconnect(self.upd_list_dom_leg_op_mod)
+
+        # Disconnect Image signals
+        self.parent.image_added_signal.disconnect(self.upd_list_img_add)
+        self.parent.image_removed_signal.disconnect(self.upd_list_img_rm)
+        self.parent.image_metadata_modified_signal.disconnect(self.upd_list_metadata_mod)
+        self.parent.image_legend_opacity_modified_signal.disconnect(self.upd_list_img_leg_op_mod)
+
+        # Disconnect Well signals
+        self.parent.well_added_signal.disconnect(self.upd_list_well_add)
+        self.parent.well_removed_signal.disconnect(self.upd_list_well_rm)
+        self.parent.well_data_keys_removed_signal.disconnect(self.upd_list_well_data_keys_mod)
+        self.parent.well_data_val_modified_signal.disconnect(self.upd_list_well_data_val_mod)
+        self.parent.well_metadata_modified_signal.disconnect(self.upd_list_well_metadata_mod)
+        self.parent.well_legend_color_modified_signal.disconnect(self.upd_list_well_leg_col_mod)
+        self.parent.well_legend_thick_modified_signal.disconnect(self.upd_list_well_leg_thick_mod)
+        self.parent.well_legend_opacity_modified_signal.disconnect(self.upd_list_well_leg_op_mod)
+
+        # Disconnect Fluid signals
+        self.parent.fluid_added_signal.disconnect(self.upd_list_fluid_add)
+        self.parent.fluid_removed_signal.disconnect(self.upd_list_fluid_rm)
+        self.parent.fluid_geom_modified_signal.disconnect(self.upd_list_fluid_geo_mod)
+        self.parent.fluid_data_keys_removed_signal.disconnect(self.upd_list_fluid_data_keys_mod)
+        self.parent.fluid_data_val_modified_signal.disconnect(self.upd_list_fluid_data_val_mod)
+        self.parent.fluid_metadata_modified_signal.disconnect(self.upd_list_fluid_metadata_mod)
+        self.parent.fluid_legend_color_modified_signal.disconnect(self.upd_list_fluid_leg_col_mod)
+        self.parent.fluid_legend_thick_modified_signal.disconnect(self.upd_list_fluid_leg_thick_mod)
+        self.parent.fluid_legend_point_size_modified_signal.disconnect(self.upd_list_fluid_leg_point_mod)
+        self.parent.fluid_legend_opacity_modified_signal.disconnect(self.upd_list_fluid_leg_op_mod)
+
+        # Disconnect Background signals
+        self.parent.background_added_signal.disconnect(self.upd_list_background_add)
+        self.parent.background_removed_signal.disconnect(self.upd_list_background_rm)
+        self.parent.background_geom_modified_signal.disconnect(self.upd_list_background_geo_mod)
+        self.parent.background_data_keys_removed_signal.disconnect(self.upd_list_background_data_keys)
+        self.parent.background_data_val_modified_signal.disconnect(self.upd_list_background_data_val)
+        self.parent.background_metadata_modified_signal.disconnect(self.upd_list_background_metadata)
+        self.parent.background_legend_color_modified_signal.disconnect(self.upd_list_background_leg_col)
+        self.parent.background_legend_thick_modified_signal.disconnect(self.upd_list_background_leg_thick)
+        self.parent.background_legend_point_size_modified_signal.disconnect(self.upd_list_background_leg_point)
+        self.parent.background_legend_opacity_modified_signal.disconnect(self.upd_list_background_leg_op)
+
+        # Disconnect Prop Legend signals
+        self.parent.prop_legend_cmap_modified_signal.disconnect(self.prop_legend_lambda)
 
     def create_geology_tree(self, sec_uid=None):
         """Create geology tree with checkboxes and properties"""
@@ -4475,6 +4639,9 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                                      QMessageBox.No)
         if reply == QMessageBox.Yes:
             # disconnect_all_signals(self.signals)
+            self.disconnect_all_lambda_signals()
+
+            # self.upd_list_geo_rm
             if not isinstance(self, ViewStereoplot):
                 self.plotter.close()  # needed to cleanly close the vtk plotter
             event.accept()
