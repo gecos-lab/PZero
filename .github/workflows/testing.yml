@@ -29,7 +29,7 @@ jobs:
           channels: conda-forge,defaults
           channel-priority: true
           activate-environment: pzero-testing
-          environment-file: environment.yml
+          environment-file: envs/std-environment.yml
           python-version: 3.8.16
           auto-activate-base: false
 
@@ -72,7 +72,7 @@ jobs:
           channels: conda-forge,defaults
           channel-priority: true
           activate-environment: pzero-test
-          environment-file: environment.yml
+          environment-file: envs/std-environment.yml
           python-version: 3.8.16
           auto-activate-base: false
 
@@ -115,7 +115,7 @@ jobs:
           channels: conda-forge,defaults
           channel-priority: true
           activate-environment: pzero-test
-          environment-file: environment.yml
+          environment-file: envs/macos-environment.yml
           python-version: 3.8.16
           auto-activate-base: false
 
