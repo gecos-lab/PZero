@@ -29,8 +29,8 @@ jobs:
           channels: conda-forge,defaults
           channel-priority: true
           activate-environment: pzero-testing
-          environment-file: environment.yml
-          python-version: 3.9
+          environment-file: envs/std-environment.yml
+          python-version: 3.8.16
           auto-activate-base: false
 
       - name: Install vtk from pip and check Conda version
@@ -72,8 +72,8 @@ jobs:
           channels: conda-forge,defaults
           channel-priority: true
           activate-environment: pzero-test
-          environment-file: environment.yml
-          python-version: 3.9
+          environment-file: envs/std-environment.yml
+          python-version: 3.8.16
           auto-activate-base: false
 
       - name: Install vtk from pip and check Conda version
@@ -115,8 +115,8 @@ jobs:
           channels: conda-forge,defaults
           channel-priority: true
           activate-environment: pzero-test
-          environment-file: environment.yml
-          python-version: 3.9
+          environment-file: envs/macos-environment.yml
+          python-version: 3.8.16
           auto-activate-base: false
 
       - name: Install vtk from pip and check Conda version
