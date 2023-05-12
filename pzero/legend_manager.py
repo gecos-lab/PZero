@@ -6,6 +6,7 @@ from PyQt5.QtGui import QColor
 from PyQt5.QtCore import QObject
 
 from pandas import unique as pd_unique
+from math import isnan
 
 
 class Legend(QObject):
@@ -217,6 +218,8 @@ class Legend(QObject):
                     geol_point_size_spn.geo_type = geo_type  # this is to pass these values to the update function below
                     geol_point_size_spn.feature = feature
                     geol_point_size_spn.scenario = scenario
+                    if isnan(point_size):
+                        point_size = 0
                     geol_point_size_spn.setValue(point_size)
                     "geol_line_opacity_spn > QSpinBox used to select opacity"
                     geol_opacity_spn = QSpinBox()
@@ -224,6 +227,8 @@ class Legend(QObject):
                     geol_opacity_spn.feature = feature
                     geol_opacity_spn.scenario = scenario
                     geol_opacity_spn.setMaximum(100)
+                    if isnan(opacity):
+                        opacity = 0
                     geol_opacity_spn.setValue(opacity)
                     "geol_time_spn > QDoubleSpinBox used to give relative geological time"
                     geol_time_spn = QDoubleSpinBox()
