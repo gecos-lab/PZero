@@ -101,7 +101,7 @@ class FluidsCollection(QAbstractTableModel):
                 self.parent.fluids_legend_df['fluid_feature'] == feature) & (
                                                     self.parent.fluids_legend_df['scenario'] == scenario)].empty:
             if color:
-                print(color)
+                # print(color)
                 R, G, B = color
             else:
                 R, G, B = np.round(np.random.random(3) * 255)
