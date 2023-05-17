@@ -6,7 +6,8 @@ from pzero.project_window import ProjectWindow
 
 """Paths"""
 icon_path = "icons/dip.png"
-style_path = "style/dark_teal.qss"
+dark_style_path = "style/dark_teal.qss"
+light_style_path = "style/light_teal.qss"
 
 app = QApplication(argv)
 project_window = ProjectWindow()
@@ -15,7 +16,7 @@ project_window = ProjectWindow()
 project_window.setWindowIcon(QIcon(icon_path))
 
 """Set styling"""
-with open(style_path, "r") as style_file:
+with open(dark_style_path, "r") as style_file:
     project_window.setStyleSheet(style_file.read())
 
 """Show the project window"""
