@@ -1237,7 +1237,6 @@ QHeaderView::section {
   color: rgba(85, 85, 85, 0.7);
   text-transform: uppercase;
   background-color: #f5f5f5;
-  padding: 0 24px;
   height: 36px;
   border-radius: 0px;
   border-right: 1px solid;
