@@ -38,10 +38,17 @@ The name of ***PZero*** was inspired by the zeroth element in Emile Argand's 3D 
 
 At the moment the easiest way to run and develop new code for ***PZero*** is to have a suitable **[Anaconda](https://www.anaconda.com/)** environment.
 
-In the ```conda terminal```, navigate to the ***PZero*** folder that you have cloned with **Git** or simply downloaded and import the environment with:
+In the ```conda terminal```, navigate to the ***PZero*** folder that you have cloned with **Git** or simply downloaded, go inside the **envs** folder and based on you OS import the right environment with:
 
+For **Windows/Linux** use this command
 ```
-conda env create -n pzero -f environment.yml
+conda env create -n pzero -f std-environment.yml
+conda activate pzero
+```
+
+Alternatively if you are a **MacOS** user, run this command instead:
+```
+conda env create -n pzero -f macos-environment.yml
 conda activate pzero
 ```
 

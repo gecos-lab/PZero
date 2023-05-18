@@ -33,14 +33,16 @@ jobs:
           python-version: 3.8.16
           auto-activate-base: false
 
-      - name: Install vtk from pip and check Conda version
+      - name: Check Conda Dependencies
         run: |
           conda info
           conda list
+
       - name: Test with pytest
         run: |
           conda install pytest-html
           pytest --html=ubu-test-report.html tests/
+
       - name: Upload pytest test results
         uses: actions/upload-artifact@v3
         with:
@@ -76,14 +78,16 @@ jobs:
           python-version: 3.8.16
           auto-activate-base: false
 
-      - name: Install vtk from pip and check Conda version
+      - name: Check Conda Dependencies
         run: |
           conda info
           conda list
+
       - name: Test with pytest
         run: |
           conda install pytest-html
           pytest --html=win-test-report.html tests/
+
       - name: Upload pytest test results
         uses: actions/upload-artifact@v3
         with:
@@ -119,14 +123,16 @@ jobs:
           python-version: 3.8.16
           auto-activate-base: false
 
-      - name: Install vtk from pip and check Conda version
+      - name: Check Conda Dependencies
         run: |
           conda info
           conda list
+
       - name: Test with pytest
         run: |
           conda install pytest-html
           pytest --html=macos-test-report.html tests/
+
       - name: Upload pytest test results
         uses: actions/upload-artifact@v3
         with:
