@@ -107,7 +107,7 @@ def gocad2vtk(self=None, in_file_name=None, uid_from_name=None):
             curr_obj_dict = deepcopy(GeologicalCollection.geological_entity_dict)
             curr_obj_dict['scenario'] = scenario_default
 
-            """Store uid and topological type of new entity."""
+            """Store uid of new entity."""
             curr_obj_dict['uid'] = str(uuid.uuid4())
 
             """Create the empty vtk object with class = topological_type."""
@@ -191,86 +191,100 @@ def gocad2vtk(self=None, in_file_name=None, uid_from_name=None):
         elif clean_line[0] == 'TFACE':  # see if and how to start a new TFACE part here
             pass
 
-        elif clean_line[0] == 'VRTX':
-            curr_obj_points.InsertPoint(int(clean_line[1]) - 1, float(clean_line[2]), float(clean_line[3]), float(clean_line[4]))  # vtkPoint with ID, X, Y Z, "-1" since first vertex has index 0 in VTK
+        elif clean_line[0] in ['VRTX', 'PVRTX', 'SEG', 'TRGL', 'ATOM']:
+            """This inner condition is required to handle multipart entities."""
+            if clean_line[0] == 'VRTX':
+                curr_obj_points.InsertPoint(int(clean_line[1]) - 1, float(clean_line[2]), float(clean_line[3]), float(clean_line[4]))  # vtkPoint with ID, X, Y Z, "-1" since first vertex has index 0 in VTK
 
-        elif clean_line[0] == 'PVRTX':
-            curr_obj_points.InsertPoint(int(clean_line[1]) - 1, float(clean_line[2]), float(clean_line[3]), float(clean_line[4]))  # vtkPoint with ID, X, Y Z, "-1" since first vertex has index 0 in VTK
-            if properties_number > 0:
-                """Now we set values in the properties float arrays"""
-                """_____________Check if all is OK here with vector properties_________________________________________________"""
-                i = 5  # i = 5 since the first five elements have already been read: PVRTX, id, X, Y, Z
-                for j in range(properties_number):
-                    this_prop = curr_obj_properties_collection.GetItem(j)
-                    if curr_obj_dict['properties_components'][j] == 1:
-                        this_prop.InsertTuple1(int(clean_line[1]) - 1,
-                                               float(clean_line[i]))
-                        i = i + 1
-                    elif curr_obj_dict['properties_components'][j] == 2:
-                        this_prop.InsertTuple2(int(clean_line[1]) - 1,
-                                               float(clean_line[i]),
-                                               float(clean_line[i + 1]))
-                        i = i + 2
-                    elif curr_obj_dict['properties_components'][j] == 3:
-                        this_prop.InsertTuple3(int(clean_line[1]) - 1,
-                                               float(clean_line[i]),
-                                               float(clean_line[i + 1]),
-                                               float(clean_line[i + 2]))
-                        i = i + 3
-                    elif curr_obj_dict['properties_components'][j] == 4:
-                        this_prop.InsertTuple4(int(clean_line[1]) - 1,
-                                               float(clean_line[i]),
-                                               float(clean_line[i + 1]),
-                                               float(clean_line[i + 2]),
-                                               float(clean_line[i + 3]))
-                        i = i + 4
-                    elif curr_obj_dict['properties_components'][j] == 6:
-                        this_prop.InsertTuple4(int(clean_line[1]) - 1,
-                                               float(clean_line[i]),
-                                               float(clean_line[i + 1]),
-                                               float(clean_line[i + 2]),
-                                               float(clean_line[i + 3]),
-                                               float(clean_line[i + 4]),
-                                               float(clean_line[i + 5]))
-                        i = i + 6
-                    elif curr_obj_dict['properties_components'][j] == 9:
-                        this_prop.InsertTuple4(int(clean_line[1]) - 1,
-                                               float(clean_line[i]),
-                                               float(clean_line[i + 1]),
-                                               float(clean_line[i + 2]),
-                                               float(clean_line[i + 3]),
-                                               float(clean_line[i + 4]),
-                                               float(clean_line[i + 5]),
-                                               float(clean_line[i + 6]),
-                                               float(clean_line[i + 7]),
-                                               float(clean_line[i + 8]))
-                        i = i + 9
-                    else:
-                        """Discard property if it is not 1D, 2D, 3D, 4D, 6D or 9D"""
-                        i = i + curr_obj_dict['properties_components'][j]
-                        curr_obj_dict['properties_names'] = curr_obj_dict['properties_names'].remove(j)
-                        properties_number = properties_number - 1
-                        curr_obj_dict['properties_components'].remove(j)
-                        curr_obj_properties_collection.RemoveItem(j)
+            elif clean_line[0] == 'PVRTX':
+                curr_obj_points.InsertPoint(int(clean_line[1]) - 1, float(clean_line[2]), float(clean_line[3]), float(clean_line[4]))  # vtkPoint with ID, X, Y Z, "-1" since first vertex has index 0 in VTK
+                if properties_number > 0:
+                    """Now we set values in the properties float arrays"""
+                    """_____________Check if all is OK here with vector properties_________________________________________________"""
+                    i = 5  # i = 5 since the first five elements have already been read: PVRTX, id, X, Y, Z
+                    for j in range(properties_number):
+                        this_prop = curr_obj_properties_collection.GetItem(j)
+                        if curr_obj_dict['properties_components'][j] == 1:
+                            this_prop.InsertTuple1(int(clean_line[1]) - 1,
+                                                   float(clean_line[i]))
+                            i = i + 1
+                        elif curr_obj_dict['properties_components'][j] == 2:
+                            this_prop.InsertTuple2(int(clean_line[1]) - 1,
+                                                   float(clean_line[i]),
+                                                   float(clean_line[i + 1]))
+                            i = i + 2
+                        elif curr_obj_dict['properties_components'][j] == 3:
+                            this_prop.InsertTuple3(int(clean_line[1]) - 1,
+                                                   float(clean_line[i]),
+                                                   float(clean_line[i + 1]),
+                                                   float(clean_line[i + 2]))
+                            i = i + 3
+                        elif curr_obj_dict['properties_components'][j] == 4:
+                            this_prop.InsertTuple4(int(clean_line[1]) - 1,
+                                                   float(clean_line[i]),
+                                                   float(clean_line[i + 1]),
+                                                   float(clean_line[i + 2]),
+                                                   float(clean_line[i + 3]))
+                            i = i + 4
+                        elif curr_obj_dict['properties_components'][j] == 6:
+                            this_prop.InsertTuple4(int(clean_line[1]) - 1,
+                                                   float(clean_line[i]),
+                                                   float(clean_line[i + 1]),
+                                                   float(clean_line[i + 2]),
+                                                   float(clean_line[i + 3]),
+                                                   float(clean_line[i + 4]),
+                                                   float(clean_line[i + 5]))
+                            i = i + 6
+                        elif curr_obj_dict['properties_components'][j] == 9:
+                            this_prop.InsertTuple4(int(clean_line[1]) - 1,
+                                                   float(clean_line[i]),
+                                                   float(clean_line[i + 1]),
+                                                   float(clean_line[i + 2]),
+                                                   float(clean_line[i + 3]),
+                                                   float(clean_line[i + 4]),
+                                                   float(clean_line[i + 5]),
+                                                   float(clean_line[i + 6]),
+                                                   float(clean_line[i + 7]),
+                                                   float(clean_line[i + 8]))
+                            i = i + 9
+                        else:
+                            """Discard property if it is not 1D, 2D, 3D, 4D, 6D or 9D"""
+                            i = i + curr_obj_dict['properties_components'][j]
+                            curr_obj_dict['properties_names'] = curr_obj_dict['properties_names'].remove(j)
+                            properties_number = properties_number - 1
+                            curr_obj_dict['properties_components'].remove(j)
+                            curr_obj_properties_collection.RemoveItem(j)
 
-        elif clean_line[0] == 'ATOM':
+            elif clean_line[0] == 'ATOM':
+                """ATOM id1 id2 (where id1 > id2) indicates a vertex with index id1 that shares the same XYZ position
+                as a previous vertex with id2. This is used in Gocad to create co-located vertexes that are
+                disconnected in topological sense. In PZero we create two independent vertexes with the same
+                coordinates."""
+                this_atom_id = int(clean_line[1]) - 1
+                from_vrtx_id = int(clean_line[2]) - 1
+                curr_obj_points.InsertPoint(this_atom_id, curr_obj_points.GetPoint(from_vrtx_id))
+                pass
+
+            elif clean_line[0] == 'SEG':
+                line = vtkLine()
+                line.GetPointIds().SetId(0, int(clean_line[1]) - 1)  # "-1" since first vertex has index 0 in VTK
+                line.GetPointIds().SetId(1, int(clean_line[2]) - 1)
+                curr_obj_cells.InsertNextCell(line)
+
+            elif clean_line[0] == 'TRGL':
+                triangle = vtkTriangle()
+                triangle.GetPointIds().SetId(0, int(clean_line[1]) - 1)  # "-1" since first vertex has index 0 in VTK
+                triangle.GetPointIds().SetId(1, int(clean_line[2]) - 1)
+                triangle.GetPointIds().SetId(2, int(clean_line[3]) - 1)
+                curr_obj_cells.InsertNextCell(triangle)
+
+        elif clean_line[0] == 'BSTONE':
             """NOT YET IMPLEMENTED"""
-            # atom_id = int(clean_line[1]) - 1
-            # vrtx_id = int(clean_line[2]) - 1
             pass
 
-        elif clean_line[0] == 'SEG':
-            line = vtkLine()
-            line.GetPointIds().SetId(0, int(clean_line[1]) - 1)  # "-1" since first vertex has index 0 in VTK
-            line.GetPointIds().SetId(1, int(clean_line[2]) - 1)
-            curr_obj_cells.InsertNextCell(line)
-
-        elif clean_line[0] == 'TRGL':
-            triangle = vtkTriangle()
-            triangle.GetPointIds().SetId(0, int(clean_line[1]) - 1)  # "-1" since first vertex has index 0 in VTK
-            triangle.GetPointIds().SetId(1, int(clean_line[2]) - 1)
-            triangle.GetPointIds().SetId(2, int(clean_line[3]) - 1)
-            curr_obj_cells.InsertNextCell(triangle)
+        elif clean_line[0] == 'BORDER':
+            """NOT YET IMPLEMENTED"""
+            pass
 
         elif clean_line[0] == 'END':
             """When END reached, process the arrays and write the VTK entity with properties to the project geol_coll"""
@@ -303,8 +317,13 @@ def gocad2vtk(self=None, in_file_name=None, uid_from_name=None):
 
             print( curr_obj_dict['vtk_obj'])
 
-            """Add current_entity to entities collection"""
-            self.geol_coll.add_entity_from_dict(entity_dict=curr_obj_dict)
+            """Add current_entity to entities collection, after checking if the entity is valid."""
+            if curr_obj_dict['vtk_obj'].points_number > 0:
+                if curr_obj_dict['topological_type'] == 'VertexSet':
+                    self.geol_coll.add_entity_from_dict(entity_dict=curr_obj_dict)
+                else:
+                    if curr_obj_dict['vtk_obj'].cells_number > 0:
+                        self.geol_coll.add_entity_from_dict(entity_dict=curr_obj_dict)
             del curr_obj_points
             del curr_obj_cells
             del curr_obj_properties_collection

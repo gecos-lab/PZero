@@ -1436,7 +1436,8 @@ def split_surf(self):
 
         # 1. Calculate the implicit distance of the target surface[1,2,3,4,..] from the reference surface[0]
 
-def retopo(self,mode=0,dec_int=0.2,n_iter=40,rel_fac=0.1):
+
+def retopo(self, mode=0, dec_int=0.2, n_iter=40, rel_fac=0.1):
     '''[Gabriele] Function used to retopologize a given surface. This is useful in the case of
     semplifying irregular triangulated meshes for CAD exporting or aesthetic reasons.
     The function is a combonation of two filters:

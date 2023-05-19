@@ -164,7 +164,7 @@ valid_topological_types = ["VertexSet",
 
 
 class PolyData(vtkPolyData):
-    """PolyData is an abstract class used as a base for all entities with a geological meaning, such as
+    """PolyData is an abstract class used as a base for all entities with a geological or fluid meaning, such as
     triangulated surfaces, polylines (also in cross sections), pointsets, etc., and possibly in other
     cases (e.g. DOMs and boundaries). Basically this is the standard vtk.PolyData class, but exposes methods from
     vtk.numpy_interface.dataset_adapter (dsa) to access points, cells, etc. as Numpy arrays instead of
@@ -294,10 +294,11 @@ class PolyData(vtkPolyData):
         clean_filter.PointMergingOn()
         clean_filter.SetTolerance(0.0)
         clean_filter.Update()
-        """Replace the input polydata "self" with the clean one."""
-        self = clean_filter.GetOutput()
-        self.Squeeze()
-        self.Modified()
+        # """Replace the input polydata "self" with the clean one."""
+        # self = clean_filter.GetOutput()
+        # self.Squeeze()
+        # self.Modified()
+        return clean_filter.GetOutput()
 
     def vtk_set_normals(self):
         """Calculate point and cell normals with vtkPolyDataNormals.
@@ -555,8 +556,7 @@ class PolyData(vtkPolyData):
                 vtk_out_list.append(vtk_out_obj)
             return vtk_out_list
 
-    ''' The locator property can be used to set and retrieve different vtkPointLocator (e.g. octree) types to use in vtkAlgorithms. '''
-
+    """The locator property can be used to set and retrieve different vtkPointLocator (e.g. octree) types to use in vtkAlgorithms"""
     @property
     def locator(self):
         return self._locator
@@ -802,10 +802,13 @@ class TriSurf(PolyData):
         """Returns a deep copy of the input TriSurf with the boundary edges translated
         outwards, parallel to the cell plane, by an amount equal to tol.
         This is similar to a dilation or a Minkowski sum."""
-        """Deep copy the input TriSurf, in order not to permanently modify it."""
-        trisurf_copy = self.deep_copy()
-        """Clean topology, store point and cell ids on scalars named vtkIdFilter_Ids."""
-        trisurf_copy.clean_topology()
+        # """Deep copy the input TriSurf, in order not to permanently modify it."""
+        # trisurf_copy = self.deep_copy()
+        # """Clean topology, store point and cell ids on scalars named vtkIdFilter_Ids."""
+        # trisurf_copy.clean_topology()
+        trisurf_copy = self.clean_topology()
+        trisurf_copy.Squeeze()
+        trisurf_copy.Modified()
         trisurf_copy.BuildCells()
         trisurf_copy.BuildLinks()
         trisurf_copy.ids_to_scalar()
