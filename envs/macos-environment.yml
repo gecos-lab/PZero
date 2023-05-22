@@ -1,5 +1,4 @@
 name: pzero
-version: 0.0.1
 channels:
   - loop3d
   - conda-forge
