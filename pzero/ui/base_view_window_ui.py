@@ -20,7 +20,7 @@ class Ui_BaseViewWindow(object):
         sizePolicy.setVerticalStretch(1)
         sizePolicy.setHeightForWidth(BaseViewWindow.sizePolicy().hasHeightForWidth())
         BaseViewWindow.setSizePolicy(sizePolicy)
-        BaseViewWindow.setMinimumSize(QtCore.QSize(1280, 800))
+        BaseViewWindow.setMinimumSize(QtCore.QSize(300, 100))
         BaseViewWindow.setBaseSize(QtCore.QSize(0, 30))
         BaseViewWindow.setLocale(QtCore.QLocale(QtCore.QLocale.English, QtCore.QLocale.UnitedStates))
         self.centralwidget = QtWidgets.QWidget(BaseViewWindow)

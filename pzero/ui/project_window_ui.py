@@ -20,7 +20,7 @@ class Ui_ProjectWindow(object):
         sizePolicy.setVerticalStretch(0)
         sizePolicy.setHeightForWidth(ProjectWindow.sizePolicy().hasHeightForWidth())
         ProjectWindow.setSizePolicy(sizePolicy)
-        ProjectWindow.setMinimumSize(QtCore.QSize(1280, 800))
+        ProjectWindow.setMinimumSize(QtCore.QSize(300, 100))
         ProjectWindow.setStyleSheet("")
         ProjectWindow.setLocale(QtCore.QLocale(QtCore.QLocale.English, QtCore.QLocale.UnitedStates))
         self.centralwidget = QtWidgets.QWidget(ProjectWindow)
