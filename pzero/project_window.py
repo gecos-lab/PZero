@@ -6,7 +6,8 @@ from copy import deepcopy
 from datetime import datetime
 
 import pandas as pd
-from PyQt5.QtWidgets import QMainWindow, QMessageBox
+from PyQt5.QtGui import QIcon
+from PyQt5.QtWidgets import QMainWindow, QMessageBox, QApplication, QPushButton
 from PyQt5.QtCore import Qt, QSortFilterProxyModel, pyqtSignal
 from vtk import vtkPolyData, vtkAppendPolyData, vtkOctreePointLocator, vtkXMLPolyDataWriter, \
     vtkXMLStructuredGridWriter, vtkXMLImageDataWriter, vtkXMLStructuredGridReader, vtkXMLPolyDataReader, \
@@ -234,9 +235,15 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.actionViewPlaneXsection.triggered.connect(lambda: NewViewXsection(parent=self))
         self.actionViewStereoplot.triggered.connect(lambda: ViewStereoplot(parent=self))
 
+        """Change StyleSheet actions -> slots """
+        self.actionDarkStyle.triggered.connect(lambda: self.toggle_stylesheet("style/dark_teal.qss"))
+        self.actionLightStyle.triggered.connect(lambda: self.toggle_stylesheet("style/light_teal.qss"))
+
         self.update_actors = True
+
     def closeEvent(self, event):
-        """Re-implement the standard closeEvent method of QWidget and ask (1) to save project, and (2) for confirmation to quit."""
+        """Re-implement the standard closeEvent method of QWidget and ask (1) to save project,
+        and (2) for confirmation to quit."""
         reply = QMessageBox.question(self, 'Closing Pzero', 'Save the project?', QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
         if reply == QMessageBox.Yes:
             self.save_project()
@@ -1854,3 +1861,17 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     df.to_csv(f'{self.out_dir_name}/{uid}.csv')
                 else:
                     print('Only geology objects are supported')
+
+    def toggle_stylesheet(self, path: str) -> None:
+        """
+        Toggle the stylesheet to use the desired path in the Qt resource
+        system (prefixed by `:/`) or generically (a path to a file on
+        system).
+
+        :path:
+        """
+
+        # Set styling
+        with open(path, "r") as style_file:
+            self.setStyleSheet(style_file.read())
+
