@@ -6,9 +6,9 @@
 
 ***PZero*** is a Python open-source 3D geological modelling application, leveraging various libraries, with a user-friendly graphical user interface allowing to perform most standard geomodelling data management and analysis tasks, explicit surface interpolation, and advanced implicit interpolation.
 
-To build ***PZero*** we use several open-source libraries. **[VTK](https://vtk.org/)** provides classes for all 3D objects, in addition to 3D visualization and basic analysis and modelling tools. The ***PZero*** graphical user interface is built with **[Qt](https://www.qt.io/qt-for-python)**. All objects in a ***PZero*** project and their metadata are collected and managed in **[pandas](https://pandas.pydata.org/)** dataframes. We use a VTK-Numpy interface that allows performing most mathematical processing with simple **[NumPy](https://numpy.org/)** syntax, while 2D plotting is performed with **[Matplotlib](https://matplotlib.org/)**. **[PyVista](https://www.pyvista.org/)** and **[vedo](https://vedo.embl.es/)** provide simplified access to **[VTK](https://vtk.org/)** visualization and I/O tools. Various 2D graphical and topological editing tools in ***PZero*** are based on **[Shapely](https://shapely.readthedocs.io)**, while **[GeoPandas](https://geopandas.org/en/stable/)**, **[Rasterio](https://rasterio.readthedocs.io)**, **[Xarray](https://xarray.pydata.org)**, and **[EzDxf](https://ezdxf.readthedocs.io)** provide I/O tools for GIS and CAD data. **[LoopStructural](https://github.com/Loop3D/LoopStructural)** provides three different implicit surface interpolation algorithms.
+To build ***PZero*** we use several open-source libraries. **[VTK](https://vtk.org/)** provides classes for all 3D objects, in addition to 3D visualization and basic analysis and modelling tools. The ***PZero*** graphical user interface is built with **[Qt](https://www.qt.io/qt-for-python)**. All objects in a ***PZero*** project and their metadata are collected and managed in **[pandas](https://pandas.pydata.org/)** dataframes. We use a **[VTK-Numpy interface](https://github.com/Kitware/VTK/tree/master/Wrapping/Python/vtkmodules/numpy_interface)** that allows performing most mathematical processing with simple **[NumPy](https://numpy.org/)** syntax, while 2D plotting is performed with **[Matplotlib](https://matplotlib.org/)**. **[PyVista](https://www.pyvista.org/)** and **[vedo](https://vedo.embl.es/)** provide simplified access to **[VTK](https://vtk.org/)** visualization and I/O tools. Various 2D graphical and topological editing tools in ***PZero*** are based on **[Shapely](https://shapely.readthedocs.io)**, while **[GeoPandas](https://geopandas.org/en/stable/)**, **[Rasterio](https://rasterio.readthedocs.io)**, **[Xarray](https://xarray.pydata.org)**, **[laspy](https://github.com/laspy/laspy)**, and **[EzDxf](https://ezdxf.readthedocs.io)** provide I/O tools for GIS, point cloud, and CAD data. **[LoopStructural](https://github.com/Loop3D/LoopStructural)** provides three different implicit surface interpolation algorithms. **[mplstereonet](https://github.com/joferkington/mplstereonet)** provides stereoplots for orientation analysis.
 
-All the developers of these libraries are warmly thanked!
+Developers of these libraries are warmly thanked!
 
 The ***PZero*** project started in spring 2020 thanks to a research project funded by **[Pro Iter Tunnelling & Geotechnical Department](https://www.proiter.it/)** and lead by **Andrea Bistacchi** and **Luca Soldo**.
 
@@ -28,25 +28,27 @@ The ***PZero*** developers are:
 &nbsp;
 &nbsp;
 
-The name of ***PZero*** was inspired by the zeroth element in Emile Argand's 3D model of the Pennine Alps nappe stack - possibly the first quantitative 3D geological model in the history of geological sciences (*Argand E., 1911. Les Nappes de recouvrement des Alpes pennines et leurs prolongements structuraux. Mat. Carte géol. Suisse, 31, 1-26*).
+The name of ***PZero*** was inspired by the zeroth element in Emile Argand's 3D model of the Pennine Alps nappe stack - possibly the first quantitative 3D geological model in the history of geological sciences (*Argand E., 1911. Les Nappes de recouvrement des Alpes pennines et leurs prolongements structuraux. Mat. Carte géol. Suisse, 31, 1-26*), and by Python.
+
+If you want to know more about the project or want to contribute, our [GitHub Wiki](https://github.com/andrea-bistacchi/PZero/wiki) can help!
 
 ## Installing and running PZero ##
 
-***PZero*** runs on **Linux**, **macOS** and **Windows**, provided that a suitable **Python 3.8** and **[required libraries](requirements.txt)** are available.
+***PZero*** runs on **Linux**, **macOS** and **Windows**, provided that a suitable **Python 3.8** and **[required libraries](envs/std-environment.yml)** are available.
 
 ### Quick and easy installation with Anaconda ###
 
 At the moment the easiest way to run and develop new code for ***PZero*** is to have a suitable **[Anaconda](https://www.anaconda.com/)** environment.
 
-In the ```conda terminal```, navigate to the ***PZero*** folder that you have cloned with **Git** or simply downloaded, go inside the **envs** folder and based on you OS import the right environment with:
+In the ```conda terminal```, navigate to the ***PZero*** folder that you have cloned with **Git** or simply downloaded, go in the **envs** folder and based on you OS import the right environment as follows.
 
-For **Windows/Linux** use this command
+For **Windows/Linux** run this command:
 ```
 conda env create -n pzero -f std-environment.yml
 conda activate pzero
 ```
 
-Alternatively if you are a **MacOS** user, run this command instead:
+Alternatively if you are a **MacOS** user, run this command:
 ```
 conda env create -n pzero -f macos-environment.yml
 conda activate pzero
@@ -62,7 +64,9 @@ To activate and deactivate the pzero environment, and in case you want to remove
 
 ```
 conda activate pzero
+
 conda deactivate
+
 conda remove -n pzero --all
 ```
 
@@ -110,7 +114,9 @@ To activate and deactivate the ```pzero``` environment, and in case you want to 
 
 ```
 workon pzero
+
 deactivate
+
 rmvirtualenv pzero
 ```
 
@@ -119,7 +125,7 @@ All the lines above, from ```brew install virtualenvwrapper```, can be skipped i
 Now the **Python** modules required by ***PZero*** can be automatically installed using ```pip3``` (not ```pip``` that will point to Python 2) within the ***PZero*** directory downloaded from **GitHub**.
 
 ```
-pip3 install -r requirements.txt
+pip3 install -r .envs/requirements.txt
 ```
 
 And finally ***PZero*** can be run with:
@@ -153,7 +159,7 @@ sudo apt install python3-pip
 To install the required python3 modules we can just run:
 
 ```bash
-pip3 install -r /path/to/requirements.txt
+pip3 install -r ./envs/requirements.txt
 ```
 
 After the required packages are installed **PZero** can be run with:
@@ -167,8 +173,6 @@ python3 pzero.py
 Conda can also be installed on Linux by following **[this quick guide](https://docs.conda.io/projects/conda/en/latest/user-guide/install/linux.html)**. After installing conda a *pzero* environment can be created and activated in the same way as in the other OSs. To install the required packages in a given environment follow the steps above after activating the environment.
 
 
-
-
 ---
 ## Test data ##
 
@@ -178,56 +182,10 @@ We have uploaded some test project on public repositories:
 
 [PZero-test Llyn-Padarn](https://github.com/andrea-bistacchi/PZero-test-Llyn-Padarn)
 
-## Advanced users/developers installation with Anaconda ##
 
-You can also create the **Conda** environment manually with (in ```conda terminal```):
-
-```
-# create a clean environment called "pzero"
-conda create -n pzero python=3.8
-# activate it
-conda activate pzero
-# add conda-forge channels
-conda config --add channels conda-forge
-conda config --env --set channel_priority strict
-# install required libraries:
-conda install -c conda-forge xarray numpy matplotlib pandas xarray pyvista pyvistaqt vtk shapely ezdxf rasterio colorcet cmocean vedo geopandas vedo
-conda install -c loop3d loopstructural
-```
-
-To periodically update the **Conda** environment use (in ```conda terminal```):
-
-```
-conda update conda
-conda activate pzero
-conda update python
-conda update -c conda-forge xarray numpy matplotlib pandas xarray pyvista pyvistaqt vtk shapely ezdxf rasterio colorcet cmocean vedo geopandas vedo
-conda update -c loop3d loopstructural
-```
-
-To save the **Conda** environment in the ```environment.yml``` file (in ```conda terminal```):
-
-```
-conda activate pzero
-conda env export --from-history | findstr  -v "prefix" > environment.yml   (Windows)
-conda env export --from-history | grep  -v "prefix" > environment.yml      (Linux or macOS)
-```
-
-In case you need to remove the pzero **Conda** environment, e.g. to build a clean new one (in ```conda terminal```):
-
-```
-conda deactivate  # (in case pzero was activated)
-conda remove -n pzero --all
-```
-
-In case you need to cleanly uninstall or completely reset **Anaconda**, follow the instructions on [Uninstalling Anaconda](https://docs.anaconda.com/anaconda/install/uninstall/) (in ```conda terminal```), then uninstall:
-
-```
-conda install anaconda-clean
-anaconda-clean --yes
-```
+---
+## IDE ##
 
 To develop ***PZero*** we use the **[PyCharm IDE](https://www.jetbrains.com/pycharm/)**, but also **[Visual Studio Code](https://code.visualstudio.com/)** has been tested successfully.
 
-If you want to know more about the project or want to contribute, our [GitHub Wiki](https://github.com/andrea-bistacchi/PZero/wiki) can help!
 

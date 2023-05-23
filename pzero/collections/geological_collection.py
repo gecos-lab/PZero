@@ -376,7 +376,7 @@ class GeologicalCollection(QAbstractTableModel):
         """Set value(s) stored in dataframe (as pointer) from uid."""
         self.df.loc[self.df['uid'] == uid, 'x_section'] = x_section
 
-    def get_xuid_uid(self,xuid=None):
+    def get_xuid_uid(self, xuid=None):
         '''[Gabriele] Get the uids of the geological objects for the corresponding xsec uid (parent)'''
         return self.df.loc[self.df['x_section']== xuid, 'uid']
 
