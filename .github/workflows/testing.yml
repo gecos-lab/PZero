@@ -3,7 +3,7 @@ name: Unit Testing
 on:
   push:
     branches:
-      - 'env_testing'
+      - 'theme'
 
 jobs:
   # Linux
