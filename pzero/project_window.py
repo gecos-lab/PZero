@@ -6,8 +6,7 @@ from copy import deepcopy
 from datetime import datetime
 
 import pandas as pd
-from PyQt5.QtGui import QIcon
-from PyQt5.QtWidgets import QMainWindow, QMessageBox, QApplication, QPushButton
+from PyQt5.QtWidgets import QMainWindow, QMessageBox, QApplication
 from PyQt5.QtCore import Qt, QSortFilterProxyModel, pyqtSignal
 from vtk import vtkPolyData, vtkAppendPolyData, vtkOctreePointLocator, vtkXMLPolyDataWriter, \
     vtkXMLStructuredGridWriter, vtkXMLImageDataWriter, vtkXMLStructuredGridReader, vtkXMLPolyDataReader, \
@@ -1864,14 +1863,16 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
 
     def toggle_stylesheet(self, path: str) -> None:
         """
-        Toggle the stylesheet to use the desired path in the Qt resource
-        system (prefixed by `:/`) or generically (a path to a file on
-        system).
-
+        Toggle the stylesheet globally to use the desired path.
         :path:
         """
 
+        app = QApplication.instance()
+        if app is None:
+            self.TextTerminal.appendPlainText("Didn't find the QApplication instance")
+            return
+
         # Set styling
         with open(path, "r") as style_file:
-            self.setStyleSheet(style_file.read())
+            app.setStyleSheet(style_file.read())
 
