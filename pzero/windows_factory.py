@@ -95,12 +95,12 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
     """parent is the QT object that is launching this one, hence the ProjectWindow() instance in this case"""
 
     def __init__(self, parent=None, *args, **kwargs):
-        super(BaseView, self).__init__(parent, *args, **kwargs)
+        super(BaseView, self).__init__(*args, **kwargs)
         self.setupUi(self)
+
         # _____________________________________________________________________________
         # THE FOLLOWING ACTUALLY DELETES ANY REFERENCE TO CLOSED WINDOWS, HENCE FREEING
         # MEMORY, BUT COULD CREATE PROBLEMS WITH SIGNALS THAT ARE STILL ACTIVE
-        # SEE DISCUSSIONS ON QPointer AND WA_DeleteOnClose ON THE INTERNET
         self.setAttribute(Qt.WA_DeleteOnClose, True)
         self.parent = parent
         """Connect actionQuit.triggered SIGNAL to self.close SLOT"""
