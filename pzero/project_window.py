@@ -6,7 +6,8 @@ from copy import deepcopy
 from datetime import datetime
 
 import pandas as pd
-from PyQt5.QtWidgets import QMainWindow, QMessageBox
+
+from PyQt5.QtWidgets import QMainWindow, QMessageBox, QApplication, QDockWidget
 from PyQt5.QtCore import Qt, QSortFilterProxyModel, pyqtSignal
 from vtk import vtkPolyData, vtkAppendPolyData, vtkOctreePointLocator, vtkXMLPolyDataWriter, \
     vtkXMLStructuredGridWriter, vtkXMLImageDataWriter, vtkXMLStructuredGridReader, vtkXMLPolyDataReader, \
@@ -146,6 +147,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
 
     line_digitized_signal = pyqtSignal(dict)
 
+
     """Add other signals above this line ----------------------------------------"""
 
     def __init__(self, *args, **kwargs):
@@ -161,6 +163,12 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
 
         """Initialize empty project."""
         self.create_empty()
+
+        """Constants used for opening the following views"""
+        self.view_3D_const = 0
+        self.view_map_const = 1
+        self.view_plane_x_sect_const = 2
+        self.view_stereoplot_const = 3
 
         # startup_option = options_dialog(title='PZero', message='Do you want to create a new project or open an existing one?', yes_role='Create New Project', no_role='Open Existing Project', reject_role='Close PZero')
         # if startup_option == 0:
@@ -229,12 +237,13 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.actionRetopologize.triggered.connect(self.retopologize_surface)
 
         """View actions -> slots"""
-        self.actionView3D.triggered.connect(lambda: View3D(parent=self))
-        self.actionViewMap.triggered.connect(lambda: NewViewMap(parent=self))
-        self.actionViewPlaneXsection.triggered.connect(lambda: NewViewXsection(parent=self))
-        self.actionViewStereoplot.triggered.connect(lambda: ViewStereoplot(parent=self))
+        self.actionView3D.triggered.connect(lambda: self.open_secondary_window(self.view_3D_const))
+        self.actionViewMap.triggered.connect(lambda: self.open_secondary_window(self.view_map_const))
+        self.actionViewPlaneXsection.triggered.connect(lambda: self.open_secondary_window(self.view_plane_x_sect_const))
+        self.actionViewStereoplot.triggered.connect(lambda: self.open_secondary_window(self.view_stereoplot_const))
 
         self.update_actors = True
+
     def closeEvent(self, event):
         """Re-implement the standard closeEvent method of QWidget and ask (1) to save project, and (2) for confirmation to quit."""
         reply = QMessageBox.question(self, 'Closing Pzero', 'Save the project?', QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
@@ -246,6 +255,30 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             event.accept()
         else:
             event.ignore()
+
+
+    # Function that runs when clicking on View actions, it creates a QDockWidget and it add the window to the widget
+    def open_secondary_window(self, window_number):
+        
+        # Create the q_dock_widget
+        self.q_dock_widget = QDockWidget('Dockable', self)
+
+        # Choose the correct QDockWidget to be added to the QMainWindow 
+        if window_number == self.view_3D_const:
+            self.addDockWidget(Qt.TopDockWidgetArea, View3D(parent=self))
+    
+        elif window_number == self.view_map_const:
+            self.addDockWidget(Qt.RightDockWidgetArea, NewViewMap(parent=self))
+    
+        elif window_number == self.view_plane_x_sect_const:
+            self.addDockWidget(Qt.LeftDockWidgetArea, NewViewXsection(parent=self))
+    
+        elif window_number == self.view_stereoplot_const:
+            self.addDockWidget(Qt.DownDockWidgetArea, ViewStereoplot(parent=self))
+            
+        else:
+            self.TextTerminal.appendPlainText("Error: window_number is wrong - Secondary Window Not Found")
+
 
     """Methods used to manage the entities shown in tables."""
 
