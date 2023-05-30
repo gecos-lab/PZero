@@ -291,8 +291,8 @@ class Ui_QDockWidget(object):
         self.ViewFrameLayout.setObjectName("ViewFrameLayout")
         self.horizontalLayout_2.addLayout(self.ViewFrameLayout)
         self.centralWidget.addWidget(self.splitter)
-        self.menubar = QtWidgets.QWidget(QDockWidget)
-        self.menubar.setGeometry(QtCore.QRect(10, 10, 1251, 31))
+        self.menubar = QtWidgets.QMenuBar(QDockWidget)
+        self.menubar.setGeometry(QtCore.QRect(10, 10, 1251, 50))
         self.menubar.setObjectName("menubar")
 
 

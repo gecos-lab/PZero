@@ -268,13 +268,19 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             self.addDockWidget(Qt.TopDockWidgetArea, View3D(parent=self))
     
         elif window_number == self.view_map_const:
-            self.addDockWidget(Qt.RightDockWidgetArea, NewViewMap(parent=self))
+            self.addDockWidget(Qt.TopDockWidgetArea, NewViewMap(parent=self))
     
         elif window_number == self.view_plane_x_sect_const:
-            self.addDockWidget(Qt.LeftDockWidgetArea, NewViewXsection(parent=self))
+            # Check if the X Section is empty, otherwise it cannot add it to the DockWidget
+            if not self.xsect_coll.get_names():
+                self.TextTerminal.appendPlainText("Error: No Xsection in project - Try to add at least one XSection")
+                message_dialog(title="Xsection", message="No Xsection in project")
+                return
+            else:
+                self.addDockWidget(Qt.TopDockWidgetArea, NewViewXsection(parent=self))
     
         elif window_number == self.view_stereoplot_const:
-            self.addDockWidget(Qt.DownDockWidgetArea, ViewStereoplot(parent=self))
+            self.addDockWidget(Qt.TopDockWidgetArea, ViewStereoplot(parent=self))
             
         else:
             self.TextTerminal.appendPlainText("Error: window_number is wrong - Secondary Window Not Found")
