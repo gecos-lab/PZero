@@ -44,6 +44,8 @@ from .windows_factory import ViewStereoplot
 from pzero.helpers.helper_dialogs import options_dialog, save_file_dialog, open_file_dialog, input_combo_dialog, message_dialog, multiple_input_dialog, input_one_value_dialog, progress_dialog, import_dialog,PreviewWidget
 from pzero.imports.image2vtk import geo_image2vtk, xs_image2vtk
 from pzero.imports.stl2vtk import vtk2stl, vtk2stl_dilation
+from pzero.imports.gltf2vtk import vtk2gltf
+from pzero.imports.cesium2vtk import vtk2cesium
 from pzero.imports.obj2vtk import vtk2obj
 from pzero.imports.ply2vtk import vtk2ply
 from pzero.imports.lxml2vtk import vtk2lxml
@@ -1674,7 +1676,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
 
     def export_cad(self):  # ________________________________________________________________ IMPLEMENT GOCAD EXPORT
         """Base method to choose a CAD format for exporting geological entities."""
-        cad_format = input_combo_dialog(parent=self, title="CAD format", label="Choose CAD format", choice_list=["DXF", "GOCAD", "OBJ", "PLY", "STL", "STL with 1m dilation","LandXML"])
+        cad_format = input_combo_dialog(parent=self, title="CAD format", label="Choose CAD format", choice_list=["DXF", "GOCAD", "GLTF", "CESIUM", "OBJ", "PLY", "STL", "STL with 1m dilation","LandXML"])
         out_dir_name = save_file_dialog(parent=self, caption="Export geological entities as CAD meshes.")
         if not out_dir_name:
             return
@@ -1690,6 +1692,10 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         elif cad_format == "GOCAD":
             # vtk2gocad(self=self, out_file_name=(out_dir_name + '/gocad_ascii.gp'))
             pass
+        elif cad_format == "GLTF":
+            vtk2gltf(self=self, out_dir_name=out_dir_name)
+        elif cad_format == "CESIUM":
+            vtk2cesium(self=self, out_dir_name=out_dir_name)
         elif cad_format == "OBJ":
             vtk2obj(self=self, out_dir_name=out_dir_name)
         elif cad_format == "PLY":
