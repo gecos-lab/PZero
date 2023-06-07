@@ -256,10 +256,10 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         else:
             event.ignore()
 
-
-    # Function that runs when clicking on View actions, it creates a QDockWidget and it add the window to the widget
     def open_secondary_window(self, window_number):
-        
+        """Function that runs when clicking on View actions,
+        it creates a QDockWidget and it add the window to the widget"""
+
         # Create the q_dock_widget
         self.q_dock_widget = QDockWidget('Dockable', self)
 

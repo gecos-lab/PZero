@@ -436,6 +436,12 @@ class Ui_ProjectWindow(object):
         self.menubar.addAction(self.menuWindow.menuAction())
         self.menubar.addAction(self.menuHelp.menuAction())
 
+        self.tabCentral.setMovable(True)
+        #self.tabCentral.setTabsClosable(True)
+        self.tabCentral.setUsesScrollButtons(True)
+        # To check if this can be useful after applying stylesheets
+        #self.tabCentral.setElideMode(QtCore.Qt.ElideNone)
+
         self.retranslateUi(ProjectWindow)
         self.tabCentral.setCurrentIndex(0)
         QtCore.QMetaObject.connectSlotsByName(ProjectWindow)
