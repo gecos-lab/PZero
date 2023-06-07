@@ -436,7 +436,12 @@ class Ui_ProjectWindow(object):
         self.menubar.addAction(self.menuWindow.menuAction())
         self.menubar.addAction(self.menuHelp.menuAction())
 
+        ProjectWindow.setDockNestingEnabled(True)
+        ProjectWindow.setDockOptions(QtWidgets.QMainWindow.AllowNestedDocks | QtWidgets.QMainWindow.AllowTabbedDocks |
+                                     QtWidgets.QMainWindow.AnimatedDocks | QtWidgets.QMainWindow.GroupedDragging)
+
         self.tabCentral.setMovable(True)
+        # Need to implement the signals/slots for closing tabs
         #self.tabCentral.setTabsClosable(True)
         self.tabCentral.setUsesScrollButtons(True)
         # To check if this can be useful after applying stylesheets
