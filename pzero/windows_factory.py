@@ -381,6 +381,15 @@ class BaseView(QDockWidget, Ui_QDockWidget):
         # self.signals = []
         # self.signals.append(self.actionClose.triggered)
 
+    def resizeEvent(self, event):
+        """This function is needed to resize the verticalLayoutWidget of the dockable windows.
+            It overrides the resizeEvent"""
+        self.verticalLayoutWidget.resize(self.size())
+        self.menubar.adjustSize()
+        #self.toolBox_2.adjustSize()
+        self.toolBox_2.resize(274, 534)
+        print(self.toolBox_2.size())
+        return
 
     def show_qt_canvas(self):
         """Show the Qt Window"""
@@ -4639,7 +4648,6 @@ class BaseView(QDockWidget, Ui_QDockWidget):
         reply = QMessageBox.question(self, 'Closing window', 'Close this window?', QMessageBox.Yes | QMessageBox.No,
                                      QMessageBox.No)
         if reply == QMessageBox.Yes:
-            # disconnect_all_signals(self.signals)
             self.disconnect_all_lambda_signals()
 
             # self.upd_list_geo_rm
