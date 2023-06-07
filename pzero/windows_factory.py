@@ -386,9 +386,7 @@ class BaseView(QDockWidget, Ui_QDockWidget):
             It overrides the resizeEvent"""
         self.verticalLayoutWidget.resize(self.size())
         self.menubar.adjustSize()
-        #self.toolBox_2.adjustSize()
         self.toolBox_2.resize(274, 534)
-        print(self.toolBox_2.size())
         return
 
     def show_qt_canvas(self):

@@ -34,7 +34,7 @@ class Ui_QDockWidget(object):
         self.splitter.setObjectName("splitter")
         self.toolBox_2 = QtWidgets.QToolBox(self.splitter)
         sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
-        sizePolicy.setHorizontalStretch(0)
+        sizePolicy.setHorizontalStretch(1)
         sizePolicy.setVerticalStretch(0)
         sizePolicy.setHeightForWidth(self.toolBox_2.sizePolicy().hasHeightForWidth())
         self.toolBox_2.setSizePolicy(sizePolicy)
