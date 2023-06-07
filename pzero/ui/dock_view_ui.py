@@ -35,7 +35,7 @@ class Ui_QDockWidget(object):
         self.toolBox_2 = QtWidgets.QToolBox(self.splitter)
         sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
         sizePolicy.setHorizontalStretch(1)
-        sizePolicy.setVerticalStretch(0)
+        sizePolicy.setVerticalStretch(1)
         sizePolicy.setHeightForWidth(self.toolBox_2.sizePolicy().hasHeightForWidth())
         self.toolBox_2.setSizePolicy(sizePolicy)
         self.toolBox_2.setMinimumSize(QtCore.QSize(274, 534))
@@ -292,9 +292,8 @@ class Ui_QDockWidget(object):
         self.horizontalLayout_2.addLayout(self.ViewFrameLayout)
         self.centralWidget.addWidget(self.splitter)
         self.menubar = QtWidgets.QMenuBar(QDockWidget)
-        self.menubar.setGeometry(10, 10, 1251, 20)
+        self.menubar.setGeometry(10, 20, 1251, 20)
         self.menubar.setObjectName("menubar")
-        self.menubar.move(0, 20)
 
 
 
@@ -393,7 +392,7 @@ class Ui_QDockWidget(object):
         self.menubar.addAction(self.menuWindow.menuAction())
         self.menubar.addAction(self.menuTools.menuAction())
         self.menubar.addAction(self.menuHelp.menuAction())
-
+        self.menubar.move((QtCore.QPoint(0, 20)))
 
         self.retranslateUi(QDockWidget)
         self.toolBox_2.setCurrentIndex(0)
