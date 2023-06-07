@@ -438,12 +438,15 @@ class Ui_ProjectWindow(object):
 
         ProjectWindow.setDockNestingEnabled(True)
         ProjectWindow.setDockOptions(QtWidgets.QMainWindow.AllowNestedDocks | QtWidgets.QMainWindow.AllowTabbedDocks |
-                                     QtWidgets.QMainWindow.AnimatedDocks | QtWidgets.QMainWindow.GroupedDragging)
+                                     QtWidgets.QMainWindow.AnimatedDocks | QtWidgets.QMainWindow.GroupedDragging |
+                                     QtWidgets.QMainWindow.VerticalTabs)
 
         self.tabCentral.setMovable(True)
-        # Need to implement the signals/slots for closing tabs
-        #self.tabCentral.setTabsClosable(True)
         self.tabCentral.setUsesScrollButtons(True)
+
+        # Need to implement the signals/slots for closing tabs
+        self.tabCentral.setTabsClosable(True)
+
         # To check if this can be useful after applying stylesheets
         #self.tabCentral.setElideMode(QtCore.Qt.ElideNone)
 
