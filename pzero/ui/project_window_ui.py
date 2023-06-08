@@ -444,9 +444,6 @@ class Ui_ProjectWindow(object):
         self.tabCentral.setMovable(True)
         self.tabCentral.setUsesScrollButtons(True)
 
-        # Need to implement the signals/slots for closing tabs
-        self.tabCentral.setTabsClosable(True)
-
         # To check if this can be useful after applying stylesheets
         #self.tabCentral.setElideMode(QtCore.Qt.ElideNone)
 
