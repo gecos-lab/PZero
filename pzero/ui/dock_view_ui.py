@@ -392,7 +392,7 @@ class Ui_QDockWidget(object):
         self.menubar.addAction(self.menuWindow.menuAction())
         self.menubar.addAction(self.menuTools.menuAction())
         self.menubar.addAction(self.menuHelp.menuAction())
-        self.menubar.move((QtCore.QPoint(0, 20)))
+        self.menubar.move((QtCore.QPoint(0, 30)))
 
         self.retranslateUi(QDockWidget)
         self.toolBox_2.setCurrentIndex(0)
