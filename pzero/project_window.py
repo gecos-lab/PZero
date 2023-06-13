@@ -4,11 +4,12 @@ PZero© Andrea Bistacchi"""
 import os
 from copy import deepcopy
 from datetime import datetime
+from threading import Timer
 
 import pandas as pd
 
 from PyQt5.QtWidgets import QMainWindow, QMessageBox, QApplication, QDockWidget
-from PyQt5.QtCore import Qt, QSortFilterProxyModel, pyqtSignal
+from PyQt5.QtCore import Qt, QSortFilterProxyModel, pyqtSignal, QSettings
 from vtk import vtkPolyData, vtkAppendPolyData, vtkOctreePointLocator, vtkXMLPolyDataWriter, \
     vtkXMLStructuredGridWriter, vtkXMLImageDataWriter, vtkXMLStructuredGridReader, vtkXMLPolyDataReader, \
     vtkXMLImageDataReader
@@ -170,6 +171,12 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.view_plane_x_sect_const = 2
         self.view_stereoplot_const = 3
 
+        """Store the window state of the project_window, we need these values for restoring the default layout"""
+        self.window_settings = QSettings("Andrea Bistacchi", "PZero")
+        self.window_settings.setValue("projectState", self.saveState())
+        self.window_settings.setValue("projectGeometry", self.saveGeometry())
+
+
         # startup_option = options_dialog(title='PZero', message='Do you want to create a new project or open an existing one?', yes_role='Create New Project', no_role='Open Existing Project', reject_role='Close PZero')
         # if startup_option == 0:
         #     self.TextTerminal.appendPlainText("Creating a new empty project.")
@@ -242,6 +249,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.actionViewPlaneXsection.triggered.connect(lambda: self.open_secondary_window(self.view_plane_x_sect_const))
         self.actionViewStereoplot.triggered.connect(lambda: self.open_secondary_window(self.view_stereoplot_const))
 
+        """Help actions -> slots"""
+        self.actionRestoreLayout.triggered.connect(lambda: self.restore_default_layout())
+
         self.update_actors = True
 
     def closeEvent(self, event):
@@ -266,10 +276,10 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         # Choose the correct QDockWidget to be added to the QMainWindow 
         if window_number == self.view_3D_const:
             self.addDockWidget(Qt.TopDockWidgetArea, View3D(parent=self))
-    
+
         elif window_number == self.view_map_const:
             self.addDockWidget(Qt.TopDockWidgetArea, NewViewMap(parent=self))
-    
+
         elif window_number == self.view_plane_x_sect_const:
             # Check if the X Section is empty, otherwise it cannot add it to the DockWidget
             if not self.xsect_coll.get_names():
@@ -278,13 +288,29 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 return
             else:
                 self.addDockWidget(Qt.TopDockWidgetArea, NewViewXsection(parent=self))
-    
+
         elif window_number == self.view_stereoplot_const:
             self.addDockWidget(Qt.TopDockWidgetArea, ViewStereoplot(parent=self))
-            
+
         else:
             self.TextTerminal.appendPlainText("Error: window_number is wrong - Secondary Window Not Found")
 
+        # Call a function after 1 second for saving the current state of the windows (it is necessary for restoring it)
+        timer = Timer(0.1, self.save_current_state)
+        timer.start()  # after 1 second, 'save_current_state' will be called
+        #self.window_settings.setValue("projectState", self.saveState())
+
+        return
+
+    def save_current_state(self):
+        """Save the current project_window state"""
+        self.window_settings.setValue("projectState", self.saveState())
+
+    def restore_default_layout(self):
+        """Restore the default state/layout of the project_window"""
+
+        self.restoreState(self.window_settings.value("projectState"))
+        return
 
     """Methods used to manage the entities shown in tables."""
 

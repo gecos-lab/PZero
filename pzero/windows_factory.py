@@ -384,9 +384,17 @@ class BaseView(QDockWidget, Ui_QDockWidget):
     def resizeEvent(self, event):
         """This function is needed to resize the verticalLayoutWidget of the dockable windows.
             It overrides the resizeEvent"""
-        self.verticalLayoutWidget.resize(self.size())
-        self.menubar.adjustSize()
-        self.toolBox_2.resize(274, 534)
+        if self.isFloating():
+            self.verticalLayoutWidget.resize(self.size())
+            #self.menubar.adjustSize()
+            #menu = self.menubar.size()
+            self.menubar.resize(180, 20)
+            self.toolBox_2.resize(274, 534)
+        else:
+            self.verticalLayoutWidget.resize(self.size())
+            #self.menubar.resize(180, 20)
+            #self.toolBox_2.resize(274, 534)
+
         return
 
     def show_qt_canvas(self):
