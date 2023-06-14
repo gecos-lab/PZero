@@ -385,8 +385,9 @@ class BaseView(QDockWidget, Ui_QDockWidget):
         """This function is needed to resize the verticalLayoutWidget of the dockable windows.
             It overrides the resizeEvent"""
         self.verticalLayoutWidget.resize(self.size())
+        self.toolBox_2.adjustSize()
         self.menubar.adjustSize()
-        self.toolBox_2.resize(274, 534)
+        # self.toolBox_2.resize(274, 534)
         return
 
     def show_qt_canvas(self):
