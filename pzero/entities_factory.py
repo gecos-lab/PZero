@@ -291,9 +291,10 @@ class PolyData(vtkPolyData):
         clean_filter.SetTolerance(0.0)
         clean_filter.Update()
         """Replace the input polydata "self" with the clean one."""
-        self = clean_filter.GetOutput()
-        self.Squeeze()
-        self.Modified()
+        # self = clean_filter.GetOutput()
+        # self.Squeeze()
+        # self.Modified()
+        return clean_filter.GetOutput()
 
     def vtk_set_normals(self):
         """Calculate point and cell normals with vtkPolyDataNormals.

@@ -36,11 +36,11 @@ def vtk2lxml(self,out_dir_name=None):
 
         obj = self.geol_coll.get_uid_vtk_obj(uid)
 
-
-
-        if isinstance(obj,TriSurf):
-            parts = obj.split_parts()
-            for i,part in enumerate(parts):
+        if isinstance(obj, TriSurf):
+            clean_obj = TriSurf()
+            clean_obj.ShallowCopy(obj.clean_topology())
+            parts = clean_obj.split_parts()
+            for i, part in enumerate(parts):
                 n_cells = part.GetNumberOfCells()
 
                 cell_shape = np_shape(numpy_support.vtk_to_numpy(part.GetCell(0).GetPoints().GetData()))
