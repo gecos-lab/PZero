@@ -13,7 +13,7 @@ def vtk2lxml(self,out_dir_name=None):
 
     date = datetime.now()
 
-    landxml =  et.Element('LandXML',
+    landxml = et.Element('LandXML',
                         xmlns="http://www.landxml.org/schema/LandXML-1.2",
                         nsmap=namespace,
                         language='English',
@@ -33,19 +33,20 @@ def vtk2lxml(self,out_dir_name=None):
     surfaces = et.SubElement(landxml,'Surfaces') # all of the different surfaces are grouped here
 
     for uid in self.geol_coll.df['uid']:
+        print(f'writing {uid}')
 
         obj = self.geol_coll.get_uid_vtk_obj(uid)
 
+        if isinstance(obj, TriSurf):
+            clean_obj = TriSurf()
+            clean_obj.ShallowCopy(obj.clean_topology())
+            parts = clean_obj.split_parts()
+            for i, part in enumerate(parts):
 
-
-        if isinstance(obj,TriSurf):
-            parts = obj.split_parts()
-            for i,part in enumerate(parts):
                 n_cells = part.GetNumberOfCells()
 
                 cell_shape = np_shape(numpy_support.vtk_to_numpy(part.GetCell(0).GetPoints().GetData()))
-                point_arr = np_zeros((n_cells,cell_shape[0],cell_shape[1]))
-
+                point_arr = np_zeros((n_cells, cell_shape[0], cell_shape[1]))
 
                 if cell_shape[0] == 3:
                     surf_type = 'TIN'
@@ -60,6 +61,7 @@ def vtk2lxml(self,out_dir_name=None):
                 for c_id in range(n_cells):
                     p_data = numpy_support.vtk_to_numpy(part.GetCell(c_id).GetPoints().GetData())
                     point_arr[c_id] = p_data
+
                 id = 1
 
                 point_dict = {}
@@ -85,8 +87,7 @@ def vtk2lxml(self,out_dir_name=None):
                             xyz = f'{p[0]} {p[1]} {p[2]}'
                             pnt = et.SubElement(pnts,'P',id=str(id))
                             pnt.text = xyz
-                            
-                            id+=1
+                            id += 1
                         
                         
                     # conn_list.append(point_id_list)
@@ -96,7 +97,7 @@ def vtk2lxml(self,out_dir_name=None):
 
     tree = et.ElementTree(landxml)
 
-    tree.write(f'{out_dir_name}/out.xml',pretty_print=True, xml_declaration=True, encoding="iso-8859-1")
+    tree.write(f'{out_dir_name}/out.xml', pretty_print=True, xml_declaration=True, encoding="iso-8859-1")
 
 
 
