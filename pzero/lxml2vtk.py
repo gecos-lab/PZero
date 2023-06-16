@@ -82,7 +82,7 @@ def vtk2lxml(self,out_dir_name=None):
                             point_id_list.append(id)
                             # yxz = f'{np.around(p[0],decimals=6)+np.random.randn()/100} {np.around(p[1],decimals=6)+np.random.randn()/100} {p[2]}'
 
-                            xyz = f'{p[0]} {p[1]} {p[2]}'
+                            xyz = f'{p[1]} {p[0]} {p[2]}'
                             pnt = et.SubElement(pnts,'P',id=str(id))
                             pnt.text = xyz
                             
