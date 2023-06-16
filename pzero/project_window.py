@@ -250,7 +250,8 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.actionViewStereoplot.triggered.connect(lambda: self.open_secondary_window(self.view_stereoplot_const))
 
         """Help actions -> slots"""
-        self.actionRestoreLayout.triggered.connect(lambda: self.restore_default_layout())
+        self.actionRestoreLayout.triggered.connect(lambda: self.restore_default_state())
+        self.actionSaveLayout.triggered.connect(lambda: self.save_current_state())
 
         self.update_actors = True
 
@@ -305,10 +306,10 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
     def save_current_state(self):
         """Save the current project_window state"""
         self.window_settings.setValue("projectState", self.saveState())
+        return
 
-    def restore_default_layout(self):
+    def restore_default_state(self):
         """Restore the default state/layout of the project_window"""
-
         self.restoreState(self.window_settings.value("projectState"))
         return
 
