@@ -1,3 +1,10 @@
+"""two_d_lines.py
+PZero© Andrea Bistacchi"""
+
+import os
+os.environ["QT_API"] = "pyside6"
+from qtpy.QtWidgets import QAction
+
 from copy import deepcopy
 
 import numpy as np
@@ -20,7 +27,6 @@ from shapely.geometry import LineString, Point, MultiLineString
 from shapely.ops import split
 from shapely.ops import snap as shp_snap
 from shapely.affinity import scale
-from PyQt5.QtWidgets import QAction
 
 from geopandas import GeoDataFrame as geodataframe
 

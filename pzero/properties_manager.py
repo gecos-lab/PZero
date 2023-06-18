@@ -1,13 +1,16 @@
 """properties_manager.py
 PZero© Andrea Bistacchi"""
 
+import os
+os.environ["QT_API"] = "pyside6"
+from qtpy.QtWidgets import QTableWidgetItem, QLabel, QComboBox
+from qtpy.QtGui import QColor, QImage, QPixmap
+from qtpy.QtCore import QObject
+
 from numpy import linspace as np_linspace
 import matplotlib.pyplot as plt
 import colorcet as cc
 import cmocean as cmo
-from PyQt5.QtWidgets import QTableWidgetItem, QLabel, QComboBox
-from PyQt5.QtGui import QColor, QImage, QPixmap
-from PyQt5.QtCore import QObject
 from pandas.core.common import flatten as pd_flatten
 
 from pyvista import get_cmap_safe as pv_get_cmap_safe

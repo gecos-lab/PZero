@@ -2,6 +2,11 @@
 PZero© Andrea Bistacchi"""
 
 """Import as much as possible as from <module> import <class> or <class as ...>"""
+import os
+os.environ["QT_API"] = "pyside6"
+# from qtpy.QtCore import QAbstractTableModel, Qt, QVariant
+from qtpy.QtCore import QAbstractTableModel, Qt
+
 from vtk import vtkPoints
 from numpy import array as np_array
 from numpy import set_printoptions as np_set_printoptions
@@ -9,7 +14,6 @@ from pandas import DataFrame as pd_DataFrame
 from pandas import set_option as pd_set_option
 from uuid import uuid4 as uuid_uuid4
 from copy import deepcopy
-from PyQt5.QtCore import QAbstractTableModel, Qt, QVariant
 from pzero.helpers.helper_dialogs import general_input_dialog
 from pzero.entities_factory import PolyLine, TriSurf
 
@@ -277,4 +281,4 @@ class BoundaryCollection(QAbstractTableModel):
                 uid = self.df.iloc[index.row(), 0]
                 self.parent.boundary_metadata_modified_signal.emit([uid])  # a list of uids is emitted, even if the entity is just one
                 return True
-        return QVariant()
+        # return QVariant()

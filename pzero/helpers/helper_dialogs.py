@@ -1,11 +1,14 @@
 """helper_dialogs.py
 PZero© Andrea Bistacchi"""
 
-from PyQt5.QtWidgets import QMessageBox, QInputDialog, QLineEdit, QPushButton, QFileDialog, QWidget, QProgressDialog, \
+import os
+os.environ["QT_API"] = "pyside6"
+from qtpy.QtWidgets import QMessageBox, QInputDialog, QLineEdit, QPushButton, QFileDialog, QWidget, QProgressDialog, \
     QMainWindow, QComboBox, QGridLayout, QLabel, QCheckBox, QTableWidgetItem, QHeaderView, QApplication, QFormLayout
 # from PyQt5.QtWidgets import QSpinBox, QDoubleSpinBox
-from PyQt5.QtGui import QColor
-from PyQt5.QtCore import QEventLoop, Qt, QAbstractTableModel
+from qtpy.QtGui import QColor
+from qtpy.QtCore import QEventLoop, Qt, QAbstractTableModel
+
 from pzero.ui.import_window_ui import Ui_ImportOptionsWindow
 from pzero.ui.navigator_window_ui import Ui_NavWindow
 from pzero.ui.preview_window_ui import Ui_PreviewWindow

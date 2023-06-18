@@ -2,12 +2,16 @@
 PZero© Andrea Bistacchi"""
 
 import os
+
+os.environ["QT_API"] = "pyside6"
+from qtpy.QtWidgets import QMainWindow, QMessageBox, QDockWidget, QSizePolicy
+from qtpy.QtCore import Qt, QSortFilterProxyModel, Signal, QSize
+
 from copy import deepcopy
 from datetime import datetime
+from uuid import uuid4
 
 import pandas as pd
-from PyQt5.QtWidgets import QMainWindow, QMessageBox
-from PyQt5.QtCore import Qt, QSortFilterProxyModel, pyqtSignal
 from vtk import vtkPolyData, vtkAppendPolyData, vtkOctreePointLocator, vtkXMLPolyDataWriter, \
     vtkXMLStructuredGridWriter, vtkXMLImageDataWriter, vtkXMLStructuredGridReader, vtkXMLPolyDataReader, \
     vtkXMLImageDataReader
@@ -59,94 +63,94 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
 
     """Signals defined here are meant to be broadcast TO ALL views. This is why we use signals
     instead of functions that will act within a single view only. They all pass a list of uid's."""
-    project_close_signal = pyqtSignal()  # this is used to delete open windows when the current project is closed (and a new one is opened)
+    project_close_signal = Signal()  # this is used to delete open windows when the current project is closed (and a new one is opened)
 
-    geology_added_signal = pyqtSignal(list)
-    geology_removed_signal = pyqtSignal(list)
-    geology_geom_modified_signal = pyqtSignal(list)  # this includes topology modified
-    geology_data_keys_removed_signal = pyqtSignal(list)
-    geology_data_val_modified_signal = pyqtSignal(list)
-    geology_metadata_modified_signal = pyqtSignal(list)
-    geology_legend_color_modified_signal = pyqtSignal(list)
-    geology_legend_thick_modified_signal = pyqtSignal(list)
-    geology_legend_point_size_modified_signal = pyqtSignal(list)
-    geology_legend_opacity_modified_signal = pyqtSignal(list)
+    geology_added_signal = Signal(list)
+    geology_removed_signal = Signal(list)
+    geology_geom_modified_signal = Signal(list)  # this includes topology modified
+    geology_data_keys_removed_signal = Signal(list)
+    geology_data_val_modified_signal = Signal(list)
+    geology_metadata_modified_signal = Signal(list)
+    geology_legend_color_modified_signal = Signal(list)
+    geology_legend_thick_modified_signal = Signal(list)
+    geology_legend_point_size_modified_signal = Signal(list)
+    geology_legend_opacity_modified_signal = Signal(list)
 
 
-    xsect_added_signal = pyqtSignal(list)
-    xsect_removed_signal = pyqtSignal(list)
-    xsect_geom_modified_signal = pyqtSignal(list)  # this includes topology modified
-    xsect_metadata_modified_signal = pyqtSignal(list)
-    xsect_legend_color_modified_signal = pyqtSignal(list)
-    xsect_legend_thick_modified_signal = pyqtSignal(list)
-    xsect_legend_opacity_modified_signal = pyqtSignal(list)
+    xsect_added_signal = Signal(list)
+    xsect_removed_signal = Signal(list)
+    xsect_geom_modified_signal = Signal(list)  # this includes topology modified
+    xsect_metadata_modified_signal = Signal(list)
+    xsect_legend_color_modified_signal = Signal(list)
+    xsect_legend_thick_modified_signal = Signal(list)
+    xsect_legend_opacity_modified_signal = Signal(list)
 
-    boundary_added_signal = pyqtSignal(list)
-    boundary_removed_signal = pyqtSignal(list)
-    boundary_geom_modified_signal = pyqtSignal(list)  # this includes topology modified
-    boundary_metadata_modified_signal = pyqtSignal(list)
-    boundary_legend_color_modified_signal = pyqtSignal(list)
-    boundary_legend_thick_modified_signal = pyqtSignal(list)
-    boundary_legend_opacity_modified_signal = pyqtSignal(list)
+    boundary_added_signal = Signal(list)
+    boundary_removed_signal = Signal(list)
+    boundary_geom_modified_signal = Signal(list)  # this includes topology modified
+    boundary_metadata_modified_signal = Signal(list)
+    boundary_legend_color_modified_signal = Signal(list)
+    boundary_legend_thick_modified_signal = Signal(list)
+    boundary_legend_opacity_modified_signal = Signal(list)
 
-    mesh3d_added_signal = pyqtSignal(list)
-    mesh3d_removed_signal = pyqtSignal(list)
-    mesh3d_data_keys_removed_signal = pyqtSignal(list)
-    mesh3d_data_val_modified_signal = pyqtSignal(list)
-    mesh3d_metadata_modified_signal = pyqtSignal(list)
-    mesh3d_legend_color_modified_signal = pyqtSignal(list)
-    mesh3d_legend_thick_modified_signal = pyqtSignal(list)
-    mesh3d_legend_opacity_modified_signal = pyqtSignal(list)
+    mesh3d_added_signal = Signal(list)
+    mesh3d_removed_signal = Signal(list)
+    mesh3d_data_keys_removed_signal = Signal(list)
+    mesh3d_data_val_modified_signal = Signal(list)
+    mesh3d_metadata_modified_signal = Signal(list)
+    mesh3d_legend_color_modified_signal = Signal(list)
+    mesh3d_legend_thick_modified_signal = Signal(list)
+    mesh3d_legend_opacity_modified_signal = Signal(list)
 
-    dom_added_signal = pyqtSignal(list)
-    dom_removed_signal = pyqtSignal(list)
-    dom_data_keys_removed_signal = pyqtSignal(list)
-    dom_data_val_modified_signal = pyqtSignal(list)
-    dom_metadata_modified_signal = pyqtSignal(list)
-    dom_legend_color_modified_signal = pyqtSignal(list)
-    dom_legend_thick_modified_signal = pyqtSignal(list)
-    dom_legend_point_size_modified_signal = pyqtSignal(list)
-    dom_legend_opacity_modified_signal = pyqtSignal(list)
+    dom_added_signal = Signal(list)
+    dom_removed_signal = Signal(list)
+    dom_data_keys_removed_signal = Signal(list)
+    dom_data_val_modified_signal = Signal(list)
+    dom_metadata_modified_signal = Signal(list)
+    dom_legend_color_modified_signal = Signal(list)
+    dom_legend_thick_modified_signal = Signal(list)
+    dom_legend_point_size_modified_signal = Signal(list)
+    dom_legend_opacity_modified_signal = Signal(list)
 
-    image_added_signal = pyqtSignal(list)
-    image_removed_signal = pyqtSignal(list)
-    image_metadata_modified_signal = pyqtSignal(list)
-    image_legend_opacity_modified_signal = pyqtSignal(list)
+    image_added_signal = Signal(list)
+    image_removed_signal = Signal(list)
+    image_metadata_modified_signal = Signal(list)
+    image_legend_opacity_modified_signal = Signal(list)
 
-    well_added_signal = pyqtSignal(list)
-    well_removed_signal = pyqtSignal(list)
-    well_data_keys_removed_signal = pyqtSignal(list)
-    well_data_val_modified_signal = pyqtSignal(list)
-    well_metadata_modified_signal = pyqtSignal(list)
-    well_legend_color_modified_signal = pyqtSignal(list)
-    well_legend_thick_modified_signal = pyqtSignal(list)
-    well_legend_opacity_modified_signal = pyqtSignal(list)
+    well_added_signal = Signal(list)
+    well_removed_signal = Signal(list)
+    well_data_keys_removed_signal = Signal(list)
+    well_data_val_modified_signal = Signal(list)
+    well_metadata_modified_signal = Signal(list)
+    well_legend_color_modified_signal = Signal(list)
+    well_legend_thick_modified_signal = Signal(list)
+    well_legend_opacity_modified_signal = Signal(list)
 
-    fluid_added_signal = pyqtSignal(list)
-    fluid_removed_signal = pyqtSignal(list)
-    fluid_geom_modified_signal = pyqtSignal(list)  # this includes topology modified
-    fluid_data_keys_removed_signal = pyqtSignal(list)
-    fluid_data_val_modified_signal = pyqtSignal(list)
-    fluid_metadata_modified_signal = pyqtSignal(list)
-    fluid_legend_color_modified_signal = pyqtSignal(list)
-    fluid_legend_thick_modified_signal = pyqtSignal(list)
-    fluid_legend_point_size_modified_signal = pyqtSignal(list)
-    fluid_legend_opacity_modified_signal = pyqtSignal(list)
+    fluid_added_signal = Signal(list)
+    fluid_removed_signal = Signal(list)
+    fluid_geom_modified_signal = Signal(list)  # this includes topology modified
+    fluid_data_keys_removed_signal = Signal(list)
+    fluid_data_val_modified_signal = Signal(list)
+    fluid_metadata_modified_signal = Signal(list)
+    fluid_legend_color_modified_signal = Signal(list)
+    fluid_legend_thick_modified_signal = Signal(list)
+    fluid_legend_point_size_modified_signal = Signal(list)
+    fluid_legend_opacity_modified_signal = Signal(list)
 
-    background_added_signal = pyqtSignal(list)
-    background_removed_signal = pyqtSignal(list)
-    background_geom_modified_signal = pyqtSignal(list)  # this includes topology modified
-    background_data_keys_removed_signal = pyqtSignal(list)
-    background_data_val_modified_signal = pyqtSignal(list)
-    background_metadata_modified_signal = pyqtSignal(list)
-    background_legend_color_modified_signal = pyqtSignal(list)
-    background_legend_thick_modified_signal = pyqtSignal(list)
-    background_legend_point_size_modified_signal = pyqtSignal(list)
-    background_legend_opacity_modified_signal = pyqtSignal(list)
+    background_added_signal = Signal(list)
+    background_removed_signal = Signal(list)
+    background_geom_modified_signal = Signal(list)  # this includes topology modified
+    background_data_keys_removed_signal = Signal(list)
+    background_data_val_modified_signal = Signal(list)
+    background_metadata_modified_signal = Signal(list)
+    background_legend_color_modified_signal = Signal(list)
+    background_legend_thick_modified_signal = Signal(list)
+    background_legend_point_size_modified_signal = Signal(list)
+    background_legend_opacity_modified_signal = Signal(list)
 
-    prop_legend_cmap_modified_signal = pyqtSignal(str)
+    prop_legend_cmap_modified_signal = Signal(str)
 
-    line_digitized_signal = pyqtSignal(dict)
+    line_digitized_signal = Signal(dict)
 
     """Add other signals above this line ----------------------------------------"""
 
@@ -231,10 +235,14 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.actionRetopologize.triggered.connect(self.retopologize_surface)
 
         """View actions -> slots"""
-        self.actionView3D.triggered.connect(lambda: View3D(parent=self))
-        self.actionViewMap.triggered.connect(lambda: NewViewMap(parent=self))
-        self.actionViewPlaneXsection.triggered.connect(lambda: NewViewXsection(parent=self))
-        self.actionViewStereoplot.triggered.connect(lambda: ViewStereoplot(parent=self))
+        # self.actionView3D.triggered.connect(lambda: View3D(parent=self))
+        # self.actionViewMap.triggered.connect(lambda: NewViewMap(parent=self))
+        # self.actionViewPlaneXsection.triggered.connect(lambda: NewViewXsection(parent=self))
+        # self.actionViewStereoplot.triggered.connect(lambda: ViewStereoplot(parent=self))
+        self.actionView3D.triggered.connect(lambda: self.new_dock_window(window_type='View3D'))
+        self.actionViewMap.triggered.connect(lambda: self.new_dock_window(window_type='NewViewMap'))
+        self.actionViewPlaneXsection.triggered.connect(lambda: self.new_dock_window(window_type='NewViewXsection'))
+        self.actionViewStereoplot.triggered.connect(lambda: self.new_dock_window(window_type='ViewStereoplot'))
 
         self.update_actors = True
     def closeEvent(self, event):
@@ -248,6 +256,47 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             event.accept()
         else:
             event.ignore()
+
+    def new_dock_window(self, window_type: str = None):
+        """Creates a QDockWidget and then fills it with a single QWidget that includes all objects of a dockable graphical window.
+        Each window needs its specific dock widget in order to be dockable, movable anc closable independently.
+        In the following code, copied from Qt Designer (Form > View Python code - layout saved as project_window_with_dock_widget.ui),
+        the dock widget is locked to the right dock area, floatable, movable and closable, hence it will only appear in the
+        right dock area or undocked on the desktop."""
+        # uuid string for widget and content names -- check if this is necessary --
+        dock_widget_id = str(uuid4())
+        dock_widget_contents_id = str(uuid4())
+        # create widget and set some parameters
+        dock_widget = QDockWidget(self)
+        dock_widget.setObjectName(dock_widget_id)
+        dock_widget.setMinimumSize(QSize(60, 40))
+        dock_widget.setMaximumSize(QSize(524287, 524287))
+        dock_widget.setBaseSize(QSize(638, 757))
+        dock_widget.setFeatures(QDockWidget.DockWidgetClosable | QDockWidget.DockWidgetFloatable | QDockWidget.DockWidgetMovable)
+        dock_widget.setAllowedAreas(Qt.RightDockWidgetArea)
+        # create the graphical window as a QWidget to be included into the QDockWidget as its content
+        if window_type is 'View3D':
+            dock_widget_contents = View3D(parent=self)
+        elif window_type is 'NewViewMap':
+            dock_widget_contents = NewViewMap(parent=self)
+        elif window_type is 'NewViewXsection':
+            dock_widget_contents = NewViewXsection(parent=self)
+        elif window_type is 'ViewStereoplot':
+            dock_widget_contents = ViewStereoplot(parent=self)
+        else:
+            # exit doing nothing in case the window type is not recognized
+            print('window type not recognized')
+            return
+        # set parameters of the graphical window
+        size_policy = QSizePolicy(QSizePolicy.MinimumExpanding, QSizePolicy.MinimumExpanding)
+        size_policy.setHorizontalStretch(0)
+        size_policy.setVerticalStretch(0)
+        # size_policy.setHeightForWidth(dock_widget_contents.size_policy().hasHeightForWidth())
+        # dock_widget_contents.setSizePolicy(size_policy)
+        dock_widget_contents.setObjectName(dock_widget_contents_id)
+        # add the content widget to the dock widget and add the dock widget to the main project window
+        dock_widget.setWidget(dock_widget_contents)
+        self.addDockWidget(Qt.RightDockWidgetArea, dock_widget)
 
     """Methods used to manage the entities shown in tables."""
 

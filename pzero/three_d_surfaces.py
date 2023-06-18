@@ -7,7 +7,6 @@ from scipy.interpolate import griddata
 from uuid import uuid4
 import vtk
 
-
 from numpy import cbrt as np_cbrt
 from numpy import around as np_around
 from numpy import flip as np_flip
@@ -20,7 +19,6 @@ from numpy import float64 as np_float64
 from numpy import sqrt as np_sqrt
 from numpy import zeros as np_zeros
 from numpy import float32 as np_float32
-
 
 from pandas import DataFrame as pd_DataFrame
 from vtkmodules.vtkCommonDataModel import vtkBoundingBox

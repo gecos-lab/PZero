@@ -1,6 +1,10 @@
 """mesh3d_collection.py
 PZero© Andrea Bistacchi"""
 
+import os
+os.environ["QT_API"] = "pyside6"
+# from qtpy.QtCore import QAbstractTableModel, Qt, QVariant
+from qtpy.QtCore import QAbstractTableModel, Qt
 
 from numpy import set_printoptions as np_set_set_printoptions
 
@@ -9,7 +13,6 @@ from pandas import DataFrame as pd_DataFrame
 
 import uuid
 from copy import deepcopy
-from PyQt5.QtCore import QAbstractTableModel, Qt, QVariant
 
 """Options to print Pandas dataframes in console for testing."""
 pd_desired_width = 800
@@ -246,4 +249,4 @@ class Mesh3DCollection(QAbstractTableModel):
                 uid = self.df.iloc[index.row(), 0]
                 self.parent.mesh3d_metadata_modified_signal.emit([uid])  # a list of uids is emitted, even if the entity is just one
                 return True
-        return QVariant()
+        # return QVariant()

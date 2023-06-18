@@ -1,10 +1,16 @@
+
+import os
+os.environ["QT_API"] = "pyside6"
+# from qtpy.QtCore import QAbstractTableModel, Qt, QVariant
+from qtpy.QtCore import QAbstractTableModel, Qt
+
+
 from numpy import random as np_random
 from numpy import round as np_round
 from pandas import DataFrame as pd_DataFrame
 from pandas import unique as pd_unique
 import uuid
 from copy import deepcopy
-from PyQt5.QtCore import QAbstractTableModel, Qt, QVariant
 
 
 class WellCollection(QAbstractTableModel):
@@ -298,4 +304,4 @@ class WellCollection(QAbstractTableModel):
                 self.parent.well_metadata_modified_signal.emit(
                     [uid])  # a list of uids is emitted, even if the entity is just one
                 return True
-        return QVariant()
+        # return QVariant()

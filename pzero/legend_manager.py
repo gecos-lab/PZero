@@ -1,9 +1,11 @@
 """legend_manager.py
 PZero© Andrea Bistacchi"""
 
-from PyQt5.QtWidgets import QTreeWidgetItem, QColorDialog, QPushButton, QSpinBox, QDoubleSpinBox, QComboBox
-from PyQt5.QtGui import QColor
-from PyQt5.QtCore import QObject
+import os
+os.environ["QT_API"] = "pyside6"
+from qtpy.QtWidgets import QTreeWidgetItem, QColorDialog, QPushButton, QSpinBox, QDoubleSpinBox, QComboBox
+from qtpy.QtGui import QColor
+from qtpy.QtCore import QObject
 
 from pandas import unique as pd_unique
 from math import isnan

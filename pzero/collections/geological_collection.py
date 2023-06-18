@@ -1,6 +1,11 @@
 """geological_collection.py
 PZero© Andrea Bistacchi"""
 
+import os
+os.environ["QT_API"] = "pyside6"
+# from qtpy.QtCore import QAbstractTableModel, Qt, QVariant
+from qtpy.QtCore import QAbstractTableModel, Qt
+
 
 from numpy import set_printoptions as np_set_set_printoptions
 from numpy import random as np_random
@@ -9,9 +14,8 @@ from numpy import round as np_round
 from pandas import set_option as pd_set_option
 from pandas import DataFrame as pd_DataFrame
 from pandas import unique as pd_unique
-import uuid
+from uuid import uuid4
 from copy import deepcopy
-from PyQt5.QtCore import QAbstractTableModel, Qt, QVariant
 
 """Options to print Pandas dataframes in console when testing."""
 pd_desired_width = 800
@@ -94,7 +98,7 @@ class GeologicalCollection(QAbstractTableModel):
         """Add entity to collection from dictionary."""
         """Create a new uid if it is not included in the dictionary."""
         if not entity_dict['uid']:
-            entity_dict['uid'] = str(uuid.uuid4())
+            entity_dict['uid'] = str(uuid4())
         """"Append new row to dataframe. Note that the 'append()' method for Pandas dataframes DOES NOT
         work in place, hence a NEW dataframe is created every time and then substituted to the old one."""
         self.df = self.df.append(entity_dict, ignore_index=True)
@@ -468,4 +472,4 @@ class GeologicalCollection(QAbstractTableModel):
                 self.geology_attr_modified_update_legend_table()
                 self.parent.geology_metadata_modified_signal.emit([uid])  # a list of uids is emitted, even if the entity is just one
                 return True
-        return QVariant()
+        # return QVariant()

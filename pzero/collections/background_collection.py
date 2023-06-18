@@ -1,11 +1,15 @@
 """backgrounds_collection.py
 PZero© Andrea Bistacchi"""
 
+import os
+os.environ["QT_API"] = "pyside6"
+# from qtpy.QtCore import QAbstractTableModel, Qt, QVariant
+from qtpy.QtCore import QAbstractTableModel, Qt
+
 import numpy as np
 import pandas as pd
 import uuid
 from copy import deepcopy
-from PyQt5.QtCore import QAbstractTableModel, Qt, QVariant
 
 """Options to print Pandas dataframes in console when testing."""
 pd_desired_width = 800
@@ -440,4 +444,4 @@ class BackgroundCollection(QAbstractTableModel):
                 self.parent.background_metadata_modified_signal.emit(
                     [uid])  # a list of uids is emitted, even if the entity is just one
                 return True
-        return QVariant()
+        # return QVariant()

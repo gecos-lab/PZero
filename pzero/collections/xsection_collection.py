@@ -1,5 +1,13 @@
 """xsection_collection.py
 PZero© Andrea Bistacchi"""
+
+import os
+os.environ["QT_API"] = "pyside6"
+# from qtpy.QtCore import QAbstractTableModel, Qt, QVariant
+from qtpy.QtCore import QAbstractTableModel, Qt
+# from qtpy.QtGui import QStandardItem, QImage
+
+
 from vtk import vtkPoints, vtkCellArray, vtkLine
 # import numpy_interface.dataset_adapter as dsa
 # import numpy_interface.algorithms as algs
@@ -20,8 +28,7 @@ from numpy import matmul as np_matmul
 from pzero.orientation_analysis import dip_directions2normals,get_dip_dir_vectors
 
 import pandas as pd
-from PyQt5.QtCore import QAbstractTableModel, Qt, QVariant
-# from PyQt5.QtGui import QStandardItem, QImage
+
 from pzero.entities_factory import Plane, XsPolyLine
 from pzero.helpers.helper_dialogs import general_input_dialog, open_file_dialog
 from pzero.helpers.helper_functions import auto_sep
@@ -628,4 +635,4 @@ class XSectionCollection(QAbstractTableModel):
                 self.parent.xsect_metadata_modified_signal.emit(
                     [uid])  # a list of uids is emitted, even if the entity is just one
                 return True
-            return QVariant()
+            # return QVariant()

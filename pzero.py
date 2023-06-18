@@ -1,5 +1,7 @@
 from sys import argv, exit
-from PyQt5.QtWidgets import QApplication
+import os
+os.environ["QT_API"] = "pyside6"
+from qtpy.QtWidgets import QApplication
 
 from pzero.project_window import ProjectWindow
 

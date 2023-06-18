@@ -3,11 +3,13 @@ PZero© Andrea Bistacchi"""
 from vtkmodules.vtkRenderingCore import vtkPropPicker
 
 """QT imports"""
-from PyQt5.QtWidgets import *
-from PyQt5.QtCore import Qt
+import os
+os.environ["QT_API"] = "pyside6"
+from qtpy.QtWidgets import *
+from qtpy.QtCore import Qt
 
 """PZero imports"""
-from pzero.ui.base_view_window_ui import Ui_BaseViewWindow
+from pzero.ui.base_view_widget_ui import Ui_View
 from .entities_factory import VertexSet, PolyLine, TriSurf, XsVertexSet, XsPolyLine, DEM, PCDom, MapImage, \
     Voxet, XsVoxet, Seismics, XsImage, PolyData, Well, WellMarker, WellTrace, Attitude
 from pzero.helpers.helper_dialogs import input_one_value_dialog, input_combo_dialog, message_dialog, \
@@ -90,7 +92,7 @@ class NavigationToolbar(NavigationToolbar2QT):
         super(NavigationToolbar, self).__init__(parent, *args, **kwargs)
 
 
-class BaseView(QMainWindow, Ui_BaseViewWindow):
+class BaseView(QWidget, Ui_View):
     """Create base view - abstract class providing common methods for all views"""
     """parent is the QT object that is launching this one, hence the ProjectWindow() instance in this case"""
 
@@ -104,13 +106,13 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.setAttribute(Qt.WA_DeleteOnClose, True)
         self.parent = parent
         """Connect actionQuit.triggered SIGNAL to self.close SLOT"""
-        self.actionClose.triggered.connect(self.close)
+        # self.actionClose.triggered.connect(self.close)
 
         """Connect signal to delete window when the project is closed (and a new one is opened)."""
         # see discussion on deleteLater vs. close on the Internet as above, delete results in deleted slots being
         # still referenced from the main window signals, thus causing errors
         # self.parent.project_close_signal.connect(self.deleteLater)
-        self.parent.project_close_signal.connect(self.close)
+        # self.parent.project_close_signal.connect(self.close)
 
         """Create empty Pandas dataframe with actor's with columns:
         uid = actor's uid -> the same as the original object's uid
@@ -123,7 +125,8 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.selected_uids = []
 
         """Initialize menus and tools, canvas, add actors and show it. These methods must be defined in subclasses."""
-        self.initialize_menu_tools()
+        #self.initialize_menu_tools()
+        self.initialize_tools()
         self.initialize_interactor()
         self.add_all_entities()
         self.show_qt_canvas()
@@ -503,7 +506,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         for geo_type in geo_types:
             glevel_1 = QTreeWidgetItem(self.GeologyTreeWidget,
                                        [geo_type])  # self.GeologyTreeWidget as parent -> top level
-            glevel_1.setFlags(glevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
+            glevel_1.setFlags(glevel_1.flags() | Qt.ItemIsAutoTristate | Qt.ItemIsUserCheckable)
             if sec_uid:
                 geo_features = pd_unique(self.parent.geol_coll.df.loc[
                                              (self.parent.geol_coll.df['geological_type'] == geo_type) & (
@@ -514,7 +517,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                                                                           'geological_type'] == geo_type, 'geological_feature'])
             for feature in geo_features:
                 glevel_2 = QTreeWidgetItem(glevel_1, [feature])  # glevel_1 as parent -> 1st middle level
-                glevel_2.setFlags(glevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
+                glevel_2.setFlags(glevel_2.flags() | Qt.ItemIsAutoTristate | Qt.ItemIsUserCheckable)
                 if sec_uid:
                     geo_scenario = pd_unique(self.parent.geol_coll.df.loc[
                                                  (self.parent.geol_coll.df['geological_type'] == geo_type) & (
@@ -529,7 +532,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                                                              'geological_feature'] == feature), 'scenario'])
                 for scenario in geo_scenario:
                     glevel_3 = QTreeWidgetItem(glevel_2, [scenario])  # glevel_2 as parent -> 2nd middle level
-                    glevel_3.setFlags(glevel_3.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
+                    glevel_3.setFlags(glevel_3.flags() | Qt.ItemIsAutoTristate | Qt.ItemIsUserCheckable)
                     if sec_uid:
                         uids = self.parent.geol_coll.df.loc[
                             (self.parent.geol_coll.df['geological_type'] == geo_type) & (
@@ -582,11 +585,11 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         for topo_type in topo_types:
             tlevel_1 = QTreeWidgetItem(self.TopologyTreeWidget,
                                        [topo_type])  # self.GeologyTreeWidget as parent -> top level
-            tlevel_1.setFlags(tlevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
+            tlevel_1.setFlags(tlevel_1.flags() | Qt.ItemIsAutoTristate | Qt.ItemIsUserCheckable)
             for scenario in pd_unique(self.parent.geol_coll.df.loc[
                                           self.parent.geol_coll.df['topological_type'] == topo_type, 'scenario']):
                 tlevel_2 = QTreeWidgetItem(tlevel_1, [scenario])  # tlevel_1 as parent -> middle level
-                tlevel_2.setFlags(tlevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
+                tlevel_2.setFlags(tlevel_2.flags() | Qt.ItemIsAutoTristate | Qt.ItemIsUserCheckable)
                 if sec_uid:
                     uids = self.parent.geol_coll.df.loc[(self.parent.geol_coll.df['topological_type'] == topo_type) & (
                             self.parent.geol_coll.df['scenario'] == scenario) & (self.parent.geol_coll.df[
@@ -692,7 +695,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                                     self.GeologyTreeWidget.findItems(self.parent.geol_coll.get_uid_geological_type(uid),
                                                                      Qt.MatchExactly, 0)[0].child(child_1),
                                     [self.parent.geol_coll.get_uid_scenario(uid)])
-                                glevel_3.setFlags(glevel_3.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
+                                glevel_3.setFlags(glevel_3.flags() | Qt.ItemIsAutoTristate | Qt.ItemIsUserCheckable)
                                 self.GeologyTreeWidget.insertTopLevelItem(0, glevel_3)
                                 property_combo = QComboBox()
                                 property_combo.uid = uid
@@ -719,10 +722,10 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                         self.GeologyTreeWidget.findItems(self.parent.geol_coll.get_uid_geological_type(uid),
                                                          Qt.MatchExactly, 0)[0],
                         [self.parent.geol_coll.get_uid_geological_feature(uid)])
-                    glevel_2.setFlags(glevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
+                    glevel_2.setFlags(glevel_2.flags() | Qt.ItemIsAutoTristate | Qt.ItemIsUserCheckable)
                     self.GeologyTreeWidget.insertTopLevelItem(0, glevel_2)
                     glevel_3 = QTreeWidgetItem(glevel_2, [self.parent.geol_coll.get_uid_scenario(uid)])
-                    glevel_3.setFlags(glevel_3.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
+                    glevel_3.setFlags(glevel_3.flags() | Qt.ItemIsAutoTristate | Qt.ItemIsUserCheckable)
                     self.GeologyTreeWidget.insertTopLevelItem(0, glevel_3)
                     property_combo = QComboBox()
                     property_combo.uid = uid
@@ -746,13 +749,13 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             else:
                 """Different geological type, geological feature and scenario"""
                 glevel_1 = QTreeWidgetItem(self.GeologyTreeWidget, [self.parent.geol_coll.get_uid_geological_type(uid)])
-                glevel_1.setFlags(glevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
+                glevel_1.setFlags(glevel_1.flags() | Qt.ItemIsAutoTristate | Qt.ItemIsUserCheckable)
                 self.GeologyTreeWidget.insertTopLevelItem(0, glevel_1)
                 glevel_2 = QTreeWidgetItem(glevel_1, [self.parent.geol_coll.get_uid_geological_feature(uid)])
-                glevel_2.setFlags(glevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
+                glevel_2.setFlags(glevel_2.flags() | Qt.ItemIsAutoTristate | Qt.ItemIsUserCheckable)
                 self.GeologyTreeWidget.insertTopLevelItem(0, glevel_2)
                 glevel_3 = QTreeWidgetItem(glevel_2, [self.parent.geol_coll.get_uid_scenario(uid)])
-                glevel_3.setFlags(glevel_3.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
+                glevel_3.setFlags(glevel_3.flags() | Qt.ItemIsAutoTristate | Qt.ItemIsUserCheckable)
                 self.GeologyTreeWidget.insertTopLevelItem(0, glevel_3)
                 property_combo = QComboBox()
                 property_combo.uid = uid
@@ -874,7 +877,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                         self.TopologyTreeWidget.findItems(self.parent.geol_coll.get_uid_topological_type(uid),
                                                           Qt.MatchExactly, 0)[0],
                         [self.parent.geol_coll.get_uid_scenario(uid)])
-                    tlevel_2.setFlags(tlevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
+                    tlevel_2.setFlags(tlevel_2.flags() | Qt.ItemIsAutoTristate | Qt.ItemIsUserCheckable)
                     self.TopologyTreeWidget.insertTopLevelItem(0, tlevel_2)
                     property_combo = QComboBox()
                     property_combo.uid = uid
@@ -899,10 +902,10 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                 """Different topological type and scenario"""
                 tlevel_1 = QTreeWidgetItem(self.TopologyTreeWidget,
                                            [self.parent.geol_coll.get_uid_topological_type(uid)])
-                tlevel_1.setFlags(tlevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
+                tlevel_1.setFlags(tlevel_1.flags() | Qt.ItemIsAutoTristate | Qt.ItemIsUserCheckable)
                 self.TopologyTreeWidget.insertTopLevelItem(0, tlevel_1)
                 tlevel_2 = QTreeWidgetItem(tlevel_1, [self.parent.geol_coll.get_uid_scenario(uid)])
-                tlevel_2.setFlags(tlevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
+                tlevel_2.setFlags(tlevel_2.flags() | Qt.ItemIsAutoTristate | Qt.ItemIsUserCheckable)
                 self.TopologyTreeWidget.insertTopLevelItem(0, tlevel_2)
                 property_combo = QComboBox()
                 property_combo.uid = uid
@@ -1008,7 +1011,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         name_xslevel1 = ["All XSections"]
         xslevel_1 = QTreeWidgetItem(self.XSectionTreeWidget,
                                     name_xslevel1)  # self.XSectionTreeWidget as parent -> top level
-        xslevel_1.setFlags(xslevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
+        xslevel_1.setFlags(xslevel_1.flags() | Qt.ItemIsAutoTristate | Qt.ItemIsUserCheckable)
         if sec_uid:
             uids = self.parent.xsect_coll.df.loc[self.parent.xsect_coll.df['uid'] == sec_uid, 'uid'].to_list()
         else:
@@ -1619,7 +1622,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         for locid in locids:
             uid = self.parent.well_coll.df.loc[(self.parent.well_coll.df['Loc ID'] == locid), 'uid'].values[0]
             tlevel_1 = QTreeWidgetItem(self.WellsTreeWidget, [locid])  # self.GeologyTreeWidget as parent -> top level
-            tlevel_1.setFlags(tlevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
+            tlevel_1.setFlags(tlevel_1.flags() | Qt.ItemIsAutoTristate | Qt.ItemIsUserCheckable)
 
             property_combo = QComboBox()
             property_combo.uid = uid
@@ -1632,7 +1635,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             # ======================================= TRACE =======================================
 
             tlevel_2_trace = QTreeWidgetItem(tlevel_1, ['Trace', uid])  # tlevel_1 as parent -> middle level
-            tlevel_2_trace.setFlags(tlevel_2_trace.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
+            tlevel_2_trace.setFlags(tlevel_2_trace.flags() | Qt.ItemIsAutoTristate | Qt.ItemIsUserCheckable)
 
             property_combo = QComboBox()
             property_combo.uid = uid
@@ -1660,7 +1663,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         # ======================================= MARKER =======================================
 
         # tlevel_2_mark = QTreeWidgetItem(tlevel_1, ['Markers', uid])  # tlevel_1 as parent -> middle level
-        # tlevel_2_mark.setFlags(tlevel_2_mark.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
+        # tlevel_2_mark.setFlags(tlevel_2_mark.flags() | Qt.ItemIsAutoTristate | Qt.ItemIsUserCheckable)
 
         # property_combo = QComboBox()
         # property_combo.uid = uid
@@ -1680,7 +1683,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         # ======================================= ANNOTATIONS =======================================
 
         # tlevel_2_mark = QTreeWidgetItem(tlevel_1, ['Annotations', uid])  # tlevel_1 as parent -> middle level
-        # tlevel_2_mark.setFlags(tlevel_2_mark.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
+        # tlevel_2_mark.setFlags(tlevel_2_mark.flags() | Qt.ItemIsAutoTristate | Qt.ItemIsUserCheckable)
 
         # property_combo = QComboBox()
         # property_combo.uid = uid
@@ -1715,7 +1718,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                     glevel_2 = QTreeWidgetItem(
                         self.WellsTreeWidget.findItems(self.parent.well_coll.get_uid_well_locid(uid), Qt.MatchExactly,
                                                        0)[0])
-                    glevel_2.setFlags(glevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
+                    glevel_2.setFlags(glevel_2.flags() | Qt.ItemIsAutoTristate | Qt.ItemIsUserCheckable)
                     self.WellsTreeWidget.insertTopLevelItem(0, glevel_2)
 
                     property_combo = QComboBox()
@@ -1746,7 +1749,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                 """Different geological type, geological feature and scenario"""
                 tlevel_1 = QTreeWidgetItem(self.WellsTreeWidget, [
                     self.parent.well_coll.get_uid_well_locid(uid)])  # self.GeologyTreeWidget as parent -> top level
-                tlevel_1.setFlags(tlevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
+                tlevel_1.setFlags(tlevel_1.flags() | Qt.ItemIsAutoTristate | Qt.ItemIsUserCheckable)
 
                 property_combo = QComboBox()
                 property_combo.uid = uid
@@ -1759,7 +1762,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                 # ======================================= TRACE =======================================
 
                 tlevel_2_trace = QTreeWidgetItem(tlevel_1, ['Trace', uid])  # tlevel_1 as parent -> middle level
-                tlevel_2_trace.setFlags(tlevel_2_trace.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
+                tlevel_2_trace.setFlags(tlevel_2_trace.flags() | Qt.ItemIsAutoTristate | Qt.ItemIsUserCheckable)
 
                 property_combo = QComboBox()
                 property_combo.uid = uid
@@ -1846,7 +1849,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         for fluid_type in fluid_types:
             flevel_1 = QTreeWidgetItem(self.FluidsTreeWidget,
                                        [fluid_type])  # self.FluidsTreeWidget as parent -> top level
-            flevel_1.setFlags(flevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
+            flevel_1.setFlags(flevel_1.flags() | Qt.ItemIsAutoTristate | Qt.ItemIsUserCheckable)
             if sec_uid:
                 fluid_features = pd_unique(self.parent.fluids_coll.df.loc[
                                                (self.parent.fluids_coll.df['fluid_type'] == fluid_type) & (
@@ -1857,7 +1860,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                                                self.parent.fluids_coll.df['fluid_type'] == fluid_type, 'fluid_feature'])
             for feature in fluid_features:
                 flevel_2 = QTreeWidgetItem(flevel_1, [feature])  # flevel_1 as parent -> 1st middle level
-                flevel_2.setFlags(flevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
+                flevel_2.setFlags(flevel_2.flags() | Qt.ItemIsAutoTristate | Qt.ItemIsUserCheckable)
                 if sec_uid:
                     fluid_scenario = pd_unique(self.parent.fluids_coll.df.loc[
                                                    (self.parent.fluids_coll.df['fluid_type'] == fluid_type) & (
@@ -1872,7 +1875,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                                                                'fluid_feature'] == feature), 'scenario'])
                 for scenario in fluid_scenario:
                     flevel_3 = QTreeWidgetItem(flevel_2, [scenario])  # flevel_2 as parent -> 2nd middle level
-                    flevel_3.setFlags(flevel_3.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
+                    flevel_3.setFlags(flevel_3.flags() | Qt.ItemIsAutoTristate | Qt.ItemIsUserCheckable)
                     if sec_uid:
                         uids = self.parent.fluids_coll.df.loc[
                             (self.parent.fluids_coll.df['fluid_type'] == fluid_type) & (
@@ -1926,11 +1929,11 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         for topo_type in topo_types:
             tlevel_1 = QTreeWidgetItem(self.FluidsTopologyTreeWidget,
                                        [topo_type])  # self.GeologyTreeWidget as parent -> top level
-            tlevel_1.setFlags(tlevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
+            tlevel_1.setFlags(tlevel_1.flags() | Qt.ItemIsAutoTristate | Qt.ItemIsUserCheckable)
             for scenario in pd_unique(self.parent.fluids_coll.df.loc[
                                           self.parent.fluids_coll.df['topological_type'] == topo_type, 'scenario']):
                 tlevel_2 = QTreeWidgetItem(tlevel_1, [scenario])  # tlevel_1 as parent -> middle level
-                tlevel_2.setFlags(tlevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
+                tlevel_2.setFlags(tlevel_2.flags() | Qt.ItemIsAutoTristate | Qt.ItemIsUserCheckable)
                 if sec_uid:
                     uids = self.parent.fluids_coll.df.loc[
                         (self.parent.fluids_coll.df['topological_type'] == topo_type) & (
@@ -2037,7 +2040,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                                     self.FluidsTreeWidget.findItems(self.parent.fluids_coll.get_uid_fluid_type(uid),
                                                                     Qt.MatchExactly, 0)[0].child(child_1),
                                     [self.parent.fluids_coll.get_uid_scenario(uid)])
-                                flevel_3.setFlags(flevel_3.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
+                                flevel_3.setFlags(flevel_3.flags() | Qt.ItemIsAutoTristate | Qt.ItemIsUserCheckable)
                                 self.FluidsTreeWidget.insertTopLevelItem(0, flevel_3)
                                 property_combo = QComboBox()
                                 property_combo.uid = uid
@@ -2064,10 +2067,10 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                         self.FluidsTreeWidget.findItems(self.parent.fluids_coll.get_uid_fluid_type(uid),
                                                         Qt.MatchExactly, 0)[0],
                         [self.parent.fluids_coll.get_uid_fluid_feature(uid)])
-                    flevel_2.setFlags(flevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
+                    flevel_2.setFlags(flevel_2.flags() | Qt.ItemIsAutoTristate | Qt.ItemIsUserCheckable)
                     self.FluidsTreeWidget.insertTopLevelItem(0, flevel_2)
                     flevel_3 = QTreeWidgetItem(flevel_2, [self.parent.fluids_coll.get_uid_scenario(uid)])
-                    flevel_3.setFlags(flevel_3.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
+                    flevel_3.setFlags(flevel_3.flags() | Qt.ItemIsAutoTristate | Qt.ItemIsUserCheckable)
                     self.FluidsTreeWidget.insertTopLevelItem(0, flevel_3)
                     property_combo = QComboBox()
                     property_combo.uid = uid
@@ -2091,13 +2094,13 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             else:
                 """Different fluid type, fluid feature and scenario"""
                 flevel_1 = QTreeWidgetItem(self.FluidsTreeWidget, [self.parent.fluids_coll.get_uid_fluid_type(uid)])
-                flevel_1.setFlags(flevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
+                flevel_1.setFlags(flevel_1.flags() | Qt.ItemIsAutoTristate | Qt.ItemIsUserCheckable)
                 self.FluidsTreeWidget.insertTopLevelItem(0, flevel_1)
                 flevel_2 = QTreeWidgetItem(flevel_1, [self.parent.fluids_coll.get_uid_fluid_feature(uid)])
-                flevel_2.setFlags(flevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
+                flevel_2.setFlags(flevel_2.flags() | Qt.ItemIsAutoTristate | Qt.ItemIsUserCheckable)
                 self.FluidsTreeWidget.insertTopLevelItem(0, flevel_2)
                 flevel_3 = QTreeWidgetItem(flevel_2, [self.parent.fluids_coll.get_uid_scenario(uid)])
-                flevel_3.setFlags(flevel_3.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
+                flevel_3.setFlags(flevel_3.flags() | Qt.ItemIsAutoTristate | Qt.ItemIsUserCheckable)
                 self.FluidsTreeWidget.insertTopLevelItem(0, flevel_3)
                 property_combo = QComboBox()
                 property_combo.uid = uid
@@ -2221,7 +2224,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                         self.FluidsTopologyTreeWidget.findItems(self.parent.fluids_coll.get_uid_topological_type(uid),
                                                                 Qt.MatchExactly, 0)[0],
                         [self.parent.fluids_coll.get_uid_scenario(uid)])
-                    tlevel_2.setFlags(tlevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
+                    tlevel_2.setFlags(tlevel_2.flags() | Qt.ItemIsAutoTristate | Qt.ItemIsUserCheckable)
                     self.FluidsTopologyTreeWidget.insertTopLevelItem(0, tlevel_2)
                     property_combo = QComboBox()
                     property_combo.uid = uid
@@ -2246,10 +2249,10 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                 """Different topological type and scenario"""
                 tlevel_1 = QTreeWidgetItem(self.FluidsTopologyTreeWidget,
                                            [self.parent.fluids_coll.get_uid_topological_type(uid)])
-                tlevel_1.setFlags(tlevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
+                tlevel_1.setFlags(tlevel_1.flags() | Qt.ItemIsAutoTristate | Qt.ItemIsUserCheckable)
                 self.FluidsTopologyTreeWidget.insertTopLevelItem(0, tlevel_1)
                 tlevel_2 = QTreeWidgetItem(tlevel_1, [self.parent.fluids_coll.get_uid_scenario(uid)])
-                tlevel_2.setFlags(tlevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
+                tlevel_2.setFlags(tlevel_2.flags() | Qt.ItemIsAutoTristate | Qt.ItemIsUserCheckable)
                 self.FluidsTopologyTreeWidget.insertTopLevelItem(0, tlevel_2)
                 property_combo = QComboBox()
                 property_combo.uid = uid
@@ -2360,7 +2363,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         for background_type in background_types:
             flevel_1 = QTreeWidgetItem(self.BackgroundsTreeWidget,
                                        [background_type])  # self.BackgroundsTreeWidget as parent -> top level
-            flevel_1.setFlags(flevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
+            flevel_1.setFlags(flevel_1.flags() | Qt.ItemIsAutoTristate | Qt.ItemIsUserCheckable)
             if sec_uid:
                 background_features = pd_unique(self.parent.backgrounds_coll.df.loc[(self.parent.backgrounds_coll.df[
                                                                                          'background_type'] == background_type) & (
@@ -2371,7 +2374,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                                                                                         'background_type'] == background_type, 'background_feature'])
             for feature in background_features:
                 flevel_2 = QTreeWidgetItem(flevel_1, [feature])  # flevel_1 as parent -> 1st middle level
-                flevel_2.setFlags(flevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
+                flevel_2.setFlags(flevel_2.flags() | Qt.ItemIsAutoTristate | Qt.ItemIsUserCheckable)
                 if sec_uid:
                     uids = self.parent.backgrounds_coll.df.loc[
                         (self.parent.backgrounds_coll.df['background_type'] == background_type) & (
@@ -2422,12 +2425,12 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         for topo_type in topo_types:
             tlevel_1 = QTreeWidgetItem(self.BackgroundsTopologyTreeWidget,
                                        [topo_type])  # self.GeologyTreeWidget as parent -> top level
-            tlevel_1.setFlags(tlevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
+            tlevel_1.setFlags(tlevel_1.flags() | Qt.ItemIsAutoTristate | Qt.ItemIsUserCheckable)
 
             for background_type in pd_unique(self.parent.backgrounds_coll.df.loc[self.parent.backgrounds_coll.df[
                                                                                      'topological_type'] == topo_type, 'background_type']):
                 tlevel_2 = QTreeWidgetItem(tlevel_1, [background_type])  # tlevel_1 as parent -> middle level
-                tlevel_2.setFlags(tlevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
+                tlevel_2.setFlags(tlevel_2.flags() | Qt.ItemIsAutoTristate | Qt.ItemIsUserCheckable)
                 if sec_uid:
                     uids = self.parent.backgrounds_coll.df.loc[
                         (self.parent.backgrounds_coll.df['topological_type'] == topo_type) & (
@@ -2522,7 +2525,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                         self.BackgroundsTreeWidget.findItems(self.parent.backgrounds_coll.get_uid_background_type(uid),
                                                              Qt.MatchExactly, 0)[0],
                         [self.parent.backgrounds_coll.get_uid_background_feature(uid)])
-                    flevel_2.setFlags(flevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
+                    flevel_2.setFlags(flevel_2.flags() | Qt.ItemIsAutoTristate | Qt.ItemIsUserCheckable)
                     self.BackgroundsTreeWidget.insertTopLevelItem(0, flevel_2)
                     property_combo = QComboBox()
                     property_combo.uid = uid
@@ -2547,10 +2550,10 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                 """Different background type and background feature"""
                 flevel_1 = QTreeWidgetItem(self.BackgroundsTreeWidget,
                                            [self.parent.backgrounds_coll.get_uid_background_type(uid)])
-                flevel_1.setFlags(flevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
+                flevel_1.setFlags(flevel_1.flags() | Qt.ItemIsAutoTristate | Qt.ItemIsUserCheckable)
                 self.BackgroundsTreeWidget.insertTopLevelItem(0, flevel_1)
                 flevel_2 = QTreeWidgetItem(flevel_1, [self.parent.backgrounds_coll.get_uid_background_feature(uid)])
-                flevel_2.setFlags(flevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
+                flevel_2.setFlags(flevel_2.flags() | Qt.ItemIsAutoTristate | Qt.ItemIsUserCheckable)
                 self.BackgroundsTreeWidget.insertTopLevelItem(0, flevel_2)
                 property_combo = QComboBox()
                 property_combo.uid = uid
@@ -2666,7 +2669,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                     tlevel_2 = QTreeWidgetItem(self.BackgroundsTopologyTreeWidget.findItems(
                         self.parent.backgrounds_coll.get_uid_topological_type(uid), Qt.MatchExactly, 0)[0],
                                                [self.parent.backgrounds_coll.get_uid_background_feature(uid)])
-                    tlevel_2.setFlags(tlevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
+                    tlevel_2.setFlags(tlevel_2.flags() | Qt.ItemIsAutoTristate | Qt.ItemIsUserCheckable)
                     self.BackgroundsTopologyTreeWidget.insertTopLevelItem(0, tlevel_2)
                     property_combo = QComboBox()
                     property_combo.uid = uid
@@ -2690,10 +2693,10 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                 """Different topological type and feature"""
                 tlevel_1 = QTreeWidgetItem(self.BackgroundsTopologyTreeWidget,
                                            [self.parent.backgrounds_coll.get_uid_topological_type(uid)])
-                tlevel_1.setFlags(tlevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
+                tlevel_1.setFlags(tlevel_1.flags() | Qt.ItemIsAutoTristate | Qt.ItemIsUserCheckable)
                 self.BackgroundsTopologyTreeWidget.insertTopLevelItem(0, tlevel_1)
                 tlevel_2 = QTreeWidgetItem(tlevel_1, [self.parent.backgrounds_coll.get_uid_background_feature(uid)])
-                tlevel_2.setFlags(tlevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
+                tlevel_2.setFlags(tlevel_2.flags() | Qt.ItemIsAutoTristate | Qt.ItemIsUserCheckable)
                 self.BackgroundsTopologyTreeWidget.insertTopLevelItem(0, tlevel_2)
                 property_combo = QComboBox()
                 property_combo.uid = uid
@@ -4588,40 +4591,78 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
 
         self.plotter.track_click_position(lambda pos: self.plotter.camera.SetFocalPoint(pos), side='left', double=True)
 
-    def initialize_menu_tools(self):
+    # def initialize_menu_tools(self):
+    #     self.saveHomeView = QAction("Save home view", self)  # create action
+    #     self.saveHomeView.triggered.connect(self.save_home_view)  # connect action to function
+    #     self.menuBaseView.addAction(self.saveHomeView)  # add action to menu
+    #     self.toolBarBase.addAction(self.saveHomeView)  # add action to toolbar
+    #
+    #     self.zoomHomeView = QAction("Zoom to home", self)
+    #     self.zoomHomeView.triggered.connect(self.zoom_home_view)
+    #     self.menuBaseView.addAction(self.zoomHomeView)
+    #     self.toolBarBase.addAction(self.zoomHomeView)
+    #
+    #     self.zoomActive = QAction("Zoom to active", self)
+    #     self.zoomActive.triggered.connect(self.zoom_active)
+    #     self.menuBaseView.addAction(self.zoomActive)
+    #     self.toolBarBase.addAction(self.zoomActive)
+    #
+    #     self.selectEntity = QAction('Select entity', self)  # create action
+    #     self.selectEntity.triggered.connect(self.select_actor_with_mouse)  # connect action to function
+    #     self.menuBaseView.addAction(self.selectEntity)  # add action to menu
+    #     self.toolBarBase.addAction(self.selectEntity)  # add action to toolbar
+    #
+    #     self.removeEntity = QAction('Remove Entity', self)  # create action
+    #     self.removeEntity.triggered.connect(self.remove_entity)  # connect action to function
+    #     self.menuBaseView.addAction(self.removeEntity)  # add action to menu
+    #     self.toolBarBase.addAction(self.removeEntity)  # add action to toolbar
+    #
+    #     self.clearSelection = QAction('Clear Selection', self)  # create action
+    #     self.clearSelection.triggered.connect(self.clear_selection)  # connect action to function
+    #     self.menuBaseView.addAction(self.clearSelection)  # add action to menu
+    #     self.toolBarBase.addAction(self.clearSelection)  # add action to toolbar
+    #
+    #     self.vertExagButton = QAction('Vertical exaggeration', self)
+    #     self.vertExagButton.triggered.connect(self.vert_exag)  # connect action to function
+    #     self.menuWindow.addAction(self.vertExagButton)  # add action to menu
+
+    def initialize_tools(self):
+        """Initialize standard QToolButton's already included in the standard base view.
+        More tool buttons must be added with the pattern:
+        self.ToolButtonsLayout.setObjectName(u"ToolButtonsLayout")
+        self.SaveHomeButton = QToolButton(self.ToolButtonsFrame)
+        self.SaveHomeButton.setObjectName(u"SaveHomeButton")
+        self.SaveHomeButton.setAutoRaise(False)
+        self.SaveHomeButton.setArrowType(Qt.NoArrow)
+        self.ToolButtonsLayout.addWidget(self.SaveHomeButton)."""
         self.saveHomeView = QAction("Save home view", self)  # create action
         self.saveHomeView.triggered.connect(self.save_home_view)  # connect action to function
-        self.menuBaseView.addAction(self.saveHomeView)  # add action to menu
-        self.toolBarBase.addAction(self.saveHomeView)  # add action to toolbar
+        self.SaveHomeButton.addAction(self.saveHomeView)  # add action to menu
 
         self.zoomHomeView = QAction("Zoom to home", self)
         self.zoomHomeView.triggered.connect(self.zoom_home_view)
-        self.menuBaseView.addAction(self.zoomHomeView)
-        self.toolBarBase.addAction(self.zoomHomeView)
+        self.ZoomHomeButton.addAction(self.zoomHomeView)
 
         self.zoomActive = QAction("Zoom to active", self)
         self.zoomActive.triggered.connect(self.zoom_active)
-        self.menuBaseView.addAction(self.zoomActive)
-        self.toolBarBase.addAction(self.zoomActive)
+        self.ZoomActiveButton.addAction(self.zoomActive)
 
-        self.selectLineButton = QAction('Select entity', self)  # create action
-        self.selectLineButton.triggered.connect(self.select_actor_with_mouse)  # connect action to function
-        self.menuBaseView.addAction(self.selectLineButton)  # add action to menu
-        self.toolBarBase.addAction(self.selectLineButton)  # add action to toolbar
+        self.selectEntity = QAction('Select entity', self)
+        self.selectEntity.triggered.connect(self.select_actor_with_mouse)
+        self.SelectEntityButton.addAction(self.selectEntity)
 
-        self.removeEntityButton = QAction('Remove Entity', self)  # create action
-        self.removeEntityButton.triggered.connect(self.remove_entity)  # connect action to function
-        self.menuBaseView.addAction(self.removeEntityButton)  # add action to menu
-        self.toolBarBase.addAction(self.removeEntityButton)  # add action to toolbar
+        self.clearSelection = QAction('Clear Selection', self)
+        self.clearSelection.triggered.connect(self.clear_selection)
+        self.ClearSelectionButton.addAction(self.clearSelection)
 
-        self.clearSelectionButton = QAction('Clear Selection', self)  # create action
-        self.clearSelectionButton.triggered.connect(self.clear_selection)  # connect action to function
-        self.menuBaseView.addAction(self.clearSelectionButton)  # add action to menu
-        self.toolBarBase.addAction(self.clearSelectionButton)  # add action to toolbar
+        self.removeEntity = QAction('Remove Entity', self)
+        self.removeEntity.triggered.connect(self.remove_entity)
+        self.RemoveEntityButton.addAction(self.removeEntity)
 
-        self.vertExagButton = QAction('Vertical exaggeration', self)
-        self.vertExagButton.triggered.connect(self.vert_exag)  # connect action to function
-        self.menuWindow.addAction(self.vertExagButton)  # add action to menu
+        #  THIS SHOULD GO TO 3D AND MAYBE X SECTION _______________
+        # self.vertExagButton = QAction('Vertical exaggeration', self)
+        # self.vertExagButton.triggered.connect(self.vert_exag)  # connect action to function
+        # self.menuWindow.addAction(self.vertExagButton)  # add action to menu
 
     def show_qt_canvas(self):
         """Show the Qt Window"""
@@ -4941,7 +4982,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
 class View3D(BaseView):
     """Create 3D view and import UI created with Qt Designer by subclassing base view"""
     """parent is the QT object that is launching this one, hence the ProjectWindow() instance in this case"""
-
+    from .point_clouds import cut_pc, segment_pc, facets_pc, auto_pick, thresh_filt, normals2dd, calibration_pc
     def __init__(self, *args, **kwargs):
         super(View3D, self).__init__(*args, **kwargs)
 
@@ -4958,90 +4999,178 @@ class View3D(BaseView):
 
     """Re-implementations of functions that appear in all views - see placeholders in BaseView()"""
 
-    def initialize_menu_tools(self):
-        """Customize menus and tools for this view"""
-        from .point_clouds import cut_pc, segment_pc, facets_pc, auto_pick, thresh_filt, normals2dd, calibration_pc
-        super().initialize_menu_tools()
-        self.menuBaseView.setTitle("Edit")
-        self.actionBase_Tool.setText("Edit")
+    # def initialize_menu_tools(self):
+    #     """Customize menus and tools for this view"""
+    #     from .point_clouds import cut_pc, segment_pc, facets_pc, auto_pick, thresh_filt, normals2dd, calibration_pc
+    #     super().initialize_menu_tools()
+    #     self.menuBaseView.setTitle("Edit")
+    #     self.actionBase_Tool.setText("Edit")
+    #
+    #     self.menuBoreTraceVis = QMenu('Borehole visualization methods', self)
+    #     self.actionBoreTrace = QAction('Trace', self)
+    #
+    #     self.actionBoreTrace.triggered.connect(lambda: self.change_bore_vis('trace'))
+    #
+    #     self.actionBoreCylinder = QAction('Cylinder', self)
+    #     self.actionBoreCylinder.triggered.connect(lambda: self.change_bore_vis('cylinder'))
+    #     self.actionToggleGeology = QAction('Toggle geology', self)
+    #     self.actionToggleGeology.triggered.connect(lambda: self.change_bore_vis('geo'))
+    #     self.actionToggleLithology = QAction('Toggle lithology', self)
+    #     self.actionToggleLithology.triggered.connect(lambda: self.change_bore_vis('litho'))
+    #
+    #     self.menuBoreTraceVis.addAction(self.actionBoreTrace)
+    #     self.menuBoreTraceVis.addAction(self.actionBoreCylinder)
+    #     self.menuBoreTraceVis.addAction(self.actionToggleLithology)
+    #     self.menuBoreTraceVis.addAction(self.actionToggleGeology)
+    #
+    #     self.menuBaseView.addMenu(self.menuBoreTraceVis)
+    #
+    #     self.actionThresholdf.triggered.connect(lambda: thresh_filt(self))
+    #     self.actionSurface_densityf.triggered.connect(lambda: self.surf_den_filt())
+    #     self.actionRoughnessf.triggered.connect(lambda: self.rough_filt())
+    #     self.actionCurvaturef.triggered.connect(lambda: self.curv_filt())
+    #     self.actionNormalsf.triggered.connect(lambda: self.norm_filt())
+    #     self.actionManualBoth.triggered.connect(lambda: cut_pc(self))
+    #     self.actionManualInner.triggered.connect(lambda: cut_pc(self,'inner'))
+    #     self.actionManualOuter.triggered.connect(lambda: cut_pc(self,'outer'))
+    #
+    #
+    #
+    #     self.actionCalibration.triggered.connect(lambda: calibration_pc(self))
+    #     self.actionManual_picking.triggered.connect(lambda: self.act_att())
+    #     self.actionSegment.triggered.connect(lambda: segment_pc(self))
+    #     self.actionPick.triggered.connect(lambda: auto_pick(self))
+    #     self.actionFacets.triggered.connect(lambda: facets_pc(self))
+    #
+    #     # self.actionCalculate_normals.triggered.connect(lambda: self.normalGeometry())
+    #     self.actionNormals_to_DDR.triggered.connect(lambda: normals2dd(self))
+    #
+    #     # self.showOct = QAction("Show octree structure", self)
+    #     # self.showOct.triggered.connect(self.show_octree)
+    #     # self.menuBaseView.addAction(self.showOct)
+    #     # self.toolBarBase.addAction(self.showOct)
+    #
+    #     self.menuOrbit = QMenu('Orbit around', self)
+    #
+    #     self.actionOrbitEntity = QAction('Entity', self)
+    #     self.actionOrbitEntity.triggered.connect(lambda: self.orbit_entity())
+    #     self.menuOrbit.addAction(self.actionOrbitEntity)
+    #
+    #     self.menuWindow.addMenu(self.menuOrbit)
+    #
+    #     """______________THIS MUST BE MOVED TO MAIN WINDOW AND NAME MUST BE MORE SPECIFIC_________________"""
+    #     self.actionExportScreen = QAction('Take screenshot', self)
+    #     self.actionExportScreen.triggered.connect(self.export_screen)
+    #     self.menuBaseView.addAction(self.actionExportScreen)
+    #     self.toolBarBase.addAction(self.actionExportScreen)
+    #
+    #     self.actionExportGltf = QAction('Export as GLTF', self)
+    #     self.actionExportGltf.triggered.connect(self.export_gltf)
+    #     self.menuBaseView.addAction(self.actionExportGltf)
+    #     self.toolBarBase.addAction(self.actionExportGltf)
+    #
+    #     self.actionExportHtml = QAction('Export as HTML', self)
+    #     self.actionExportHtml.triggered.connect(self.export_html)
+    #     self.menuBaseView.addAction(self.actionExportHtml)
+    #     self.toolBarBase.addAction(self.actionExportHtml)
+    #
+    #     self.actionExportObj = QAction('Export as OBJ', self)
+    #     self.actionExportObj.triggered.connect(self.export_obj)
+    #     self.menuBaseView.addAction(self.actionExportObj)
+    #     self.toolBarBase.addAction(self.actionExportObj)
+    #
+    #     self.actionExportVtkjs = QAction('Export as VTKjs', self)
+    #     self.actionExportVtkjs.triggered.connect(self.export_vtkjs)
+    #     self.menuBaseView.addAction(self.actionExportVtkjs)
+    #     self.toolBarBase.addAction(self.actionExportVtkjs)
 
-        self.menuBoreTraceVis = QMenu('Borehole visualization methods', self)
-        self.actionBoreTrace = QAction('Trace', self)
-
-        self.actionBoreTrace.triggered.connect(lambda: self.change_bore_vis('trace'))
-
-        self.actionBoreCylinder = QAction('Cylinder', self)
-        self.actionBoreCylinder.triggered.connect(lambda: self.change_bore_vis('cylinder'))
-        self.actionToggleGeology = QAction('Toggle geology', self)
-        self.actionToggleGeology.triggered.connect(lambda: self.change_bore_vis('geo'))
-        self.actionToggleLithology = QAction('Toggle lithology', self)
-        self.actionToggleLithology.triggered.connect(lambda: self.change_bore_vis('litho'))
-
-        self.menuBoreTraceVis.addAction(self.actionBoreTrace)
-        self.menuBoreTraceVis.addAction(self.actionBoreCylinder)
-        self.menuBoreTraceVis.addAction(self.actionToggleLithology)
-        self.menuBoreTraceVis.addAction(self.actionToggleGeology)
-
-        self.menuBaseView.addMenu(self.menuBoreTraceVis)
-
-        self.actionThresholdf.triggered.connect(lambda: thresh_filt(self))
-        self.actionSurface_densityf.triggered.connect(lambda: self.surf_den_filt())
-        self.actionRoughnessf.triggered.connect(lambda: self.rough_filt())
-        self.actionCurvaturef.triggered.connect(lambda: self.curv_filt())
-        self.actionNormalsf.triggered.connect(lambda: self.norm_filt())
-        self.actionManualBoth.triggered.connect(lambda: cut_pc(self))
-        self.actionManualInner.triggered.connect(lambda: cut_pc(self,'inner'))
-        self.actionManualOuter.triggered.connect(lambda: cut_pc(self,'outer'))
-
-
-
-        self.actionCalibration.triggered.connect(lambda: calibration_pc(self))
-        self.actionManual_picking.triggered.connect(lambda: self.act_att())
-        self.actionSegment.triggered.connect(lambda: segment_pc(self))
-        self.actionPick.triggered.connect(lambda: auto_pick(self))
-        self.actionFacets.triggered.connect(lambda: facets_pc(self))
-
-        # self.actionCalculate_normals.triggered.connect(lambda: self.normalGeometry())
-        self.actionNormals_to_DDR.triggered.connect(lambda: normals2dd(self))
-
-        # self.showOct = QAction("Show octree structure", self)
-        # self.showOct.triggered.connect(self.show_octree)
-        # self.menuBaseView.addAction(self.showOct)
-        # self.toolBarBase.addAction(self.showOct)
-
-        self.menuOrbit = QMenu('Orbit around', self)
-
-        self.actionOrbitEntity = QAction('Entity', self)
-        self.actionOrbitEntity.triggered.connect(lambda: self.orbit_entity())
-        self.menuOrbit.addAction(self.actionOrbitEntity)
-
-        self.menuWindow.addMenu(self.menuOrbit)
-
-        """______________THIS MUST BE MOVED TO MAIN WINDOW AND NAME MUST BE MORE SPECIFIC_________________"""
-        self.actionExportScreen = QAction('Take screenshot', self)
-        self.actionExportScreen.triggered.connect(self.export_screen)
-        self.menuBaseView.addAction(self.actionExportScreen)
-        self.toolBarBase.addAction(self.actionExportScreen)
-
-        self.actionExportGltf = QAction('Export as GLTF', self)
-        self.actionExportGltf.triggered.connect(self.export_gltf)
-        self.menuBaseView.addAction(self.actionExportGltf)
-        self.toolBarBase.addAction(self.actionExportGltf)
-
-        self.actionExportHtml = QAction('Export as HTML', self)
-        self.actionExportHtml.triggered.connect(self.export_html)
-        self.menuBaseView.addAction(self.actionExportHtml)
-        self.toolBarBase.addAction(self.actionExportHtml)
-
-        self.actionExportObj = QAction('Export as OBJ', self)
-        self.actionExportObj.triggered.connect(self.export_obj)
-        self.menuBaseView.addAction(self.actionExportObj)
-        self.toolBarBase.addAction(self.actionExportObj)
-
-        self.actionExportVtkjs = QAction('Export as VTKjs', self)
-        self.actionExportVtkjs.triggered.connect(self.export_vtkjs)
-        self.menuBaseView.addAction(self.actionExportVtkjs)
-        self.toolBarBase.addAction(self.actionExportVtkjs)
+    def initialize_tools(self):
+        """Add more tool buttons for this view with the pattern:
+        self.ToolButtonsLayout.setObjectName(u"ToolButtonsLayout")
+        self.SaveHomeButton = QToolButton(self.ToolButtonsFrame)
+        self.SaveHomeButton.setObjectName(u"SaveHomeButton")
+        self.SaveHomeButton.setAutoRaise(False)
+        self.SaveHomeButton.setArrowType(Qt.NoArrow)
+        self.ToolButtonsLayout.addWidget(self.SaveHomeButton)."""
+        super().initialize_tools()
+        # self.menuBaseView.setTitle("Edit")
+        # self.actionBase_Tool.setText("Edit")
+        #
+        # self.menuBoreTraceVis = QMenu('Borehole visualization methods', self)
+        # self.actionBoreTrace = QAction('Trace', self)
+        #
+        # self.actionBoreTrace.triggered.connect(lambda: self.change_bore_vis('trace'))
+        #
+        # self.actionBoreCylinder = QAction('Cylinder', self)
+        # self.actionBoreCylinder.triggered.connect(lambda: self.change_bore_vis('cylinder'))
+        # self.actionToggleGeology = QAction('Toggle geology', self)
+        # self.actionToggleGeology.triggered.connect(lambda: self.change_bore_vis('geo'))
+        # self.actionToggleLithology = QAction('Toggle lithology', self)
+        # self.actionToggleLithology.triggered.connect(lambda: self.change_bore_vis('litho'))
+        #
+        # self.menuBoreTraceVis.addAction(self.actionBoreTrace)
+        # self.menuBoreTraceVis.addAction(self.actionBoreCylinder)
+        # self.menuBoreTraceVis.addAction(self.actionToggleLithology)
+        # self.menuBoreTraceVis.addAction(self.actionToggleGeology)
+        #
+        # self.menuBaseView.addMenu(self.menuBoreTraceVis)
+        #
+        # self.actionThresholdf.triggered.connect(lambda: thresh_filt(self))
+        # self.actionSurface_densityf.triggered.connect(lambda: self.surf_den_filt())
+        # self.actionRoughnessf.triggered.connect(lambda: self.rough_filt())
+        # self.actionCurvaturef.triggered.connect(lambda: self.curv_filt())
+        # self.actionNormalsf.triggered.connect(lambda: self.norm_filt())
+        # self.actionManualBoth.triggered.connect(lambda: cut_pc(self))
+        # self.actionManualInner.triggered.connect(lambda: cut_pc(self, 'inner'))
+        # self.actionManualOuter.triggered.connect(lambda: cut_pc(self, 'outer'))
+        #
+        # self.actionCalibration.triggered.connect(lambda: calibration_pc(self))
+        # self.actionManual_picking.triggered.connect(lambda: self.act_att())
+        # self.actionSegment.triggered.connect(lambda: segment_pc(self))
+        # self.actionPick.triggered.connect(lambda: auto_pick(self))
+        # self.actionFacets.triggered.connect(lambda: facets_pc(self))
+        #
+        # # self.actionCalculate_normals.triggered.connect(lambda: self.normalGeometry())
+        # self.actionNormals_to_DDR.triggered.connect(lambda: normals2dd(self))
+        #
+        # # self.showOct = QAction("Show octree structure", self)
+        # # self.showOct.triggered.connect(self.show_octree)
+        # # self.menuBaseView.addAction(self.showOct)
+        # # self.toolBarBase.addAction(self.showOct)
+        #
+        # self.menuOrbit = QMenu('Orbit around', self)
+        #
+        # self.actionOrbitEntity = QAction('Entity', self)
+        # self.actionOrbitEntity.triggered.connect(lambda: self.orbit_entity())
+        # self.menuOrbit.addAction(self.actionOrbitEntity)
+        #
+        # self.menuWindow.addMenu(self.menuOrbit)
+        #
+        # """______________THIS MUST BE MOVED TO MAIN WINDOW AND NAME MUST BE MORE SPECIFIC_________________"""
+        # self.actionExportScreen = QAction('Take screenshot', self)
+        # self.actionExportScreen.triggered.connect(self.export_screen)
+        # self.menuBaseView.addAction(self.actionExportScreen)
+        # self.toolBarBase.addAction(self.actionExportScreen)
+        #
+        # self.actionExportGltf = QAction('Export as GLTF', self)
+        # self.actionExportGltf.triggered.connect(self.export_gltf)
+        # self.menuBaseView.addAction(self.actionExportGltf)
+        # self.toolBarBase.addAction(self.actionExportGltf)
+        #
+        # self.actionExportHtml = QAction('Export as HTML', self)
+        # self.actionExportHtml.triggered.connect(self.export_html)
+        # self.menuBaseView.addAction(self.actionExportHtml)
+        # self.toolBarBase.addAction(self.actionExportHtml)
+        #
+        # self.actionExportObj = QAction('Export as OBJ', self)
+        # self.actionExportObj.triggered.connect(self.export_obj)
+        # self.menuBaseView.addAction(self.actionExportObj)
+        # self.toolBarBase.addAction(self.actionExportObj)
+        #
+        # self.actionExportVtkjs = QAction('Export as VTKjs', self)
+        # self.actionExportVtkjs.triggered.connect(self.export_vtkjs)
+        # self.menuBaseView.addAction(self.actionExportVtkjs)
+        # self.toolBarBase.addAction(self.actionExportVtkjs)
 
     def export_screen(self):
         out_file_name = save_file_dialog(parent=self, caption="Export 3D view as HTML.", filter="png (*.png);; jpeg (*.jpg)")
@@ -5323,118 +5452,238 @@ class View2D(BaseView):
 
     """Re-implementations of functions that appear in all views - see placeholders in BaseView()"""
 
-    def initialize_menu_tools(self):
+    # def initialize_menu_tools(self):
+    #     """Imports for this view."""
+    #     from .two_d_lines import draw_line, edit_line, sort_line_nodes, rotate_line, extend_line, \
+    #         split_line_line, split_line_existing_point, merge_lines, snap_line, resample_line_distance, \
+    #         resample_line_number_points, simplify_line, copy_parallel, copy_kink, copy_similar, measure_distance
+    #     """Customize menus and tools for this view"""
+    #     self.menuBaseView.setTitle("Edit")
+    #     self.actionBase_Tool.setText("Edit")
+    #
+    #     self.removeEntity = QAction('Remove Entity', self)  # create action
+    #     self.removeEntity.triggered.connect(self.entity_remove_selected)  # connect action to function
+    #     self.menuBaseView.addAction(self.removeEntity)  # add action to menu
+    #     self.toolBarBase.addAction(self.removeEntity)  # add action to toolbar
+    #
+    #     self.drawLineButton = QAction('Draw line', self)  # create action
+    #     self.drawLineButton.triggered.connect(
+    #         lambda: draw_line(self))  # connect action to function with additional argument parent
+    #     self.menuBaseView.addAction(self.drawLineButton)  # add action to menu
+    #     self.toolBarBase.addAction(self.drawLineButton)  # add action to toolbar
+    #
+    #     self.selectEntity = QAction('Select line', self)  # create action
+    #     self.selectEntity.triggered.connect(self.select_actor_with_mouse)  # connect action to function
+    #     self.menuBaseView.addAction(self.selectEntity)  # add action to menu
+    #     self.toolBarBase.addAction(self.selectEntity)  # add action to toolbar
+    #
+    #     self.clearSelection = QAction('Clear Selection', self)  # create action
+    #     self.clearSelection.triggered.connect(self.clear_selection)  # connect action to function
+    #     self.menuBaseView.addAction(self.clearSelection)  # add action to menu
+    #     self.toolBarBase.addAction(self.clearSelection)  # add action to toolbar
+    #
+    #     self.editLineButton = QAction('Edit line', self)  # create action
+    #     self.editLineButton.triggered.connect(lambda: edit_line(self))  # connect action to function
+    #     self.menuBaseView.addAction(self.editLineButton)  # add action to menu
+    #     self.toolBarBase.addAction(self.editLineButton)  # add action to toolbar
+    #
+    #     self.sortLineButton = QAction('Sort line nodes', self)  # create action
+    #     self.sortLineButton.triggered.connect(lambda: sort_line_nodes(self))  # connect action to function
+    #     self.menuBaseView.addAction(self.sortLineButton)  # add action to menu
+    #     self.toolBarBase.addAction(self.sortLineButton)  # add action to toolbar
+    #
+    #     self.moveLineButton = QAction('Move line', self)  # create action
+    #     self.moveLineButton.triggered.connect(self.vector_by_mouse)  # connect action to function
+    #     self.menuBaseView.addAction(self.moveLineButton)  # add action to menu
+    #     self.toolBarBase.addAction(self.moveLineButton)  # add action to toolbar
+    #
+    #     self.rotateLineButton = QAction('Rotate line', self)  # create action
+    #     self.rotateLineButton.triggered.connect(lambda: rotate_line(self))  # connect action to function
+    #     self.menuBaseView.addAction(self.rotateLineButton)  # add action to menu
+    #     self.toolBarBase.addAction(self.rotateLineButton)  # add action to toolbar
+    #
+    #     self.extendButton = QAction('Extend line', self)  # create action
+    #     self.extendButton.triggered.connect(lambda: extend_line(self))  # connect action to function
+    #     self.menuBaseView.addAction(self.extendButton)  # add action to menu
+    #     self.toolBarBase.addAction(self.extendButton)  # add action to toolbar
+    #
+    #     self.splitLineByLineButton = QAction('Split line-line', self)  # create action
+    #     self.splitLineByLineButton.triggered.connect(lambda: split_line_line(self))  # connect action to function
+    #     self.menuBaseView.addAction(self.splitLineByLineButton)  # add action to menu
+    #     self.toolBarBase.addAction(self.splitLineByLineButton)  # add action to toolbar
+    #
+    #     self.splitLineByPointButton = QAction('Split line-point', self)  # create action
+    #     self.splitLineByPointButton.triggered.connect(
+    #         lambda: split_line_existing_point(self))  # connect action to function
+    #     self.menuBaseView.addAction(self.splitLineByPointButton)  # add action to menu
+    #     self.toolBarBase.addAction(self.splitLineByPointButton)  # add action to toolbar
+    #
+    #     self.mergeLineButton = QAction('Merge lines', self)  # create action
+    #     self.mergeLineButton.triggered.connect(lambda: merge_lines(self))  # connect action to function
+    #     self.menuBaseView.addAction(self.mergeLineButton)  # add action to menu
+    #     self.toolBarBase.addAction(self.mergeLineButton)  # add action to toolbar
+    #
+    #     self.snapLineButton = QAction('Snap line', self)  # create action
+    #     self.snapLineButton.triggered.connect(lambda: snap_line(self))  # connect action to function
+    #     self.menuBaseView.addAction(self.snapLineButton)  # add action to menu
+    #     self.toolBarBase.addAction(self.snapLineButton)  # add action to toolbar
+    #
+    #     self.resampleDistanceButton = QAction('Resample distance', self)  # create action
+    #     self.resampleDistanceButton.triggered.connect(
+    #         lambda: resample_line_distance(self))  # connect action to function
+    #     self.menuBaseView.addAction(self.resampleDistanceButton)  # add action to menu
+    #     self.toolBarBase.addAction(self.resampleDistanceButton)  # add action to toolbar
+    #
+    #     self.resampleNumberButton = QAction('Resample number', self)  # create action
+    #     self.resampleNumberButton.triggered.connect(
+    #         lambda: resample_line_number_points(self))  # connect action to function
+    #     self.menuBaseView.addAction(self.resampleNumberButton)  # add action to menu
+    #     self.toolBarBase.addAction(self.resampleNumberButton)  # add action to toolbar
+    #
+    #     self.simplifyButton = QAction('Simplify line', self)  # create action
+    #     self.simplifyButton.triggered.connect(lambda: simplify_line(self))  # connect action to function
+    #     self.menuBaseView.addAction(self.simplifyButton)  # add action to menu
+    #     self.toolBarBase.addAction(self.simplifyButton)  # add action to toolbar
+    #
+    #     self.copyParallelButton = QAction('Copy parallel', self)  # create action
+    #     self.copyParallelButton.triggered.connect(lambda: copy_parallel(self))  # connect action to function
+    #     self.menuBaseView.addAction(self.copyParallelButton)  # add action to menu
+    #     self.toolBarBase.addAction(self.copyParallelButton)  # add action to toolbar
+    #
+    #     self.copyKinkButton = QAction('Copy kink', self)  # create action
+    #     self.copyKinkButton.triggered.connect(lambda: copy_kink(self))  # connect action to function
+    #     self.menuBaseView.addAction(self.copyKinkButton)  # add action to menu
+    #     self.toolBarBase.addAction(self.copyKinkButton)  # add action to toolbar
+    #
+    #     self.copySimilarButton = QAction('Copy similar', self)  # create action
+    #     self.copySimilarButton.triggered.connect(lambda: copy_similar(self))  # connect action to function
+    #     self.menuBaseView.addAction(self.copySimilarButton)  # add action to menu
+    #     self.toolBarBase.addAction(self.copySimilarButton)  # add action to toolbar
+    #
+    #     self.measureDistanceButton = QAction('Measure', self)  # create action
+    #     self.measureDistanceButton.triggered.connect(lambda: measure_distance(self))  # connect action to function
+    #     self.menuBaseView.addAction(self.measureDistanceButton)  # add action to menu
+    #     self.toolBarBase.addAction(self.measureDistanceButton)  # add action to toolbar
+
+    def initialize_tools(self):
+        """Add more tool buttons for this view with the pattern:
+        self.ToolButtonsLayout.setObjectName(u"ToolButtonsLayout")
+        self.SaveHomeButton = QToolButton(self.ToolButtonsFrame)
+        self.SaveHomeButton.setObjectName(u"SaveHomeButton")
+        self.SaveHomeButton.setAutoRaise(False)
+        self.SaveHomeButton.setArrowType(Qt.NoArrow)
+        self.ToolButtonsLayout.addWidget(self.SaveHomeButton)."""
         """Imports for this view."""
         from .two_d_lines import draw_line, edit_line, sort_line_nodes, rotate_line, extend_line, \
             split_line_line, split_line_existing_point, merge_lines, snap_line, resample_line_distance, \
             resample_line_number_points, simplify_line, copy_parallel, copy_kink, copy_similar, measure_distance
-        """Customize menus and tools for this view"""
-        self.menuBaseView.setTitle("Edit")
-        self.actionBase_Tool.setText("Edit")
-
-        self.removeEntityButton = QAction('Remove Entity', self)  # create action
-        self.removeEntityButton.triggered.connect(self.entity_remove_selected)  # connect action to function
-        self.menuBaseView.addAction(self.removeEntityButton)  # add action to menu
-        self.toolBarBase.addAction(self.removeEntityButton)  # add action to toolbar
-
-        self.drawLineButton = QAction('Draw line', self)  # create action
-        self.drawLineButton.triggered.connect(
-            lambda: draw_line(self))  # connect action to function with additional argument parent
-        self.menuBaseView.addAction(self.drawLineButton)  # add action to menu
-        self.toolBarBase.addAction(self.drawLineButton)  # add action to toolbar
-
-        self.selectLineButton = QAction('Select line', self)  # create action
-        self.selectLineButton.triggered.connect(self.select_actor_with_mouse)  # connect action to function
-        self.menuBaseView.addAction(self.selectLineButton)  # add action to menu
-        self.toolBarBase.addAction(self.selectLineButton)  # add action to toolbar
-
-        self.clearSelectionButton = QAction('Clear Selection', self)  # create action
-        self.clearSelectionButton.triggered.connect(self.clear_selection)  # connect action to function
-        self.menuBaseView.addAction(self.clearSelectionButton)  # add action to menu
-        self.toolBarBase.addAction(self.clearSelectionButton)  # add action to toolbar
-
-        self.editLineButton = QAction('Edit line', self)  # create action
-        self.editLineButton.triggered.connect(lambda: edit_line(self))  # connect action to function
-        self.menuBaseView.addAction(self.editLineButton)  # add action to menu
-        self.toolBarBase.addAction(self.editLineButton)  # add action to toolbar
-
-        self.sortLineButton = QAction('Sort line nodes', self)  # create action
-        self.sortLineButton.triggered.connect(lambda: sort_line_nodes(self))  # connect action to function
-        self.menuBaseView.addAction(self.sortLineButton)  # add action to menu
-        self.toolBarBase.addAction(self.sortLineButton)  # add action to toolbar
-
-        self.moveLineButton = QAction('Move line', self)  # create action
-        self.moveLineButton.triggered.connect(self.vector_by_mouse)  # connect action to function
-        self.menuBaseView.addAction(self.moveLineButton)  # add action to menu
-        self.toolBarBase.addAction(self.moveLineButton)  # add action to toolbar
-
-        self.rotateLineButton = QAction('Rotate line', self)  # create action
-        self.rotateLineButton.triggered.connect(lambda: rotate_line(self))  # connect action to function
-        self.menuBaseView.addAction(self.rotateLineButton)  # add action to menu
-        self.toolBarBase.addAction(self.rotateLineButton)  # add action to toolbar
-
-        self.extendButton = QAction('Extend line', self)  # create action
-        self.extendButton.triggered.connect(lambda: extend_line(self))  # connect action to function
-        self.menuBaseView.addAction(self.extendButton)  # add action to menu
-        self.toolBarBase.addAction(self.extendButton)  # add action to toolbar
-
-        self.splitLineByLineButton = QAction('Split line-line', self)  # create action
-        self.splitLineByLineButton.triggered.connect(lambda: split_line_line(self))  # connect action to function
-        self.menuBaseView.addAction(self.splitLineByLineButton)  # add action to menu
-        self.toolBarBase.addAction(self.splitLineByLineButton)  # add action to toolbar
-
-        self.splitLineByPointButton = QAction('Split line-point', self)  # create action
-        self.splitLineByPointButton.triggered.connect(
-            lambda: split_line_existing_point(self))  # connect action to function
-        self.menuBaseView.addAction(self.splitLineByPointButton)  # add action to menu
-        self.toolBarBase.addAction(self.splitLineByPointButton)  # add action to toolbar
-
-        self.mergeLineButton = QAction('Merge lines', self)  # create action
-        self.mergeLineButton.triggered.connect(lambda: merge_lines(self))  # connect action to function
-        self.menuBaseView.addAction(self.mergeLineButton)  # add action to menu
-        self.toolBarBase.addAction(self.mergeLineButton)  # add action to toolbar
-
-        self.snapLineButton = QAction('Snap line', self)  # create action
-        self.snapLineButton.triggered.connect(lambda: snap_line(self))  # connect action to function
-        self.menuBaseView.addAction(self.snapLineButton)  # add action to menu
-        self.toolBarBase.addAction(self.snapLineButton)  # add action to toolbar
-
-        self.resampleDistanceButton = QAction('Resample distance', self)  # create action
-        self.resampleDistanceButton.triggered.connect(
-            lambda: resample_line_distance(self))  # connect action to function
-        self.menuBaseView.addAction(self.resampleDistanceButton)  # add action to menu
-        self.toolBarBase.addAction(self.resampleDistanceButton)  # add action to toolbar
-
-        self.resampleNumberButton = QAction('Resample number', self)  # create action
-        self.resampleNumberButton.triggered.connect(
-            lambda: resample_line_number_points(self))  # connect action to function
-        self.menuBaseView.addAction(self.resampleNumberButton)  # add action to menu
-        self.toolBarBase.addAction(self.resampleNumberButton)  # add action to toolbar
-
-        self.simplifyButton = QAction('Simplify line', self)  # create action
-        self.simplifyButton.triggered.connect(lambda: simplify_line(self))  # connect action to function
-        self.menuBaseView.addAction(self.simplifyButton)  # add action to menu
-        self.toolBarBase.addAction(self.simplifyButton)  # add action to toolbar
-
-        self.copyParallelButton = QAction('Copy parallel', self)  # create action
-        self.copyParallelButton.triggered.connect(lambda: copy_parallel(self))  # connect action to function
-        self.menuBaseView.addAction(self.copyParallelButton)  # add action to menu
-        self.toolBarBase.addAction(self.copyParallelButton)  # add action to toolbar
-
-        self.copyKinkButton = QAction('Copy kink', self)  # create action
-        self.copyKinkButton.triggered.connect(lambda: copy_kink(self))  # connect action to function
-        self.menuBaseView.addAction(self.copyKinkButton)  # add action to menu
-        self.toolBarBase.addAction(self.copyKinkButton)  # add action to toolbar
-
-        self.copySimilarButton = QAction('Copy similar', self)  # create action
-        self.copySimilarButton.triggered.connect(lambda: copy_similar(self))  # connect action to function
-        self.menuBaseView.addAction(self.copySimilarButton)  # add action to menu
-        self.toolBarBase.addAction(self.copySimilarButton)  # add action to toolbar
-
-        self.measureDistanceButton = QAction('Measure', self)  # create action
-        self.measureDistanceButton.triggered.connect(lambda: measure_distance(self))  # connect action to function
-        self.menuBaseView.addAction(self.measureDistanceButton)  # add action to menu
-        self.toolBarBase.addAction(self.measureDistanceButton)  # add action to toolbar
+        super().initialize_tools()
+        # self.menuBaseView.setTitle("Edit")
+        # self.actionBase_Tool.setText("Edit")
+        #
+        # self.removeEntity = QAction('Remove Entity', self)  # create action
+        # self.removeEntity.triggered.connect(self.entity_remove_selected)  # connect action to function
+        # self.menuBaseView.addAction(self.removeEntity)  # add action to menu
+        # self.toolBarBase.addAction(self.removeEntity)  # add action to toolbar
+        #
+        # self.drawLineButton = QAction('Draw line', self)  # create action
+        # self.drawLineButton.triggered.connect(
+        #     lambda: draw_line(self))  # connect action to function with additional argument parent
+        # self.menuBaseView.addAction(self.drawLineButton)  # add action to menu
+        # self.toolBarBase.addAction(self.drawLineButton)  # add action to toolbar
+        #
+        # self.selectEntity = QAction('Select line', self)  # create action
+        # self.selectEntity.triggered.connect(self.select_actor_with_mouse)  # connect action to function
+        # self.menuBaseView.addAction(self.selectEntity)  # add action to menu
+        # self.toolBarBase.addAction(self.selectEntity)  # add action to toolbar
+        #
+        # self.clearSelection = QAction('Clear Selection', self)  # create action
+        # self.clearSelection.triggered.connect(self.clear_selection)  # connect action to function
+        # self.menuBaseView.addAction(self.clearSelection)  # add action to menu
+        # self.toolBarBase.addAction(self.clearSelection)  # add action to toolbar
+        #
+        # self.editLineButton = QAction('Edit line', self)  # create action
+        # self.editLineButton.triggered.connect(lambda: edit_line(self))  # connect action to function
+        # self.menuBaseView.addAction(self.editLineButton)  # add action to menu
+        # self.toolBarBase.addAction(self.editLineButton)  # add action to toolbar
+        #
+        # self.sortLineButton = QAction('Sort line nodes', self)  # create action
+        # self.sortLineButton.triggered.connect(lambda: sort_line_nodes(self))  # connect action to function
+        # self.menuBaseView.addAction(self.sortLineButton)  # add action to menu
+        # self.toolBarBase.addAction(self.sortLineButton)  # add action to toolbar
+        #
+        # self.moveLineButton = QAction('Move line', self)  # create action
+        # self.moveLineButton.triggered.connect(self.vector_by_mouse)  # connect action to function
+        # self.menuBaseView.addAction(self.moveLineButton)  # add action to menu
+        # self.toolBarBase.addAction(self.moveLineButton)  # add action to toolbar
+        #
+        # self.rotateLineButton = QAction('Rotate line', self)  # create action
+        # self.rotateLineButton.triggered.connect(lambda: rotate_line(self))  # connect action to function
+        # self.menuBaseView.addAction(self.rotateLineButton)  # add action to menu
+        # self.toolBarBase.addAction(self.rotateLineButton)  # add action to toolbar
+        #
+        # self.extendButton = QAction('Extend line', self)  # create action
+        # self.extendButton.triggered.connect(lambda: extend_line(self))  # connect action to function
+        # self.menuBaseView.addAction(self.extendButton)  # add action to menu
+        # self.toolBarBase.addAction(self.extendButton)  # add action to toolbar
+        #
+        # self.splitLineByLineButton = QAction('Split line-line', self)  # create action
+        # self.splitLineByLineButton.triggered.connect(lambda: split_line_line(self))  # connect action to function
+        # self.menuBaseView.addAction(self.splitLineByLineButton)  # add action to menu
+        # self.toolBarBase.addAction(self.splitLineByLineButton)  # add action to toolbar
+        #
+        # self.splitLineByPointButton = QAction('Split line-point', self)  # create action
+        # self.splitLineByPointButton.triggered.connect(
+        #     lambda: split_line_existing_point(self))  # connect action to function
+        # self.menuBaseView.addAction(self.splitLineByPointButton)  # add action to menu
+        # self.toolBarBase.addAction(self.splitLineByPointButton)  # add action to toolbar
+        #
+        # self.mergeLineButton = QAction('Merge lines', self)  # create action
+        # self.mergeLineButton.triggered.connect(lambda: merge_lines(self))  # connect action to function
+        # self.menuBaseView.addAction(self.mergeLineButton)  # add action to menu
+        # self.toolBarBase.addAction(self.mergeLineButton)  # add action to toolbar
+        #
+        # self.snapLineButton = QAction('Snap line', self)  # create action
+        # self.snapLineButton.triggered.connect(lambda: snap_line(self))  # connect action to function
+        # self.menuBaseView.addAction(self.snapLineButton)  # add action to menu
+        # self.toolBarBase.addAction(self.snapLineButton)  # add action to toolbar
+        #
+        # self.resampleDistanceButton = QAction('Resample distance', self)  # create action
+        # self.resampleDistanceButton.triggered.connect(
+        #     lambda: resample_line_distance(self))  # connect action to function
+        # self.menuBaseView.addAction(self.resampleDistanceButton)  # add action to menu
+        # self.toolBarBase.addAction(self.resampleDistanceButton)  # add action to toolbar
+        #
+        # self.resampleNumberButton = QAction('Resample number', self)  # create action
+        # self.resampleNumberButton.triggered.connect(
+        #     lambda: resample_line_number_points(self))  # connect action to function
+        # self.menuBaseView.addAction(self.resampleNumberButton)  # add action to menu
+        # self.toolBarBase.addAction(self.resampleNumberButton)  # add action to toolbar
+        #
+        # self.simplifyButton = QAction('Simplify line', self)  # create action
+        # self.simplifyButton.triggered.connect(lambda: simplify_line(self))  # connect action to function
+        # self.menuBaseView.addAction(self.simplifyButton)  # add action to menu
+        # self.toolBarBase.addAction(self.simplifyButton)  # add action to toolbar
+        #
+        # self.copyParallelButton = QAction('Copy parallel', self)  # create action
+        # self.copyParallelButton.triggered.connect(lambda: copy_parallel(self))  # connect action to function
+        # self.menuBaseView.addAction(self.copyParallelButton)  # add action to menu
+        # self.toolBarBase.addAction(self.copyParallelButton)  # add action to toolbar
+        #
+        # self.copyKinkButton = QAction('Copy kink', self)  # create action
+        # self.copyKinkButton.triggered.connect(lambda: copy_kink(self))  # connect action to function
+        # self.menuBaseView.addAction(self.copyKinkButton)  # add action to menu
+        # self.toolBarBase.addAction(self.copyKinkButton)  # add action to toolbar
+        #
+        # self.copySimilarButton = QAction('Copy similar', self)  # create action
+        # self.copySimilarButton.triggered.connect(lambda: copy_similar(self))  # connect action to function
+        # self.menuBaseView.addAction(self.copySimilarButton)  # add action to menu
+        # self.toolBarBase.addAction(self.copySimilarButton)  # add action to toolbar
+        #
+        # self.measureDistanceButton = QAction('Measure', self)  # create action
+        # self.measureDistanceButton.triggered.connect(lambda: measure_distance(self))  # connect action to function
+        # self.menuBaseView.addAction(self.measureDistanceButton)  # add action to menu
+        # self.toolBarBase.addAction(self.measureDistanceButton)  # add action to toolbar
 
     def initialize_interactor(self):
         """Initialize parameters for mouse interaction functions."""
@@ -5842,38 +6091,76 @@ class ViewMap(View2D):
 
     """Implementation of functions specific to 2D views"""
 
-    def initialize_menu_tools(self):
-        """Inheritance of common tools"""
-        super().initialize_menu_tools()
-        """Tools specific to map view"""
+    # def initialize_menu_tools(self):
+    #     """Inheritance of common tools"""
+    #     super().initialize_menu_tools()
+    #     """Tools specific to map view"""
+    #     from pzero.collections.xsection_collection import section_from_azimuth, sections_from_file
+    #     # from .xsection_collection import section_from_points
+    #     from pzero.collections.boundary_collection import boundary_from_points
+    #
+    #     self.sectionFromAzimuthButton = QAction('Section from Azimuth', self)  # create action
+    #     self.sectionFromAzimuthButton.triggered.connect(
+    #         lambda: section_from_azimuth(self))  # connect action to function with additional argument parent
+    #     self.menuBaseView.addAction(self.sectionFromAzimuthButton)  # add action to menu
+    #     self.toolBarBase.addAction(self.sectionFromAzimuthButton)  # add action to toolbar
+    #
+    #     self.sectionFromPointsButton = QAction('Section from 2 points', self)  # create action
+    #     # Commented because section_from_points doesn't exist actually
+    #     # self.sectionFromPointsButton.triggered.connect(
+    #     #    lambda: section_from_points(self))  # connect action to function with additional argument parent
+    #     self.menuBaseView.addAction(self.sectionFromPointsButton)  # add action to menu
+    #     self.toolBarBase.addAction(self.sectionFromPointsButton)  # add action to toolbar
+    #
+    #     self.sectionFromFileButton = QAction('Sections from file', self)
+    #     self.sectionFromFileButton.triggered.connect(lambda: sections_from_file(self))
+    #
+    #     self.menuBaseView.addAction(self.sectionFromFileButton)  # add action to menu
+    #     self.toolBarBase.addAction(self.sectionFromFileButton)  # add action to toolbar
+    #
+    #     self.boundaryFromPointsButton = QAction('Boundary from 2 points', self)  # create action
+    #     self.boundaryFromPointsButton.triggered.connect(
+    #         lambda: boundary_from_points(self))  # connect action to function with additional argument parent
+    #     self.menuBaseView.addAction(self.boundaryFromPointsButton)  # add action to menu
+    #     self.toolBarBase.addAction(self.boundaryFromPointsButton)  # add action to toolbar
+
+    def initialize_tools(self):
+        """Add more tool buttons for this view with the pattern:
+        self.ToolButtonsLayout.setObjectName(u"ToolButtonsLayout")
+        self.SaveHomeButton = QToolButton(self.ToolButtonsFrame)
+        self.SaveHomeButton.setObjectName(u"SaveHomeButton")
+        self.SaveHomeButton.setAutoRaise(False)
+        self.SaveHomeButton.setArrowType(Qt.NoArrow)
+        self.ToolButtonsLayout.addWidget(self.SaveHomeButton).
+        Importing classes here is necessary to avoid circular import errors."""
         from pzero.collections.xsection_collection import section_from_azimuth, sections_from_file
         # from .xsection_collection import section_from_points
         from pzero.collections.boundary_collection import boundary_from_points
-
-        self.sectionFromAzimuthButton = QAction('Section from Azimuth', self)  # create action
-        self.sectionFromAzimuthButton.triggered.connect(
-            lambda: section_from_azimuth(self))  # connect action to function with additional argument parent
-        self.menuBaseView.addAction(self.sectionFromAzimuthButton)  # add action to menu
-        self.toolBarBase.addAction(self.sectionFromAzimuthButton)  # add action to toolbar
-
-        self.sectionFromPointsButton = QAction('Section from 2 points', self)  # create action
-        # Commented because section_from_points doesn't exist actually
-        # self.sectionFromPointsButton.triggered.connect(
-        #    lambda: section_from_points(self))  # connect action to function with additional argument parent
-        self.menuBaseView.addAction(self.sectionFromPointsButton)  # add action to menu
-        self.toolBarBase.addAction(self.sectionFromPointsButton)  # add action to toolbar
-
-        self.sectionFromFileButton = QAction('Sections from file', self)
-        self.sectionFromFileButton.triggered.connect(lambda: sections_from_file(self))
-
-        self.menuBaseView.addAction(self.sectionFromFileButton)  # add action to menu
-        self.toolBarBase.addAction(self.sectionFromFileButton)  # add action to toolbar
-
-        self.boundaryFromPointsButton = QAction('Boundary from 2 points', self)  # create action
-        self.boundaryFromPointsButton.triggered.connect(
-            lambda: boundary_from_points(self))  # connect action to function with additional argument parent
-        self.menuBaseView.addAction(self.boundaryFromPointsButton)  # add action to menu
-        self.toolBarBase.addAction(self.boundaryFromPointsButton)  # add action to toolbar
+        super().initialize_tools()
+        # self.sectionFromAzimuthButton = QAction('Section from Azimuth', self)  # create action
+        # self.sectionFromAzimuthButton.triggered.connect(
+        #     lambda: section_from_azimuth(self))  # connect action to function with additional argument parent
+        # self.menuBaseView.addAction(self.sectionFromAzimuthButton)  # add action to menu
+        # self.toolBarBase.addAction(self.sectionFromAzimuthButton)  # add action to toolbar
+        #
+        # self.sectionFromPointsButton = QAction('Section from 2 points', self)  # create action
+        # # Commented because section_from_points doesn't exist actually
+        # # self.sectionFromPointsButton.triggered.connect(
+        # #    lambda: section_from_points(self))  # connect action to function with additional argument parent
+        # self.menuBaseView.addAction(self.sectionFromPointsButton)  # add action to menu
+        # self.toolBarBase.addAction(self.sectionFromPointsButton)  # add action to toolbar
+        #
+        # self.sectionFromFileButton = QAction('Sections from file', self)
+        # self.sectionFromFileButton.triggered.connect(lambda: sections_from_file(self))
+        #
+        # self.menuBaseView.addAction(self.sectionFromFileButton)  # add action to menu
+        # self.toolBarBase.addAction(self.sectionFromFileButton)  # add action to toolbar
+        #
+        # self.boundaryFromPointsButton = QAction('Boundary from 2 points', self)  # create action
+        # self.boundaryFromPointsButton.triggered.connect(
+        #     lambda: boundary_from_points(self))  # connect action to function with additional argument parent
+        # self.menuBaseView.addAction(self.boundaryFromPointsButton)  # add action to menu
+        # self.toolBarBase.addAction(self.boundaryFromPointsButton)  # add action to toolbar
 
     def show_actor_with_property(self, uid=None, collection=None, show_property=None, visible=None):
         """Show actor with scalar property (default None)
@@ -6136,14 +6423,27 @@ class ViewXsection(View2D):
 
     """Implementation of functions specific to 2D views"""
 
-    def initialize_menu_tools(self):
-        """Inheritance of common tools"""
-        super().initialize_menu_tools()
-        """Tools specific to Xsection view"""
-        """NONE AT THE MOMENT"""
-        self.secNavigator = QAction("Section navigator", self)
-        self.secNavigator.triggered.connect(self.navigator)
-        self.menuWindow.addAction(self.secNavigator)
+    # def initialize_menu_tools(self):
+    #     """Inheritance of common tools"""
+    #     super().initialize_menu_tools()
+    #     """Tools specific to Xsection view"""
+    #     """NONE AT THE MOMENT"""
+    #     self.secNavigator = QAction("Section navigator", self)
+    #     self.secNavigator.triggered.connect(self.navigator)
+    #     self.menuWindow.addAction(self.secNavigator)
+
+    def initialize_tools(self):
+        """Add more tool buttons for this view with the pattern:
+        self.ToolButtonsLayout.setObjectName(u"ToolButtonsLayout")
+        self.SaveHomeButton = QToolButton(self.ToolButtonsFrame)
+        self.SaveHomeButton.setObjectName(u"SaveHomeButton")
+        self.SaveHomeButton.setAutoRaise(False)
+        self.SaveHomeButton.setArrowType(Qt.NoArrow)
+        self.ToolButtonsLayout.addWidget(self.SaveHomeButton)."""
+        super().initialize_tools()
+        # self.secNavigator = QAction("Section navigator", self)
+        # self.secNavigator.triggered.connect(self.navigator)
+        # self.menuWindow.addAction(self.secNavigator)
 
     def show_actor_with_property(self, uid=None, collection=None, show_property=None, visible=None):
         """Show actor with scalar property (default None)
@@ -6453,32 +6753,67 @@ class ViewStereoplot(BaseView):
         self.setWindowTitle("Stereoplot View")
         self.tog_contours = -1
         # mplstyle.context('classic')
-    def initialize_menu_tools(self):
 
-        self.actionContours = QAction('View contours', self)
-        self.actionContours.triggered.connect(lambda: self.toggle_contours(filled=False))
-        self.menuTools.addAction(self.actionContours)
+    # def initialize_menu_tools(self):
+    #
+    #     self.actionContours = QAction('View contours', self)
+    #     self.actionContours.triggered.connect(lambda: self.toggle_contours(filled=False))
+    #     self.menuTools.addAction(self.actionContours)
+    #
+    #     self.menuPlot = QMenu('Plot options', self)
+    #
+    #     self.menuGrids = QMenu('Grid overlays', self)
+    #     self.actionSetPolar = QAction('Set polar grid', self)
+    #     self.actionSetPolar.triggered.connect(lambda: self.change_grid(kind='polar'))
+    #     self.actionSetEq = QAction('Set equatorial grid', self)
+    #     self.actionSetEq.triggered.connect(lambda: self.change_grid(kind='equatorial'))
+    #     self.menuGrids.addAction(self.actionSetPolar)
+    #     self.menuGrids.addAction(self.actionSetEq)
+    #     self.menuPlot.addMenu(self.menuGrids)
+    #
+    #     self.menuProj = QMenu('Stereoplot projection', self)
+    #     self.actionSetEquiare = QAction('Equiareal (Schmidt)', self)
+    #     self.actionSetEquiare.triggered.connect(lambda: self.change_proj(projection='equal_area_stereonet'))
+    #     self.actionSetEquiang = QAction('Equiangolar (Wulff)', self)
+    #     self.actionSetEquiang.triggered.connect(lambda: self.change_proj(projection='equal_angle_stereonet'))
+    #     self.menuProj.addAction(self.actionSetEquiare)
+    #     self.menuProj.addAction(self.actionSetEquiang)
+    #     self.menuPlot.addMenu(self.menuProj)
+    #     self.menubar.insertMenu(self.menuHelp.menuAction(), self.menuPlot)
 
-        self.menuPlot = QMenu('Plot options', self)
-
-        self.menuGrids = QMenu('Grid overlays', self)
-        self.actionSetPolar = QAction('Set polar grid', self)
-        self.actionSetPolar.triggered.connect(lambda: self.change_grid(kind='polar'))
-        self.actionSetEq = QAction('Set equatorial grid', self)
-        self.actionSetEq.triggered.connect(lambda: self.change_grid(kind='equatorial'))
-        self.menuGrids.addAction(self.actionSetPolar)
-        self.menuGrids.addAction(self.actionSetEq)
-        self.menuPlot.addMenu(self.menuGrids)
-
-        self.menuProj = QMenu('Stereoplot projection', self)
-        self.actionSetEquiare = QAction('Equiareal (Schmidt)', self)
-        self.actionSetEquiare.triggered.connect(lambda: self.change_proj(projection='equal_area_stereonet'))
-        self.actionSetEquiang = QAction('Equiangolar (Wulff)', self)
-        self.actionSetEquiang.triggered.connect(lambda: self.change_proj(projection='equal_angle_stereonet'))
-        self.menuProj.addAction(self.actionSetEquiare)
-        self.menuProj.addAction(self.actionSetEquiang)
-        self.menuPlot.addMenu(self.menuProj)
-        self.menubar.insertMenu(self.menuHelp.menuAction(), self.menuPlot)
+    def initialize_tools(self):
+        """Add more tool buttons for this view with the pattern:
+                self.ToolButtonsLayout.setObjectName(u"ToolButtonsLayout")
+                self.SaveHomeButton = QToolButton(self.ToolButtonsFrame)
+                self.SaveHomeButton.setObjectName(u"SaveHomeButton")
+                self.SaveHomeButton.setAutoRaise(False)
+                self.SaveHomeButton.setArrowType(Qt.NoArrow)
+                self.ToolButtonsLayout.addWidget(self.SaveHomeButton)."""
+        super().initialize_tools()
+        # self.actionContours = QAction('View contours', self)
+        # self.actionContours.triggered.connect(lambda: self.toggle_contours(filled=False))
+        # self.menuTools.addAction(self.actionContours)
+        #
+        # self.menuPlot = QMenu('Plot options', self)
+        #
+        # self.menuGrids = QMenu('Grid overlays', self)
+        # self.actionSetPolar = QAction('Set polar grid', self)
+        # self.actionSetPolar.triggered.connect(lambda: self.change_grid(kind='polar'))
+        # self.actionSetEq = QAction('Set equatorial grid', self)
+        # self.actionSetEq.triggered.connect(lambda: self.change_grid(kind='equatorial'))
+        # self.menuGrids.addAction(self.actionSetPolar)
+        # self.menuGrids.addAction(self.actionSetEq)
+        # self.menuPlot.addMenu(self.menuGrids)
+        #
+        # self.menuProj = QMenu('Stereoplot projection', self)
+        # self.actionSetEquiare = QAction('Equiareal (Schmidt)', self)
+        # self.actionSetEquiare.triggered.connect(lambda: self.change_proj(projection='equal_area_stereonet'))
+        # self.actionSetEquiang = QAction('Equiangolar (Wulff)', self)
+        # self.actionSetEquiang.triggered.connect(lambda: self.change_proj(projection='equal_angle_stereonet'))
+        # self.menuProj.addAction(self.actionSetEquiare)
+        # self.menuProj.addAction(self.actionSetEquiang)
+        # self.menuPlot.addMenu(self.menuProj)
+        # self.menubar.insertMenu(self.menuHelp.menuAction(), self.menuPlot)
 
     def initialize_interactor(self, kind=None, projection='equal_area_stereonet'):
         self.grid_kind = kind
@@ -6519,7 +6854,7 @@ class ViewStereoplot(BaseView):
         for geo_type in geo_types:
             glevel_1 = QTreeWidgetItem(self.GeologyTreeWidget,
                                        [geo_type])  # self.GeologyTreeWidget as parent -> top level
-            glevel_1.setFlags(glevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
+            glevel_1.setFlags(glevel_1.flags() | Qt.ItemIsAutoTristate | Qt.ItemIsUserCheckable)
 
             filtered_geo_feat = self.parent.geol_coll.df.loc[
                 (self.parent.geol_coll.df['geological_type'] == geo_type) & (
@@ -6528,7 +6863,7 @@ class ViewStereoplot(BaseView):
 
             for feature in geo_features:
                 glevel_2 = QTreeWidgetItem(glevel_1, [feature])  # glevel_1 as parent -> 1st middle level
-                glevel_2.setFlags(glevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
+                glevel_2.setFlags(glevel_2.flags() | Qt.ItemIsAutoTristate | Qt.ItemIsUserCheckable)
 
                 geo_scenario = pd_unique(self.parent.geol_coll.df.loc[
                                              (self.parent.geol_coll.df['geological_type'] == geo_type) & (
@@ -6537,7 +6872,7 @@ class ViewStereoplot(BaseView):
 
                 for scenario in geo_scenario:
                     glevel_3 = QTreeWidgetItem(glevel_2, [scenario])  # glevel_2 as parent -> 2nd middle level
-                    glevel_3.setFlags(glevel_3.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
+                    glevel_3.setFlags(glevel_3.flags() | Qt.ItemIsAutoTristate | Qt.ItemIsUserCheckable)
 
                     uids = self.parent.geol_coll.df.loc[(self.parent.geol_coll.df['geological_type'] == geo_type) & (
                             self.parent.geol_coll.df['geological_feature'] == feature) & (self.parent.geol_coll.df[
@@ -6580,11 +6915,11 @@ class ViewStereoplot(BaseView):
         for topo_type in topo_types:
             tlevel_1 = QTreeWidgetItem(self.TopologyTreeWidget,
                                        [topo_type])  # self.GeologyTreeWidget as parent -> top level
-            tlevel_1.setFlags(tlevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
+            tlevel_1.setFlags(tlevel_1.flags() | Qt.ItemIsAutoTristate | Qt.ItemIsUserCheckable)
             for scenario in pd_unique(self.parent.geol_coll.df.loc[
                                           self.parent.geol_coll.df['topological_type'] == topo_type, 'scenario']):
                 tlevel_2 = QTreeWidgetItem(tlevel_1, [scenario])  # tlevel_1 as parent -> middle level
-                tlevel_2.setFlags(tlevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
+                tlevel_2.setFlags(tlevel_2.flags() | Qt.ItemIsAutoTristate | Qt.ItemIsUserCheckable)
 
                 uids = self.parent.geol_coll.df.loc[(self.parent.geol_coll.df['topological_type'] == topo_type) & (
                         self.parent.geol_coll.df['scenario'] == scenario) & (self.parent.geol_coll.df[
@@ -6677,7 +7012,7 @@ class ViewStereoplot(BaseView):
                                     self.GeologyTreeWidget.findItems(self.parent.geol_coll.get_uid_geological_type(uid),
                                                                      Qt.MatchExactly, 0)[0].child(child_1),
                                     [self.parent.geol_coll.get_uid_scenario(uid)])
-                                glevel_3.setFlags(glevel_3.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
+                                glevel_3.setFlags(glevel_3.flags() | Qt.ItemIsAutoTristate | Qt.ItemIsUserCheckable)
                                 self.GeologyTreeWidget.insertTopLevelItem(0, glevel_3)
                                 property_combo = QComboBox()
                                 property_combo.uid = uid
@@ -6702,10 +7037,10 @@ class ViewStereoplot(BaseView):
                         self.GeologyTreeWidget.findItems(self.parent.geol_coll.get_uid_geological_type(uid),
                                                          Qt.MatchExactly, 0)[0],
                         [self.parent.geol_coll.get_uid_geological_feature(uid)])
-                    glevel_2.setFlags(glevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
+                    glevel_2.setFlags(glevel_2.flags() | Qt.ItemIsAutoTristate | Qt.ItemIsUserCheckable)
                     self.GeologyTreeWidget.insertTopLevelItem(0, glevel_2)
                     glevel_3 = QTreeWidgetItem(glevel_2, [self.parent.geol_coll.get_uid_scenario(uid)])
-                    glevel_3.setFlags(glevel_3.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
+                    glevel_3.setFlags(glevel_3.flags() | Qt.ItemIsAutoTristate | Qt.ItemIsUserCheckable)
                     self.GeologyTreeWidget.insertTopLevelItem(0, glevel_3)
                     property_combo = QComboBox()
                     property_combo.uid = uid
@@ -6727,13 +7062,13 @@ class ViewStereoplot(BaseView):
             else:
                 """Different geological type, geological feature and scenario"""
                 glevel_1 = QTreeWidgetItem(self.GeologyTreeWidget, [self.parent.geol_coll.get_uid_geological_type(uid)])
-                glevel_1.setFlags(glevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
+                glevel_1.setFlags(glevel_1.flags() | Qt.ItemIsAutoTristate | Qt.ItemIsUserCheckable)
                 self.GeologyTreeWidget.insertTopLevelItem(0, glevel_1)
                 glevel_2 = QTreeWidgetItem(glevel_1, [self.parent.geol_coll.get_uid_geological_feature(uid)])
-                glevel_2.setFlags(glevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
+                glevel_2.setFlags(glevel_2.flags() | Qt.ItemIsAutoTristate | Qt.ItemIsUserCheckable)
                 self.GeologyTreeWidget.insertTopLevelItem(0, glevel_2)
                 glevel_3 = QTreeWidgetItem(glevel_2, [self.parent.geol_coll.get_uid_scenario(uid)])
-                glevel_3.setFlags(glevel_3.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
+                glevel_3.setFlags(glevel_3.flags() | Qt.ItemIsAutoTristate | Qt.ItemIsUserCheckable)
                 self.GeologyTreeWidget.insertTopLevelItem(0, glevel_3)
                 property_combo = QComboBox()
                 property_combo.uid = uid
@@ -6804,7 +7139,7 @@ class ViewStereoplot(BaseView):
                         self.TopologyTreeWidget.findItems(self.parent.geol_coll.get_uid_topological_type(uid),
                                                           Qt.MatchExactly, 0)[0],
                         [self.parent.geol_coll.get_uid_scenario(uid)])
-                    tlevel_2.setFlags(tlevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
+                    tlevel_2.setFlags(tlevel_2.flags() | Qt.ItemIsAutoTristate | Qt.ItemIsUserCheckable)
                     self.TopologyTreeWidget.insertTopLevelItem(0, tlevel_2)
                     property_combo = QComboBox()
                     property_combo.uid = uid
@@ -6827,10 +7162,10 @@ class ViewStereoplot(BaseView):
                 """Different topological type and scenario"""
                 tlevel_1 = QTreeWidgetItem(self.TopologyTreeWidget,
                                            [self.parent.geol_coll.get_uid_topological_type(uid)])
-                tlevel_1.setFlags(tlevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
+                tlevel_1.setFlags(tlevel_1.flags() | Qt.ItemIsAutoTristate | Qt.ItemIsUserCheckable)
                 self.TopologyTreeWidget.insertTopLevelItem(0, tlevel_1)
                 tlevel_2 = QTreeWidgetItem(tlevel_1, [self.parent.geol_coll.get_uid_scenario(uid)])
-                tlevel_2.setFlags(tlevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
+                tlevel_2.setFlags(tlevel_2.flags() | Qt.ItemIsAutoTristate | Qt.ItemIsUserCheckable)
                 self.TopologyTreeWidget.insertTopLevelItem(0, tlevel_2)
                 property_combo = QComboBox()
                 property_combo.uid = uid
@@ -7052,109 +7387,218 @@ class NewView2D(BaseView):
 
     """Re-implementations of functions that appear in all views - see placeholders in BaseView()"""
 
-    def initialize_menu_tools(self):
+    # def initialize_menu_tools(self):
+    #     from .two_d_lines import draw_line, edit_line, sort_line_nodes, move_line, rotate_line, extend_line, \
+    #         split_line_line, split_line_existing_point, merge_lines, snap_line, resample_line_distance, \
+    #         resample_line_number_points, simplify_line, copy_parallel, copy_kink, copy_similar, measure_distance, clean_intersection
+    #
+    #     """Imports for this view."""
+    #     """Customize menus and tools for this view"""
+    #     super().initialize_menu_tools()
+    #     self.menuBaseView.setTitle("Edit")
+    #     self.actionBase_Tool.setText("Edit")
+    #
+    #     self.drawLineButton = QAction('Draw line', self)  # create action
+    #     self.drawLineButton.triggered.connect(lambda: draw_line(self))  # connect action to function with additional argument parent
+    #     self.menuBaseView.addAction(self.drawLineButton)  # add action to menu
+    #     self.toolBarBase.addAction(self.drawLineButton)  # add action to toolbar
+    #
+    #     self.editLineButton = QAction('Edit line', self)  # create action
+    #     self.editLineButton.triggered.connect(lambda: edit_line(self))  # connect action to function
+    #     self.menuBaseView.addAction(self.editLineButton)  # add action to menu
+    #     self.toolBarBase.addAction(self.editLineButton)  # add action to toolbar
+    #
+    #     self.sortLineButton = QAction('Sort line nodes', self)  # create action
+    #     self.sortLineButton.triggered.connect(lambda: sort_line_nodes(self))  # connect action to function
+    #     self.menuBaseView.addAction(self.sortLineButton)  # add action to menu
+    #     self.toolBarBase.addAction(self.sortLineButton)  # add action to toolbar
+    #
+    #     self.moveLineButton = QAction('Move line', self)  # create action
+    #     self.moveLineButton.triggered.connect(lambda: self.vector_by_mouse(move_line))  # connect action to function
+    #     self.menuBaseView.addAction(self.moveLineButton)  # add action to menu
+    #     self.toolBarBase.addAction(self.moveLineButton)  # add action to toolbar
+    #
+    #     self.rotateLineButton = QAction('Rotate line', self)  # create action
+    #     self.rotateLineButton.triggered.connect(lambda: rotate_line(self))  # connect action to function
+    #     self.menuBaseView.addAction(self.rotateLineButton)  # add action to menu
+    #     self.toolBarBase.addAction(self.rotateLineButton)  # add action to toolbar
+    #
+    #     self.extendButton = QAction('Extend line', self)  # create action
+    #     self.extendButton.triggered.connect(lambda: extend_line(self))  # connect action to function
+    #     self.menuBaseView.addAction(self.extendButton)  # add action to menu
+    #     self.toolBarBase.addAction(self.extendButton)  # add action to toolbar
+    #
+    #     self.splitLineByLineButton = QAction('Split line-line', self)  # create action
+    #     self.splitLineByLineButton.triggered.connect(lambda: split_line_line(self))  # connect action to function
+    #     self.menuBaseView.addAction(self.splitLineByLineButton)  # add action to menu
+    #     self.toolBarBase.addAction(self.splitLineByLineButton)  # add action to toolbar
+    #
+    #     self.splitLineByPointButton = QAction('Split line-point', self)  # create action
+    #     self.splitLineByPointButton.triggered.connect(
+    #         lambda: split_line_existing_point(self))  # connect action to function
+    #     self.menuBaseView.addAction(self.splitLineByPointButton)  # add action to menu
+    #     self.toolBarBase.addAction(self.splitLineByPointButton)  # add action to toolbar
+    #
+    #     self.mergeLineButton = QAction('Merge lines', self)  # create action
+    #     self.mergeLineButton.triggered.connect(lambda: merge_lines(self))  # connect action to function
+    #     self.menuBaseView.addAction(self.mergeLineButton)  # add action to menu
+    #     self.toolBarBase.addAction(self.mergeLineButton)  # add action to toolbar
+    #
+    #     self.snapLineButton = QAction('Snap line', self)  # create action
+    #     self.snapLineButton.triggered.connect(lambda: snap_line(self))  # connect action to function
+    #     self.menuBaseView.addAction(self.snapLineButton)  # add action to menu
+    #     self.toolBarBase.addAction(self.snapLineButton)  # add action to toolbar
+    #
+    #     self.resampleDistanceButton = QAction('Resample distance', self)  # create action
+    #     self.resampleDistanceButton.triggered.connect(
+    #         lambda: resample_line_distance(self))  # connect action to function
+    #     self.menuBaseView.addAction(self.resampleDistanceButton)  # add action to menu
+    #     self.toolBarBase.addAction(self.resampleDistanceButton)  # add action to toolbar
+    #
+    #     self.resampleNumberButton = QAction('Resample number', self)  # create action
+    #     self.resampleNumberButton.triggered.connect(
+    #         lambda: resample_line_number_points(self))  # connect action to function
+    #     self.menuBaseView.addAction(self.resampleNumberButton)  # add action to menu
+    #     self.toolBarBase.addAction(self.resampleNumberButton)  # add action to toolbar
+    #
+    #     self.simplifyButton = QAction('Simplify line', self)  # create action
+    #     self.simplifyButton.triggered.connect(lambda: simplify_line(self))  # connect action to function
+    #     self.menuBaseView.addAction(self.simplifyButton)  # add action to menu
+    #     self.toolBarBase.addAction(self.simplifyButton)  # add action to toolbar
+    #
+    #     self.copyParallelButton = QAction('Copy parallel', self)  # create action
+    #     self.copyParallelButton.triggered.connect(lambda: copy_parallel(self))  # connect action to function
+    #     self.menuBaseView.addAction(self.copyParallelButton)  # add action to menu
+    #     self.toolBarBase.addAction(self.copyParallelButton)  # add action to toolbar
+    #
+    #     self.copyKinkButton = QAction('Copy kink', self)  # create action
+    #     self.copyKinkButton.triggered.connect(lambda: copy_kink(self))  # connect action to function
+    #     self.menuBaseView.addAction(self.copyKinkButton)  # add action to menu
+    #     self.toolBarBase.addAction(self.copyKinkButton)  # add action to toolbar
+    #
+    #     self.copySimilarButton = QAction('Copy similar', self)  # create action
+    #     self.copySimilarButton.triggered.connect(lambda: self.vector_by_mouse(copy_similar))  # connect action to function
+    #     self.menuBaseView.addAction(self.copySimilarButton)  # add action to menu
+    #     self.toolBarBase.addAction(self.copySimilarButton)  # add action to toolbar
+    #
+    #     self.measureDistanceButton = QAction('Measure', self)  # cline_thickreate action
+    #     self.measureDistanceButton.triggered.connect(lambda: self.vector_by_mouse(measure_distance))  # connect action to function
+    #     self.menuBaseView.addAction(self.measureDistanceButton)  # add action to menu
+    #     self.toolBarBase.addAction(self.measureDistanceButton)  # add action to toolbar
+    #
+    #     self.cleanSectionButton = QAction('Clean intersections', self)
+    #     self.cleanSectionButton.triggered.connect(lambda: clean_intersection(self))  # connect action to function
+    #     self.menuBaseView.addAction(self.cleanSectionButton)  # add action to menu
+    #     self.toolBarBase.addAction(self.cleanSectionButton)  # add action to toolbar
+
+    def initialize_tools(self):
+        """Add more tool buttons for this view with the pattern:
+                self.ToolButtonsLayout.setObjectName(u"ToolButtonsLayout")
+                self.SaveHomeButton = QToolButton(self.ToolButtonsFrame)
+                self.SaveHomeButton.setObjectName(u"SaveHomeButton")
+                self.SaveHomeButton.setAutoRaise(False)
+                self.SaveHomeButton.setArrowType(Qt.NoArrow)
+                self.ToolButtonsLayout.addWidget(self.SaveHomeButton)."""
         from .two_d_lines import draw_line, edit_line, sort_line_nodes, move_line, rotate_line, extend_line, \
             split_line_line, split_line_existing_point, merge_lines, snap_line, resample_line_distance, \
-            resample_line_number_points, simplify_line, copy_parallel, copy_kink, copy_similar, measure_distance, clean_intersection
-
-        """Imports for this view."""
-        """Customize menus and tools for this view"""
-        super().initialize_menu_tools()
-        self.menuBaseView.setTitle("Edit")
-        self.actionBase_Tool.setText("Edit")
-
-        self.drawLineButton = QAction('Draw line', self)  # create action
-        self.drawLineButton.triggered.connect(lambda: draw_line(self))  # connect action to function with additional argument parent
-        self.menuBaseView.addAction(self.drawLineButton)  # add action to menu
-        self.toolBarBase.addAction(self.drawLineButton)  # add action to toolbar
-
-        self.editLineButton = QAction('Edit line', self)  # create action
-        self.editLineButton.triggered.connect(lambda: edit_line(self))  # connect action to function
-        self.menuBaseView.addAction(self.editLineButton)  # add action to menu
-        self.toolBarBase.addAction(self.editLineButton)  # add action to toolbar
-
-        self.sortLineButton = QAction('Sort line nodes', self)  # create action
-        self.sortLineButton.triggered.connect(lambda: sort_line_nodes(self))  # connect action to function
-        self.menuBaseView.addAction(self.sortLineButton)  # add action to menu
-        self.toolBarBase.addAction(self.sortLineButton)  # add action to toolbar
-
-        self.moveLineButton = QAction('Move line', self)  # create action
-        self.moveLineButton.triggered.connect(lambda: self.vector_by_mouse(move_line))  # connect action to function
-        self.menuBaseView.addAction(self.moveLineButton)  # add action to menu
-        self.toolBarBase.addAction(self.moveLineButton)  # add action to toolbar
-
-        self.rotateLineButton = QAction('Rotate line', self)  # create action
-        self.rotateLineButton.triggered.connect(lambda: rotate_line(self))  # connect action to function
-        self.menuBaseView.addAction(self.rotateLineButton)  # add action to menu
-        self.toolBarBase.addAction(self.rotateLineButton)  # add action to toolbar
-
-        self.extendButton = QAction('Extend line', self)  # create action
-        self.extendButton.triggered.connect(lambda: extend_line(self))  # connect action to function
-        self.menuBaseView.addAction(self.extendButton)  # add action to menu
-        self.toolBarBase.addAction(self.extendButton)  # add action to toolbar
-
-        self.splitLineByLineButton = QAction('Split line-line', self)  # create action
-        self.splitLineByLineButton.triggered.connect(lambda: split_line_line(self))  # connect action to function
-        self.menuBaseView.addAction(self.splitLineByLineButton)  # add action to menu
-        self.toolBarBase.addAction(self.splitLineByLineButton)  # add action to toolbar
-
-        self.splitLineByPointButton = QAction('Split line-point', self)  # create action
-        self.splitLineByPointButton.triggered.connect(
-            lambda: split_line_existing_point(self))  # connect action to function
-        self.menuBaseView.addAction(self.splitLineByPointButton)  # add action to menu
-        self.toolBarBase.addAction(self.splitLineByPointButton)  # add action to toolbar
-
-        self.mergeLineButton = QAction('Merge lines', self)  # create action
-        self.mergeLineButton.triggered.connect(lambda: merge_lines(self))  # connect action to function
-        self.menuBaseView.addAction(self.mergeLineButton)  # add action to menu
-        self.toolBarBase.addAction(self.mergeLineButton)  # add action to toolbar
-
-        self.snapLineButton = QAction('Snap line', self)  # create action
-        self.snapLineButton.triggered.connect(lambda: snap_line(self))  # connect action to function
-        self.menuBaseView.addAction(self.snapLineButton)  # add action to menu
-        self.toolBarBase.addAction(self.snapLineButton)  # add action to toolbar
-
-        self.resampleDistanceButton = QAction('Resample distance', self)  # create action
-        self.resampleDistanceButton.triggered.connect(
-            lambda: resample_line_distance(self))  # connect action to function
-        self.menuBaseView.addAction(self.resampleDistanceButton)  # add action to menu
-        self.toolBarBase.addAction(self.resampleDistanceButton)  # add action to toolbar
-
-        self.resampleNumberButton = QAction('Resample number', self)  # create action
-        self.resampleNumberButton.triggered.connect(
-            lambda: resample_line_number_points(self))  # connect action to function
-        self.menuBaseView.addAction(self.resampleNumberButton)  # add action to menu
-        self.toolBarBase.addAction(self.resampleNumberButton)  # add action to toolbar
-
-        self.simplifyButton = QAction('Simplify line', self)  # create action
-        self.simplifyButton.triggered.connect(lambda: simplify_line(self))  # connect action to function
-        self.menuBaseView.addAction(self.simplifyButton)  # add action to menu
-        self.toolBarBase.addAction(self.simplifyButton)  # add action to toolbar
-
-        self.copyParallelButton = QAction('Copy parallel', self)  # create action
-        self.copyParallelButton.triggered.connect(lambda: copy_parallel(self))  # connect action to function
-        self.menuBaseView.addAction(self.copyParallelButton)  # add action to menu
-        self.toolBarBase.addAction(self.copyParallelButton)  # add action to toolbar
-
-        self.copyKinkButton = QAction('Copy kink', self)  # create action
-        self.copyKinkButton.triggered.connect(lambda: copy_kink(self))  # connect action to function
-        self.menuBaseView.addAction(self.copyKinkButton)  # add action to menu
-        self.toolBarBase.addAction(self.copyKinkButton)  # add action to toolbar
-
-        self.copySimilarButton = QAction('Copy similar', self)  # create action
-        self.copySimilarButton.triggered.connect(lambda: self.vector_by_mouse(copy_similar))  # connect action to function
-        self.menuBaseView.addAction(self.copySimilarButton)  # add action to menu
-        self.toolBarBase.addAction(self.copySimilarButton)  # add action to toolbar
-
-        self.measureDistanceButton = QAction('Measure', self)  # cline_thickreate action
-        self.measureDistanceButton.triggered.connect(lambda: self.vector_by_mouse(measure_distance))  # connect action to function
-        self.menuBaseView.addAction(self.measureDistanceButton)  # add action to menu
-        self.toolBarBase.addAction(self.measureDistanceButton)  # add action to toolbar
-
-        self.cleanSectionButton = QAction('Clean intersections', self)
-        self.cleanSectionButton.triggered.connect(lambda: clean_intersection(self))  # connect action to function
-        self.menuBaseView.addAction(self.cleanSectionButton)  # add action to menu
-        self.toolBarBase.addAction(self.cleanSectionButton)  # add action to toolbar
+            resample_line_number_points, simplify_line, copy_parallel, copy_kink, copy_similar, measure_distance, \
+            clean_intersection
+        super().initialize_tools()
+        # self.menuBaseView.setTitle("Edit")
+        # self.actionBase_Tool.setText("Edit")
+        #
+        # self.drawLineButton = QAction('Draw line', self)  # create action
+        # self.drawLineButton.triggered.connect(lambda: draw_line(self))  # connect action to function with additional argument parent
+        # self.menuBaseView.addAction(self.drawLineButton)  # add action to menu
+        # self.toolBarBase.addAction(self.drawLineButton)  # add action to toolbar
+        #
+        # self.editLineButton = QAction('Edit line', self)  # create action
+        # self.editLineButton.triggered.connect(lambda: edit_line(self))  # connect action to function
+        # self.menuBaseView.addAction(self.editLineButton)  # add action to menu
+        # self.toolBarBase.addAction(self.editLineButton)  # add action to toolbar
+        #
+        # self.sortLineButton = QAction('Sort line nodes', self)  # create action
+        # self.sortLineButton.triggered.connect(lambda: sort_line_nodes(self))  # connect action to function
+        # self.menuBaseView.addAction(self.sortLineButton)  # add action to menu
+        # self.toolBarBase.addAction(self.sortLineButton)  # add action to toolbar
+        #
+        # self.moveLineButton = QAction('Move line', self)  # create action
+        # self.moveLineButton.triggered.connect(lambda: self.vector_by_mouse(move_line))  # connect action to function
+        # self.menuBaseView.addAction(self.moveLineButton)  # add action to menu
+        # self.toolBarBase.addAction(self.moveLineButton)  # add action to toolbar
+        #
+        # self.rotateLineButton = QAction('Rotate line', self)  # create action
+        # self.rotateLineButton.triggered.connect(lambda: rotate_line(self))  # connect action to function
+        # self.menuBaseView.addAction(self.rotateLineButton)  # add action to menu
+        # self.toolBarBase.addAction(self.rotateLineButton)  # add action to toolbar
+        #
+        # self.extendButton = QAction('Extend line', self)  # create action
+        # self.extendButton.triggered.connect(lambda: extend_line(self))  # connect action to function
+        # self.menuBaseView.addAction(self.extendButton)  # add action to menu
+        # self.toolBarBase.addAction(self.extendButton)  # add action to toolbar
+        #
+        # self.splitLineByLineButton = QAction('Split line-line', self)  # create action
+        # self.splitLineByLineButton.triggered.connect(lambda: split_line_line(self))  # connect action to function
+        # self.menuBaseView.addAction(self.splitLineByLineButton)  # add action to menu
+        # self.toolBarBase.addAction(self.splitLineByLineButton)  # add action to toolbar
+        #
+        # self.splitLineByPointButton = QAction('Split line-point', self)  # create action
+        # self.splitLineByPointButton.triggered.connect(
+        #     lambda: split_line_existing_point(self))  # connect action to function
+        # self.menuBaseView.addAction(self.splitLineByPointButton)  # add action to menu
+        # self.toolBarBase.addAction(self.splitLineByPointButton)  # add action to toolbar
+        #
+        # self.mergeLineButton = QAction('Merge lines', self)  # create action
+        # self.mergeLineButton.triggered.connect(lambda: merge_lines(self))  # connect action to function
+        # self.menuBaseView.addAction(self.mergeLineButton)  # add action to menu
+        # self.toolBarBase.addAction(self.mergeLineButton)  # add action to toolbar
+        #
+        # self.snapLineButton = QAction('Snap line', self)  # create action
+        # self.snapLineButton.triggered.connect(lambda: snap_line(self))  # connect action to function
+        # self.menuBaseView.addAction(self.snapLineButton)  # add action to menu
+        # self.toolBarBase.addAction(self.snapLineButton)  # add action to toolbar
+        #
+        # self.resampleDistanceButton = QAction('Resample distance', self)  # create action
+        # self.resampleDistanceButton.triggered.connect(
+        #     lambda: resample_line_distance(self))  # connect action to function
+        # self.menuBaseView.addAction(self.resampleDistanceButton)  # add action to menu
+        # self.toolBarBase.addAction(self.resampleDistanceButton)  # add action to toolbar
+        #
+        # self.resampleNumberButton = QAction('Resample number', self)  # create action
+        # self.resampleNumberButton.triggered.connect(
+        #     lambda: resample_line_number_points(self))  # connect action to function
+        # self.menuBaseView.addAction(self.resampleNumberButton)  # add action to menu
+        # self.toolBarBase.addAction(self.resampleNumberButton)  # add action to toolbar
+        #
+        # self.simplifyButton = QAction('Simplify line', self)  # create action
+        # self.simplifyButton.triggered.connect(lambda: simplify_line(self))  # connect action to function
+        # self.menuBaseView.addAction(self.simplifyButton)  # add action to menu
+        # self.toolBarBase.addAction(self.simplifyButton)  # add action to toolbar
+        #
+        # self.copyParallelButton = QAction('Copy parallel', self)  # create action
+        # self.copyParallelButton.triggered.connect(lambda: copy_parallel(self))  # connect action to function
+        # self.menuBaseView.addAction(self.copyParallelButton)  # add action to menu
+        # self.toolBarBase.addAction(self.copyParallelButton)  # add action to toolbar
+        #
+        # self.copyKinkButton = QAction('Copy kink', self)  # create action
+        # self.copyKinkButton.triggered.connect(lambda: copy_kink(self))  # connect action to function
+        # self.menuBaseView.addAction(self.copyKinkButton)  # add action to menu
+        # self.toolBarBase.addAction(self.copyKinkButton)  # add action to toolbar
+        #
+        # self.copySimilarButton = QAction('Copy similar', self)  # create action
+        # self.copySimilarButton.triggered.connect(lambda: self.vector_by_mouse(copy_similar))  # connect action to function
+        # self.menuBaseView.addAction(self.copySimilarButton)  # add action to menu
+        # self.toolBarBase.addAction(self.copySimilarButton)  # add action to toolbar
+        #
+        # self.measureDistanceButton = QAction('Measure', self)  # cline_thickreate action
+        # self.measureDistanceButton.triggered.connect(lambda: self.vector_by_mouse(measure_distance))  # connect action to function
+        # self.menuBaseView.addAction(self.measureDistanceButton)  # add action to menu
+        # self.toolBarBase.addAction(self.measureDistanceButton)  # add action to toolbar
+        #
+        # self.cleanSectionButton = QAction('Clean intersections', self)
+        # self.cleanSectionButton.triggered.connect(lambda: clean_intersection(self))  # connect action to function
+        # self.menuBaseView.addAction(self.cleanSectionButton)  # add action to menu
+        # self.toolBarBase.addAction(self.cleanSectionButton)  # add action to toolbar
 
     def vector_by_mouse(self, func):
         # if not self.selected_uids:
@@ -7166,31 +7610,60 @@ class NewView2D(BaseView):
 
 
 class NewViewMap(NewView2D):
+
     def __init__(self, *args, **kwargs):
         super(NewViewMap, self).__init__(*args, **kwargs)
         self.setWindowTitle("Map View")
         self.plotter.view_xy()
 
-    def initialize_menu_tools(self):
-        from pzero.collections.xsection_collection import section_from_azimuth, sections_from_file
-        from pzero.collections.boundary_collection import boundary_from_points
-        super().initialize_menu_tools()
-        self.sectionFromAzimuthButton = QAction('Section from azimuth', self)  # create action
-        self.sectionFromAzimuthButton.triggered.connect(
-            lambda: self.vector_by_mouse(section_from_azimuth))  # connect action to function)  # connect action to function with additional argument parent
-        self.menuBaseView.addAction(self.sectionFromAzimuthButton)  # add action to menu
-        self.toolBarBase.addAction(self.sectionFromAzimuthButton)  # add action to toolbar
+    # def initialize_menu_tools(self):
+    #     from pzero.collections.xsection_collection import section_from_azimuth, sections_from_file
+    #     from pzero.collections.boundary_collection import boundary_from_points
+    #     super().initialize_menu_tools()
+    #     self.sectionFromAzimuthButton = QAction('Section from azimuth', self)  # create action
+    #     self.sectionFromAzimuthButton.triggered.connect(
+    #         lambda: self.vector_by_mouse(section_from_azimuth))  # connect action to function)  # connect action to function with additional argument parent
+    #     self.menuBaseView.addAction(self.sectionFromAzimuthButton)  # add action to menu
+    #     self.toolBarBase.addAction(self.sectionFromAzimuthButton)  # add action to toolbar
+    #
+    #     self.sectionFromFileButton = QAction('Sections from file', self)
+    #     self.sectionFromFileButton.triggered.connect(lambda: sections_from_file(self))
+    #
+    #     self.menuBaseView.addAction(self.sectionFromFileButton)  # add action to menu
+    #     self.toolBarBase.addAction(self.sectionFromFileButton)  # add action to toolbar
+    #
+    #     self.boundaryFromPointsButton = QAction('Boundary from 2 points', self)  # create action
+    #     self.boundaryFromPointsButton.triggered.connect(lambda: self.vector_by_mouse(boundary_from_points))  # connect action to function with additional argument parent
+    #     self.menuBaseView.addAction(self.boundaryFromPointsButton)  # add action to menu
+    #     self.toolBarBase.addAction(self.boundaryFromPointsButton)  # add action to toolbar
 
-        self.sectionFromFileButton = QAction('Sections from file', self)
-        self.sectionFromFileButton.triggered.connect(lambda: sections_from_file(self))
-
-        self.menuBaseView.addAction(self.sectionFromFileButton)  # add action to menu
-        self.toolBarBase.addAction(self.sectionFromFileButton)  # add action to toolbar
-
-        self.boundaryFromPointsButton = QAction('Boundary from 2 points', self)  # create action
-        self.boundaryFromPointsButton.triggered.connect(lambda: self.vector_by_mouse(boundary_from_points))  # connect action to function with additional argument parent
-        self.menuBaseView.addAction(self.boundaryFromPointsButton)  # add action to menu
-        self.toolBarBase.addAction(self.boundaryFromPointsButton)  # add action to toolbar
+    # def initialize_tools(self):
+    #     """Add more tool buttons for this view with the pattern:
+    #                     self.ToolButtonsLayout.setObjectName(u"ToolButtonsLayout")
+    #                     self.SaveHomeButton = QToolButton(self.ToolButtonsFrame)
+    #                     self.SaveHomeButton.setObjectName(u"SaveHomeButton")
+    #                     self.SaveHomeButton.setAutoRaise(False)
+    #                     self.SaveHomeButton.setArrowType(Qt.NoArrow)
+    #                     self.ToolButtonsLayout.addWidget(self.SaveHomeButton)."""
+    #     from pzero.collections.xsection_collection import section_from_azimuth, sections_from_file
+    #     from pzero.collections.boundary_collection import boundary_from_points
+    #     super().initialize_tools()
+    #     # self.sectionFromAzimuthButton = QAction('Section from azimuth', self)  # create action
+    #     # self.sectionFromAzimuthButton.triggered.connect(
+    #     #     lambda: self.vector_by_mouse(section_from_azimuth))  # connect action to function)  # connect action to function with additional argument parent
+    #     # self.menuBaseView.addAction(self.sectionFromAzimuthButton)  # add action to menu
+    #     # self.toolBarBase.addAction(self.sectionFromAzimuthButton)  # add action to toolbar
+    #     #
+    #     # self.sectionFromFileButton = QAction('Sections from file', self)
+    #     # self.sectionFromFileButton.triggered.connect(lambda: sections_from_file(self))
+    #     #
+    #     # self.menuBaseView.addAction(self.sectionFromFileButton)  # add action to menu
+    #     # self.toolBarBase.addAction(self.sectionFromFileButton)  # add action to toolbar
+    #     #
+    #     # self.boundaryFromPointsButton = QAction('Boundary from 2 points', self)  # create action
+    #     # self.boundaryFromPointsButton.triggered.connect(lambda: self.vector_by_mouse(boundary_from_points))  # connect action to function with additional argument parent
+    #     # self.menuBaseView.addAction(self.boundaryFromPointsButton)  # add action to menu
+    #     # self.toolBarBase.addAction(self.boundaryFromPointsButton)  # add action to toolbar
 
     def show_actor_with_property(self, uid=None, collection=None, show_property=None, visible=None):
         """Show actor with scalar property (default None)

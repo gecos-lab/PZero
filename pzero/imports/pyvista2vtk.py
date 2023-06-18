@@ -1,7 +1,10 @@
 """pyvista2vtk.py
 PZero© Andrea Bistacchi"""
 
-from PyQt5.QtWidgets import QFileDialog
+import os
+os.environ["QT_API"] = "pyside6"
+from qtpy.QtWidgets import QFileDialog
+
 import uuid
 from pzero.entities_factory import VertexSet, PolyLine, TriSurf, TetraSolid
 import pyvista as pv

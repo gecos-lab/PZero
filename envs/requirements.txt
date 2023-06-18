@@ -1,6 +1,8 @@
 pandas~=1.5.3
 laspy~=2.3.0
 numpy~=1.24.3
+pyside6=6.5.1
+qtpy=2.2.0
 pyvistaqt~=0.10.0
 pyvista~=0.39.0
 pillow~=9.5.0
