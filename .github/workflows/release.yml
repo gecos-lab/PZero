@@ -1,7 +1,7 @@
 name: Release
 
 on:
-  # runs after testing_for_release.yml was completed
+  # runs after release-testing.yml was completed
   workflow_run:
     workflows: ["Release Testing"]
     types:
@@ -17,7 +17,7 @@ jobs:
       run:
         shell: bash -el {0}
 
-    # check if the testing_for_release.yml was succeeded, else it will not run the steps
+    # check if the release-testing.yml was succeeded, else it will not run the steps
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
 
     steps:
