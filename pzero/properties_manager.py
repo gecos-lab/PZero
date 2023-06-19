@@ -2,7 +2,7 @@
 PZero© Andrea Bistacchi"""
 
 import os
-os.environ["QT_API"] = "pyside6"
+os.environ["QT_API"] = "pyqt5 "
 from qtpy.QtWidgets import QTableWidgetItem, QLabel, QComboBox
 from qtpy.QtGui import QColor, QImage, QPixmap
 from qtpy.QtCore import QObject

@@ -4,19 +4,19 @@ from vtkmodules.vtkRenderingCore import vtkPropPicker
 
 """QT imports"""
 import os
-os.environ["QT_API"] = "pyside6"
+os.environ["QT_API"] = "pyqt5 "
 from qtpy.QtWidgets import *
 from qtpy.QtCore import Qt
 
 """PZero imports"""
 from pzero.ui.base_view_widget_ui import Ui_View
-from .entities_factory import VertexSet, PolyLine, TriSurf, XsVertexSet, XsPolyLine, DEM, PCDom, MapImage, \
+from pzero.entities_factory import VertexSet, PolyLine, TriSurf, XsVertexSet, XsPolyLine, DEM, PCDom, MapImage, \
     Voxet, XsVoxet, Seismics, XsImage, PolyData, Well, WellMarker, WellTrace, Attitude
 from pzero.helpers.helper_dialogs import input_one_value_dialog, input_combo_dialog, message_dialog, \
     multiple_input_dialog, progress_dialog, save_file_dialog, \
     NavigatorWidget
 from pzero.collections.geological_collection import GeologicalCollection
-from .orientation_analysis import get_dip_dir_vectors
+from pzero.orientation_analysis import get_dip_dir_vectors
 from pzero.helpers.helper_functions import best_fitting_plane, gen_frame
 from pzero.helpers.helper_widgets import Vector
 
@@ -4982,7 +4982,7 @@ class BaseView(QWidget, Ui_View):
 class View3D(BaseView):
     """Create 3D view and import UI created with Qt Designer by subclassing base view"""
     """parent is the QT object that is launching this one, hence the ProjectWindow() instance in this case"""
-    from .point_clouds import cut_pc, segment_pc, facets_pc, auto_pick, thresh_filt, normals2dd, calibration_pc
+    from pzero.point_clouds import cut_pc, segment_pc, facets_pc, auto_pick, thresh_filt, normals2dd, calibration_pc
     def __init__(self, *args, **kwargs):
         super(View3D, self).__init__(*args, **kwargs)
 
@@ -5001,7 +5001,7 @@ class View3D(BaseView):
 
     # def initialize_menu_tools(self):
     #     """Customize menus and tools for this view"""
-    #     from .point_clouds import cut_pc, segment_pc, facets_pc, auto_pick, thresh_filt, normals2dd, calibration_pc
+    #     from pzero.point_clouds import cut_pc, segment_pc, facets_pc, auto_pick, thresh_filt, normals2dd, calibration_pc
     #     super().initialize_menu_tools()
     #     self.menuBaseView.setTitle("Edit")
     #     self.actionBase_Tool.setText("Edit")
@@ -5454,7 +5454,7 @@ class View2D(BaseView):
 
     # def initialize_menu_tools(self):
     #     """Imports for this view."""
-    #     from .two_d_lines import draw_line, edit_line, sort_line_nodes, rotate_line, extend_line, \
+    #     from pzero.two_d_lines import draw_line, edit_line, sort_line_nodes, rotate_line, extend_line, \
     #         split_line_line, split_line_existing_point, merge_lines, snap_line, resample_line_distance, \
     #         resample_line_number_points, simplify_line, copy_parallel, copy_kink, copy_similar, measure_distance
     #     """Customize menus and tools for this view"""
@@ -5574,7 +5574,7 @@ class View2D(BaseView):
         self.SaveHomeButton.setArrowType(Qt.NoArrow)
         self.ToolButtonsLayout.addWidget(self.SaveHomeButton)."""
         """Imports for this view."""
-        from .two_d_lines import draw_line, edit_line, sort_line_nodes, rotate_line, extend_line, \
+        from pzero.two_d_lines import draw_line, edit_line, sort_line_nodes, rotate_line, extend_line, \
             split_line_line, split_line_existing_point, merge_lines, snap_line, resample_line_distance, \
             resample_line_number_points, simplify_line, copy_parallel, copy_kink, copy_similar, measure_distance
         super().initialize_tools()
@@ -6096,7 +6096,7 @@ class ViewMap(View2D):
     #     super().initialize_menu_tools()
     #     """Tools specific to map view"""
     #     from pzero.collections.xsection_collection import section_from_azimuth, sections_from_file
-    #     # from .xsection_collection import section_from_points
+    #     # from pzero.xsection_collection import section_from_points
     #     from pzero.collections.boundary_collection import boundary_from_points
     #
     #     self.sectionFromAzimuthButton = QAction('Section from Azimuth', self)  # create action
@@ -6134,7 +6134,7 @@ class ViewMap(View2D):
         self.ToolButtonsLayout.addWidget(self.SaveHomeButton).
         Importing classes here is necessary to avoid circular import errors."""
         from pzero.collections.xsection_collection import section_from_azimuth, sections_from_file
-        # from .xsection_collection import section_from_points
+        # from pzero.xsection_collection import section_from_points
         from pzero.collections.boundary_collection import boundary_from_points
         super().initialize_tools()
         # self.sectionFromAzimuthButton = QAction('Section from Azimuth', self)  # create action
@@ -7388,7 +7388,7 @@ class NewView2D(BaseView):
     """Re-implementations of functions that appear in all views - see placeholders in BaseView()"""
 
     # def initialize_menu_tools(self):
-    #     from .two_d_lines import draw_line, edit_line, sort_line_nodes, move_line, rotate_line, extend_line, \
+    #     from pzero.two_d_lines import draw_line, edit_line, sort_line_nodes, move_line, rotate_line, extend_line, \
     #         split_line_line, split_line_existing_point, merge_lines, snap_line, resample_line_distance, \
     #         resample_line_number_points, simplify_line, copy_parallel, copy_kink, copy_similar, measure_distance, clean_intersection
     #
@@ -7499,7 +7499,7 @@ class NewView2D(BaseView):
                 self.SaveHomeButton.setAutoRaise(False)
                 self.SaveHomeButton.setArrowType(Qt.NoArrow)
                 self.ToolButtonsLayout.addWidget(self.SaveHomeButton)."""
-        from .two_d_lines import draw_line, edit_line, sort_line_nodes, move_line, rotate_line, extend_line, \
+        from pzero.two_d_lines import draw_line, edit_line, sort_line_nodes, move_line, rotate_line, extend_line, \
             split_line_line, split_line_existing_point, merge_lines, snap_line, resample_line_distance, \
             resample_line_number_points, simplify_line, copy_parallel, copy_kink, copy_similar, measure_distance, \
             clean_intersection

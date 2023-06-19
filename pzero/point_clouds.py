@@ -11,7 +11,7 @@ from vtkmodules.vtkFiltersExtraction import vtkExtractGeometry, vtkExtractSelect
 from vtkmodules.vtkFiltersPoints import vtkEuclideanClusterExtraction, vtkRadiusOutlierRemoval, vtkProjectPointsToPlane
 
 from pzero.collections.dom_collection import DomCollection
-from .entities_factory import PCDom, TriSurf, Attitude
+from pzero.entities_factory import PCDom, TriSurf, Attitude
 from pzero.collections.geological_collection import GeologicalCollection
 from pzero.helpers.helper_dialogs import multiple_input_dialog
 from pzero.helpers.helper_functions import best_fitting_plane,srf

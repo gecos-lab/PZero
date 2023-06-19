@@ -1,6 +1,6 @@
 
 import os
-os.environ["QT_API"] = "pyside6"
+os.environ["QT_API"] = "pyqt5 "
 # from qtpy.QtCore import QAbstractTableModel, Qt, QVariant
 from qtpy.QtCore import QAbstractTableModel, Qt
 

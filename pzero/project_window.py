@@ -3,7 +3,7 @@ PZero© Andrea Bistacchi"""
 
 import os
 
-os.environ["QT_API"] = "pyside6"
+os.environ["QT_API"] = "pyqt5 "
 from qtpy.QtWidgets import QMainWindow, QMessageBox, QDockWidget, QSizePolicy
 from qtpy.QtCore import Qt, QSortFilterProxyModel, Signal, QSize
 
@@ -19,7 +19,7 @@ from pandas import DataFrame as pd_DataFrame
 from pandas import read_json as pd_read_json
 from pandas import read_csv as pd_read_csv
 from pzero.ui.project_window_ui import Ui_ProjectWindow
-from .entities_factory import VertexSet, PolyLine, TriSurf, XsVertexSet, XsPolyLine, DEM, MapImage, Voxet, \
+from pzero.entities_factory import VertexSet, PolyLine, TriSurf, XsVertexSet, XsPolyLine, DEM, MapImage, Voxet, \
     Seismics, XsVoxet, PCDom, TSDom, Well,Attitude,XsImage
 from pzero.collections.geological_collection import GeologicalCollection
 from pzero.collections.xsection_collection import XSectionCollection
@@ -30,8 +30,8 @@ from pzero.collections.boundary_collection import BoundaryCollection
 from pzero.collections.well_collection import WellCollection
 from pzero.collections.fluid_collection import FluidsCollection
 from pzero.collections.background_collection import BackgroundCollection
-from .legend_manager import Legend
-from .properties_manager import PropertiesCMaps
+from pzero.legend_manager import Legend
+from pzero.properties_manager import PropertiesCMaps
 from pzero.imports.gocad2vtk import gocad2vtk, gocad2vtk_section, gocad2vtk_boundary
 from pzero.imports.pc2vtk import pc2vtk
 from pzero.imports.pyvista2vtk import pyvista2vtk
@@ -41,10 +41,10 @@ from pzero.imports.dem2vtk import dem2vtk
 from pzero.imports.dxf2vtk import vtk2dxf
 from pzero.imports.well2vtk import well2vtk
 from pzero.imports.segy2vtk import segy2vtk
-from .windows_factory import View3D
-from .windows_factory import NewViewMap
-from .windows_factory import NewViewXsection
-from .windows_factory import ViewStereoplot
+from pzero.windows_factory import View3D
+from pzero.windows_factory import NewViewMap
+from pzero.windows_factory import NewViewXsection
+from pzero.windows_factory import ViewStereoplot
 from pzero.helpers.helper_dialogs import options_dialog, save_file_dialog, open_file_dialog, input_combo_dialog, message_dialog, multiple_input_dialog, input_one_value_dialog, progress_dialog, import_dialog,PreviewWidget
 from pzero.imports.image2vtk import geo_image2vtk, xs_image2vtk
 from pzero.imports.stl2vtk import vtk2stl, vtk2stl_dilation
@@ -53,9 +53,9 @@ from pzero.imports.cesium2vtk import vtk2cesium
 from pzero.imports.obj2vtk import vtk2obj
 from pzero.imports.ply2vtk import vtk2ply
 from pzero.imports.lxml2vtk import vtk2lxml
-from .three_d_surfaces import interpolation_delaunay_2d, poisson_interpolation, implicit_model_loop_structural, surface_smoothing, linear_extrusion, decimation_pro_resampling, decimation_quadric_resampling, subdivision_resampling, intersection_xs, project_2_dem, project_2_xs, split_surf,retopo
-from .orientation_analysis import set_normals
-from .point_clouds import decimate_pc
+from pzero.three_d_surfaces import interpolation_delaunay_2d, poisson_interpolation, implicit_model_loop_structural, surface_smoothing, linear_extrusion, decimation_pro_resampling, decimation_quadric_resampling, subdivision_resampling, intersection_xs, project_2_dem, project_2_xs, split_surf,retopo
+from pzero.orientation_analysis import set_normals
+from pzero.point_clouds import decimate_pc
 
 
 class ProjectWindow(QMainWindow, Ui_ProjectWindow):
@@ -275,13 +275,13 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         dock_widget.setFeatures(QDockWidget.DockWidgetClosable | QDockWidget.DockWidgetFloatable | QDockWidget.DockWidgetMovable)
         dock_widget.setAllowedAreas(Qt.RightDockWidgetArea)
         # create the graphical window as a QWidget to be included into the QDockWidget as its content
-        if window_type is 'View3D':
+        if window_type == 'View3D':
             dock_widget_contents = View3D(parent=self)
-        elif window_type is 'NewViewMap':
+        elif window_type == 'NewViewMap':
             dock_widget_contents = NewViewMap(parent=self)
-        elif window_type is 'NewViewXsection':
+        elif window_type == 'NewViewXsection':
             dock_widget_contents = NewViewXsection(parent=self)
-        elif window_type is 'ViewStereoplot':
+        elif window_type == 'ViewStereoplot':
             dock_widget_contents = ViewStereoplot(parent=self)
         else:
             # exit doing nothing in case the window type is not recognized

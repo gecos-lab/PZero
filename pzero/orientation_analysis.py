@@ -89,7 +89,7 @@ def dip_directions2normals(dips=None, directions=None, return_dip_dir_vec=False)
 
 
 def vset_set_normals(VertexSet=None, dip_name=None, dir_name=None):
-    from .entities_factory import VertexSet
+    from pzero.entities_factory import VertexSet
 
     dips_array = VertexSet.get_point_data(dip_name)
     dirs_array = VertexSet.get_point_data(dir_name)
@@ -99,7 +99,7 @@ def vset_set_normals(VertexSet=None, dip_name=None, dir_name=None):
 
 
 def set_normals(self):
-    from .entities_factory import TriSurf, VertexSet, XsVertexSet
+    from pzero.entities_factory import TriSurf, VertexSet, XsVertexSet
 
     """General function to set normals on different entities.
     It branches to other functions depending on the selected entity

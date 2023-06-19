@@ -43,7 +43,7 @@ from numpy import zeros as np_zeros
 from numpy import dot as np_dot
 from vtkmodules.vtkFiltersPoints import vtkConvertToPointCloud
 
-from .orientation_analysis import get_dip_dir_vectors
+from pzero.orientation_analysis import get_dip_dir_vectors
 from vtkmodules.vtkFiltersCore import vtkThresholdPoints
 
 """

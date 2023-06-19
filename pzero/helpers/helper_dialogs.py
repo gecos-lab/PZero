@@ -2,28 +2,28 @@
 PZero© Andrea Bistacchi"""
 
 import os
-os.environ["QT_API"] = "pyside6"
+os.environ["QT_API"] = "pyqt5 "
 from qtpy.QtWidgets import QMessageBox, QInputDialog, QLineEdit, QPushButton, QFileDialog, QWidget, QProgressDialog, \
     QMainWindow, QComboBox, QGridLayout, QLabel, QCheckBox, QTableWidgetItem, QHeaderView, QApplication, QFormLayout
-# from PyQt5.QtWidgets import QSpinBox, QDoubleSpinBox
+# from qtpy.QtWidgets import QSpinBox, QDoubleSpinBox
 from qtpy.QtGui import QColor
 from qtpy.QtCore import QEventLoop, Qt, QAbstractTableModel
 
 from pzero.ui.import_window_ui import Ui_ImportOptionsWindow
 from pzero.ui.navigator_window_ui import Ui_NavWindow
 from pzero.ui.preview_window_ui import Ui_PreviewWindow
-# from .assign_ui import Ui_AssignWindow
-# from .helper_functions import profiler
-# from .entities_factory import PolyData
+# from pzero.assign_ui import Ui_AssignWindow
+# from pzero.helper_functions import profiler
+# from pzero.entities_factory import PolyData
 from pandas import read_csv as pd_read_csv
 from pandas import DataFrame as pd_DataFrame
 from laspy import open as lp_open
 from os import path as os_path
 # from numpy import inf as np_inf
 from numpy import c_ as np_c_
-# from .pc2vtk import pc2vtk
+# from pzero.pc2vtk import pc2vtk
 from difflib import SequenceMatcher
-from .helper_functions import auto_sep
+from pzero.helpers.helper_functions import auto_sep
 
 from pyvistaqt import QtInteractor as pvQtInteractor
 

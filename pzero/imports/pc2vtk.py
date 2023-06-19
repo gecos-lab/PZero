@@ -28,7 +28,7 @@ from pandas import to_numeric as pd_to_numeric
 from pandas import read_csv as pd_read_csv
 
 from laspy import read as lp_read
-# from .helper_functions import profiler
+# from pzero.helper_functions import profiler
 
 
 def pc2vtk(in_file_name,col_names,row_range,header_row,usecols,delimiter,self=None):

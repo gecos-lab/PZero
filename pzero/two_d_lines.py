@@ -2,7 +2,7 @@
 PZero© Andrea Bistacchi"""
 
 import os
-os.environ["QT_API"] = "pyside6"
+os.environ["QT_API"] = "pyqt5 "
 from qtpy.QtWidgets import QAction
 
 from copy import deepcopy
@@ -20,8 +20,8 @@ from numpy import round as np_round
 from pzero.collections.geological_collection import GeologicalCollection
 from pzero.helpers.helper_dialogs import multiple_input_dialog, input_one_value_dialog, message_dialog
 from pzero.helpers.helper_widgets import Editor, Tracer
-from .windows_factory import ViewMap, ViewXsection, NewViewMap, NewViewXsection
-from .entities_factory import PolyLine, XsPolyLine
+from pzero.windows_factory import ViewMap, ViewXsection, NewViewMap, NewViewXsection
+from pzero.entities_factory import PolyLine, XsPolyLine
 from shapely import affinity
 from shapely.geometry import LineString, Point, MultiLineString
 from shapely.ops import split

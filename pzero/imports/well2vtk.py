@@ -18,7 +18,7 @@ from numpy import random as np_random
 from copy import deepcopy
 from pzero.entities_factory import Well, VertexSet
 from uuid import uuid4
-# from .entities_factory import WellData
+# from pzero.entities_factory import WellData
 
 from pzero.collections.well_collection import WellCollection
 from pzero.collections.geological_collection import GeologicalCollection

@@ -2,7 +2,7 @@
 PZero© Andrea Bistacchi"""
 
 import os
-os.environ["QT_API"] = "pyside6"
+os.environ["QT_API"] = "pyqt5 "
 from qtpy.QtWidgets import QTreeWidgetItem, QColorDialog, QPushButton, QSpinBox, QDoubleSpinBox, QComboBox
 from qtpy.QtGui import QColor
 from qtpy.QtCore import QObject
