@@ -203,7 +203,6 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.actionExportVTK.triggered.connect(self.export_vtk)
         self.actionExportCSV.triggered.connect(self.export_csv)
 
-
         """Edit actions -> slots"""
         self.actionEditEntityRemove.triggered.connect(self.entity_remove)
         self.actionConnectedParts.triggered.connect(self.connected_parts)
@@ -246,6 +245,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.actionViewStereoplot.triggered.connect(lambda: DockWindow(parent=self, window_type='ViewStereoplot'))
 
         self.update_actors = True
+
     def closeEvent(self, event):
         """Re-implement the standard closeEvent method of QWidget and ask (1) to save project, and (2) for confirmation to quit."""
         reply = QMessageBox.question(self, 'Closing Pzero', 'Save the project?', QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
@@ -253,12 +253,14 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             self.save_project()
         reply = QMessageBox.question(self, 'Closing Pzero', 'Confirm quit?', QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
         if reply == QMessageBox.Yes:
-            self.project_close_signal.emit()  # this is used to delete open windows when the current project is closed
+            # self.project_close_signal.emit()  # this is used to delete open windows when the current project is closed
+            for dock_widget in self.findChildren(QDockWidget):
+                """This closes the dok windows without a close() signal
+                that would trigger a message box for each window"""
+                dock_widget.deleteLater()
             event.accept()
         else:
             event.ignore()
-
-
 
     """Methods used to manage the entities shown in tables."""
 
