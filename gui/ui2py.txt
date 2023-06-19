@@ -1,6 +1,6 @@
 In Anaconda or Command terminal, type:
 
-pyuic5 base_view_widget.ui -o ..\pzero\ui\base_view_widget_ui.py
+pyuic5 base_view.ui -o ..\pzero\ui\base_view_ui.py
 
 pyuic5 import_window.ui -o ..\pzero\ui\import_window_ui.py
 

@@ -9,7 +9,7 @@ from qtpy.QtWidgets import *
 from qtpy.QtCore import Qt
 
 """PZero imports"""
-from pzero.ui.base_view_widget_ui import Ui_View
+from pzero.ui.base_view_ui import Ui_Base_View
 from pzero.entities_factory import VertexSet, PolyLine, TriSurf, XsVertexSet, XsPolyLine, DEM, PCDom, MapImage, \
     Voxet, XsVoxet, Seismics, XsImage, PolyData, Well, WellMarker, WellTrace, Attitude
 from pzero.helpers.helper_dialogs import input_one_value_dialog, input_combo_dialog, message_dialog, \
@@ -92,7 +92,7 @@ class NavigationToolbar(NavigationToolbar2QT):
         super(NavigationToolbar, self).__init__(parent, *args, **kwargs)
 
 
-class BaseView(QWidget, Ui_View):
+class BaseView(QWidget, Ui_Base_View):
     """Create base view - abstract class providing common methods for all views"""
     """parent is the QT object that is launching this one, hence the ProjectWindow() instance in this case"""
 

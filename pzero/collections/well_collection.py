@@ -1,9 +1,7 @@
 
 import os
 os.environ["QT_API"] = "pyqt5 "
-# from qtpy.QtCore import QAbstractTableModel, Qt, QVariant
-from qtpy.QtCore import QAbstractTableModel, Qt
-
+from qtpy.QtCore import QAbstractTableModel, Qt, QVariant
 
 from numpy import random as np_random
 from numpy import round as np_round
@@ -304,4 +302,4 @@ class WellCollection(QAbstractTableModel):
                 self.parent.well_metadata_modified_signal.emit(
                     [uid])  # a list of uids is emitted, even if the entity is just one
                 return True
-        # return QVariant()
+        return QVariant()

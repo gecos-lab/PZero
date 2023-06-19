@@ -3,8 +3,7 @@ PZero© Andrea Bistacchi"""
 
 import os
 os.environ["QT_API"] = "pyqt5 "
-# from qtpy.QtCore import QAbstractTableModel, Qt, QVariant
-from qtpy.QtCore import QAbstractTableModel, Qt
+from qtpy.QtCore import QAbstractTableModel, Qt, QVariant
 
 import numpy as np
 from pandas import set_option as pd_set_option
@@ -251,4 +250,4 @@ class ImageCollection(QAbstractTableModel):
                 uid = self.df.iloc[index.row(), 0]
                 self.parent.image_metadata_modified_signal.emit([uid])  # a list of uids is emitted, even if the entity is just one
                 return True
-        # return QVariant()
+        return QVariant()

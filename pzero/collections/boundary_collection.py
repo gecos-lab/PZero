@@ -4,8 +4,7 @@ PZero© Andrea Bistacchi"""
 """Import as much as possible as from <module> import <class> or <class as ...>"""
 import os
 os.environ["QT_API"] = "pyqt5 "
-# from qtpy.QtCore import QAbstractTableModel, Qt, QVariant
-from qtpy.QtCore import QAbstractTableModel, Qt
+from qtpy.QtCore import QAbstractTableModel, Qt, QVariant
 
 from vtk import vtkPoints
 from numpy import array as np_array
@@ -281,4 +280,4 @@ class BoundaryCollection(QAbstractTableModel):
                 uid = self.df.iloc[index.row(), 0]
                 self.parent.boundary_metadata_modified_signal.emit([uid])  # a list of uids is emitted, even if the entity is just one
                 return True
-        # return QVariant()
+        return QVariant()

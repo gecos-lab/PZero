@@ -3,8 +3,7 @@ PZero© Andrea Bistacchi"""
 
 import os
 os.environ["QT_API"] = "pyqt5 "
-# from qtpy.QtCore import QAbstractTableModel, Qt, QVariant
-from qtpy.QtCore import QAbstractTableModel, Qt
+from qtpy.QtCore import QAbstractTableModel, Qt, QVariant
 # from qtpy.QtGui import QStandardItem, QImage
 
 
@@ -635,4 +634,4 @@ class XSectionCollection(QAbstractTableModel):
                 self.parent.xsect_metadata_modified_signal.emit(
                     [uid])  # a list of uids is emitted, even if the entity is just one
                 return True
-            # return QVariant()
+            return QVariant()

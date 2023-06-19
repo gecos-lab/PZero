@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <ui version="4.0">
- <class>View</class>
- <widget class="QWidget" name="View">
+ <class>Base_View</class>
+ <widget class="QWidget" name="Base_View">
   <property name="geometry">
    <rect>
     <x>0</x>
@@ -239,7 +239,7 @@
          <x>0</x>
          <y>0</y>
          <width>274</width>
-         <height>284</height>
+         <height>308</height>
         </rect>
        </property>
        <property name="sizePolicy">
@@ -304,8 +304,8 @@
         <rect>
          <x>0</x>
          <y>0</y>
-         <width>274</width>
-         <height>284</height>
+         <width>98</width>
+         <height>89</height>
         </rect>
        </property>
        <property name="sizePolicy">
@@ -364,8 +364,8 @@
         <rect>
          <x>0</x>
          <y>0</y>
-         <width>274</width>
-         <height>284</height>
+         <width>98</width>
+         <height>89</height>
         </rect>
        </property>
        <property name="sizePolicy">
@@ -439,8 +439,8 @@
         <rect>
          <x>0</x>
          <y>0</y>
-         <width>274</width>
-         <height>284</height>
+         <width>98</width>
+         <height>89</height>
         </rect>
        </property>
        <property name="sizePolicy">
@@ -482,8 +482,8 @@
         <rect>
          <x>0</x>
          <y>0</y>
-         <width>274</width>
-         <height>284</height>
+         <width>98</width>
+         <height>89</height>
         </rect>
        </property>
        <property name="sizePolicy">
@@ -537,8 +537,8 @@
         <rect>
          <x>0</x>
          <y>0</y>
-         <width>274</width>
-         <height>284</height>
+         <width>98</width>
+         <height>89</height>
         </rect>
        </property>
        <property name="sizePolicy">
@@ -592,8 +592,8 @@
         <rect>
          <x>0</x>
          <y>0</y>
-         <width>274</width>
-         <height>284</height>
+         <width>98</width>
+         <height>89</height>
         </rect>
        </property>
        <attribute name="label">
@@ -616,8 +616,8 @@
         <rect>
          <x>0</x>
          <y>0</y>
-         <width>274</width>
-         <height>284</height>
+         <width>98</width>
+         <height>89</height>
         </rect>
        </property>
        <attribute name="label">
@@ -640,8 +640,8 @@
         <rect>
          <x>0</x>
          <y>0</y>
-         <width>274</width>
-         <height>284</height>
+         <width>98</width>
+         <height>89</height>
         </rect>
        </property>
        <attribute name="label">
@@ -664,8 +664,8 @@
         <rect>
          <x>0</x>
          <y>0</y>
-         <width>274</width>
-         <height>284</height>
+         <width>98</width>
+         <height>89</height>
         </rect>
        </property>
        <attribute name="label">
@@ -688,8 +688,8 @@
         <rect>
          <x>0</x>
          <y>0</y>
-         <width>274</width>
-         <height>284</height>
+         <width>98</width>
+         <height>89</height>
         </rect>
        </property>
        <attribute name="label">
@@ -712,8 +712,8 @@
         <rect>
          <x>0</x>
          <y>0</y>
-         <width>274</width>
-         <height>284</height>
+         <width>98</width>
+         <height>89</height>
         </rect>
        </property>
        <property name="sizePolicy">

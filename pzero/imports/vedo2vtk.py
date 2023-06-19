@@ -8,7 +8,7 @@ from qtpy.QtWidgets import QFileDialog
 import uuid
 from pzero.entities_factory import VertexSet, PolyLine, TriSurf, TetraSolid
 from pzero.collections.geological_collection import GeologicalCollection
-import vedo as vd
+from vedo import load as vd_load
 
 """MUST BE COMPLETELY REVISED___________________"""
 
@@ -31,9 +31,9 @@ def vedo2vtk(self):
         """Initialize"""
         cell_type = -1
 
-        """Read file with vd.load() function and detect type of curr_obj - ASSUMES ALL CELLS ARE OF THE SAME TYPE"""
+        """Read file with vd_load() function and detect type of curr_obj - ASSUMES ALL CELLS ARE OF THE SAME TYPE"""
         try:
-            curr_obj = vd.load(in_file_name)  # _____ this is the only difference with respect to pyvista2vtk
+            curr_obj = vd_load(in_file_name)  # _____ this is the only difference with respect to pyvista2vtk
 
             """ VTK cell types from documentation at https://vtk.org/doc/nightly/html/vtkCellType_8h.html
             VTK_EMPTY_CELL = 0, VTK_VERTEX = 1, VTK_POLY_VERTEX = 2, VTK_LINE = 3,
