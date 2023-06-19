@@ -1,0 +1,42 @@
+name: Release
+
+on:
+  # runs after testing_for_release.yml was completed
+  workflow_run:
+    workflows: ["Release Testing"]
+    types:
+      - completed
+
+
+jobs:
+  # Linux
+  linux-testing:
+    name: Linux Unit Testing
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash -el {0}
+
+    # check if the testing_for_release.yml was succeeded, else it will not run the steps
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v3
+
+      - name: Make exe
+        run: |
+          pip install pyinstaller
+          pyinstaller pzero.spec
+          ls
+
+      - name: check path
+        run: |
+          cd build
+          ls
+
+      - name: Upload Build
+        uses: actions/upload-artifact@v3
+        with:
+           name: Linux build
+           path: dist
