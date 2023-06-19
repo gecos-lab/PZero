@@ -3,7 +3,7 @@ name: Release Testing
 on:
   push:
     tags:
-      - v*.*.*
+      - t*.*.*
 
 jobs:
   # Linux
