@@ -41,6 +41,7 @@ from pzero.imports.dem2vtk import dem2vtk
 from pzero.imports.dxf2vtk import vtk2dxf
 from pzero.imports.well2vtk import well2vtk
 from pzero.imports.segy2vtk import segy2vtk
+from pzero.windows_factory import DockWindow
 from pzero.windows_factory import View3D
 from pzero.windows_factory import NewViewMap
 from pzero.windows_factory import NewViewXsection
@@ -239,10 +240,10 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         # self.actionViewMap.triggered.connect(lambda: NewViewMap(parent=self))
         # self.actionViewPlaneXsection.triggered.connect(lambda: NewViewXsection(parent=self))
         # self.actionViewStereoplot.triggered.connect(lambda: ViewStereoplot(parent=self))
-        self.actionView3D.triggered.connect(lambda: self.new_dock_window(window_type='View3D'))
-        self.actionViewMap.triggered.connect(lambda: self.new_dock_window(window_type='NewViewMap'))
-        self.actionViewPlaneXsection.triggered.connect(lambda: self.new_dock_window(window_type='NewViewXsection'))
-        self.actionViewStereoplot.triggered.connect(lambda: self.new_dock_window(window_type='ViewStereoplot'))
+        self.actionView3D.triggered.connect(lambda: DockWindow(parent=self, window_type='View3D'))
+        self.actionViewMap.triggered.connect(lambda: DockWindow(parent=self, window_type='NewViewMap'))
+        self.actionViewPlaneXsection.triggered.connect(lambda: DockWindow(parent=self, window_type='NewViewXsection'))
+        self.actionViewStereoplot.triggered.connect(lambda: DockWindow(parent=self, window_type='ViewStereoplot'))
 
         self.update_actors = True
     def closeEvent(self, event):
@@ -257,46 +258,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         else:
             event.ignore()
 
-    def new_dock_window(self, window_type: str = None):
-        """Creates a QDockWidget and then fills it with a single QWidget that includes all objects of a dockable graphical window.
-        Each window needs its specific dock widget in order to be dockable, movable anc closable independently.
-        In the following code, copied from Qt Designer (Form > View Python code - layout saved as project_window_with_dock_widget.ui),
-        the dock widget is locked to the right dock area, floatable, movable and closable, hence it will only appear in the
-        right dock area or undocked on the desktop."""
-        # uuid string for widget and content names -- check if this is necessary --
-        dock_widget_id = str(uuid4())
-        dock_widget_contents_id = str(uuid4())
-        # create widget and set some parameters
-        dock_widget = QDockWidget(self)
-        dock_widget.setObjectName(dock_widget_id)
-        dock_widget.setMinimumSize(QSize(60, 40))
-        dock_widget.setMaximumSize(QSize(524287, 524287))
-        dock_widget.setBaseSize(QSize(638, 757))
-        dock_widget.setFeatures(QDockWidget.DockWidgetClosable | QDockWidget.DockWidgetFloatable | QDockWidget.DockWidgetMovable)
-        dock_widget.setAllowedAreas(Qt.RightDockWidgetArea)
-        # create the graphical window as a QWidget to be included into the QDockWidget as its content
-        if window_type == 'View3D':
-            dock_widget_contents = View3D(parent=self)
-        elif window_type == 'NewViewMap':
-            dock_widget_contents = NewViewMap(parent=self)
-        elif window_type == 'NewViewXsection':
-            dock_widget_contents = NewViewXsection(parent=self)
-        elif window_type == 'ViewStereoplot':
-            dock_widget_contents = ViewStereoplot(parent=self)
-        else:
-            # exit doing nothing in case the window type is not recognized
-            print('window type not recognized')
-            return
-        # set parameters of the graphical window
-        size_policy = QSizePolicy(QSizePolicy.MinimumExpanding, QSizePolicy.MinimumExpanding)
-        size_policy.setHorizontalStretch(0)
-        size_policy.setVerticalStretch(0)
-        # size_policy.setHeightForWidth(dock_widget_contents.size_policy().hasHeightForWidth())
-        # dock_widget_contents.setSizePolicy(size_policy)
-        dock_widget_contents.setObjectName(dock_widget_contents_id)
-        # add the content widget to the dock widget and add the dock widget to the main project window
-        dock_widget.setWidget(dock_widget_contents)
-        self.addDockWidget(Qt.RightDockWidgetArea, dock_widget)
+
 
     """Methods used to manage the entities shown in tables."""
 

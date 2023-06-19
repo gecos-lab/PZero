@@ -5,8 +5,8 @@ from vtkmodules.vtkRenderingCore import vtkPropPicker
 """QT imports"""
 import os
 os.environ["QT_API"] = "pyqt5 "
-from qtpy.QtWidgets import *
-from qtpy.QtCore import Qt
+from qtpy.QtWidgets import QDockWidget, QWidget, QSizePolicy, QAction, QTreeWidgetItem, QTableWidgetItem, QComboBox, QMessageBox, QAbstractItemView
+from qtpy.QtCore import Qt, QSize
 
 """PZero imports"""
 from pzero.ui.base_view_ui import Ui_Base_View
@@ -92,6 +92,77 @@ class NavigationToolbar(NavigationToolbar2QT):
         super(NavigationToolbar, self).__init__(parent, *args, **kwargs)
 
 
+class DockWindow(QDockWidget):
+    """Creates a QDockWidget and then fills it with a single QWidget that includes all objects of a dockable graphical window.
+        Each window needs its specific dock widget in order to be dockable, movable anc closable independently.
+        In the following code, copied from Qt Designer (Form > View Python code - layout saved as project_window_with_dock_widget.ui),
+        the dock widget is locked to the right dock area, floatable, movable and closable, hence it will only appear in the
+        right dock area or undocked on the desktop."""
+    def __init__(self, parent=None, window_type=None, *args, **kwargs):
+        super(DockWindow, self).__init__(parent, *args, **kwargs)
+        n_docks = len(parent.findChildren(QDockWidget))
+        """Setup property and onnect signal to delete window when the project is closed (and a new one is opened)."""
+        # see discussion on deleteLater vs. close on the Internet as above, delete results in deleted slots being
+        # still referenced from the main window signals, thus causing errors
+        # self.parent.project_close_signal.connect(self.deleteLater)
+        # self.parent.project_close_signal.connect(self.close)
+        self.setAttribute(Qt.WA_DeleteOnClose, True)  # <<--------------------------- IS THIS WORKING FOR A DOCK WINDOW???
+        """Connect actionQuit.triggered SIGNAL to self.close SLOT"""
+        # self.closeEvent.triggered.connect(self.close)
+
+        # uuid string for widget and content names -- check if this is necessary --
+        dock_widget_id = str(uuid4())
+        dock_widget_contents_id = str(uuid4())
+        # create widget and set some parameters
+        # self = QDockWidget(self)
+        self.setObjectName(dock_widget_id)
+        self.setWindowTitle(window_type + "_" + str(n_docks))
+        #self.setMinimumSize(QSize(60, 40))
+        #self.setMaximumSize(QSize(524287, 524287))
+        #self.setBaseSize(QSize(638, 757))
+        self.setFeatures(QDockWidget.DockWidgetClosable | QDockWidget.DockWidgetFloatable | QDockWidget.DockWidgetMovable)
+        self.setAllowedAreas(Qt.RightDockWidgetArea)
+        # create the graphical window as a QWidget to be included into the QDockWidget as its content
+        if window_type == 'View3D':
+            self.canvas = View3D(parent=parent)
+        elif window_type == 'NewViewMap':
+            self.canvas = NewViewMap(parent=parent)
+        elif window_type == 'NewViewXsection':
+            self.canvas = NewViewXsection(parent=parent)
+        elif window_type == 'ViewStereoplot':
+            self.canvas = ViewStereoplot(parent=parent)
+        else:
+            # exit doing nothing in case the window type is not recognized
+            print('window type not recognized')
+            return
+        # set parameters of the graphical window
+        size_policy = QSizePolicy(QSizePolicy.MinimumExpanding, QSizePolicy.MinimumExpanding)
+        size_policy.setHorizontalStretch(0)
+        size_policy.setVerticalStretch(0)
+        # size_policy.setHeightForWidth(self.canvas.size_policy().hasHeightForWidth())
+        # self.canvas.setSizePolicy(size_policy)
+        self.canvas.setObjectName(dock_widget_contents_id)
+        # add the content widget to the dock widget and add the dock widget to the main project window
+        self.setWidget(self.canvas)  # calling self.canvas returns the same object as calling self.widget()
+        parent.addDockWidget(Qt.RightDockWidgetArea, self)
+        if n_docks > 1:
+            parent.tabifyDockWidget(parent.findChildren(QDockWidget)[0], self)
+
+    def closeEvent(self, event):
+        """Override the standard closeEvent method since self.plotter.close() is needed to cleanly close the vtk
+        plotter."""
+        reply = QMessageBox.question(self, 'Closing window', 'Close this window?', QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+        if reply == QMessageBox.Yes:
+            # disconnect_all_signals(self.signals)
+            self.canvas.disconnect_all_lambda_signals()
+            # self.upd_list_geo_rm
+            if not isinstance(self, ViewStereoplot):
+                self.canvas.plotter.close()  # needed to cleanly close the vtk plotter
+            event.accept()
+        else:
+            event.ignore()
+
+
 class BaseView(QWidget, Ui_Base_View):
     """Create base view - abstract class providing common methods for all views"""
     """parent is the QT object that is launching this one, hence the ProjectWindow() instance in this case"""
@@ -103,16 +174,7 @@ class BaseView(QWidget, Ui_Base_View):
         # THE FOLLOWING ACTUALLY DELETES ANY REFERENCE TO CLOSED WINDOWS, HENCE FREEING
         # MEMORY, BUT COULD CREATE PROBLEMS WITH SIGNALS THAT ARE STILL ACTIVE
         # SEE DISCUSSIONS ON QPointer AND WA_DeleteOnClose ON THE INTERNET
-        self.setAttribute(Qt.WA_DeleteOnClose, True)
         self.parent = parent
-        """Connect actionQuit.triggered SIGNAL to self.close SLOT"""
-        # self.actionClose.triggered.connect(self.close)
-
-        """Connect signal to delete window when the project is closed (and a new one is opened)."""
-        # see discussion on deleteLater vs. close on the Internet as above, delete results in deleted slots being
-        # still referenced from the main window signals, thus causing errors
-        # self.parent.project_close_signal.connect(self.deleteLater)
-        # self.parent.project_close_signal.connect(self.close)
 
         """Create empty Pandas dataframe with actor's with columns:
         uid = actor's uid -> the same as the original object's uid
@@ -175,7 +237,6 @@ class BaseView(QWidget, Ui_Base_View):
         self.parent.geology_legend_point_size_modified_signal.connect(self.upd_list_geo_leg_point_mod)
         self.parent.geology_legend_opacity_modified_signal.connect(self.upd_list_geo_leg_op_mod)
 
-
         # X Section lamda functions and signals
         self.upd_list_x_add = lambda updated_list: self.xsect_added_update_views(updated_list=updated_list)
         self.upd_list_x_rm = lambda updated_list: self.xsect_removed_update_views(updated_list=updated_list)
@@ -193,7 +254,6 @@ class BaseView(QWidget, Ui_Base_View):
         self.parent.xsect_legend_thick_modified_signal.connect(self.upd_list_x_leg_thick_mod)
         self.parent.xsect_legend_opacity_modified_signal.connect(self.upd_list_x_leg_op_mod)
 
-
         # Boundary lamda functions and signals
         self.upd_list_bound_add = lambda updated_list: self.boundary_added_update_views(updated_list=updated_list)
         self.upd_list_bound_rm = lambda updated_list: self.boundary_removed_update_views(updated_list=updated_list)
@@ -210,7 +270,6 @@ class BaseView(QWidget, Ui_Base_View):
         self.parent.boundary_legend_color_modified_signal.connect(self.upd_list_bound_leg_col_mod)
         self.parent.boundary_legend_thick_modified_signal.connect(self.upd_list_bound_leg_thick_mod)
         self.parent.boundary_legend_opacity_modified_signal.connect(self.upd_list_bound_leg_op_mod)
-
 
         # Mesh 3D lamda functions and signals
         self.upd_list_mesh3d_add = lambda updated_list: self.mesh3d_added_update_views(updated_list=updated_list)
@@ -236,7 +295,6 @@ class BaseView(QWidget, Ui_Base_View):
         self.parent.mesh3d_legend_color_modified_signal.connect(self.upd_list_mesh3d_leg_col_mod)
         self.parent.mesh3d_legend_thick_modified_signal.connect(self.upd_list_mesh3d_leg_thick_mod)
         self.parent.mesh3d_legend_opacity_modified_signal.connect(self.upd_list_mesh3d_leg_op_mod)
-
 
         # Dom lamda functions and signals
         self.upd_list_dom_add = lambda updated_list: self.dom_added_update_views(updated_list=updated_list)
@@ -266,7 +324,6 @@ class BaseView(QWidget, Ui_Base_View):
         self.parent.dom_legend_point_size_modified_signal.connect(self.upd_list_dom_leg_point_mod)
         self.parent.dom_legend_opacity_modified_signal.connect(self.upd_list_dom_leg_op_mod)
 
-
         # Image lamda functions and signals
         self.upd_list_img_add = lambda updated_list: self.image_added_update_views(updated_list=updated_list)
         self.upd_list_img_rm = lambda updated_list: self.image_removed_update_views(updated_list=updated_list)
@@ -279,7 +336,6 @@ class BaseView(QWidget, Ui_Base_View):
         self.parent.image_removed_signal.connect(self.upd_list_img_rm)
         self.parent.image_metadata_modified_signal.connect(self.upd_list_metadata_mod)
         self.parent.image_legend_opacity_modified_signal.connect(self.upd_list_img_leg_op_mod)
-
 
         # Well lamda functions and signals
         self.upd_list_well_add = lambda updated_list: self.well_added_update_views(updated_list=updated_list)
@@ -305,7 +361,6 @@ class BaseView(QWidget, Ui_Base_View):
         self.parent.well_legend_color_modified_signal.connect(self.upd_list_well_leg_col_mod)
         self.parent.well_legend_thick_modified_signal.connect(self.upd_list_well_leg_thick_mod)
         self.parent.well_legend_opacity_modified_signal.connect(self.upd_list_well_leg_op_mod)
-
 
         # Fluid lamda functions and signals
         self.upd_list_fluid_add = lambda updated_list: self.fluid_added_update_views(updated_list=updated_list)
@@ -337,7 +392,6 @@ class BaseView(QWidget, Ui_Base_View):
         self.parent.fluid_legend_thick_modified_signal.connect(self.upd_list_fluid_leg_thick_mod)
         self.parent.fluid_legend_point_size_modified_signal.connect(self.upd_list_fluid_leg_point_mod)
         self.parent.fluid_legend_opacity_modified_signal.connect(self.upd_list_fluid_leg_op_mod)
-
 
         # Background lamda functions and signals
         self.upd_list_background_add = lambda updated_list: self.background_added_update_views(
@@ -372,7 +426,6 @@ class BaseView(QWidget, Ui_Base_View):
         self.parent.background_legend_point_size_modified_signal.connect(self.upd_list_background_leg_point)
         self.parent.background_legend_opacity_modified_signal.connect(self.upd_list_background_leg_op)
 
-
         # Prop Legend lamda functions and signals
         self.prop_legend_lambda = lambda this_property: self.prop_legend_cmap_modified_update_views(this_property=this_property)
 
@@ -382,7 +435,6 @@ class BaseView(QWidget, Ui_Base_View):
             this is needed when closing because we need to dereference them"""
         # self.signals = []
         # self.signals.append(self.actionClose.triggered)
-
 
     def show_qt_canvas(self):
         """Show the Qt Window"""
@@ -4672,22 +4724,6 @@ class BaseView(QWidget, Ui_Base_View):
             self.init_zoom = self.plotter.camera.distance
             self.cam_orient_widget.On()  # [Gabriele] The orientation widget needs to be turned on AFTER the canvas is shown
         # self.picker = self.plotter.enable_mesh_picking(callback= self.pkd_mesh,show_message=False)
-
-    def closeEvent(self, event):
-        """Override the standard closeEvent method since self.plotter.close() is needed to cleanly close the vtk
-        plotter."""
-        reply = QMessageBox.question(self, 'Closing window', 'Close this window?', QMessageBox.Yes | QMessageBox.No,
-                                     QMessageBox.No)
-        if reply == QMessageBox.Yes:
-            # disconnect_all_signals(self.signals)
-            self.disconnect_all_lambda_signals()
-
-            # self.upd_list_geo_rm
-            if not isinstance(self, ViewStereoplot):
-                self.plotter.close()  # needed to cleanly close the vtk plotter
-            event.accept()
-        else:
-            event.ignore()
 
     def plot_mesh(self, uid=None, plot_entity=None, color_RGB=None, show_property=None, show_scalar_bar=None,
                   color_bar_range=None, show_property_title=None, line_thick=None,
