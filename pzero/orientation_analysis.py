@@ -100,7 +100,6 @@ def vset_set_normals(VertexSet=None, dip_name=None, dir_name=None):
 
 def set_normals(self):
     from pzero.entities_factory import TriSurf, VertexSet, XsVertexSet
-
     """General function to set normals on different entities.
     It branches to other functions depending on the selected entity
     and aborts if the input entities are not homogeneous."""

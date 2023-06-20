@@ -1,8 +1,9 @@
 """windows_factory.py
 PZero© Andrea Bistacchi"""
+
 from vtkmodules.vtkRenderingCore import vtkPropPicker
 
-"""QT imports"""
+"""QT imports - we use PyQt5 and QtPy that in theory allows switching between different Qt versions"""
 import os
 os.environ["QT_API"] = "pyqt5 "
 from qtpy.QtWidgets import QDockWidget, QWidget, QSizePolicy, QAction, QTreeWidgetItem, QTableWidgetItem, QComboBox, QMessageBox, QAbstractItemView
@@ -104,8 +105,8 @@ class DockWindow(QDockWidget):
         """Setup property and onnect signal to delete window when the project is closed (and a new one is opened)."""
         # see discussion on deleteLater vs. close on the Internet as above, delete results in deleted slots being
         # still referenced from the main window signals, thus causing errors
-        # self.parent.project_close_signal.connect(self.deleteLater)
-        # self.parent.project_close_signal.connect(self.close)
+        parent.project_close_signal.connect(self.deleteLater)
+        # parent.project_close_signal.connect(self.close)
         self.setAttribute(Qt.WA_DeleteOnClose, True)  # <<--------------------------- IS THIS WORKING FOR A DOCK WINDOW???
         """Connect actionQuit.triggered SIGNAL to self.close SLOT"""
         # self.closeEvent.triggered.connect(self.close)

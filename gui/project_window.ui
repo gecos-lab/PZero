@@ -710,7 +710,6 @@
     <addaction name="actionConnectedParts"/>
     <addaction name="actionMergeEntities"/>
     <addaction name="actionSplitMultipart"/>
-    <addaction name="actionDecimatePointCloud"/>
     <addaction name="separator"/>
     <addaction name="actionEditTextureAdd"/>
     <addaction name="actionEditTextureRemove"/>
@@ -721,7 +720,7 @@
     <addaction name="actionCalculateNormal"/>
     <addaction name="actionCalculateLineation"/>
     <addaction name="separator"/>
-    <addaction name="actionBuildOctree"/>
+    <addaction name="actionShowInfo"/>
    </widget>
    <widget class="QMenu" name="menuInterpolation_tools">
     <property name="tearOffEnabled">
@@ -746,9 +745,17 @@
     <addaction name="actionProject2DEM"/>
     <addaction name="actionSplitSurf"/>
    </widget>
+   <widget class="QMenu" name="menuPoint_cloud">
+    <property name="title">
+     <string>Point Clouds</string>
+    </property>
+    <addaction name="actionBuildOctree"/>
+    <addaction name="actionDecimatePointCloud"/>
+   </widget>
    <addaction name="menuFile"/>
    <addaction name="menuEdit"/>
    <addaction name="menuInterpolation_tools"/>
+   <addaction name="menuPoint_cloud"/>
    <addaction name="menuWindow"/>
    <addaction name="menuHelp"/>
   </widget>
@@ -954,7 +961,7 @@
   </action>
   <action name="actionCalculateNormal">
    <property name="text">
-    <string>Calculate normal</string>
+    <string>Calculate Normals</string>
    </property>
    <property name="toolTip">
     <string>Calculate normal unit vector</string>
@@ -962,7 +969,7 @@
   </action>
   <action name="actionCalculateLineation">
    <property name="text">
-    <string>Calculate lineation</string>
+    <string>Calculate Lineations</string>
    </property>
    <property name="toolTip">
     <string>Calculate lineation unit vector</string>
@@ -970,7 +977,7 @@
   </action>
   <action name="actionAddProperty">
    <property name="text">
-    <string>Add property</string>
+    <string>Add Property</string>
    </property>
    <property name="toolTip">
     <string>Add empty property</string>
@@ -978,7 +985,7 @@
   </action>
   <action name="actionRemoveProperty">
    <property name="text">
-    <string>Remove property</string>
+    <string>Remove Property</string>
    </property>
   </action>
   <action name="actionProject2XSection">
@@ -1028,7 +1035,7 @@
   </action>
   <action name="actionSplitSurf">
    <property name="text">
-    <string>Split surfaces</string>
+    <string>Split Surfaces</string>
    </property>
   </action>
   <action name="actionRetopologize">
@@ -1038,17 +1045,22 @@
   </action>
   <action name="actionBuildOctree">
    <property name="text">
-    <string>Build octree</string>
+    <string>Build Octree</string>
    </property>
   </action>
   <action name="actionDecimatePointCloud">
    <property name="text">
-    <string>Decimate point cloud</string>
+    <string>Decimate Point Cloud</string>
    </property>
   </action>
   <action name="actionExportCSV">
    <property name="text">
     <string>Export CSV</string>
+   </property>
+  </action>
+  <action name="actionShowInfo">
+   <property name="text">
+    <string>Show Entities Info</string>
    </property>
   </action>
  </widget>
