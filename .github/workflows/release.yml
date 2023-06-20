@@ -27,6 +27,7 @@ jobs:
 
             - name: Make executable
               run: |
+                pip install rasterio
                 pip install pyinstaller
                 pyinstaller pzero.spec
                 ls
