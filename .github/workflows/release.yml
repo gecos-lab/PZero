@@ -27,7 +27,7 @@ jobs:
 
             - name: Make executable
               run: |
-                pip install pyinstaller 5.10.1
+                pip install pyinstaller
                 cd sums
                 pyinstaller sum_numbers.spec
                 ls
