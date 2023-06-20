@@ -10,7 +10,7 @@ jobs:
     testing:
       uses: ./.github/workflows/release-testing.yml
 
-    deploy:
+    deploy-linux:
         strategy:
             matrix:
               # OS we can use to run jobs
@@ -38,24 +38,24 @@ jobs:
                 ls
 
             - name: Upload Windows Build
-              uses: actions/upload-artifact@v3
               if: ${{ matrix.os }} == 'windows-latest'
+              uses: actions/upload-artifact@v3
               with:
                  name: ${{ matrix.os }} build
                  path: installers/PZero_Windows
 
 
             - name: Upload Ubuntu Build
-              uses: actions/upload-artifact@v3
               if: ${{ matrix.os }} == 'ubuntu-latest'
+              uses: actions/upload-artifact@v3
               with:
                  name: ${{ matrix.os }} build
                  path: installers/PZero_Linux
 
 
             - name: Upload MacOs Build
-              uses: actions/upload-artifact@v3
               if: ${{ matrix.os }} == 'macos-latest'
+              uses: actions/upload-artifact@v3
               with:
                  name: ${{ matrix.os }} build
                  path: installers/PZero_Darwin
