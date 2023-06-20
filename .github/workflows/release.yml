@@ -34,11 +34,11 @@ jobs:
 
             - name: check path
               run: |
-                cd build
+                cd installers
                 ls
 
             - name: Upload Build
               uses: actions/upload-artifact@v3
               with:
                  name: ${{ matrix.os }} build
-                 path: dist
+                 path: installers\dist
