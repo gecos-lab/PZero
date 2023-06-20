@@ -22,9 +22,6 @@ jobs:
 
         # Steps for deploying a release
         steps:
-            - name: Checkout Repo
-              uses: actions/checkout@v3
-
             - name: Make executable
               run: |
                 pip install pyinstaller
