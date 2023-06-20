@@ -42,7 +42,7 @@ jobs:
               if: ${{ matrix.os }} == 'windows-latest'
               with:
                  name: ${{ matrix.os }} build
-                 path: PZero_Windows
+                 path: installers/PZero_Windows
 
 
             - name: Upload Ubuntu Build
@@ -50,7 +50,7 @@ jobs:
               if: ${{ matrix.os }} == 'ubuntu-latest'
               with:
                  name: ${{ matrix.os }} build
-                 path: PZero_Linux
+                 path: installers/PZero_Linux
 
 
             - name: Upload MacOs Build
@@ -58,4 +58,4 @@ jobs:
               if: ${{ matrix.os }} == 'macos-latest'
               with:
                  name: ${{ matrix.os }} build
-                 path: PZero_Darwin
+                 path: installers/PZero_Darwin
