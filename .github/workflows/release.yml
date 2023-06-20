@@ -1,0 +1,61 @@
+name: Deploy and Release
+
+on:
+    push:
+      tags:
+        - v*.*.*
+
+jobs:
+    # Specify the reusable workflow
+    testing:
+      uses: ./.github/workflows/release-testing.yml
+
+    deploy-linux:
+        strategy:
+            matrix:
+              # OS we can use to run jobs
+              os: [windows-latest, ubuntu-latest, macos-latest]
+
+        runs-on: ${{ matrix.os }}
+        # Requiring one or more reusable workflows in needs
+        needs: [testing]
+
+        # Steps for deploying a release
+        steps:
+            - name: Checkout Repo
+              uses: actions/checkout@v3
+
+            - name: Make executable
+              run: |
+                python3 -m pip install install rasterio
+                python3 -m pip install install pyinstaller
+                pyinstaller pzero.spec
+                ls
+
+            - name: check path
+              run: |
+                cd installers
+                ls
+
+            - name: Upload Windows Build
+              if: ${{ matrix.os == 'windows-latest' }}
+              uses: actions/upload-artifact@v3
+              with:
+                 name: ${{ matrix.os }} build
+                 path: installers/PZero_Windows
+
+
+            - name: Upload Ubuntu Build
+              if: ${{ matrix.os == 'ubuntu-latest' }}
+              uses: actions/upload-artifact@v3
+              with:
+                 name: ${{ matrix.os }} build
+                 path: installers/PZero_Linux
+
+
+            - name: Upload MacOs Build
+              if: ${{ matrix.os == 'macos-latest' }}
+              uses: actions/upload-artifact@v3
+              with:
+                 name: ${{ matrix.os }} build
+                 path: installers/PZero_Darwin
