@@ -37,8 +37,25 @@ jobs:
                 cd installers
                 ls
 
-            - name: Upload Build
+            - name: Upload Windows Build
               uses: actions/upload-artifact@v3
+              if: ${{ matrix.os }} == 'windows-latest'
               with:
                  name: ${{ matrix.os }} build
-                 path: installers\dist
+                 path: installers\PZero_Windows
+
+
+            - name: Upload Ubuntu Build
+              uses: actions/upload-artifact@v3
+              if: ${{ matrix.os }} == 'ubuntu-latest'
+              with:
+                 name: ${{ matrix.os }} build
+                 path: installers\PZero_Linux
+
+
+            - name: Upload MacOs Build
+              uses: actions/upload-artifact@v3
+              if: ${{ matrix.os }} == 'macos-latest'
+              with:
+                 name: ${{ matrix.os }} build
+                 path: installers\PZero_Darwin
