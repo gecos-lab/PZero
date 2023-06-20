@@ -1,42 +1,45 @@
-name: Release
+name: Deploy and Release
 
 on:
-  # runs after release-testing.yml was completed
-  workflow_run:
-    workflows: ["Release Testing"]
-    types:
-      - completed
-
+    push:
+      tags:
+        - v*.*.*
 
 jobs:
-  # Linux
-  linux-testing:
-    name: Linux Unit Testing
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        shell: bash -el {0}
+    # Specify the reusable workflow
+    testing:
+      uses: ./.github/workflows/release-testing.yml
 
-    # check if the release-testing.yml was succeeded, else it will not run the steps
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    deploy:
+        strategy:
+            matrix:
+              # OS we can use to run jobs
+              os: [windows-latest, ubuntu-latest, macos-latest]
 
-    steps:
-      - name: Checkout Repo
-        uses: actions/checkout@v3
+        runs-on: ${{ matrix.os }}
+        # Requiring one or more reusable workflows in needs
+        needs: [testing]
 
-      - name: Make exe
-        run: |
-          pip install pyinstaller
-          pyinstaller pzero.spec
-          ls
+        # Steps for deploying a release
+        steps:
+            - name: Checkout Repo
+              uses: actions/checkout@v3
 
-      - name: check path
-        run: |
-          cd build
-          ls
+            - name: Make executable
+              run: |
+                pip install pyinstaller 5.10.1
+                cd sums
+                pyinstaller sum_numbers.spec
+                ls
 
-      - name: Upload Build
-        uses: actions/upload-artifact@v3
-        with:
-           name: Linux build
-           path: dist
+            - name: check path
+              run: |
+                cd sums
+                cd build
+                ls
+
+            - name: Upload Build
+              uses: actions/upload-artifact@v3
+              with:
+                 name: ${{ matrix.os }} build
+                 path: sums/dist

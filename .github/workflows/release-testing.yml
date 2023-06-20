@@ -1,9 +1,7 @@
 name: Release Testing
 
 on:
-  push:
-    tags:
-      - t*.*.*
+  workflow_call:
 
 jobs:
   # Linux
