@@ -27,7 +27,7 @@ jobs:
 
             - name: Make executable
               run: |
-                python3 -m pip install pyinstaller
+                pip install pyinstaller
                 pyinstaller pzero.spec
                 ls
 
