@@ -38,7 +38,7 @@ jobs:
                 ls
 
             - name: Upload Windows Build
-              if: ${{ matrix.os }} == 'windows-latest'
+              if: ${{ matrix.os == 'windows-latest' }}
               uses: actions/upload-artifact@v3
               with:
                  name: ${{ matrix.os }} build
@@ -46,7 +46,7 @@ jobs:
 
 
             - name: Upload Ubuntu Build
-              if: ${{ matrix.os }} == 'ubuntu-latest'
+              if: ${{ matrix.os == 'ubuntu-latest' }}
               uses: actions/upload-artifact@v3
               with:
                  name: ${{ matrix.os }} build
@@ -54,7 +54,7 @@ jobs:
 
 
             - name: Upload MacOs Build
-              if: ${{ matrix.os }} == 'macos-latest'
+              if: ${{ matrix.os == 'macos-latest' }}
               uses: actions/upload-artifact@v3
               with:
                  name: ${{ matrix.os }} build
