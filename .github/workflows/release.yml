@@ -28,13 +28,11 @@ jobs:
             - name: Make executable
               run: |
                 python3 -m pip install pyinstaller
-                cd sums
                 pyinstaller pzero.spec
                 ls
 
             - name: check path
               run: |
-                cd sums
                 cd build
                 ls
 
@@ -42,4 +40,4 @@ jobs:
               uses: actions/upload-artifact@v3
               with:
                  name: ${{ matrix.os }} build
-                 path: sums/dist
+                 path: dist
