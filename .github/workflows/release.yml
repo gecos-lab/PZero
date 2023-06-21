@@ -32,7 +32,7 @@ jobs:
                 mamba-version: "*"
                 channels: conda-forge,defaults
                 channel-priority: true
-                activate-environment: pzero-testing
+                activate-environment: pzero
                 environment-file: envs/std-environment.yml
                 python-version: 3.8.16
                 auto-activate-base: false
@@ -44,14 +44,20 @@ jobs:
                 mamba-version: "*"
                 channels: conda-forge,defaults
                 channel-priority: true
-                activate-environment: pzero-testing
+                activate-environment: pzero
                 environment-file: envs/macos-environment.yml
                 python-version: 3.8.16
                 auto-activate-base: false
 
+            - name: Check Conda Dependencies
+              run: |
+                conda info
+                conda list
 
             - name: Make executable
               run: |
+                python3 -m pip install install rasterio
+                python3 -m pip install install pyinstaller
                 pyinstaller pzero.spec
                 ls
 
