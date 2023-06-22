@@ -10,11 +10,18 @@ jobs:
     testing:
       uses: ./.github/workflows/release-testing.yml
 
-    deploy-linux:
+    deploy:
         strategy:
             matrix:
               # OS we can use to run jobs
               os: [windows-latest, ubuntu-latest, macos-latest]
+
+        defaults:
+          run:
+            shell: bash -el {0}
+        permissions:
+          checks: write
+          pull-requests: write
 
         runs-on: ${{ matrix.os }}
         # Requiring one or more reusable workflows in needs

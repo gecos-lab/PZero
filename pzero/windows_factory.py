@@ -107,9 +107,6 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.actionClose.triggered.connect(self.close)
 
         """Connect signal to delete window when the project is closed (and a new one is opened)."""
-        # see discussion on deleteLater vs. close on the Internet as above, delete results in deleted slots being
-        # still referenced from the main window signals, thus causing errors
-        # self.parent.project_close_signal.connect(self.deleteLater)
         self.parent.project_close_signal.connect(self.close)
 
         """Create empty Pandas dataframe with actor's with columns:
@@ -372,15 +369,8 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
 
         # Prop Legend lamda functions and signals
         self.prop_legend_lambda = lambda this_property: self.prop_legend_cmap_modified_update_views(this_property=this_property)
-
         self.parent.prop_legend_cmap_modified_signal.connect(self.prop_legend_lambda)
-
-        """ Gather all the signals inside a signals list, 
-            this is needed when closing because we need to dereference them"""
-        # self.signals = []
-        # self.signals.append(self.actionClose.triggered)
-
-
+        
     def show_qt_canvas(self):
         """Show the Qt Window"""
         self.show()
