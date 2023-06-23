@@ -52,7 +52,7 @@ jobs:
 
             - name: check path
               run: |
-                cd installers
+                cd dist
                 ls
 
             - name: Upload Ubuntu Build
@@ -60,7 +60,7 @@ jobs:
               uses: actions/upload-artifact@v3
               with:
                  name: ${{ matrix.os }} build
-                 path: installers/PZero_Linux
+                 path: dist/pzero
 
 
             - name: Upload MacOs Build
@@ -68,4 +68,4 @@ jobs:
               uses: actions/upload-artifact@v3
               with:
                  name: ${{ matrix.os }} build
-                 path: installers/PZero_Darwin
+                 path: dist/pzero
