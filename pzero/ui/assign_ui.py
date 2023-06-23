@@ -8,6 +8,7 @@
 
 from PyQt5 import QtCore, QtGui, QtWidgets
 
+
 class Ui_AssignWindow(object):
     def setupUi(self, AssignWindow):
         AssignWindow.setObjectName("AssignWindow")
@@ -23,7 +24,9 @@ class Ui_AssignWindow(object):
         self.AssignTable.verticalHeader().setVisible(True)
         self.verticalLayout_2.addWidget(self.AssignTable)
         self.ConfirmButton = QtWidgets.QDialogButtonBox(self.AssignLayout)
-        self.ConfirmButton.setStandardButtons(QtWidgets.QDialogButtonBox.Close|QtWidgets.QDialogButtonBox.Ok)
+        self.ConfirmButton.setStandardButtons(
+            QtWidgets.QDialogButtonBox.Close | QtWidgets.QDialogButtonBox.Ok
+        )
         self.ConfirmButton.setCenterButtons(True)
         self.ConfirmButton.setObjectName("ConfirmButton")
         self.verticalLayout_2.addWidget(self.ConfirmButton)

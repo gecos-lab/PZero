@@ -1,12 +1,15 @@
 """pyvista2vtk.py
 PZero© Andrea Bistacchi"""
 
-from PyQt5.QtWidgets import QFileDialog
 import uuid
-from pzero.entities_factory import VertexSet, PolyLine, TriSurf, TetraSolid
+
 import pyvista as pv
+from PyQt5.QtWidgets import QFileDialog
+
+from pzero.entities_factory import VertexSet, PolyLine, TriSurf, TetraSolid
 
 """TO BE COMPLETELY UPDATED - SEE DEM2VTK FOR INSTANCE _____________________________"""
+
 
 def pyvista2vtk(self):
     """
@@ -15,13 +18,17 @@ def pyvista2vtk(self):
     <self> is the calling ProjectWindow() instance.
     """
     self.TextTerminal.appendPlainText("Importing PyVista-supported format")
-    self.TextTerminal.appendPlainText("Properties are discarded if they are not 1D, 2D, 3D, 4D, 6D or 9D (due to VTK limitations)")
+    self.TextTerminal.appendPlainText(
+        "Properties are discarded if they are not 1D, 2D, 3D, 4D, 6D or 9D (due to VTK limitations)"
+    )
 
     """Select and open input file"""
-    in_file_name = QFileDialog.getOpenFileName(self, 'Import entities from PyVista-supported file')
+    in_file_name = QFileDialog.getOpenFileName(
+        self, "Import entities from PyVista-supported file"
+    )
     in_file_name = in_file_name[0]
     if in_file_name:
-        self.TextTerminal.appendPlainText('in_file_name: ' + in_file_name)
+        self.TextTerminal.appendPlainText("in_file_name: " + in_file_name)
         """Initialize"""
         cell_type = -1
 
@@ -51,7 +58,9 @@ def pyvista2vtk(self):
             """Get type of first cell in object - THEN ASSUMES ALL CELLS ARE OF THE SAME TYPE"""
             cell_type = curr_obj.GetCellType(0)
         except:
-            self.TextTerminal.appendPlainText("pyvista2vtk - entity type not recognized ERROR.")
+            self.TextTerminal.appendPlainText(
+                "pyvista2vtk - entity type not recognized ERROR."
+            )
 
         """If curr_obj is a recognized type, assign to PZero class, and add to a collection"""
         if cell_type == 1:
@@ -70,7 +79,9 @@ def pyvista2vtk(self):
             curr_obj.uid = str(uuid.uuid4())
             curr_obj.type = "TetraSolid"
             curr_obj.__class__ = TetraSolid
-        self.e_c.add_entity_from_dict(vtk_entity=curr_obj, entity_dict=GeologicalCollection.geological_entity_dict)  # to APPROPRIATE collection_________________
+        self.e_c.add_entity_from_dict(
+            vtk_entity=curr_obj, entity_dict=GeologicalCollection.geological_entity_dict
+        )  # to APPROPRIATE collection_________________
 
         """Clean"""
         del curr_obj

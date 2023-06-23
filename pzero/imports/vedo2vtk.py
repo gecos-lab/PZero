@@ -1,11 +1,13 @@
 """vedo2vtk.py
 PZero© Andrea Bistacchi"""
 
-from PyQt5.QtWidgets import QFileDialog
 import uuid
-from pzero.entities_factory import VertexSet, PolyLine, TriSurf, TetraSolid
-from pzero.collections.geological_collection import GeologicalCollection
+
 import vedo as vd
+from PyQt5.QtWidgets import QFileDialog
+
+from pzero.collections.geological_collection import GeologicalCollection
+from pzero.entities_factory import VertexSet, PolyLine, TriSurf, TetraSolid
 
 """MUST BE COMPLETELY REVISED___________________"""
 
@@ -17,20 +19,26 @@ def vedo2vtk(self):
     <self> is the calling ProjectWindow() instance.
     """
     self.TextTerminal.appendPlainText("Importing Vedo-supported format")
-    self.TextTerminal.appendPlainText("Properties are discarded if they are not 1D, 2D, 3D, 4D, 6D or 9D (due to VTK limitations)")
+    self.TextTerminal.appendPlainText(
+        "Properties are discarded if they are not 1D, 2D, 3D, 4D, 6D or 9D (due to VTK limitations)"
+    )
 
     """Select and open input file"""
     """__________________________________________Potentially Vedo reads also multiple files and even whole directories - see vedo/io.py"""
-    in_file_name = QFileDialog.getOpenFileName(self, 'Import entities from PyVista-supported file')
+    in_file_name = QFileDialog.getOpenFileName(
+        self, "Import entities from PyVista-supported file"
+    )
     in_file_name = in_file_name[0]
     if in_file_name:
-        self.TextTerminal.appendPlainText('in_file_name: ' + in_file_name)
+        self.TextTerminal.appendPlainText("in_file_name: " + in_file_name)
         """Initialize"""
         cell_type = -1
 
         """Read file with vd.load() function and detect type of curr_obj - ASSUMES ALL CELLS ARE OF THE SAME TYPE"""
         try:
-            curr_obj = vd.load(in_file_name)  # _____ this is the only difference with respect to pyvista2vtk
+            curr_obj = vd.load(
+                in_file_name
+            )  # _____ this is the only difference with respect to pyvista2vtk
 
             """ VTK cell types from documentation at https://vtk.org/doc/nightly/html/vtkCellType_8h.html
             VTK_EMPTY_CELL = 0, VTK_VERTEX = 1, VTK_POLY_VERTEX = 2, VTK_LINE = 3,
@@ -55,7 +63,9 @@ def vedo2vtk(self):
             cell_type = curr_obj.GetCellType(0)
             print(cell_type)
         except:
-            self.TextTerminal.appendPlainText("vedo2vtk - entity type not recognized ERROR.")
+            self.TextTerminal.appendPlainText(
+                "vedo2vtk - entity type not recognized ERROR."
+            )
 
         """If curr_obj is a recognized type, assign to PZero class, and add to the collection."""
         if cell_type == 1:
@@ -74,7 +84,9 @@ def vedo2vtk(self):
             curr_obj.uid = str(uuid.uuid4())
             curr_obj.type = "TetraSolid"
             curr_obj.__class__ = TetraSolid
-        self.e_c.add_entity_from_dict(vtk_entity=curr_obj, entity_dict=GeologicalCollection.geological_entity_dict)  # to APPROPRIATE collection_________________
+        self.e_c.add_entity_from_dict(
+            vtk_entity=curr_obj, entity_dict=GeologicalCollection.geological_entity_dict
+        )  # to APPROPRIATE collection_________________
 
         """Clean"""
         del curr_obj

@@ -20,10 +20,14 @@ class Ui_PreviewWindow(object):
         self.horizontalLayout_2 = QtWidgets.QHBoxLayout(self.centralwidget)
         self.horizontalLayout_2.setObjectName("horizontalLayout_2")
         self.OptionsWidget = QtWidgets.QWidget(self.centralwidget)
-        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
+        sizePolicy = QtWidgets.QSizePolicy(
+            QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed
+        )
         sizePolicy.setHorizontalStretch(0)
         sizePolicy.setVerticalStretch(0)
-        sizePolicy.setHeightForWidth(self.OptionsWidget.sizePolicy().hasHeightForWidth())
+        sizePolicy.setHeightForWidth(
+            self.OptionsWidget.sizePolicy().hasHeightForWidth()
+        )
         self.OptionsWidget.setSizePolicy(sizePolicy)
         self.OptionsWidget.setObjectName("OptionsWidget")
         self.verticalLayout = QtWidgets.QVBoxLayout(self.OptionsWidget)
@@ -36,12 +40,18 @@ class Ui_PreviewWindow(object):
         self.previewButton.setObjectName("previewButton")
         self.verticalLayout.addWidget(self.previewButton)
         self.ConfirmButtonBox = QtWidgets.QDialogButtonBox(self.OptionsWidget)
-        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
+        sizePolicy = QtWidgets.QSizePolicy(
+            QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed
+        )
         sizePolicy.setHorizontalStretch(0)
         sizePolicy.setVerticalStretch(0)
-        sizePolicy.setHeightForWidth(self.ConfirmButtonBox.sizePolicy().hasHeightForWidth())
+        sizePolicy.setHeightForWidth(
+            self.ConfirmButtonBox.sizePolicy().hasHeightForWidth()
+        )
         self.ConfirmButtonBox.setSizePolicy(sizePolicy)
-        self.ConfirmButtonBox.setStandardButtons(QtWidgets.QDialogButtonBox.Cancel|QtWidgets.QDialogButtonBox.Ok)
+        self.ConfirmButtonBox.setStandardButtons(
+            QtWidgets.QDialogButtonBox.Cancel | QtWidgets.QDialogButtonBox.Ok
+        )
         self.ConfirmButtonBox.setCenterButtons(False)
         self.ConfirmButtonBox.setObjectName("ConfirmButtonBox")
         self.verticalLayout.addWidget(self.ConfirmButtonBox, 0, QtCore.Qt.AlignRight)

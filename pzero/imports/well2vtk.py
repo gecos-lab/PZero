@@ -5,59 +5,67 @@ Convert well data (csv, ags ...) in vtk objects.
 
 """
 
-from numpy import array as np_array
-from numpy import append as np_append
-from numpy import vstack as np_vstack
-from numpy import zeros as np_zeros
-from numpy import argmin as np_argmin
+from copy import deepcopy
+from uuid import uuid4
+
+import pandas as pd
 from numpy import abs as np_abs
+from numpy import append as np_append
+from numpy import argmin as np_argmin
+from numpy import array as np_array
 from numpy import full as np_full
 from numpy import nan as np_nan
 from numpy import random as np_random
+from numpy import vstack as np_vstack
+from numpy import zeros as np_zeros
 
-from copy import deepcopy
+from pzero.collections.background_collection import BackgroundCollection
+from pzero.collections.geological_collection import GeologicalCollection
+from pzero.collections.well_collection import WellCollection
 from pzero.entities_factory import Well, VertexSet
-from uuid import uuid4
+
+
 # from .entities_factory import WellData
 
-from pzero.collections.well_collection import WellCollection
-from pzero.collections.geological_collection import GeologicalCollection
-from pzero.collections.background_collection import BackgroundCollection
-import pandas as pd
+
 # import lasio as ls
 
-def well2vtk(self,path=None):
 
-    
-    data = pd.read_excel(path,sheet_name=None)
-    well_data = data['INFO']
-    well_id = well_data['WELL'].values[0]
+def well2vtk(self, path=None):
+    data = pd.read_excel(path, sheet_name=None)
+    well_data = data["INFO"]
+    well_id = well_data["WELL"].values[0]
 
     # Get and set well head data
 
-    xyz_head = np_array([well_data['EASTING'].values,well_data['NORTHING'].values,well_data['ELEV'].values]).reshape(-1,3)
+    xyz_head = np_array(
+        [
+            well_data["EASTING"].values,
+            well_data["NORTHING"].values,
+            well_data["ELEV"].values,
+        ]
+    ).reshape(-1, 3)
     well_head = xyz_head
 
     # Get and set well trace data
-    trace_data = data['GEOMETRY']
+    trace_data = data["GEOMETRY"]
 
-    x = xyz_head[0,0]-trace_data['DX']
-    y = xyz_head[0,1]-trace_data['DY']
-    z = xyz_head[0,2]-trace_data['DZ']
+    x = xyz_head[0, 0] - trace_data["DX"]
+    y = xyz_head[0, 1] - trace_data["DY"]
+    z = xyz_head[0, 2] - trace_data["DZ"]
 
-    xyz_trace = np_vstack([x,y,z]).T.reshape(-1,3)
+    xyz_trace = np_vstack([x, y, z]).T.reshape(-1, 3)
 
+    well_obj = Well(ID=well_id, trace_xyz=xyz_trace, head_xyz=xyz_head)
 
-    well_obj = Well(ID=well_id,trace_xyz=xyz_trace,head_xyz=xyz_head)
-
-    #Get and set curve data
+    # Get and set curve data
 
     prop_df = data.copy()
 
-    del prop_df['INFO']
-    del prop_df['GEOMETRY']
+    del prop_df["INFO"]
+    del prop_df["GEOMETRY"]
 
-    arr = well_obj.trace.get_point_data(data_key='MD')
+    arr = well_obj.trace.get_point_data(data_key="MD")
     # print(arr)
     points = well_obj.trace.points_number
     ann_list = []
@@ -65,87 +73,105 @@ def well2vtk(self,path=None):
     for key in prop_df:
         prop = prop_df[key]
 
-        if 'START' in prop.columns:
-            if key == 'LITHOLOGY' or key == 'GEOLOGY':
-                tr_data = np_full(shape=(points,3),fill_value=np_nan)
+        if "START" in prop.columns:
+            if key == "LITHOLOGY" or key == "GEOLOGY":
+                tr_data = np_full(shape=(points, 3), fill_value=np_nan)
 
                 try:
                     color_dict = {k: np_random.rand(3) for k in pd.unique(prop[key])}
                 except:
-                    print('No key found')
-                else:   
-                    for row,(start,end,value) in prop.iterrows():
-                            start_idx = np_argmin(np_abs(arr - start))
-                            end_idx = np_argmin(np_abs(arr - end))
-                            # print(key)
-                            # print(len(curve_copy.points[start_idx:end_idx]))
-                            
-                            if key == "GEOLOGY":
-                                marker_pos = well_obj.trace.points[start_idx,:].reshape(-1,3)
-                                marker_obj = VertexSet()
-                                marker_obj.points = marker_pos
-                                marker_obj.auto_cells()
+                    print("No key found")
+                else:
+                    for row, (start, end, value) in prop.iterrows():
+                        start_idx = np_argmin(np_abs(arr - start))
+                        end_idx = np_argmin(np_abs(arr - end))
+                        # print(key)
+                        # print(len(curve_copy.points[start_idx:end_idx]))
 
-                                marker_obj_dict = deepcopy(GeologicalCollection.geological_entity_dict)
-                                marker_obj_dict["topological_type"] = "VertexSet"
-                                marker_obj_dict['uid'] = str(uuid4())
-                                marker_obj_dict['name'] = f'marker_{value}'
-                                marker_obj_dict['geological_type'] = 'top'
-                                marker_obj_dict['geological_feature'] = value
-                                marker_obj_dict['x_section'] = well_uid
-                                marker_obj_dict['vtk_obj'] = marker_obj
-                                self.geol_coll.add_entity_from_dict(marker_obj_dict)
-                                color_R = self.geol_coll.get_uid_legend(uid=marker_obj_dict['uid'])['color_R']/255
-                                color_G = self.geol_coll.get_uid_legend(uid=marker_obj_dict['uid'])['color_G']/255
-                                color_B = self.geol_coll.get_uid_legend(uid=marker_obj_dict['uid'])['color_B']/255
-                                color_dict[value] = np_array([color_R,color_G,color_B])
-                                del marker_obj_dict
-                            color_val = color_dict[value]
+                        if key == "GEOLOGY":
+                            marker_pos = well_obj.trace.points[start_idx, :].reshape(
+                                -1, 3
+                            )
+                            marker_obj = VertexSet()
+                            marker_obj.points = marker_pos
+                            marker_obj.auto_cells()
 
-                            tr_data[start_idx:end_idx] = color_val
-                              
+                            marker_obj_dict = deepcopy(
+                                GeologicalCollection.geological_entity_dict
+                            )
+                            marker_obj_dict["topological_type"] = "VertexSet"
+                            marker_obj_dict["uid"] = str(uuid4())
+                            marker_obj_dict["name"] = f"marker_{value}"
+                            marker_obj_dict["geological_type"] = "top"
+                            marker_obj_dict["geological_feature"] = value
+                            marker_obj_dict["x_section"] = well_uid
+                            marker_obj_dict["vtk_obj"] = marker_obj
+                            self.geol_coll.add_entity_from_dict(marker_obj_dict)
+                            color_R = (
+                                self.geol_coll.get_uid_legend(
+                                    uid=marker_obj_dict["uid"]
+                                )["color_R"]
+                                / 255
+                            )
+                            color_G = (
+                                self.geol_coll.get_uid_legend(
+                                    uid=marker_obj_dict["uid"]
+                                )["color_G"]
+                                / 255
+                            )
+                            color_B = (
+                                self.geol_coll.get_uid_legend(
+                                    uid=marker_obj_dict["uid"]
+                                )["color_B"]
+                                / 255
+                            )
+                            color_dict[value] = np_array([color_R, color_G, color_B])
+                            del marker_obj_dict
+                        color_val = color_dict[value]
+
+                        tr_data[start_idx:end_idx] = color_val
+
             else:
                 tr_data = np_zeros(shape=points)
-                for row,(start,end,value) in prop.iterrows():
+                for row, (start, end, value) in prop.iterrows():
                     start_idx = np_argmin(np_abs(arr - start))
                     end_idx = np_argmin(np_abs(arr - end))
                     # print(key)
                     # print(len(curve_copy.points[start_idx:end_idx]))
                     tr_data[start_idx:end_idx] = value
                     # tr_data.insert(0,0)
-            well_obj.add_trace_data(name=f'{key}',tr_data=tr_data,xyz=well_obj.trace.points)
-        elif 'MD_point' in prop.columns:
-            
-                prop = prop.set_index('MD_point')
-                for col in prop.columns:
-                    annotation_obj = VertexSet()
-                    mrk_pos = np_array([])
-                    mrk_data = np_array([])
-                    for row in prop.index:
-                        idx = np_argmin(np_abs(arr - row))
-                        value = prop.loc[row,col]
-                        mrk_data = np_append(mrk_data,value)
-                        mrk_pos = np_append(mrk_pos,well_obj.trace.points[idx,:])
-                    annotation_obj.points = mrk_pos.reshape(-1,3)
-                    annotation_obj.auto_cells()
-                    annotation_obj.set_field_data(name=col,data=mrk_data)
-                    ann_list.append(annotation_obj)   
+            well_obj.add_trace_data(
+                name=f"{key}", tr_data=tr_data, xyz=well_obj.trace.points
+            )
+        elif "MD_point" in prop.columns:
+            prop = prop.set_index("MD_point")
+            for col in prop.columns:
+                annotation_obj = VertexSet()
+                mrk_pos = np_array([])
+                mrk_data = np_array([])
+                for row in prop.index:
+                    idx = np_argmin(np_abs(arr - row))
+                    value = prop.loc[row, col]
+                    mrk_data = np_append(mrk_data, value)
+                    mrk_pos = np_append(mrk_pos, well_obj.trace.points[idx, :])
+                annotation_obj.points = mrk_pos.reshape(-1, 3)
+                annotation_obj.auto_cells()
+                annotation_obj.set_field_data(name=col, data=mrk_data)
+                ann_list.append(annotation_obj)
         else:
-                prop = prop.set_index('MD')
-                for col in prop.columns:
-                    prop_clean = prop[col].dropna()
+            prop = prop.set_index("MD")
+            for col in prop.columns:
+                prop_clean = prop[col].dropna()
 
-                    points_arr = well_obj.trace.points
-                    tr_data = prop_clean.values
-                    xyz = np_zeros(shape=(len(prop_clean),3))
+                points_arr = well_obj.trace.points
+                tr_data = prop_clean.values
+                xyz = np_zeros(shape=(len(prop_clean), 3))
 
-                    for i,row in enumerate(prop_clean.index):
-                        idx = np_argmin(np_abs(arr - row))
-                        # value = prop_clean.loc[row]
-                        xyz[i,:] = points_arr[idx,:]
-                    well_obj.add_trace_data(name=f'{col}',tr_data=tr_data,xyz=xyz)
-                    
-
+                for i, row in enumerate(prop_clean.index):
+                    idx = np_argmin(np_abs(arr - row))
+                    # value = prop_clean.loc[row]
+                    xyz[i, :] = points_arr[idx, :]
+                well_obj.add_trace_data(name=f"{col}", tr_data=tr_data, xyz=xyz)
 
     trace_keys = well_obj.get_trace_names()
     components = []
@@ -153,14 +179,14 @@ def well2vtk(self,path=None):
     for key in trace_keys:
         components.append(well_obj.trace.get_field_data_shape(key)[1])
         types.append(well_obj.trace.get_field_data_type(key))
-    
+
     bore_obj_attributes = deepcopy(WellCollection.well_entity_dict)
-    bore_obj_attributes['uid'] = well_uid
-    bore_obj_attributes['Loc ID'] = well_obj.ID
-    bore_obj_attributes['properties_names'] = trace_keys
-    bore_obj_attributes['properties_components'] = components
-    bore_obj_attributes['properties_types'] = types
-    bore_obj_attributes['vtk_obj'] = well_obj.trace
+    bore_obj_attributes["uid"] = well_uid
+    bore_obj_attributes["Loc ID"] = well_obj.ID
+    bore_obj_attributes["properties_names"] = trace_keys
+    bore_obj_attributes["properties_components"] = components
+    bore_obj_attributes["properties_types"] = types
+    bore_obj_attributes["vtk_obj"] = well_obj.trace
     self.well_coll.add_entity_from_dict(entity_dict=bore_obj_attributes)
 
     for annotation in ann_list:
@@ -172,20 +198,24 @@ def well2vtk(self,path=None):
             components.append(annotation.trace.get_point_data_shape(key)[1])
             types.append(annotation.trace.get_point_data_type(key))
 
-        annotation_obj_attributes = deepcopy(BackgroundCollection.background_entity_dict)
-        annotation_obj_attributes['uid'] = str(uuid4())
-        annotation_obj_attributes['name'] = name
-        annotation_obj_attributes['topological_type'] = 'VertexSet'
-        annotation_obj_attributes['background_type'] = 'Annotations'
-        annotation_obj_attributes['background_feature'] = well_obj.ID
+        annotation_obj_attributes = deepcopy(
+            BackgroundCollection.background_entity_dict
+        )
+        annotation_obj_attributes["uid"] = str(uuid4())
+        annotation_obj_attributes["name"] = name
+        annotation_obj_attributes["topological_type"] = "VertexSet"
+        annotation_obj_attributes["background_type"] = "Annotations"
+        annotation_obj_attributes["background_feature"] = well_obj.ID
 
-        annotation_obj_attributes['properties_names'] = ann_keys
-        annotation_obj_attributes['properties_components'] = components
-        annotation_obj_attributes['properties_types'] = types
-        annotation_obj_attributes['borehole'] = bore_obj_attributes['uid']
+        annotation_obj_attributes["properties_names"] = ann_keys
+        annotation_obj_attributes["properties_components"] = components
+        annotation_obj_attributes["properties_types"] = types
+        annotation_obj_attributes["borehole"] = bore_obj_attributes["uid"]
 
-        annotation_obj_attributes['vtk_obj'] = annotation
-        self.backgrounds_coll.add_entity_from_dict(entity_dict=annotation_obj_attributes)
+        annotation_obj_attributes["vtk_obj"] = annotation
+        self.backgrounds_coll.add_entity_from_dict(
+            entity_dict=annotation_obj_attributes
+        )
     # paths = in_file_name
 
     # data_paths = paths[1]
@@ -205,19 +235,11 @@ def well2vtk(self,path=None):
     #         cont_data = data.set_index('LocationID')
     #         punt_data = None
 
-
-
-
-
-
     #     shape = cont_data.shape[0]
 
     #     # cont_data.loc[shape] = [data['LocationID'].values[0],loc['FinalDepth'].values[0],'END']
 
     #     print(cont_data)
-
-
-
 
     #     unique_id = pd.unique(data['LocationID'])
     #     location = loc.loc[loc['LocationID'].values==unique_id[0],['LocationID','Easting','Northing','GroundLevel']]
@@ -275,10 +297,6 @@ def well2vtk(self,path=None):
     #                 #
     #                 #
 
-
-
-
-
     #                     appender.AddInputData(seg)
     #     appender.Update()
     #     well_line = Wells()
@@ -287,15 +305,14 @@ def well2vtk(self,path=None):
     #     test = pv.PolyData()
     #     test.ShallowCopy(well_line)
     #     test.plot()
-        
-        
+
     #     # well_marker.points = np_array([top])
     #     # well_marker.auto_cells()
-        
+
     #     # top = np_array([x_bottom,y_bottom,z_bottom])
-        
+
     #     # geo_code = data.loc[i,"GeologyCode"]
-        
+
     #     # curr_obj_attributes = deepcopy(WellCollection.well_entity_dict)
     #     # curr_obj_attributes['uid'] = str(uuid4())
     #     # curr_obj_attributes['Loc ID'] = f'{unique_id[0]}'
@@ -304,7 +321,7 @@ def well2vtk(self,path=None):
     #     # curr_obj_attributes['properties_components'] = []
     #     # curr_obj_attributes['properties_types'] = []
     #     # curr_obj_attributes['vtk_obj'] = well_line
-        
+
     #     # marker_obj_attributes = deepcopy(GeologicalCollection.geological_entity_dict)
     #     # marker_obj_attributes['uid'] = str(uuid4())
     #     # marker_obj_attributes['name'] = f'{data.loc[i,"GeologyCode"]}_marker'
@@ -317,16 +334,14 @@ def well2vtk(self,path=None):
     #     # marker_obj_attributes['properties_types'] = []
     #     # marker_obj_attributes['x_section'] = curr_obj_attributes['uid']
     #     # marker_obj_attributes['vtk_obj'] = well_marker
-        
+
     #     # self.geol_coll.add_entity_from_dict(entity_dict=marker_obj_attributes)
-        
-        
-        
+
     #     # self.well_coll.add_entity_from_dict(entity_dict=curr_obj_attributes)
-        
+
     #     # del well_line
     #     # del well_marker
-    
+
     # # basename = os.path.basename(in_file_name)
     # # _,ext = os.path.splitext(basename)
     # # if ext == '.csv':

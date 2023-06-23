@@ -2,10 +2,14 @@ pzero.collections package
 =========================
 One of the most important groups of files comprises the "collections." Each collection encapsulates all entities of a specific type of geological or non-geological objects, such as images that indirectly assist in describing a geological model. These collections are always Pandas dataframes. Inside each "type_of_collection.py" file, we have a series of similar methods that serve to manage the entities, including:
 
-add_entity(): Takes an entity as input and inserts it into the entity list of that collection.
-remove_entity(): Removes a specific entity from a collection using its UID.
-clone_entity(): Duplicates and adds the same input entity to a collection.
-replace_vtk(): Given a UID, replaces the vtk instance of that entity with another input instance.
+-add_entity(): Takes an entity as input and inserts it into the entity list of that collection.
+
+-remove_entity(): Removes a specific entity from a collection using its UID.
+
+-clone_entity(): Duplicates and adds the same input entity to a collection.
+
+-replace_vtk(): Given a UID, replaces the vtk instance of that entity with another input instance.
+
 Many getter and setter methods for retrieving and setting UIDs, properties, metadata, etc.
 Another group of files is used within "project_windows.py," comprising around fifteen small files that contain all the useful functions for converting, importing, and exporting various formats to be used in the View.
 

@@ -1,27 +1,27 @@
-from csv import Sniffer
 import datetime
 import os
-import pandas as pd
-from numpy import mean as np_mean
-from numpy import std as np_std
-from numpy import corrcoef as np_corrcoef
-from numpy import cov as np_cov
-from numpy import linalg as np_linalg
-from numpy import dot as np_dot
-from numpy import pi as np_pi
-from numpy import deg2rad as np_deg2rad
-from numpy import sin as np_sin
-from numpy import cos as np_cos
-from numpy import array as np_array
-from numpy import sum as np_sum
-from numpy import square as np_square
-from numpy import sqrt as np_sqrt
+from csv import Sniffer
 
+import pandas as pd
 from PIL import Image
+from numpy import array as np_array
+from numpy import corrcoef as np_corrcoef
+from numpy import cos as np_cos
+from numpy import cov as np_cov
+from numpy import deg2rad as np_deg2rad
+from numpy import dot as np_dot
+from numpy import linalg as np_linalg
+from numpy import mean as np_mean
+from numpy import pi as np_pi
+from numpy import sin as np_sin
+from numpy import sqrt as np_sqrt
+from numpy import square as np_square
+from numpy import std as np_std
+from numpy import sum as np_sum
 
 
 def auto_sep(filename):
-    with open(filename, 'r') as IN:
+    with open(filename, "r") as IN:
         separator = Sniffer().sniff(IN.readline()).delimiter
     return separator
 
@@ -52,30 +52,45 @@ def profiler(path, iter):
         def inner(*args, **kwargs):
             title = func.__name__
             date = datetime.datetime.now()
-            print(f'\n-------------------{title} PROFILING STARTED-------------------\n')
+            print(
+                f"\n-------------------{title} PROFILING STARTED-------------------\n"
+            )
             for i in range(iter):
-                print(f'{i + 1} cycle of {iter}')
+                print(f"{i + 1} cycle of {iter}")
                 start = datetime.datetime.now()
                 res = func(*args, **kwargs)
                 end = datetime.datetime.now()
                 diff = (end - start).total_seconds()
                 diff_list.append(diff)
-                print(f'cycle {i + 1} completed. It took {diff} seconds')
-            raw_time_diff = pd.DataFrame(diff_list, columns=['time diff [s]'])
-            raw_time_diff.to_csv(os.path.join(root, f'{title}_raw{date.strftime("%d_%m_%Y-%H%M%S")}.csv'), sep=';',
-                                 mode='w')
+                print(f"cycle {i + 1} completed. It took {diff} seconds")
+            raw_time_diff = pd.DataFrame(diff_list, columns=["time diff [s]"])
+            raw_time_diff.to_csv(
+                os.path.join(
+                    root, f'{title}_raw{date.strftime("%d_%m_%Y-%H%M%S")}.csv'
+                ),
+                sep=";",
+                mode="w",
+            )
             mean = np_mean(diff_list)
             std = np_std(diff_list)
 
             if os.path.exists(path):
-                with open(path, 'a') as f:
-                    f.write(f'{date.strftime("%d_%m_%Y-%H%M%S")};{title};{mean};{std};{iter};\n')
+                with open(path, "a") as f:
+                    f.write(
+                        f'{date.strftime("%d_%m_%Y-%H%M%S")};{title};{mean};{std};{iter};\n'
+                    )
             else:
-                with open(path, 'a') as f:
-                    f.write(f'Rec. time;function title [-];mean [s];std [-];n of iterations[-];\n')
-                    f.write(f'{date.strftime("%d_%m_%Y-%H%M%S")};{title};{mean};{std};{iter};\n')
-            print(f'Profiling finished in ~{mean * iter}s! The results are saved in the specified {root} directory')
-            print(f'\n-------------------{title} PROFILING ENDED-------------------\n')
+                with open(path, "a") as f:
+                    f.write(
+                        f"Rec. time;function title [-];mean [s];std [-];n of iterations[-];\n"
+                    )
+                    f.write(
+                        f'{date.strftime("%d_%m_%Y-%H%M%S")};{title};{mean};{std};{iter};\n'
+                    )
+            print(
+                f"Profiling finished in ~{mean * iter}s! The results are saved in the specified {root} directory"
+            )
+            print(f"\n-------------------{title} PROFILING ENDED-------------------\n")
             return res
 
         return inner
@@ -90,7 +105,7 @@ def angle_wrapper(angle):
 
 
 def PCA(data, correlation=False, sort=True):
-    """ PCA code taken from https://stackoverflow.com/a/38770513/19331382"""
+    """PCA code taken from https://stackoverflow.com/a/38770513/19331382"""
     """ Applies Principal Component Analysis to the data
 
     Parameters
@@ -134,7 +149,6 @@ def PCA(data, correlation=False, sort=True):
 
     #: the data is transposed due to np.cov/corrcoef syntax
     if correlation:
-
         matrix = np_corrcoef(data_adjust.T)
 
     else:
@@ -152,7 +166,7 @@ def PCA(data, correlation=False, sort=True):
 
 
 def best_fitting_plane(points, equation=False):
-    ''' code from https://stackoverflow.com/a/38770513/19331382'''
+    """code from https://stackoverflow.com/a/38770513/19331382"""
     """ Computes the best fitting plane of the given points
 
     Parameters
@@ -200,13 +214,14 @@ def best_fitting_plane(points, equation=False):
 
 
 def gen_frame(arr):
-    '''[Gabriele] Function used to generate transparent PIL frames to create gifs.
-    Code modified from https://stackoverflow.com/questions/46850318/transparent-background-in-gif-using-python-imageio'''
+    """[Gabriele] Function used to generate transparent PIL frames to create gifs.
+    Code modified from https://stackoverflow.com/questions/46850318/transparent-background-in-gif-using-python-imageio
+    """
     im = Image.fromarray(arr)
-    alpha = im.getchannel('A')
+    alpha = im.getchannel("A")
 
     # Convert the image into P mode but only use 255 colors in the palette out of 256
-    im = im.convert('RGBA').convert('P', palette=Image.ADAPTIVE, colors=255)
+    im = im.convert("RGBA").convert("P", palette=Image.ADAPTIVE, colors=255)
 
     # Set all pixel values below 128 to 255 , and the rest to 0
     mask = Image.eval(alpha, lambda a: 255 if a <= 128 else 0)
@@ -215,25 +230,37 @@ def gen_frame(arr):
     im.paste(255, mask)
 
     # The transparency index is 255
-    im.info['transparency'] = 255
+    im.info["transparency"] = 255
 
     return im
 
 
 def rotate_vec_along(vector, axis, degrees):
     angle = np_deg2rad(degrees)
-    if axis.lower() == 'x':
-        R = np_array([[1, 0, 0],
-                      [0, np_cos(angle), -np_sin(angle)],
-                      [0, np_sin(angle), np_cos(angle)]])
-    elif axis.lower() == 'y':
-        R = np_array([[np_cos(angle), 0, np_sin(angle)],
-                      [0, 1, 0],
-                      [-np_sin(angle), 0, np_cos(angle)]])
-    elif axis.lower() == 'z':
-        R = np_array([[np_cos(angle), -np_sin(angle), 0],
-                      [np_sin(angle), np_cos(angle), 0],
-                      [0, 0, 1]])
+    if axis.lower() == "x":
+        R = np_array(
+            [
+                [1, 0, 0],
+                [0, np_cos(angle), -np_sin(angle)],
+                [0, np_sin(angle), np_cos(angle)],
+            ]
+        )
+    elif axis.lower() == "y":
+        R = np_array(
+            [
+                [np_cos(angle), 0, np_sin(angle)],
+                [0, 1, 0],
+                [-np_sin(angle), 0, np_cos(angle)],
+            ]
+        )
+    elif axis.lower() == "z":
+        R = np_array(
+            [
+                [np_cos(angle), -np_sin(angle), 0],
+                [np_sin(angle), np_cos(angle), 0],
+                [0, 0, 1],
+            ]
+        )
     rot_vec = vector.dot(R)
     return rot_vec
 

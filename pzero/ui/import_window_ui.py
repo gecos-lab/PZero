@@ -8,24 +8,35 @@
 
 from PyQt5 import QtCore, QtGui, QtWidgets
 
+
 class Ui_ImportOptionsWindow(object):
     def setupUi(self, ImportOptionsWindow):
         ImportOptionsWindow.setObjectName("ImportOptionsWindow")
         ImportOptionsWindow.resize(1082, 894)
-        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.MinimumExpanding, QtWidgets.QSizePolicy.MinimumExpanding)
+        sizePolicy = QtWidgets.QSizePolicy(
+            QtWidgets.QSizePolicy.MinimumExpanding,
+            QtWidgets.QSizePolicy.MinimumExpanding,
+        )
         sizePolicy.setHorizontalStretch(0)
         sizePolicy.setVerticalStretch(0)
-        sizePolicy.setHeightForWidth(ImportOptionsWindow.sizePolicy().hasHeightForWidth())
+        sizePolicy.setHeightForWidth(
+            ImportOptionsWindow.sizePolicy().hasHeightForWidth()
+        )
         ImportOptionsWindow.setSizePolicy(sizePolicy)
         ImportOptionsWindow.setMinimumSize(QtCore.QSize(900, 690))
         ImportOptionsWindow.setMaximumSize(QtCore.QSize(16777215, 16777215))
         ImportOptionsWindow.setBaseSize(QtCore.QSize(900, 600))
         self.centralwidget = QtWidgets.QWidget(ImportOptionsWindow)
         self.centralwidget.setEnabled(True)
-        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.MinimumExpanding, QtWidgets.QSizePolicy.MinimumExpanding)
+        sizePolicy = QtWidgets.QSizePolicy(
+            QtWidgets.QSizePolicy.MinimumExpanding,
+            QtWidgets.QSizePolicy.MinimumExpanding,
+        )
         sizePolicy.setHorizontalStretch(0)
         sizePolicy.setVerticalStretch(0)
-        sizePolicy.setHeightForWidth(self.centralwidget.sizePolicy().hasHeightForWidth())
+        sizePolicy.setHeightForWidth(
+            self.centralwidget.sizePolicy().hasHeightForWidth()
+        )
         self.centralwidget.setSizePolicy(sizePolicy)
         self.centralwidget.setMinimumSize(QtCore.QSize(900, 600))
         self.centralwidget.setMaximumSize(QtCore.QSize(16777215, 16777215))
@@ -35,10 +46,14 @@ class Ui_ImportOptionsWindow(object):
         self.horizontalLayout = QtWidgets.QHBoxLayout(self.centralwidget)
         self.horizontalLayout.setObjectName("horizontalLayout")
         self.prevDataWidget = QtWidgets.QWidget(self.centralwidget)
-        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Preferred)
+        sizePolicy = QtWidgets.QSizePolicy(
+            QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Preferred
+        )
         sizePolicy.setHorizontalStretch(0)
         sizePolicy.setVerticalStretch(0)
-        sizePolicy.setHeightForWidth(self.prevDataWidget.sizePolicy().hasHeightForWidth())
+        sizePolicy.setHeightForWidth(
+            self.prevDataWidget.sizePolicy().hasHeightForWidth()
+        )
         self.prevDataWidget.setSizePolicy(sizePolicy)
         self.prevDataWidget.setObjectName("prevDataWidget")
         self.verticalLayout = QtWidgets.QVBoxLayout(self.prevDataWidget)
@@ -53,10 +68,14 @@ class Ui_ImportOptionsWindow(object):
         self.verticalLayout.addWidget(self.dataView)
         self.horizontalLayout.addWidget(self.prevDataWidget)
         self.AssignImportWidget = QtWidgets.QWidget(self.centralwidget)
-        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
+        sizePolicy = QtWidgets.QSizePolicy(
+            QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding
+        )
         sizePolicy.setHorizontalStretch(0)
         sizePolicy.setVerticalStretch(0)
-        sizePolicy.setHeightForWidth(self.AssignImportWidget.sizePolicy().hasHeightForWidth())
+        sizePolicy.setHeightForWidth(
+            self.AssignImportWidget.sizePolicy().hasHeightForWidth()
+        )
         self.AssignImportWidget.setSizePolicy(sizePolicy)
         self.AssignImportWidget.setObjectName("AssignImportWidget")
         self.AssignImportV = QtWidgets.QVBoxLayout(self.AssignImportWidget)
@@ -69,7 +88,9 @@ class Ui_ImportOptionsWindow(object):
         self.dataAssignLabel.setObjectName("dataAssignLabel")
         self.AssignImportV.addWidget(self.dataAssignLabel)
         self.AssignTable = QtWidgets.QTableWidget(self.AssignImportWidget)
-        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
+        sizePolicy = QtWidgets.QSizePolicy(
+            QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding
+        )
         sizePolicy.setHorizontalStretch(0)
         sizePolicy.setVerticalStretch(0)
         sizePolicy.setHeightForWidth(self.AssignTable.sizePolicy().hasHeightForWidth())
@@ -81,7 +102,9 @@ class Ui_ImportOptionsWindow(object):
         self.AssignTable.verticalHeader().setVisible(True)
         self.AssignImportV.addWidget(self.AssignTable)
         self.OptionsFrame = QtWidgets.QFrame(self.AssignImportWidget)
-        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Fixed)
+        sizePolicy = QtWidgets.QSizePolicy(
+            QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Fixed
+        )
         sizePolicy.setHorizontalStretch(0)
         sizePolicy.setVerticalStretch(0)
         sizePolicy.setHeightForWidth(self.OptionsFrame.sizePolicy().hasHeightForWidth())
@@ -92,7 +115,9 @@ class Ui_ImportOptionsWindow(object):
         self.OptionsLayout = QtWidgets.QVBoxLayout(self.OptionsFrame)
         self.OptionsLayout.setObjectName("OptionsLayout")
         self.OptionsLabel = QtWidgets.QLabel(self.OptionsFrame)
-        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
+        sizePolicy = QtWidgets.QSizePolicy(
+            QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed
+        )
         sizePolicy.setHorizontalStretch(0)
         sizePolicy.setVerticalStretch(0)
         sizePolicy.setHeightForWidth(self.OptionsLabel.sizePolicy().hasHeightForWidth())
@@ -100,10 +125,14 @@ class Ui_ImportOptionsWindow(object):
         self.OptionsLabel.setObjectName("OptionsLabel")
         self.OptionsLayout.addWidget(self.OptionsLabel, 0, QtCore.Qt.AlignHCenter)
         self.ImportGroupBox = QtWidgets.QGroupBox(self.OptionsFrame)
-        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
+        sizePolicy = QtWidgets.QSizePolicy(
+            QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding
+        )
         sizePolicy.setHorizontalStretch(0)
         sizePolicy.setVerticalStretch(0)
-        sizePolicy.setHeightForWidth(self.ImportGroupBox.sizePolicy().hasHeightForWidth())
+        sizePolicy.setHeightForWidth(
+            self.ImportGroupBox.sizePolicy().hasHeightForWidth()
+        )
         self.ImportGroupBox.setSizePolicy(sizePolicy)
         self.ImportGroupBox.setFlat(False)
         self.ImportGroupBox.setCheckable(False)
@@ -112,7 +141,9 @@ class Ui_ImportOptionsWindow(object):
         self.horizontalLayout_3.setSpacing(8)
         self.horizontalLayout_3.setObjectName("horizontalLayout_3")
         self.PathlineEdit = QtWidgets.QLineEdit(self.ImportGroupBox)
-        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Fixed)
+        sizePolicy = QtWidgets.QSizePolicy(
+            QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Fixed
+        )
         sizePolicy.setHorizontalStretch(0)
         sizePolicy.setVerticalStretch(0)
         sizePolicy.setHeightForWidth(self.PathlineEdit.sizePolicy().hasHeightForWidth())
@@ -137,7 +168,9 @@ class Ui_ImportOptionsWindow(object):
         self.StartRowspinBox = QtWidgets.QSpinBox(self.OptionsFrame)
         self.StartRowspinBox.setProperty("value", 0)
         self.StartRowspinBox.setObjectName("StartRowspinBox")
-        self.formLayout.setWidget(0, QtWidgets.QFormLayout.FieldRole, self.StartRowspinBox)
+        self.formLayout.setWidget(
+            0, QtWidgets.QFormLayout.FieldRole, self.StartRowspinBox
+        )
         self.EndOnLabel = QtWidgets.QLabel(self.OptionsFrame)
         self.EndOnLabel.setObjectName("EndOnLabel")
         self.formLayout.setWidget(1, QtWidgets.QFormLayout.LabelRole, self.EndOnLabel)
@@ -146,10 +179,14 @@ class Ui_ImportOptionsWindow(object):
         self.EndRowspinBox.setMaximum(2147483647)
         self.EndRowspinBox.setProperty("value", 100)
         self.EndRowspinBox.setObjectName("EndRowspinBox")
-        self.formLayout.setWidget(1, QtWidgets.QFormLayout.FieldRole, self.EndRowspinBox)
+        self.formLayout.setWidget(
+            1, QtWidgets.QFormLayout.FieldRole, self.EndRowspinBox
+        )
         self.SeparatoLabel = QtWidgets.QLabel(self.OptionsFrame)
         self.SeparatoLabel.setObjectName("SeparatoLabel")
-        self.formLayout.setWidget(2, QtWidgets.QFormLayout.LabelRole, self.SeparatoLabel)
+        self.formLayout.setWidget(
+            2, QtWidgets.QFormLayout.LabelRole, self.SeparatoLabel
+        )
         self.SeparatorcomboBox = QtWidgets.QComboBox(self.OptionsFrame)
         self.SeparatorcomboBox.setEditable(True)
         # self.SeparatorcomboBox.setPlaceholderText("")
@@ -158,10 +195,14 @@ class Ui_ImportOptionsWindow(object):
         self.SeparatorcomboBox.addItem("")
         self.SeparatorcomboBox.addItem("")
         self.SeparatorcomboBox.addItem("")
-        self.formLayout.setWidget(2, QtWidgets.QFormLayout.FieldRole, self.SeparatorcomboBox)
+        self.formLayout.setWidget(
+            2, QtWidgets.QFormLayout.FieldRole, self.SeparatorcomboBox
+        )
         self.OptionsLayout.addLayout(self.formLayout)
         self.gridWidget = QtWidgets.QWidget(self.OptionsFrame)
-        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Fixed)
+        sizePolicy = QtWidgets.QSizePolicy(
+            QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Fixed
+        )
         sizePolicy.setHorizontalStretch(0)
         sizePolicy.setVerticalStretch(0)
         sizePolicy.setHeightForWidth(self.gridWidget.sizePolicy().hasHeightForWidth())
@@ -174,7 +215,9 @@ class Ui_ImportOptionsWindow(object):
         self.horizontalLayout_4.addWidget(self.PreviewButton)
         self.ConfirmBox = QtWidgets.QDialogButtonBox(self.gridWidget)
         self.ConfirmBox.setOrientation(QtCore.Qt.Horizontal)
-        self.ConfirmBox.setStandardButtons(QtWidgets.QDialogButtonBox.Close|QtWidgets.QDialogButtonBox.Ok)
+        self.ConfirmBox.setStandardButtons(
+            QtWidgets.QDialogButtonBox.Close | QtWidgets.QDialogButtonBox.Ok
+        )
         self.ConfirmBox.setCenterButtons(True)
         self.ConfirmBox.setObjectName("ConfirmBox")
         self.horizontalLayout_4.addWidget(self.ConfirmBox)
@@ -190,19 +233,37 @@ class Ui_ImportOptionsWindow(object):
 
     def retranslateUi(self, ImportOptionsWindow):
         _translate = QtCore.QCoreApplication.translate
-        ImportOptionsWindow.setWindowTitle(_translate("ImportOptionsWindow", "Import options"))
-        self.dataPreviewLabel.setText(_translate("ImportOptionsWindow", "Preview data table"))
-        self.dataAssignLabel.setText(_translate("ImportOptionsWindow", "Assign data table"))
+        ImportOptionsWindow.setWindowTitle(
+            _translate("ImportOptionsWindow", "Import options")
+        )
+        self.dataPreviewLabel.setText(
+            _translate("ImportOptionsWindow", "Preview data table")
+        )
+        self.dataAssignLabel.setText(
+            _translate("ImportOptionsWindow", "Assign data table")
+        )
         self.OptionsLabel.setText(_translate("ImportOptionsWindow", "Import options"))
-        self.PathlineEdit.setPlaceholderText(_translate("ImportOptionsWindow", "file path..."))
+        self.PathlineEdit.setPlaceholderText(
+            _translate("ImportOptionsWindow", "file path...")
+        )
         self.PathtoolButton.setText(_translate("ImportOptionsWindow", "..."))
         self.StartOnLabel.setText(_translate("ImportOptionsWindow", "Start from line"))
         self.EndOnLabel.setText(_translate("ImportOptionsWindow", "End on line"))
         self.SeparatoLabel.setText(_translate("ImportOptionsWindow", "Separator"))
-        self.SeparatorcomboBox.setCurrentText(_translate("ImportOptionsWindow", "<space>"))
-        self.SeparatorcomboBox.setItemText(0, _translate("ImportOptionsWindow", "<space>"))
-        self.SeparatorcomboBox.setItemText(1, _translate("ImportOptionsWindow", "<comma>"))
-        self.SeparatorcomboBox.setItemText(2, _translate("ImportOptionsWindow", "<semi-col>"))
-        self.SeparatorcomboBox.setItemText(3, _translate("ImportOptionsWindow", "<tab>"))
+        self.SeparatorcomboBox.setCurrentText(
+            _translate("ImportOptionsWindow", "<space>")
+        )
+        self.SeparatorcomboBox.setItemText(
+            0, _translate("ImportOptionsWindow", "<space>")
+        )
+        self.SeparatorcomboBox.setItemText(
+            1, _translate("ImportOptionsWindow", "<comma>")
+        )
+        self.SeparatorcomboBox.setItemText(
+            2, _translate("ImportOptionsWindow", "<semi-col>")
+        )
+        self.SeparatorcomboBox.setItemText(
+            3, _translate("ImportOptionsWindow", "<tab>")
+        )
         self.PreviewButton.setText(_translate("ImportOptionsWindow", "Preview"))
         self.actionImport.setText(_translate("ImportOptionsWindow", "Import"))
