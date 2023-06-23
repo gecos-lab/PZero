@@ -1,5 +1,5 @@
 # -*- mode: python ; coding: utf-8 -*-
-from PyInstaller.utils.hooks import collect_data_files
+from PyInstaller.utils.hooks import collect_data_files, collect_all
 import pkgutil
 import rasterio
 import platform
@@ -25,6 +25,7 @@ datas = []
 datas += collect_data_files('vedo')
 datas += collect_data_files('cmocean')
 
+datas, binaries, hiddenimports = collect_all('pzero')
 
 block_cipher = None
 
@@ -32,9 +33,9 @@ block_cipher = None
 a = Analysis(
     ['pzero.py'],
     pathex=[],
-    binaries=[],
+    binaries=binaries,
     datas=datas,
-    hiddenimports=additional_packages,
+    hiddenimports=hiddenimports,
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],

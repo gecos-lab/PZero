@@ -47,15 +47,12 @@ jobs:
               run: |
                 python3 -m pip install install rasterio
                 python3 -m pip install install pyinstaller
-                pyi-makespec pzero.py
-                ls
-                cat pzero.spec
                 pyinstaller pzero.spec
                 ls
 
             - name: check path
               run: |
-                cd dist
+                cd installers
                 ls
 
             - name: Upload Ubuntu Build
@@ -63,7 +60,7 @@ jobs:
               uses: actions/upload-artifact@v3
               with:
                  name: ${{ matrix.os }} build
-                 path: dist/pzero
+                 path: installers/PZero_Linux
 
 
             - name: Upload MacOs Build
@@ -71,4 +68,4 @@ jobs:
               uses: actions/upload-artifact@v3
               with:
                  name: ${{ matrix.os }} build
-                 path: dist/pzero
+                 path: installers/PZero_Darwin
