@@ -35,7 +35,7 @@ block_cipher = None
 a = Analysis(
     ['pzero.py'],
     pathex=[],
-    binaries=[binaries],
+    binaries=binaries,
     datas=datas,
     hiddenimports=hiddenimports,
     hookspath=[],
