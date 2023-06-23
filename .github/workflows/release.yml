@@ -2,48 +2,58 @@ name: Deploy and Release
 
 on:
     push:
-      tags:
-        - t*.*.*
+      branches:
+        - 'test_release'
 
 jobs:
-    # Specify the reusable workflow
-    testing:
-      uses: ./.github/workflows/release-testing.yml
-
-    deploy-linux:
+    deploy:
         strategy:
             matrix:
               # OS we can use to run jobs
-              os: [windows-latest, ubuntu-latest, macos-latest]
+              os: [ubuntu-latest, macos-latest]
 
         runs-on: ${{ matrix.os }}
-        # Requiring one or more reusable workflows in needs
-        needs: [testing]
-
         # Steps for deploying a release
         steps:
             - name: Checkout Repo
               uses: actions/checkout@v3
 
+            - name: Install Conda Env for Linux
+              if: ${{ matrix.os != 'macos-latest' }}
+              uses: conda-incubator/setup-miniconda@v2
+              with:
+                mamba-version: "*"
+                channels: conda-forge,defaults
+                channel-priority: true
+                activate-environment: pzero
+                environment-file: envs/std-environment.yml
+                python-version: 3.8.16
+                auto-activate-base: false
+
+            - name: Install Conda Env for MacOS
+              if: ${{ matrix.os == 'macos-latest' }}
+              uses: conda-incubator/setup-miniconda@v2
+              with:
+                mamba-version: "*"
+                channels: conda-forge,defaults
+                channel-priority: true
+                activate-environment: pzero
+                environment-file: envs/macos-environment.yml
+                python-version: 3.8.16
+                auto-activate-base: false
+
+
             - name: Make executable
               run: |
                 python3 -m pip install install rasterio
                 python3 -m pip install install pyinstaller
-                pyinstaller pzero.spec
+                pyinstaller pzero.py
                 ls
 
             - name: check path
               run: |
                 cd installers
                 ls
-
-            - name: Upload Windows Build
-              if: ${{ matrix.os == 'windows-latest' }}
-              uses: actions/upload-artifact@v3
-              with:
-                 name: ${{ matrix.os }} build
-                 path: installers/PZero_Windows
-
 
             - name: Upload Ubuntu Build
               if: ${{ matrix.os == 'ubuntu-latest' }}
