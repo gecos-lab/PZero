@@ -47,7 +47,10 @@ jobs:
               run: |
                 python3 -m pip install install rasterio
                 python3 -m pip install install pyinstaller
-                pyinstaller pzero.py
+                pyi-makespec pzero.py
+                ls
+                cat pzero.spec
+                pyinstaller pzero.spec
                 ls
 
             - name: check path
