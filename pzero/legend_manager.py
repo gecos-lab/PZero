@@ -3,7 +3,7 @@ PZero© Andrea Bistacchi"""
 
 import os
 os.environ["QT_API"] = "pyqt5 "
-from qtpy.QtWidgets import QTreeWidgetItem, QColorDialog, QPushButton, QSpinBox, QDoubleSpinBox, QComboBox
+from qtpy.QtWidgets import QTreeWidgetItem, QColorDialog, QPushButton, QDoubleSpinBox, QDoubleSpinBox, QComboBox
 from qtpy.QtGui import QColor
 from qtpy.QtCore import QObject
 
@@ -121,16 +121,16 @@ class Legend(QObject):
             other_color_dialog_btn = QPushButton()
             other_color_dialog_btn.other_type = other_type  # this is to pass these values to the update function below
             other_color_dialog_btn.setStyleSheet("background-color:rgb({},{},{})".format(color_R, color_G, color_B))
-            "other_line_thick_spn > QSpinBox used to select line thickness"
-            other_line_thick_spn = QSpinBox()
+            "other_line_thick_spn > QDoubleSpinBox used to select line thickness"
+            other_line_thick_spn = QDoubleSpinBox()
             other_line_thick_spn.other_type = other_type  # this is to pass these values to the update function below
             other_line_thick_spn.setValue(line_thick)
-            "other_point_size_spn > QSpinBox used to select point size"
-            other_point_size_spn = QSpinBox()
+            "other_point_size_spn > QDoubleSpinBox used to select point size"
+            other_point_size_spn = QDoubleSpinBox()
             other_point_size_spn.other_type = other_type  # this is to pass these values to the update function below
             other_point_size_spn.setValue(point_size)
-            "other_opacity_spn > QSpinBox used to select opacity"
-            other_opacity_spn = QSpinBox()
+            "other_opacity_spn > QDoubleSpinBox used to select opacity"
+            other_opacity_spn = QDoubleSpinBox()
             other_opacity_spn.setMaximum(100)
             other_opacity_spn.other_type = other_type  # this is to pass these values to the update function below
             other_opacity_spn.setValue(opacity)
@@ -209,22 +209,22 @@ class Legend(QObject):
                     geol_color_dialog_btn.scenario = scenario
                     geol_color_dialog_btn.setStyleSheet(
                         "background-color:rgb({},{},{})".format(color_R, color_G, color_B))
-                    "geol_line_thick_spn > QSpinBox used to select line thickness"
-                    geol_line_thick_spn = QSpinBox()
+                    "geol_line_thick_spn > QDoubleSpinBox used to select line thickness"
+                    geol_line_thick_spn = QDoubleSpinBox()
                     geol_line_thick_spn.geo_type = geo_type  # this is to pass these values to the update function below
                     geol_line_thick_spn.feature = feature
                     geol_line_thick_spn.scenario = scenario
                     geol_line_thick_spn.setValue(line_thick)
-                    "geol_point_size_spn > QSpinBox used to select point size"
-                    geol_point_size_spn = QSpinBox()
+                    "geol_point_size_spn > QDoubleSpinBox used to select point size"
+                    geol_point_size_spn = QDoubleSpinBox()
                     geol_point_size_spn.geo_type = geo_type  # this is to pass these values to the update function below
                     geol_point_size_spn.feature = feature
                     geol_point_size_spn.scenario = scenario
                     if isnan(point_size):
                         point_size = 0
                     geol_point_size_spn.setValue(point_size)
-                    "geol_line_opacity_spn > QSpinBox used to select opacity"
-                    geol_opacity_spn = QSpinBox()
+                    "geol_line_opacity_spn > QDoubleSpinBox used to select opacity"
+                    geol_opacity_spn = QDoubleSpinBox()
                     geol_opacity_spn.geo_type = geo_type  # this is to pass these values to the update function below
                     geol_opacity_spn.feature = feature
                     geol_opacity_spn.scenario = scenario
@@ -302,12 +302,12 @@ class Legend(QObject):
             well_color_dialog_btn = QPushButton()
             well_color_dialog_btn.locid = locid  # this is to pass these values to the update function below
             well_color_dialog_btn.setStyleSheet("background-color:rgb({},{},{})".format(color_R, color_G, color_B))
-            "well_line_thick_spn > QSpinBox used to select line thickness"
-            well_line_thick_spn = QSpinBox()
+            "well_line_thick_spn > QDoubleSpinBox used to select line thickness"
+            well_line_thick_spn = QDoubleSpinBox()
             well_line_thick_spn.locid = locid  # this is to pass these values to the update function below
             well_line_thick_spn.setValue(line_thick)
-            "well_line_opacity_spn > QSpinBox used to select line thickness"
-            well_line_opacity_spn = QSpinBox()
+            "well_line_opacity_spn > QDoubleSpinBox used to select line thickness"
+            well_line_opacity_spn = QDoubleSpinBox()
             well_line_opacity_spn.locid = locid
             well_line_opacity_spn.setMaximum(100)
             well_line_opacity_spn.setValue(opacity)
@@ -377,20 +377,20 @@ class Legend(QObject):
                     fluid_color_dialog_btn.scenario = scenario
                     fluid_color_dialog_btn.setStyleSheet(
                         "background-color:rgb({},{},{})".format(color_R, color_G, color_B))
-                    "fluid_line_thick_spn > QSpinBox used to select line thickness"
-                    fluid_line_thick_spn = QSpinBox()
+                    "fluid_line_thick_spn > QDoubleSpinBox used to select line thickness"
+                    fluid_line_thick_spn = QDoubleSpinBox()
                     fluid_line_thick_spn.fluid_type = fluid_type  # this is to pass these values to the update function below
                     fluid_line_thick_spn.feature = feature
                     fluid_line_thick_spn.scenario = scenario
                     fluid_line_thick_spn.setValue(line_thick)
-                    "fluid_point_size_spn > QSpinBox used to select point size"
-                    fluid_point_size_spn = QSpinBox()
+                    "fluid_point_size_spn > QDoubleSpinBox used to select point size"
+                    fluid_point_size_spn = QDoubleSpinBox()
                     fluid_point_size_spn.fluid_type = fluid_type  # this is to pass these values to the update function below
                     fluid_point_size_spn.feature = feature
                     fluid_point_size_spn.scenario = scenario
                     fluid_point_size_spn.setValue(point_size)
-                    "fluid_opacity_spn > QSpinBox used to select line thickness"
-                    fluid_opacity_spn = QSpinBox()
+                    "fluid_opacity_spn > QDoubleSpinBox used to select line thickness"
+                    fluid_opacity_spn = QDoubleSpinBox()
                     fluid_opacity_spn.fluid_type = fluid_type  # this is to pass these values to the update function below
                     fluid_opacity_spn.feature = feature
                     fluid_opacity_spn.scenario = scenario
@@ -475,20 +475,20 @@ class Legend(QObject):
 
                 backgrounds_color_dialog_btn.setStyleSheet(
                     "background-color:rgb({},{},{})".format(color_R, color_G, color_B))
-                "background_line_thick_spn > QSpinBox used to select line thickness"
-                background_line_thick_spn = QSpinBox()
+                "background_line_thick_spn > QDoubleSpinBox used to select line thickness"
+                background_line_thick_spn = QDoubleSpinBox()
                 background_line_thick_spn.background_type = background_type  # this is to pass these values to the update function below
                 background_line_thick_spn.feature = feature
 
                 background_line_thick_spn.setValue(line_thick)
 
-                "background_point_size_spn > QSpinBox used to select line thickness"
-                background_point_size_spn = QSpinBox()
+                "background_point_size_spn > QDoubleSpinBox used to select line thickness"
+                background_point_size_spn = QDoubleSpinBox()
                 background_point_size_spn.background_type = background_type  # this is to pass these values to the update function below
                 background_point_size_spn.feature = feature
                 background_point_size_spn.setValue(point_size)
-                "background_opacity_spn > QSpinBox used to select line thickness"
-                background_opacity_spn = QSpinBox()
+                "background_opacity_spn > QDoubleSpinBox used to select line thickness"
+                background_opacity_spn = QDoubleSpinBox()
                 background_opacity_spn.background_type = background_type  # this is to pass these values to the update function below
                 background_opacity_spn.feature = feature
                 background_opacity_spn.setMaximum(100)
