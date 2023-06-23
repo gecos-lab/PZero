@@ -21,11 +21,13 @@ for package in pkgutil.iter_modules(rasterio.__path__, prefix="rasterio."):
     additional_packages.append(package.name)
 
 additional_packages.append('vtkmodules.all')
+
+
+datas, binaries, hiddenimports = collect_all('pzero')
+
 datas = []
 datas += collect_data_files('vedo')
 datas += collect_data_files('cmocean')
-
-datas, binaries, hiddenimports = collect_all('pzero')
 
 block_cipher = None
 
@@ -33,7 +35,7 @@ block_cipher = None
 a = Analysis(
     ['pzero.py'],
     pathex=[],
-    binaries=binaries,
+    binaries=[binaries],
     datas=datas,
     hiddenimports=hiddenimports,
     hookspath=[],
