@@ -28,9 +28,9 @@ datas, binaries, hiddenimports = collect_all('pzero')
 datas = []
 datas += collect_data_files('vedo')
 datas += collect_data_files('cmocean')
-#datas += collect_data_files('PyQt5')
+datas += collect_data_files('PyQt5')
 
-hiddenimports.append(additional_packages)
+#hiddenimports.append(additional_packages)
 
 block_cipher = None
 
