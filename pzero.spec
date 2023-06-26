@@ -28,6 +28,7 @@ datas, binaries, hiddenimports = collect_all('pzero')
 datas = []
 datas += collect_data_files('vedo')
 datas += collect_data_files('cmocean')
+#datas += collect_data_files('PyQt5')
 
 block_cipher = None
 
@@ -37,7 +38,7 @@ a = Analysis(
     pathex=[],
     binaries=binaries,
     datas=datas,
-    hiddenimports=hiddenimports,
+    hiddenimports=[hiddenimports, additional_packages],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
