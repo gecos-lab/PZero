@@ -18,44 +18,22 @@ jobs:
             - name: Checkout Repo
               uses: actions/checkout@v3
 
-            - name: Install Conda Env for Linux
-              if: ${{ matrix.os != 'macos-latest' }}
-              uses: conda-incubator/setup-miniconda@v2
-              with:
-                mamba-version: "*"
-                channels: conda-forge,defaults
-                channel-priority: true
-                activate-environment: pzero
-                environment-file: envs/std-environment.yml
-                python-version: 3.8.16
-                auto-activate-base: false
-
-            - name: Install Conda Env for MacOS
-              if: ${{ matrix.os == 'macos-latest' }}
-              uses: conda-incubator/setup-miniconda@v2
-              with:
-                mamba-version: "*"
-                channels: conda-forge,defaults
-                channel-priority: true
-                activate-environment: pzero
-                environment-file: envs/macos-environment.yml
-                python-version: 3.8.16
-                auto-activate-base: false
-
 
             - name: Make executable Linux
               if: ${{ matrix.os == 'ubuntu-latest' }}
               run: |
-                python3 -m pip install install rasterio
-                python3 -m pip install install pyinstaller
+                python3 -m pip install rasterio
+                python3 -m pip install PyQt5
+                python3 -m pip install pyinstaller
                 pyinstaller pzero.spec
                 ls
 
             - name: Make executable Linux
               if: ${{ matrix.os == 'macos-latest' }}
               run: |
-                python3 -m pip install install rasterio
-                python3 -m pip install install pyinstaller
+                python3 -m pip install rasterio
+                python3 -m pip install PyQt5
+                python3 -m pip install pyinstaller
                 pyinstaller pzero-macos.spec
                 ls
 
