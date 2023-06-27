@@ -1,7 +1,8 @@
 # -*- mode: python ; coding: utf-8 -*-
-from PyInstaller.utils.hooks import collect_data_files, collect_all
+from PyInstaller.utils.hooks import collect_data_files
 import pkgutil
 import rasterio
+import PyQt5
 import platform
 import os
 import shutil
@@ -21,16 +22,12 @@ for package in pkgutil.iter_modules(rasterio.__path__, prefix="rasterio."):
     additional_packages.append(package.name)
 
 additional_packages.append('vtkmodules.all')
-
-
-datas, binaries, hiddenimports = collect_all('pzero')
-
+additional_packages.append('PyQt5')
+additional_packages.append('PyQt5.*')
 datas = []
 datas += collect_data_files('vedo')
 datas += collect_data_files('cmocean')
-datas += collect_data_files('PyQt5')
 
-#hiddenimports.append(additional_packages)
 
 block_cipher = None
 
@@ -38,10 +35,10 @@ block_cipher = None
 a = Analysis(
     ['pzero.py'],
     pathex=[],
-    binaries=binaries,
+    binaries=[],
     datas=datas,
-    hiddenimports=hiddenimports,
-    hookspath=[],
+    hiddenimports=additional_packages,
+    hookspath=['pzero/project_window.py'],
     hooksconfig={},
     runtime_hooks=[],
     excludes=[],
@@ -60,7 +57,7 @@ exe = EXE(
     a.datas,
     [],
     name='pzero',
-    debug=False,
+    debug=imports,
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
