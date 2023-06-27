@@ -43,11 +43,20 @@ jobs:
                 auto-activate-base: false
 
 
-            - name: Make executable
+            - name: Make executable Linux
+              if: ${{ matrix.os == 'ubuntu-latest' }}
               run: |
                 python3 -m pip install install rasterio
                 python3 -m pip install install pyinstaller
                 pyinstaller pzero.spec
+                ls
+
+            - name: Make executable Linux
+              if: ${{ matrix.os == 'macos-latest' }}
+              run: |
+                python3 -m pip install install rasterio
+                python3 -m pip install install pyinstaller
+                pyinstaller pzero-macos.spec
                 ls
 
             - name: check path
