@@ -22,8 +22,6 @@ for package in pkgutil.iter_modules(rasterio.__path__, prefix="rasterio."):
     additional_packages.append(package.name)
 
 additional_packages.append('vtkmodules.all')
-additional_packages.append('PyQt5')
-additional_packages.append('PyQt5.*')
 datas = []
 datas += collect_data_files('vedo')
 datas += collect_data_files('cmocean')
