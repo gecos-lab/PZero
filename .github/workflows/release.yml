@@ -12,6 +12,13 @@ jobs:
               # OS we can use to run jobs
               os: [ubuntu-latest, macos-latest]
 
+        defaults:
+          run:
+            shell: bash -el {0}
+        permissions:
+          checks: write
+          pull-requests: write
+
         runs-on: ${{ matrix.os }}
         # Steps for deploying a release
         steps:
