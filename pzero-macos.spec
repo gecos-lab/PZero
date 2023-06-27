@@ -57,7 +57,7 @@ exe = EXE(
     a.datas,
     [],
     name='pzero',
-    debug=imports,
+    debug=True,
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
