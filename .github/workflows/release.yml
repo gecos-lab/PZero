@@ -75,7 +75,7 @@ jobs:
               uses: actions/upload-artifact@v3
               with:
                  name: ${{ matrix.os }} build
-                 path: installers/PZero_Linux
+                 path: installers/PZero_Linux/pzero
 
 
             - name: Upload MacOs Build
@@ -83,4 +83,4 @@ jobs:
               uses: actions/upload-artifact@v3
               with:
                  name: ${{ matrix.os }} build
-                 path: installers/PZero_Darwin
+                 path: installers/PZero_Darwin/pzero
