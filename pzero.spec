@@ -21,11 +21,10 @@ for package in pkgutil.iter_modules(rasterio.__path__, prefix="rasterio."):
     additional_packages.append(package.name)
 
 additional_packages.append('vtkmodules.all')
-datas = []
-datas += collect_data_files('vedo')
-datas += collect_data_files('cmocean')
 
 datas, binaries, hiddenimports = collect_all('pzero')
+datas += collect_data_files('vedo')
+datas += collect_data_files('cmocean')
 
 block_cipher = None
 
