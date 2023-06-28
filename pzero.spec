@@ -42,11 +42,6 @@ for item in rasterio_imports_paths:
     current_module_filename = 'rasterio.'+current_module_filename.replace('.py', '')
     additional_packages.append(current_module_filename)
 
-
-
-
-
-
 additional_packages.append('vtkmodules.all')
 
 datas, binaries, hiddenimports = collect_all('pzero')
@@ -55,12 +50,10 @@ datas += collect_data_files('cmocean')
 datas += collect_data_files('shapely')
 datas += collect_data_files('rasterio')
 datas += collect_data_files('rasterio.sample')
-datas += ('style/*.qss', 'style' )
-
+datas += ('style/dark_teal.qss', 'style' )
+datas += ('style/light_teal.qss', 'style' )
 
 hiddenimports += additional_packages
-
-
 if os.getenv('CONDA_PREFIX', ''):
 	# path to general lib directory
 	LIB_DIR = os.path.join(sys.prefix, 'lib')
