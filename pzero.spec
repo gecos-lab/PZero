@@ -2,6 +2,7 @@
 from PyInstaller.utils.hooks import collect_data_files, collect_all
 import pkgutil
 import rasterio
+import rasterio.sample
 import platform
 import os
 import shutil
@@ -32,6 +33,16 @@ for package in pkgutil.iter_modules(rasterio.__path__, prefix="rasterio.io"):
 
 for package in pkgutil.iter_modules(rasterio.__path__, prefix="rasterio._io"):
     additional_packages.append(package.name)
+
+
+rasterio_imports_paths = glob.glob(r'C:\ProgramData\Anaconda2\envs\wps_env36\Lib\site-packages\rasterio\*.py')
+rasterio_imports = ['rasterio._shim']
+
+for item in rasterio_imports_paths:
+    current_module_filename = os.path.split(item)[-1]
+    current_module_filename = 'rasterio.'+current_module_filename.replace('.py', '')
+    additional_packages.append(current_module_filename)
+
 
 
 additional_packages.append('vtkmodules.all')
