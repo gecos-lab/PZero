@@ -25,6 +25,7 @@ additional_packages.append('vtkmodules.all')
 datas, binaries, hiddenimports = collect_all('pzero')
 datas += collect_data_files('vedo')
 datas += collect_data_files('cmocean')
+datas += collect_data_files('shapely')
 
 block_cipher = None
 
