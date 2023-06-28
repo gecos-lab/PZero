@@ -9,8 +9,6 @@ import shutil
 import shapely
 import sys
 import glob
-import style.dark_teal
-import style.light_teal
 
 system = platform.system()
 
@@ -35,15 +33,6 @@ for package in pkgutil.iter_modules(rasterio.__path__, prefix="rasterio.io"):
 for package in pkgutil.iter_modules(rasterio.__path__, prefix="rasterio._io"):
     additional_packages.append(package.name)
 
-for package in pkgutil.iter_modules(style.__path__, prefix="style."):
-    additional_packages.append(package.name)
-
-for package in pkgutil.iter_modules(style.__path__, prefix="style.light_teal"):
-    additional_packages.append(package.name)
-
-for package in pkgutil.iter_modules(style.__path__, prefix="style.dark_teal"):
-    additional_packages.append(package.name)
-
 
 rasterio_imports_paths = glob.glob(r'C:\ProgramData\Anaconda2\envs\wps_env36\Lib\site-packages\rasterio\*.py')
 rasterio_imports = ['rasterio._shim']
@@ -66,10 +55,7 @@ datas += collect_data_files('cmocean')
 datas += collect_data_files('shapely')
 datas += collect_data_files('rasterio')
 datas += collect_data_files('rasterio.sample')
-datas += collect_data_files('style.light_teal')
-datas += collect_data_files('style.dark_teal')
-
-#datas += collect_data_files('style')
+datas += ('style/*.qss', 'style' )
 
 
 hiddenimports += additional_packages
