@@ -1,5 +1,5 @@
 # -*- mode: python ; coding: utf-8 -*-
-from PyInstaller.utils.hooks import collect_data_files, collect_all
+from PyInstaller.utils.hooks import collect_data_files, collect_all, collect_entry_point
 import pkgutil
 import rasterio
 import rasterio.sample
@@ -54,13 +54,9 @@ datas += collect_data_files('cmocean')
 datas += collect_data_files('shapely')
 datas += collect_data_files('rasterio')
 datas += collect_data_files('rasterio.sample')
-datas += collect_data_files('style/dark_teal.qss')
-datas += collect_data_files('style/light_teal.qss')
-
+datas += collect_data_files('style')
 
 hiddenimports += additional_packages
-#hiddenimports.append(additional_packages)
-
 if os.getenv('CONDA_PREFIX', ''):
 	# path to general lib directory
 	LIB_DIR = os.path.join(sys.prefix, 'lib')
