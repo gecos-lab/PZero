@@ -53,6 +53,9 @@ datas += collect_data_files('cmocean')
 datas += collect_data_files('shapely')
 datas += collect_data_files('rasterio')
 
+#hiddenimports += additional_packages
+hiddenimports.append(additional_packages)
+
 if os.getenv('CONDA_PREFIX', ''):
 	# path to general lib directory
 	LIB_DIR = os.path.join(sys.prefix, 'lib')
