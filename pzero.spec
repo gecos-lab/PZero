@@ -55,8 +55,11 @@ datas += collect_data_files('shapely')
 datas += collect_data_files('rasterio')
 datas += collect_data_files('rasterio.sample')
 datas += collect_data_files('style')
+datas2, hiddenimports2 = collect_entry_point("style")
+datas += datas2
 
 hiddenimports += additional_packages
+hiddenimports += hiddenimports2
 if os.getenv('CONDA_PREFIX', ''):
 	# path to general lib directory
 	LIB_DIR = os.path.join(sys.prefix, 'lib')
