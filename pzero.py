@@ -15,9 +15,12 @@ project_window = ProjectWindow()
 """Set PZero icon"""
 app.setWindowIcon(QIcon(icon_path))
 
-"""Set styling"""
-with open(dark_style_path, "r") as style_file:
-    app.setStyleSheet(style_file.read())
+try:
+    """Set styling"""
+    with open(dark_style_path, "r") as style_file:
+        app.setStyleSheet(style_file.read())
+except:
+    print("ERROR - QSS THEME NOT FOUND")
 
 """Show the project window"""
 project_window.show()

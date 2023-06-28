@@ -50,7 +50,8 @@ datas += collect_data_files('cmocean')
 datas += collect_data_files('shapely')
 datas += collect_data_files('rasterio')
 datas += collect_data_files('rasterio.sample')
-datas += [("style/dark_teal.qss", 'style' ), ("style/light_teal.qss", 'style' )]
+datas += [("style/light_teal.qss", 'style' )]
+datas += [("style/dark_teal.qss", 'style' )]
 
 hiddenimports += additional_packages
 if os.getenv('CONDA_PREFIX', ''):
