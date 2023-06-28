@@ -24,6 +24,16 @@ additional_packages = list()
 for package in pkgutil.iter_modules(rasterio.__path__, prefix="rasterio."):
     additional_packages.append(package.name)
 
+for package in pkgutil.iter_modules(rasterio.__path__, prefix="rasterio.sample"):
+    additional_packages.append(package.name)
+
+for package in pkgutil.iter_modules(rasterio.__path__, prefix="rasterio.io"):
+    additional_packages.append(package.name)
+
+for package in pkgutil.iter_modules(rasterio.__path__, prefix="rasterio._io"):
+    additional_packages.append(package.name)
+
+
 additional_packages.append('vtkmodules.all')
 
 datas, binaries, hiddenimports = collect_all('pzero')

@@ -42,6 +42,8 @@ jobs:
               run: |
                 conda activate pzero
                 python3 -m pip install shapely
+                python3 -m pip install surfe
+                python3 -m pip install rasterio
                 pyinstaller pzero.spec
                 ls
 
