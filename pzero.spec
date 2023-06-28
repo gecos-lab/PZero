@@ -5,6 +5,10 @@ import rasterio
 import platform
 import os
 import shutil
+import shapely
+import sys
+import glob
+
 
 system = platform.system()
 
@@ -26,6 +30,31 @@ datas, binaries, hiddenimports = collect_all('pzero')
 datas += collect_data_files('vedo')
 datas += collect_data_files('cmocean')
 datas += collect_data_files('shapely')
+
+if os.getenv('CONDA_PREFIX', ''):
+	# path to general lib directory
+	LIB_DIR = os.path.join(sys.prefix, 'lib')
+
+	# check if geos frozen lib name is existent
+	# at least with PyInstaller==3.4 it otherwise does not get created
+	if not glob.glob(os.path.join(LIB_DIR, 'libgeos_c-*.so.*')):
+		# otherwise create a new symlink to be copied to the frozen target
+		# conda package. (from shapely.geos source code)
+		LIB_FILE_NAME = 'libgeos_c.so'
+
+		# create symlink that shapely package can locate when in frozen state
+		LIB_SYM_PATH = os.path.join(LIB_DIR, 'libgeos_c-1.so.1')
+		command = f'ln -sf {LIB_FILE_NAME} {LIB_SYM_PATH}'
+		print(f"Created symlink {LIB_SYM_PATH} -> {LIB_FILE_NAME} and added to target.")
+
+		os.system(command)
+	else:
+		# if the library can already be found make sure it still gets included
+		# when bundling
+		LIB_SYM_PATH = glob.glob(os.path.join(LIB_DIR, 'libgeos_c-*.so.*'))[0]
+
+	# pass path of library to pyinstaller variable binaries [(source,target)]
+	binaries += [(LIB_SYM_PATH, '.')]
 
 block_cipher = None
 

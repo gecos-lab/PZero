@@ -10,7 +10,7 @@ jobs:
         strategy:
             matrix:
               # OS we can use to run jobs
-              os: [ubuntu-latest, macos-latest]
+              os: [ubuntu-latest]
 
         defaults:
           run:
@@ -37,32 +37,12 @@ jobs:
                 python-version: 3.8.16
                 auto-activate-base: false
 
-            - name: Install Conda Env for MacOS
-              if: ${{ matrix.os == 'macos-latest' }}
-              uses: conda-incubator/setup-miniconda@v2
-              with:
-                mamba-version: "*"
-                channels: conda-forge,defaults
-                channel-priority: true
-                activate-environment: pzero
-                environment-file: envs/macos-environment.yml
-                python-version: 3.8.16
-                auto-activate-base: false
-
             - name: Make executable Linux
               if: ${{ matrix.os == 'ubuntu-latest' }}
               run: |
                 conda activate pzero
                 python3 -m pip install shapely
                 pyinstaller pzero.spec
-                ls
-
-            - name: Make executable MacOs
-              if: ${{ matrix.os == 'macos-latest' }}
-              run: |
-                conda activate pzero
-                python3 -m pip install shapely
-                pyinstaller pzero-macos.spec
                 ls
 
             - name: check path
@@ -76,11 +56,3 @@ jobs:
               with:
                  name: ${{ matrix.os }} build
                  path: installers/PZero_Linux/pzero
-
-
-            - name: Upload MacOs Build
-              if: ${{ matrix.os == 'macos-latest' }}
-              uses: actions/upload-artifact@v3
-              with:
-                 name: ${{ matrix.os }} build
-                 path: installers/PZero_Darwin/pzero
