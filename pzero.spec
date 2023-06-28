@@ -9,7 +9,8 @@ import shutil
 import shapely
 import sys
 import glob
-
+#import style.dark_teal
+#import style.light_teal
 
 system = platform.system()
 
@@ -53,8 +54,11 @@ datas += collect_data_files('cmocean')
 datas += collect_data_files('shapely')
 datas += collect_data_files('rasterio')
 datas += collect_data_files('rasterio.sample')
+datas += collect_data_files('style/dark_teal.qss')
+datas += collect_data_files('style/light_teal.qss')
 
-#hiddenimports += additional_packages
+
+hiddenimports += additional_packages
 #hiddenimports.append(additional_packages)
 
 if os.getenv('CONDA_PREFIX', ''):
