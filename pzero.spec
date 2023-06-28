@@ -46,6 +46,9 @@ for item in rasterio_imports_paths:
 
 
 
+
+
+
 additional_packages.append('vtkmodules.all')
 
 datas, binaries, hiddenimports = collect_all('pzero')
@@ -58,8 +61,15 @@ datas += collect_data_files('style')
 datas2, hiddenimports2 = collect_entry_point("style")
 datas += datas2
 
+if getattr(sys, 'frozen', False):
+    datas += collect_data_files(file=os.path.join(sys._MEIPASS, "style/dark_teal.qss"))
+else:
+    datas += collect_data_files(file="style/dark_teal.qss")
+
+
 hiddenimports += additional_packages
 hiddenimports += hiddenimports2
+
 if os.getenv('CONDA_PREFIX', ''):
 	# path to general lib directory
 	LIB_DIR = os.path.join(sys.prefix, 'lib')
