@@ -25,7 +25,6 @@ datas = []
 datas += collect_data_files('vedo')
 datas += collect_data_files('cmocean')
 
-
 block_cipher = None
 
 
