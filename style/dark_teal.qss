@@ -90,10 +90,6 @@ QFrame.fill_background {
   border-radius: 4px;
 }
 
-QSplitter {
-  background-color: transparent;
-  border: none
-}
 
 QStatusBar {
   color: #ffffff;
@@ -1274,16 +1270,6 @@ QDialog QToolButton:disabled {
 /*  ------------------------------------------------------------------------  */
 /*  Grips  */
 
-
-QMainWindow::separator:vertical,
-QSplitter::handle:horizontal {
-  image: url("style/imgs/splitter-horizontal.svg");
-}
-
-QMainWindow::separator:horizontal,
-QSplitter::handle:vertical {
-  image: url("style/imgs/splitter-vertical.svg");
-}
 
 QSizeGrip {
   image: url("style/imgs/sizegrip.svg");

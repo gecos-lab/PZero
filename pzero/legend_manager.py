@@ -1,10 +1,6 @@
 """legend_manager.py
 PZero© Andrea Bistacchi"""
 
-from math import isnan
-
-from PyQt5.QtCore import QObject
-from PyQt5.QtGui import QColor
 from PyQt5.QtWidgets import (
     QTreeWidgetItem,
     QColorDialog,
@@ -13,7 +9,11 @@ from PyQt5.QtWidgets import (
     QDoubleSpinBox,
     QComboBox,
 )
+from PyQt5.QtGui import QColor
+from PyQt5.QtCore import QObject
+
 from pandas import unique as pd_unique
+from math import isnan
 
 
 class Legend(QObject):

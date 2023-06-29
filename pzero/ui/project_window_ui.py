@@ -23,7 +23,7 @@ class Ui_ProjectWindow(object):
         sizePolicy.setVerticalStretch(0)
         sizePolicy.setHeightForWidth(ProjectWindow.sizePolicy().hasHeightForWidth())
         ProjectWindow.setSizePolicy(sizePolicy)
-        ProjectWindow.setMinimumSize(QtCore.QSize(1280, 800))
+        ProjectWindow.setMinimumSize(QtCore.QSize(300, 100))
         ProjectWindow.setStyleSheet("")
         ProjectWindow.setLocale(
             QtCore.QLocale(QtCore.QLocale.English, QtCore.QLocale.UnitedStates)
@@ -39,7 +39,7 @@ class Ui_ProjectWindow(object):
             self.centralwidget.sizePolicy().hasHeightForWidth()
         )
         self.centralwidget.setSizePolicy(sizePolicy)
-        self.centralwidget.setMinimumSize(QtCore.QSize(1280, 470))
+        self.centralwidget.setMinimumSize(QtCore.QSize(300, 100))
         self.centralwidget.setBaseSize(QtCore.QSize(1280, 470))
         self.centralwidget.setStyleSheet("")
         self.centralwidget.setObjectName("centralwidget")
@@ -56,7 +56,7 @@ class Ui_ProjectWindow(object):
         sizePolicy.setVerticalStretch(1)
         sizePolicy.setHeightForWidth(self.tabCentral.sizePolicy().hasHeightForWidth())
         self.tabCentral.setSizePolicy(sizePolicy)
-        self.tabCentral.setMinimumSize(QtCore.QSize(1272, 462))
+        self.tabCentral.setMinimumSize(QtCore.QSize(300, 100))
         self.tabCentral.setBaseSize(QtCore.QSize(1272, 462))
         self.tabCentral.setObjectName("tabCentral")
         self.tabGeology = QtWidgets.QWidget()
@@ -322,6 +322,10 @@ class Ui_ProjectWindow(object):
         self.actionViewXYPlot.setObjectName("actionViewXYPlot")
         self.actionAbout = QtWidgets.QAction(ProjectWindow)
         self.actionAbout.setObjectName("actionAbout")
+        self.actionRestoreLayout = QtWidgets.QAction(ProjectWindow)
+        self.actionRestoreLayout.setObjectName("actionRestoreLayout")
+        self.actionSaveLayout = QtWidgets.QAction(ProjectWindow)
+        self.actionSaveLayout.setObjectName("actionSaveLayout")
         self.actionHelp = QtWidgets.QAction(ProjectWindow)
         self.actionHelp.setObjectName("actionHelp")
         self.actionViewWellLog = QtWidgets.QAction(ProjectWindow)
@@ -413,6 +417,10 @@ class Ui_ProjectWindow(object):
         self.actionDecimatePointCloud.setObjectName("actionDecimatePointCloud")
         self.actionExportCSV = QtWidgets.QAction(ProjectWindow)
         self.actionExportCSV.setObjectName("actionExportCSV")
+        self.actionDarkStyle = QtWidgets.QAction(ProjectWindow)
+        self.actionDarkStyle.setObjectName("actionDarkStyle")
+        self.actionLightStyle = QtWidgets.QAction(ProjectWindow)
+        self.actionLightStyle.setObjectName("actionLightStyle")
         self.menuFile.addAction(self.actionProjectNew)
         self.menuFile.addAction(self.actionProjectOpen)
         self.menuFile.addAction(self.actionProjectSave)
@@ -446,6 +454,12 @@ class Ui_ProjectWindow(object):
         self.menuWindow.addSeparator()
         self.menuHelp.addAction(self.actionHelp)
         self.menuHelp.addAction(self.actionAbout)
+        self.menuHelp.addSeparator()
+        self.menuHelp.addAction(self.actionRestoreLayout)
+        self.menuHelp.addAction(self.actionSaveLayout)
+        self.menuHelp.addSeparator()
+        self.menuHelp.addAction(self.actionDarkStyle)
+        self.menuHelp.addAction(self.actionLightStyle)
         self.menuEdit.addAction(self.actionEditEntityClone)
         self.menuEdit.addAction(self.actionEditEntityRemove)
         self.menuEdit.addSeparator()
@@ -486,6 +500,21 @@ class Ui_ProjectWindow(object):
         self.menubar.addAction(self.menuInterpolation_tools.menuAction())
         self.menubar.addAction(self.menuWindow.menuAction())
         self.menubar.addAction(self.menuHelp.menuAction())
+
+        ProjectWindow.setDockNestingEnabled(True)
+        ProjectWindow.setDockOptions(
+            QtWidgets.QMainWindow.AllowNestedDocks
+            | QtWidgets.QMainWindow.AllowTabbedDocks
+            | QtWidgets.QMainWindow.AnimatedDocks
+            | QtWidgets.QMainWindow.GroupedDragging
+            | QtWidgets.QMainWindow.VerticalTabs
+        )
+
+        self.tabCentral.setMovable(True)
+        self.tabCentral.setUsesScrollButtons(True)
+
+        # To check if this can be useful after applying stylesheets
+        # self.tabCentral.setElideMode(QtCore.Qt.ElideNone)
 
         self.retranslateUi(ProjectWindow)
         self.tabCentral.setCurrentIndex(0)
@@ -604,6 +633,8 @@ class Ui_ProjectWindow(object):
         self.actionViewMap.setText(_translate("ProjectWindow", "Map View"))
         self.actionViewXYPlot.setText(_translate("ProjectWindow", "XY Plot View"))
         self.actionAbout.setText(_translate("ProjectWindow", "About"))
+        self.actionRestoreLayout.setText(_translate("ProjectWindow", "Restore Layout"))
+        self.actionSaveLayout.setText(_translate("ProjectWindow", "Save Layout"))
         self.actionHelp.setText(_translate("ProjectWindow", "Help"))
         self.actionViewWellLog.setText(_translate("ProjectWindow", "Well Log View"))
         self.actionViewStereoplot.setText(
@@ -704,3 +735,5 @@ class Ui_ProjectWindow(object):
             _translate("ProjectWindow", "Decimate point cloud")
         )
         self.actionExportCSV.setText(_translate("ProjectWindow", "Export CSV"))
+        self.actionDarkStyle.setText(_translate("ProjectWindow", "Dark Style"))
+        self.actionLightStyle.setText(_translate("ProjectWindow", "Light Style"))
