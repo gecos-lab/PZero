@@ -721,6 +721,7 @@ class BaseView(QDockWidget, Ui_QDockWidget):
         It overrides the resizeEvent"""
         self.verticalLayoutWidget.resize(self.size())
         self.toolBox_2.adjustSize()
+        self.menubar.resize(20, 1250)
         # self.menubar.adjustSize()
         # self.toolBox_2.resize(274, 534)
         return

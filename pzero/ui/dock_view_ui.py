@@ -356,7 +356,7 @@ class Ui_QDockWidget(object):
         self.horizontalLayout_2.addLayout(self.ViewFrameLayout)
         self.centralWidget.addWidget(self.splitter)
         self.menubar = QtWidgets.QMenuBar(QDockWidget)
-        self.menubar.setGeometry(10, 20, 1251, 20)
+        self.menubar.setGeometry(10, 20, 20, 1250)
         self.menubar.setObjectName("menubar")
 
         self.actionClose = QtWidgets.QAction(QDockWidget)
