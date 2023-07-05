@@ -182,7 +182,7 @@ class BaseView(QWidget, Ui_Base_View):
         self.initialize_tools()
         self.initialize_interactor()
         self.add_all_entities()
-        self.show_qt_canvas()
+        # self.show_qt_canvas()
 
         if not isinstance(self, NewViewXsection):
             """Build and show geology and topology trees, and cross-section, DOM, image, lists.
