@@ -147,6 +147,10 @@ class DockWindow(QDockWidget):
         """Override the standard closeEvent method since self.plotter.close() is needed
         to cleanly close the vtk plotter and disconnect_all_lambda_signals is required to
         disconnect signals before deleting the window."""
+        if self.isFloating():
+            self.setFloating(False)
+            event.ignore()
+            return
         reply = QMessageBox.question(self, 'Closing window', 'Close this window?', QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
         if reply == QMessageBox.Yes:
             # disconnect_all_signals(self.signals)
