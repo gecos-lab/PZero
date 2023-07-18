@@ -7,7 +7,7 @@ from PyQt5.QtWidgets import *
 from PyQt5.QtCore import Qt
 
 """PZero imports"""
-from pzero.ui.dock_view_ui import Ui_QDockWidget
+from pzero.ui.base_view_window_ui import Ui_BaseViewWindow
 from .entities_factory import (
     VertexSet,
     PolyLine,
@@ -93,7 +93,6 @@ import matplotlib.style as mplstyle
 # from matplotlib.backend_bases import FigureCanvasBase
 import mplstereonet
 
-
 """Probably not-required imports"""
 # import sys
 # from time import sleep
@@ -120,26 +119,24 @@ class NavigationToolbar(NavigationToolbar2QT):
         super(NavigationToolbar, self).__init__(parent, *args, **kwargs)
 
 
-class BaseView(QDockWidget, Ui_QDockWidget):
+class BaseView(QMainWindow, Ui_BaseViewWindow):
     """Create base view - abstract class providing common methods for all views"""
 
     """parent is the QT object that is launching this one, hence the ProjectWindow() instance in this case"""
 
     def __init__(self, parent=None, *args, **kwargs):
-        super(BaseView, self).__init__(*args, **kwargs)
+        super(BaseView, self).__init__(parent, *args, **kwargs)
         self.setupUi(self)
         # _____________________________________________________________________________
         # THE FOLLOWING ACTUALLY DELETES ANY REFERENCE TO CLOSED WINDOWS, HENCE FREEING
         # MEMORY, BUT COULD CREATE PROBLEMS WITH SIGNALS THAT ARE STILL ACTIVE
+        # SEE DISCUSSIONS ON QPointer AND WA_DeleteOnClose ON THE INTERNET
         self.setAttribute(Qt.WA_DeleteOnClose, True)
         self.parent = parent
         """Connect actionQuit.triggered SIGNAL to self.close SLOT"""
         self.actionClose.triggered.connect(self.close)
 
         """Connect signal to delete window when the project is closed (and a new one is opened)."""
-        # see discussion on deleteLater vs. close on the Internet as above, delete results in deleted slots being
-        # still referenced from the main window signals, thus causing errors
-        # self.parent.project_close_signal.connect(self.deleteLater)
         self.parent.project_close_signal.connect(self.close)
 
         """Create empty Pandas dataframe with actor's with columns:
@@ -713,18 +710,7 @@ class BaseView(QDockWidget, Ui_QDockWidget):
                 this_property=this_property
             )
         )
-
         self.parent.prop_legend_cmap_modified_signal.connect(self.prop_legend_lambda)
-
-    def resizeEvent(self, event):
-        """This function is needed to resize the verticalLayoutWidget of the dockable windows.
-        It overrides the resizeEvent"""
-        self.verticalLayoutWidget.resize(self.size())
-        self.toolBox_2.adjustSize()
-        self.menubar.resize(20, 1250)
-        # self.menubar.adjustSize()
-        # self.toolBox_2.resize(274, 534)
-        return
 
     def show_qt_canvas(self):
         """Show the Qt Window"""
@@ -7089,32 +7075,38 @@ class BaseView(QDockWidget, Ui_QDockWidget):
             self.save_home_view
         )  # connect action to function
         self.menuBaseView.addAction(self.saveHomeView)  # add action to menu
+        self.toolBarBase.addAction(self.saveHomeView)  # add action to toolbar
 
         self.zoomHomeView = QAction("Zoom to home", self)
         self.zoomHomeView.triggered.connect(self.zoom_home_view)
         self.menuBaseView.addAction(self.zoomHomeView)
+        self.toolBarBase.addAction(self.zoomHomeView)
 
         self.zoomActive = QAction("Zoom to active", self)
         self.zoomActive.triggered.connect(self.zoom_active)
         self.menuBaseView.addAction(self.zoomActive)
+        self.toolBarBase.addAction(self.zoomActive)
 
         self.selectLineButton = QAction("Select entity", self)  # create action
         self.selectLineButton.triggered.connect(
             self.select_actor_with_mouse
         )  # connect action to function
         self.menuBaseView.addAction(self.selectLineButton)  # add action to menu
+        self.toolBarBase.addAction(self.selectLineButton)  # add action to toolbar
 
         self.removeEntityButton = QAction("Remove Entity", self)  # create action
         self.removeEntityButton.triggered.connect(
             self.remove_entity
         )  # connect action to function
         self.menuBaseView.addAction(self.removeEntityButton)  # add action to menu
+        self.toolBarBase.addAction(self.removeEntityButton)  # add action to toolbar
 
         self.clearSelectionButton = QAction("Clear Selection", self)  # create action
         self.clearSelectionButton.triggered.connect(
             self.clear_selection
         )  # connect action to function
         self.menuBaseView.addAction(self.clearSelectionButton)  # add action to menu
+        self.toolBarBase.addAction(self.clearSelectionButton)  # add action to toolbar
 
         self.vertExagButton = QAction("Vertical exaggeration", self)
         self.vertExagButton.triggered.connect(
@@ -7142,9 +7134,10 @@ class BaseView(QDockWidget, Ui_QDockWidget):
             QMessageBox.No,
         )
         if reply == QMessageBox.Yes:
-            # Disconnect all the signals - needed with DeleteOnClose Window Attribute
+            # disconnect_all_signals(self.signals)
             self.disconnect_all_lambda_signals()
 
+            # self.upd_list_geo_rm
             if not isinstance(self, ViewStereoplot):
                 self.plotter.close()  # needed to cleanly close the vtk plotter
             event.accept()
@@ -7581,6 +7574,7 @@ class View3D(BaseView):
         # self.showOct = QAction("Show octree structure", self)
         # self.showOct.triggered.connect(self.show_octree)
         # self.menuBaseView.addAction(self.showOct)
+        # self.toolBarBase.addAction(self.showOct)
 
         self.menuOrbit = QMenu("Orbit around", self)
 
@@ -7594,22 +7588,27 @@ class View3D(BaseView):
         self.actionExportScreen = QAction("Take screenshot", self)
         self.actionExportScreen.triggered.connect(self.export_screen)
         self.menuBaseView.addAction(self.actionExportScreen)
+        self.toolBarBase.addAction(self.actionExportScreen)
 
         self.actionExportGltf = QAction("Export as GLTF", self)
         self.actionExportGltf.triggered.connect(self.export_gltf)
         self.menuBaseView.addAction(self.actionExportGltf)
+        self.toolBarBase.addAction(self.actionExportGltf)
 
         self.actionExportHtml = QAction("Export as HTML", self)
         self.actionExportHtml.triggered.connect(self.export_html)
         self.menuBaseView.addAction(self.actionExportHtml)
+        self.toolBarBase.addAction(self.actionExportHtml)
 
         self.actionExportObj = QAction("Export as OBJ", self)
         self.actionExportObj.triggered.connect(self.export_obj)
         self.menuBaseView.addAction(self.actionExportObj)
+        self.toolBarBase.addAction(self.actionExportObj)
 
         self.actionExportVtkjs = QAction("Export as VTKjs", self)
         self.actionExportVtkjs.triggered.connect(self.export_vtkjs)
         self.menuBaseView.addAction(self.actionExportVtkjs)
+        self.toolBarBase.addAction(self.actionExportVtkjs)
 
     def export_screen(self):
         out_file_name = save_file_dialog(
@@ -7992,78 +7991,91 @@ class View2D(BaseView):
             self.entity_remove_selected
         )  # connect action to function
         self.menuBaseView.addAction(self.removeEntityButton)  # add action to menu
+        self.toolBarBase.addAction(self.removeEntityButton)  # add action to toolbar
 
         self.drawLineButton = QAction("Draw line", self)  # create action
         self.drawLineButton.triggered.connect(
             lambda: draw_line(self)
         )  # connect action to function with additional argument parent
         self.menuBaseView.addAction(self.drawLineButton)  # add action to menu
+        self.toolBarBase.addAction(self.drawLineButton)  # add action to toolbar
 
         self.selectLineButton = QAction("Select line", self)  # create action
         self.selectLineButton.triggered.connect(
             self.select_actor_with_mouse
         )  # connect action to function
         self.menuBaseView.addAction(self.selectLineButton)  # add action to menu
+        self.toolBarBase.addAction(self.selectLineButton)  # add action to toolbar
 
         self.clearSelectionButton = QAction("Clear Selection", self)  # create action
         self.clearSelectionButton.triggered.connect(
             self.clear_selection
         )  # connect action to function
         self.menuBaseView.addAction(self.clearSelectionButton)  # add action to menu
+        self.toolBarBase.addAction(self.clearSelectionButton)  # add action to toolbar
 
         self.editLineButton = QAction("Edit line", self)  # create action
         self.editLineButton.triggered.connect(
             lambda: edit_line(self)
         )  # connect action to function
         self.menuBaseView.addAction(self.editLineButton)  # add action to menu
+        self.toolBarBase.addAction(self.editLineButton)  # add action to toolbar
 
         self.sortLineButton = QAction("Sort line nodes", self)  # create action
         self.sortLineButton.triggered.connect(
             lambda: sort_line_nodes(self)
         )  # connect action to function
         self.menuBaseView.addAction(self.sortLineButton)  # add action to menu
+        self.toolBarBase.addAction(self.sortLineButton)  # add action to toolbar
 
         self.moveLineButton = QAction("Move line", self)  # create action
         self.moveLineButton.triggered.connect(
             self.vector_by_mouse
         )  # connect action to function
         self.menuBaseView.addAction(self.moveLineButton)  # add action to menu
+        self.toolBarBase.addAction(self.moveLineButton)  # add action to toolbar
 
         self.rotateLineButton = QAction("Rotate line", self)  # create action
         self.rotateLineButton.triggered.connect(
             lambda: rotate_line(self)
         )  # connect action to function
         self.menuBaseView.addAction(self.rotateLineButton)  # add action to menu
+        self.toolBarBase.addAction(self.rotateLineButton)  # add action to toolbar
 
         self.extendButton = QAction("Extend line", self)  # create action
         self.extendButton.triggered.connect(
             lambda: extend_line(self)
         )  # connect action to function
         self.menuBaseView.addAction(self.extendButton)  # add action to menu
+        self.toolBarBase.addAction(self.extendButton)  # add action to toolbar
 
         self.splitLineByLineButton = QAction("Split line-line", self)  # create action
         self.splitLineByLineButton.triggered.connect(
             lambda: split_line_line(self)
         )  # connect action to function
         self.menuBaseView.addAction(self.splitLineByLineButton)  # add action to menu
+        self.toolBarBase.addAction(self.splitLineByLineButton)  # add action to toolbar
 
         self.splitLineByPointButton = QAction("Split line-point", self)  # create action
         self.splitLineByPointButton.triggered.connect(
             lambda: split_line_existing_point(self)
         )  # connect action to function
         self.menuBaseView.addAction(self.splitLineByPointButton)  # add action to menu
+        self.toolBarBase.addAction(self.splitLineByPointButton)  # add action to toolbar
 
         self.mergeLineButton = QAction("Merge lines", self)  # create action
         self.mergeLineButton.triggered.connect(
             lambda: merge_lines(self)
         )  # connect action to function
         self.menuBaseView.addAction(self.mergeLineButton)  # add action to menu
+        self.toolBarBase.addAction(self.mergeLineButton)  # add action to toolbar
 
         self.snapLineButton = QAction("Snap line", self)  # create action
         self.snapLineButton.triggered.connect(
             lambda: snap_line(self)
         )  # connect action to function
         self.menuBaseView.addAction(self.snapLineButton)  # add action to menu
+        self.toolBarBase.addAction(self.snapLineButton)  # add action to toolbar
 
         self.resampleDistanceButton = QAction(
             "Resample distance", self
@@ -8072,42 +8084,49 @@ class View2D(BaseView):
             lambda: resample_line_distance(self)
         )  # connect action to function
         self.menuBaseView.addAction(self.resampleDistanceButton)  # add action to menu
+        self.toolBarBase.addAction(self.resampleDistanceButton)  # add action to toolbar
 
         self.resampleNumberButton = QAction("Resample number", self)  # create action
         self.resampleNumberButton.triggered.connect(
             lambda: resample_line_number_points(self)
         )  # connect action to function
         self.menuBaseView.addAction(self.resampleNumberButton)  # add action to menu
+        self.toolBarBase.addAction(self.resampleNumberButton)  # add action to toolbar
 
         self.simplifyButton = QAction("Simplify line", self)  # create action
         self.simplifyButton.triggered.connect(
             lambda: simplify_line(self)
         )  # connect action to function
         self.menuBaseView.addAction(self.simplifyButton)  # add action to menu
+        self.toolBarBase.addAction(self.simplifyButton)  # add action to toolbar
 
         self.copyParallelButton = QAction("Copy parallel", self)  # create action
         self.copyParallelButton.triggered.connect(
             lambda: copy_parallel(self)
         )  # connect action to function
         self.menuBaseView.addAction(self.copyParallelButton)  # add action to menu
+        self.toolBarBase.addAction(self.copyParallelButton)  # add action to toolbar
 
         self.copyKinkButton = QAction("Copy kink", self)  # create action
         self.copyKinkButton.triggered.connect(
             lambda: copy_kink(self)
         )  # connect action to function
         self.menuBaseView.addAction(self.copyKinkButton)  # add action to menu
+        self.toolBarBase.addAction(self.copyKinkButton)  # add action to toolbar
 
         self.copySimilarButton = QAction("Copy similar", self)  # create action
         self.copySimilarButton.triggered.connect(
             lambda: copy_similar(self)
         )  # connect action to function
         self.menuBaseView.addAction(self.copySimilarButton)  # add action to menu
+        self.toolBarBase.addAction(self.copySimilarButton)  # add action to toolbar
 
         self.measureDistanceButton = QAction("Measure", self)  # create action
         self.measureDistanceButton.triggered.connect(
             lambda: measure_distance(self)
         )  # connect action to function
         self.menuBaseView.addAction(self.measureDistanceButton)  # add action to menu
+        self.toolBarBase.addAction(self.measureDistanceButton)  # add action to toolbar
 
     def initialize_interactor(self):
         """Initialize parameters for mouse interaction functions."""
@@ -8662,6 +8681,9 @@ class ViewMap(View2D):
             lambda: section_from_azimuth(self)
         )  # connect action to function with additional argument parent
         self.menuBaseView.addAction(self.sectionFromAzimuthButton)  # add action to menu
+        self.toolBarBase.addAction(
+            self.sectionFromAzimuthButton
+        )  # add action to toolbar
 
         self.sectionFromPointsButton = QAction(
             "Section from 2 points", self
@@ -8670,11 +8692,15 @@ class ViewMap(View2D):
         # self.sectionFromPointsButton.triggered.connect(
         #    lambda: section_from_points(self))  # connect action to function with additional argument parent
         self.menuBaseView.addAction(self.sectionFromPointsButton)  # add action to menu
+        self.toolBarBase.addAction(
+            self.sectionFromPointsButton
+        )  # add action to toolbar
 
         self.sectionFromFileButton = QAction("Sections from file", self)
         self.sectionFromFileButton.triggered.connect(lambda: sections_from_file(self))
 
         self.menuBaseView.addAction(self.sectionFromFileButton)  # add action to menu
+        self.toolBarBase.addAction(self.sectionFromFileButton)  # add action to toolbar
 
         self.boundaryFromPointsButton = QAction(
             "Boundary from 2 points", self
@@ -8683,6 +8709,9 @@ class ViewMap(View2D):
             lambda: boundary_from_points(self)
         )  # connect action to function with additional argument parent
         self.menuBaseView.addAction(self.boundaryFromPointsButton)  # add action to menu
+        self.toolBarBase.addAction(
+            self.boundaryFromPointsButton
+        )  # add action to toolbar
 
     def show_actor_with_property(
         self, uid=None, collection=None, show_property=None, visible=None
@@ -10637,60 +10666,70 @@ class NewView2D(BaseView):
             lambda: draw_line(self)
         )  # connect action to function with additional argument parent
         self.menuBaseView.addAction(self.drawLineButton)  # add action to menu
+        self.toolBarBase.addAction(self.drawLineButton)  # add action to toolbar
 
         self.editLineButton = QAction("Edit line", self)  # create action
         self.editLineButton.triggered.connect(
             lambda: edit_line(self)
         )  # connect action to function
         self.menuBaseView.addAction(self.editLineButton)  # add action to menu
+        self.toolBarBase.addAction(self.editLineButton)  # add action to toolbar
 
         self.sortLineButton = QAction("Sort line nodes", self)  # create action
         self.sortLineButton.triggered.connect(
             lambda: sort_line_nodes(self)
         )  # connect action to function
         self.menuBaseView.addAction(self.sortLineButton)  # add action to menu
+        self.toolBarBase.addAction(self.sortLineButton)  # add action to toolbar
 
         self.moveLineButton = QAction("Move line", self)  # create action
         self.moveLineButton.triggered.connect(
             lambda: self.vector_by_mouse(move_line)
         )  # connect action to function
         self.menuBaseView.addAction(self.moveLineButton)  # add action to menu
+        self.toolBarBase.addAction(self.moveLineButton)  # add action to toolbar
 
         self.rotateLineButton = QAction("Rotate line", self)  # create action
         self.rotateLineButton.triggered.connect(
             lambda: rotate_line(self)
         )  # connect action to function
         self.menuBaseView.addAction(self.rotateLineButton)  # add action to menu
+        self.toolBarBase.addAction(self.rotateLineButton)  # add action to toolbar
 
         self.extendButton = QAction("Extend line", self)  # create action
         self.extendButton.triggered.connect(
             lambda: extend_line(self)
         )  # connect action to function
         self.menuBaseView.addAction(self.extendButton)  # add action to menu
+        self.toolBarBase.addAction(self.extendButton)  # add action to toolbar
 
         self.splitLineByLineButton = QAction("Split line-line", self)  # create action
         self.splitLineByLineButton.triggered.connect(
             lambda: split_line_line(self)
         )  # connect action to function
         self.menuBaseView.addAction(self.splitLineByLineButton)  # add action to menu
+        self.toolBarBase.addAction(self.splitLineByLineButton)  # add action to toolbar
 
         self.splitLineByPointButton = QAction("Split line-point", self)  # create action
         self.splitLineByPointButton.triggered.connect(
             lambda: split_line_existing_point(self)
         )  # connect action to function
         self.menuBaseView.addAction(self.splitLineByPointButton)  # add action to menu
+        self.toolBarBase.addAction(self.splitLineByPointButton)  # add action to toolbar
 
         self.mergeLineButton = QAction("Merge lines", self)  # create action
         self.mergeLineButton.triggered.connect(
             lambda: merge_lines(self)
         )  # connect action to function
         self.menuBaseView.addAction(self.mergeLineButton)  # add action to menu
+        self.toolBarBase.addAction(self.mergeLineButton)  # add action to toolbar
 
         self.snapLineButton = QAction("Snap line", self)  # create action
         self.snapLineButton.triggered.connect(
             lambda: snap_line(self)
         )  # connect action to function
         self.menuBaseView.addAction(self.snapLineButton)  # add action to menu
+        self.toolBarBase.addAction(self.snapLineButton)  # add action to toolbar
 
         self.resampleDistanceButton = QAction(
             "Resample distance", self
@@ -10699,48 +10738,56 @@ class NewView2D(BaseView):
             lambda: resample_line_distance(self)
         )  # connect action to function
         self.menuBaseView.addAction(self.resampleDistanceButton)  # add action to menu
+        self.toolBarBase.addAction(self.resampleDistanceButton)  # add action to toolbar
 
         self.resampleNumberButton = QAction("Resample number", self)  # create action
         self.resampleNumberButton.triggered.connect(
             lambda: resample_line_number_points(self)
         )  # connect action to function
         self.menuBaseView.addAction(self.resampleNumberButton)  # add action to menu
+        self.toolBarBase.addAction(self.resampleNumberButton)  # add action to toolbar
 
         self.simplifyButton = QAction("Simplify line", self)  # create action
         self.simplifyButton.triggered.connect(
             lambda: simplify_line(self)
         )  # connect action to function
         self.menuBaseView.addAction(self.simplifyButton)  # add action to menu
+        self.toolBarBase.addAction(self.simplifyButton)  # add action to toolbar
 
         self.copyParallelButton = QAction("Copy parallel", self)  # create action
         self.copyParallelButton.triggered.connect(
             lambda: copy_parallel(self)
         )  # connect action to function
         self.menuBaseView.addAction(self.copyParallelButton)  # add action to menu
+        self.toolBarBase.addAction(self.copyParallelButton)  # add action to toolbar
 
         self.copyKinkButton = QAction("Copy kink", self)  # create action
         self.copyKinkButton.triggered.connect(
             lambda: copy_kink(self)
         )  # connect action to function
         self.menuBaseView.addAction(self.copyKinkButton)  # add action to menu
+        self.toolBarBase.addAction(self.copyKinkButton)  # add action to toolbar
 
         self.copySimilarButton = QAction("Copy similar", self)  # create action
         self.copySimilarButton.triggered.connect(
             lambda: self.vector_by_mouse(copy_similar)
         )  # connect action to function
         self.menuBaseView.addAction(self.copySimilarButton)  # add action to menu
+        self.toolBarBase.addAction(self.copySimilarButton)  # add action to toolbar
 
         self.measureDistanceButton = QAction("Measure", self)  # cline_thickreate action
         self.measureDistanceButton.triggered.connect(
             lambda: self.vector_by_mouse(measure_distance)
         )  # connect action to function
         self.menuBaseView.addAction(self.measureDistanceButton)  # add action to menu
+        self.toolBarBase.addAction(self.measureDistanceButton)  # add action to toolbar
 
         self.cleanSectionButton = QAction("Clean intersections", self)
         self.cleanSectionButton.triggered.connect(
             lambda: clean_intersection(self)
         )  # connect action to function
         self.menuBaseView.addAction(self.cleanSectionButton)  # add action to menu
+        self.toolBarBase.addAction(self.cleanSectionButton)  # add action to toolbar
 
     def vector_by_mouse(self, func):
         # if not self.selected_uids:
@@ -10772,11 +10819,15 @@ class NewViewMap(NewView2D):
             lambda: self.vector_by_mouse(section_from_azimuth)
         )  # connect action to function)  # connect action to function with additional argument parent
         self.menuBaseView.addAction(self.sectionFromAzimuthButton)  # add action to menu
+        self.toolBarBase.addAction(
+            self.sectionFromAzimuthButton
+        )  # add action to toolbar
 
         self.sectionFromFileButton = QAction("Sections from file", self)
         self.sectionFromFileButton.triggered.connect(lambda: sections_from_file(self))
 
         self.menuBaseView.addAction(self.sectionFromFileButton)  # add action to menu
+        self.toolBarBase.addAction(self.sectionFromFileButton)  # add action to toolbar
 
         self.boundaryFromPointsButton = QAction(
             "Boundary from 2 points", self
@@ -10785,6 +10836,9 @@ class NewViewMap(NewView2D):
             lambda: self.vector_by_mouse(boundary_from_points)
         )  # connect action to function with additional argument parent
         self.menuBaseView.addAction(self.boundaryFromPointsButton)  # add action to menu
+        self.toolBarBase.addAction(
+            self.boundaryFromPointsButton
+        )  # add action to toolbar
 
     def show_actor_with_property(
         self, uid=None, collection=None, show_property=None, visible=None

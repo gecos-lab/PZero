@@ -61,11 +61,30 @@ jobs:
                 conda info
                 conda list
 
-            - name: Make executable
+            - name: Make executable - Windows
+              if: ${{ matrix.os == 'windows-latest' }}
               run: |
                 python3 -m pip install install rasterio
                 python3 -m pip install install pyinstaller
-                pyinstaller pzero.spec
+                pyinstaller pzero-windows.spec
+                ls
+
+            - name: Make executable - Linux
+              if: ${{ matrix.os == 'ubuntu-latest' }}
+              run: |
+                conda activate pzero
+                python3 -m pip install shapely
+                python3 -m pip install rasterio
+                pyinstaller pzero-linux.spec
+                ls
+
+            - name: Make executable - MacOS
+              if: ${{ matrix.os == 'macos-latest' }}
+              run: |
+                conda activate pzero
+                python3 -m pip install shapely
+                python3 -m pip install rasterio
+                pyinstaller pzero-macos.spec
                 ls
 
             - name: check path

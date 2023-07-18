@@ -4,11 +4,13 @@ PZero© Andrea Bistacchi"""
 import os
 from copy import deepcopy
 from datetime import datetime
-from threading import Timer
 
 import pandas as pd
-from PyQt5.QtWidgets import QMainWindow, QMessageBox, QApplication, QDockWidget
-from PyQt5.QtCore import Qt, QSortFilterProxyModel, pyqtSignal, QSettings
+from PyQt5.QtCore import Qt, QSortFilterProxyModel, pyqtSignal
+from PyQt5.QtWidgets import QMainWindow, QMessageBox
+from pandas import DataFrame as pd_DataFrame
+from pandas import read_csv as pd_read_csv
+from pandas import read_json as pd_read_json
 from vtk import (
     vtkPolyData,
     vtkAppendPolyData,
@@ -20,9 +22,44 @@ from vtk import (
     vtkXMLPolyDataReader,
     vtkXMLImageDataReader,
 )
-from pandas import DataFrame as pd_DataFrame
-from pandas import read_json as pd_read_json
-from pandas import read_csv as pd_read_csv
+
+from pzero.collections.background_collection import BackgroundCollection
+from pzero.collections.boundary_collection import BoundaryCollection
+from pzero.collections.dom_collection import DomCollection
+from pzero.collections.fluid_collection import FluidsCollection
+from pzero.collections.geological_collection import GeologicalCollection
+from pzero.collections.image_collection import ImageCollection
+from pzero.collections.mesh3d_collection import Mesh3DCollection
+from pzero.collections.well_collection import WellCollection
+from pzero.collections.xsection_collection import XSectionCollection
+from pzero.helpers.helper_dialogs import (
+    options_dialog,
+    save_file_dialog,
+    open_file_dialog,
+    input_combo_dialog,
+    message_dialog,
+    multiple_input_dialog,
+    input_one_value_dialog,
+    progress_dialog,
+    import_dialog,
+    PreviewWidget,
+)
+from pzero.imports.cesium2vtk import vtk2cesium
+from pzero.imports.dem2vtk import dem2vtk
+from pzero.imports.dxf2vtk import vtk2dxf
+from pzero.imports.gltf2vtk import vtk2gltf
+from pzero.imports.gocad2vtk import gocad2vtk, gocad2vtk_section, gocad2vtk_boundary
+from pzero.imports.image2vtk import geo_image2vtk, xs_image2vtk
+from pzero.imports.lxml2vtk import vtk2lxml
+from pzero.imports.obj2vtk import vtk2obj
+from pzero.imports.pc2vtk import pc2vtk
+from pzero.imports.ply2vtk import vtk2ply
+from pzero.imports.pyvista2vtk import pyvista2vtk
+from pzero.imports.segy2vtk import segy2vtk
+from pzero.imports.shp2vtk import shp2vtk
+from pzero.imports.stl2vtk import vtk2stl, vtk2stl_dilation
+from pzero.imports.vedo2vtk import vedo2vtk
+from pzero.imports.well2vtk import well2vtk
 from pzero.ui.project_window_ui import Ui_ProjectWindow
 from .entities_factory import (
     VertexSet,
@@ -41,49 +78,10 @@ from .entities_factory import (
     Attitude,
     XsImage,
 )
-from pzero.collections.geological_collection import GeologicalCollection
-from pzero.collections.xsection_collection import XSectionCollection
-from pzero.collections.dom_collection import DomCollection
-from pzero.collections.image_collection import ImageCollection
-from pzero.collections.mesh3d_collection import Mesh3DCollection
-from pzero.collections.boundary_collection import BoundaryCollection
-from pzero.collections.well_collection import WellCollection
-from pzero.collections.fluid_collection import FluidsCollection
-from pzero.collections.background_collection import BackgroundCollection
 from .legend_manager import Legend
+from .orientation_analysis import set_normals
+from .point_clouds import decimate_pc
 from .properties_manager import PropertiesCMaps
-from pzero.imports.gltf2vtk import vtk2gltf
-from pzero.imports.cesium2vtk import vtk2cesium
-from pzero.imports.gocad2vtk import gocad2vtk, gocad2vtk_section, gocad2vtk_boundary
-from pzero.imports.pc2vtk import pc2vtk
-from pzero.imports.pyvista2vtk import pyvista2vtk
-from pzero.imports.vedo2vtk import vedo2vtk
-from pzero.imports.shp2vtk import shp2vtk
-from pzero.imports.dem2vtk import dem2vtk
-from pzero.imports.dxf2vtk import vtk2dxf
-from pzero.imports.well2vtk import well2vtk
-from pzero.imports.segy2vtk import segy2vtk
-from .windows_factory import View3D
-from .windows_factory import NewViewMap
-from .windows_factory import NewViewXsection
-from .windows_factory import ViewStereoplot
-from pzero.helpers.helper_dialogs import (
-    options_dialog,
-    save_file_dialog,
-    open_file_dialog,
-    input_combo_dialog,
-    message_dialog,
-    multiple_input_dialog,
-    input_one_value_dialog,
-    progress_dialog,
-    import_dialog,
-    PreviewWidget,
-)
-from pzero.imports.image2vtk import geo_image2vtk, xs_image2vtk
-from pzero.imports.stl2vtk import vtk2stl, vtk2stl_dilation
-from pzero.imports.obj2vtk import vtk2obj
-from pzero.imports.ply2vtk import vtk2ply
-from pzero.imports.lxml2vtk import vtk2lxml
 from .three_d_surfaces import (
     interpolation_delaunay_2d,
     poisson_interpolation,
@@ -99,8 +97,10 @@ from .three_d_surfaces import (
     split_surf,
     retopo,
 )
-from .orientation_analysis import set_normals
-from .point_clouds import decimate_pc
+from .windows_factory import NewViewMap
+from .windows_factory import NewViewXsection
+from .windows_factory import View3D
+from .windows_factory import ViewStereoplot
 
 
 class ProjectWindow(QMainWindow, Ui_ProjectWindow):
@@ -218,17 +218,6 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         """Initialize empty project."""
         self.create_empty()
 
-        """Constants used for opening the following views"""
-        self.view_3D_const = 0
-        self.view_map_const = 1
-        self.view_plane_x_sect_const = 2
-        self.view_stereoplot_const = 3
-
-        """Store the window state of the project_window, we need these values for restoring the default layout"""
-        self.window_settings = QSettings("Andrea Bistacchi", "PZero")
-        self.window_settings.setValue("projectState", self.saveState())
-        self.window_settings.setValue("projectGeometry", self.saveGeometry())
-
         # startup_option = options_dialog(title='PZero', message='Do you want to create a new project or open an existing one?', yes_role='Create New Project', no_role='Open Existing Project', reject_role='Close PZero')
         # if startup_option == 0:
         #     self.TextTerminal.appendPlainText("Creating a new empty project.")
@@ -305,36 +294,17 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.actionRetopologize.triggered.connect(self.retopologize_surface)
 
         """View actions -> slots"""
-        self.actionView3D.triggered.connect(
-            lambda: self.open_secondary_window(self.view_3D_const)
-        )
-        self.actionViewMap.triggered.connect(
-            lambda: self.open_secondary_window(self.view_map_const)
-        )
+        self.actionView3D.triggered.connect(lambda: View3D(parent=self))
+        self.actionViewMap.triggered.connect(lambda: NewViewMap(parent=self))
         self.actionViewPlaneXsection.triggered.connect(
-            lambda: self.open_secondary_window(self.view_plane_x_sect_const)
+            lambda: NewViewXsection(parent=self)
         )
-        self.actionViewStereoplot.triggered.connect(
-            lambda: self.open_secondary_window(self.view_stereoplot_const)
-        )
-
-        """Change StyleSheet actions -> slots """
-        self.actionDarkStyle.triggered.connect(
-            lambda: self.toggle_stylesheet("style/dark_teal.qss")
-        )
-        self.actionLightStyle.triggered.connect(
-            lambda: self.toggle_stylesheet("style/light_teal.qss")
-        )
-
-        """Help actions -> slots"""
-        self.actionRestoreLayout.triggered.connect(lambda: self.restore_default_state())
-        self.actionSaveLayout.triggered.connect(lambda: self.save_current_state())
+        self.actionViewStereoplot.triggered.connect(lambda: ViewStereoplot(parent=self))
 
         self.update_actors = True
 
     def closeEvent(self, event):
-        """Re-implement the standard closeEvent method of QWidget and ask (1) to save project,
-        and (2) for confirmation to quit."""
+        """Re-implement the standard closeEvent method of QWidget and ask (1) to save project, and (2) for confirmation to quit."""
         reply = QMessageBox.question(
             self,
             "Closing Pzero",
@@ -356,55 +326,6 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             event.accept()
         else:
             event.ignore()
-
-    def open_secondary_window(self, window_number):
-        """Function that runs when clicking on View actions,
-        it creates a QDockWidget, and it adds the window to the widget"""
-
-        # Create the q_dock_widget
-        self.q_dock_widget = QDockWidget("Dockable", self)
-
-        # Choose the correct QDockWidget to be added to the QMainWindow
-        if window_number == self.view_3D_const:
-            self.addDockWidget(Qt.TopDockWidgetArea, View3D(parent=self))
-
-        elif window_number == self.view_map_const:
-            self.addDockWidget(Qt.TopDockWidgetArea, NewViewMap(parent=self))
-
-        elif window_number == self.view_plane_x_sect_const:
-            # Check if the X Section is empty, otherwise it cannot add it to the DockWidget
-            if not self.xsect_coll.get_names():
-                self.TextTerminal.appendPlainText(
-                    "Error: No Xsection in project - Try to add at least one XSection"
-                )
-                message_dialog(title="Xsection", message="No Xsection in project")
-                return
-            else:
-                self.addDockWidget(Qt.TopDockWidgetArea, NewViewXsection(parent=self))
-
-        elif window_number == self.view_stereoplot_const:
-            self.addDockWidget(Qt.TopDockWidgetArea, ViewStereoplot(parent=self))
-
-        else:
-            self.TextTerminal.appendPlainText(
-                "Error: window_number is wrong - Secondary Window Not Found"
-            )
-
-        # Call a function after 1 second for saving the current state of the windows (it is necessary for restoring it)
-        timer = Timer(0.1, self.save_current_state)
-        timer.start()  # after 1 second, 'save_current_state' will be called
-
-        return
-
-    def save_current_state(self):
-        """Save the current project_window state"""
-        self.window_settings.setValue("projectState", self.saveState())
-        return
-
-    def restore_default_state(self):
-        """Restore the default state/layout of the project_window"""
-        self.restoreState(self.window_settings.value("projectState"))
-        return
 
     """Methods used to manage the entities shown in tables."""
 
@@ -2728,24 +2649,3 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     df.to_csv(f"{self.out_dir_name}/{uid}.csv")
                 else:
                     print("Only geology objects are supported")
-
-    def toggle_stylesheet(self, path: str) -> None:
-        """
-        Toggle the stylesheet globally to use the desired path.
-        :path:
-        """
-
-        app = QApplication.instance()
-        if app is None:
-            self.TextTerminal.appendPlainText("Didn't find the QApplication instance")
-            return
-
-        try:
-            # Set styling
-            with open(path, "r") as style_file:
-                app.setStyleSheet(style_file.read())
-
-        except Exception as e:
-            self.TextTerminal.appendPlainText(str(e))
-
-        return
