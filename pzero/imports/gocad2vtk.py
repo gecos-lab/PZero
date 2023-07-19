@@ -114,6 +114,17 @@ def gocad2vtk(self=None, in_file_name=None, uid_from_name=None):
         geological_feature_from_name = True
     else:
         geological_feature_from_name = False
+    reset_legend = options_dialog(
+        title="Legend reset",
+        message="Reset color in legend from object properties defined in file",
+        yes_role="Yes",
+        no_role="No",
+        reject_role=None,
+    )
+    if reset_legend == 0:
+        reset_legend = True
+    else:
+        reset_legend = False
     """Open input file"""
     fin = open(in_file_name, "rt")
     """Number of entities before importing________________________________"""
@@ -165,6 +176,11 @@ def gocad2vtk(self=None, in_file_name=None, uid_from_name=None):
             curr_obj_cells = vtkCellArray()
             curr_obj_properties_collection = vtkDataArrayCollection()
             properties_number = 0
+
+        elif "*solid*color:" in clean_line[0]:
+            curr_obj_color_r = float(round(float(clean_line[1]) * 255))
+            curr_obj_color_g = float(round(float(clean_line[2]) * 255))
+            curr_obj_color_b = float(round(float(clean_line[3]) * 255))
 
         elif "name:" in clean_line[0]:
             if clean_line[0] == "name:":
@@ -398,7 +414,7 @@ def gocad2vtk(self=None, in_file_name=None, uid_from_name=None):
                         curr_obj_properties_collection.GetItem(i)
                     )
 
-            print(curr_obj_dict["vtk_obj"])
+            # print(curr_obj_dict["vtk_obj"])
 
             """Add current_entity to entities collection, after checking if the entity is valid."""
             if curr_obj_dict["vtk_obj"].points_number > 0:
@@ -407,6 +423,8 @@ def gocad2vtk(self=None, in_file_name=None, uid_from_name=None):
                 else:
                     if curr_obj_dict["vtk_obj"].cells_number > 0:
                         self.geol_coll.add_entity_from_dict(entity_dict=curr_obj_dict)
+                if reset_legend:
+                    self.geol_coll.set_uid_legend(uid=curr_obj_dict["uid"], color_R=curr_obj_color_r, color_G=curr_obj_color_g, color_B=curr_obj_color_b)
             del curr_obj_points
             del curr_obj_cells
             del curr_obj_properties_collection
