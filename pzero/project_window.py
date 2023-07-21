@@ -523,9 +523,8 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 self.backgrounds_coll.remove_entity(uid=uid)
         self.update_actors = True
 
-    def entities_merge(
-        self,
-    ):  # ____________________________________________________ CHECK (1) HOW PROPERTIES AND TEXTURES ARE AFFECTED BY MERGING, (2) HOW IT WORKS FOR DOMs
+    def entities_merge(self):
+        # ____________________________________________________ CHECK (1) HOW PROPERTIES AND TEXTURES ARE AFFECTED BY MERGING, (2) HOW IT WORKS FOR DOMs
         """Merge entities of the same type - VertexSet, PolyLine, TriSurf, ..."""
         if not self.selected_uids:
             return
@@ -700,9 +699,8 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     dom_uid=dom_uid, map_image_uid=map_image_uid
                 )
 
-    def property_add(
-        self,
-    ):  # ____________________________________________________ ADD IMAGES
+    def property_add(self):
+        # ____________________________________________________ ADD IMAGES
         """Add empty property on geological entity"""
         if not self.shown_table in ["tabGeology", "tabMeshes3D", "tabDOMs"]:
             return
@@ -750,9 +748,8 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         """Finally update properties legend."""
         self.prop_legend.update_widget(self)
 
-    def property_remove(
-        self,
-    ):  # ____________________________________________________ ADD IMAGES
+    def property_remove(self):
+        # ____________________________________________________ ADD IMAGES
         if not self.shown_table in ["tabGeology", "tabMeshes3D", "tabDOMs"]:
             return
         if not self.selected_uids:
@@ -822,17 +819,15 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         """Finally update properties legend."""
         self.prop_legend.update_widget(self)
 
-    def normals_calculate(
-        self,
-    ):  # ____________________________________________________ ADD MORE CASES FOR POINT CLOUDS ETC.
+    def normals_calculate(self):
+        # ____________________________________________________ ADD MORE CASES FOR POINT CLOUDS ETC.
         """Calculate Normals on geological entities (add point clouds and DOMS in the future)."""
         if self.shown_table in ["tabGeology", "tabMeshes3D", "tabDOMs"]:
             if self.selected_uids:
                 set_normals(self)
 
-    def lineations_calculate(
-        self,
-    ):  # ____________________________________________________ IMPLEMENT THIS FOR POINTS WITH PLUNGE/TREND AND FOR POLYLINES
+    def lineations_calculate(self):
+        # ____________________________________________________ IMPLEMENT THIS FOR POINTS WITH PLUNGE/TREND AND FOR POLYLINES
         """Calculate lineations on geological entities."""
         pass
 
@@ -1149,6 +1144,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.prop_legend.update_widget(parent=self)
 
     def save_project(self):
+        #________________________________________WRITERS TO BE MOVED TO COLLECTIONS
         """Save project to file and folder"""
         """Get date and time, used to save incremental revisions."""
         now = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
@@ -2267,9 +2263,8 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 header_row=0,
             )
 
-    def import_SHP(
-        self,
-    ):  # __________________________________________________________________ UPDATE IN shp2vtk.py OR DUPLICATE THIS TO IMPORT SHP GEOLOGY OR BOUNDARY
+    def import_SHP(self):
+        # __________________________________________________________________ UPDATE IN shp2vtk.py OR DUPLICATE THIS TO IMPORT SHP GEOLOGY OR BOUNDARY
         """Import SHP file and update geological collection."""
         self.TextTerminal.appendPlainText("Importing SHP file")
         list = ["Geology", "Fluid contacts", "Background data"]
@@ -2378,9 +2373,8 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         #     # self.TextTerminal.appendPlainText('in_file_name: ' + in_file_name)
         #     well2vtk(in_file_name=in_file_name, col_names=col_names, usecols=index_list, delimiter=delimiter, self=self, header_row=0)
 
-    def import_SEGY(
-        self,
-    ):  # ___________________________________________________________ TO BE REVIEWED AND UPDATED IN MODULE segy2vtk
+    def import_SEGY(self):
+        # ___________________________________________________________ TO BE REVIEWED AND UPDATED IN MODULE segy2vtk
         """Import SEGY file and update Mesh3D collection."""
         self.TextTerminal.appendPlainText("Importing SEGY seismics file.")
         """Select and open input file"""
@@ -2393,9 +2387,8 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
 
     """Methods used to export entities to other file formats."""
 
-    def export_cad(
-        self,
-    ):  # ________________________________________________________________ IMPLEMENT GOCAD EXPORT
+    def export_cad(self):
+        # ________________________________________________________________ IMPLEMENT GOCAD EXPORT
         """Base method to choose a CAD format for exporting geological entities."""
         cad_format = input_combo_dialog(
             parent=self,

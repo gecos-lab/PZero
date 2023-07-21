@@ -727,9 +727,8 @@ class VertexSet(PolyData):
         self.Modified()
 
 
-class PolyLine(
-    PolyData
-):  # _____________________________ HERE WE MUST DECIDE WHETHER TO USE LINE (TYPE = 3) OR POLYLINE (TYPE = 4) CELLS - NOT BOTH - POLYLINE COULD BE USEFUL FOR MULTI-PART
+class PolyLine(PolyData):
+    # _____________________________ HERE WE MUST DECIDE WHETHER TO USE LINE (TYPE = 3) OR POLYLINE (TYPE = 4) CELLS - NOT BOTH - POLYLINE COULD BE USEFUL FOR MULTI-PART
     """PolyLine is a polyline derived from BaseEntity and vtkPolyData"""
 
     def __init__(self, *args, **kwargs):
@@ -1508,9 +1507,8 @@ class Voxet(
         return frame
 
 
-class XsVoxet(
-    Voxet
-):  # _____________________________________________________________ use frame and texture as in XSImage?
+class XsVoxet(Voxet):
+    # _____________________________________________________________ use frame and texture as in XSImage?
     """XsVoxet is a slice of a Voxet performed along a XSection."""
 
     def __init__(self, x_section_uid=None, parent=None, *args, **kwargs):
@@ -1605,9 +1603,8 @@ class XsVoxet(
             Z_min = Z_tmp
         return [W_min, W_max, Z_min, Z_max]
 
-    def image_data(
-        self, show_property=None
-    ):  # _____________________ THERE WAS A NOTE SAYING "CHECK THIS" BUT IT IS PROBABLY OK
+    def image_data(self, show_property=None):
+        # _____________________ THERE WAS A NOTE SAYING "CHECK THIS" BUT IT IS PROBABLY OK
         """Returns a rows_n x columns_n x properties_components numpy array with image data.
         Inspired by vtkimagedata_to_array in vtkplotlib:
         https://github.com/bwoodsend/vtkplotlib/blob/master/vtkplotlib/_image_io.py"""
@@ -1617,9 +1614,8 @@ class XsVoxet(
         return image_data
 
 
-class Seismics(
-    vtkStructuredGrid
-):  # ___________________________________ MUST BE UPDATED AS 2D AND 3D SEISMICS, AND TO WORK AS OTHER CLASSES OF THE IMAGE COLLECTION
+class Seismics(vtkStructuredGrid):
+    # ___________________________________ MUST BE UPDATED AS 2D AND 3D SEISMICS, AND TO WORK AS OTHER CLASSES OF THE IMAGE COLLECTION
     """Seismics is a 3D structured grid, derived from BaseEntity and vtkStructuredGrid.
     NOT ALL SEISMICS MUST BE UNSTRUCTURED."""
 
@@ -1751,40 +1747,34 @@ class Seismics(
                 col
             ]
 
-    def list_cell_data(
-        self,
-    ):  # _______________________ TO BE IMPLEMENTED IF WE WANT TO WORK WITH CELL DATA
+    def list_cell_data(self):
+        # _______________________ TO BE IMPLEMENTED IF WE WANT TO WORK WITH CELL DATA
         """Lists cell attribute names"""
         pass
 
-    def init_cell_data(
-        self, parent=None, data_key=None, dimension=None
-    ):  # _______________________ TO BE IMPLEMENTED IF WE WANT TO WORK WITH CELL DATA
+    def init_cell_data(self, parent=None, data_key=None, dimension=None):
+        # _______________________ TO BE IMPLEMENTED IF WE WANT TO WORK WITH CELL DATA
         """Creates a new cell attribute with name = data_key
         as an empty Numpy array with dimension = 1, 2, 3, 4, 6, or 9"""
         pass
 
-    def remove_cell_data(
-        self, parent=None, data_key=None
-    ):  # _______________________ TO BE IMPLEMENTED IF WE WANT TO WORK WITH CELL DATA
+    def remove_cell_data(self, parent=None, data_key=None):
+        # _______________________ TO BE IMPLEMENTED IF WE WANT TO WORK WITH CELL DATA
         """Remove a cell attribute"""
         pass
 
-    def get_cell_data(
-        self, parent=None, data_key=None
-    ):  # _______________________ TO BE IMPLEMENTED IF WE WANT TO WORK WITH CELL DATA
+    def get_cell_data(self, parent=None, data_key=None):
+        # _______________________ TO BE IMPLEMENTED IF WE WANT TO WORK WITH CELL DATA
         """Returns cell attribute as Numpy array"""
         pass
 
-    def set_cell_data(
-        self, parent=None, data_key=None, attribute_matrix=None
-    ):  # _______________________ TO BE IMPLEMENTED IF WE WANT TO WORK WITH CELL DATA
+    def set_cell_data(self, parent=None, data_key=None, attribute_matrix=None):
+        # _______________________ TO BE IMPLEMENTED IF WE WANT TO WORK WITH CELL DATA
         """Sets cell attribute from Numpy array"""
         pass
 
-    def edit_cell_data(
-        self, parent=None, data_key=None, cell_id=None, cell_data_array=None
-    ):  # _______________________ TO BE IMPLEMENTED IF WE WANT TO WORK WITH CELL DATA
+    def edit_cell_data(self, parent=None, data_key=None, cell_id=None, cell_data_array=None):
+        # _______________________ TO BE IMPLEMENTED IF WE WANT TO WORK WITH CELL DATA
         """Sets cell attribute from Numpy array"""
         pass
 
@@ -1946,40 +1936,34 @@ class DEM(vtkStructuredGrid):
                 col
             ]
 
-    def list_cell_data(
-        self,
-    ):  # _______________________ TO BE IMPLEMENTED IF WE WANT TO WORK WITH CELL DATA
+    def list_cell_data(self):
+        # _______________________ TO BE IMPLEMENTED IF WE WANT TO WORK WITH CELL DATA
         """Lists cell attribute names"""
         pass
 
-    def init_cell_data(
-        self, parent=None, data_key=None, dimension=None
-    ):  # _______________________ TO BE IMPLEMENTED IF WE WANT TO WORK WITH CELL DATA
+    def init_cell_data(self, parent=None, data_key=None, dimension=None):
+        # _______________________ TO BE IMPLEMENTED IF WE WANT TO WORK WITH CELL DATA
         """Creates a new cell attribute with name = data_key
         as an empty Numpy array with dimension = 1, 2, 3, 4, 6, or 9"""
         pass
 
-    def remove_cell_data(
-        self, parent=None, data_key=None
-    ):  # _______________________ TO BE IMPLEMENTED IF WE WANT TO WORK WITH CELL DATA
+    def remove_cell_data(self, parent=None, data_key=None):
+        # _______________________ TO BE IMPLEMENTED IF WE WANT TO WORK WITH CELL DATA
         """Remove a cell attribute"""
         pass
 
-    def get_cell_data(
-        self, parent=None, data_key=None
-    ):  # _______________________ TO BE IMPLEMENTED IF WE WANT TO WORK WITH CELL DATA
+    def get_cell_data(self, parent=None, data_key=None):
+        # _______________________ TO BE IMPLEMENTED IF WE WANT TO WORK WITH CELL DATA
         """Returns cell attribute as Numpy array"""
         pass
 
-    def set_cell_data(
-        self, parent=None, data_key=None, attribute_matrix=None
-    ):  # _______________________ TO BE IMPLEMENTED IF WE WANT TO WORK WITH CELL DATA
+    def set_cell_data(self, parent=None, data_key=None, attribute_matrix=None):
+        # _______________________ TO BE IMPLEMENTED IF WE WANT TO WORK WITH CELL DATA
         """Sets cell attribute from Numpy array"""
         pass
 
-    def edit_cell_data(
-        self, parent=None, data_key=None, cell_id=None, cell_data_array=None
-    ):  # _______________________ TO BE IMPLEMENTED IF WE WANT TO WORK WITH CELL DATA
+    def edit_cell_data(self, parent=None, data_key=None, cell_id=None, cell_data_array=None):
+        # _______________________ TO BE IMPLEMENTED IF WE WANT TO WORK WITH CELL DATA
         """Sets cell attribute from Numpy array"""
         pass
 
@@ -2018,9 +2002,8 @@ class DEM(vtkStructuredGrid):
         self.GetPointData().SetActiveTCoords(map_image_uid)
 
 
-class PCDom(
-    PolyData
-):  # _______________________ DO WE NEED ADDITIONAL METHODS WITH RESPECT TO POLYDATA?
+class PCDom(PolyData):
+    # _______________________ DO WE NEED ADDITIONAL METHODS WITH RESPECT TO POLYDATA?
     """Point Cloud DOM.
     See discussion at https://discourse.vtk.org/t/proposal-adding-a-vtkpointcloud-data-structure/3872/3 ->
     pointset would be better since no cell data is necessary but there are some problems (related to VTK and pyvista):
@@ -2140,9 +2123,8 @@ class PCDom(
         return properties_names
 
 
-class TSDom(
-    PolyData
-):  # __________________________________ TO BE IMPLEMENTED - could also be derived from TriSurf()
+class TSDom(PolyData):
+    # __________________________________ TO BE IMPLEMENTED - could also be derived from TriSurf()
     """Textured Surface DOM"""
 
     def __init__(self, *args, **kwargs):
@@ -2154,9 +2136,8 @@ class TSDom(
         return tsdom_copy
 
 
-class Image(
-    vtkImageData
-):  # _________________________________________________see if it is a good idea to use this also as a superclass to Voxet()
+class Image(vtkImageData):
+    # _________________________________________________see if it is a good idea to use this also as a superclass to Voxet()
     """Image is an abstract class for image data, used as a base for subclasses, derived from
     vtkImageData() that is saved in the project folder as .vti"""
 
@@ -2449,9 +2430,8 @@ class XsImage(Image):
         return pv_image_to_texture(self)
 
 
-class Image3D(
-    Image
-):  # ________________________________________________________________ TO BE IMPLEMENTED - JUST COPY AND PASTE AT THE MOMENT
+class Image3D(Image):
+    # ________________________________________________________________ TO BE IMPLEMENTED - JUST COPY AND PASTE AT THE MOMENT
     """Image3D is a georeferenced (possibly multi-property) 3D image, derived from
     vtkImageData() that is saved in the project folder as .vti"""
 
