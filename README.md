@@ -40,7 +40,7 @@ Alternatively, you can provided that a suitable **Python 3.8** and **[required l
 
 ### Installing PZero source code with Anaconda ###
 
-At the moment the easiest way to run and develop new code for ***PZero*** is to clone this repository locally as [discussed here](https://github.com/andrea-bistacchi/PZero/wiki/How-to-use-GIT-(for-beginners)), and install a suitable **[Anaconda](https://www.anaconda.com/)** environment as [discussed here](https://github.com/andrea-bistacchi/PZero/wiki/How-to-install-and-manage-CONDA-environments-(for-beginners)). Alternatively PyPi could be used in macOS and Linex [as explained here](https://github.com/andrea-bistacchi/PZero/wiki/Installation-on-macOS-and-Linux-with-PyPI-using-pip).
+At the moment the easiest way to run and develop new code for ***PZero*** is to clone this repository locally as [discussed here](https://github.com/andrea-bistacchi/PZero/wiki/How-to-use-GIT-(for-beginners)), and install a suitable **[Anaconda](https://www.anaconda.com/)** environment as [explained here](https://github.com/andrea-bistacchi/PZero/wiki/How-to-install-and-manage-CONDA-environments-(for-beginners)). Alternatively PyPi could be used in macOS and Linux as [discussed here](https://github.com/andrea-bistacchi/PZero/wiki/Installation-on-macOS-and-Linux-with-PyPI-using-pip).
 
 Then you can start PZero from PyCharm, or from the terminal with:
 
