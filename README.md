@@ -36,7 +36,7 @@ If you want to know more about the project or want to contribute, our [GitHub Wi
 
 ***PZero*** runs on **Linux**, **macOS** and **Windows**. Executable files can be [downloaded from the releases section of this repository](https://github.com/andrea-bistacchi/PZero/releases).
 
-Alternatively, you can provided that a suitable **Python 3.8** and **[required libraries](envs/std-environment.yml)** are available.
+Alternatively, you can download the most recent source code and test it, provided that a suitable **Python** and **[required libraries](envs/std-environment.yml)** are available.
 
 ### Installing PZero source code with Anaconda ###
 
