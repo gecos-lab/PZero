@@ -10,13 +10,13 @@ To build ***PZero*** we use several open-source libraries. **[VTK](https://vtk.o
 
 Developers of these libraries are warmly thanked!
 
-The ***PZero*** project started in spring 2020 thanks to a research project funded by **[Pro Iter Tunnelling & Geotechnical Department](https://www.proiter.it/)** and lead by **Andrea Bistacchi** and **Luca Soldo**.
+The ***PZero*** project started in spring 2020 thanks to a research project funded by **[Pro Iter Tunnelling & Geotechnical Department](https://www.proiter.it/)** and lead by **Andrea Bistacchi** and **Luca Soldo**. ***PZero*** is now supported by the **[Geosciences IR](https://geosciences-ir.it/)** project lead by **[ISPRA - Servizio Geologico d'Italia](https://www.isprambiente.gov.it/it/servizi/il-servizio-geologico-ditalia)** and funded by **[PNRR](https://www.mur.gov.it/it/pnrr/missione-istruzione-e-ricerca)**.
 
-The ***PZero*** developers are:
+The ***PZero*** developers are (or have been):
 * Andrea Bistacchi (since the beginning)
 * Gloria Arienti (since December 2020)
 * Gabriele Benedetti (since January 2022)
-* Tommaso Comelli (since April 2023)
+* Tommaso Comelli (April 2023 - July 2023)
 * Luca Penasa (since April 2023)
 
 ***PZero*** © 2020 by Andrea Bistacchi, released under [GNU AGPLv3 license](LICENSE.txt).
