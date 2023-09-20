@@ -30,7 +30,8 @@ jobs:
           channel-priority: true
           activate-environment: pzero-testing
           environment-file: envs/std-environment.yml
-          python-version: 3.8.16
+          # python-version: 3.8.16
+          python-version: 3.8
           auto-activate-base: false
 
       - name: Check Conda Dependencies
@@ -75,7 +76,8 @@ jobs:
           channel-priority: true
           activate-environment: pzero-test
           environment-file: envs/std-environment.yml
-          python-version: 3.8.16
+          # python-version: 3.8.16
+          python-version: 3.8
           auto-activate-base: false
 
       - name: Check Conda Dependencies
@@ -119,8 +121,10 @@ jobs:
           channels: conda-forge,defaults
           channel-priority: true
           activate-environment: pzero-test
-          environment-file: envs/macos-environment.yml
-          python-version: 3.8.16
+          # environment-file: envs/macos-environment.yml
+          environment-file: envs/std-environment.yml
+          # python-version: 3.8.16
+          python-version: 3.8
           auto-activate-base: false
 
       - name: Check Conda Dependencies
