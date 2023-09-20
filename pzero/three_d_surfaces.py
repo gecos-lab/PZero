@@ -555,6 +555,7 @@ def implicit_model_loop_structural(self):
     tic()
     voxet_dict = deepcopy(self.mesh3d_coll.mesh3d_entity_dict)
     """Get output Voxet name."""
+    print("voxet_dict")
     model_name = input_text_dialog(
         title="Implicit Modelling - LoopStructural algorithms",
         label="Name of the output Voxet",
@@ -562,6 +563,7 @@ def implicit_model_loop_structural(self):
     )
     if model_name is None:
         model_name = "Loop_model"
+    print(model_name)
     voxet_dict["name"] = model_name
     voxet_dict["mesh3d_type"] = "Voxet"
     voxet_dict["properties_names"] = ["strati_0"]
@@ -576,6 +578,7 @@ def implicit_model_loop_structural(self):
     ]
     voxet_dict["vtk_obj"].dimensions = dimensions
     voxet_dict["vtk_obj"].spacing = spacing
+    print(voxet_dict)
     toc()
     """Pass calculated values of the LoopStructural model to the Voxet, as scalar fields"""
     print("-> populate Voxet...")
