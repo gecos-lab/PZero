@@ -29,4 +29,3 @@ dependencies:
   - vedo
   - vtk
   - xarray
-prefix: C:\Users\bistek\anaconda3\envs\pzero
