@@ -60,6 +60,7 @@ from vtk import (
     vtkTubeFilter,
     vtkActor,
     vtkLocator,
+    vtkQuad,
 )
 from vtkmodules.numpy_interface.dataset_adapter import (
     WrapDataObject,
@@ -682,9 +683,8 @@ class PolyData(vtkPolyData):
         return homo_points
 
 
-class Plane(
-    vtkPlane
-):  # _______________________ AT THE MOMENT THIS DOES NOT EXPOSE ANY OTHER METHOD - SEE IF IT IS USEFUL
+class Plane(vtkPlane):
+    # _______________________ AT THE MOMENT THIS DOES NOT EXPOSE ANY OTHER METHOD - SEE IF IT IS USEFUL
     """Plane is a class used as a base for cross-section planes. Basically this is the standard vtkPlane
     class, but exposes methods from vtk.numpy_interface.dataset_adapter (dsa) to access data as Numpy
     arrays instead of VTK arrays. Numpy arrays are just a reference to the underlying VTK arrays, so
@@ -1034,13 +1034,50 @@ class TriSurf(PolyData):
     def world2plane(self, normal=None):
         dip_vec, dir_vec = get_dip_dir_vectors(normal)
         uv = np_zeros((self.GetNumberOfPoints(), 2))
-
         for i, point in enumerate(self.points):
             uv[i, 0] = np_dot(dir_vec[0], point)  # u
             uv[i, 1] = -np_dot(
                 dip_vec[0], point
             )  # v is negative because of the right hand rule
+        return uv
 
+
+class Frame(PolyData):
+    """Frame is a rectangular surface made of a single rectangular cell, derived from BaseEntity and vtkPolyData"""
+
+    def __init__(self, *args, **kwargs):
+        super(Frame, self).__init__(*args, **kwargs)
+        quad = vtkQuad()
+        quad.GetPointIds().SetId(0, 0)
+        quad.GetPointIds().SetId(1, 1)
+        quad.GetPointIds().SetId(2, 2)
+        quad.GetPointIds().SetId(3, 3)
+        surf_cells = vtkCellArray()
+        surf_cells.InsertNextCell(quad)
+        self.SetPolys(surf_cells)
+
+    def deep_copy(self):
+        frame_copy = Frame()
+        frame_copy.DeepCopy(self)
+        return frame_copy
+
+    @property
+    def cells(self):
+        """Returns cells as Numpy array.
+        In Frame the cells are instances of vtkQuad identified by vtkCellType VTK_QUAD = 9
+        """
+        return (vtkDataArrayToVTKArray(self.GetPolys().GetData())).reshape(
+            (self.GetNumberOfPolys(), 9)
+        )[:, 1:5]
+
+    def world2plane(self, normal=None):
+        dip_vec, dir_vec = get_dip_dir_vectors(normal)
+        uv = np_zeros((self.GetNumberOfPoints(), 2))
+        for i, point in enumerate(self.points):
+            uv[i, 0] = np_dot(dir_vec[0], point)  # u
+            uv[i, 1] = -np_dot(
+                dip_vec[0], point
+            )  # v is negative because of the right hand rule
         return uv
 
 
@@ -1146,9 +1183,8 @@ class XsPolyLine(PolyLine, XSectionBaseEntity):
         return xpline_copy
 
 
-class XsTriSurf(
-    TriSurf, XSectionBaseEntity
-):  # ______________________________________ NOT YET USED - SEE IF THIS IS USEFUL
+class XsTriSurf(TriSurf, XSectionBaseEntity):
+    # ______________________________________ NOT YET USED - SEE IF THIS IS USEFUL
     """XsTriSurf is a triangulated surface belonging to a unique XSection, derived from XSectionBaseEntity and TriSurf"""
 
     def __init__(self, *args, **kwargs):
@@ -1160,9 +1196,8 @@ class XsTriSurf(
         return xtsurf_copy
 
 
-class TetraSolid(
-    vtkUnstructuredGrid
-):  # ______________________________________ NOT YET USED - EVERYTHING MUST BE CHECKED - ADD METHODS SIMILAR TO POLYDATA
+class TetraSolid(vtkUnstructuredGrid):
+    # ______________________________________ NOT YET USED - EVERYTHING MUST BE CHECKED - ADD METHODS SIMILAR TO POLYDATA
     """TetraSolid is a tetrahedral mesh, derived from vtkUnstructuredGrid"""
 
     def __init__(self, *args, **kwargs):
@@ -1209,9 +1244,8 @@ class TetraSolid(
         return edges.GetOutput()
 
 
-class Voxet(
-    vtkImageData
-):  # _______________________________________________ SEE IF POINT METHODS MAKE SENSE HERE - NOW COMMENTED
+class Voxet(vtkImageData):
+    # _______________________________________________ SEE IF POINT METHODS MAKE SENSE HERE - NOW COMMENTED
     """Voxet is a 3D image, derived from BaseEntity and vtkImageData"""
 
     """Add methods similar to PolyData for points."""
@@ -2274,10 +2308,12 @@ class MapImage(Image):
             ]
         )
         """Rectangular face and frame."""
-        face = np_hstack([[4, 0, 1, 2, 3]])
-        frame = pv_PolyData(points, face)
+        frame = Frame()
+        frame.points = points
         """Apply texture coordinates."""
-        frame.t_coords = np_array([[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]])
+        t_coords = np_array([[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]])
+        frame.set_point_data(data_key="t_coords", attribute_matrix=t_coords)
+        frame.GetPointData().SetActiveTCoords("t_coords")
         return frame
 
     @property
@@ -2419,10 +2455,12 @@ class XsImage(Image):
             ]
         )
         """Rectangular face and frame."""
-        face = np_hstack([[4, 0, 1, 2, 3]])
-        frame = pv_PolyData(points, face)
+        frame = Frame()
+        frame.points = points
         """Apply texture coordinates."""
-        frame.t_coords = np_array([[0.0, 1.0], [0.0, 0.0], [1.0, 0.0], [1.0, 1.0]])
+        t_coords = np_array([[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]])
+        frame.set_point_data(data_key="t_coords", attribute_matrix=t_coords)
+        frame.GetPointData().SetActiveTCoords("t_coords")
         return frame
 
     @property
