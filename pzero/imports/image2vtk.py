@@ -79,13 +79,14 @@ def geo_image2vtk(self=None, in_file_name=None):
                 1,
             ]
         )
-        # vtk_image.SetOrigin([img_x_min, img_y_max, 0])
+        vtk_image.SetOrigin([img_x_min, img_y_max, 0])
+        # For some reason we wer re-centering the image as follows, with the comment: "Maybe not the best solution,
+        # we should add an option to add re-centering every object using the same translation vector." However this
+        # was shifting the image in a wrong position. I keep this code here in case it was useful for some reason.
+        # vtk_image.SetOrigin(
+        #     [img_x_min - round(img_x_min, -2), img_y_max - round(img_y_min, -2), 0]
+        # )
 
-        vtk_image.SetOrigin(
-            [img_x_min - round(img_x_min, -2), img_y_max - round(img_y_min, -2), 0]
-        )
-        # Re-centering the image. Maybe not the best solution, we should add an option to add re-centering every object
-        # using the same translation vector.
         """Add the vtk array image data"""
         vtk_image.GetPointData().AddArray(vtk_array)
         if geo_image.count == 1:
@@ -98,12 +99,12 @@ def geo_image2vtk(self=None, in_file_name=None):
         curr_obj_dict["uid"] = str(uuid.uuid4())
         curr_obj_dict["name"] = os.path.basename(in_file_name)
         curr_obj_dict["image_type"] = "MapImage"
-        curr_obj_dict["properties_components"] = vtk_image.properties_components
-        curr_obj_dict["properties_types"] = vtk_image.properties_types
         if geo_image.count == 1:
             curr_obj_dict["properties_names"] = ["greyscale"]
         elif geo_image.count >= 3:
             curr_obj_dict["properties_names"] = ["RGB"]
+        curr_obj_dict["properties_components"] = vtk_image.properties_components
+        curr_obj_dict["properties_types"] = vtk_image.properties_types
         curr_obj_dict["vtk_obj"] = vtk_image
         """Add to entity collection."""
         self.image_coll.add_entity_from_dict(entity_dict=curr_obj_dict)
@@ -218,13 +219,13 @@ def xs_image2vtk(self=None, in_file_name=None, x_section_uid=None):
     curr_obj_dict["uid"] = str(uuid.uuid4())
     curr_obj_dict["name"] = os.path.basename(in_file_name)
     curr_obj_dict["image_type"] = "XsImage"
-    curr_obj_dict["properties_components"] = vtk_image.properties_components
-    curr_obj_dict["properties_types"] = vtk_image.properties_types
-    curr_obj_dict["x_section"] = x_section_uid
     if xs_image.count == 1:
         curr_obj_dict["properties_names"] = ["greyscale"]
     elif xs_image.count == 3:
         curr_obj_dict["properties_names"] = ["RGB"]
+    curr_obj_dict["properties_components"] = vtk_image.properties_components
+    curr_obj_dict["properties_types"] = vtk_image.properties_types
+    curr_obj_dict["x_section"] = x_section_uid
     curr_obj_dict["vtk_obj"] = vtk_image
     """Add to entity collection."""
     self.image_coll.add_entity_from_dict(entity_dict=curr_obj_dict)

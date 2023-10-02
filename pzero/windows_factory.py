@@ -6454,7 +6454,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
 
     def remove_actor_in_view(self, uid=None, redraw=False):
         update = self.parent.update_actors
-        print(update)
+        print("update: ", update)
         """"Remove actor from plotter"""
         """plotter.remove_actor can remove a single entity or a list of entities as actors -> 
         here we remove a single entity"""
