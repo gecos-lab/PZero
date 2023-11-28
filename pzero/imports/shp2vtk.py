@@ -169,12 +169,14 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
                     # print(np_shape(outXYZ))
                     curr_obj_dict["vtk_obj"].points = outXYZ
 
-                    if "dip_dir" in column_names:
-                        dir = pd_series((gdf_index.loc[i, "dip_dir"] - 90) % 360)
-                        curr_obj_dict["vtk_obj"].set_point_data("dir", dir.values)
                     if "dir" in column_names:
+                        direction = pd_series((gdf_index.loc[i, "dir"] + 90) % 360)
                         curr_obj_dict["vtk_obj"].set_point_data(
-                            "dir", pd_series(gdf_index.loc[i, "dir"]).values
+                            "dip_dir", direction.values
+                        )
+                    if "dip_dir" in column_names:
+                        curr_obj_dict["vtk_obj"].set_point_data(
+                            "dip_dir", pd_series(gdf_index.loc[i, "dip_dir"]).values
                         )
                     if "dip":
                         curr_obj_dict["vtk_obj"].set_point_data(
@@ -187,7 +189,7 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
                         # print(type(curr_obj_dict["vtk_obj"].get_point_data('dip')))
                         normals = dip_directions2normals(
                             curr_obj_dict["vtk_obj"].get_point_data("dip"),
-                            curr_obj_dict["vtk_obj"].get_point_data("dir"),
+                            curr_obj_dict["vtk_obj"].get_point_data("dip_dir"),
                         )
                         curr_obj_dict["vtk_obj"].set_point_data("Normals", normals)
 

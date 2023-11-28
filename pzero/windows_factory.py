@@ -11012,7 +11012,7 @@ class NewViewMap(NewView2D):
                     appender = vtkAppendPolyData()
                     r = self.parent.geol_coll.get_uid_legend(uid=uid)["point_size"] * 4
                     normals = plot_entity.get_point_data("Normals")
-                    _, dir_vectors, az_vectors = get_dip_dir_vectors(
+                    az_vectors, dir_vectors = get_dip_dir_vectors(
                         normals=normals, az=True
                     )
                     line1 = pv_Line(pointa=(0, 0, 0), pointb=(r, 0, 0))
