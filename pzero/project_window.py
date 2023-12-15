@@ -1025,7 +1025,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                         vtk_out_dict["vtk_obj"] = vtk_object
                         collection.add_entity_from_dict(entity_dict=vtk_out_dict)
                     collection.remove_entity(uid)
-                if isinstance(collection.get_uid_vtk_obj(uid), PCDom):
+                elif isinstance(collection.get_uid_vtk_obj(uid), PCDom):
                     vtk_out_list = collection.get_uid_vtk_obj(uid).split_parts()
                     for i, vtk_object in enumerate(vtk_out_list):
                         vtk_out_dict = deepcopy(
