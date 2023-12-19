@@ -1,7 +1,10 @@
 """windows_factory.py
 PZero© Andrea Bistacchi"""
 from vtkmodules.vtkRenderingCore import vtkPropPicker
-
+from vtk import vtkAssembly
+from vtk import vtkActor, vtkPolyDataMapper
+import vtk
+import pyvista as pv
 """QT imports"""
 from PyQt5.QtWidgets import *
 from PyQt5.QtCore import Qt
@@ -6841,9 +6844,21 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             )
         elif isinstance(plot_entity, Seismics):
             plot_rgb_option = None
+            this_actor = None
+
             if isinstance(plot_entity.points, np_ndarray):
-                """This  check is needed to avoid errors when trying to plot an empty
-                PolyData, just created at the beginning of a digitizing session."""
+                # Define the colormap based on the property name
+                show_property_cmap = None
+                if show_property_title in self.parent.prop_legend_df["property_name"].values:
+                    show_property_cmap = self.parent.prop_legend_df.loc[
+                        self.parent.prop_legend_df["property_name"] == show_property_title,
+                        "colormap"
+                    ].values[0]
+                else:
+                    # Handle the case where the property name does not exist
+                    # You could set a default colormap or handle this case as needed
+                    show_property_cmap = "seismic"  # Replace with your default or desired action
+
                 if show_property is None:
                     show_scalar_bar = False
                     pass
@@ -6857,24 +6872,34 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                 elif show_property == "Z":
                     show_property = plot_entity.points_Z
                 else:
-                    if plot_entity.get_point_data_shape(show_property)[-1] == 3:
-                        plot_rgb_option = True
-                this_actor = self.plot_mesh(
-                    uid=uid,
-                    plot_entity=plot_entity,
-                    color_RGB=color_RGB,
-                    show_property=show_property,
-                    show_scalar_bar=show_scalar_bar,
-                    color_bar_range=None,
-                    show_property_title=show_property_title,
-                    line_thick=line_thick,
-                    plot_texture_option=False,
-                    plot_rgb_option=plot_rgb_option,
-                    visible=visible,
-                    opacity=opacity,
-                )
+                    show_property = 'intensity'
+
+                # Call plot_seismics to add interactive slicing planes
+                self.plotter.clear()
+                this_actor = self.plot_seismics(uid=uid,
+                                                plot_entity=plot_entity,
+                                                color_RGB=None,
+                                                show_property=show_property,
+                                                show_scalar_bar=show_scalar_bar,
+                                                color_bar_range=None,
+                                                show_property_title=show_property_title,
+                                                plot_texture_option=False,
+                                                plot_rgb_option=plot_rgb_option,
+                                                visible=visible)
+
+
+                # if combined_assembly:
+                #     # Add the assembly to the plotter
+                #     self.plotter.add_actor(combined_assembly)
+                #
+                #     # Apply additional settings to the assembly
+                #     # Note: vtkAssembly does not have GetProperty method, so setting color and opacity might need a different approach
+                #     combined_assembly.SetVisibility(visible)  # Set visibility
+                #
+                #     this_actor = combined_assembly  # Store the assembly as this_actor
             else:
                 this_actor = None
+            return this_actor
         elif isinstance(plot_entity, Voxet):
             plot_rgb_option = None
             if plot_entity.cells_number > 0:
@@ -7239,7 +7264,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             log_scale=False,
         )
         if not visible:
-            this_actor.SetVisibility(False)
+            self.plotter.clear()
         if not self.actors_df.empty:
             """See above."""
             self.plotter.camera_position = camera_position
@@ -7812,6 +7837,372 @@ class View3D(BaseView):
             self.plotter.camera_position = camera_position
         return this_actor
 
+    def plot_seismics(
+            self,
+            uid=None,
+            plot_entity=None,
+            color_RGB=None,
+            show_property=None,
+            show_scalar_bar=None,
+            color_bar_range=None,
+            show_property_title=None,
+            line_thick=None,
+            plot_texture_option=None,
+            plot_rgb_option=None,
+            visible=None,
+            style="surface",
+            point_size=None,
+            points_as_spheres=False,
+            render_lines_as_tubes=False,
+            pickable=True,
+            opacity=1.0,
+            smooth_shading=False,
+    ):
+        """
+        Plots a seismic volume.
+
+        Args:
+            uid (str): A unique identifier for the plot.
+            plot_entity (Union[str, np.ndarray, xarray.DataArray]): The seismic volume to be plotted.
+            color_RGB (Iterable[int]): The RGB color of the seismic volume.
+            show_property (str): The name of the property to visualize.
+            show_scalar_bar (bool): Whether to show a colorbar for the visualized property.
+            color_bar_range (Tuple[float, float]): The range of values for the colorbar.
+            show_property_title (str): The title of the colorbar.
+            line_thick (int): The thickness of the lines.
+            plot_texture_option (Union[bool, vtk.vtkTexture, np.ndarray]): The texture to apply to the seismic volume.
+            plot_rgb_option (bool): Whether to use the input data as RGB data.
+            visible (bool): Whether the plot is visible initially.
+            style (str): The style of the plot ("surface", "wireframe", or "points").
+            point_size (int): The size of the points.
+            points_as_spheres (bool): Whether to render points as spheres.
+            render_lines_as_tubes (bool): Whether to render lines as tubes.
+            pickable (bool): Whether the plot is pickable (i.e., can be selected interactively).
+            opacity (float): The opacity of the seismic volume.
+            smooth_shading (bool): Whether to use smooth shading for the surface plot.
+
+        Returns:
+            vtk.vtkAssembly: The assembly containing the plotted data.
+        """
+
+        if not self.actors_df.empty:
+            camera_position = self.plotter.camera_position
+
+        if show_property_title is not None and show_property_title != "none":
+            show_property_cmap = self.parent.prop_legend_df.loc[
+                self.parent.prop_legend_df["property_name"] == show_property_title,
+                "colormap",
+            ].values[0]
+        else:
+            show_property_cmap = None   
+
+        vtk_grid = pv.wrap(plot_entity)
+
+
+        # Interactive Slicing
+        # slice_actors = []
+        combined_assembly = vtk.vtkAssembly()
+
+        x_slice = self.plotter.add_mesh_slice(
+            vtk_grid,
+            normal=(1, 0, 0),
+            normal_rotation=False,
+            assign_to_axis='x',
+            color=color_RGB,
+            style=style,  # 'surface' (default), 'wireframe', or 'points'
+            scalars=show_property,  # str pointing to vtk property or numpy.ndarray
+            clim=color_bar_range,  # color bar range for scalars, e.g. [-1, 2]
+            show_edges=None,  # bool
+            edge_color=None,  # default black
+            point_size=point_size,  # was 5.0
+            line_width=line_thick,
+            opacity=opacity,
+            flip_scalars=False,  # flip direction of cmap
+            lighting=None,  # bool to enable view-direction lighting
+            n_colors=256,  # number of colors to use when
+            interpolate_before_map=True,
+            # bool for smoother scalars display (default True)
+            cmap=show_property_cmap,
+            # ____________________________ name of the Matplotlib colormap, includes 'colorcet' and 'cmocean', and custom colormaps like ['green', 'red', 'blue']
+            label=None,  # string label for legend with pyvista.BasePlotter.add_legend
+            reset_camera=None,
+            scalar_bar_args={
+                "title": show_property_title,
+                "title_font_size": 10,
+                "label_font_size": 8,
+                "shadow": True,
+                "interactive": True,
+            },
+            # keyword arguments for scalar bar, see pyvista.BasePlotter.add_scalar_bar
+            show_scalar_bar=show_scalar_bar,  # bool (default True)
+            multi_colors=False,  # for MultiBlock datasets
+            name='x_slice',  # actor name
+            texture=plot_texture_option,
+            # ________________________________ vtk.vtkTexture or np_ndarray or boolean, will work if input mesh has texture coordinates. True > first available texture. String > texture with that name already associated to mesh.
+            render_points_as_spheres=points_as_spheres,
+            render_lines_as_tubes=render_lines_as_tubes,
+            smooth_shading=smooth_shading,
+            ambient=0.0,
+            diffuse=1.0,
+            specular=0.0,
+            specular_power=100.0,
+            nan_color=None,  # color to use for all NaN values
+            nan_opacity=1.0,  # opacity to use for all NaN values
+            culling=None,
+            # 'front', 'back', 'false' (default) > does not render faces that are culled
+            rgb=plot_rgb_option,  # True > plot array values as RGB(A) colors
+            categories=False,
+            # True > number of unique values in the scalar used as 'n_colors' argument
+            use_transparency=False,
+            # _______________________ invert the opacity mapping as transparency mapping
+            below_color=None,
+            # solid color for values below the scalars range in 'clim'
+            above_color=None,
+            # solid color for values above the scalars range in 'clim'
+            annotations=None,
+            # dictionary of annotations for scale bar withor 'points'h keys = float values and values = string annotations
+            pickable=pickable,  # bool
+            preference="point",
+            log_scale=False,
+        )
+
+        combined_assembly.AddPart(x_slice)
+
+        y_slice = self.plotter.add_mesh_slice(
+            vtk_grid,
+            normal=(0, 1, 0),
+            normal_rotation=False,
+            assign_to_axis='y',
+            color=color_RGB,
+            style=style,  # 'surface' (default), 'wireframe', or 'points'
+            scalars=show_property,  # str pointing to vtk property or numpy.ndarray
+            clim=color_bar_range,  # color bar range for scalars, e.g. [-1, 2]
+            show_edges=None,  # bool
+            edge_color=None,  # default black
+            point_size=point_size,  # was 5.0
+            line_width=line_thick,
+            opacity=opacity,
+            flip_scalars=False,  # flip direction of cmap
+            lighting=None,  # bool to enable view-direction lighting
+            n_colors=256,  # number of colors to use when
+            interpolate_before_map=True,
+            # bool for smoother scalars display (default True)
+            cmap=show_property_cmap,
+            # ____________________________ name of the Matplotlib colormap, includes 'colorcet' and 'cmocean', and custom colormaps like ['green', 'red', 'blue']
+            label=None,  # string label for legend with pyvista.BasePlotter.add_legend
+            reset_camera=None,
+            scalar_bar_args={
+                "title": show_property_title,
+                "title_font_size": 10,
+                "label_font_size": 8,
+                "shadow": True,
+                "interactive": True,
+            },
+            # keyword arguments for scalar bar, see pyvista.BasePlotter.add_scalar_bar
+            show_scalar_bar=show_scalar_bar,  # bool (default True)
+            multi_colors=False,  # for MultiBlock datasets
+            name='y_slice',  # actor name
+            texture=plot_texture_option,
+            # ________________________________ vtk.vtkTexture or np_ndarray or boolean, will work if input mesh has texture coordinates. True > first available texture. String > texture with that name already associated to mesh.
+            render_points_as_spheres=points_as_spheres,
+            render_lines_as_tubes=render_lines_as_tubes,
+            smooth_shading=smooth_shading,
+            ambient=0.0,
+            diffuse=1.0,
+            specular=0.0,
+            specular_power=100.0,
+            nan_color=None,  # color to use for all NaN values
+            nan_opacity=1.0,  # opacity to use for all NaN values
+            culling=None,
+            # 'front', 'back', 'false' (default) > does not render faces that are culled
+            rgb=plot_rgb_option,  # True > plot array values as RGB(A) colors
+            categories=False,
+            # True > number of unique values in the scalar used as 'n_colors' argument
+            use_transparency=False,
+            # _______________________ invert the opacity mapping as transparency mapping
+            below_color=None,
+            # solid color for values below the scalars range in 'clim'
+            above_color=None,
+            # solid color for values above the scalars range in 'clim'
+            annotations=None,
+            # dictionary of annotations for scale bar withor 'points'h keys = float values and values = string annotations
+            pickable=pickable,  # bool
+            preference="point",
+            log_scale=False,
+        )
+
+        combined_assembly.AddPart(y_slice)
+
+        z_slice = self.plotter.add_mesh_slice(
+            vtk_grid,
+            normal=(0, 0, 1),
+            normal_rotation=False,
+            assign_to_axis='z',
+            color=color_RGB,
+            style=style,  # 'surface' (default), 'wireframe', or 'points'
+            scalars=show_property,  # str pointing to vtk property or numpy.ndarray
+            clim=color_bar_range,  # color bar range for scalars, e.g. [-1, 2]
+            show_edges=None,  # bool
+            edge_color=None,  # default black
+            point_size=point_size,  # was 5.0
+            line_width=line_thick,
+            opacity=opacity,
+            flip_scalars=False,  # flip direction of cmap
+            lighting=None,  # bool to enable view-direction lighting
+            n_colors=256,  # number of colors to use when
+            interpolate_before_map=True,
+            # bool for smoother scalars display (default True)
+            cmap=show_property_cmap,
+            # ____________________________ name of the Matplotlib colormap, includes 'colorcet' and 'cmocean', and custom colormaps like ['green', 'red', 'blue']
+            label=None,  # string label for legend with pyvista.BasePlotter.add_legend
+            reset_camera=None,
+            scalar_bar_args={
+                "title": show_property_title,
+                "title_font_size": 10,
+                "label_font_size": 8,
+                "shadow": True,
+                "interactive": True,
+            },
+            # keyword arguments for scalar bar, see pyvista.BasePlotter.add_scalar_bar
+            show_scalar_bar=show_scalar_bar,  # bool (default True)
+            multi_colors=False,  # for MultiBlock datasets
+            name='z_slice',  # actor name
+            texture=plot_texture_option,
+            # ________________________________ vtk.vtkTexture or np_ndarray or boolean, will work if input mesh has texture coordinates. True > first available texture. String > texture with that name already associated to mesh.
+            render_points_as_spheres=points_as_spheres,
+            render_lines_as_tubes=render_lines_as_tubes,
+            smooth_shading=smooth_shading,
+            ambient=0.0,
+            diffuse=1.0,
+            specular=0.0,
+            specular_power=100.0,
+            nan_color=None,  # color to use for all NaN values
+            nan_opacity=1.0,  # opacity to use for all NaN values
+            culling=None,
+            # 'front', 'back', 'false' (default) > does not render faces that are culled
+            rgb=plot_rgb_option,  # True > plot array values as RGB(A) colors
+            categories=False,
+            # True > number of unique values in the scalar used as 'n_colors' argument
+            use_transparency=False,
+            # _______________________ invert the opacity mapping as transparency mapping
+            below_color=None,
+            # solid color for values below the scalars range in 'clim'
+            above_color=None,
+            # solid color for values above the scalars range in 'clim'
+            annotations=None,
+            # dictionary of annotations for scale bar withor 'points'h keys = float values and values = string annotations
+            pickable=pickable,  # bool
+            preference="point",
+            log_scale=False,
+        )
+
+        combined_assembly.AddPart(z_slice)
+
+        if not visible:
+            self.plotter.clear()
+        return combined_assembly
+
+        # slice_actors.append()  # X-axis
+
+        # if not visible:
+        #     combined_assembly.SetVisibility(False)
+        # if not self.actors_df.empty:
+        #     """See above."""
+        #     self.plotter.camera_position = camera_position
+        # slice_actors.append(self.plotter.add_mesh_slice(vtk_grid, normal=(0, 1, 0)))  # Y-axis
+        #
+        #
+        # slice_actors.append(self.plotter.add_mesh_slice(plot_entity, normal=(0, 0, 1)))  # Z-axis
+
+        # Combine slice actors into a vtkAssembly
+
+        # for actor in slice_actors:
+        #     combined_assembly.AddPart(actor)
+
+
+        # this_actor = self.plotter.add_mesh(
+        #     combined_assembly,
+        #     color=color_RGB,
+        #     # string, RGB list, or hex string, overridden if scalars are specified
+        #     style=style,  # 'surface' (default), 'wireframe', or 'points'
+        #     scalars=show_property,  # str pointing to vtk property or numpy.ndarray
+        #     clim=color_bar_range,  # color bar range for scalars, e.g. [-1, 2]
+        #     show_edges=None,  # bool
+        #     edge_color=None,  # default black
+        #     point_size=point_size,  # was 5.0
+        #     line_width=line_thick,
+        #     opacity=opacity,
+        #     # ___________________ single value > uniform opacity. A string can be specified to map the scalars range to opacity.
+        #     flip_scalars=False,  # flip direction of cmap
+        #     lighting=None,  # bool to enable view-direction lighting
+        #     n_colors=256,  # number of colors to use when displaying scalars
+        #     interpolate_before_map=True,
+        #     # bool for smoother scalars display (default True)
+        #     cmap=show_property_cmap,
+        #     # ____________________________ name of the Matplotlib colormap, includes 'colorcet' and 'cmocean', and custom colormaps like ['green', 'red', 'blue']
+        #     label=None,  # string label for legend with pyvista.BasePlotter.add_legend
+        #     reset_camera=None,
+        #     scalar_bar_args={
+        #         "title": show_property_title,
+        #         "title_font_size": 10,
+        #         "label_font_size": 8,
+        #         "shadow": True,
+        #         "interactive": True,
+        #     },
+        #     # keyword arguments for scalar bar, see pyvista.BasePlotter.add_scalar_bar
+        #     show_scalar_bar=show_scalar_bar,  # bool (default True)
+        #     multi_colors=False,  # for MultiBlock datasets
+        #     name=uid,  # actor name
+        #     texture=plot_texture_option,
+        #     # ________________________________ vtk.vtkTexture or np_ndarray or boolean, will work if input mesh has texture coordinates. True > first available texture. String > texture with that name already associated to mesh.
+        #     render_points_as_spheres=points_as_spheres,
+        #     render_lines_as_tubes=render_lines_as_tubes,
+        #     smooth_shading=smooth_shading,
+        #     ambient=0.0,
+        #     diffuse=1.0,
+        #     specular=0.0,
+        #     specular_power=100.0,
+        #     nan_color=None,  # color to use for all NaN values
+        #     nan_opacity=1.0,  # opacity to use for all NaN values
+        #     culling=None,
+        #     # 'front', 'back', 'false' (default) > does not render faces that are culled
+        #     rgb=plot_rgb_option,  # True > plot array values as RGB(A) colors
+        #     categories=False,
+        #     # True > number of unique values in the scalar used as 'n_colors' argument
+        #     use_transparency=False,
+        #     # _______________________ invert the opacity mapping as transparency mapping
+        #     below_color=None,  # solid color for values below the scalars range in 'clim'
+        #     above_color=None,  # solid color for values above the scalars range in 'clim'
+        #     annotations=None,
+        #     # dictionary of annotations for scale bar witor 'points'h keys = float values and values = string annotations
+        #     pickable=pickable,  # bool
+        #     preference="point",
+        #     log_scale=False,
+        # )
+
+    # def plot_seismics(self, seismic, cmap):
+    #     """
+    #     Add interactive slicing planes to the seismic data with a specified colormap.
+    #     :param seismic: Instance of Seismics class containing processed seismic data.
+    #     :param cmap: Colormap to apply to the seismic slices.
+    #     :return: vtkAssembly of interactive seismic slices with the specified colormap.
+    #     """
+    #     vtk_grid = pv.wrap(seismic)
+    #
+    #     # Interactive Slicing
+    #     slice_actors = []
+    #     slice_actors.append(self.plotter.add_mesh_slice(vtk_grid, normal=(1, 0, 0), cmap=cmap))  # X-axis
+    #     slice_actors.append(self.plotter.add_mesh_slice(vtk_grid, normal=(0, 1, 0), cmap=cmap))  # Y-axis
+    #     slice_actors.append(self.plotter.add_mesh_slice(vtk_grid, normal=(0, 0, 1), cmap=cmap))  # Z-axis
+    #
+    #     # Combine slice actors into a vtkAssembly
+    #     combined_assembly = vtk.vtkAssembly()
+    #     for actor in slice_actors:
+    #         combined_assembly.AddPart(actor)
+    #
+    #     this_actor = self.plotter.add_mesh(combined_assembly,)
+    #     return this_actor
+
     def show_octree(self):
         vis_uids = self.actors_df.loc[self.actors_df["show"] == True, "uid"]
         for uid in vis_uids:
@@ -7947,6 +8338,7 @@ class View3D(BaseView):
             duration=duration,
             disposal=2,
         )
+
         # off_screen_plot.orbit_on_path(path=path,focus=focus, write_frames=True,progress_bar=True,threaded=False)
         # off_screen_plot.close()
 
