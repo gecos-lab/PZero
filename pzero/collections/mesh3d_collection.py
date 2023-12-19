@@ -83,15 +83,7 @@ class Mesh3DCollection(QAbstractTableModel):
         """Reset data model"""
         self.modelReset.emit()
         """Update properties colormaps if needed"""
-        for property_name in entity_dict["properties_names"]:
-            if self.parent.prop_legend_df.loc[
-                self.parent.prop_legend_df["property_name"] == property_name
-            ].empty:
-                self.parent.prop_legend_df = self.parent.prop_legend_df.append(
-                    {"property_name": property_name, "colormap": "rainbow"},
-                    ignore_index=True,
-                )
-                self.parent.prop_legend.update_widget(self.parent)
+        self.parent.prop_legend.update_widget(self.parent)
         """Then emit signal to update the views."""
         self.parent.mesh3d_added_signal.emit(
             [entity_dict["uid"]]
