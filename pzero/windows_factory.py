@@ -6875,7 +6875,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                     show_property = 'intensity'
 
                 # Call plot_seismics to add interactive slicing planes
-                self.plotter.clear()
+
                 this_actor = self.plot_seismics(uid=uid,
                                                 plot_entity=plot_entity,
                                                 color_RGB=None,
@@ -7264,7 +7264,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             log_scale=False,
         )
         if not visible:
-            self.plotter.clear()
+            this_actor.SetVisibility(False)
         if not self.actors_df.empty:
             """See above."""
             self.plotter.camera_position = camera_position
@@ -7908,7 +7908,7 @@ class View3D(BaseView):
             normal=(1, 0, 0),
             normal_rotation=False,
             assign_to_axis='x',
-            color=color_RGB,
+            color=None,
             style=style,  # 'surface' (default), 'wireframe', or 'points'
             scalars=show_property,  # str pointing to vtk property or numpy.ndarray
             clim=color_bar_range,  # color bar range for scalars, e.g. [-1, 2]
@@ -7965,7 +7965,7 @@ class View3D(BaseView):
             preference="point",
             log_scale=False,
         )
-
+        x_slice.SetVisibility(visible)
         combined_assembly.AddPart(x_slice)
 
         y_slice = self.plotter.add_mesh_slice(
@@ -7973,7 +7973,7 @@ class View3D(BaseView):
             normal=(0, 1, 0),
             normal_rotation=False,
             assign_to_axis='y',
-            color=color_RGB,
+            color=None,
             style=style,  # 'surface' (default), 'wireframe', or 'points'
             scalars=show_property,  # str pointing to vtk property or numpy.ndarray
             clim=color_bar_range,  # color bar range for scalars, e.g. [-1, 2]
@@ -8032,13 +8032,13 @@ class View3D(BaseView):
         )
 
         combined_assembly.AddPart(y_slice)
-
+        y_slice.SetVisibility(visible)
         z_slice = self.plotter.add_mesh_slice(
             vtk_grid,
             normal=(0, 0, 1),
             normal_rotation=False,
             assign_to_axis='z',
-            color=color_RGB,
+            color=None,
             style=style,  # 'surface' (default), 'wireframe', or 'points'
             scalars=show_property,  # str pointing to vtk property or numpy.ndarray
             clim=color_bar_range,  # color bar range for scalars, e.g. [-1, 2]
@@ -8095,7 +8095,7 @@ class View3D(BaseView):
             preference="point",
             log_scale=False,
         )
-
+        z_slice.SetVisibility(visible)
         combined_assembly.AddPart(z_slice)
 
         if not visible:
