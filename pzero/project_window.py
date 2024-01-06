@@ -1500,6 +1500,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     orient="index",
                     dtype=Legend.legend_type_dict,
                 )
+                new_geol_legend_df.loc[new_geol_legend_df['opacity'].isnull(), 'opacity'] = 100
             else:
                 new_geol_legend_df = pd_read_csv(
                     in_dir_name + "/geol_legend_table.csv",
