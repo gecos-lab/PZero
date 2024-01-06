@@ -19,3 +19,4 @@ loopstructural~=v1.5.10
 colorcet~=3.0.1
 cmocean~=3.0.3
 pytest~=7.3.1
+blackd~=23.7.0
