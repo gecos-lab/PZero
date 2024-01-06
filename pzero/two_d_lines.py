@@ -25,6 +25,7 @@ from pzero.helpers.helper_dialogs import (
 )
 from pzero.helpers.helper_widgets import Editor, Tracer
 from .entities_factory import PolyLine, XsPolyLine
+
 # from .windows_factory import ViewMap, ViewXsection, NewViewMap, NewViewXsection
 from .windows_factory import NewViewMap, NewViewXsection
 
@@ -659,7 +660,7 @@ def merge_lines(self):
     """Create empty dictionary for the output line."""
     new_line = deepcopy(self.parent.geol_coll.geological_entity_dict)
     if isinstance(self, NewViewMap):
-    # if isinstance(self, (ViewMap, NewViewMap)):
+        # if isinstance(self, (ViewMap, NewViewMap)):
         new_line["vtk_obj"] = PolyLine()
         new_line["x_section"] = None
         inU_one = deepcopy(
@@ -739,7 +740,7 @@ def merge_lines(self):
     outU = outUV[:, 0]
     outV = outUV[:, 1]
     if isinstance(self, NewViewMap):
-    # if isinstance(self, (ViewMap, NewViewMap)):
+        # if isinstance(self, (ViewMap, NewViewMap)):
         outX = outU
         outY = outV
         outZ = np_zeros(np_shape(outX))
@@ -1001,7 +1002,7 @@ def resample_line_distance(
         outU = outUV[:, 0]
         outV = outUV[:, 1]
         if isinstance(self, NewViewMap):
-        # if isinstance(self, (ViewMap, NewViewMap)):
+            # if isinstance(self, (ViewMap, NewViewMap)):
             outX = outU
             outY = outV
             outZ = np_zeros(np_shape(outX))
@@ -1075,7 +1076,7 @@ def resample_line_number_points(
         new_line = deepcopy(self.parent.geol_coll.geological_entity_dict)
         """Define topological_type and x_section. Get coordinates of input line"""
         if isinstance(self, NewViewMap):
-        # if isinstance(self, (ViewMap, NewViewMap)):
+            # if isinstance(self, (ViewMap, NewViewMap)):
             new_line["topological_type"] = "PolyLine"
             new_line["x_section"] = None
             inU = deepcopy(
@@ -1105,7 +1106,7 @@ def resample_line_number_points(
         outU = outUV[:, 0]
         outV = outUV[:, 1]
         if isinstance(self, NewViewMap):
-        # if isinstance(self, (ViewMap, NewViewMap)):
+            # if isinstance(self, (ViewMap, NewViewMap)):
             outX = outU
             outY = outV
             outZ = np_zeros(np_shape(outX))
@@ -1181,7 +1182,7 @@ def simplify_line(
         new_line = deepcopy(self.parent.geol_coll.geological_entity_dict)
         """Get coordinates of input line."""
         if isinstance(self, NewViewMap):
-        # if isinstance(self, (ViewMap, NewViewMap)):
+            # if isinstance(self, (ViewMap, NewViewMap)):
             new_line["topological_type"] = "PolyLine"
             new_line["x_section"] = None
             inU = deepcopy(
@@ -1207,7 +1208,7 @@ def simplify_line(
         outU = outUV[:, 0]
         outV = outUV[:, 1]
         if isinstance(self, NewViewMap):
-        # if isinstance(self, (ViewMap, NewViewMap)):
+            # if isinstance(self, (ViewMap, NewViewMap)):
             outX = outU
             outY = outV
             outZ = np_zeros(np_shape(outX))
@@ -1300,7 +1301,7 @@ def copy_parallel(
         self.selected_uids[0]
     )
     if isinstance(self, NewViewMap):
-    # if isinstance(self, (ViewMap, NewViewMap)):
+        # if isinstance(self, (ViewMap, NewViewMap)):
         inU = self.parent.geol_coll.get_uid_vtk_obj(input_uid).points_X
         inV = self.parent.geol_coll.get_uid_vtk_obj(input_uid).points_Y
 
@@ -1337,7 +1338,7 @@ def copy_parallel(
             action.setEnabled(True)
         return
     if isinstance(self, NewViewMap):
-    # if isinstance(self, (ViewMap, NewViewMap)):
+        # if isinstance(self, (ViewMap, NewViewMap)):
         outX = outU
         outY = outV
         outZ = np_zeros(np_shape(outX))
@@ -1419,7 +1420,7 @@ def copy_kink(
         self.selected_uids[0]
     )
     if isinstance(self, NewViewMap):
-    # if isinstance(self, (ViewMap, NewViewMap)):
+        # if isinstance(self, (ViewMap, NewViewMap)):
         line_dict["vtk_obj"] = PolyLine()
         line_dict["topological_type"] = "PolyLine"
         inU = self.parent.geol_coll.get_uid_vtk_obj(input_uid).points_X
@@ -1454,7 +1455,7 @@ def copy_kink(
         self.enable_actions()
         return
     if isinstance(self, NewViewMap):
-    # if isinstance(self, (ViewMap, NewViewMap)):
+        # if isinstance(self, (ViewMap, NewViewMap)):
         outX = outU
         outY = outV
         outZ = np_zeros(np_shape(outX))
@@ -1610,7 +1611,7 @@ def flip_line(self, uid=None):
 def left_right(self, uid=None):
     """Ensures lines are oriented left-to-right and bottom-to-top in map or cross-section"""
     if isinstance(self, NewViewMap):
-    # if isinstance(self, ViewMap):
+        # if isinstance(self, ViewMap):
         U_line = self.parent.geol_coll.get_uid_vtk_obj(uid).points_X
         V_line = self.parent.geol_coll.get_uid_vtk_obj(uid).points_Y
     # elif isinstance(self, ViewXsection):

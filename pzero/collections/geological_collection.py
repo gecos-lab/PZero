@@ -421,53 +421,110 @@ class GeologicalCollection(QAbstractTableModel):
             0
         ]  # the '[0]' is needed since .to_dict('records') returns a list of dictionaries (with just one element in this case)
 
-    def set_uid_legend(self, uid=None, color_R=None, color_G=None, color_B=None, line_thick=None, point_size=None, opacity=None):
+    def set_uid_legend(
+        self,
+        uid=None,
+        color_R=None,
+        color_G=None,
+        color_B=None,
+        line_thick=None,
+        point_size=None,
+        opacity=None,
+    ):
         """Set legend as dictionary from uid. Take care since this resets the legend for all similar objects."""
         legend_dict = self.get_uid_legend(uid)
         if isinstance(color_R, float):
             if color_R >= 0.0 and color_R <= 255.0:
                 self.parent.geol_legend_df.loc[
-                    (self.parent.geol_legend_df["geological_type"] == legend_dict['geological_type'])
-                    & (self.parent.geol_legend_df["geological_feature"] == legend_dict['geological_feature'])
-                    & (self.parent.geol_legend_df["scenario"] == legend_dict['scenario']),
+                    (
+                        self.parent.geol_legend_df["geological_type"]
+                        == legend_dict["geological_type"]
+                    )
+                    & (
+                        self.parent.geol_legend_df["geological_feature"]
+                        == legend_dict["geological_feature"]
+                    )
+                    & (
+                        self.parent.geol_legend_df["scenario"]
+                        == legend_dict["scenario"]
+                    ),
                     "color_R",
                 ] = color_R
         if isinstance(color_G, float):
             if color_G >= 0.0 and color_G <= 255.0:
                 self.parent.geol_legend_df.loc[
-                    (self.parent.geol_legend_df["geological_type"] == legend_dict['geological_type'])
-                    & (self.parent.geol_legend_df["geological_feature"] == legend_dict['geological_feature'])
-                    & (self.parent.geol_legend_df["scenario"] == legend_dict['scenario']),
+                    (
+                        self.parent.geol_legend_df["geological_type"]
+                        == legend_dict["geological_type"]
+                    )
+                    & (
+                        self.parent.geol_legend_df["geological_feature"]
+                        == legend_dict["geological_feature"]
+                    )
+                    & (
+                        self.parent.geol_legend_df["scenario"]
+                        == legend_dict["scenario"]
+                    ),
                     "color_G",
                 ] = color_G
         if isinstance(color_B, float):
             if color_B >= 0.0 and color_B <= 255.0:
                 self.parent.geol_legend_df.loc[
-                    (self.parent.geol_legend_df["geological_type"] == legend_dict['geological_type'])
-                    & (self.parent.geol_legend_df["geological_feature"] == legend_dict['geological_feature'])
-                    & (self.parent.geol_legend_df["scenario"] == legend_dict['scenario']),
+                    (
+                        self.parent.geol_legend_df["geological_type"]
+                        == legend_dict["geological_type"]
+                    )
+                    & (
+                        self.parent.geol_legend_df["geological_feature"]
+                        == legend_dict["geological_feature"]
+                    )
+                    & (
+                        self.parent.geol_legend_df["scenario"]
+                        == legend_dict["scenario"]
+                    ),
                     "color_B",
                 ] = color_B
         if isinstance(line_thick, float) and line_thick >= 0.0:
             self.parent.geol_legend_df.loc[
-                (self.parent.geol_legend_df["geological_type"] == legend_dict['geological_type'])
-                & (self.parent.geol_legend_df["geological_feature"] == legend_dict['geological_feature'])
-                & (self.parent.geol_legend_df["scenario"] == legend_dict['scenario']),
+                (
+                    self.parent.geol_legend_df["geological_type"]
+                    == legend_dict["geological_type"]
+                )
+                & (
+                    self.parent.geol_legend_df["geological_feature"]
+                    == legend_dict["geological_feature"]
+                )
+                & (self.parent.geol_legend_df["scenario"] == legend_dict["scenario"]),
                 "line_thick",
             ] = line_thick
         if isinstance(point_size, float) and point_size >= 0.0:
             self.parent.geol_legend_df.loc[
-                (self.parent.geol_legend_df["geological_type"] == legend_dict['geological_type'])
-                & (self.parent.geol_legend_df["geological_feature"] == legend_dict['geological_feature'])
-                & (self.parent.geol_legend_df["scenario"] == legend_dict['scenario']),
+                (
+                    self.parent.geol_legend_df["geological_type"]
+                    == legend_dict["geological_type"]
+                )
+                & (
+                    self.parent.geol_legend_df["geological_feature"]
+                    == legend_dict["geological_feature"]
+                )
+                & (self.parent.geol_legend_df["scenario"] == legend_dict["scenario"]),
                 "point_size",
             ] = point_size
         if isinstance(opacity, float):
             if opacity >= 0.0 and opacity <= 100.0:
                 self.parent.geol_legend_df.loc[
-                    (self.parent.geol_legend_df["geological_type"] == legend_dict['geological_type'])
-                    & (self.parent.geol_legend_df["geological_feature"] == legend_dict['geological_feature'])
-                    & (self.parent.geol_legend_df["scenario"] == legend_dict['scenario']),
+                    (
+                        self.parent.geol_legend_df["geological_type"]
+                        == legend_dict["geological_type"]
+                    )
+                    & (
+                        self.parent.geol_legend_df["geological_feature"]
+                        == legend_dict["geological_feature"]
+                    )
+                    & (
+                        self.parent.geol_legend_df["scenario"]
+                        == legend_dict["scenario"]
+                    ),
                     "opacity",
                 ] = opacity
 

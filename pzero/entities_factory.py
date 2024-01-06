@@ -1807,7 +1807,9 @@ class Seismics(vtkStructuredGrid):
         """Sets cell attribute from Numpy array"""
         pass
 
-    def edit_cell_data(self, parent=None, data_key=None, cell_id=None, cell_data_array=None):
+    def edit_cell_data(
+        self, parent=None, data_key=None, cell_id=None, cell_data_array=None
+    ):
         # _______________________ TO BE IMPLEMENTED IF WE WANT TO WORK WITH CELL DATA
         """Sets cell attribute from Numpy array"""
         pass
@@ -1996,7 +1998,9 @@ class DEM(vtkStructuredGrid):
         """Sets cell attribute from Numpy array"""
         pass
 
-    def edit_cell_data(self, parent=None, data_key=None, cell_id=None, cell_data_array=None):
+    def edit_cell_data(
+        self, parent=None, data_key=None, cell_id=None, cell_data_array=None
+    ):
         # _______________________ TO BE IMPLEMENTED IF WE WANT TO WORK WITH CELL DATA
         """Sets cell attribute from Numpy array"""
         pass

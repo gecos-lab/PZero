@@ -32,18 +32,13 @@ def vtk2obj(self=None, out_dir_name=None):
                     + "/"
                     + uid
                     + "_"
-                    + self.geol_coll.df.loc[self.geol_coll.df["uid"] == uid, "name"].values[
-                        0
-                    ]
+                    + self.geol_coll.df.loc[
+                        self.geol_coll.df["uid"] == uid, "name"
+                    ].values[0]
                     + ".obj"
                 )
             else:
-                out_file_name = (
-                        str(out_dir_name)
-                        + "/"
-                        + uid
-                        + ".obj"
-                )
+                out_file_name = str(out_dir_name) + "/" + uid + ".obj"
             vtk_entity = self.geol_coll.get_uid_vtk_obj(uid)
             obj_writer.SetFileName(out_file_name)
             obj_writer.SetInputData(vtk_entity)
@@ -62,12 +57,7 @@ def vtk2obj(self=None, out_dir_name=None):
                     + ".obj"
                 )
             else:
-                out_file_name = (
-                        str(out_dir_name)
-                        + "/"
-                        + uid
-                        + ".obj"
-                )
+                out_file_name = str(out_dir_name) + "/" + uid + ".obj"
             vtk_entity = self.boundary_coll.get_uid_vtk_obj(uid)
             obj_writer.SetFileName(out_file_name)
             obj_writer.SetInputData(vtk_entity)

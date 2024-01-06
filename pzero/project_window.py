@@ -1144,7 +1144,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.prop_legend.update_widget(parent=self)
 
     def save_project(self):
-        #________________________________________WRITERS TO BE MOVED TO COLLECTIONS
+        # ________________________________________WRITERS TO BE MOVED TO COLLECTIONS
         """Save project to file and folder"""
         """Get date and time, used to save incremental revisions."""
         now = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
@@ -1500,7 +1500,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     orient="index",
                     dtype=Legend.legend_type_dict,
                 )
-                new_geol_legend_df.loc[new_geol_legend_df['opacity'].isnull(), 'opacity'] = 100
+                # in a branch called "Riccardo", a control to set opacity to 100 in case it was null was added here, but it is most problably useless
             else:
                 new_geol_legend_df = pd_read_csv(
                     in_dir_name + "/geol_legend_table.csv",

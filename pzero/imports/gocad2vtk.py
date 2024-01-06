@@ -424,7 +424,12 @@ def gocad2vtk(self=None, in_file_name=None, uid_from_name=None):
                     if curr_obj_dict["vtk_obj"].cells_number > 0:
                         self.geol_coll.add_entity_from_dict(entity_dict=curr_obj_dict)
                 if reset_legend:
-                    self.geol_coll.set_uid_legend(uid=curr_obj_dict["uid"], color_R=curr_obj_color_r, color_G=curr_obj_color_g, color_B=curr_obj_color_b)
+                    self.geol_coll.set_uid_legend(
+                        uid=curr_obj_dict["uid"],
+                        color_R=curr_obj_color_r,
+                        color_G=curr_obj_color_g,
+                        color_B=curr_obj_color_b,
+                    )
             del curr_obj_points
             del curr_obj_cells
             del curr_obj_properties_collection

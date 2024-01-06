@@ -7065,9 +7065,9 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         """Manage home view"""
         self.default_view = self.plotter.camera_position
 
-        #self.plotter.track_click_position(
+        # self.plotter.track_click_position(
         #    lambda pos: self.plotter.camera.SetFocalPoint(pos), side="left", double=True
-        #)
+        # )
 
     def initialize_menu_tools(self):
         self.saveHomeView = QAction("Save home view", self)  # create action
@@ -7340,9 +7340,9 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.plotter.untrack_click_position(
             side="left"
         )  # Remove the left click observer
-        #self.plotter.track_click_position(
+        # self.plotter.track_click_position(
         #    lambda pos: self.plotter.camera.SetFocalPoint(pos), side="left", double=True
-        #)
+        # )
         if isinstance(self, View3D):
             self.plotter.enable_trackball_style()
         elif isinstance(self, NewView2D):
