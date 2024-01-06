@@ -10620,6 +10620,18 @@ class ViewStereoplot(BaseView):
                 ignore_index=True,
             )
 
+    def change_actor_color(self, uid=None, collection=None):
+        return
+
+    def change_actor_opacity(self, uid=None, collection=None):
+        return
+
+    def change_actor_line_thick(self, uid=None, collection=None):
+        return
+
+    def change_actor_point_size(self, uid=None, collection=None):
+        return
+
 
 class NewView2D(BaseView):
     """Create 2D view using vtk/pyvista. This should be more efficient than matplotlib"""
