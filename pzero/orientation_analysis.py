@@ -209,7 +209,7 @@ def set_normals(self):
 def get_dip_dir_vectors(normals=None, az=False):
     if normals.ndim == 1:
         normals = np_array([normals])
-    normals[np_where(normals[:, 2] > 0)] *= -1
+    # normals[np_where(normals[:, 2] > 0)] *= -1
     dir_vectors = normals.copy()
     dir_vectors[:, 2] = 0
     dir_vectors[:, 0], dir_vectors[:, 1] = (
@@ -218,8 +218,8 @@ def get_dip_dir_vectors(normals=None, az=False):
     )  # direction is the az vector rotated clockwise by 90° around the Z axis
     dip_vectors = np_cross(normals, dir_vectors)
     if az:
-        az_vectors = normals.copy()
+        az_vectors = dip_vectors.copy()
         az_vectors[:, 2] = 0
-        return dip_vectors, dir_vectors, az_vectors
+        return az_vectors, dir_vectors
     else:
         return dip_vectors, dir_vectors
