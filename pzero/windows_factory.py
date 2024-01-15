@@ -9700,17 +9700,18 @@ class ViewStereoplot(BaseView):
         self.menuProj.addAction(self.actionSetEquiare)
         self.menuProj.addAction(self.actionSetEquiang)
         self.menuPlot.addMenu(self.menuProj)
+
         self.menubar.insertMenu(self.menuHelp.menuAction(), self.menuPlot)
 
     def initialize_interactor(self, kind=None, projection="equal_area_stereonet"):
         self.grid_kind = kind
         self.proj_type = projection
 
-        with mplstyle.context(("default")):
-            """Create Matplotlib canvas, figure and navi_toolbar"""
+        with mplstyle.context("default"):
+            """Create Matplotlib canvas, figure and navi_toolbar. this implicitly creates also the canvas to contain the figure"""
             self.figure, self.ax = mplstereonet.subplots(
                 projection=self.proj_type
-            )  # create a Matplotlib figure; this implicitly creates also the canvas to contain the figure
+            )
 
         self.canvas = FigureCanvas(
             self.figure
@@ -9744,10 +9745,12 @@ class ViewStereoplot(BaseView):
         self.GeologyTreeWidget.setItemsExpandable(True)
 
         filtered_geo = self.parent.geol_coll.df.loc[
-            (self.parent.geol_coll.df["topological_type"] == "VertexSet"),
-            "geological_type",
+            (self.parent.geol_coll.df["topological_type"] == "VertexSet")
+            | (self.parent.geol_coll.df["topological_type"] == "XsVertexSet"),
+            "geological_type"
         ]
         geo_types = pd_unique(filtered_geo)
+        print("geo_types: ", geo_types)
 
         for geo_type in geo_types:
             glevel_1 = QTreeWidgetItem(
@@ -9756,14 +9759,16 @@ class ViewStereoplot(BaseView):
             glevel_1.setFlags(
                 glevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
             )
-
             filtered_geo_feat = self.parent.geol_coll.df.loc[
                 (self.parent.geol_coll.df["geological_type"] == geo_type)
-                & (self.parent.geol_coll.df["topological_type"] == "VertexSet"),
-                "geological_feature",
+                & (
+                    (self.parent.geol_coll.df["topological_type"] == "VertexSet")
+                    | (self.parent.geol_coll.df["topological_type"] == "XsVertexSet")
+                ),
+                "geological_feature"
             ]
             geo_features = pd_unique(filtered_geo_feat)
-
+            print("geo_features: ", geo_features)
             for feature in geo_features:
                 glevel_2 = QTreeWidgetItem(
                     glevel_1, [feature]
@@ -9771,15 +9776,13 @@ class ViewStereoplot(BaseView):
                 glevel_2.setFlags(
                     glevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
                 )
-
                 geo_scenario = pd_unique(
                     self.parent.geol_coll.df.loc[
                         (self.parent.geol_coll.df["geological_type"] == geo_type)
                         & (self.parent.geol_coll.df["geological_feature"] == feature),
-                        "scenario",
+                        "scenario"
                     ]
                 )
-
                 for scenario in geo_scenario:
                     glevel_3 = QTreeWidgetItem(
                         glevel_2, [scenario]
@@ -9787,21 +9790,21 @@ class ViewStereoplot(BaseView):
                     glevel_3.setFlags(
                         glevel_3.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
                     )
-
                     uids = self.parent.geol_coll.df.loc[
                         (self.parent.geol_coll.df["geological_type"] == geo_type)
                         & (self.parent.geol_coll.df["geological_feature"] == feature)
                         & (self.parent.geol_coll.df["scenario"] == scenario)
-                        & (self.parent.geol_coll.df["topological_type"] == "VertexSet"),
-                        "uid",
+                        & (
+                            (self.parent.geol_coll.df["topological_type"] == "VertexSet")
+                        |(self.parent.geol_coll.df["topological_type"] == "XsVertexSet")
+                        ),
+                        "uid"
                     ].to_list()
-
                     for uid in uids:
                         property_combo = QComboBox()
                         property_combo.uid = uid
                         property_combo.addItem("Poles")
                         # property_combo.addItem("Planes")
-
                         name = self.parent.geol_coll.df.loc[
                             (self.parent.geol_coll.df["uid"] == uid), "name"
                         ].values[0]
@@ -9841,11 +9844,11 @@ class ViewStereoplot(BaseView):
         self.TopologyTreeWidget.setItemsExpandable(True)
 
         filtered_topo = self.parent.geol_coll.df.loc[
-            (self.parent.geol_coll.df["topological_type"] == "VertexSet"),
-            "topological_type",
+            (self.parent.geol_coll.df["topological_type"] == "VertexSet")
+            | (self.parent.geol_coll.df["topological_type"] == "XsVertexSet"),
+            "topological_type"
         ]
         topo_types = pd_unique(filtered_topo)
-
         for topo_type in topo_types:
             tlevel_1 = QTreeWidgetItem(
                 self.TopologyTreeWidget, [topo_type]
@@ -9856,7 +9859,7 @@ class ViewStereoplot(BaseView):
             for scenario in pd_unique(
                 self.parent.geol_coll.df.loc[
                     self.parent.geol_coll.df["topological_type"] == topo_type,
-                    "scenario",
+                    "scenario"
                 ]
             ):
                 tlevel_2 = QTreeWidgetItem(
@@ -9869,10 +9872,15 @@ class ViewStereoplot(BaseView):
                 uids = self.parent.geol_coll.df.loc[
                     (self.parent.geol_coll.df["topological_type"] == topo_type)
                     & (self.parent.geol_coll.df["scenario"] == scenario)
-                    & (self.parent.geol_coll.df["topological_type"] == "VertexSet"),
-                    "uid",
+                    & (
+                        (self.parent.geol_coll.df["topological_type"] == "VertexSet")
+                        | (
+                            self.parent.geol_coll.df["topological_type"]
+                            == "XsVertexSet"
+                        )
+                    ),
+                    "uid"
                 ].to_list()
-
                 for uid in uids:
                     property_combo = QComboBox()
                     property_combo.uid = uid
@@ -10463,7 +10471,7 @@ class ViewStereoplot(BaseView):
         else:
             plot_entity = None
         """Then plot."""
-        if isinstance(plot_entity, (VertexSet, Attitude)):
+        if isinstance(plot_entity, (VertexSet, XsVertexSet, Attitude)):
             if isinstance(plot_entity.points, np_ndarray):
                 if plot_entity.points_number > 0:
                     """This check is needed to avoid errors when trying to plot an empty
@@ -10589,7 +10597,9 @@ class ViewStereoplot(BaseView):
 
         self.initialize_interactor(kind=self.grid_kind, projection=self.proj_type)
         uids = self.parent.geol_coll.df.loc[
-            self.parent.geol_coll.df["topological_type"] == "VertexSet", "uid"
+            (self.parent.geol_coll.df["topological_type"] == "VertexSet")
+            | (self.parent.geol_coll.df["topological_type"] == "XsVertexSet"),
+            "uid",
         ]
 
         if self.tog_contours == -1:
@@ -10621,7 +10631,29 @@ class ViewStereoplot(BaseView):
             )
 
     def change_actor_color(self, uid=None, collection=None):
-        return
+        "Change colour with Matplotlib method."
+        if collection == "geol_coll":
+            color_R = self.parent.geol_coll.get_uid_legend(uid=uid)["color_R"]
+            color_G = self.parent.geol_coll.get_uid_legend(uid=uid)["color_G"]
+            color_B = self.parent.geol_coll.get_uid_legend(uid=uid)["color_B"]
+            color_RGB = [color_R / 255, color_G / 255, color_B / 255]
+        elif collection == "xsect_coll":
+            color_R = self.parent.xsect_coll.get_legend()["color_R"]
+            color_G = self.parent.xsect_coll.get_legend()["color_G"]
+            color_B = self.parent.xsect_coll.get_legend()["color_B"]
+            color_RGB = [color_R / 255, color_G / 255, color_B / 255]
+        else:
+            return
+        if isinstance(
+            self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[0], Line2D
+        ):
+            "Case for Line2D"
+            self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[
+                0
+            ].set_color(color_RGB)
+            self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[
+                0
+            ].figure.canvas.draw()
 
     def change_actor_opacity(self, uid=None, collection=None):
         return
