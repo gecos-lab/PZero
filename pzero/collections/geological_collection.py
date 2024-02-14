@@ -67,6 +67,7 @@ class GeologicalCollection(QAbstractTableModel):
     valid_geological_types = [
         "undef",
         "fault",
+        "tectonic",
         "intrusive",
         "unconformity",
         "top",
