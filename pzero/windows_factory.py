@@ -120,9 +120,9 @@ class NavigationToolbar(NavigationToolbar2QT):
 
 
 class BaseView(QMainWindow, Ui_BaseViewWindow):
-    """Create base view - abstract class providing common methods for all views"""
-
-    """parent is the QT object that is launching this one, hence the ProjectWindow() instance in this case"""
+    """Create base view - abstract class providing common methods for all views. This includes all side tree and list
+    views, but not the main plotting canvas, that must be managed by subclasses.
+    parent is the QT object that is launching this one, hence the ProjectWindow() instance."""
 
     def __init__(self, parent=None, *args, **kwargs):
         super(BaseView, self).__init__(parent, *args, **kwargs)
@@ -131,53 +131,52 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         # THE FOLLOWING ACTUALLY DELETES ANY REFERENCE TO CLOSED WINDOWS, HENCE FREEING
         # MEMORY, BUT COULD CREATE PROBLEMS WITH SIGNALS THAT ARE STILL ACTIVE
         # SEE DISCUSSIONS ON QPointer AND WA_DeleteOnClose ON THE INTERNET
+        # _____________________________________________________________________________
         self.setAttribute(Qt.WA_DeleteOnClose, True)
         self.parent = parent
-        """Connect actionQuit.triggered SIGNAL to self.close SLOT"""
+        # Connect actionQuit.triggered SIGNAL to self.close SLOT
         self.actionClose.triggered.connect(self.close)
-
-        """Connect signal to delete window when the project is closed (and a new one is opened)."""
+        # Connect signal to delete window when the project is closed (and a new one is opened)
         self.parent.project_close_signal.connect(self.close)
-
-        """Create empty Pandas dataframe with actor's with columns:
-        uid = actor's uid -> the same as the original object's uid
-        actor = the actor
-        show = a boolean to show (True) or hide (false) the actor
-        collection = the original collection of the actor, e.g. geol_coll, xsect_coll, etc."""
+        # Create empty Pandas dataframe with actor's with columns:
+        # uid = actor's uid -> the same as the original object's uid
+        # actor = the actor
+        # show = a boolean to show (True) or hide (false) the actor
+        # collection = the original collection of the actor, e.g. geol_coll, xsect_coll, etc.
         self.actors_df = pd_DataFrame(columns=["uid", "actor", "show", "collection"])
-
-        """Create list of selected uid's."""
+        # Create list of selected uid's
+        # _____________________________________________
+        # SEE IF IT IA A GOOD IDEA TO USE A selected COLUMN IN self.actors_df
+        # _____________________________________________
         self.selected_uids = []
-
-        """Initialize menus and tools, canvas, add actors and show it. These methods must be defined in subclasses."""
+        # Initialize menus and tools, canvas, add actors and show it. These methods must be defined in subclasses
+        # _____________________________________________
+        # CHECK IMPLEMENTATION FOR X-SECTIONS, STEREOPLOTS, ETC. THAT MUST BE LIMITED TO SOME ENTITIES ONLY
+        # _____________________________________________
         self.initialize_menu_tools()
         self.initialize_interactor()
         self.add_all_entities()
         self.show_qt_canvas()
-
-        if not isinstance(self, NewViewXsection):
-            """Build and show geology and topology trees, and cross-section, DOM, image, lists.
-            Reimplemented for NewViewXsection with entities limited to those belonging to the Xsection.
-            """
-            self.create_geology_tree()
-            self.create_topology_tree()
-            self.create_xsections_tree()
-            self.create_boundary_list()
-            self.create_mesh3d_list()
-            self.create_dom_list()
-            self.create_image_list()
-            self.create_well_tree()
-            self.create_fluids_tree()
-            self.create_fluids_topology_tree()
-            self.create_backgrounds_tree()
-            self.create_backgrounds_topology_tree()
-
-        """Build and show other widgets, icons, tools - TO BE DONE_________________________________"""
-
-        """Connect signals to update functions. Use lambda functions where we need to pass additional
-        arguments such as parent in addition to the signal itself - the updated_list."""
-
-        # Geology lamda functions and signals
+        # Build and show geology and topology trees, and cross-section, DOM, image, lists.
+        # _____________________________________________
+        # CHECK IMPLEMENTATION FOR X-SECTIONS, STEREOPLOTS, ETC. THAT MUST BE LIMITED TO SOME ENTITIES ONLY
+        # _____________________________________________
+        self.create_geology_tree()
+        self.create_topology_tree()
+        self.create_xsections_tree()
+        self.create_boundary_list()
+        self.create_mesh3d_list()
+        self.create_dom_list()
+        self.create_image_list()
+        self.create_well_tree()
+        self.create_fluids_tree()
+        self.create_fluids_topology_tree()
+        self.create_backgrounds_tree()
+        self.create_backgrounds_topology_tree()
+        # Build and show other widgets, icons, tools, etc. here ___
+        # Connect signals to update functions. Use lambda functions where we need to pass additional
+        # arguments such as parent in addition to the signal itself, e.g. the updated_list
+        # Define GEOLOGY lamda functions and signals
         self.upd_list_geo_add = lambda updated_list: self.geology_added_update_views(
             updated_list=updated_list
         )
@@ -224,7 +223,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                 updated_list=updated_list
             )
         )
-
+        # Connect GEOLOGY lamda functions and signals
         self.parent.geology_added_signal.connect(self.upd_list_geo_add)
         self.parent.geology_removed_signal.connect(self.upd_list_geo_rm)
         self.parent.geology_geom_modified_signal.connect(self.upd_list_geo_mod)
@@ -249,8 +248,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.parent.geology_legend_opacity_modified_signal.connect(
             self.upd_list_geo_leg_op_mod
         )
-
-        # X Section lamda functions and signals
+        # Define X SECTION lamda functions and signals
         self.upd_list_x_add = lambda updated_list: self.xsect_added_update_views(
             updated_list=updated_list
         )
@@ -282,7 +280,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                 updated_list=updated_list
             )
         )
-
+        # Connect X SECTION lamda functions and signals
         self.parent.xsect_added_signal.connect(self.upd_list_x_add)
         self.parent.xsect_removed_signal.connect(self.upd_list_x_rm)
         self.parent.xsect_geom_modified_signal.connect(self.upd_list_x_mod)
@@ -296,8 +294,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.parent.xsect_legend_opacity_modified_signal.connect(
             self.upd_list_x_leg_op_mod
         )
-
-        # Boundary lamda functions and signals
+        # Define BOUNDARY lamda functions and signals
         self.upd_list_bound_add = lambda updated_list: self.boundary_added_update_views(
             updated_list=updated_list
         )
@@ -331,7 +328,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                 updated_list=updated_list
             )
         )
-
+        # COnnect BOUNDARY lamda functions and signals
         self.parent.boundary_added_signal.connect(self.upd_list_bound_add)
         self.parent.boundary_removed_signal.connect(self.upd_list_bound_rm)
         self.parent.boundary_geom_modified_signal.connect(self.upd_list_bound_geo_mod)
@@ -347,8 +344,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.parent.boundary_legend_opacity_modified_signal.connect(
             self.upd_list_bound_leg_op_mod
         )
-
-        # Mesh 3D lamda functions and signals
+        # Define MESH 3D lamda functions and signals
         self.upd_list_mesh3d_add = lambda updated_list: self.mesh3d_added_update_views(
             updated_list=updated_list
         )
@@ -385,7 +381,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                 updated_list=updated_list
             )
         )
-
+        # Connect MESH 3D lamda functions and signals
         self.parent.mesh3d_added_signal.connect(self.upd_list_mesh3d_add)
         self.parent.mesh3d_removed_signal.connect(self.upd_list_mesh3d_rm)
         self.parent.mesh3d_data_keys_removed_signal.connect(
@@ -406,8 +402,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.parent.mesh3d_legend_opacity_modified_signal.connect(
             self.upd_list_mesh3d_leg_op_mod
         )
-
-        # Dom lamda functions and signals
+        # Define DOM lamda functions and signals
         self.upd_list_dom_add = lambda updated_list: self.dom_added_update_views(
             updated_list=updated_list
         )
@@ -449,7 +444,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                 updated_list=updated_list
             )
         )
-
+        # Collect DOM lamda functions and signals
         self.parent.dom_added_signal.connect(self.upd_list_dom_add)
         self.parent.dom_removed_signal.connect(self.upd_list_dom_rm)
         self.parent.dom_data_keys_removed_signal.connect(
@@ -469,8 +464,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.parent.dom_legend_opacity_modified_signal.connect(
             self.upd_list_dom_leg_op_mod
         )
-
-        # Image lamda functions and signals
+        # Define IMAGE lamda functions and signals
         self.upd_list_img_add = lambda updated_list: self.image_added_update_views(
             updated_list=updated_list
         )
@@ -487,15 +481,14 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                 updated_list=updated_list
             )
         )
-
+        # Connect IMAGE lamda functions and signals
         self.parent.image_added_signal.connect(self.upd_list_img_add)
         self.parent.image_removed_signal.connect(self.upd_list_img_rm)
         self.parent.image_metadata_modified_signal.connect(self.upd_list_metadata_mod)
         self.parent.image_legend_opacity_modified_signal.connect(
             self.upd_list_img_leg_op_mod
         )
-
-        # Well lamda functions and signals
+        # Define WELL lamda functions and signals
         self.upd_list_well_add = lambda updated_list: self.well_added_update_views(
             updated_list=updated_list
         )
@@ -532,7 +525,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                 updated_list=updated_list
             )
         )
-
+        # Connect WELL lamda functions and signals
         self.parent.well_added_signal.connect(self.upd_list_well_add)
         self.parent.well_removed_signal.connect(self.upd_list_well_rm)
         self.parent.well_data_keys_removed_signal.connect(
@@ -553,8 +546,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.parent.well_legend_opacity_modified_signal.connect(
             self.upd_list_well_leg_op_mod
         )
-
-        # Fluid lamda functions and signals
+        # Define FLUID lamda functions and signals
         self.upd_list_fluid_add = lambda updated_list: self.fluid_added_update_views(
             updated_list=updated_list
         )
@@ -601,7 +593,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                 updated_list=updated_list
             )
         )
-
+        # Connect FLUID lamda functions and signals
         self.parent.fluid_added_signal.connect(self.upd_list_fluid_add)
         self.parent.fluid_removed_signal.connect(self.upd_list_fluid_rm)
         self.parent.fluid_geom_modified_signal.connect(self.upd_list_fluid_geo_mod)
@@ -626,8 +618,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.parent.fluid_legend_opacity_modified_signal.connect(
             self.upd_list_fluid_leg_op_mod
         )
-
-        # Background lamda functions and signals
+        # Define BACKGROUND lamda functions and signals
         self.upd_list_background_add = (
             lambda updated_list: self.background_added_update_views(
                 updated_list=updated_list
@@ -676,7 +667,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                 updated_list=updated_list
             )
         )
-
+        # Connect BACKGROUND lamda functions and signals
         self.parent.background_added_signal.connect(self.upd_list_background_add)
         self.parent.background_removed_signal.connect(self.upd_list_background_rm)
         self.parent.background_geom_modified_signal.connect(
@@ -703,8 +694,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.parent.background_legend_opacity_modified_signal.connect(
             self.upd_list_background_leg_op
         )
-
-        # Prop Legend lamda functions and signals
+        # Define and connect PROPERTY LEGEND lamda functions and signals
         self.prop_legend_lambda = (
             lambda this_property: self.prop_legend_cmap_modified_update_views(
                 this_property=this_property
@@ -712,20 +702,13 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         )
         self.parent.prop_legend_cmap_modified_signal.connect(self.prop_legend_lambda)
 
-    def show_qt_canvas(self):
-        """Show the Qt Window"""
-        self.show()
-        if isinstance(self, View3D):
-            """Turn on the orientation widget AFTER the canvas is shown."""
-            self.cam_orient_widget.On()
+    # ================================  build and update trees and tables ================================
 
-    # ================================  build and update ================================
+    # Methods used to build and update the GEOLOGY and TOPOLOGY trees
 
-    """Methods used to build and update the geology and topology trees."""
-
-    # Help to disconnect all windows signals correctly, if this method is removed it will crash in this case
-    def disconnect_all_lambda_signals(self):
-        # Disconnect geology signals
+    def disconnect_all_signals(self):
+        """Help to disconnect all windows signals correctly, if this method is removed PZero will crash"""
+        # Disconnect GEOLOGY signals
         self.parent.geology_added_signal.disconnect(self.upd_list_geo_add)
         self.parent.geology_removed_signal.disconnect(self.upd_list_geo_rm)
         self.parent.geology_geom_modified_signal.disconnect(self.upd_list_geo_mod)
@@ -750,8 +733,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.parent.geology_legend_opacity_modified_signal.disconnect(
             self.upd_list_geo_leg_op_mod
         )
-
-        # Disconnect XSect signals
+        # Disconnect X-SECTION signals
         self.parent.xsect_added_signal.disconnect(self.upd_list_x_add)
         self.parent.xsect_removed_signal.disconnect(self.upd_list_x_rm)
         self.parent.xsect_geom_modified_signal.disconnect(self.upd_list_x_mod)
@@ -767,8 +749,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.parent.xsect_legend_opacity_modified_signal.disconnect(
             self.upd_list_x_leg_op_mod
         )
-
-        # Disconnect Boundary signals
+        # Disconnect BOUNDARY signals
         self.parent.boundary_added_signal.disconnect(self.upd_list_bound_add)
         self.parent.boundary_removed_signal.disconnect(self.upd_list_bound_rm)
         self.parent.boundary_geom_modified_signal.disconnect(
@@ -786,8 +767,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.parent.boundary_legend_opacity_modified_signal.disconnect(
             self.upd_list_bound_leg_op_mod
         )
-
-        # Disconnect Mesh3D signals
+        # Disconnect MESH3D signals
         self.parent.mesh3d_added_signal.disconnect(self.upd_list_mesh3d_add)
         self.parent.mesh3d_removed_signal.disconnect(self.upd_list_mesh3d_rm)
         self.parent.mesh3d_data_keys_removed_signal.disconnect(
@@ -808,8 +788,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.parent.mesh3d_legend_opacity_modified_signal.disconnect(
             self.upd_list_mesh3d_leg_op_mod
         )
-
-        # Disconnect Dom signals
+        # Disconnect DOM signals
         self.parent.dom_added_signal.disconnect(self.upd_list_dom_add)
         self.parent.dom_removed_signal.disconnect(self.upd_list_dom_rm)
         self.parent.dom_data_keys_removed_signal.disconnect(
@@ -833,8 +812,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.parent.dom_legend_opacity_modified_signal.disconnect(
             self.upd_list_dom_leg_op_mod
         )
-
-        # Disconnect Image signals
+        # Disconnect IMAGE signals
         self.parent.image_added_signal.disconnect(self.upd_list_img_add)
         self.parent.image_removed_signal.disconnect(self.upd_list_img_rm)
         self.parent.image_metadata_modified_signal.disconnect(
@@ -843,8 +821,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.parent.image_legend_opacity_modified_signal.disconnect(
             self.upd_list_img_leg_op_mod
         )
-
-        # Disconnect Well signals
+        # Disconnect WELL signals
         self.parent.well_added_signal.disconnect(self.upd_list_well_add)
         self.parent.well_removed_signal.disconnect(self.upd_list_well_rm)
         self.parent.well_data_keys_removed_signal.disconnect(
@@ -865,8 +842,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.parent.well_legend_opacity_modified_signal.disconnect(
             self.upd_list_well_leg_op_mod
         )
-
-        # Disconnect Fluid signals
+        # Disconnect FLUID signals
         self.parent.fluid_added_signal.disconnect(self.upd_list_fluid_add)
         self.parent.fluid_removed_signal.disconnect(self.upd_list_fluid_rm)
         self.parent.fluid_geom_modified_signal.disconnect(self.upd_list_fluid_geo_mod)
@@ -891,8 +867,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.parent.fluid_legend_opacity_modified_signal.disconnect(
             self.upd_list_fluid_leg_op_mod
         )
-
-        # Disconnect Background signals
+        # Disconnect BACKGROUND signals
         self.parent.background_added_signal.disconnect(self.upd_list_background_add)
         self.parent.background_removed_signal.disconnect(self.upd_list_background_rm)
         self.parent.background_geom_modified_signal.disconnect(
@@ -919,8 +894,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.parent.background_legend_opacity_modified_signal.disconnect(
             self.upd_list_background_leg_op
         )
-
-        # Disconnect Prop Legend signals
+        # Disconnect PROPERTY LEGEND signals
         self.parent.prop_legend_cmap_modified_signal.disconnect(self.prop_legend_lambda)
 
     def create_geology_tree(self, sec_uid=None):
@@ -930,7 +904,8 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.GeologyTreeWidget.setHeaderLabels(
             ["Type > Feature > Scenario > Name", "uid", "property"]
         )
-        self.GeologyTreeWidget.hideColumn(1)  # hide the uid column
+        # hide the uid column
+        self.GeologyTreeWidget.hideColumn(1)
         self.GeologyTreeWidget.setItemsExpandable(True)
         if sec_uid:
             geo_types = pd_unique(
@@ -942,9 +917,10 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         else:
             geo_types = pd_unique(self.parent.geol_coll.df["geological_type"])
         for geo_type in geo_types:
+            # self.GeologyTreeWidget as parent -> top level
             glevel_1 = QTreeWidgetItem(
                 self.GeologyTreeWidget, [geo_type]
-            )  # self.GeologyTreeWidget as parent -> top level
+            )
             glevel_1.setFlags(
                 glevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
             )
@@ -964,9 +940,10 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                     ]
                 )
             for feature in geo_features:
+                # glevel_1 as parent -> 1st middle level
                 glevel_2 = QTreeWidgetItem(
                     glevel_1, [feature]
-                )  # glevel_1 as parent -> 1st middle level
+                )
                 glevel_2.setFlags(
                     glevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
                 )
@@ -994,9 +971,10 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                         ]
                     )
                 for scenario in geo_scenario:
+                    # glevel_2 as parent -> 2nd middle level
                     glevel_3 = QTreeWidgetItem(
                         glevel_2, [scenario]
-                    )  # glevel_2 as parent -> 2nd middle level
+                    )
                     glevel_3.setFlags(
                         glevel_3.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
                     )
@@ -1033,9 +1011,10 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                         name = self.parent.geol_coll.df.loc[
                             (self.parent.geol_coll.df["uid"] == uid), "name"
                         ].values[0]
+                        # glevel_3 as parent -> lower level
                         glevel_4 = QTreeWidgetItem(
                             glevel_3, [name, uid]
-                        )  # glevel_3 as parent -> lower level
+                        )
                         self.GeologyTreeWidget.setItemWidget(
                             glevel_4, 2, property_combo
                         )
@@ -1051,8 +1030,8 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                             self.actors_df["uid"] == uid, "show"
                         ].values[0]:
                             glevel_4.setCheckState(0, Qt.Unchecked)
-        """Send messages. Note that with tristate several signals are emitted in a sequence, one for each
-        changed item, but upper levels do not broadcast uid's so they are filtered in the toggle method."""
+        # Send messages. Note that with tristate several signals are emitted in a sequence, one for each
+        # changed item, but upper levels do not broadcast uid's so they are filtered in the toggle method.
         self.GeologyTreeWidget.itemChanged.connect(
             self.toggle_geology_topology_visibility
         )
@@ -1065,7 +1044,8 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.TopologyTreeWidget.setHeaderLabels(
             ["Type > Scenario > Name", "uid", "property"]
         )
-        self.TopologyTreeWidget.hideColumn(1)  # hide the uid column
+        # hide the uid column
+        self.TopologyTreeWidget.hideColumn(1)
         self.TopologyTreeWidget.setItemsExpandable(True)
 
         if sec_uid:
@@ -1077,9 +1057,10 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             topo_types = pd_unique(self.parent.geol_coll.df["topological_type"])
 
         for topo_type in topo_types:
+            # self.GeologyTreeWidget as parent -> top level
             tlevel_1 = QTreeWidgetItem(
                 self.TopologyTreeWidget, [topo_type]
-            )  # self.GeologyTreeWidget as parent -> top level
+            )
             tlevel_1.setFlags(
                 tlevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
             )
@@ -1089,9 +1070,10 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                     "scenario",
                 ]
             ):
+                # tlevel_1 as parent -> middle level
                 tlevel_2 = QTreeWidgetItem(
                     tlevel_1, [scenario]
-                )  # tlevel_1 as parent -> middle level
+                )
                 tlevel_2.setFlags(
                     tlevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
                 )
@@ -1120,9 +1102,10 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                     name = self.parent.geol_coll.df.loc[
                         self.parent.geol_coll.df["uid"] == uid, "name"
                     ].values[0]
+                    # tlevel_2 as parent -> lower level
                     tlevel_3 = QTreeWidgetItem(
                         tlevel_2, [name, uid]
-                    )  # tlevel_2 as parent -> lower level
+                    )
                     self.TopologyTreeWidget.setItemWidget(tlevel_3, 2, property_combo)
                     property_combo.currentIndexChanged.connect(
                         lambda: self.toggle_property()
@@ -1136,8 +1119,8 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                         self.actors_df["uid"] == uid, "show"
                     ].values[0]:
                         tlevel_3.setCheckState(0, Qt.Unchecked)
-        """Send messages. Note that with tristate several signals are emitted in a sequence, one for each
-        changed item, but upper levels do not broadcast uid's so they are filtered in the toggle method."""
+        # Send messages. Note that with tristate several signals are emitted in a sequence, one for each
+        # changed item, but upper levels do not broadcast uid's so they are filtered in the toggle method
         self.TopologyTreeWidget.itemChanged.connect(
             self.toggle_geology_topology_visibility
         )
@@ -1164,7 +1147,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                 )
                 != []
             ):
-                """Already exists a TreeItem (1 level) for the geological type"""
+                # Already exists a TreeItem (1 level) for the geological type
                 counter_1 = 0
                 for child_1 in range(
                     self.GeologyTreeWidget.findItems(
@@ -1173,7 +1156,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                         0,
                     )[0].childCount()
                 ):
-                    """for cycle that loops n times as the number of subItems in the specific geological type branch"""
+                    # for cycle that loops n times as the number of subItems in the specific geological type branch
                     if self.GeologyTreeWidget.findItems(
                         self.parent.geol_coll.get_uid_geological_type(uid),
                         Qt.MatchExactly,
@@ -1201,7 +1184,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                         ) == self.parent.geol_coll.get_uid_geological_feature(
                             uid
                         ):
-                            """Already exists a TreeItem (2 level) for the geological feature"""
+                            # Already exists a TreeItem (2 level) for the geological feature
                             counter_2 = 0
                             for child_2 in range(
                                 self.GeologyTreeWidget.itemBelow(
@@ -1214,7 +1197,8 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                                     )[0]
                                 ).childCount()
                             ):
-                                """for cycle that loops n times as the number of sub-subItems in the specific geological type and geological feature branch"""
+                                # for cycle that loops n times as the number of sub-subItems in the specific geological
+                                # type and geological feature branch
                                 if self.GeologyTreeWidget.itemBelow(
                                     self.GeologyTreeWidget.findItems(
                                         self.parent.geol_coll.get_uid_geological_type(
@@ -1254,7 +1238,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                                     ) == self.parent.geol_coll.get_uid_scenario(
                                         uid
                                     ):
-                                        """Same geological type, geological feature and scenario"""
+                                        # Same geological type, geological feature and scenario
                                         property_combo = QComboBox()
                                         property_combo.uid = uid
                                         property_combo.addItem("none")
@@ -1302,7 +1286,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                                         )
                                         break
                             else:
-                                """Same geological type and geological feature, different scenario"""
+                                # Same geological type and geological feature, different scenario
                                 glevel_3 = QTreeWidgetItem(
                                     self.GeologyTreeWidget.findItems(
                                         self.parent.geol_coll.get_uid_geological_type(
@@ -1353,7 +1337,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                                 self.GeologyTreeWidget.insertTopLevelItem(0, glevel_4)
                                 break
                 else:
-                    """Same geological type, different geological feature and scenario"""
+                    # Same geological type, different geological feature and scenario
                     glevel_2 = QTreeWidgetItem(
                         self.GeologyTreeWidget.findItems(
                             self.parent.geol_coll.get_uid_geological_type(uid),
@@ -1399,7 +1383,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                     self.GeologyTreeWidget.insertTopLevelItem(0, glevel_4)
                     break
             else:
-                """Different geological type, geological feature and scenario"""
+                # Different geological type, geological feature and scenario
                 glevel_1 = QTreeWidgetItem(
                     self.GeologyTreeWidget,
                     [self.parent.geol_coll.get_uid_geological_type(uid)],
@@ -1450,29 +1434,29 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         )
         self.GeologyTreeWidget.expandAll()
 
-    def update_geology_tree_removed(self, removed_list=None):  # second attempt
+    def update_geology_tree_removed(self, removed_list=None):
         """When geological entity is removed, update Geology Tree without building a new model"""
         success = 0
         for uid in removed_list:
             for top_geo_type in range(self.GeologyTreeWidget.topLevelItemCount()):
-                """Iterate through every Geological Type top level"""
+                # Iterate through every Geological Type top level
                 for child_geo_feat in range(
                     self.GeologyTreeWidget.topLevelItem(top_geo_type).childCount()
                 ):
-                    """Iterate through every Geological Feature child"""
+                    # Iterate through every Geological Feature child
                     for child_scenario in range(
                         self.GeologyTreeWidget.topLevelItem(top_geo_type)
                         .child(child_geo_feat)
                         .childCount()
                     ):
-                        """Iterate through every Scenario child"""
+                        # Iterate through every Scenario child
                         for child_entity in range(
                             self.GeologyTreeWidget.topLevelItem(top_geo_type)
                             .child(child_geo_feat)
                             .child(child_scenario)
                             .childCount()
                         ):
-                            """Iterate through every Entity child"""
+                            # Iterate through every Entity child
                             if (
                                 self.GeologyTreeWidget.topLevelItem(top_geo_type)
                                 .child(child_geo_feat)
@@ -1481,7 +1465,8 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                                 .text(1)
                                 == uid
                             ):
-                                """Complete check: entity found has the uid of the entity we need to remove. Delete child, then ensure no Child or Top Level remain empty"""
+                                # Complete check: entity found has the uid of the entity we need to remove. Delete
+                                # child, then ensure no Child or Top Level remain empty
                                 success = 1
                                 self.GeologyTreeWidget.topLevelItem(top_geo_type).child(
                                     child_geo_feat
@@ -1560,7 +1545,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                 )
                 != []
             ):
-                """Already exists a TreeItem (1 level) for the topological type"""
+                # Already exists a TreeItem (1 level) for the topological type
                 counter_1 = 0
                 for child_1 in range(
                     self.TopologyTreeWidget.findItems(
@@ -1569,7 +1554,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                         0,
                     )[0].childCount()
                 ):
-                    """for cycle that loops n times as the number of subItems in the specific topological type branch"""
+                    # for cycle that loops n times as the number of subItems in the specific topological type branch
                     if self.TopologyTreeWidget.findItems(
                         self.parent.geol_coll.get_uid_topological_type(uid),
                         Qt.MatchExactly,
@@ -1597,7 +1582,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                         ) == self.parent.geol_coll.get_uid_scenario(
                             uid
                         ):
-                            """Same topological type and scenario"""
+                            # Same topological type and scenario
                             property_combo = QComboBox()
                             property_combo.uid = uid
                             property_combo.addItem("none")
@@ -1635,7 +1620,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                             self.TopologyTreeWidget.insertTopLevelItem(0, tlevel_3)
                             break
                 else:
-                    """Same topological type, different scenario"""
+                    # Same topological type, different scenario
                     tlevel_2 = QTreeWidgetItem(
                         self.TopologyTreeWidget.findItems(
                             self.parent.geol_coll.get_uid_topological_type(uid),
@@ -1674,7 +1659,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                     self.TopologyTreeWidget.insertTopLevelItem(0, tlevel_3)
                     break
             else:
-                """Different topological type and scenario"""
+                # Different topological type and scenario
                 tlevel_1 = QTreeWidgetItem(
                     self.TopologyTreeWidget,
                     [self.parent.geol_coll.get_uid_topological_type(uid)],
@@ -1723,17 +1708,17 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         success = 0
         for uid in removed_list:
             for top_topo_type in range(self.TopologyTreeWidget.topLevelItemCount()):
-                """Iterate through every Topological Type top level"""
+                # Iterate through every Topological Type top level
                 for child_scenario in range(
                     self.TopologyTreeWidget.topLevelItem(top_topo_type).childCount()
                 ):
-                    """Iterate through every Scenario child"""
+                    # Iterate through every Scenario child
                     for child_entity in range(
                         self.TopologyTreeWidget.topLevelItem(top_topo_type)
                         .child(child_scenario)
                         .childCount()
                     ):
-                        """Iterate through every Entity child"""
+                        # Iterate through every Entity child
                         if (
                             self.TopologyTreeWidget.topLevelItem(top_topo_type)
                             .child(child_scenario)
@@ -1741,7 +1726,8 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                             .text(1)
                             == uid
                         ):
-                            """Complete check: entity found has the uid of the entity we need to remove. Delete child, then ensure no Child or Top Level remain empty"""
+                            # Complete check: entity found has the uid of the entity we need to remove. Delete child,
+                            # then ensure no Child or Top Level remain empty
                             success = 1
                             self.TopologyTreeWidget.topLevelItem(top_topo_type).child(
                                 child_scenario
@@ -1799,13 +1785,15 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             item.setCheckState(0, Qt.Unchecked)
 
     def toggle_geology_topology_visibility(self, item, column):
-        """Called by self.GeologyTreeWidget.itemChanged.connect(self.toggle_geology_topology_visibility) and self.TopologyTreeWidget.itemChanged.connect(self.toggle_geology_topology_visibility)"""
-        name = item.text(0)  # not used
+        """Called by self.GeologyTreeWidget.itemChanged.connect(self.toggle_geology_topology_visibility) and
+        self.TopologyTreeWidget.itemChanged.connect(self.toggle_geology_topology_visibility)"""
+        # name = item.text(0)  # not used
         uid = item.text(1)
         uid_checkState = item.checkState(0)
+        # needed to skip messages from upper levels of tree that do not broadcast uid's
         if (
             uid
-        ):  # needed to skip messages from upper levels of tree that do not broadcast uid's
+        ):
             if uid_checkState == Qt.Checked:
                 if not self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[
                     0
@@ -1816,9 +1804,9 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                 if self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]:
                     self.actors_df.loc[self.actors_df["uid"] == uid, "show"] = False
                     self.set_actor_visible(uid=uid, visible=False)
-            """Before updating checkboxes, disconnect signals to geology and topology tree, if they are set,
-            to avoid a nasty loop that disrupts the trees, then reconnect them (it is also possible that
-            they are automatically reconnected whe the trees are rebuilt."""
+            # Before updating checkboxes, disconnect signals to geology and topology tree, if they are set,
+            # to avoid a nasty loop that disrupts the trees, then reconnect them (it is also possible that
+            # they are automatically reconnected whe the trees are rebuilt
             self.GeologyTreeWidget.itemChanged.disconnect()
             self.TopologyTreeWidget.itemChanged.disconnect()
             self.update_geology_checkboxes(uid=uid, uid_checkState=uid_checkState)
@@ -1830,7 +1818,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                 self.toggle_geology_topology_visibility
             )
 
-    """Methods used to build and update the cross-section table."""
+    # Methods used to build and update the X-SECTION table
 
     def create_xsections_tree(self, sec_uid=None):
         """Create XSection tree with checkboxes and properties"""
@@ -1840,9 +1828,10 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.XSectionTreeWidget.hideColumn(1)  # hide the uid column
         self.XSectionTreeWidget.setItemsExpandable(True)
         name_xslevel1 = ["All XSections"]
+        # self.XSectionTreeWidget as parent -> top level
         xslevel_1 = QTreeWidgetItem(
             self.XSectionTreeWidget, name_xslevel1
-        )  # self.XSectionTreeWidget as parent -> top level
+        )
         xslevel_1.setFlags(
             xslevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
         )
@@ -1856,16 +1845,17 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             name = self.parent.xsect_coll.df.loc[
                 self.parent.xsect_coll.df["uid"] == uid, "name"
             ].values[0]
+            # xslevel_2 as parent -> lower level
             xslevel_2 = QTreeWidgetItem(
                 xslevel_1, [name, uid]
-            )  # xslevel_2 as parent -> lower level
+            )
             xslevel_2.setFlags(xslevel_2.flags() | Qt.ItemIsUserCheckable)
             if self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]:
                 xslevel_2.setCheckState(0, Qt.Checked)
             elif not self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]:
                 xslevel_2.setCheckState(0, Qt.Unchecked)
-        """Send messages. Note that with tristate several signals are emitted in a sequence, one for each
-        changed item, but upper levels do not broadcast uid's so they are filtered in the toggle method."""
+        # Send messages. Note that with tristate several signals are emitted in a sequence, one for each
+        # changed item, but upper levels do not broadcast uid's so they are filtered in the toggle method
         self.XSectionTreeWidget.itemChanged.connect(self.toggle_xsection_visibility)
         self.XSectionTreeWidget.expandAll()
 
@@ -1954,7 +1944,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             self.update_xsection_checkboxes(uid=uid, uid_checkState=uid_checkState)
             self.XSectionTreeWidget.itemChanged.connect(self.toggle_xsection_visibility)
 
-    """Methods used to build and update the Boundary table."""
+    # Methods used to build and update the BOUNDARY table
 
     def create_boundary_list(self, sec_uid=None):
         """Create boundaries list with checkboxes."""
@@ -2047,7 +2037,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                 self.actors_df.loc[self.actors_df["uid"] == uid, "show"] = False
                 self.set_actor_visible(uid=uid, visible=False)
 
-    """Methods used to build and update the Mesh3D table."""
+    # Methods used to build and update the MESH3D table
 
     def create_mesh3d_list(self, sec_uid=None):
         """Create mesh3D list with checkboxes."""
@@ -2197,7 +2187,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             ignore_index=True,
         )  # self.set_actor_visible(uid=uid, visible=show)
 
-    """Methods used to build and update the DOM table."""
+    # Methods used to build and update the DOM table
 
     def create_dom_list(self, sec_uid=None):
         """Create cross-sections list with checkboxes."""
@@ -2438,7 +2428,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             ignore_index=True,
         )  # self.set_actor_visible(uid=uid, visible=show)
 
-    """Methods used to build and update the image table."""
+    # Methods used to build and update the IMAGE table
 
     def create_image_list(self, sec_uid=None):
         """Create image list with checkboxes."""
@@ -2586,7 +2576,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             ignore_index=True,
         )  # self.set_actor_visible(uid=uid, visible=show)
 
-    """Methods used to build and update the Wells table."""
+    # Methods used to build and update the WELLS table
 
     def create_well_tree(self):
         """Create topology tree with checkboxes and properties"""
@@ -2875,7 +2865,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             self.WellsTreeWidget.itemChanged.disconnect()
             self.WellsTreeWidget.itemChanged.connect(self.toggle_well_visibility)
 
-    """Methods used to build and update the fluid and fluid topology trees."""
+    # Methods used to build and update the FLUID and FLUID TOPOLOGY trees __________________???
 
     def create_fluids_tree(self, sec_uid=None):
         """Create fluids tree with checkboxes and properties"""
@@ -3781,7 +3771,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                 self.toggle_fluids_topology_visibility
             )
 
-    """Methods used to build and update the backgrounds_misti tree."""
+    # Methods used to build and update the BACKGROUNDS and BACKGROUNDS TOPOLOGY trees __________________???
 
     def create_backgrounds_tree(self, sec_uid=None):
         """Create Backgrounds tree with checkboxes and properties"""
@@ -4576,7 +4566,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
 
     # ================================  add, remove, and update actors ================================
 
-    """Methods used to add, remove, and update actors from the geological collection."""
+    # Methods used to add, remove, and update actors from the GEOLOGICAL collection.
 
     def geology_added_update_views(self, updated_list=None):
         """This is called when an entity is added to the geological collection.
@@ -4829,7 +4819,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             self.toggle_geology_topology_visibility
         )
 
-    """Methods used to add, remove, and update actors from the cross section collection."""
+    # Methods used to add, remove, and update actors from the X-SECTION collection
 
     def xsect_added_update_views(self, updated_list=None):
         """This is called when a cross-section is added to the xsect collection.
@@ -4943,7 +4933,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         """Re-connect signals."""
         self.XSectionTreeWidget.itemChanged.connect(self.toggle_xsect_visibility)
 
-    """Methods used to add, remove, and update actors from the Boundary collection."""
+    # Methods used to add, remove, and update actors from the BOUNDARY collection
 
     def boundary_added_update_views(self, updated_list=None):
         """This is called when a boundary is added to the boundary collection.
@@ -5062,7 +5052,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         """Re-connect signals."""
         self.BoundariesTableWidget.itemChanged.connect(self.toggle_boundary_visibility)
 
-    """Methods used to add, remove, and update actors from the Mesh3D collection."""
+    # Methods used to add, remove, and update actors from the MESH3D collection
 
     def mesh3d_added_update_views(self, updated_list=None):
         """This is called when a mesh3d is added to the mesh3d collection.
@@ -5205,7 +5195,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         """Re-connect signals."""
         self.Mesh3DTableWidget.itemChanged.connect(self.toggle_mesh3d_visibility)
 
-    """Methods used to add, remove, and update actors from the DOM collection."""
+    # Methods used to add, remove, and update actors from the DOM collection
 
     def dom_added_update_views(self, updated_list=None):
         """This is called when a DOM is added to the xsect collection.
@@ -5357,7 +5347,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         """Re-connect signals."""
         self.DOMsTableWidget.itemChanged.connect(self.toggle_dom_visibility)
 
-    """Methods used to add, remove, and update actors from the image collection."""
+    # Methods used to add, remove, and update actors from the IMAGE collection
 
     def image_added_update_views(self, updated_list=None):
         """This is called when an image is added to the image collection.
@@ -5428,7 +5418,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         """Re-connect signals."""
         self.ImagesTableWidget.itemChanged.connect(self.toggle_image_visibility)
 
-    """Methods used to add, remove, and update actors from the wells collection."""
+    # Methods used to add, remove, and update actors from the WELLS collection
 
     def well_added_update_views(self, updated_list=None):
         """This is called when an entity is added to the well collection.
@@ -5566,7 +5556,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         """Re-connect signals."""
         self.WellsTreeWidget.itemChanged.connect(self.toggle_well_visibility)
 
-    """Methods used to add, remove, and update actors from the fluid collection."""
+    # Methods used to add, remove, and update actors from the FLUID collection
 
     def fluid_added_update_views(self, updated_list=None):
         """This is called when an entity is added to the fluid collection.
@@ -5819,7 +5809,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             self.toggle_fluids_topology_visibility
         )
 
-    """Methods used to add, remove, and update actors from the backgrounds_misti collection."""
+    # Methods used to add, remove, and update actors from the BACKGROUNDS collection
 
     def background_added_update_views(self, updated_list=None):
         """This is called when an entity is added to the fluid collection.
@@ -6074,7 +6064,9 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             self.toggle_backgrounds_topology_visibility
         )
 
-    """General methods shared by all views."""
+    # ================================  general methods ================================
+
+    # General methods shared by all views
 
     def toggle_property(self):
         """Generic method to toggle the property shown by an actor that is already present in the view."""
@@ -6089,15 +6081,19 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         collection = self.actors_df.loc[
             self.actors_df["uid"] == uid, "collection"
         ].values[0]
-        """This removes the previous copy of the actor with the same uid, then calls the viewer-specific function that shows an actor with a property.
-        IN THE FUTURE see if it is possible and more efficient to keep the actor and just change the property shown."""
+        # This removes the previous copy of the actor with the same uid, then calls the viewer-specific function that
+        # shows an actor with a property.
+        # IN THE FUTURE see if it is possible and more efficient to keep the actor and just change the property shown
         if name == "Marker":
+            # case for Marker
             self.show_markers(uid=uid, show_property=show_property)
         elif name == "Annotations":
+            # case for Annotations
             self.show_labels(
                 uid=uid, show_property=show_property, collection=collection
             )
         else:
+            # case for all other properties
             self.remove_actor_in_view(uid=uid)
 
             this_actor = self.show_actor_with_property(
@@ -6118,10 +6114,10 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             )  # self.set_actor_visible(uid=uid, visible=show)
 
     def add_all_entities(self):
-        """Add all entities in project collections. This must be reimplemented for cross-sections in order
-        to show entities belonging to the section only. All objects are visible by default -> show = True
-        """
-
+        """Add all entities in project collections.
+        All objects are visible by default -> show = True
+        This must be reimplemented for cross-sections in order
+        to show entities belonging to the section only."""
         for index, uid in enumerate(self.parent.geol_coll.df["uid"].tolist()):
             this_actor = self.show_actor_with_property(
                 uid=uid, collection="geol_coll", show_property=None, visible=True
@@ -6136,7 +6132,6 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                 },
                 ignore_index=True,
             )
-
         for uid in self.parent.xsect_coll.df["uid"].tolist():
             this_actor = self.show_actor_with_property(
                 uid=uid, collection="xsect_coll", show_property=None, visible=False
@@ -6151,7 +6146,6 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                 },
                 ignore_index=True,
             )
-
         for uid in self.parent.boundary_coll.df["uid"].tolist():
             this_actor = self.show_actor_with_property(
                 uid=uid, collection="boundary_coll", show_property=None, visible=False
@@ -6166,7 +6160,6 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                 },
                 ignore_index=True,
             )
-
         for uid in self.parent.mesh3d_coll.df["uid"].tolist():
             this_actor = self.show_actor_with_property(
                 uid=uid, collection="mesh3d_coll", show_property=None, visible=False
@@ -6181,7 +6174,6 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                 },
                 ignore_index=True,
             )
-
         for uid in self.parent.dom_coll.df["uid"].tolist():
             this_actor = self.show_actor_with_property(
                 uid=uid, collection="dom_coll", show_property=None, visible=False
@@ -6196,7 +6188,6 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                 },
                 ignore_index=True,
             )
-
         for uid in self.parent.image_coll.df["uid"].tolist():
             this_actor = self.show_actor_with_property(
                 uid=uid, collection="image_coll", show_property=None, visible=False
@@ -6211,7 +6202,6 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                 },
                 ignore_index=True,
             )
-
         for uid in self.parent.well_coll.df["uid"].tolist():
             this_actor = self.show_actor_with_property(
                 uid=uid, collection="well_coll", show_property=None, visible=False
@@ -6226,7 +6216,6 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                 },
                 ignore_index=True,
             )
-
         for uid in self.parent.fluids_coll.df["uid"].tolist():
             this_actor = self.show_actor_with_property(
                 uid=uid, collection="fluids_coll", show_property=None, visible=False
@@ -6274,8 +6263,10 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                 collection = self.actors_df.loc[
                     self.actors_df["uid"] == uid, "collection"
                 ].to_list()[0]
-                """This removes the previous copy of the actor with the same uid, then calls the viewer-specific function that shows an actor with a property.
-                IN THE FUTURE see if it is possible and more efficient to keep the actor and just change the property shown."""
+                # This removes the previous copy of the actor with the same uid, then calls the viewer-specific
+                # function that shows an actor with a property.
+                # IN THE FUTURE see if it is possible and more efficient to keep the actor and just change
+                # the property shown.
                 self.remove_actor_in_view(uid=uid)
                 this_actor = self.show_actor_with_property(
                     uid=uid,
@@ -6295,8 +6286,281 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                 )
 
     def change_actor_color(self, uid=None, collection=None):
+        """Dummy method to update color for actor uid. Must be implemented in subclasses."""
+        return
+
+    def change_actor_opacity(self, uid=None, collection=None):
+        """Dummy method to update opacity for actor uid. Must be implemented in subclasses."""
+        return
+
+    def change_actor_line_thick(self, uid=None, collection=None):
+        """Dummy method to update line thickness for actor uid. Must be implemented in subclasses."""
+        return
+
+    def change_actor_point_size(self, uid=None, collection=None):
+        """Dummy method to update point size for actor uid. Must be implemented in subclasses."""
+        return
+
+    def set_actor_visible(self, uid=None, visible=None, name=None):
+        """Dummy method to Set actor uid visible or invisible (visible = True or False).
+        Must be implemented in subclasses."""
+        return
+
+    def remove_actor_in_view(self, uid=None, redraw=False):
+        """Dummy method to remove actor with uid. Must be implemented in subclasses."""
+        return
+
+    def show_actor_with_property(self, uid=None, collection=None, show_property=None, visible=None):
+        """Dummy method to show actor with uid and property. Must be implemented in subclasses."""
+        return
+
+    def show_markers(self, uid=None, show_property=None):
+        """Dummy method to show markers for uid and property. Must be implemented in subclasses."""
+        return
+
+    def show_labels(self, uid=None, collection=None, show_property=None):
+        """Dummy method to show labels for uid and property. Must be implemented in subclasses."""
+        return
+
+    def initialize_menu_tools(self):
+        """Dummy method to initialize menu tools. Must be implemented in subclasses."""
+        # _______________________
+        # SOME TOOLS MIGHT BE IMPLEMENTED HERE? IN THIS CASE SUBCLASSES WOULD NEED A METHOD ADDING TOOLS,
+        # AND NOT A COMPLETE REIMPLEMENTATION OF THIS
+        # _______________________
+        return
+
+    def initialize_interactor(self):
+        """Dummy method to initialize the plotting canvas. Must be implemented in subclasses."""
+        return
+
+    def add_all_entities(self):
+        """Dummy method to add all entities to the plotting canvas. Must be implemented in subclasses."""
+        return
+
+    def show_qt_canvas(self):
+        """Dummy method to show the plotting canvas. Must be implemented in subclasses."""
+        return
+
+    def closeEvent(self, event):
+        """Override the standard closeEvent method since self.plotter.close() is needed to cleanly close the vtk
+        plotter."""
+        reply = QMessageBox.question(
+            self,
+            "Closing window",
+            "Close this window?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if reply == QMessageBox.Yes:
+            # disconnect_all_signals(self.signals)
+            self.disconnect_all_signals()
+
+            # self.upd_list_geo_rm
+            if not isinstance(self, ViewStereoplot):
+                self.plotter.close()  # needed to cleanly close the vtk plotter
+            event.accept()
+        else:
+            event.ignore()
+
+    def disable_actions(self):
+        for action in self.findChildren(QAction):
+            if isinstance(action.parentWidget(), NavigationToolbar) is False:
+                action.setDisabled(True)
+
+    def enable_actions(self):
+        for action in self.findChildren(QAction):
+            action.setEnabled(True)
+
+    def remove_entity(self):
+        # _______________________________________________
+        # ISSUE #68 HERE
+        # _______________________________________________
+        for sel_uid in self.selected_uids:
+            self.plotter.remove_actor(f"{sel_uid}_silh")
+        self.parent.entity_remove()
+
+    """ Picking general functions """
+
+    # ______________________________________________________________
+    # 14/2/2024 UP TO HERE
+    # ______________________________________________________________
+
+    def actor_in_table(self, sel_uid=None):
+        """Function used to highlight in the table view a list of selected actors"""
+        if sel_uid:
+            """[Gabriele] To select the mesh in the entity list we compare the actors of the actors_df dataframe
+            with the picker.GetActor() result"""
+            collection = self.actors_df.loc[
+                self.actors_df["uid"] == sel_uid[0], "collection"
+            ].values[0]
+
+            if collection == "geol_coll":
+                table = self.parent.GeologyTableView
+                df = self.parent.geol_coll.df
+                self.parent.tabCentral.setCurrentIndex(
+                    0
+                )  # set the correct tab to avoid problems
+            elif collection == "dom_coll":
+                table = self.parent.DOMsTableView
+                df = self.parent.dom_coll.df
+                self.parent.tabCentral.setCurrentIndex(4)
+            else:
+                print("Selection not supported")
+                return
+            table.clearSelection()
+
+            if len(sel_uid) > 1:
+                table.setSelectionMode(QAbstractItemView.MultiSelection)
+
+            # In general this approach is not the best.
+            # In the actors_df the index of the df is indipendent from the index of the table views.
+            # We could have 6 entities 5 of which are in the geology tab and 1 in the image tab.
+            # When selecting the image the actors_df index could be anything from 0 to 5 (depends on the add_all_entities order)
+            # but in the table view is 0 thus returning nothing.
+            # To resolve this we could:
+            #   1. Create a actor_df for each collection
+            #   2. Have a general actors_df with a table_index value (that needs to be updated when adding or removing objects)
+            #   3. Have a selected_entities_df indipendent from the tables or views that collects the selected actors (both in the table or in the view)
+
+            # For now selection will work only for geology objects
+
+            for uid in sel_uid:
+                uid_list = [
+                    table.model().index(row, 0).data() for row in range(len(df.index))
+                ]
+                idx = uid_list.index(uid)
+                # coll = self.actors_df.loc[self.actors_df['uid'] == uid, 'collection'].values[0]
+
+                # if coll == 'geol_coll':
+                table.selectRow(idx)
+
+                # elif coll == 'image_coll':
+                #     self.parent.ImagesTableView.selectRow(idx)
+                # return
+        else:
+            self.parent.GeologyTableView.clearSelection()
+            self.parent.DOMsTableView.clearSelection()
+            self.selected_uids = []
+
+    def select_actor_with_mouse(self):
+        """Function used to initiate actor selection"""
+        self.disable_actions()
+        self.plotter.iren.interactor.AddObserver(
+            "LeftButtonPressEvent", self.select_actor
+        )
+        # self.plotter.iren.interactor.AddObserver('KeyPressEvent',self.clear_selected)
+        self.plotter.track_click_position(self.end_pick)
+        self.plotter.add_key_event("c", self.clear_selection)
+
+    def end_pick(self, pos):
+        """Function used to disable actor picking"""
+
+        self.plotter.iren.interactor.RemoveObservers(
+            "LeftButtonPressEvent"
+        )  # Remove the selector observer
+        self.plotter.untrack_click_position(
+            side="right"
+        )  # Remove the right click observer
+        self.plotter.untrack_click_position(
+            side="left"
+        )  # Remove the left click observer
+        # self.plotter.track_click_position(
+        #    lambda pos: self.plotter.camera.SetFocalPoint(pos), side="left", double=True
+        # )
+        if isinstance(self, View3D):
+            self.plotter.enable_trackball_style()
+        elif isinstance(self, NewView2D):
+            self.plotter.enable_image_style()
+
+        self.plotter.reset_key_events()
+        self.selected_uids = self.parent.selected_uids
+        self.enable_actions()
+
+    def clear_selection(self):
+        for av_actor in self.plotter.renderer.actors.copy():
+            self.plotter.remove_bounding_box()
+            if "_silh" in av_actor:
+                self.plotter.remove_actor(av_actor)
+
+        if not self.selected_uids == []:
+            deselected_uids = self.selected_uids
+            self.selected_uids = []
+        self.actor_in_table()
+
+    def select_actor(self, obj, event):
+        style = obj.GetInteractorStyle()
+        style.SetDefaultRenderer(self.plotter.renderer)
+        pos = obj.GetEventPosition()
+        shift = obj.GetShiftKey()
+        name_list = set()
+        # end_pos = style.GetEndPosition()
+
+        picker = vtkPropPicker()
+        picker.PickProp(pos[0], pos[1], style.GetDefaultRenderer())
+
+        actors = set(self.plotter.renderer.actors)
+
+        actor = picker.GetActor()
+
+        if not self.actors_df.loc[self.actors_df["actor"] == actor, "uid"].empty:
+            sel_uid = self.actors_df.loc[
+                self.actors_df["actor"] == actor, "uid"
+            ].values[0]
+            if shift:
+                self.selected_uids.append(sel_uid)
+            else:
+                self.selected_uids = [sel_uid]
+
+            for sel_uid in self.selected_uids:
+                sel_actor = self.actors_df.loc[
+                    self.actors_df["uid"] == sel_uid, "actor"
+                ].values[0]
+                collection = self.actors_df.loc[
+                    self.actors_df["uid"] == sel_uid, "collection"
+                ].values[0]
+                mesh = sel_actor.GetMapper().GetInput()
+                name = f"{sel_uid}_silh"
+                name_list.add(name)
+                if collection == "dom_coll":
+                    bounds = sel_actor.GetBounds()
+                    mesh = pv_Box(bounds)
+
+                self.plotter.add_mesh(
+                    mesh,
+                    pickable=False,
+                    name=name,
+                    color="Yellow",
+                    style="wireframe",
+                    line_width=5,
+                )
+                for av_actor in actors.difference(name_list):
+                    if "_silh" in av_actor:
+                        self.plotter.remove_actor(av_actor)
+
+            self.actor_in_table(self.selected_uids)
+        else:
+            return None
+
+    def vert_exag(self):
+        exag_value = input_one_value_dialog(
+            parent=self,
+            title="Vertical exaggeration options",
+            label="Set vertical exaggeration",
+            default_value=1.0,
+        )
+
+        self.plotter.set_scale(zscale=exag_value)
+
+
+class VTKView(BaseView):
+
+    def change_actor_color(self, uid=None, collection=None):
         """Update color for actor uid"""
         if uid in self.actors_df.uid:
+            # _______________________________________________________________________
+            # THIS COULD BE SIMPLIFIED IF A SUPER-CLASS TO COLLECTIONS IS IMPLEMENTED
+            # _______________________________________________________________________
             if collection == "geol_coll":
                 color_R = self.parent.geol_coll.get_uid_legend(uid=uid)["color_R"]
                 color_G = self.parent.geol_coll.get_uid_legend(uid=uid)["color_G"]
@@ -6329,8 +6593,8 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                 color_R = self.parent.backgrounds_coll.get_uid_legend(uid=uid)["color_R"]
                 color_G = self.parent.backgrounds_coll.get_uid_legend(uid=uid)["color_G"]
                 color_B = self.parent.backgrounds_coll.get_uid_legend(uid=uid)["color_B"]
-            """Note: no legend for image."""
-            """Update color for actor uid"""
+            # No color for image
+            # Now update color for actor uid
             color_RGB = [color_R / 255, color_G / 255, color_B / 255]
             self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[
                 0
@@ -6341,6 +6605,9 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
     def change_actor_opacity(self, uid=None, collection=None):
         """Update opacity for actor uid"""
         if uid in self.actors_df.uid:
+            # _______________________________________________________________________
+            # THIS COULD BE SIMPLIFIED IF A SUPER-CLASS TO COLLECTIONS IS IMPLEMENTED
+            # _______________________________________________________________________
             if collection == "geol_coll":
                 opacity = self.parent.geol_coll.get_uid_legend(uid=uid)["opacity"] / 100
             elif collection == "xsect_coll":
@@ -6361,8 +6628,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                 )
             elif collection == "image_coll":
                 opacity = self.parent.image_coll.get_legend()["opacity"] / 100
-            """Note: no legend for image."""
-            """Update color for actor uid"""
+            # Now update color for actor uid
             self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[
                 0
             ].GetProperty().SetOpacity(opacity)
@@ -6372,6 +6638,9 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
     def change_actor_line_thick(self, uid=None, collection=None):
         """Update line thickness for actor uid"""
         if uid in self.actors_df.uid:
+            # _______________________________________________________________________
+            # THIS COULD BE SIMPLIFIED IF A SUPER-CLASS TO COLLECTIONS IS IMPLEMENTED
+            # _______________________________________________________________________
             if collection == "geol_coll":
                 line_thick = self.parent.geol_coll.get_uid_legend(uid=uid)["line_thick"]
             elif collection == "xsect_coll":
@@ -6382,7 +6651,6 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                 line_thick = self.parent.mesh3d_coll.get_legend()["line_thick"]
             elif collection == "dom_coll":
                 line_thick = self.parent.dom_coll.get_legend()["line_thick"]
-                """Note: no legend for image."""
             elif collection == "well_coll":
                 line_thick = self.parent.well_coll.get_uid_legend(uid=uid)["line_thick"]
             elif collection == "fluids_coll":
@@ -6391,6 +6659,8 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                 line_thick = self.parent.backgrounds_coll.get_uid_legend(uid=uid)[
                     "line_thick"
                 ]
+            # No thickness for image
+            # Now update thickness for actor uid
             self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[
                 0
             ].GetProperty().SetLineWidth(line_thick)
@@ -6400,6 +6670,9 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
     def change_actor_point_size(self, uid=None, collection=None):
         """Update point size for actor uid"""
         if uid in self.actors_df.uid:
+            # _______________________________________________________________________
+            # THIS COULD BE SIMPLIFIED IF A SUPER-CLASS TO COLLECTIONS IS IMPLEMENTED
+            # _______________________________________________________________________
             if collection == "geol_coll":
                 point_size = self.parent.geol_coll.get_uid_legend(uid=uid)["point_size"]
             elif collection == "xsect_coll":
@@ -6419,10 +6692,12 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                 point_size = self.parent.backgrounds_coll.get_uid_legend(uid=uid)[
                     "point_size"
                 ]
+            # No thickness for image
+            # Now update point size for actor uid
             self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[
                 0
             ].GetProperty().SetPointSize(point_size)
-         else:
+        else:
             return
 
     def set_actor_visible(self, uid=None, visible=None, name=None):
@@ -6432,13 +6707,13 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             self.actors_df["uid"] == uid, "collection"
         ].values[0]
         actors = self.plotter.renderer.actors
-
         if collection == "well_coll":
+            # case for WELLS
             if name == "Trace":
+                # case for WELL TRACE
                 if f"{uid}_prop" in actors.keys():
                     prop_actor = actors[f"{uid}_prop"]
                     prop_actor.SetVisibility(visible)
-
                 if f"{uid}_geo" in actors:
                     geo_actor = actors[f"{uid}_geo"]
                     geo_actor.SetVisibility(visible)
@@ -6446,19 +6721,20 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                 # self.plotter.remove_actor(f'{uid}_geo')
                 this_actor.SetVisibility(visible)
             elif name == "Markers":
+                # case for WELL markers
                 if f"{uid}_marker-labels" in actors.keys():
                     marker_actor_labels = actors[f"{uid}_marker-labels"]
                     marker_actor_points = actors[f"{uid}_marker-points"]
                     marker_actor_labels.SetVisibility(visible)
                     marker_actor_points.SetVisibility(visible)
-
         elif collection == "backgrounds_coll":
+            # case for BACKGROUNDS
             if f"{uid}_name-labels" in actors.keys():
                 marker_actor_labels = actors[f"{uid}_name-labels"]
                 marker_actor_labels.SetVisibility(visible)
             this_actor.SetVisibility(visible)
-
         else:
+            # case for ALL OTHER COLLECTIONS
             this_actor.SetVisibility(visible)
 
     def remove_actor_in_view(self, uid=None, redraw=False):
@@ -6478,10 +6754,11 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             )
 
     def show_actor_with_property(self, uid=None, collection=None, show_property=None, visible=None):
-        """Show actor with scalar property (default None)
+        """
+        Show actor with scalar property (default None). See details in:
         https://github.com/pyvista/pyvista/blob/140b15be1d4021b81ded46b1c212c70e86a98ee7/pyvista/plotting/plotting.py#L1045
         """
-        """First get the vtk object from its collection."""
+        # First get the vtk object from its collection
         show_property_title = show_property
         show_scalar_bar = True
         if collection == "geol_coll":
@@ -6492,7 +6769,6 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             line_thick = self.parent.geol_coll.get_uid_legend(uid=uid)["line_thick"]
             point_size = self.parent.geol_coll.get_uid_legend(uid=uid)["point_size"]
             opacity = self.parent.geol_coll.get_uid_legend(uid=uid)["opacity"] / 100
-
             plot_entity = self.parent.geol_coll.get_uid_vtk_obj(uid)
         elif collection == "xsect_coll":
             color_R = self.parent.xsect_coll.get_legend()["color_R"]
@@ -6501,7 +6777,6 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             color_RGB = [color_R / 255, color_G / 255, color_B / 255]
             line_thick = self.parent.xsect_coll.get_legend()["line_thick"]
             opacity = self.parent.xsect_coll.get_legend()["opacity"] / 100
-
             plot_entity = self.parent.xsect_coll.get_uid_vtk_frame(uid)
         elif collection == "boundary_coll":
             color_R = self.parent.boundary_coll.get_legend()["color_R"]
@@ -6510,7 +6785,6 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             color_RGB = [color_R / 255, color_G / 255, color_B / 255]
             line_thick = self.parent.boundary_coll.get_legend()["line_thick"]
             opacity = self.parent.boundary_coll.get_legend()["opacity"] / 100
-
             plot_entity = self.parent.boundary_coll.get_uid_vtk_obj(uid)
         elif collection == "mesh3d_coll":
             color_R = self.parent.mesh3d_coll.get_legend()["color_R"]
@@ -6519,7 +6793,6 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             color_RGB = [color_R / 255, color_G / 255, color_B / 255]
             line_thick = self.parent.mesh3d_coll.get_legend()["line_thick"]
             opacity = self.parent.mesh3d_coll.get_legend()["opacity"] / 100
-
             plot_entity = self.parent.mesh3d_coll.get_uid_vtk_obj(uid)
         elif collection == "dom_coll":
             color_R = self.parent.dom_coll.get_legend()["color_R"]
@@ -6528,14 +6801,12 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             color_RGB = [color_R / 255, color_G / 255, color_B / 255]
             line_thick = self.parent.dom_coll.get_legend()["line_thick"]
             opacity = self.parent.dom_coll.get_legend()["opacity"] / 100
-
             plot_entity = self.parent.dom_coll.get_uid_vtk_obj(uid)
         elif collection == "image_coll":
             """Note: no legend for image."""
             color_RGB = [255, 255, 255]
             line_thick = 5.0
             opacity = self.parent.image_coll.get_legend()["opacity"] / 100
-
             plot_entity = self.parent.image_coll.get_uid_vtk_obj(uid)
         elif collection == "well_coll":
             color_R = self.parent.well_coll.get_uid_legend(uid=uid)["color_R"]
@@ -6544,7 +6815,6 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             color_RGB = [color_R / 255, color_G / 255, color_B / 255]
             line_thick = self.parent.well_coll.get_uid_legend(uid=uid)["line_thick"]
             opacity = self.parent.well_coll.get_uid_legend(uid=uid)["opacity"] / 100
-
             plot_entity = self.parent.well_coll.get_uid_vtk_obj(uid)
         elif collection == "fluids_coll":
             color_R = self.parent.fluids_coll.get_uid_legend(uid=uid)["color_R"]
@@ -6554,7 +6824,6 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             line_thick = self.parent.fluids_coll.get_uid_legend(uid=uid)["line_thick"]
             point_size = self.parent.fluids_coll.get_uid_legend(uid=uid)["point_size"]
             opacity = self.parent.fluids_coll.get_uid_legend(uid=uid)["opacity"] / 100
-
             plot_entity = self.parent.fluids_coll.get_uid_vtk_obj(uid)
         elif collection == "backgrounds_coll":
             color_R = self.parent.backgrounds_coll.get_uid_legend(uid=uid)["color_R"]
@@ -6570,13 +6839,12 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             opacity = (
                 self.parent.backgrounds_coll.get_uid_legend(uid=uid)["opacity"] / 100
             )
-
             plot_entity = self.parent.backgrounds_coll.get_uid_vtk_obj(uid)
         else:
-            print("no collection")
-            print(collection)
+            # catch errors
+            print("no collection", collection)
             this_actor = None
-        """Then plot the vtk object with proper options."""
+        # Then plot the vtk object with proper options
         if isinstance(plot_entity, (PolyLine, TriSurf, XsPolyLine)) and not isinstance(
             plot_entity, WellTrace
         ):
@@ -6950,6 +7218,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                 opacity=opacity,
             )
         else:
+            # catch errors
             print("[Windows factory]: actor with no class")
             this_actor = None
         return this_actor
@@ -7053,29 +7322,6 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
     def zoom_active(self):
         self.plotter.reset_camera()
 
-    def initialize_interactor(self):
-        """Add the pyvista interactor object to self.ViewFrameLayout ->
-        the layout of an empty frame generated with Qt Designer"""
-        # print(self.ViewFrame)
-        self.plotter = pvQtInteractor(self.ViewFrame)
-        self.plotter.set_background(
-            "black"
-        )  # background color - could be made interactive in the future
-        self.ViewFrameLayout.addWidget(self.plotter.interactor)
-        # self.plotter.show_axes_all()
-        """Set orientation widget (turned on after the qt canvas is shown)"""
-        self.cam_orient_widget = vtkCameraOrientationWidget()
-        self.cam_orient_widget.SetParentRenderer(self.plotter.renderer)
-        """Set default orientation horizontal because vertical colorbars interfere with the camera widget."""
-        pv_global_theme.colorbar_orientation = "horizontal"
-
-        """Manage home view"""
-        self.default_view = self.plotter.camera_position
-
-        # self.plotter.track_click_position(
-        #    lambda pos: self.plotter.camera.SetFocalPoint(pos), side="left", double=True
-        # )
-
     def initialize_menu_tools(self):
         self.saveHomeView = QAction("Save home view", self)  # create action
         self.saveHomeView.triggered.connect(
@@ -7121,34 +7367,42 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         )  # connect action to function
         self.menuWindow.addAction(self.vertExagButton)  # add action to menu
 
+    def initialize_interactor(self):
+        """Add the pyvista interactor object to self.ViewFrameLayout ->
+        the layout of an empty frame generated with Qt Designer"""
+        # print(self.ViewFrame)
+        self.plotter = pvQtInteractor(self.ViewFrame)
+        self.plotter.set_background(
+            "black"
+        )  # background color - could be made interactive in the future
+        self.ViewFrameLayout.addWidget(self.plotter.interactor)
+        # self.plotter.show_axes_all()
+        """Set orientation widget (turned on after the qt canvas is shown)"""
+        self.cam_orient_widget = vtkCameraOrientationWidget()
+        self.cam_orient_widget.SetParentRenderer(self.plotter.renderer)
+        """Set default orientation horizontal because vertical colorbars interfere with the camera widget."""
+        pv_global_theme.colorbar_orientation = "horizontal"
+
+        """Manage home view"""
+        self.default_view = self.plotter.camera_position
+        # self.plotter.track_click_position(
+        #    lambda pos: self.plotter.camera.SetFocalPoint(pos), side="left", double=True
+        # )
+
+    def add_all_entities(self):
+        return
+
     def show_qt_canvas(self):
         """Show the Qt Window"""
         self.show()
         if isinstance(self, View3D):
+            #________________________
+            # CHECK THIS ZOOM SETTING
+            #________________________
             self.init_zoom = self.plotter.camera.distance
-            self.cam_orient_widget.On()  # [Gabriele] The orientation widget needs to be turned on AFTER the canvas is shown
-        # self.picker = self.plotter.enable_mesh_picking(callback= self.pkd_mesh,show_message=False)
-
-    def closeEvent(self, event):
-        """Override the standard closeEvent method since self.plotter.close() is needed to cleanly close the vtk
-        plotter."""
-        reply = QMessageBox.question(
-            self,
-            "Closing window",
-            "Close this window?",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No,
-        )
-        if reply == QMessageBox.Yes:
-            # disconnect_all_signals(self.signals)
-            self.disconnect_all_lambda_signals()
-
-            # self.upd_list_geo_rm
-            if not isinstance(self, ViewStereoplot):
-                self.plotter.close()  # needed to cleanly close the vtk plotter
-            event.accept()
-        else:
-            event.ignore()
+            """Turn on the orientation widget AFTER the canvas is shown."""
+            self.cam_orient_widget.On()
+            # self.picker = self.plotter.enable_mesh_picking(callback= self.pkd_mesh,show_message=False)
 
     def plot_mesh(
         self,
@@ -7251,187 +7505,18 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             self.plotter.camera_position = camera_position
         return this_actor
 
-    def disable_actions(self):
-        for action in self.findChildren(QAction):
-            if isinstance(action.parentWidget(), NavigationToolbar) is False:
-                action.setDisabled(True)
 
-    def enable_actions(self):
-        for action in self.findChildren(QAction):
-            action.setEnabled(True)
 
-    def remove_entity(self):
-        for sel_uid in self.selected_uids:
-            self.plotter.remove_actor(f"{sel_uid}_silh")
-        self.parent.entity_remove()
 
-    """ Picking general functions """
 
-    def actor_in_table(self, sel_uid=None):
-        """Function used to highlight in the table view a list of selected actors"""
-        if sel_uid:
-            """[Gabriele] To select the mesh in the entity list we compare the actors of the actors_df dataframe
-            with the picker.GetActor() result"""
-            collection = self.actors_df.loc[
-                self.actors_df["uid"] == sel_uid[0], "collection"
-            ].values[0]
 
-            if collection == "geol_coll":
-                table = self.parent.GeologyTableView
-                df = self.parent.geol_coll.df
-                self.parent.tabCentral.setCurrentIndex(
-                    0
-                )  # set the correct tab to avoid problems
-            elif collection == "dom_coll":
-                table = self.parent.DOMsTableView
-                df = self.parent.dom_coll.df
-                self.parent.tabCentral.setCurrentIndex(4)
-            else:
-                print("Selection not supported")
-                return
-            table.clearSelection()
 
-            if len(sel_uid) > 1:
-                table.setSelectionMode(QAbstractItemView.MultiSelection)
 
-            # In general this approach is not the best.
-            # In the actors_df the index of the df is indipendent from the index of the table views.
-            # We could have 6 entities 5 of which are in the geology tab and 1 in the image tab.
-            # When selecting the image the actors_df index could be anything from 0 to 5 (depends on the add_all_entities order)
-            # but in the table view is 0 thus returning nothing.
-            # To resolve this we could:
-            #   1. Create a actor_df for each collection
-            #   2. Have a general actors_df with a table_index value (that needs to be updated when adding or removing objects)
-            #   3. Have a selected_entities_df indipendent from the tables or views that collects the selected actors (both in the table or in the view)
 
-            # For now selection will work only for geology objects
 
-            for uid in sel_uid:
-                uid_list = [
-                    table.model().index(row, 0).data() for row in range(len(df.index))
-                ]
-                idx = uid_list.index(uid)
-                # coll = self.actors_df.loc[self.actors_df['uid'] == uid, 'collection'].values[0]
 
-                # if coll == 'geol_coll':
-                table.selectRow(idx)
-
-                # elif coll == 'image_coll':
-                #     self.parent.ImagesTableView.selectRow(idx)
-                # return
-        else:
-            self.parent.GeologyTableView.clearSelection()
-            self.parent.DOMsTableView.clearSelection()
-            self.selected_uids = []
-
-    def select_actor_with_mouse(self):
-        """Function used to initiate actor selection"""
-        self.disable_actions()
-        self.plotter.iren.interactor.AddObserver(
-            "LeftButtonPressEvent", self.select_actor
-        )
-        # self.plotter.iren.interactor.AddObserver('KeyPressEvent',self.clear_selected)
-        self.plotter.track_click_position(self.end_pick)
-        self.plotter.add_key_event("c", self.clear_selection)
-
-    def end_pick(self, pos):
-        """Function used to disable actor picking"""
-
-        self.plotter.iren.interactor.RemoveObservers(
-            "LeftButtonPressEvent"
-        )  # Remove the selector observer
-        self.plotter.untrack_click_position(
-            side="right"
-        )  # Remove the right click observer
-        self.plotter.untrack_click_position(
-            side="left"
-        )  # Remove the left click observer
-        # self.plotter.track_click_position(
-        #    lambda pos: self.plotter.camera.SetFocalPoint(pos), side="left", double=True
-        # )
-        if isinstance(self, View3D):
-            self.plotter.enable_trackball_style()
-        elif isinstance(self, NewView2D):
-            self.plotter.enable_image_style()
-
-        self.plotter.reset_key_events()
-        self.selected_uids = self.parent.selected_uids
-        self.enable_actions()
-
-    def clear_selection(self):
-        for av_actor in self.plotter.renderer.actors.copy():
-            self.plotter.remove_bounding_box()
-            if "_silh" in av_actor:
-                self.plotter.remove_actor(av_actor)
-
-        if not self.selected_uids == []:
-            deselected_uids = self.selected_uids
-            self.selected_uids = []
-        self.actor_in_table()
-
-    def select_actor(self, obj, event):
-        style = obj.GetInteractorStyle()
-        style.SetDefaultRenderer(self.plotter.renderer)
-        pos = obj.GetEventPosition()
-        shift = obj.GetShiftKey()
-        name_list = set()
-        # end_pos = style.GetEndPosition()
-
-        picker = vtkPropPicker()
-        picker.PickProp(pos[0], pos[1], style.GetDefaultRenderer())
-
-        actors = set(self.plotter.renderer.actors)
-
-        actor = picker.GetActor()
-
-        if not self.actors_df.loc[self.actors_df["actor"] == actor, "uid"].empty:
-            sel_uid = self.actors_df.loc[
-                self.actors_df["actor"] == actor, "uid"
-            ].values[0]
-            if shift:
-                self.selected_uids.append(sel_uid)
-            else:
-                self.selected_uids = [sel_uid]
-
-            for sel_uid in self.selected_uids:
-                sel_actor = self.actors_df.loc[
-                    self.actors_df["uid"] == sel_uid, "actor"
-                ].values[0]
-                collection = self.actors_df.loc[
-                    self.actors_df["uid"] == sel_uid, "collection"
-                ].values[0]
-                mesh = sel_actor.GetMapper().GetInput()
-                name = f"{sel_uid}_silh"
-                name_list.add(name)
-                if collection == "dom_coll":
-                    bounds = sel_actor.GetBounds()
-                    mesh = pv_Box(bounds)
-
-                self.plotter.add_mesh(
-                    mesh,
-                    pickable=False,
-                    name=name,
-                    color="Yellow",
-                    style="wireframe",
-                    line_width=5,
-                )
-                for av_actor in actors.difference(name_list):
-                    if "_silh" in av_actor:
-                        self.plotter.remove_actor(av_actor)
-
-            self.actor_in_table(self.selected_uids)
-        else:
-            return None
-
-    def vert_exag(self):
-        exag_value = input_one_value_dialog(
-            parent=self,
-            title="Vertical exaggeration options",
-            label="Set vertical exaggeration",
-            default_value=1.0,
-        )
-
-        self.plotter.set_scale(zscale=exag_value)
+class MPLView(BaseView):
+    return
 
 
 class View3D(BaseView):
