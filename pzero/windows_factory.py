@@ -6118,7 +6118,8 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         All objects are visible by default -> show = True
         This must be reimplemented for cross-sections in order
         to show entities belonging to the section only."""
-        for index, uid in enumerate(self.parent.geol_coll.df["uid"].tolist()):
+        print("self.add_all_entities()")
+        for uid in self.parent.geol_coll.df["uid"].tolist():
             this_actor = self.show_actor_with_property(
                 uid=uid, collection="geol_coll", show_property=None, visible=True
             )
@@ -6334,10 +6335,6 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         """Dummy method to initialize the plotting canvas. Must be implemented in subclasses."""
         return
 
-    def add_all_entities(self):
-        """Dummy method to add all entities to the plotting canvas. Must be implemented in subclasses."""
-        return
-
     def show_qt_canvas(self):
         """Dummy method to show the plotting canvas. Must be implemented in subclasses."""
         return
@@ -6376,184 +6373,15 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         # _______________________________________________
         # ISSUE #68 HERE
         # _______________________________________________
-        for sel_uid in self.selected_uids:
-            self.plotter.remove_actor(f"{sel_uid}_silh")
+        # for sel_uid in self.selected_uids:
+        #     self.plotter.remove_actor(f"{sel_uid}_silh")
         self.parent.entity_remove()
-
-    """ Picking general functions """
-
-    # ______________________________________________________________
-    # 14/2/2024 UP TO HERE
-    # ______________________________________________________________
-
-    def actor_in_table(self, sel_uid=None):
-        """Function used to highlight in the table view a list of selected actors"""
-        if sel_uid:
-            """[Gabriele] To select the mesh in the entity list we compare the actors of the actors_df dataframe
-            with the picker.GetActor() result"""
-            collection = self.actors_df.loc[
-                self.actors_df["uid"] == sel_uid[0], "collection"
-            ].values[0]
-
-            if collection == "geol_coll":
-                table = self.parent.GeologyTableView
-                df = self.parent.geol_coll.df
-                self.parent.tabCentral.setCurrentIndex(
-                    0
-                )  # set the correct tab to avoid problems
-            elif collection == "dom_coll":
-                table = self.parent.DOMsTableView
-                df = self.parent.dom_coll.df
-                self.parent.tabCentral.setCurrentIndex(4)
-            else:
-                print("Selection not supported")
-                return
-            table.clearSelection()
-
-            if len(sel_uid) > 1:
-                table.setSelectionMode(QAbstractItemView.MultiSelection)
-
-            # In general this approach is not the best.
-            # In the actors_df the index of the df is indipendent from the index of the table views.
-            # We could have 6 entities 5 of which are in the geology tab and 1 in the image tab.
-            # When selecting the image the actors_df index could be anything from 0 to 5 (depends on the add_all_entities order)
-            # but in the table view is 0 thus returning nothing.
-            # To resolve this we could:
-            #   1. Create a actor_df for each collection
-            #   2. Have a general actors_df with a table_index value (that needs to be updated when adding or removing objects)
-            #   3. Have a selected_entities_df indipendent from the tables or views that collects the selected actors (both in the table or in the view)
-
-            # For now selection will work only for geology objects
-
-            for uid in sel_uid:
-                uid_list = [
-                    table.model().index(row, 0).data() for row in range(len(df.index))
-                ]
-                idx = uid_list.index(uid)
-                # coll = self.actors_df.loc[self.actors_df['uid'] == uid, 'collection'].values[0]
-
-                # if coll == 'geol_coll':
-                table.selectRow(idx)
-
-                # elif coll == 'image_coll':
-                #     self.parent.ImagesTableView.selectRow(idx)
-                # return
-        else:
-            self.parent.GeologyTableView.clearSelection()
-            self.parent.DOMsTableView.clearSelection()
-            self.selected_uids = []
-
-    def select_actor_with_mouse(self):
-        """Function used to initiate actor selection"""
-        self.disable_actions()
-        self.plotter.iren.interactor.AddObserver(
-            "LeftButtonPressEvent", self.select_actor
-        )
-        # self.plotter.iren.interactor.AddObserver('KeyPressEvent',self.clear_selected)
-        self.plotter.track_click_position(self.end_pick)
-        self.plotter.add_key_event("c", self.clear_selection)
-
-    def end_pick(self, pos):
-        """Function used to disable actor picking"""
-
-        self.plotter.iren.interactor.RemoveObservers(
-            "LeftButtonPressEvent"
-        )  # Remove the selector observer
-        self.plotter.untrack_click_position(
-            side="right"
-        )  # Remove the right click observer
-        self.plotter.untrack_click_position(
-            side="left"
-        )  # Remove the left click observer
-        # self.plotter.track_click_position(
-        #    lambda pos: self.plotter.camera.SetFocalPoint(pos), side="left", double=True
-        # )
-        if isinstance(self, View3D):
-            self.plotter.enable_trackball_style()
-        elif isinstance(self, NewView2D):
-            self.plotter.enable_image_style()
-
-        self.plotter.reset_key_events()
-        self.selected_uids = self.parent.selected_uids
-        self.enable_actions()
-
-    def clear_selection(self):
-        for av_actor in self.plotter.renderer.actors.copy():
-            self.plotter.remove_bounding_box()
-            if "_silh" in av_actor:
-                self.plotter.remove_actor(av_actor)
-
-        if not self.selected_uids == []:
-            deselected_uids = self.selected_uids
-            self.selected_uids = []
-        self.actor_in_table()
-
-    def select_actor(self, obj, event):
-        style = obj.GetInteractorStyle()
-        style.SetDefaultRenderer(self.plotter.renderer)
-        pos = obj.GetEventPosition()
-        shift = obj.GetShiftKey()
-        name_list = set()
-        # end_pos = style.GetEndPosition()
-
-        picker = vtkPropPicker()
-        picker.PickProp(pos[0], pos[1], style.GetDefaultRenderer())
-
-        actors = set(self.plotter.renderer.actors)
-
-        actor = picker.GetActor()
-
-        if not self.actors_df.loc[self.actors_df["actor"] == actor, "uid"].empty:
-            sel_uid = self.actors_df.loc[
-                self.actors_df["actor"] == actor, "uid"
-            ].values[0]
-            if shift:
-                self.selected_uids.append(sel_uid)
-            else:
-                self.selected_uids = [sel_uid]
-
-            for sel_uid in self.selected_uids:
-                sel_actor = self.actors_df.loc[
-                    self.actors_df["uid"] == sel_uid, "actor"
-                ].values[0]
-                collection = self.actors_df.loc[
-                    self.actors_df["uid"] == sel_uid, "collection"
-                ].values[0]
-                mesh = sel_actor.GetMapper().GetInput()
-                name = f"{sel_uid}_silh"
-                name_list.add(name)
-                if collection == "dom_coll":
-                    bounds = sel_actor.GetBounds()
-                    mesh = pv_Box(bounds)
-
-                self.plotter.add_mesh(
-                    mesh,
-                    pickable=False,
-                    name=name,
-                    color="Yellow",
-                    style="wireframe",
-                    line_width=5,
-                )
-                for av_actor in actors.difference(name_list):
-                    if "_silh" in av_actor:
-                        self.plotter.remove_actor(av_actor)
-
-            self.actor_in_table(self.selected_uids)
-        else:
-            return None
-
-    def vert_exag(self):
-        exag_value = input_one_value_dialog(
-            parent=self,
-            title="Vertical exaggeration options",
-            label="Set vertical exaggeration",
-            default_value=1.0,
-        )
-
-        self.plotter.set_scale(zscale=exag_value)
 
 
 class VTKView(BaseView):
+    """Abstract class used as a base for all classes using the VTK/PyVista plotting canvas."""
+    def __init__(self, *args, **kwargs):
+        super(VTKView, self).__init__(*args, **kwargs)
 
     def change_actor_color(self, uid=None, collection=None):
         """Update color for actor uid"""
@@ -7389,9 +7217,6 @@ class VTKView(BaseView):
         #    lambda pos: self.plotter.camera.SetFocalPoint(pos), side="left", double=True
         # )
 
-    def add_all_entities(self):
-        return
-
     def show_qt_canvas(self):
         """Show the Qt Window"""
         self.show()
@@ -7505,25 +7330,180 @@ class VTKView(BaseView):
             self.plotter.camera_position = camera_position
         return this_actor
 
+    def actor_in_table(self, sel_uid=None):
+        """Method used to highlight in the main project table view a list of selected actors."""
+        if sel_uid:
+            # To select the mesh in the entity list we compare the actors of the actors_df dataframe
+            # with the picker.GetActor() result
+            collection = self.actors_df.loc[
+                self.actors_df["uid"] == sel_uid[0], "collection"
+            ].values[0]
+            if collection == "geol_coll":
+                table = self.parent.GeologyTableView
+                df = self.parent.geol_coll.df
+                # set the correct tab to avoid problems
+                self.parent.tabCentral.setCurrentIndex(0)
+            elif collection == "dom_coll":
+                table = self.parent.DOMsTableView
+                df = self.parent.dom_coll.df
+                # set the correct tab to avoid problems
+                self.parent.tabCentral.setCurrentIndex(4)
+            else:
+                print("Selection not supported for entities that do not belong to geological or DOM collection.")
+                return
+            table.clearSelection()
+            if len(sel_uid) > 1:
+                table.setSelectionMode(QAbstractItemView.MultiSelection)
 
+            # In general this approach is not the best.
+            # In the actors_df the index of the df is indipendent from the index of the table views.
+            # We could have 6 entities 5 of which are in the geology tab and 1 in the image tab.
+            # When selecting the image the actors_df index could be anything from 0 to 5 (depends on the add_all_entities order)
+            # but in the table view is 0 thus returning nothing.
+            # To resolve this we could:
+            #   1. Create a actor_df for each collection
+            #   2. Have a general actors_df with a table_index value (that needs to be updated when adding or removing objects)
+            #   3. Have a selected_entities_df indipendent from the tables or views that collects the selected actors (both in the table or in the view)
 
+            # For now selection will work only for geology objects
 
+            for uid in sel_uid:
+                uid_list = [
+                    table.model().index(row, 0).data() for row in range(len(df.index))
+                ]
+                idx = uid_list.index(uid)
+                # coll = self.actors_df.loc[self.actors_df['uid'] == uid, 'collection'].values[0]
 
+                # if coll == 'geol_coll':
+                table.selectRow(idx)
 
+                # elif coll == 'image_coll':
+                #     self.parent.ImagesTableView.selectRow(idx)
+                # return
+        else:
+            self.parent.GeologyTableView.clearSelection()
+            self.parent.DOMsTableView.clearSelection()
+            self.selected_uids = []
 
+    def select_actor_with_mouse(self):
+        """Function used to initiate actor selection"""
+        self.disable_actions()
+        self.plotter.iren.interactor.AddObserver(
+            "LeftButtonPressEvent", self.select_actor
+        )
+        # self.plotter.iren.interactor.AddObserver('KeyPressEvent',self.clear_selected)
+        self.plotter.track_click_position(self.end_pick)
+        self.plotter.add_key_event("c", self.clear_selection)
 
+    def end_pick(self, pos):
+        """Function used to disable actor picking"""
 
+        self.plotter.iren.interactor.RemoveObservers(
+            "LeftButtonPressEvent"
+        )  # Remove the selector observer
+        self.plotter.untrack_click_position(
+            side="right"
+        )  # Remove the right click observer
+        self.plotter.untrack_click_position(
+            side="left"
+        )  # Remove the left click observer
+        # self.plotter.track_click_position(
+        #    lambda pos: self.plotter.camera.SetFocalPoint(pos), side="left", double=True
+        # )
+        if isinstance(self, View3D):
+            self.plotter.enable_trackball_style()
+        elif isinstance(self, NewView2D):
+            self.plotter.enable_image_style()
+
+        self.plotter.reset_key_events()
+        self.selected_uids = self.parent.selected_uids
+        self.enable_actions()
+
+    def clear_selection(self):
+        for av_actor in self.plotter.renderer.actors.copy():
+            self.plotter.remove_bounding_box()
+            if "_silh" in av_actor:
+                self.plotter.remove_actor(av_actor)
+
+        if not self.selected_uids == []:
+            deselected_uids = self.selected_uids
+            self.selected_uids = []
+        self.actor_in_table()
+
+    def select_actor(self, obj, event):
+        style = obj.GetInteractorStyle()
+        style.SetDefaultRenderer(self.plotter.renderer)
+        pos = obj.GetEventPosition()
+        shift = obj.GetShiftKey()
+        name_list = set()
+        # end_pos = style.GetEndPosition()
+
+        picker = vtkPropPicker()
+        picker.PickProp(pos[0], pos[1], style.GetDefaultRenderer())
+
+        actors = set(self.plotter.renderer.actors)
+
+        actor = picker.GetActor()
+
+        if not self.actors_df.loc[self.actors_df["actor"] == actor, "uid"].empty:
+            sel_uid = self.actors_df.loc[
+                self.actors_df["actor"] == actor, "uid"
+            ].values[0]
+            if shift:
+                self.selected_uids.append(sel_uid)
+            else:
+                self.selected_uids = [sel_uid]
+
+            for sel_uid in self.selected_uids:
+                sel_actor = self.actors_df.loc[
+                    self.actors_df["uid"] == sel_uid, "actor"
+                ].values[0]
+                collection = self.actors_df.loc[
+                    self.actors_df["uid"] == sel_uid, "collection"
+                ].values[0]
+                mesh = sel_actor.GetMapper().GetInput()
+                name = f"{sel_uid}_silh"
+                name_list.add(name)
+                if collection == "dom_coll":
+                    bounds = sel_actor.GetBounds()
+                    mesh = pv_Box(bounds)
+
+                self.plotter.add_mesh(
+                    mesh,
+                    pickable=False,
+                    name=name,
+                    color="Yellow",
+                    style="wireframe",
+                    line_width=5,
+                )
+                for av_actor in actors.difference(name_list):
+                    if "_silh" in av_actor:
+                        self.plotter.remove_actor(av_actor)
+
+            self.actor_in_table(self.selected_uids)
+        else:
+            return None
+
+    def vert_exag(self):
+        exag_value = input_one_value_dialog(
+            parent=self,
+            title="Vertical exaggeration options",
+            label="Set vertical exaggeration",
+            default_value=1.0,
+        )
+
+        self.plotter.set_scale(zscale=exag_value)
 
 
 class MPLView(BaseView):
-    return
+    """Abstract class used as a base for all classes using the Matplotlib plotting canvas."""
+    def __init__(self, *args, **kwargs):
+        super(MPLView, self).__init__(*args, **kwargs)
 
 
-class View3D(BaseView):
-    """Create 3D view and import UI created with Qt Designer by subclassing base view"""
-
-    """parent is the QT object that is launching this one, hence the ProjectWindow() instance in this case"""
-
+class View3D(VTKView):
+    """Create 3D view and import UI created with Qt Designer by subclassing base view.
+    Parent is the QT object that is launching this one, hence the ProjectWindow() instance in this case."""
     def __init__(self, *args, **kwargs):
         super(View3D, self).__init__(*args, **kwargs)
 
@@ -7539,8 +7519,6 @@ class View3D(BaseView):
         self.toggle_bore_litho = -1
 
         self.trigger_event = "LeftButtonPressEvent"
-
-    """Re-implementations of functions that appear in all views - see placeholders in BaseView()"""
 
     def initialize_menu_tools(self):
         """Customize menus and tools for this view"""
@@ -7979,1009 +7957,7 @@ class View3D(BaseView):
         # off_screen_plot.close()
 
 
-class ViewStereoplot(BaseView):
-    def __init__(self, *args, **kwargs):
-        super(ViewStereoplot, self).__init__(*args, **kwargs)
-        self.setWindowTitle("Stereoplot View")
-        self.tog_contours = -1
-        # mplstyle.context('classic')
-
-    def initialize_menu_tools(self):
-        self.actionContours = QAction("View contours", self)
-        self.actionContours.triggered.connect(
-            lambda: self.toggle_contours(filled=False)
-        )
-        self.menuTools.addAction(self.actionContours)
-
-        self.menuPlot = QMenu("Plot options", self)
-
-        self.menuGrids = QMenu("Grid overlays", self)
-        self.actionSetPolar = QAction("Set polar grid", self)
-        self.actionSetPolar.triggered.connect(lambda: self.change_grid(kind="polar"))
-        self.actionSetEq = QAction("Set equatorial grid", self)
-        self.actionSetEq.triggered.connect(lambda: self.change_grid(kind="equatorial"))
-        self.menuGrids.addAction(self.actionSetPolar)
-        self.menuGrids.addAction(self.actionSetEq)
-        self.menuPlot.addMenu(self.menuGrids)
-
-        self.menuProj = QMenu("Stereoplot projection", self)
-        self.actionSetEquiare = QAction("Equiareal (Schmidt)", self)
-        self.actionSetEquiare.triggered.connect(
-            lambda: self.change_proj(projection="equal_area_stereonet")
-        )
-        self.actionSetEquiang = QAction("Equiangolar (Wulff)", self)
-        self.actionSetEquiang.triggered.connect(
-            lambda: self.change_proj(projection="equal_angle_stereonet")
-        )
-        self.menuProj.addAction(self.actionSetEquiare)
-        self.menuProj.addAction(self.actionSetEquiang)
-        self.menuPlot.addMenu(self.menuProj)
-
-        self.menubar.insertMenu(self.menuHelp.menuAction(), self.menuPlot)
-
-    def initialize_interactor(self, kind=None, projection="equal_area_stereonet"):
-        self.grid_kind = kind
-        self.proj_type = projection
-
-        with mplstyle.context("default"):
-            """Create Matplotlib canvas, figure and navi_toolbar. this implicitly creates also the canvas to contain the figure"""
-            self.figure, self.ax = mplstereonet.subplots(
-                projection=self.proj_type
-            )
-
-        self.canvas = FigureCanvas(
-            self.figure
-        )  # get a reference to the canvas that contains the figure
-        # print("dir(self.canvas):\n", dir(self.canvas))
-        """https://doc.qt.io/qt-5/qsizepolicy.html"""
-        self.navi_toolbar = NavigationToolbar(
-            self.figure.canvas, self
-        )  # create a navi_toolbar with the matplotlib.backends.backend_qt5agg method NavigationToolbar
-
-        """Create Qt layout andNone add Matplotlib canvas, figure and navi_toolbar"""
-        # canvas_widget = self.figure.canvas
-        # canvas_widget.setAutoFillBackground(True)
-        self.ViewFrameLayout.addWidget(
-            self.canvas
-        )  # add Matplotlib canvas (created above) as a widget to the Qt layout
-        # print(plot_widget)
-        self.ViewFrameLayout.addWidget(
-            self.navi_toolbar
-        )  # add navigation navi_toolbar (created above) to the layout
-        self.ax.grid(kind=self.grid_kind, color="k")
-
-    def create_geology_tree(self):
-        """Create geology tree with checkboxes and properties"""
-        self.GeologyTreeWidget.clear()
-        self.GeologyTreeWidget.setColumnCount(3)
-        self.GeologyTreeWidget.setHeaderLabels(
-            ["Type > Feature > Scenario > Name", "uid", "property"]
-        )
-        self.GeologyTreeWidget.hideColumn(1)  # hide the uid column
-        self.GeologyTreeWidget.setItemsExpandable(True)
-
-        filtered_geo = self.parent.geol_coll.df.loc[
-            (self.parent.geol_coll.df["topological_type"] == "VertexSet")
-            | (self.parent.geol_coll.df["topological_type"] == "XsVertexSet"),
-            "geological_type"
-        ]
-        geo_types = pd_unique(filtered_geo)
-        print("geo_types: ", geo_types)
-
-        for geo_type in geo_types:
-            glevel_1 = QTreeWidgetItem(
-                self.GeologyTreeWidget, [geo_type]
-            )  # self.GeologyTreeWidget as parent -> top level
-            glevel_1.setFlags(
-                glevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
-            )
-            filtered_geo_feat = self.parent.geol_coll.df.loc[
-                (self.parent.geol_coll.df["geological_type"] == geo_type)
-                & (
-                    (self.parent.geol_coll.df["topological_type"] == "VertexSet")
-                    | (self.parent.geol_coll.df["topological_type"] == "XsVertexSet")
-                ),
-                "geological_feature"
-            ]
-            geo_features = pd_unique(filtered_geo_feat)
-            print("geo_features: ", geo_features)
-            for feature in geo_features:
-                glevel_2 = QTreeWidgetItem(
-                    glevel_1, [feature]
-                )  # glevel_1 as parent -> 1st middle level
-                glevel_2.setFlags(
-                    glevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
-                )
-                geo_scenario = pd_unique(
-                    self.parent.geol_coll.df.loc[
-                        (self.parent.geol_coll.df["geological_type"] == geo_type)
-                        & (self.parent.geol_coll.df["geological_feature"] == feature),
-                        "scenario"
-                    ]
-                )
-                for scenario in geo_scenario:
-                    glevel_3 = QTreeWidgetItem(
-                        glevel_2, [scenario]
-                    )  # glevel_2 as parent -> 2nd middle level
-                    glevel_3.setFlags(
-                        glevel_3.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
-                    )
-                    uids = self.parent.geol_coll.df.loc[
-                        (self.parent.geol_coll.df["geological_type"] == geo_type)
-                        & (self.parent.geol_coll.df["geological_feature"] == feature)
-                        & (self.parent.geol_coll.df["scenario"] == scenario)
-                        & (
-                            (self.parent.geol_coll.df["topological_type"] == "VertexSet")
-                        |(self.parent.geol_coll.df["topological_type"] == "XsVertexSet")
-                        ),
-                        "uid"
-                    ].to_list()
-                    for uid in uids:
-                        property_combo = QComboBox()
-                        property_combo.uid = uid
-                        property_combo.addItem("Poles")
-                        # property_combo.addItem("Planes")
-                        name = self.parent.geol_coll.df.loc[
-                            (self.parent.geol_coll.df["uid"] == uid), "name"
-                        ].values[0]
-                        glevel_4 = QTreeWidgetItem(
-                            glevel_3, [name, uid]
-                        )  # glevel_3 as parent -> lower level
-                        self.GeologyTreeWidget.setItemWidget(
-                            glevel_4, 2, property_combo
-                        )
-                        property_combo.currentIndexChanged.connect(
-                            lambda: self.toggle_property()
-                        )
-                        glevel_4.setFlags(glevel_4.flags() | Qt.ItemIsUserCheckable)
-                        if self.actors_df.loc[
-                            self.actors_df["uid"] == uid, "show"
-                        ].values[0]:
-                            glevel_4.setCheckState(0, Qt.Checked)
-                        elif not self.actors_df.loc[
-                            self.actors_df["uid"] == uid, "show"
-                        ].values[0]:
-                            glevel_4.setCheckState(0, Qt.Unchecked)
-        """Send messages. Note that with tristate several signals are emitted in a sequence, one for each
-        changed item, but upper levels do not broadcast uid's so they are filtered in the toggle method."""
-        self.GeologyTreeWidget.itemChanged.connect(
-            self.toggle_geology_topology_visibility
-        )
-        self.GeologyTreeWidget.expandAll()
-
-    def create_topology_tree(self):
-        """Create topology tree with checkboxes and properties"""
-        self.TopologyTreeWidget.clear()
-        self.TopologyTreeWidget.setColumnCount(3)
-        self.TopologyTreeWidget.setHeaderLabels(
-            ["Type > Scenario > Name", "uid", "property"]
-        )
-        self.TopologyTreeWidget.hideColumn(1)  # hide the uid column
-        self.TopologyTreeWidget.setItemsExpandable(True)
-
-        filtered_topo = self.parent.geol_coll.df.loc[
-            (self.parent.geol_coll.df["topological_type"] == "VertexSet")
-            | (self.parent.geol_coll.df["topological_type"] == "XsVertexSet"),
-            "topological_type"
-        ]
-        topo_types = pd_unique(filtered_topo)
-        for topo_type in topo_types:
-            tlevel_1 = QTreeWidgetItem(
-                self.TopologyTreeWidget, [topo_type]
-            )  # self.GeologyTreeWidget as parent -> top level
-            tlevel_1.setFlags(
-                tlevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
-            )
-            for scenario in pd_unique(
-                self.parent.geol_coll.df.loc[
-                    self.parent.geol_coll.df["topological_type"] == topo_type,
-                    "scenario"
-                ]
-            ):
-                tlevel_2 = QTreeWidgetItem(
-                    tlevel_1, [scenario]
-                )  # tlevel_1 as parent -> middle level
-                tlevel_2.setFlags(
-                    tlevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
-                )
-
-                uids = self.parent.geol_coll.df.loc[
-                    (self.parent.geol_coll.df["topological_type"] == topo_type)
-                    & (self.parent.geol_coll.df["scenario"] == scenario)
-                    & (
-                        (self.parent.geol_coll.df["topological_type"] == "VertexSet")
-                        | (
-                            self.parent.geol_coll.df["topological_type"]
-                            == "XsVertexSet"
-                        )
-                    ),
-                    "uid"
-                ].to_list()
-                for uid in uids:
-                    property_combo = QComboBox()
-                    property_combo.uid = uid
-                    property_combo.addItem("Poles")
-                    # property_combo.addItem("Planes")
-                    name = self.parent.geol_coll.df.loc[
-                        self.parent.geol_coll.df["uid"] == uid, "name"
-                    ].values[0]
-                    tlevel_3 = QTreeWidgetItem(
-                        tlevel_2, [name, uid]
-                    )  # tlevel_2 as parent -> lower level
-                    self.TopologyTreeWidget.setItemWidget(tlevel_3, 2, property_combo)
-                    property_combo.currentIndexChanged.connect(
-                        lambda: self.toggle_property()
-                    )
-                    tlevel_3.setFlags(tlevel_3.flags() | Qt.ItemIsUserCheckable)
-                    if self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[
-                        0
-                    ]:
-                        tlevel_3.setCheckState(0, Qt.Checked)
-                    elif not self.actors_df.loc[
-                        self.actors_df["uid"] == uid, "show"
-                    ].values[0]:
-                        tlevel_3.setCheckState(0, Qt.Unchecked)
-        """Send messages. Note that with tristate several signals are emitted in a sequence, one for each
-        changed item, but upper levels do not broadcast uid's so they are filtered in the toggle method."""
-        self.TopologyTreeWidget.itemChanged.connect(
-            self.toggle_geology_topology_visibility
-        )
-        self.TopologyTreeWidget.expandAll()
-
-    def update_geology_tree_added(self, new_list=None):
-        """Update geology tree without creating a new model"""
-        uid_list = list(new_list["uid"])
-        for uid in uid_list:
-            if (
-                self.GeologyTreeWidget.findItems(
-                    self.parent.geol_coll.get_uid_geological_type(uid),
-                    Qt.MatchExactly,
-                    0,
-                )
-                != []
-            ):
-                """Already exists a TreeItem (1 level) for the geological type"""
-                counter_1 = 0
-                for child_1 in range(
-                    self.GeologyTreeWidget.findItems(
-                        self.parent.geol_coll.get_uid_geological_type(uid),
-                        Qt.MatchExactly,
-                        0,
-                    )[0].childCount()
-                ):
-                    """for cycle that loops n times as the number of subItems in the specific geological type branch"""
-                    if self.GeologyTreeWidget.findItems(
-                        self.parent.geol_coll.get_uid_geological_type(uid),
-                        Qt.MatchExactly,
-                        0,
-                    )[0].child(child_1).text(
-                        0
-                    ) == self.parent.geol_coll.get_uid_geological_feature(
-                        uid
-                    ):
-                        counter_1 += 1
-                if counter_1 != 0:
-                    for child_1 in range(
-                        self.GeologyTreeWidget.findItems(
-                            self.parent.geol_coll.get_uid_geological_type(uid),
-                            Qt.MatchExactly,
-                            0,
-                        )[0].childCount()
-                    ):
-                        if self.GeologyTreeWidget.findItems(
-                            self.parent.geol_coll.get_uid_geological_type(uid),
-                            Qt.MatchExactly,
-                            0,
-                        )[0].child(child_1).text(
-                            0
-                        ) == self.parent.geol_coll.get_uid_geological_feature(
-                            uid
-                        ):
-                            """Already exists a TreeItem (2 level) for the geological feature"""
-                            counter_2 = 0
-                            for child_2 in range(
-                                self.GeologyTreeWidget.itemBelow(
-                                    self.GeologyTreeWidget.findItems(
-                                        self.parent.geol_coll.get_uid_geological_type(
-                                            uid
-                                        ),
-                                        Qt.MatchExactly,
-                                        0,
-                                    )[0]
-                                ).childCount()
-                            ):
-                                """for cycle that loops n times as the number of sub-subItems in the specific geological type and geological feature branch"""
-                                if self.GeologyTreeWidget.itemBelow(
-                                    self.GeologyTreeWidget.findItems(
-                                        self.parent.geol_coll.get_uid_geological_type(
-                                            uid
-                                        ),
-                                        Qt.MatchExactly,
-                                        0,
-                                    )[0]
-                                ).child(child_2).text(
-                                    0
-                                ) == self.parent.geol_coll.get_uid_scenario(
-                                    uid
-                                ):
-                                    counter_2 += 1
-                            if counter_2 != 0:
-                                for child_2 in range(
-                                    self.GeologyTreeWidget.itemBelow(
-                                        self.GeologyTreeWidget.findItems(
-                                            self.parent.geol_coll.get_uid_geological_type(
-                                                uid
-                                            ),
-                                            Qt.MatchExactly,
-                                            0,
-                                        )[0]
-                                    ).childCount()
-                                ):
-                                    if self.GeologyTreeWidget.itemBelow(
-                                        self.GeologyTreeWidget.findItems(
-                                            self.parent.geol_coll.get_uid_geological_type(
-                                                uid
-                                            ),
-                                            Qt.MatchExactly,
-                                            0,
-                                        )[0]
-                                    ).child(child_2).text(
-                                        0
-                                    ) == self.parent.geol_coll.get_uid_scenario(
-                                        uid
-                                    ):
-                                        """Same geological type, geological feature and scenario"""
-                                        property_combo = QComboBox()
-                                        property_combo.uid = uid
-                                        # property_combo.addItem("Planes")
-                                        property_combo.addItem("Poles")
-                                        for (
-                                            prop
-                                        ) in self.parent.geol_coll.get_uid_properties_names(
-                                            uid
-                                        ):
-                                            property_combo.addItem(prop)
-                                        name = self.parent.geol_coll.get_uid_name(uid)
-                                        glevel_4 = QTreeWidgetItem(
-                                            self.GeologyTreeWidget.findItems(
-                                                self.parent.geol_coll.get_uid_geological_type(
-                                                    uid
-                                                ),
-                                                Qt.MatchExactly,
-                                                0,
-                                            )[0]
-                                            .child(child_1)
-                                            .child(child_2),
-                                            [name, uid],
-                                        )
-                                        self.GeologyTreeWidget.setItemWidget(
-                                            glevel_4, 2, property_combo
-                                        )
-                                        property_combo.currentIndexChanged.connect(
-                                            lambda: self.toggle_property()
-                                        )
-                                        glevel_4.setFlags(
-                                            glevel_4.flags() | Qt.ItemIsUserCheckable
-                                        )
-                                        if self.actors_df.loc[
-                                            self.actors_df["uid"] == uid, "show"
-                                        ].values[0]:
-                                            glevel_4.setCheckState(0, Qt.Checked)
-                                        elif not self.actors_df.loc[
-                                            self.actors_df["uid"] == uid, "show"
-                                        ].values[0]:
-                                            glevel_4.setCheckState(0, Qt.Unchecked)
-                                        self.GeologyTreeWidget.insertTopLevelItem(
-                                            0, glevel_4
-                                        )
-                                        break
-                            else:
-                                """Same geological type and geological feature, different scenario"""
-                                glevel_3 = QTreeWidgetItem(
-                                    self.GeologyTreeWidget.findItems(
-                                        self.parent.geol_coll.get_uid_geological_type(
-                                            uid
-                                        ),
-                                        Qt.MatchExactly,
-                                        0,
-                                    )[0].child(child_1),
-                                    [self.parent.geol_coll.get_uid_scenario(uid)],
-                                )
-                                glevel_3.setFlags(
-                                    glevel_3.flags()
-                                    | Qt.ItemIsTristate
-                                    | Qt.ItemIsUserCheckable
-                                )
-                                self.GeologyTreeWidget.insertTopLevelItem(0, glevel_3)
-                                property_combo = QComboBox()
-                                property_combo.uid = uid
-                                # property_combo.addItem("Planes")
-                                property_combo.addItem("Poles")
-                                for (
-                                    prop
-                                ) in self.parent.geol_coll.get_uid_properties_names(
-                                    uid
-                                ):
-                                    property_combo.addItem(prop)
-                                name = self.parent.geol_coll.get_uid_name(uid)
-                                glevel_4 = QTreeWidgetItem(glevel_3, [name, uid])
-                                self.GeologyTreeWidget.setItemWidget(
-                                    glevel_4, 2, property_combo
-                                )
-                                property_combo.currentIndexChanged.connect(
-                                    lambda: self.toggle_property()
-                                )
-                                glevel_4.setFlags(
-                                    glevel_4.flags() | Qt.ItemIsUserCheckable
-                                )
-                                if self.actors_df.loc[
-                                    self.actors_df["uid"] == uid, "show"
-                                ].values[0]:
-                                    glevel_4.setCheckState(0, Qt.Checked)
-                                elif not self.actors_df.loc[
-                                    self.actors_df["uid"] == uid, "show"
-                                ].values[0]:
-                                    glevel_4.setCheckState(0, Qt.Unchecked)
-                                self.GeologyTreeWidget.insertTopLevelItem(0, glevel_4)
-                                break
-                else:
-                    """Same geological type, different geological feature and scenario"""
-                    glevel_2 = QTreeWidgetItem(
-                        self.GeologyTreeWidget.findItems(
-                            self.parent.geol_coll.get_uid_geological_type(uid),
-                            Qt.MatchExactly,
-                            0,
-                        )[0],
-                        [self.parent.geol_coll.get_uid_geological_feature(uid)],
-                    )
-                    glevel_2.setFlags(
-                        glevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
-                    )
-                    self.GeologyTreeWidget.insertTopLevelItem(0, glevel_2)
-                    glevel_3 = QTreeWidgetItem(
-                        glevel_2, [self.parent.geol_coll.get_uid_scenario(uid)]
-                    )
-                    glevel_3.setFlags(
-                        glevel_3.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
-                    )
-                    self.GeologyTreeWidget.insertTopLevelItem(0, glevel_3)
-                    property_combo = QComboBox()
-                    property_combo.uid = uid
-                    # property_combo.addItem("Planes")
-                    property_combo.addItem("Poles")
-                    for prop in self.parent.geol_coll.get_uid_properties_names(uid):
-                        property_combo.addItem(prop)
-                    name = self.parent.geol_coll.get_uid_name(uid)
-                    glevel_4 = QTreeWidgetItem(glevel_3, [name, uid])
-                    self.GeologyTreeWidget.setItemWidget(glevel_4, 2, property_combo)
-                    property_combo.currentIndexChanged.connect(
-                        lambda: self.toggle_property()
-                    )
-                    glevel_4.setFlags(glevel_4.flags() | Qt.ItemIsUserCheckable)
-                    if self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[
-                        0
-                    ]:
-                        glevel_4.setCheckState(0, Qt.Checked)
-                    elif not self.actors_df.loc[
-                        self.actors_df["uid"] == uid, "show"
-                    ].values[0]:
-                        glevel_4.setCheckState(0, Qt.Unchecked)
-                    self.GeologyTreeWidget.insertTopLevelItem(0, glevel_4)
-                    break
-            else:
-                """Different geological type, geological feature and scenario"""
-                glevel_1 = QTreeWidgetItem(
-                    self.GeologyTreeWidget,
-                    [self.parent.geol_coll.get_uid_geological_type(uid)],
-                )
-                glevel_1.setFlags(
-                    glevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
-                )
-                self.GeologyTreeWidget.insertTopLevelItem(0, glevel_1)
-                glevel_2 = QTreeWidgetItem(
-                    glevel_1, [self.parent.geol_coll.get_uid_geological_feature(uid)]
-                )
-                glevel_2.setFlags(
-                    glevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
-                )
-                self.GeologyTreeWidget.insertTopLevelItem(0, glevel_2)
-                glevel_3 = QTreeWidgetItem(
-                    glevel_2, [self.parent.geol_coll.get_uid_scenario(uid)]
-                )
-                glevel_3.setFlags(
-                    glevel_3.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
-                )
-                self.GeologyTreeWidget.insertTopLevelItem(0, glevel_3)
-                property_combo = QComboBox()
-                property_combo.uid = uid
-                # property_combo.addItem("Planes")
-                property_combo.addItem("Poles")
-                for prop in self.parent.geol_coll.get_uid_properties_names(uid):
-                    property_combo.addItem(prop)
-                name = self.parent.geol_coll.get_uid_name(uid)
-                glevel_4 = QTreeWidgetItem(glevel_3, [name, uid])
-                self.GeologyTreeWidget.setItemWidget(glevel_4, 2, property_combo)
-                property_combo.currentIndexChanged.connect(
-                    lambda: self.toggle_property()
-                )
-                glevel_4.setFlags(glevel_4.flags() | Qt.ItemIsUserCheckable)
-                if self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]:
-                    glevel_4.setCheckState(0, Qt.Checked)
-                elif not self.actors_df.loc[
-                    self.actors_df["uid"] == uid, "show"
-                ].values[0]:
-                    glevel_4.setCheckState(0, Qt.Unchecked)
-                self.GeologyTreeWidget.insertTopLevelItem(0, glevel_4)
-                break
-        self.GeologyTreeWidget.itemChanged.connect(
-            self.toggle_geology_topology_visibility
-        )
-        self.GeologyTreeWidget.expandAll()
-
-    def update_topology_tree_added(self, new_list=None):
-        """Update topology tree without creating a new model"""
-        uid_list = list(new_list["uid"])
-        for uid in uid_list:
-            if (
-                self.TopologyTreeWidget.findItems(
-                    self.parent.geol_coll.get_uid_topological_type(uid),
-                    Qt.MatchExactly,
-                    0,
-                )
-                != []
-            ):
-                """Already exists a TreeItem (1 level) for the topological type"""
-                counter_1 = 0
-                for child_1 in range(
-                    self.TopologyTreeWidget.findItems(
-                        self.parent.geol_coll.get_uid_topological_type(uid),
-                        Qt.MatchExactly,
-                        0,
-                    )[0].childCount()
-                ):
-                    """for cycle that loops n times as the number of subItems in the specific topological type branch"""
-                    if self.TopologyTreeWidget.findItems(
-                        self.parent.geol_coll.get_uid_topological_type(uid),
-                        Qt.MatchExactly,
-                        0,
-                    )[0].child(child_1).text(
-                        0
-                    ) == self.parent.geol_coll.get_uid_scenario(
-                        uid
-                    ):
-                        counter_1 += 1
-                if counter_1 != 0:
-                    for child_1 in range(
-                        self.TopologyTreeWidget.findItems(
-                            self.parent.geol_coll.get_uid_topological_type(uid),
-                            Qt.MatchExactly,
-                            0,
-                        )[0].childCount()
-                    ):
-                        if self.TopologyTreeWidget.findItems(
-                            self.parent.geol_coll.get_uid_topological_type(uid),
-                            Qt.MatchExactly,
-                            0,
-                        )[0].child(child_1).text(
-                            0
-                        ) == self.parent.geol_coll.get_uid_scenario(
-                            uid
-                        ):
-                            """Same topological type and scenario"""
-                            property_combo = QComboBox()
-                            property_combo.uid = uid
-                            # property_combo.addItem("Planes")
-                            property_combo.addItem("Poles")
-                            for prop in self.parent.geol_coll.get_uid_properties_names(
-                                uid
-                            ):
-                                property_combo.addItem(prop)
-                            name = self.parent.geol_coll.get_uid_name(uid)
-                            tlevel_3 = QTreeWidgetItem(
-                                self.TopologyTreeWidget.findItems(
-                                    self.parent.geol_coll.get_uid_topological_type(uid),
-                                    Qt.MatchExactly,
-                                    0,
-                                )[0].child(child_1),
-                                [name, uid],
-                            )
-                            self.TopologyTreeWidget.setItemWidget(
-                                tlevel_3, 2, property_combo
-                            )
-                            property_combo.currentIndexChanged.connect(
-                                lambda: self.toggle_property()
-                            )
-                            tlevel_3.setFlags(tlevel_3.flags() | Qt.ItemIsUserCheckable)
-                            if self.actors_df.loc[
-                                self.actors_df["uid"] == uid, "show"
-                            ].values[0]:
-                                tlevel_3.setCheckState(0, Qt.Checked)
-                            elif not self.actors_df.loc[
-                                self.actors_df["uid"] == uid, "show"
-                            ].values[0]:
-                                tlevel_3.setCheckState(0, Qt.Unchecked)
-                            self.TopologyTreeWidget.insertTopLevelItem(0, tlevel_3)
-                            break
-                else:
-                    """Same topological type, different scenario"""
-                    tlevel_2 = QTreeWidgetItem(
-                        self.TopologyTreeWidget.findItems(
-                            self.parent.geol_coll.get_uid_topological_type(uid),
-                            Qt.MatchExactly,
-                            0,
-                        )[0],
-                        [self.parent.geol_coll.get_uid_scenario(uid)],
-                    )
-                    tlevel_2.setFlags(
-                        tlevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
-                    )
-                    self.TopologyTreeWidget.insertTopLevelItem(0, tlevel_2)
-                    property_combo = QComboBox()
-                    property_combo.uid = uid
-                    # property_combo.addItem("Planes")
-                    property_combo.addItem("Poles")
-                    for prop in self.parent.geol_coll.get_uid_properties_names(uid):
-                        property_combo.addItem(prop)
-                    name = self.parent.geol_coll.get_uid_name(uid)
-                    tlevel_3 = QTreeWidgetItem(tlevel_2, [name, uid])
-                    self.TopologyTreeWidget.setItemWidget(tlevel_3, 2, property_combo)
-                    property_combo.currentIndexChanged.connect(
-                        lambda: self.toggle_property()
-                    )
-                    tlevel_3.setFlags(tlevel_3.flags() | Qt.ItemIsUserCheckable)
-                    if self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[
-                        0
-                    ]:
-                        tlevel_3.setCheckState(0, Qt.Checked)
-                    elif not self.actors_df.loc[
-                        self.actors_df["uid"] == uid, "show"
-                    ].values[0]:
-                        tlevel_3.setCheckState(0, Qt.Unchecked)
-                    self.TopologyTreeWidget.insertTopLevelItem(0, tlevel_3)
-                    break
-            else:
-                """Different topological type and scenario"""
-                tlevel_1 = QTreeWidgetItem(
-                    self.TopologyTreeWidget,
-                    [self.parent.geol_coll.get_uid_topological_type(uid)],
-                )
-                tlevel_1.setFlags(
-                    tlevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
-                )
-                self.TopologyTreeWidget.insertTopLevelItem(0, tlevel_1)
-                tlevel_2 = QTreeWidgetItem(
-                    tlevel_1, [self.parent.geol_coll.get_uid_scenario(uid)]
-                )
-                tlevel_2.setFlags(
-                    tlevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
-                )
-                self.TopologyTreeWidget.insertTopLevelItem(0, tlevel_2)
-                property_combo = QComboBox()
-                property_combo.uid = uid
-                # property_combo.addItem("Planes")
-                property_combo.addItem("Poles")
-                for prop in self.parent.geol_coll.get_uid_properties_names(uid):
-                    property_combo.addItem(prop)
-                name = self.parent.geol_coll.get_uid_name(uid)
-                tlevel_3 = QTreeWidgetItem(tlevel_2, [name, uid])
-                self.TopologyTreeWidget.setItemWidget(tlevel_3, 2, property_combo)
-                property_combo.currentIndexChanged.connect(
-                    lambda: self.toggle_property()
-                )
-                tlevel_3.setFlags(tlevel_3.flags() | Qt.ItemIsUserCheckable)
-                if self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]:
-                    tlevel_3.setCheckState(0, Qt.Checked)
-                elif not self.actors_df.loc[
-                    self.actors_df["uid"] == uid, "show"
-                ].values[0]:
-                    tlevel_3.setCheckState(0, Qt.Unchecked)
-                self.TopologyTreeWidget.insertTopLevelItem(0, tlevel_3)
-                break
-        self.TopologyTreeWidget.itemChanged.connect(
-            self.toggle_geology_topology_visibility
-        )
-        self.TopologyTreeWidget.expandAll()
-
-    def set_actor_visible(self, uid=None, visible=None):
-        # print(self.actors_df)
-        """Set actor uid visible or invisible (visible = True or False)"""
-        if isinstance(
-            self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[0], Line2D
-        ):
-            "Case for Line2D"
-            self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[
-                0
-            ].set_visible(visible)
-            self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[
-                0
-            ].figure.canvas.draw()
-        elif isinstance(
-            self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[0],
-            PathCollection,
-        ):
-            "Case for PathCollection -> ax.scatter"
-            pass
-        elif isinstance(
-            self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[0],
-            TriContourSet,
-        ):
-            "Case for TriContourSet -> ax.tricontourf"
-            pass
-        elif isinstance(
-            self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[0],
-            AxesImage,
-        ):
-            "Case for AxesImage (i.e. images)"
-            """Hide other images if (1) they are shown and (2) you are showing another one."""
-            for hide_uid in self.actors_df.loc[
-                (self.actors_df["collection"] == "image_coll")
-                & (self.actors_df["show"])
-                & (self.actors_df["uid"] != uid),
-                "uid",
-            ].to_list():
-                self.actors_df.loc[self.actors_df["uid"] == hide_uid, "show"] = False
-                self.actors_df.loc[self.actors_df["uid"] == hide_uid, "actor"].values[
-                    0
-                ].set_visible(False)
-                row = self.ImagesTableWidget.findItems(hide_uid, Qt.MatchExactly)[
-                    0
-                ].row()
-                self.ImagesTableWidget.item(row, 0).setCheckState(Qt.Unchecked)
-            """Then show this one."""
-            self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[
-                0
-            ].set_visible(visible)
-            self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[
-                0
-            ].figure.canvas.draw()
-        else:
-            "Do-nothing option to avoid errors, but it does not set/unset visibility."
-            pass
-
-    def remove_actor_in_view(self, uid=None, redraw=False):
-        """ "Remove actor from plotter"""
-        """Can remove a single entity or a list of entities as actors - here we remove a single entity"""
-
-        if not self.actors_df.loc[self.actors_df["uid"] == uid].empty:
-            if self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[0]:
-                # print(self.actors_df.loc[self.actors_df['uid'] == uid, 'actor'].values)
-                # print(self.actors_df.loc[self.actors_df['uid'] == uid, 'actor'].values[0])
-                self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[
-                    0
-                ].remove()
-                self.actors_df.drop(
-                    self.actors_df[self.actors_df["uid"] == uid].index, inplace=True
-                )
-            if redraw:
-                """IN THE FUTURE check if there is a way to redraw just the actor that has just been removed."""
-                self.figure.canvas.draw()
-                print("redraw all - a more efficient alternative should be found")
-
-    def show_actor_with_property(
-        self,
-        uid=None,
-        collection=None,
-        show_property="Poles",
-        visible=None,
-        filled=None,
-    ):
-        if show_property is None:
-            show_property = "Poles"
-        """Show actor with scalar property (default None)
-        https://github.com/pyvista/pyvista/blob/140b15be1d4021b81ded46b1c212c70e86a98ee7/pyvista/plotting/plotting.py#L1045"""
-        """First get entity from collection."""
-        if collection == "geol_coll":
-            color_R = self.parent.geol_coll.get_uid_legend(uid=uid)["color_R"]
-            color_G = self.parent.geol_coll.get_uid_legend(uid=uid)["color_G"]
-            color_B = self.parent.geol_coll.get_uid_legend(uid=uid)["color_B"]
-            color_RGB = [color_R / 255, color_G / 255, color_B / 255]
-            line_thick = self.parent.geol_coll.get_uid_legend(uid=uid)["line_thick"]
-            plot_entity = self.parent.geol_coll.get_uid_vtk_obj(uid)
-        elif collection == "xsect_coll":
-            color_R = self.parent.xsect_coll.get_legend()["color_R"]
-            color_G = self.parent.xsect_coll.get_legend()["color_G"]
-            color_B = self.parent.xsect_coll.get_legend()["color_B"]
-            color_RGB = [color_R / 255, color_G / 255, color_B / 255]
-            line_thick = self.parent.xsect_coll.get_legend()["line_thick"]
-            plot_entity = self.parent.xsect_coll.get_uid_vtk_frame(uid)
-        else:
-            plot_entity = None
-        """Then plot."""
-        if isinstance(plot_entity, (VertexSet, XsVertexSet, Attitude)):
-            if isinstance(plot_entity.points, np_ndarray):
-                if plot_entity.points_number > 0:
-                    """This check is needed to avoid errors when trying to plot an empty
-                    PolyData, just created at the beginning of a digitizing session.
-                    Check if both these conditions are necessary_________________"""
-                    # [Gabriele] Dip az needs to be converted to strike (dz-90) to plot with mplstereonet
-                    strike = (plot_entity.points_map_dip_azimuth - 90) % 360
-                    dip = plot_entity.points_map_dip
-
-                    if np_all(strike != None):
-                        if uid in self.selected_uids:
-                            if show_property == "Planes":
-                                this_actor = self.ax.plane(
-                                    strike, dip, color=color_RGB
-                                )[0]
-                            else:
-                                this_actor = self.ax.pole(strike, dip, color=color_RGB)[
-                                    0
-                                ]
-
-                            this_actor.set_visible(visible)
-                        else:
-                            if show_property == "Planes":
-                                this_actor = self.ax.plane(
-                                    strike, dip, color=color_RGB
-                                )[0]
-                            else:
-                                if filled is not None and visible is True:
-                                    if filled:
-                                        self.ax.density_contourf(
-                                            strike, dip, measurement="poles"
-                                        )
-                                    else:
-                                        self.ax.density_contour(
-                                            strike, dip, measurement="poles"
-                                        )
-                                this_actor = self.ax.pole(strike, dip, color=color_RGB)[
-                                    0
-                                ]
-                            if this_actor:
-                                this_actor.set_visible(visible)
-                    else:
-                        this_actor = None
-                else:
-                    this_actor = None
-            else:
-                this_actor = None
-        else:
-            this_actor = None
-        if this_actor:
-            this_actor.figure.canvas.draw()
-        return this_actor
-
-    def stop_event_loops(self):
-        """Terminate running event loops"""
-        self.figure.canvas.stop_event_loop()
-
-    def change_grid(self, kind):
-        self.grid_kind = kind
-        self.ViewFrameLayout.removeWidget(self.canvas)
-        self.ViewFrameLayout.removeWidget(self.navi_toolbar)
-        self.initialize_interactor(kind=kind, projection=self.proj_type)
-        uids = self.parent.geol_coll.df.loc[
-            self.parent.geol_coll.df["topological_type"] == "VertexSet", "uid"
-        ]
-
-        # print(uids)
-        """[Gabriele]It is not always the case that VertexSets have normal data (are attitude measurements). When importing from shp we should add a dialog to identify VertexSets as Attitude measurements
-        """
-
-        # att_uid_list = []
-        # for uid in uids:
-        #     obj = self.parent.geol_coll.get_uid_vtk_obj(uid)
-        #     if isinstance(obj, Attitude):
-        #         att_uid_list.append(uid)
-        # print(att_uid_list)
-        for uid in uids:
-            show = self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]
-            self.remove_actor_in_view(uid, redraw=False)
-            this_actor = self.show_actor_with_property(uid, "geol_coll", visible=show)
-            self.actors_df = self.actors_df.append(
-                {
-                    "uid": uid,
-                    "actor": this_actor,
-                    "show": show,
-                    "collection": "geol_collection",
-                    "show_prop": "poles",
-                },
-                ignore_index=True,
-            )
-            # For now only geol_collection (I guess this is the only collection for attitude measurements)
-
-    def change_proj(self, projection):
-        self.proj_type = projection
-        self.ViewFrameLayout.removeWidget(self.canvas)
-        self.ViewFrameLayout.removeWidget(self.navi_toolbar)
-        self.initialize_interactor(kind=self.grid_kind, projection=self.proj_type)
-        uids = self.parent.geol_coll.df.loc[
-            self.parent.geol_coll.df["topological_type"] == "VertexSet", "uid"
-        ]
-        for uid in uids:
-            show = self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]
-            self.remove_actor_in_view(uid, redraw=False)
-            this_actor = self.show_actor_with_property(uid, "geol_coll", visible=show)
-            self.actors_df = self.actors_df.append(
-                {
-                    "uid": uid,
-                    "actor": this_actor,
-                    "show": show,
-                    "collection": "geol_collection",
-                    "show_prop": "poles",
-                },
-                ignore_index=True,
-            )
-
-    def toggle_contours(self, filled=False):
-        """[Gabriele] This is not the best way, but for now will do.
-        It's a toggle switch that display kamb contours for visible poles in
-        the stereoplot."""
-
-        self.ViewFrameLayout.removeWidget(self.canvas)
-        self.ViewFrameLayout.removeWidget(self.navi_toolbar)
-
-        self.initialize_interactor(kind=self.grid_kind, projection=self.proj_type)
-        uids = self.parent.geol_coll.df.loc[
-            (self.parent.geol_coll.df["topological_type"] == "VertexSet")
-            | (self.parent.geol_coll.df["topological_type"] == "XsVertexSet"),
-            "uid",
-        ]
-
-        if self.tog_contours == -1:
-            filled_opt = filled
-            self.tog_contours *= -1
-            print("Contours enabled")
-        else:
-            filled_opt = None
-            self.tog_contours *= -1
-            print("Contours disabled")
-
-        for uid in uids:
-            show = self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]
-
-            self.remove_actor_in_view(uid, redraw=False)
-
-            this_actor = self.show_actor_with_property(
-                uid, "geol_coll", visible=show, filled=filled_opt
-            )
-            self.actors_df = self.actors_df.append(
-                {
-                    "uid": uid,
-                    "actor": this_actor,
-                    "show": show,
-                    "collection": "geol_collection",
-                    "show_prop": "poles",
-                },
-                ignore_index=True,
-            )
-
-    def change_actor_color(self, uid=None, collection=None):
-        "Change colour with Matplotlib method."
-        if collection == "geol_coll":
-            color_R = self.parent.geol_coll.get_uid_legend(uid=uid)["color_R"]
-            color_G = self.parent.geol_coll.get_uid_legend(uid=uid)["color_G"]
-            color_B = self.parent.geol_coll.get_uid_legend(uid=uid)["color_B"]
-            color_RGB = [color_R / 255, color_G / 255, color_B / 255]
-        elif collection == "xsect_coll":
-            color_R = self.parent.xsect_coll.get_legend()["color_R"]
-            color_G = self.parent.xsect_coll.get_legend()["color_G"]
-            color_B = self.parent.xsect_coll.get_legend()["color_B"]
-            color_RGB = [color_R / 255, color_G / 255, color_B / 255]
-        else:
-            return
-        if isinstance(
-            self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[0], Line2D
-        ):
-            "Case for Line2D"
-            self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[
-                0
-            ].set_color(color_RGB)
-            self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[
-                0
-            ].figure.canvas.draw()
-
-    def change_actor_opacity(self, uid=None, collection=None):
-        return
-
-    def change_actor_line_thick(self, uid=None, collection=None):
-        return
-
-    def change_actor_point_size(self, uid=None, collection=None):
-        return
-
-
-class NewView2D(BaseView):
+class NewView2D(VTKView):
     """Create 2D view using vtk/pyvista. This should be more efficient than matplotlib"""
 
     def __init__(self, *args, **kwargs):
@@ -10664,3 +9640,1006 @@ class NewViewXsection(NewView2D):
             )
         """Re-connect signals."""
         self.XSectionTreeWidget.itemChanged.connect(self.toggle_xsection_visibility)
+
+
+class ViewStereoplot(MPLView):
+    def __init__(self, *args, **kwargs):
+        super(ViewStereoplot, self).__init__(*args, **kwargs)
+        self.setWindowTitle("Stereoplot View")
+        self.tog_contours = -1
+        # mplstyle.context('classic')
+
+    def initialize_menu_tools(self):
+        self.actionContours = QAction("View contours", self)
+        self.actionContours.triggered.connect(
+            lambda: self.toggle_contours(filled=False)
+        )
+        self.menuTools.addAction(self.actionContours)
+
+        self.menuPlot = QMenu("Plot options", self)
+
+        self.menuGrids = QMenu("Grid overlays", self)
+        self.actionSetPolar = QAction("Set polar grid", self)
+        self.actionSetPolar.triggered.connect(lambda: self.change_grid(kind="polar"))
+        self.actionSetEq = QAction("Set equatorial grid", self)
+        self.actionSetEq.triggered.connect(lambda: self.change_grid(kind="equatorial"))
+        self.menuGrids.addAction(self.actionSetPolar)
+        self.menuGrids.addAction(self.actionSetEq)
+        self.menuPlot.addMenu(self.menuGrids)
+
+        self.menuProj = QMenu("Stereoplot projection", self)
+        self.actionSetEquiare = QAction("Equiareal (Schmidt)", self)
+        self.actionSetEquiare.triggered.connect(
+            lambda: self.change_proj(projection="equal_area_stereonet")
+        )
+        self.actionSetEquiang = QAction("Equiangolar (Wulff)", self)
+        self.actionSetEquiang.triggered.connect(
+            lambda: self.change_proj(projection="equal_angle_stereonet")
+        )
+        self.menuProj.addAction(self.actionSetEquiare)
+        self.menuProj.addAction(self.actionSetEquiang)
+        self.menuPlot.addMenu(self.menuProj)
+
+        self.menubar.insertMenu(self.menuHelp.menuAction(), self.menuPlot)
+
+    def initialize_interactor(self, kind=None, projection="equal_area_stereonet"):
+        self.grid_kind = kind
+        self.proj_type = projection
+
+        with mplstyle.context("default"):
+            """Create Matplotlib canvas, figure and navi_toolbar. this implicitly creates also the canvas to contain the figure"""
+            self.figure, self.ax = mplstereonet.subplots(
+                projection=self.proj_type
+            )
+
+        self.canvas = FigureCanvas(
+            self.figure
+        )  # get a reference to the canvas that contains the figure
+        # print("dir(self.canvas):\n", dir(self.canvas))
+        """https://doc.qt.io/qt-5/qsizepolicy.html"""
+        self.navi_toolbar = NavigationToolbar(
+            self.figure.canvas, self
+        )  # create a navi_toolbar with the matplotlib.backends.backend_qt5agg method NavigationToolbar
+
+        """Create Qt layout andNone add Matplotlib canvas, figure and navi_toolbar"""
+        # canvas_widget = self.figure.canvas
+        # canvas_widget.setAutoFillBackground(True)
+        self.ViewFrameLayout.addWidget(
+            self.canvas
+        )  # add Matplotlib canvas (created above) as a widget to the Qt layout
+        # print(plot_widget)
+        self.ViewFrameLayout.addWidget(
+            self.navi_toolbar
+        )  # add navigation navi_toolbar (created above) to the layout
+        self.ax.grid(kind=self.grid_kind, color="k")
+
+    def create_geology_tree(self):
+        """Create geology tree with checkboxes and properties"""
+        self.GeologyTreeWidget.clear()
+        self.GeologyTreeWidget.setColumnCount(3)
+        self.GeologyTreeWidget.setHeaderLabels(
+            ["Type > Feature > Scenario > Name", "uid", "property"]
+        )
+        self.GeologyTreeWidget.hideColumn(1)  # hide the uid column
+        self.GeologyTreeWidget.setItemsExpandable(True)
+
+        filtered_geo = self.parent.geol_coll.df.loc[
+            (self.parent.geol_coll.df["topological_type"] == "VertexSet")
+            | (self.parent.geol_coll.df["topological_type"] == "XsVertexSet"),
+            "geological_type"
+        ]
+        geo_types = pd_unique(filtered_geo)
+        print("geo_types: ", geo_types)
+
+        for geo_type in geo_types:
+            glevel_1 = QTreeWidgetItem(
+                self.GeologyTreeWidget, [geo_type]
+            )  # self.GeologyTreeWidget as parent -> top level
+            glevel_1.setFlags(
+                glevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
+            )
+            filtered_geo_feat = self.parent.geol_coll.df.loc[
+                (self.parent.geol_coll.df["geological_type"] == geo_type)
+                & (
+                    (self.parent.geol_coll.df["topological_type"] == "VertexSet")
+                    | (self.parent.geol_coll.df["topological_type"] == "XsVertexSet")
+                ),
+                "geological_feature"
+            ]
+            geo_features = pd_unique(filtered_geo_feat)
+            print("geo_features: ", geo_features)
+            for feature in geo_features:
+                glevel_2 = QTreeWidgetItem(
+                    glevel_1, [feature]
+                )  # glevel_1 as parent -> 1st middle level
+                glevel_2.setFlags(
+                    glevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
+                )
+                geo_scenario = pd_unique(
+                    self.parent.geol_coll.df.loc[
+                        (self.parent.geol_coll.df["geological_type"] == geo_type)
+                        & (self.parent.geol_coll.df["geological_feature"] == feature),
+                        "scenario"
+                    ]
+                )
+                for scenario in geo_scenario:
+                    glevel_3 = QTreeWidgetItem(
+                        glevel_2, [scenario]
+                    )  # glevel_2 as parent -> 2nd middle level
+                    glevel_3.setFlags(
+                        glevel_3.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
+                    )
+                    uids = self.parent.geol_coll.df.loc[
+                        (self.parent.geol_coll.df["geological_type"] == geo_type)
+                        & (self.parent.geol_coll.df["geological_feature"] == feature)
+                        & (self.parent.geol_coll.df["scenario"] == scenario)
+                        & (
+                            (self.parent.geol_coll.df["topological_type"] == "VertexSet")
+                        |(self.parent.geol_coll.df["topological_type"] == "XsVertexSet")
+                        ),
+                        "uid"
+                    ].to_list()
+                    for uid in uids:
+                        property_combo = QComboBox()
+                        property_combo.uid = uid
+                        property_combo.addItem("Poles")
+                        # property_combo.addItem("Planes")
+                        name = self.parent.geol_coll.df.loc[
+                            (self.parent.geol_coll.df["uid"] == uid), "name"
+                        ].values[0]
+                        glevel_4 = QTreeWidgetItem(
+                            glevel_3, [name, uid]
+                        )  # glevel_3 as parent -> lower level
+                        self.GeologyTreeWidget.setItemWidget(
+                            glevel_4, 2, property_combo
+                        )
+                        property_combo.currentIndexChanged.connect(
+                            lambda: self.toggle_property()
+                        )
+                        glevel_4.setFlags(glevel_4.flags() | Qt.ItemIsUserCheckable)
+                        if self.actors_df.loc[
+                            self.actors_df["uid"] == uid, "show"
+                        ].values[0]:
+                            glevel_4.setCheckState(0, Qt.Checked)
+                        elif not self.actors_df.loc[
+                            self.actors_df["uid"] == uid, "show"
+                        ].values[0]:
+                            glevel_4.setCheckState(0, Qt.Unchecked)
+        """Send messages. Note that with tristate several signals are emitted in a sequence, one for each
+        changed item, but upper levels do not broadcast uid's so they are filtered in the toggle method."""
+        self.GeologyTreeWidget.itemChanged.connect(
+            self.toggle_geology_topology_visibility
+        )
+        self.GeologyTreeWidget.expandAll()
+
+    def create_topology_tree(self):
+        """Create topology tree with checkboxes and properties"""
+        self.TopologyTreeWidget.clear()
+        self.TopologyTreeWidget.setColumnCount(3)
+        self.TopologyTreeWidget.setHeaderLabels(
+            ["Type > Scenario > Name", "uid", "property"]
+        )
+        self.TopologyTreeWidget.hideColumn(1)  # hide the uid column
+        self.TopologyTreeWidget.setItemsExpandable(True)
+
+        filtered_topo = self.parent.geol_coll.df.loc[
+            (self.parent.geol_coll.df["topological_type"] == "VertexSet")
+            | (self.parent.geol_coll.df["topological_type"] == "XsVertexSet"),
+            "topological_type"
+        ]
+        topo_types = pd_unique(filtered_topo)
+        for topo_type in topo_types:
+            tlevel_1 = QTreeWidgetItem(
+                self.TopologyTreeWidget, [topo_type]
+            )  # self.GeologyTreeWidget as parent -> top level
+            tlevel_1.setFlags(
+                tlevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
+            )
+            for scenario in pd_unique(
+                self.parent.geol_coll.df.loc[
+                    self.parent.geol_coll.df["topological_type"] == topo_type,
+                    "scenario"
+                ]
+            ):
+                tlevel_2 = QTreeWidgetItem(
+                    tlevel_1, [scenario]
+                )  # tlevel_1 as parent -> middle level
+                tlevel_2.setFlags(
+                    tlevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
+                )
+
+                uids = self.parent.geol_coll.df.loc[
+                    (self.parent.geol_coll.df["topological_type"] == topo_type)
+                    & (self.parent.geol_coll.df["scenario"] == scenario)
+                    & (
+                        (self.parent.geol_coll.df["topological_type"] == "VertexSet")
+                        | (
+                            self.parent.geol_coll.df["topological_type"]
+                            == "XsVertexSet"
+                        )
+                    ),
+                    "uid"
+                ].to_list()
+                for uid in uids:
+                    property_combo = QComboBox()
+                    property_combo.uid = uid
+                    property_combo.addItem("Poles")
+                    # property_combo.addItem("Planes")
+                    name = self.parent.geol_coll.df.loc[
+                        self.parent.geol_coll.df["uid"] == uid, "name"
+                    ].values[0]
+                    tlevel_3 = QTreeWidgetItem(
+                        tlevel_2, [name, uid]
+                    )  # tlevel_2 as parent -> lower level
+                    self.TopologyTreeWidget.setItemWidget(tlevel_3, 2, property_combo)
+                    property_combo.currentIndexChanged.connect(
+                        lambda: self.toggle_property()
+                    )
+                    tlevel_3.setFlags(tlevel_3.flags() | Qt.ItemIsUserCheckable)
+                    if self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[
+                        0
+                    ]:
+                        tlevel_3.setCheckState(0, Qt.Checked)
+                    elif not self.actors_df.loc[
+                        self.actors_df["uid"] == uid, "show"
+                    ].values[0]:
+                        tlevel_3.setCheckState(0, Qt.Unchecked)
+        """Send messages. Note that with tristate several signals are emitted in a sequence, one for each
+        changed item, but upper levels do not broadcast uid's so they are filtered in the toggle method."""
+        self.TopologyTreeWidget.itemChanged.connect(
+            self.toggle_geology_topology_visibility
+        )
+        self.TopologyTreeWidget.expandAll()
+
+    def update_geology_tree_added(self, new_list=None):
+        """Update geology tree without creating a new model"""
+        uid_list = list(new_list["uid"])
+        for uid in uid_list:
+            if (
+                self.GeologyTreeWidget.findItems(
+                    self.parent.geol_coll.get_uid_geological_type(uid),
+                    Qt.MatchExactly,
+                    0,
+                )
+                != []
+            ):
+                """Already exists a TreeItem (1 level) for the geological type"""
+                counter_1 = 0
+                for child_1 in range(
+                    self.GeologyTreeWidget.findItems(
+                        self.parent.geol_coll.get_uid_geological_type(uid),
+                        Qt.MatchExactly,
+                        0,
+                    )[0].childCount()
+                ):
+                    """for cycle that loops n times as the number of subItems in the specific geological type branch"""
+                    if self.GeologyTreeWidget.findItems(
+                        self.parent.geol_coll.get_uid_geological_type(uid),
+                        Qt.MatchExactly,
+                        0,
+                    )[0].child(child_1).text(
+                        0
+                    ) == self.parent.geol_coll.get_uid_geological_feature(
+                        uid
+                    ):
+                        counter_1 += 1
+                if counter_1 != 0:
+                    for child_1 in range(
+                        self.GeologyTreeWidget.findItems(
+                            self.parent.geol_coll.get_uid_geological_type(uid),
+                            Qt.MatchExactly,
+                            0,
+                        )[0].childCount()
+                    ):
+                        if self.GeologyTreeWidget.findItems(
+                            self.parent.geol_coll.get_uid_geological_type(uid),
+                            Qt.MatchExactly,
+                            0,
+                        )[0].child(child_1).text(
+                            0
+                        ) == self.parent.geol_coll.get_uid_geological_feature(
+                            uid
+                        ):
+                            """Already exists a TreeItem (2 level) for the geological feature"""
+                            counter_2 = 0
+                            for child_2 in range(
+                                self.GeologyTreeWidget.itemBelow(
+                                    self.GeologyTreeWidget.findItems(
+                                        self.parent.geol_coll.get_uid_geological_type(
+                                            uid
+                                        ),
+                                        Qt.MatchExactly,
+                                        0,
+                                    )[0]
+                                ).childCount()
+                            ):
+                                """for cycle that loops n times as the number of sub-subItems in the specific geological type and geological feature branch"""
+                                if self.GeologyTreeWidget.itemBelow(
+                                    self.GeologyTreeWidget.findItems(
+                                        self.parent.geol_coll.get_uid_geological_type(
+                                            uid
+                                        ),
+                                        Qt.MatchExactly,
+                                        0,
+                                    )[0]
+                                ).child(child_2).text(
+                                    0
+                                ) == self.parent.geol_coll.get_uid_scenario(
+                                    uid
+                                ):
+                                    counter_2 += 1
+                            if counter_2 != 0:
+                                for child_2 in range(
+                                    self.GeologyTreeWidget.itemBelow(
+                                        self.GeologyTreeWidget.findItems(
+                                            self.parent.geol_coll.get_uid_geological_type(
+                                                uid
+                                            ),
+                                            Qt.MatchExactly,
+                                            0,
+                                        )[0]
+                                    ).childCount()
+                                ):
+                                    if self.GeologyTreeWidget.itemBelow(
+                                        self.GeologyTreeWidget.findItems(
+                                            self.parent.geol_coll.get_uid_geological_type(
+                                                uid
+                                            ),
+                                            Qt.MatchExactly,
+                                            0,
+                                        )[0]
+                                    ).child(child_2).text(
+                                        0
+                                    ) == self.parent.geol_coll.get_uid_scenario(
+                                        uid
+                                    ):
+                                        """Same geological type, geological feature and scenario"""
+                                        property_combo = QComboBox()
+                                        property_combo.uid = uid
+                                        # property_combo.addItem("Planes")
+                                        property_combo.addItem("Poles")
+                                        for (
+                                            prop
+                                        ) in self.parent.geol_coll.get_uid_properties_names(
+                                            uid
+                                        ):
+                                            property_combo.addItem(prop)
+                                        name = self.parent.geol_coll.get_uid_name(uid)
+                                        glevel_4 = QTreeWidgetItem(
+                                            self.GeologyTreeWidget.findItems(
+                                                self.parent.geol_coll.get_uid_geological_type(
+                                                    uid
+                                                ),
+                                                Qt.MatchExactly,
+                                                0,
+                                            )[0]
+                                            .child(child_1)
+                                            .child(child_2),
+                                            [name, uid],
+                                        )
+                                        self.GeologyTreeWidget.setItemWidget(
+                                            glevel_4, 2, property_combo
+                                        )
+                                        property_combo.currentIndexChanged.connect(
+                                            lambda: self.toggle_property()
+                                        )
+                                        glevel_4.setFlags(
+                                            glevel_4.flags() | Qt.ItemIsUserCheckable
+                                        )
+                                        if self.actors_df.loc[
+                                            self.actors_df["uid"] == uid, "show"
+                                        ].values[0]:
+                                            glevel_4.setCheckState(0, Qt.Checked)
+                                        elif not self.actors_df.loc[
+                                            self.actors_df["uid"] == uid, "show"
+                                        ].values[0]:
+                                            glevel_4.setCheckState(0, Qt.Unchecked)
+                                        self.GeologyTreeWidget.insertTopLevelItem(
+                                            0, glevel_4
+                                        )
+                                        break
+                            else:
+                                """Same geological type and geological feature, different scenario"""
+                                glevel_3 = QTreeWidgetItem(
+                                    self.GeologyTreeWidget.findItems(
+                                        self.parent.geol_coll.get_uid_geological_type(
+                                            uid
+                                        ),
+                                        Qt.MatchExactly,
+                                        0,
+                                    )[0].child(child_1),
+                                    [self.parent.geol_coll.get_uid_scenario(uid)],
+                                )
+                                glevel_3.setFlags(
+                                    glevel_3.flags()
+                                    | Qt.ItemIsTristate
+                                    | Qt.ItemIsUserCheckable
+                                )
+                                self.GeologyTreeWidget.insertTopLevelItem(0, glevel_3)
+                                property_combo = QComboBox()
+                                property_combo.uid = uid
+                                # property_combo.addItem("Planes")
+                                property_combo.addItem("Poles")
+                                for (
+                                    prop
+                                ) in self.parent.geol_coll.get_uid_properties_names(
+                                    uid
+                                ):
+                                    property_combo.addItem(prop)
+                                name = self.parent.geol_coll.get_uid_name(uid)
+                                glevel_4 = QTreeWidgetItem(glevel_3, [name, uid])
+                                self.GeologyTreeWidget.setItemWidget(
+                                    glevel_4, 2, property_combo
+                                )
+                                property_combo.currentIndexChanged.connect(
+                                    lambda: self.toggle_property()
+                                )
+                                glevel_4.setFlags(
+                                    glevel_4.flags() | Qt.ItemIsUserCheckable
+                                )
+                                if self.actors_df.loc[
+                                    self.actors_df["uid"] == uid, "show"
+                                ].values[0]:
+                                    glevel_4.setCheckState(0, Qt.Checked)
+                                elif not self.actors_df.loc[
+                                    self.actors_df["uid"] == uid, "show"
+                                ].values[0]:
+                                    glevel_4.setCheckState(0, Qt.Unchecked)
+                                self.GeologyTreeWidget.insertTopLevelItem(0, glevel_4)
+                                break
+                else:
+                    """Same geological type, different geological feature and scenario"""
+                    glevel_2 = QTreeWidgetItem(
+                        self.GeologyTreeWidget.findItems(
+                            self.parent.geol_coll.get_uid_geological_type(uid),
+                            Qt.MatchExactly,
+                            0,
+                        )[0],
+                        [self.parent.geol_coll.get_uid_geological_feature(uid)],
+                    )
+                    glevel_2.setFlags(
+                        glevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
+                    )
+                    self.GeologyTreeWidget.insertTopLevelItem(0, glevel_2)
+                    glevel_3 = QTreeWidgetItem(
+                        glevel_2, [self.parent.geol_coll.get_uid_scenario(uid)]
+                    )
+                    glevel_3.setFlags(
+                        glevel_3.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
+                    )
+                    self.GeologyTreeWidget.insertTopLevelItem(0, glevel_3)
+                    property_combo = QComboBox()
+                    property_combo.uid = uid
+                    # property_combo.addItem("Planes")
+                    property_combo.addItem("Poles")
+                    for prop in self.parent.geol_coll.get_uid_properties_names(uid):
+                        property_combo.addItem(prop)
+                    name = self.parent.geol_coll.get_uid_name(uid)
+                    glevel_4 = QTreeWidgetItem(glevel_3, [name, uid])
+                    self.GeologyTreeWidget.setItemWidget(glevel_4, 2, property_combo)
+                    property_combo.currentIndexChanged.connect(
+                        lambda: self.toggle_property()
+                    )
+                    glevel_4.setFlags(glevel_4.flags() | Qt.ItemIsUserCheckable)
+                    if self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[
+                        0
+                    ]:
+                        glevel_4.setCheckState(0, Qt.Checked)
+                    elif not self.actors_df.loc[
+                        self.actors_df["uid"] == uid, "show"
+                    ].values[0]:
+                        glevel_4.setCheckState(0, Qt.Unchecked)
+                    self.GeologyTreeWidget.insertTopLevelItem(0, glevel_4)
+                    break
+            else:
+                """Different geological type, geological feature and scenario"""
+                glevel_1 = QTreeWidgetItem(
+                    self.GeologyTreeWidget,
+                    [self.parent.geol_coll.get_uid_geological_type(uid)],
+                )
+                glevel_1.setFlags(
+                    glevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
+                )
+                self.GeologyTreeWidget.insertTopLevelItem(0, glevel_1)
+                glevel_2 = QTreeWidgetItem(
+                    glevel_1, [self.parent.geol_coll.get_uid_geological_feature(uid)]
+                )
+                glevel_2.setFlags(
+                    glevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
+                )
+                self.GeologyTreeWidget.insertTopLevelItem(0, glevel_2)
+                glevel_3 = QTreeWidgetItem(
+                    glevel_2, [self.parent.geol_coll.get_uid_scenario(uid)]
+                )
+                glevel_3.setFlags(
+                    glevel_3.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
+                )
+                self.GeologyTreeWidget.insertTopLevelItem(0, glevel_3)
+                property_combo = QComboBox()
+                property_combo.uid = uid
+                # property_combo.addItem("Planes")
+                property_combo.addItem("Poles")
+                for prop in self.parent.geol_coll.get_uid_properties_names(uid):
+                    property_combo.addItem(prop)
+                name = self.parent.geol_coll.get_uid_name(uid)
+                glevel_4 = QTreeWidgetItem(glevel_3, [name, uid])
+                self.GeologyTreeWidget.setItemWidget(glevel_4, 2, property_combo)
+                property_combo.currentIndexChanged.connect(
+                    lambda: self.toggle_property()
+                )
+                glevel_4.setFlags(glevel_4.flags() | Qt.ItemIsUserCheckable)
+                if self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]:
+                    glevel_4.setCheckState(0, Qt.Checked)
+                elif not self.actors_df.loc[
+                    self.actors_df["uid"] == uid, "show"
+                ].values[0]:
+                    glevel_4.setCheckState(0, Qt.Unchecked)
+                self.GeologyTreeWidget.insertTopLevelItem(0, glevel_4)
+                break
+        self.GeologyTreeWidget.itemChanged.connect(
+            self.toggle_geology_topology_visibility
+        )
+        self.GeologyTreeWidget.expandAll()
+
+    def update_topology_tree_added(self, new_list=None):
+        """Update topology tree without creating a new model"""
+        uid_list = list(new_list["uid"])
+        for uid in uid_list:
+            if (
+                self.TopologyTreeWidget.findItems(
+                    self.parent.geol_coll.get_uid_topological_type(uid),
+                    Qt.MatchExactly,
+                    0,
+                )
+                != []
+            ):
+                """Already exists a TreeItem (1 level) for the topological type"""
+                counter_1 = 0
+                for child_1 in range(
+                    self.TopologyTreeWidget.findItems(
+                        self.parent.geol_coll.get_uid_topological_type(uid),
+                        Qt.MatchExactly,
+                        0,
+                    )[0].childCount()
+                ):
+                    """for cycle that loops n times as the number of subItems in the specific topological type branch"""
+                    if self.TopologyTreeWidget.findItems(
+                        self.parent.geol_coll.get_uid_topological_type(uid),
+                        Qt.MatchExactly,
+                        0,
+                    )[0].child(child_1).text(
+                        0
+                    ) == self.parent.geol_coll.get_uid_scenario(
+                        uid
+                    ):
+                        counter_1 += 1
+                if counter_1 != 0:
+                    for child_1 in range(
+                        self.TopologyTreeWidget.findItems(
+                            self.parent.geol_coll.get_uid_topological_type(uid),
+                            Qt.MatchExactly,
+                            0,
+                        )[0].childCount()
+                    ):
+                        if self.TopologyTreeWidget.findItems(
+                            self.parent.geol_coll.get_uid_topological_type(uid),
+                            Qt.MatchExactly,
+                            0,
+                        )[0].child(child_1).text(
+                            0
+                        ) == self.parent.geol_coll.get_uid_scenario(
+                            uid
+                        ):
+                            """Same topological type and scenario"""
+                            property_combo = QComboBox()
+                            property_combo.uid = uid
+                            # property_combo.addItem("Planes")
+                            property_combo.addItem("Poles")
+                            for prop in self.parent.geol_coll.get_uid_properties_names(
+                                uid
+                            ):
+                                property_combo.addItem(prop)
+                            name = self.parent.geol_coll.get_uid_name(uid)
+                            tlevel_3 = QTreeWidgetItem(
+                                self.TopologyTreeWidget.findItems(
+                                    self.parent.geol_coll.get_uid_topological_type(uid),
+                                    Qt.MatchExactly,
+                                    0,
+                                )[0].child(child_1),
+                                [name, uid],
+                            )
+                            self.TopologyTreeWidget.setItemWidget(
+                                tlevel_3, 2, property_combo
+                            )
+                            property_combo.currentIndexChanged.connect(
+                                lambda: self.toggle_property()
+                            )
+                            tlevel_3.setFlags(tlevel_3.flags() | Qt.ItemIsUserCheckable)
+                            if self.actors_df.loc[
+                                self.actors_df["uid"] == uid, "show"
+                            ].values[0]:
+                                tlevel_3.setCheckState(0, Qt.Checked)
+                            elif not self.actors_df.loc[
+                                self.actors_df["uid"] == uid, "show"
+                            ].values[0]:
+                                tlevel_3.setCheckState(0, Qt.Unchecked)
+                            self.TopologyTreeWidget.insertTopLevelItem(0, tlevel_3)
+                            break
+                else:
+                    """Same topological type, different scenario"""
+                    tlevel_2 = QTreeWidgetItem(
+                        self.TopologyTreeWidget.findItems(
+                            self.parent.geol_coll.get_uid_topological_type(uid),
+                            Qt.MatchExactly,
+                            0,
+                        )[0],
+                        [self.parent.geol_coll.get_uid_scenario(uid)],
+                    )
+                    tlevel_2.setFlags(
+                        tlevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
+                    )
+                    self.TopologyTreeWidget.insertTopLevelItem(0, tlevel_2)
+                    property_combo = QComboBox()
+                    property_combo.uid = uid
+                    # property_combo.addItem("Planes")
+                    property_combo.addItem("Poles")
+                    for prop in self.parent.geol_coll.get_uid_properties_names(uid):
+                        property_combo.addItem(prop)
+                    name = self.parent.geol_coll.get_uid_name(uid)
+                    tlevel_3 = QTreeWidgetItem(tlevel_2, [name, uid])
+                    self.TopologyTreeWidget.setItemWidget(tlevel_3, 2, property_combo)
+                    property_combo.currentIndexChanged.connect(
+                        lambda: self.toggle_property()
+                    )
+                    tlevel_3.setFlags(tlevel_3.flags() | Qt.ItemIsUserCheckable)
+                    if self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[
+                        0
+                    ]:
+                        tlevel_3.setCheckState(0, Qt.Checked)
+                    elif not self.actors_df.loc[
+                        self.actors_df["uid"] == uid, "show"
+                    ].values[0]:
+                        tlevel_3.setCheckState(0, Qt.Unchecked)
+                    self.TopologyTreeWidget.insertTopLevelItem(0, tlevel_3)
+                    break
+            else:
+                """Different topological type and scenario"""
+                tlevel_1 = QTreeWidgetItem(
+                    self.TopologyTreeWidget,
+                    [self.parent.geol_coll.get_uid_topological_type(uid)],
+                )
+                tlevel_1.setFlags(
+                    tlevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
+                )
+                self.TopologyTreeWidget.insertTopLevelItem(0, tlevel_1)
+                tlevel_2 = QTreeWidgetItem(
+                    tlevel_1, [self.parent.geol_coll.get_uid_scenario(uid)]
+                )
+                tlevel_2.setFlags(
+                    tlevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
+                )
+                self.TopologyTreeWidget.insertTopLevelItem(0, tlevel_2)
+                property_combo = QComboBox()
+                property_combo.uid = uid
+                # property_combo.addItem("Planes")
+                property_combo.addItem("Poles")
+                for prop in self.parent.geol_coll.get_uid_properties_names(uid):
+                    property_combo.addItem(prop)
+                name = self.parent.geol_coll.get_uid_name(uid)
+                tlevel_3 = QTreeWidgetItem(tlevel_2, [name, uid])
+                self.TopologyTreeWidget.setItemWidget(tlevel_3, 2, property_combo)
+                property_combo.currentIndexChanged.connect(
+                    lambda: self.toggle_property()
+                )
+                tlevel_3.setFlags(tlevel_3.flags() | Qt.ItemIsUserCheckable)
+                if self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]:
+                    tlevel_3.setCheckState(0, Qt.Checked)
+                elif not self.actors_df.loc[
+                    self.actors_df["uid"] == uid, "show"
+                ].values[0]:
+                    tlevel_3.setCheckState(0, Qt.Unchecked)
+                self.TopologyTreeWidget.insertTopLevelItem(0, tlevel_3)
+                break
+        self.TopologyTreeWidget.itemChanged.connect(
+            self.toggle_geology_topology_visibility
+        )
+        self.TopologyTreeWidget.expandAll()
+
+    def set_actor_visible(self, uid=None, visible=None):
+        # print(self.actors_df)
+        """Set actor uid visible or invisible (visible = True or False)"""
+        if isinstance(
+            self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[0], Line2D
+        ):
+            "Case for Line2D"
+            self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[
+                0
+            ].set_visible(visible)
+            self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[
+                0
+            ].figure.canvas.draw()
+        elif isinstance(
+            self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[0],
+            PathCollection,
+        ):
+            "Case for PathCollection -> ax.scatter"
+            pass
+        elif isinstance(
+            self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[0],
+            TriContourSet,
+        ):
+            "Case for TriContourSet -> ax.tricontourf"
+            pass
+        elif isinstance(
+            self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[0],
+            AxesImage,
+        ):
+            "Case for AxesImage (i.e. images)"
+            """Hide other images if (1) they are shown and (2) you are showing another one."""
+            for hide_uid in self.actors_df.loc[
+                (self.actors_df["collection"] == "image_coll")
+                & (self.actors_df["show"])
+                & (self.actors_df["uid"] != uid),
+                "uid",
+            ].to_list():
+                self.actors_df.loc[self.actors_df["uid"] == hide_uid, "show"] = False
+                self.actors_df.loc[self.actors_df["uid"] == hide_uid, "actor"].values[
+                    0
+                ].set_visible(False)
+                row = self.ImagesTableWidget.findItems(hide_uid, Qt.MatchExactly)[
+                    0
+                ].row()
+                self.ImagesTableWidget.item(row, 0).setCheckState(Qt.Unchecked)
+            """Then show this one."""
+            self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[
+                0
+            ].set_visible(visible)
+            self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[
+                0
+            ].figure.canvas.draw()
+        else:
+            "Do-nothing option to avoid errors, but it does not set/unset visibility."
+            pass
+
+    def remove_actor_in_view(self, uid=None, redraw=False):
+        """ "Remove actor from plotter"""
+        """Can remove a single entity or a list of entities as actors - here we remove a single entity"""
+
+        if not self.actors_df.loc[self.actors_df["uid"] == uid].empty:
+            if self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[0]:
+                # print(self.actors_df.loc[self.actors_df['uid'] == uid, 'actor'].values)
+                # print(self.actors_df.loc[self.actors_df['uid'] == uid, 'actor'].values[0])
+                self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[
+                    0
+                ].remove()
+                self.actors_df.drop(
+                    self.actors_df[self.actors_df["uid"] == uid].index, inplace=True
+                )
+            if redraw:
+                """IN THE FUTURE check if there is a way to redraw just the actor that has just been removed."""
+                self.figure.canvas.draw()
+                print("redraw all - a more efficient alternative should be found")
+
+    def show_actor_with_property(
+        self,
+        uid=None,
+        collection=None,
+        show_property="Poles",
+        visible=None,
+        filled=None,
+    ):
+        if show_property is None:
+            show_property = "Poles"
+        """Show actor with scalar property (default None)
+        https://github.com/pyvista/pyvista/blob/140b15be1d4021b81ded46b1c212c70e86a98ee7/pyvista/plotting/plotting.py#L1045"""
+        """First get entity from collection."""
+        if collection == "geol_coll":
+            color_R = self.parent.geol_coll.get_uid_legend(uid=uid)["color_R"]
+            color_G = self.parent.geol_coll.get_uid_legend(uid=uid)["color_G"]
+            color_B = self.parent.geol_coll.get_uid_legend(uid=uid)["color_B"]
+            color_RGB = [color_R / 255, color_G / 255, color_B / 255]
+            line_thick = self.parent.geol_coll.get_uid_legend(uid=uid)["line_thick"]
+            plot_entity = self.parent.geol_coll.get_uid_vtk_obj(uid)
+        elif collection == "xsect_coll":
+            color_R = self.parent.xsect_coll.get_legend()["color_R"]
+            color_G = self.parent.xsect_coll.get_legend()["color_G"]
+            color_B = self.parent.xsect_coll.get_legend()["color_B"]
+            color_RGB = [color_R / 255, color_G / 255, color_B / 255]
+            line_thick = self.parent.xsect_coll.get_legend()["line_thick"]
+            plot_entity = self.parent.xsect_coll.get_uid_vtk_frame(uid)
+        else:
+            plot_entity = None
+        """Then plot."""
+        if isinstance(plot_entity, (VertexSet, XsVertexSet, Attitude)):
+            if isinstance(plot_entity.points, np_ndarray):
+                if plot_entity.points_number > 0:
+                    """This check is needed to avoid errors when trying to plot an empty
+                    PolyData, just created at the beginning of a digitizing session.
+                    Check if both these conditions are necessary_________________"""
+                    # [Gabriele] Dip az needs to be converted to strike (dz-90) to plot with mplstereonet
+                    strike = (plot_entity.points_map_dip_azimuth - 90) % 360
+                    dip = plot_entity.points_map_dip
+
+                    if np_all(strike != None):
+                        if uid in self.selected_uids:
+                            if show_property == "Planes":
+                                this_actor = self.ax.plane(
+                                    strike, dip, color=color_RGB
+                                )[0]
+                            else:
+                                this_actor = self.ax.pole(strike, dip, color=color_RGB)[
+                                    0
+                                ]
+
+                            this_actor.set_visible(visible)
+                        else:
+                            if show_property == "Planes":
+                                this_actor = self.ax.plane(
+                                    strike, dip, color=color_RGB
+                                )[0]
+                            else:
+                                if filled is not None and visible is True:
+                                    if filled:
+                                        self.ax.density_contourf(
+                                            strike, dip, measurement="poles"
+                                        )
+                                    else:
+                                        self.ax.density_contour(
+                                            strike, dip, measurement="poles"
+                                        )
+                                this_actor = self.ax.pole(strike, dip, color=color_RGB)[
+                                    0
+                                ]
+                            if this_actor:
+                                this_actor.set_visible(visible)
+                    else:
+                        this_actor = None
+                else:
+                    this_actor = None
+            else:
+                this_actor = None
+        else:
+            this_actor = None
+        if this_actor:
+            this_actor.figure.canvas.draw()
+        return this_actor
+
+    def stop_event_loops(self):
+        """Terminate running event loops"""
+        self.figure.canvas.stop_event_loop()
+
+    def change_grid(self, kind):
+        self.grid_kind = kind
+        self.ViewFrameLayout.removeWidget(self.canvas)
+        self.ViewFrameLayout.removeWidget(self.navi_toolbar)
+        self.initialize_interactor(kind=kind, projection=self.proj_type)
+        uids = self.parent.geol_coll.df.loc[
+            self.parent.geol_coll.df["topological_type"] == "VertexSet", "uid"
+        ]
+
+        # print(uids)
+        """[Gabriele]It is not always the case that VertexSets have normal data (are attitude measurements). When importing from shp we should add a dialog to identify VertexSets as Attitude measurements
+        """
+
+        # att_uid_list = []
+        # for uid in uids:
+        #     obj = self.parent.geol_coll.get_uid_vtk_obj(uid)
+        #     if isinstance(obj, Attitude):
+        #         att_uid_list.append(uid)
+        # print(att_uid_list)
+        for uid in uids:
+            show = self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]
+            self.remove_actor_in_view(uid, redraw=False)
+            this_actor = self.show_actor_with_property(uid, "geol_coll", visible=show)
+            self.actors_df = self.actors_df.append(
+                {
+                    "uid": uid,
+                    "actor": this_actor,
+                    "show": show,
+                    "collection": "geol_collection",
+                    "show_prop": "poles",
+                },
+                ignore_index=True,
+            )
+            # For now only geol_collection (I guess this is the only collection for attitude measurements)
+
+    def change_proj(self, projection):
+        self.proj_type = projection
+        self.ViewFrameLayout.removeWidget(self.canvas)
+        self.ViewFrameLayout.removeWidget(self.navi_toolbar)
+        self.initialize_interactor(kind=self.grid_kind, projection=self.proj_type)
+        uids = self.parent.geol_coll.df.loc[
+            self.parent.geol_coll.df["topological_type"] == "VertexSet", "uid"
+        ]
+        for uid in uids:
+            show = self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]
+            self.remove_actor_in_view(uid, redraw=False)
+            this_actor = self.show_actor_with_property(uid, "geol_coll", visible=show)
+            self.actors_df = self.actors_df.append(
+                {
+                    "uid": uid,
+                    "actor": this_actor,
+                    "show": show,
+                    "collection": "geol_collection",
+                    "show_prop": "poles",
+                },
+                ignore_index=True,
+            )
+
+    def toggle_contours(self, filled=False):
+        """[Gabriele] This is not the best way, but for now will do.
+        It's a toggle switch that display kamb contours for visible poles in
+        the stereoplot."""
+
+        self.ViewFrameLayout.removeWidget(self.canvas)
+        self.ViewFrameLayout.removeWidget(self.navi_toolbar)
+
+        self.initialize_interactor(kind=self.grid_kind, projection=self.proj_type)
+        uids = self.parent.geol_coll.df.loc[
+            (self.parent.geol_coll.df["topological_type"] == "VertexSet")
+            | (self.parent.geol_coll.df["topological_type"] == "XsVertexSet"),
+            "uid",
+        ]
+
+        if self.tog_contours == -1:
+            filled_opt = filled
+            self.tog_contours *= -1
+            print("Contours enabled")
+        else:
+            filled_opt = None
+            self.tog_contours *= -1
+            print("Contours disabled")
+
+        for uid in uids:
+            show = self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]
+
+            self.remove_actor_in_view(uid, redraw=False)
+
+            this_actor = self.show_actor_with_property(
+                uid, "geol_coll", visible=show, filled=filled_opt
+            )
+            self.actors_df = self.actors_df.append(
+                {
+                    "uid": uid,
+                    "actor": this_actor,
+                    "show": show,
+                    "collection": "geol_collection",
+                    "show_prop": "poles",
+                },
+                ignore_index=True,
+            )
+
+    def change_actor_color(self, uid=None, collection=None):
+        "Change colour with Matplotlib method."
+        if collection == "geol_coll":
+            color_R = self.parent.geol_coll.get_uid_legend(uid=uid)["color_R"]
+            color_G = self.parent.geol_coll.get_uid_legend(uid=uid)["color_G"]
+            color_B = self.parent.geol_coll.get_uid_legend(uid=uid)["color_B"]
+            color_RGB = [color_R / 255, color_G / 255, color_B / 255]
+        elif collection == "xsect_coll":
+            color_R = self.parent.xsect_coll.get_legend()["color_R"]
+            color_G = self.parent.xsect_coll.get_legend()["color_G"]
+            color_B = self.parent.xsect_coll.get_legend()["color_B"]
+            color_RGB = [color_R / 255, color_G / 255, color_B / 255]
+        else:
+            return
+        if isinstance(
+            self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[0], Line2D
+        ):
+            "Case for Line2D"
+            self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[
+                0
+            ].set_color(color_RGB)
+            self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[
+                0
+            ].figure.canvas.draw()
+
+    def change_actor_opacity(self, uid=None, collection=None):
+        return
+
+    def change_actor_line_thick(self, uid=None, collection=None):
+        return
+
+    def change_actor_point_size(self, uid=None, collection=None):
+        return
+
