@@ -546,6 +546,7 @@
     <addaction name="actionImportGocad"/>
     <addaction name="actionImportGocadXsection"/>
     <addaction name="actionImportGocadBoundary"/>
+    <addaction name="actionImportSections"/>
     <addaction name="actionImportPC"/>
     <addaction name="actionImportPyvista"/>
     <addaction name="actionImportVedo"/>
@@ -941,6 +942,11 @@
   <action name="actionExportCSV">
    <property name="text">
     <string>Export CSV</string>
+   </property>
+  </action>
+  <action name="actionImportSections">
+   <property name="text">
+    <string>Import Sections</string>
    </property>
   </action>
  </widget>

@@ -32,6 +32,7 @@ from pzero.collections.image_collection import ImageCollection
 from pzero.collections.mesh3d_collection import Mesh3DCollection
 from pzero.collections.well_collection import WellCollection
 from pzero.collections.xsection_collection import XSectionCollection
+from pzero.collections.xsection_collection import sections_from_file
 from pzero.helpers.helper_dialogs import (
     options_dialog,
     save_file_dialog,
@@ -237,6 +238,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.actionImportGocad.triggered.connect(self.import_gocad)
         self.actionImportGocadXsection.triggered.connect(self.import_gocad_section)
         self.actionImportGocadBoundary.triggered.connect(self.import_gocad_boundary)
+        self.actionImportSections.triggered.connect(self.import_sections)
         self.actionImportPyvista.triggered.connect(lambda: pyvista2vtk(self=self))
         self.actionImportPC.triggered.connect(self.import_PC)
         self.actionImportVedo.triggered.connect(lambda: vedo2vtk(self=self))
@@ -2220,6 +2222,10 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             gocad2vtk_boundary(
                 self=self, in_file_name=in_file_name, uid_from_name=False
             )
+
+    def import_sections(self):
+        """Import section traces from different kinds of files."""
+        sections_from_file(self)
 
     def import_PC(self):
         """Import point cloud data. File extension dependent (.txt, .xyz, .las) -> Ui_ImportOptionsWindow ui to preview the data (similar to stereonet)"""

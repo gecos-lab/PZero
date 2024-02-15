@@ -6118,7 +6118,6 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         All objects are visible by default -> show = True
         This must be reimplemented for cross-sections in order
         to show entities belonging to the section only."""
-        print("self.add_all_entities()")
         for uid in self.parent.geol_coll.df["uid"].tolist():
             this_actor = self.show_actor_with_property(
                 uid=uid, collection="geol_coll", show_property=None, visible=True
@@ -6300,7 +6299,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
 
     def change_actor_point_size(self, uid=None, collection=None):
         """Dummy method to update point size for actor uid. Must be implemented in subclasses."""
-        return
+        returnself.add_all_entities()
 
     def set_actor_visible(self, uid=None, visible=None, name=None):
         """Dummy method to Set actor uid visible or invisible (visible = True or False).
@@ -6324,12 +6323,8 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         return
 
     def initialize_menu_tools(self):
-        """Dummy method to initialize menu tools. Must be implemented in subclasses."""
-        # _______________________
-        # SOME TOOLS MIGHT BE IMPLEMENTED HERE? IN THIS CASE SUBCLASSES WOULD NEED A METHOD ADDING TOOLS,
-        # AND NOT A COMPLETE REIMPLEMENTATION OF THIS
-        # _______________________
-        return
+        """This is the base method of the abstract BaseView() class, used to add menu tools used by all windows.
+        The code appearing here is appended in subclasses using super().initialize_menu_tools() in their first line."""
 
     def initialize_interactor(self):
         """Dummy method to initialize the plotting canvas. Must be implemented in subclasses."""
@@ -6368,14 +6363,6 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
     def enable_actions(self):
         for action in self.findChildren(QAction):
             action.setEnabled(True)
-
-    def remove_entity(self):
-        # _______________________________________________
-        # ISSUE #68 HERE
-        # _______________________________________________
-        # for sel_uid in self.selected_uids:
-        #     self.plotter.remove_actor(f"{sel_uid}_silh")
-        self.parent.entity_remove()
 
 
 class VTKView(BaseView):
@@ -7151,6 +7138,11 @@ class VTKView(BaseView):
         self.plotter.reset_camera()
 
     def initialize_menu_tools(self):
+        """This is the intermediate method of the VTKView() abstract class, used to add menu tools used by all VTK windows.
+        The code appearing here is appended in subclasses using super().initialize_menu_tools() in their first line."""
+        # append code from BaseView()
+        super().initialize_menu_tools()
+        # then add new code specific to VTKView()
         self.saveHomeView = QAction("Save home view", self)  # create action
         self.saveHomeView.triggered.connect(
             self.save_home_view
@@ -7175,13 +7167,6 @@ class VTKView(BaseView):
         self.menuBaseView.addAction(self.selectLineButton)  # add action to menu
         self.toolBarBase.addAction(self.selectLineButton)  # add action to toolbar
 
-        self.removeEntityButton = QAction("Remove Entity", self)  # create action
-        self.removeEntityButton.triggered.connect(
-            self.remove_entity
-        )  # connect action to function
-        self.menuBaseView.addAction(self.removeEntityButton)  # add action to menu
-        self.toolBarBase.addAction(self.removeEntityButton)  # add action to toolbar
-
         self.clearSelectionButton = QAction("Clear Selection", self)  # create action
         self.clearSelectionButton.triggered.connect(
             self.clear_selection
@@ -7189,11 +7174,33 @@ class VTKView(BaseView):
         self.menuBaseView.addAction(self.clearSelectionButton)  # add action to menu
         self.toolBarBase.addAction(self.clearSelectionButton)  # add action to toolbar
 
+        self.removeEntityButton = QAction("Remove Entity", self)  # create action
+        self.removeEntityButton.triggered.connect(
+            self.remove_entity
+        )  # connect action to function
+        self.menuBaseView.addAction(self.removeEntityButton)  # add action to menu
+        self.toolBarBase.addAction(self.removeEntityButton)  # add action to toolbar
+
         self.vertExagButton = QAction("Vertical exaggeration", self)
         self.vertExagButton.triggered.connect(
             self.vert_exag
         )  # connect action to function
         self.menuWindow.addAction(self.vertExagButton)  # add action to menu
+
+        self.actionExportScreen = QAction("Take screenshot", self)
+        self.actionExportScreen.triggered.connect(self.export_screen)
+        self.menuBaseView.addAction(self.actionExportScreen)
+        self.toolBarBase.addAction(self.actionExportScreen)
+
+    def export_screen(self):
+        out_file_name = save_file_dialog(
+            parent=self,
+            caption="Export 3D view as HTML.",
+            filter="png (*.png);; jpeg (*.jpg)",
+        )
+        self.plotter.screenshot(
+            out_file_name, transparent_background=True, window_size=(1920, 1080)
+        )
 
     def initialize_interactor(self):
         """Add the pyvista interactor object to self.ViewFrameLayout ->
@@ -7484,6 +7491,14 @@ class VTKView(BaseView):
         else:
             return None
 
+    def remove_entity(self):
+        """This method first removes the yellow silhouette that highlights selected actors (actually an actor itself),
+        then call the general method to remove entities from the project, which in turn fires a signal to update all
+        plot windows removing all actors."""
+        for sel_uid in self.selected_uids:
+            self.plotter.remove_actor(f"{sel_uid}_silh")
+        self.parent.entity_remove()
+
     def vert_exag(self):
         exag_value = input_one_value_dialog(
             parent=self,
@@ -7582,20 +7597,6 @@ class View3D(VTKView):
         # self.menuBaseView.addAction(self.showOct)
         # self.toolBarBase.addAction(self.showOct)
 
-        self.menuOrbit = QMenu("Orbit around", self)
-
-        self.actionOrbitEntity = QAction("Entity", self)
-        self.actionOrbitEntity.triggered.connect(lambda: self.orbit_entity())
-        self.menuOrbit.addAction(self.actionOrbitEntity)
-
-        self.menuWindow.addMenu(self.menuOrbit)
-
-        """______________THIS MUST BE MOVED TO MAIN WINDOW AND NAME MUST BE MORE SPECIFIC_________________"""
-        self.actionExportScreen = QAction("Take screenshot", self)
-        self.actionExportScreen.triggered.connect(self.export_screen)
-        self.menuBaseView.addAction(self.actionExportScreen)
-        self.toolBarBase.addAction(self.actionExportScreen)
-
         self.actionExportGltf = QAction("Export as GLTF", self)
         self.actionExportGltf.triggered.connect(self.export_gltf)
         self.menuBaseView.addAction(self.actionExportGltf)
@@ -7616,15 +7617,13 @@ class View3D(VTKView):
         self.menuBaseView.addAction(self.actionExportVtkjs)
         self.toolBarBase.addAction(self.actionExportVtkjs)
 
-    def export_screen(self):
-        out_file_name = save_file_dialog(
-            parent=self,
-            caption="Export 3D view as HTML.",
-            filter="png (*.png);; jpeg (*.jpg)",
-        )
-        self.plotter.screenshot(
-            out_file_name, transparent_background=True, window_size=(1920, 1080)
-        )
+        self.menuOrbit = QMenu("Orbit around", self)
+
+        self.actionOrbitEntity = QAction("Entity", self)
+        self.actionOrbitEntity.triggered.connect(lambda: self.orbit_entity())
+        self.menuOrbit.addAction(self.actionOrbitEntity)
+
+        self.menuWindow.addMenu(self.menuOrbit)
 
     def export_html(self):
         out_file_name = save_file_dialog(
@@ -7651,6 +7650,7 @@ class View3D(VTKView):
         self.plotter.export_gltf(out_file_name)
 
     def act_att(self):
+        """Used to activate pkd_point, which returns data from picking on point clouds."""
         if self.tog_att == -1:
             input_dict = {
                 "name": ["Set name: ", "Set_0"],
@@ -7676,6 +7676,7 @@ class View3D(VTKView):
             print("Picking disabled")
 
     def pkd_point(self, mesh, pid, set_opt):
+        """Used by  pkd_point, which returns data from picking on point clouds."""
         obj = mesh
 
         sph_r = 0.2  # radius of the selection sphere
@@ -7997,6 +7998,10 @@ class NewView2D(VTKView):
         self.menuBaseView.setTitle("Edit")
         self.actionBase_Tool.setText("Edit")
 
+        # ------------------------------------
+        # CONSIDER MOVING SOME OF THE FOLLOWING METHODS TO VTKView(), IN ORDER TO HAVE THEM ALSO IN 3D VIEWS
+        # ------------------------------------
+
         self.drawLineButton = QAction("Draw line", self)  # create action
         self.drawLineButton.triggered.connect(
             lambda: draw_line(self)
@@ -8141,10 +8146,7 @@ class NewViewMap(NewView2D):
         self.plotter.view_xy()
 
     def initialize_menu_tools(self):
-        from pzero.collections.xsection_collection import (
-            section_from_azimuth,
-            sections_from_file,
-        )
+        from pzero.collections.xsection_collection import section_from_azimuth
         from pzero.collections.boundary_collection import boundary_from_points
 
         super().initialize_menu_tools()
@@ -8158,12 +8160,6 @@ class NewViewMap(NewView2D):
         self.toolBarBase.addAction(
             self.sectionFromAzimuthButton
         )  # add action to toolbar
-
-        self.sectionFromFileButton = QAction("Sections from file", self)
-        self.sectionFromFileButton.triggered.connect(lambda: sections_from_file(self))
-
-        self.menuBaseView.addAction(self.sectionFromFileButton)  # add action to menu
-        self.toolBarBase.addAction(self.sectionFromFileButton)  # add action to toolbar
 
         self.boundaryFromPointsButton = QAction(
             "Boundary from 2 points", self
@@ -9650,6 +9646,11 @@ class ViewStereoplot(MPLView):
         # mplstyle.context('classic')
 
     def initialize_menu_tools(self):
+        """This is the method of the ViewStereoplot() class, used to add menu tools in addition to those inherited from
+        superclasses, that are appended here using super().initialize_menu_tools()."""
+        # append code from MPLView()
+        super().initialize_menu_tools()
+        # then add new code specific to MPLView()
         self.actionContours = QAction("View contours", self)
         self.actionContours.triggered.connect(
             lambda: self.toggle_contours(filled=False)
