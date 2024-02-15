@@ -15,29 +15,19 @@ class Ui_ProjectWindow(object):
     def setupUi(self, ProjectWindow):
         ProjectWindow.setObjectName("ProjectWindow")
         ProjectWindow.resize(1418, 800)
-        sizePolicy = QtWidgets.QSizePolicy(
-            QtWidgets.QSizePolicy.MinimumExpanding,
-            QtWidgets.QSizePolicy.MinimumExpanding,
-        )
+        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.MinimumExpanding, QtWidgets.QSizePolicy.MinimumExpanding)
         sizePolicy.setHorizontalStretch(0)
         sizePolicy.setVerticalStretch(0)
         sizePolicy.setHeightForWidth(ProjectWindow.sizePolicy().hasHeightForWidth())
         ProjectWindow.setSizePolicy(sizePolicy)
         ProjectWindow.setMinimumSize(QtCore.QSize(1280, 800))
         ProjectWindow.setStyleSheet("")
-        ProjectWindow.setLocale(
-            QtCore.QLocale(QtCore.QLocale.English, QtCore.QLocale.UnitedStates)
-        )
+        ProjectWindow.setLocale(QtCore.QLocale(QtCore.QLocale.English, QtCore.QLocale.UnitedStates))
         self.centralwidget = QtWidgets.QWidget(ProjectWindow)
-        sizePolicy = QtWidgets.QSizePolicy(
-            QtWidgets.QSizePolicy.MinimumExpanding,
-            QtWidgets.QSizePolicy.MinimumExpanding,
-        )
+        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.MinimumExpanding, QtWidgets.QSizePolicy.MinimumExpanding)
         sizePolicy.setHorizontalStretch(1)
         sizePolicy.setVerticalStretch(1)
-        sizePolicy.setHeightForWidth(
-            self.centralwidget.sizePolicy().hasHeightForWidth()
-        )
+        sizePolicy.setHeightForWidth(self.centralwidget.sizePolicy().hasHeightForWidth())
         self.centralwidget.setSizePolicy(sizePolicy)
         self.centralwidget.setMinimumSize(QtCore.QSize(1280, 470))
         self.centralwidget.setBaseSize(QtCore.QSize(1280, 470))
@@ -48,10 +38,7 @@ class Ui_ProjectWindow(object):
         self.horizontalLayout.setSpacing(8)
         self.horizontalLayout.setObjectName("horizontalLayout")
         self.tabCentral = QtWidgets.QTabWidget(self.centralwidget)
-        sizePolicy = QtWidgets.QSizePolicy(
-            QtWidgets.QSizePolicy.MinimumExpanding,
-            QtWidgets.QSizePolicy.MinimumExpanding,
-        )
+        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.MinimumExpanding, QtWidgets.QSizePolicy.MinimumExpanding)
         sizePolicy.setHorizontalStretch(1)
         sizePolicy.setVerticalStretch(1)
         sizePolicy.setHeightForWidth(self.tabCentral.sizePolicy().hasHeightForWidth())
@@ -60,10 +47,7 @@ class Ui_ProjectWindow(object):
         self.tabCentral.setBaseSize(QtCore.QSize(1272, 462))
         self.tabCentral.setObjectName("tabCentral")
         self.tabGeology = QtWidgets.QWidget()
-        sizePolicy = QtWidgets.QSizePolicy(
-            QtWidgets.QSizePolicy.MinimumExpanding,
-            QtWidgets.QSizePolicy.MinimumExpanding,
-        )
+        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.MinimumExpanding, QtWidgets.QSizePolicy.MinimumExpanding)
         sizePolicy.setHorizontalStretch(1)
         sizePolicy.setVerticalStretch(1)
         sizePolicy.setHeightForWidth(self.tabGeology.sizePolicy().hasHeightForWidth())
@@ -74,14 +58,10 @@ class Ui_ProjectWindow(object):
         self.verticalLayout_4 = QtWidgets.QVBoxLayout(self.tabGeology)
         self.verticalLayout_4.setObjectName("verticalLayout_4")
         self.GeologyTableView = QtWidgets.QTableView(self.tabGeology)
-        sizePolicy = QtWidgets.QSizePolicy(
-            QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding
-        )
+        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
         sizePolicy.setHorizontalStretch(0)
         sizePolicy.setVerticalStretch(0)
-        sizePolicy.setHeightForWidth(
-            self.GeologyTableView.sizePolicy().hasHeightForWidth()
-        )
+        sizePolicy.setHeightForWidth(self.GeologyTableView.sizePolicy().hasHeightForWidth())
         self.GeologyTableView.setSizePolicy(sizePolicy)
         self.GeologyTableView.setMinimumSize(QtCore.QSize(0, 0))
         self.GeologyTableView.setBaseSize(QtCore.QSize(0, 0))
@@ -161,10 +141,7 @@ class Ui_ProjectWindow(object):
         self.verticalLayout_11.addWidget(self.BackgroundsTableView)
         self.tabCentral.addTab(self.tabBackgrounds, "")
         self.tabLegend = QtWidgets.QWidget()
-        sizePolicy = QtWidgets.QSizePolicy(
-            QtWidgets.QSizePolicy.MinimumExpanding,
-            QtWidgets.QSizePolicy.MinimumExpanding,
-        )
+        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.MinimumExpanding, QtWidgets.QSizePolicy.MinimumExpanding)
         sizePolicy.setHorizontalStretch(1)
         sizePolicy.setVerticalStretch(1)
         sizePolicy.setHeightForWidth(self.tabLegend.sizePolicy().hasHeightForWidth())
@@ -175,14 +152,10 @@ class Ui_ProjectWindow(object):
         self.verticalLayout_3 = QtWidgets.QVBoxLayout(self.tabLegend)
         self.verticalLayout_3.setObjectName("verticalLayout_3")
         self.LegendTreeWidget = QtWidgets.QTreeWidget(self.tabLegend)
-        sizePolicy = QtWidgets.QSizePolicy(
-            QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding
-        )
+        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
         sizePolicy.setHorizontalStretch(0)
         sizePolicy.setVerticalStretch(0)
-        sizePolicy.setHeightForWidth(
-            self.LegendTreeWidget.sizePolicy().hasHeightForWidth()
-        )
+        sizePolicy.setHeightForWidth(self.LegendTreeWidget.sizePolicy().hasHeightForWidth())
         self.LegendTreeWidget.setSizePolicy(sizePolicy)
         self.LegendTreeWidget.setMinimumSize(QtCore.QSize(0, 0))
         self.LegendTreeWidget.setBaseSize(QtCore.QSize(0, 0))
@@ -191,15 +164,10 @@ class Ui_ProjectWindow(object):
         self.verticalLayout_3.addWidget(self.LegendTreeWidget)
         self.tabCentral.addTab(self.tabLegend, "")
         self.tabProperties = QtWidgets.QWidget()
-        sizePolicy = QtWidgets.QSizePolicy(
-            QtWidgets.QSizePolicy.MinimumExpanding,
-            QtWidgets.QSizePolicy.MinimumExpanding,
-        )
+        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.MinimumExpanding, QtWidgets.QSizePolicy.MinimumExpanding)
         sizePolicy.setHorizontalStretch(0)
         sizePolicy.setVerticalStretch(0)
-        sizePolicy.setHeightForWidth(
-            self.tabProperties.sizePolicy().hasHeightForWidth()
-        )
+        sizePolicy.setHeightForWidth(self.tabProperties.sizePolicy().hasHeightForWidth())
         self.tabProperties.setSizePolicy(sizePolicy)
         self.tabProperties.setMinimumSize(QtCore.QSize(1266, 430))
         self.tabProperties.setBaseSize(QtCore.QSize(1266, 430))
@@ -208,14 +176,10 @@ class Ui_ProjectWindow(object):
         self.verticalLayout_2 = QtWidgets.QVBoxLayout(self.tabProperties)
         self.verticalLayout_2.setObjectName("verticalLayout_2")
         self.PropertiesTableWidget = QtWidgets.QTableWidget(self.tabProperties)
-        sizePolicy = QtWidgets.QSizePolicy(
-            QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding
-        )
+        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
         sizePolicy.setHorizontalStretch(0)
         sizePolicy.setVerticalStretch(0)
-        sizePolicy.setHeightForWidth(
-            self.PropertiesTableWidget.sizePolicy().hasHeightForWidth()
-        )
+        sizePolicy.setHeightForWidth(self.PropertiesTableWidget.sizePolicy().hasHeightForWidth())
         self.PropertiesTableWidget.setSizePolicy(sizePolicy)
         self.PropertiesTableWidget.setMinimumSize(QtCore.QSize(0, 0))
         self.PropertiesTableWidget.setBaseSize(QtCore.QSize(0, 0))
@@ -225,10 +189,7 @@ class Ui_ProjectWindow(object):
         self.verticalLayout_2.addWidget(self.PropertiesTableWidget)
         self.tabCentral.addTab(self.tabProperties, "")
         self.tabTerminal = QtWidgets.QWidget()
-        sizePolicy = QtWidgets.QSizePolicy(
-            QtWidgets.QSizePolicy.MinimumExpanding,
-            QtWidgets.QSizePolicy.MinimumExpanding,
-        )
+        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.MinimumExpanding, QtWidgets.QSizePolicy.MinimumExpanding)
         sizePolicy.setHorizontalStretch(1)
         sizePolicy.setVerticalStretch(1)
         sizePolicy.setHeightForWidth(self.tabTerminal.sizePolicy().hasHeightForWidth())
@@ -239,9 +200,7 @@ class Ui_ProjectWindow(object):
         self.verticalLayout_5 = QtWidgets.QVBoxLayout(self.tabTerminal)
         self.verticalLayout_5.setObjectName("verticalLayout_5")
         self.TextTerminal = QtWidgets.QPlainTextEdit(self.tabTerminal)
-        sizePolicy = QtWidgets.QSizePolicy(
-            QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding
-        )
+        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
         sizePolicy.setHorizontalStretch(0)
         sizePolicy.setVerticalStretch(0)
         sizePolicy.setHeightForWidth(self.TextTerminal.sizePolicy().hasHeightForWidth())
@@ -256,9 +215,7 @@ class Ui_ProjectWindow(object):
         ProjectWindow.setCentralWidget(self.centralwidget)
         self.menubar = QtWidgets.QMenuBar(ProjectWindow)
         self.menubar.setGeometry(QtCore.QRect(0, 0, 1418, 30))
-        sizePolicy = QtWidgets.QSizePolicy(
-            QtWidgets.QSizePolicy.MinimumExpanding, QtWidgets.QSizePolicy.Fixed
-        )
+        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.MinimumExpanding, QtWidgets.QSizePolicy.Fixed)
         sizePolicy.setHorizontalStretch(0)
         sizePolicy.setVerticalStretch(0)
         sizePolicy.setHeightForWidth(self.menubar.sizePolicy().hasHeightForWidth())
@@ -291,9 +248,7 @@ class Ui_ProjectWindow(object):
         self.menuInterpolation_tools.setObjectName("menuInterpolation_tools")
         ProjectWindow.setMenuBar(self.menubar)
         self.statusbar = QtWidgets.QStatusBar(ProjectWindow)
-        sizePolicy = QtWidgets.QSizePolicy(
-            QtWidgets.QSizePolicy.MinimumExpanding, QtWidgets.QSizePolicy.Fixed
-        )
+        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.MinimumExpanding, QtWidgets.QSizePolicy.Fixed)
         sizePolicy.setHorizontalStretch(0)
         sizePolicy.setVerticalStretch(0)
         sizePolicy.setHeightForWidth(self.statusbar.sizePolicy().hasHeightForWidth())
@@ -350,9 +305,7 @@ class Ui_ProjectWindow(object):
         self.actionImportGocadXsection.setObjectName("actionImportGocadXsection")
         self.actionDelaunay2DInterpolation = QtWidgets.QAction(ProjectWindow)
         self.actionDelaunay2DInterpolation.setCheckable(False)
-        self.actionDelaunay2DInterpolation.setObjectName(
-            "actionDelaunay2DInterpolation"
-        )
+        self.actionDelaunay2DInterpolation.setObjectName("actionDelaunay2DInterpolation")
         self.actionMergeEntities = QtWidgets.QAction(ProjectWindow)
         self.actionMergeEntities.setObjectName("actionMergeEntities")
         self.actionPoissonInterpolation = QtWidgets.QAction(ProjectWindow)
@@ -372,9 +325,7 @@ class Ui_ProjectWindow(object):
         self.actionProject2DEM = QtWidgets.QAction(ProjectWindow)
         self.actionProject2DEM.setObjectName("actionProject2DEM")
         self.actionLoopStructuralImplicitModelling = QtWidgets.QAction(ProjectWindow)
-        self.actionLoopStructuralImplicitModelling.setObjectName(
-            "actionLoopStructuralImplicitModelling"
-        )
+        self.actionLoopStructuralImplicitModelling.setObjectName("actionLoopStructuralImplicitModelling")
         self.actionImportSEGY = QtWidgets.QAction(ProjectWindow)
         self.actionImportSEGY.setObjectName("actionImportSEGY")
         self.actionCalculateNormal = QtWidgets.QAction(ProjectWindow)
@@ -413,6 +364,8 @@ class Ui_ProjectWindow(object):
         self.actionDecimatePointCloud.setObjectName("actionDecimatePointCloud")
         self.actionExportCSV = QtWidgets.QAction(ProjectWindow)
         self.actionExportCSV.setObjectName("actionExportCSV")
+        self.actionImportSections = QtWidgets.QAction(ProjectWindow)
+        self.actionImportSections.setObjectName("actionImportSections")
         self.menuFile.addAction(self.actionProjectNew)
         self.menuFile.addAction(self.actionProjectOpen)
         self.menuFile.addAction(self.actionProjectSave)
@@ -420,6 +373,7 @@ class Ui_ProjectWindow(object):
         self.menuFile.addAction(self.actionImportGocad)
         self.menuFile.addAction(self.actionImportGocadXsection)
         self.menuFile.addAction(self.actionImportGocadBoundary)
+        self.menuFile.addAction(self.actionImportSections)
         self.menuFile.addAction(self.actionImportPC)
         self.menuFile.addAction(self.actionImportPyvista)
         self.menuFile.addAction(self.actionImportVedo)
@@ -466,9 +420,7 @@ class Ui_ProjectWindow(object):
         self.menuEdit.addAction(self.actionBuildOctree)
         self.menuInterpolation_tools.addAction(self.actionDelaunay2DInterpolation)
         self.menuInterpolation_tools.addAction(self.actionPoissonInterpolation)
-        self.menuInterpolation_tools.addAction(
-            self.actionLoopStructuralImplicitModelling
-        )
+        self.menuInterpolation_tools.addAction(self.actionLoopStructuralImplicitModelling)
         self.menuInterpolation_tools.addSeparator()
         self.menuInterpolation_tools.addAction(self.actionSurfaceSmoothing)
         self.menuInterpolation_tools.addAction(self.actionSubdivisionResampling)
@@ -498,98 +450,41 @@ class Ui_ProjectWindow(object):
         self.tabGeology.setAccessibleName(_translate("ProjectWindow", "Entities"))
         self.GeologyTableView.setToolTip(_translate("ProjectWindow", "Entities"))
         self.GeologyTableView.setAccessibleName(_translate("ProjectWindow", "Entities"))
-        self.tabCentral.setTabText(
-            self.tabCentral.indexOf(self.tabGeology),
-            _translate("ProjectWindow", "Geology"),
-        )
-        self.tabCentral.setTabToolTip(
-            self.tabCentral.indexOf(self.tabGeology),
-            _translate("ProjectWindow", "Geology"),
-        )
-        self.tabCentral.setTabText(
-            self.tabCentral.indexOf(self.tabXSections),
-            _translate("ProjectWindow", "X Sections"),
-        )
-        self.tabCentral.setTabToolTip(
-            self.tabCentral.indexOf(self.tabXSections),
-            _translate("ProjectWindow", "X Sections"),
-        )
-        self.tabCentral.setTabText(
-            self.tabCentral.indexOf(self.tabBoundaries),
-            _translate("ProjectWindow", "Boundaries"),
-        )
-        self.tabCentral.setTabText(
-            self.tabCentral.indexOf(self.tabMeshes3D),
-            _translate("ProjectWindow", "3D Meshes and Grids"),
-        )
-        self.tabCentral.setTabToolTip(
-            self.tabCentral.indexOf(self.tabMeshes3D),
-            _translate("ProjectWindow", "3D Meshes and Grids"),
-        )
-        self.tabCentral.setTabText(
-            self.tabCentral.indexOf(self.tabDOMs),
-            _translate("ProjectWindow", "DEMs and DOMs"),
-        )
-        self.tabCentral.setTabToolTip(
-            self.tabCentral.indexOf(self.tabDOMs),
-            _translate("ProjectWindow", "DEMs and DOMs"),
-        )
-        self.tabCentral.setTabText(
-            self.tabCentral.indexOf(self.tabImages),
-            _translate("ProjectWindow", "Images"),
-        )
-        self.tabCentral.setTabToolTip(
-            self.tabCentral.indexOf(self.tabImages),
-            _translate("ProjectWindow", "Images"),
-        )
-        self.tabCentral.setTabText(
-            self.tabCentral.indexOf(self.tabWells), _translate("ProjectWindow", "Wells")
-        )
-        self.tabCentral.setTabText(
-            self.tabCentral.indexOf(self.tabFluids),
-            _translate("ProjectWindow", "Fluid contacts"),
-        )
-        self.tabCentral.setTabText(
-            self.tabCentral.indexOf(self.tabBackgrounds),
-            _translate("ProjectWindow", "Background data"),
-        )
+        self.tabCentral.setTabText(self.tabCentral.indexOf(self.tabGeology), _translate("ProjectWindow", "Geology"))
+        self.tabCentral.setTabToolTip(self.tabCentral.indexOf(self.tabGeology), _translate("ProjectWindow", "Geology"))
+        self.tabCentral.setTabText(self.tabCentral.indexOf(self.tabXSections), _translate("ProjectWindow", "X Sections"))
+        self.tabCentral.setTabToolTip(self.tabCentral.indexOf(self.tabXSections), _translate("ProjectWindow", "X Sections"))
+        self.tabCentral.setTabText(self.tabCentral.indexOf(self.tabBoundaries), _translate("ProjectWindow", "Boundaries"))
+        self.tabCentral.setTabText(self.tabCentral.indexOf(self.tabMeshes3D), _translate("ProjectWindow", "3D Meshes and Grids"))
+        self.tabCentral.setTabToolTip(self.tabCentral.indexOf(self.tabMeshes3D), _translate("ProjectWindow", "3D Meshes and Grids"))
+        self.tabCentral.setTabText(self.tabCentral.indexOf(self.tabDOMs), _translate("ProjectWindow", "DEMs and DOMs"))
+        self.tabCentral.setTabToolTip(self.tabCentral.indexOf(self.tabDOMs), _translate("ProjectWindow", "DEMs and DOMs"))
+        self.tabCentral.setTabText(self.tabCentral.indexOf(self.tabImages), _translate("ProjectWindow", "Images"))
+        self.tabCentral.setTabToolTip(self.tabCentral.indexOf(self.tabImages), _translate("ProjectWindow", "Images"))
+        self.tabCentral.setTabText(self.tabCentral.indexOf(self.tabWells), _translate("ProjectWindow", "Wells"))
+        self.tabCentral.setTabText(self.tabCentral.indexOf(self.tabFluids), _translate("ProjectWindow", "Fluid contacts"))
+        self.tabCentral.setTabText(self.tabCentral.indexOf(self.tabBackgrounds), _translate("ProjectWindow", "Background data"))
         self.tabLegend.setToolTip(_translate("ProjectWindow", "Legend"))
         self.tabLegend.setAccessibleName(_translate("ProjectWindow", "Legend"))
         self.LegendTreeWidget.setToolTip(_translate("ProjectWindow", "Legend"))
         self.LegendTreeWidget.setAccessibleName(_translate("ProjectWindow", "Legend"))
-        self.tabCentral.setTabText(
-            self.tabCentral.indexOf(self.tabLegend),
-            _translate("ProjectWindow", "Legend"),
-        )
+        self.tabCentral.setTabText(self.tabCentral.indexOf(self.tabLegend), _translate("ProjectWindow", "Legend"))
         self.tabProperties.setToolTip(_translate("ProjectWindow", "Properties"))
         self.tabProperties.setAccessibleName(_translate("ProjectWindow", "Properties"))
         self.PropertiesTableWidget.setToolTip(_translate("ProjectWindow", "Properties"))
-        self.PropertiesTableWidget.setAccessibleName(
-            _translate("ProjectWindow", "Properties")
-        )
-        self.tabCentral.setTabText(
-            self.tabCentral.indexOf(self.tabProperties),
-            _translate("ProjectWindow", "Properties"),
-        )
+        self.PropertiesTableWidget.setAccessibleName(_translate("ProjectWindow", "Properties"))
+        self.tabCentral.setTabText(self.tabCentral.indexOf(self.tabProperties), _translate("ProjectWindow", "Properties"))
         self.tabTerminal.setToolTip(_translate("ProjectWindow", "Terminal"))
         self.tabTerminal.setAccessibleName(_translate("ProjectWindow", "Terminal"))
         self.TextTerminal.setToolTip(_translate("ProjectWindow", "Terminal"))
         self.TextTerminal.setAccessibleName(_translate("ProjectWindow", "Terminal"))
-        self.tabCentral.setTabText(
-            self.tabCentral.indexOf(self.tabTerminal),
-            _translate("ProjectWindow", "Terminal"),
-        )
-        self.tabCentral.setTabToolTip(
-            self.tabCentral.indexOf(self.tabTerminal),
-            _translate("ProjectWindow", "Terminal"),
-        )
+        self.tabCentral.setTabText(self.tabCentral.indexOf(self.tabTerminal), _translate("ProjectWindow", "Terminal"))
+        self.tabCentral.setTabToolTip(self.tabCentral.indexOf(self.tabTerminal), _translate("ProjectWindow", "Terminal"))
         self.menuFile.setTitle(_translate("ProjectWindow", "File"))
         self.menuWindow.setTitle(_translate("ProjectWindow", "Window"))
         self.menuHelp.setTitle(_translate("ProjectWindow", "Help"))
         self.menuEdit.setTitle(_translate("ProjectWindow", "Edit"))
-        self.menuInterpolation_tools.setTitle(
-            _translate("ProjectWindow", "Interpolation")
-        )
+        self.menuInterpolation_tools.setTitle(_translate("ProjectWindow", "Interpolation"))
         self.actionProjectNew.setText(_translate("ProjectWindow", "New Project"))
         self.actionProjectOpen.setText(_translate("ProjectWindow", "Open Project"))
         self.actionProjectSave.setText(_translate("ProjectWindow", "Save Project"))
@@ -598,109 +493,56 @@ class Ui_ProjectWindow(object):
         self.actionExportCAD.setText(_translate("ProjectWindow", "Export CAD"))
         self.actionQuit.setText(_translate("ProjectWindow", "Quit"))
         self.actionView3D.setText(_translate("ProjectWindow", "3D View"))
-        self.actionViewPlaneXsection.setText(
-            _translate("ProjectWindow", "Plane X Section View")
-        )
+        self.actionViewPlaneXsection.setText(_translate("ProjectWindow", "Plane X Section View"))
         self.actionViewMap.setText(_translate("ProjectWindow", "Map View"))
         self.actionViewXYPlot.setText(_translate("ProjectWindow", "XY Plot View"))
         self.actionAbout.setText(_translate("ProjectWindow", "About"))
         self.actionHelp.setText(_translate("ProjectWindow", "Help"))
         self.actionViewWellLog.setText(_translate("ProjectWindow", "Well Log View"))
-        self.actionViewStereoplot.setText(
-            _translate("ProjectWindow", "Stereoplot View")
-        )
+        self.actionViewStereoplot.setText(_translate("ProjectWindow", "Stereoplot View"))
         self.actionViewHistogram.setText(_translate("ProjectWindow", "Histogram View"))
         self.actionImportPyvista.setText(_translate("ProjectWindow", "Import PyVista"))
         self.actionImportVedo.setText(_translate("ProjectWindow", "Import Vedo"))
         self.actionImportDEM.setText(_translate("ProjectWindow", "Import DEM"))
-        self.actionImportOrthoImage.setText(
-            _translate("ProjectWindow", "Import OrthoImage")
-        )
-        self.actionEditEntityRemove.setText(
-            _translate("ProjectWindow", "Remove Entity")
-        )
+        self.actionImportOrthoImage.setText(_translate("ProjectWindow", "Import OrthoImage"))
+        self.actionEditEntityRemove.setText(_translate("ProjectWindow", "Remove Entity"))
         self.actionEditTextureAdd.setText(_translate("ProjectWindow", "Add Texture"))
-        self.actionEditTextureRemove.setText(
-            _translate("ProjectWindow", "Remove Texture")
-        )
+        self.actionEditTextureRemove.setText(_translate("ProjectWindow", "Remove Texture"))
         self.actionEditEntityClone.setText(_translate("ProjectWindow", "Clone Entity"))
-        self.actionImportGocadXsection.setText(
-            _translate("ProjectWindow", "Import Gocad Xsection")
-        )
-        self.actionDelaunay2DInterpolation.setText(
-            _translate("ProjectWindow", "Delaunay 2D")
-        )
+        self.actionImportGocadXsection.setText(_translate("ProjectWindow", "Import Gocad Xsection"))
+        self.actionDelaunay2DInterpolation.setText(_translate("ProjectWindow", "Delaunay 2D"))
         self.actionMergeEntities.setText(_translate("ProjectWindow", "Merge Entities"))
         self.actionPoissonInterpolation.setText(_translate("ProjectWindow", "Poisson"))
-        self.actionSurfaceSmoothing.setText(
-            _translate("ProjectWindow", "Surface Smoothing")
-        )
+        self.actionSurfaceSmoothing.setText(_translate("ProjectWindow", "Surface Smoothing"))
         self.actionExtrusion.setText(_translate("ProjectWindow", "Extrusion"))
         self.actionDecimationPro.setText(_translate("ProjectWindow", "Decimation Pro"))
-        self.actionDecimationPro.setToolTip(
-            _translate("ProjectWindow", "DecimationPro")
-        )
-        self.actionSubdivisionResampling.setText(
-            _translate("ProjectWindow", "Subdivision Resampling")
-        )
-        self.actionDecimationQuadric.setText(
-            _translate("ProjectWindow", "Decimation Quadric")
-        )
-        self.actionDecimationQuadric.setToolTip(
-            _translate("ProjectWindow", "DecimationQuadric")
-        )
-        self.actionIntersectionXSection.setText(
-            _translate("ProjectWindow", "XSection Intersection")
-        )
+        self.actionDecimationPro.setToolTip(_translate("ProjectWindow", "DecimationPro"))
+        self.actionSubdivisionResampling.setText(_translate("ProjectWindow", "Subdivision Resampling"))
+        self.actionDecimationQuadric.setText(_translate("ProjectWindow", "Decimation Quadric"))
+        self.actionDecimationQuadric.setToolTip(_translate("ProjectWindow", "DecimationQuadric"))
+        self.actionIntersectionXSection.setText(_translate("ProjectWindow", "XSection Intersection"))
         self.actionProject2DEM.setText(_translate("ProjectWindow", "Project to DEM"))
-        self.actionLoopStructuralImplicitModelling.setText(
-            _translate("ProjectWindow", "LoopStructural Implicit Modelling")
-        )
+        self.actionLoopStructuralImplicitModelling.setText(_translate("ProjectWindow", "LoopStructural Implicit Modelling"))
         self.actionImportSEGY.setText(_translate("ProjectWindow", "Import SEGY"))
-        self.actionCalculateNormal.setText(
-            _translate("ProjectWindow", "Calculate normal")
-        )
-        self.actionCalculateNormal.setToolTip(
-            _translate("ProjectWindow", "Calculate normal unit vector")
-        )
-        self.actionCalculateLineation.setText(
-            _translate("ProjectWindow", "Calculate lineation")
-        )
-        self.actionCalculateLineation.setToolTip(
-            _translate("ProjectWindow", "Calculate lineation unit vector")
-        )
+        self.actionCalculateNormal.setText(_translate("ProjectWindow", "Calculate normal"))
+        self.actionCalculateNormal.setToolTip(_translate("ProjectWindow", "Calculate normal unit vector"))
+        self.actionCalculateLineation.setText(_translate("ProjectWindow", "Calculate lineation"))
+        self.actionCalculateLineation.setToolTip(_translate("ProjectWindow", "Calculate lineation unit vector"))
         self.actionAddProperty.setText(_translate("ProjectWindow", "Add property"))
-        self.actionAddProperty.setToolTip(
-            _translate("ProjectWindow", "Add empty property")
-        )
-        self.actionRemoveProperty.setText(
-            _translate("ProjectWindow", "Remove property")
-        )
-        self.actionProject2XSection.setText(
-            _translate("ProjectWindow", "Project to XSection")
-        )
+        self.actionAddProperty.setToolTip(_translate("ProjectWindow", "Add empty property"))
+        self.actionRemoveProperty.setText(_translate("ProjectWindow", "Remove property"))
+        self.actionProject2XSection.setText(_translate("ProjectWindow", "Project to XSection"))
         self.actionImportSHP.setText(_translate("ProjectWindow", "Import SHP"))
-        self.actionImportGocadBoundary.setText(
-            _translate("ProjectWindow", "Import Gocad Boundary")
-        )
-        self.actionImportXsectionImage.setText(
-            _translate("ProjectWindow", "Import Xsection Image")
-        )
-        self.actionConnectedParts.setText(
-            _translate("ProjectWindow", "Connected Parts")
-        )
-        self.actionSplitMultipart.setText(
-            _translate("ProjectWindow", "Split Multi-part")
-        )
+        self.actionImportGocadBoundary.setText(_translate("ProjectWindow", "Import Gocad Boundary"))
+        self.actionImportXsectionImage.setText(_translate("ProjectWindow", "Import Xsection Image"))
+        self.actionConnectedParts.setText(_translate("ProjectWindow", "Connected Parts"))
+        self.actionSplitMultipart.setText(_translate("ProjectWindow", "Split Multi-part"))
         self.actionImportPC.setText(_translate("ProjectWindow", "Import Point Clouds"))
-        self.actionImportWellData.setText(
-            _translate("ProjectWindow", "Import well data")
-        )
+        self.actionImportWellData.setText(_translate("ProjectWindow", "Import well data"))
         self.actionExportVTK.setText(_translate("ProjectWindow", "Export vtk"))
         self.actionSplitSurf.setText(_translate("ProjectWindow", "Split surfaces"))
         self.actionRetopologize.setText(_translate("ProjectWindow", "Retopologize"))
         self.actionBuildOctree.setText(_translate("ProjectWindow", "Build octree"))
-        self.actionDecimatePointCloud.setText(
-            _translate("ProjectWindow", "Decimate point cloud")
-        )
+        self.actionDecimatePointCloud.setText(_translate("ProjectWindow", "Decimate point cloud"))
         self.actionExportCSV.setText(_translate("ProjectWindow", "Export CSV"))
+        self.actionImportSections.setText(_translate("ProjectWindow", "Import Sections"))
