@@ -12,7 +12,7 @@ def vtk2obj(self=None, out_dir_name=None):
     IN THE FUTURE extendo to other entity classes such as DEM, polyline, etc."""
     append_name = options_dialog(
         title="Append name",
-        message="Append entity name to output file mane?",
+        message="Append entity name to output file name?",
         yes_role="Yes",
         no_role="No",
         reject_role=None,

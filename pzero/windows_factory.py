@@ -148,31 +148,42 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         # _____________________________________________
         # SEE IF IT IA A GOOD IDEA TO USE A selected COLUMN IN self.actors_df
         # _____________________________________________
+        # Create empty list of selected uids
         self.selected_uids = []
+        # Set self.this_x_section_uid = None for all views except X-section
+        # not elegant but works and reduces a lot of code repetition and reimplementation
+        # for x-sections. try finding a better solution in the future
+        #########################################################
+        if not isinstance(self, NewViewXsection):
+            self.this_x_section_uid = None
+        print("self.this_x_section_uid: ", self.this_x_section_uid)
         # Initialize menus and tools, canvas, add actors and show it. These methods must be defined in subclasses
         # _____________________________________________
         # CHECK IMPLEMENTATION FOR X-SECTIONS, STEREOPLOTS, ETC. THAT MUST BE LIMITED TO SOME ENTITIES ONLY
         # _____________________________________________
         self.initialize_menu_tools()
         self.initialize_interactor()
-        self.add_all_entities()
+        self.add_all_entities(sec_uid=self.this_x_section_uid)
         self.show_qt_canvas()
         # Build and show geology and topology trees, and cross-section, DOM, image, lists.
         # _____________________________________________
         # CHECK IMPLEMENTATION FOR X-SECTIONS, STEREOPLOTS, ETC. THAT MUST BE LIMITED TO SOME ENTITIES ONLY
         # _____________________________________________
-        self.create_geology_tree()
-        self.create_topology_tree()
-        self.create_xsections_tree()
-        self.create_boundary_list()
-        self.create_mesh3d_list()
-        self.create_dom_list()
-        self.create_image_list()
-        self.create_well_tree()
-        self.create_fluids_tree()
-        self.create_fluids_topology_tree()
-        self.create_backgrounds_tree()
-        self.create_backgrounds_topology_tree()
+        self.create_geology_tree(sec_uid=self.this_x_section_uid)
+        self.create_topology_tree(sec_uid=self.this_x_section_uid)
+        self.create_xsections_tree(sec_uid=self.this_x_section_uid)
+        self.create_boundary_list(sec_uid=self.this_x_section_uid)
+        self.create_mesh3d_list(sec_uid=self.this_x_section_uid)
+        self.create_dom_list(sec_uid=self.this_x_section_uid)
+        self.create_image_list(sec_uid=self.this_x_section_uid)
+        # _____________________________________________
+        # THE FOLLOWING MUST BE UPDATED FOR ec_uid=self.this_x_section_uid
+        # _____________________________________________
+        self.create_well_tree(sec_uid=self.this_x_section_uid)
+        self.create_fluids_tree(sec_uid=self.this_x_section_uid)
+        self.create_fluids_topology_tree(sec_uid=self.this_x_section_uid)
+        self.create_backgrounds_tree(sec_uid=self.this_x_section_uid)
+        self.create_backgrounds_topology_tree(sec_uid=self.this_x_section_uid)
         # Build and show other widgets, icons, tools, etc. here ___
         # Connect signals to update functions. Use lambda functions where we need to pass additional
         # arguments such as parent in addition to the signal itself, e.g. the updated_list
@@ -2578,7 +2589,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
 
     # Methods used to build and update the WELLS table
 
-    def create_well_tree(self):
+    def create_well_tree(self, sec_uid=None):
         """Create topology tree with checkboxes and properties"""
         self.WellsTreeWidget.clear()
         self.WellsTreeWidget.setColumnCount(3)
@@ -2586,7 +2597,16 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.WellsTreeWidget.hideColumn(1)  # hide the uid column
         self.WellsTreeWidget.setItemsExpandable(True)
 
-        locids = pd_unique(self.parent.well_coll.df["Loc ID"])
+        # get unique well-head locations
+        if sec_uid:
+            ########################################################################
+            # at the moment well data cannot be assigned to a X section
+            # need to work on this
+            ########################################################################
+            return
+        else:
+            locids = pd_unique(
+                self.parent.well_coll.df["Loc ID"])
 
         for locid in locids:
             uid = self.parent.well_coll.df.loc[
@@ -2686,6 +2706,9 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.WellsTreeWidget.expandAll()
 
     def update_well_tree_added(self, new_list=None):
+        #############################################################
+        # IS IT NECESSARY TO CONSIDER CROSS SEVTION HERE?
+        #############################################################
         """Update well tree without creating a new model"""
         for uid in new_list["uid"]:
             if (
@@ -6113,140 +6136,276 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                 ignore_index=True,
             )  # self.set_actor_visible(uid=uid, visible=show)
 
-    def add_all_entities(self):
+    def add_all_entities(self, sec_uid=None):
         """Add all entities in project collections.
         All objects are visible by default -> show = True
         This must be reimplemented for cross-sections in order
         to show entities belonging to the section only."""
-        for uid in self.parent.geol_coll.df["uid"].tolist():
-            this_actor = self.show_actor_with_property(
-                uid=uid, collection="geol_coll", show_property=None, visible=True
-            )
-            self.actors_df = self.actors_df.append(
-                {
-                    "uid": uid,
-                    "actor": this_actor,
-                    "show": True,
-                    "collection": "geol_coll",
-                    "show_prop": None,
-                },
-                ignore_index=True,
-            )
-        for uid in self.parent.xsect_coll.df["uid"].tolist():
-            this_actor = self.show_actor_with_property(
-                uid=uid, collection="xsect_coll", show_property=None, visible=False
-            )
-            self.actors_df = self.actors_df.append(
-                {
-                    "uid": uid,
-                    "actor": this_actor,
-                    "show": False,
-                    "collection": "xsect_coll",
-                    "show_prop": None,
-                },
-                ignore_index=True,
-            )
-        for uid in self.parent.boundary_coll.df["uid"].tolist():
-            this_actor = self.show_actor_with_property(
-                uid=uid, collection="boundary_coll", show_property=None, visible=False
-            )
-            self.actors_df = self.actors_df.append(
-                {
-                    "uid": uid,
-                    "actor": this_actor,
-                    "show": False,
-                    "collection": "boundary_coll",
-                    "show_prop": None,
-                },
-                ignore_index=True,
-            )
-        for uid in self.parent.mesh3d_coll.df["uid"].tolist():
-            this_actor = self.show_actor_with_property(
-                uid=uid, collection="mesh3d_coll", show_property=None, visible=False
-            )
-            self.actors_df = self.actors_df.append(
-                {
-                    "uid": uid,
-                    "actor": this_actor,
-                    "show": False,
-                    "collection": "mesh3d_coll",
-                    "show_prop": None,
-                },
-                ignore_index=True,
-            )
-        for uid in self.parent.dom_coll.df["uid"].tolist():
-            this_actor = self.show_actor_with_property(
-                uid=uid, collection="dom_coll", show_property=None, visible=False
-            )
-            self.actors_df = self.actors_df.append(
-                {
-                    "uid": uid,
-                    "actor": this_actor,
-                    "show": False,
-                    "collection": "dom_coll",
-                    "show_prop": None,
-                },
-                ignore_index=True,
-            )
-        for uid in self.parent.image_coll.df["uid"].tolist():
-            this_actor = self.show_actor_with_property(
-                uid=uid, collection="image_coll", show_property=None, visible=False
-            )
-            self.actors_df = self.actors_df.append(
-                {
-                    "uid": uid,
-                    "actor": this_actor,
-                    "show": False,
-                    "collection": "image_coll",
-                    "show_prop": None,
-                },
-                ignore_index=True,
-            )
-        for uid in self.parent.well_coll.df["uid"].tolist():
-            this_actor = self.show_actor_with_property(
-                uid=uid, collection="well_coll", show_property=None, visible=False
-            )
-            self.actors_df = self.actors_df.append(
-                {
-                    "uid": uid,
-                    "actor": this_actor,
-                    "show": False,
-                    "collection": "well_coll",
-                    "show_prop": None,
-                },
-                ignore_index=True,
-            )
-        for uid in self.parent.fluids_coll.df["uid"].tolist():
-            this_actor = self.show_actor_with_property(
-                uid=uid, collection="fluids_coll", show_property=None, visible=False
-            )
-            self.actors_df = self.actors_df.append(
-                {
-                    "uid": uid,
-                    "actor": this_actor,
-                    "show": False,
-                    "collection": "fluids_coll",
-                    "show_prop": None,
-                },
-                ignore_index=True,
-            )
-        for uid in self.parent.backgrounds_coll.df["uid"].tolist():
-            this_actor = self.show_actor_with_property(
-                uid=uid,
-                collection="backgrounds_coll",
-                show_property=None,
-                visible=False,
-            )
-            self.actors_df = self.actors_df.append(
-                {
-                    "uid": uid,
-                    "actor": this_actor,
-                    "show": False,
-                    "collection": "backgrounds_coll",
-                    "show_prop": None,
-                },
-                ignore_index=True,
-            )
+        if sec_uid:
+            # this selects only entities "belonging" to a cross section to avoid crashing
+            # should be changed in future to allow one well to be projected on
+            # more than one cross-section
+            ########################################################################
+            for uid in self.parent.geol_coll.df.loc[(self.parent.geol_coll.df["x_section"] == sec_uid), "uid"].tolist():
+                this_actor = self.show_actor_with_property(
+                    uid=uid, collection="geol_coll", show_property=None, visible=True
+                )
+                self.actors_df = self.actors_df.append(
+                    {
+                        "uid": uid,
+                        "actor": this_actor,
+                        "show": True,
+                        "collection": "geol_coll",
+                        "show_prop": None,
+                    },
+                    ignore_index=True,
+                )
+            for uid in self.parent.xsect_coll.df.loc[(self.parent.xsect_coll.df["uid"] == sec_uid), "uid"].tolist():
+                this_actor = self.show_actor_with_property(
+                    uid=uid, collection="xsect_coll", show_property=None, visible=False
+                )
+                self.actors_df = self.actors_df.append(
+                    {
+                        "uid": uid,
+                        "actor": this_actor,
+                        "show": False,
+                        "collection": "xsect_coll",
+                        "show_prop": None,
+                    },
+                    ignore_index=True,
+                )
+            for uid in self.parent.boundary_coll.df.loc[(self.parent.boundary_coll.df["x_section"] == sec_uid), "uid"].tolist():
+                this_actor = self.show_actor_with_property(
+                    uid=uid, collection="boundary_coll", show_property=None, visible=False
+                )
+                self.actors_df = self.actors_df.append(
+                    {
+                        "uid": uid,
+                        "actor": this_actor,
+                        "show": False,
+                        "collection": "boundary_coll",
+                        "show_prop": None,
+                    },
+                    ignore_index=True,
+                )
+            for uid in self.parent.mesh3d_coll.df.loc[(self.parent.mesh3d_coll.df["x_section"] == sec_uid), "uid"].tolist():
+                this_actor = self.show_actor_with_property(
+                    uid=uid, collection="mesh3d_coll", show_property=None, visible=False
+                )
+                self.actors_df = self.actors_df.append(
+                    {
+                        "uid": uid,
+                        "actor": this_actor,
+                        "show": False,
+                        "collection": "mesh3d_coll",
+                        "show_prop": None,
+                    },
+                    ignore_index=True,
+                )
+            for uid in self.parent.dom_coll.df.loc[(self.parent.dom_coll.df["x_section"] == sec_uid), "uid"].tolist():
+                this_actor = self.show_actor_with_property(
+                    uid=uid, collection="dom_coll", show_property=None, visible=False
+                )
+                self.actors_df = self.actors_df.append(
+                    {
+                        "uid": uid,
+                        "actor": this_actor,
+                        "show": False,
+                        "collection": "dom_coll",
+                        "show_prop": None,
+                    },
+                    ignore_index=True,
+                )
+            for uid in self.parent.image_coll.df.loc[(self.parent.image_coll.df["x_section"] == sec_uid), "uid"].tolist():
+                this_actor = self.show_actor_with_property(
+                    uid=uid, collection="image_coll", show_property=None, visible=False
+                )
+                self.actors_df = self.actors_df.append(
+                    {
+                        "uid": uid,
+                        "actor": this_actor,
+                        "show": False,
+                        "collection": "image_coll",
+                        "show_prop": None,
+                    },
+                    ignore_index=True,
+                )
+            # for uid in self.parent.well_coll.df.loc[(self.parent.well_coll.df["x_section"] == sec_uid), "uid"].tolist():
+            # WELLS NOT INCLUDED IN SECTIONS AT THE MOMENT
+            #     this_actor = self.show_actor_with_property(
+            #         uid=uid, collection="well_coll", show_property=None, visible=False
+            #     )
+            #     self.actors_df = self.actors_df.append(
+            #         {
+            #             "uid": uid,
+            #             "actor": this_actor,
+            #             "show": False,
+            #             "collection": "well_coll",
+            #             "show_prop": None,
+            #         },
+            #         ignore_index=True,
+            #     )
+            for uid in self.parent.fluids_coll.df.loc[(self.parent.fluids_coll.df["x_section"] == sec_uid), "uid"].tolist():
+                this_actor = self.show_actor_with_property(
+                    uid=uid, collection="fluids_coll", show_property=None, visible=False
+                )
+                self.actors_df = self.actors_df.append(
+                    {
+                        "uid": uid,
+                        "actor": this_actor,
+                        "show": False,
+                        "collection": "fluids_coll",
+                        "show_prop": None,
+                    },
+                    ignore_index=True,
+                )
+            for uid in self.parent.backgrounds_coll.df.loc[(self.parent.backgrounds_coll.df["x_section"] == sec_uid), "uid"].tolist():
+                this_actor = self.show_actor_with_property(
+                    uid=uid,
+                    collection="backgrounds_coll",
+                    show_property=None,
+                    visible=False,
+                )
+                self.actors_df = self.actors_df.append(
+                    {
+                        "uid": uid,
+                        "actor": this_actor,
+                        "show": False,
+                        "collection": "backgrounds_coll",
+                        "show_prop": None,
+                    },
+                    ignore_index=True,
+                )
+        else:
+            for uid in self.parent.geol_coll.df["uid"].tolist():
+                this_actor = self.show_actor_with_property(
+                    uid=uid, collection="geol_coll", show_property=None, visible=True
+                )
+                self.actors_df = self.actors_df.append(
+                    {
+                        "uid": uid,
+                        "actor": this_actor,
+                        "show": True,
+                        "collection": "geol_coll",
+                        "show_prop": None,
+                    },
+                    ignore_index=True,
+                )
+            for uid in self.parent.xsect_coll.df["uid"].tolist():
+                this_actor = self.show_actor_with_property(
+                    uid=uid, collection="xsect_coll", show_property=None, visible=False
+                )
+                self.actors_df = self.actors_df.append(
+                    {
+                        "uid": uid,
+                        "actor": this_actor,
+                        "show": False,
+                        "collection": "xsect_coll",
+                        "show_prop": None,
+                    },
+                    ignore_index=True,
+                )
+            for uid in self.parent.boundary_coll.df["uid"].tolist():
+                this_actor = self.show_actor_with_property(
+                    uid=uid, collection="boundary_coll", show_property=None, visible=False
+                )
+                self.actors_df = self.actors_df.append(
+                    {
+                        "uid": uid,
+                        "actor": this_actor,
+                        "show": False,
+                        "collection": "boundary_coll",
+                        "show_prop": None,
+                    },
+                    ignore_index=True,
+                )
+            for uid in self.parent.mesh3d_coll.df["uid"].tolist():
+                this_actor = self.show_actor_with_property(
+                    uid=uid, collection="mesh3d_coll", show_property=None, visible=False
+                )
+                self.actors_df = self.actors_df.append(
+                    {
+                        "uid": uid,
+                        "actor": this_actor,
+                        "show": False,
+                        "collection": "mesh3d_coll",
+                        "show_prop": None,
+                    },
+                    ignore_index=True,
+                )
+            for uid in self.parent.dom_coll.df["uid"].tolist():
+                this_actor = self.show_actor_with_property(
+                    uid=uid, collection="dom_coll", show_property=None, visible=False
+                )
+                self.actors_df = self.actors_df.append(
+                    {
+                        "uid": uid,
+                        "actor": this_actor,
+                        "show": False,
+                        "collection": "dom_coll",
+                        "show_prop": None,
+                    },
+                    ignore_index=True,
+                )
+            for uid in self.parent.image_coll.df["uid"].tolist():
+                this_actor = self.show_actor_with_property(
+                    uid=uid, collection="image_coll", show_property=None, visible=False
+                )
+                self.actors_df = self.actors_df.append(
+                    {
+                        "uid": uid,
+                        "actor": this_actor,
+                        "show": False,
+                        "collection": "image_coll",
+                        "show_prop": None,
+                    },
+                    ignore_index=True,
+                )
+            for uid in self.parent.well_coll.df["uid"].tolist():
+                this_actor = self.show_actor_with_property(
+                    uid=uid, collection="well_coll", show_property=None, visible=False
+                )
+                self.actors_df = self.actors_df.append(
+                    {
+                        "uid": uid,
+                        "actor": this_actor,
+                        "show": False,
+                        "collection": "well_coll",
+                        "show_prop": None,
+                    },
+                    ignore_index=True,
+                )
+            for uid in self.parent.fluids_coll.df["uid"].tolist():
+                this_actor = self.show_actor_with_property(
+                    uid=uid, collection="fluids_coll", show_property=None, visible=False
+                )
+                self.actors_df = self.actors_df.append(
+                    {
+                        "uid": uid,
+                        "actor": this_actor,
+                        "show": False,
+                        "collection": "fluids_coll",
+                        "show_prop": None,
+                    },
+                    ignore_index=True,
+                )
+            for uid in self.parent.backgrounds_coll.df["uid"].tolist():
+                this_actor = self.show_actor_with_property(
+                    uid=uid,
+                    collection="backgrounds_coll",
+                    show_property=None,
+                    visible=False,
+                )
+                self.actors_df = self.actors_df.append(
+                    {
+                        "uid": uid,
+                        "actor": this_actor,
+                        "show": False,
+                        "collection": "backgrounds_coll",
+                        "show_prop": None,
+                    },
+                    ignore_index=True,
+                )
 
     def prop_legend_cmap_modified_update_views(self, this_property=None):
         """Redraw all actors that are currently shown with a property whose colormap has been changed."""
@@ -8149,6 +8308,8 @@ class NewViewMap(NewView2D):
         from pzero.collections.xsection_collection import section_from_azimuth
         from pzero.collections.boundary_collection import boundary_from_points
 
+        """Imports for this view."""
+        """Customize menus and tools for this view"""
         super().initialize_menu_tools()
         self.sectionFromAzimuthButton = QAction(
             "Section from azimuth", self
@@ -8656,6 +8817,7 @@ class NewViewXsection(NewView2D):
                 label="Choose Xsection",
                 choice_list=parent.xsect_coll.get_names(),
             )
+            print("self.this_x_section_name: ", self.this_x_section_name)
         else:
             message_dialog(title="Xsection", message="No Xsection in project")
             return
@@ -8663,29 +8825,33 @@ class NewViewXsection(NewView2D):
             self.this_x_section_uid = parent.xsect_coll.df.loc[
                 parent.xsect_coll.df["name"] == self.this_x_section_name, "uid"
             ].values[0]
+            print("self.this_x_section_uid: ", self.this_x_section_uid)
         else:
             return
 
-        """super here after having set the x_section_uid and _name"""
+        # Super here after having set the x_section_uid and _name
         super(NewViewXsection, self).__init__(parent, *args, **kwargs)
 
-        """Rename Base View, Menu and Tool"""
+        print("self.this_x_section_uid: ", self.this_x_section_uid)
+
+        # Rename Base View, Menu and Tool
         self.setWindowTitle("Xsection View")
 
-        self.create_geology_tree(sec_uid=self.this_x_section_uid)
-        self.create_topology_tree(sec_uid=self.this_x_section_uid)
-        self.create_xsections_tree(sec_uid=self.this_x_section_uid)
-        self.create_boundary_list(sec_uid=self.this_x_section_uid)
-        self.create_mesh3d_list(sec_uid=self.this_x_section_uid)
-        self.create_dom_list(sec_uid=self.this_x_section_uid)
-        self.create_image_list(sec_uid=self.this_x_section_uid)
+        # Commented due to more general implementation in BaseView
+        # self.create_geology_tree(sec_uid=self.this_x_section_uid)
+        # self.create_topology_tree(sec_uid=self.this_x_section_uid)
+        # self.create_xsections_tree(sec_uid=self.this_x_section_uid)
+        # self.create_boundary_list(sec_uid=self.this_x_section_uid)
+        # self.create_mesh3d_list(sec_uid=self.this_x_section_uid)
+        # self.create_dom_list(sec_uid=self.this_x_section_uid)
+        # self.create_image_list(sec_uid=self.this_x_section_uid)
 
         # We should add something to programmatically set the visibility of entities via UID
-        # Don't know if it is already implemented or not
-        self.set_actor_visible(uid=self.this_x_section_uid, visible=True)
-        self.update_xsection_checkboxes(
-            uid=self.this_x_section_uid, uid_checkState=Qt.Checked
-        )
+        # Should be already implemented in BaseView - trying to comment
+        # self.set_actor_visible(uid=self.this_x_section_uid, visible=True)
+        # self.update_xsection_checkboxes(
+        #     uid=self.this_x_section_uid, uid_checkState=Qt.Checked
+        #)
 
         section_plane = parent.xsect_coll.get_uid_vtk_plane(self.this_x_section_uid)
         center = np_array(section_plane.GetOrigin())
@@ -8695,947 +8861,950 @@ class NewViewXsection(NewView2D):
         self.plotter.camera.position = center + direction
         self.plotter.reset_camera()
 
-    def add_all_entities(self):
-        """Add all entities in project collections. All objects are visible by default -> show = True"""
-        sec_uid = self.this_x_section_uid
-        for uid in self.parent.geol_coll.df["uid"].tolist():
-            if self.parent.geol_coll.get_uid_x_section(uid) == sec_uid:
-                this_actor = self.show_actor_with_property(
-                    uid=uid, collection="geol_coll", show_property=None, visible=True
-                )
-                self.actors_df = self.actors_df.append(
-                    {
-                        "uid": uid,
-                        "actor": this_actor,
-                        "show": True,
-                        "collection": "geol_coll",
-                        "show_prop": None,
-                    },
-                    ignore_index=True,
-                )
+    # def add_all_entities(self):
+    #     ##########################################################
+    #     # MAKE THIS MORE GENERAL IN BASE VIEW
+    #     ##########################################################
+    #     """Add all entities in project collections. All objects are visible by default -> show = True"""
+    #     sec_uid = self.this_x_section_uid
+    #     for uid in self.parent.geol_coll.df["uid"].tolist():
+    #         if self.parent.geol_coll.get_uid_x_section(uid) == sec_uid:
+    #             this_actor = self.show_actor_with_property(
+    #                 uid=uid, collection="geol_coll", show_property=None, visible=True
+    #             )
+    #             self.actors_df = self.actors_df.append(
+    #                 {
+    #                     "uid": uid,
+    #                     "actor": this_actor,
+    #                     "show": True,
+    #                     "collection": "geol_coll",
+    #                     "show_prop": None,
+    #                 },
+    #                 ignore_index=True,
+    #             )
+    #
+    #     for uid in self.parent.xsect_coll.df["uid"].tolist():
+    #         if uid == sec_uid:
+    #             this_actor = self.show_actor_with_property(
+    #                 uid=uid, collection="xsect_coll", show_property=None, visible=False
+    #             )
+    #             self.actors_df = self.actors_df.append(
+    #                 {
+    #                     "uid": uid,
+    #                     "actor": this_actor,
+    #                     "show": False,
+    #                     "collection": "xsect_coll",
+    #                     "show_prop": None,
+    #                 },
+    #                 ignore_index=True,
+    #             )
+    #
+    #     for uid in self.parent.boundary_coll.df["uid"].tolist():
+    #         if self.parent.boundary_coll.get_uid_x_section(uid) == sec_uid:
+    #             this_actor = self.show_actor_with_property(
+    #                 uid=uid,
+    #                 collection="boundary_coll",
+    #                 show_property=None,
+    #                 visible=False,
+    #             )
+    #             self.actors_df = self.actors_df.append(
+    #                 {
+    #                     "uid": uid,
+    #                     "actor": this_actor,
+    #                     "show": False,
+    #                     "collection": "boundary_coll",
+    #                     "show_prop": None,
+    #                 },
+    #                 ignore_index=True,
+    #             )
+    #     for uid in self.parent.mesh3d_coll.df["uid"].tolist():
+    #         if self.parent.mesh3d_coll.get_uid_x_section(uid) == sec_uid:
+    #             this_actor = self.show_actor_with_property(
+    #                 uid=uid, collection="mesh3d_coll", show_property=None, visible=False
+    #             )
+    #             self.actors_df = self.actors_df.append(
+    #                 {
+    #                     "uid": uid,
+    #                     "actor": this_actor,
+    #                     "show": False,
+    #                     "collection": "mesh3d_coll",
+    #                     "show_prop": None,
+    #                 },
+    #                 ignore_index=True,
+    #             )
+    #     for uid in self.parent.dom_coll.df["uid"].tolist():
+    #         if self.parent.dom_coll.get_uid_x_section(uid) == sec_uid:
+    #             this_actor = self.show_actor_with_property(
+    #                 uid=uid, collection="dom_coll", show_property=None, visible=False
+    #             )
+    #             self.actors_df = self.actors_df.append(
+    #                 {
+    #                     "uid": uid,
+    #                     "actor": this_actor,
+    #                     "show": False,
+    #                     "collection": "dom_coll",
+    #                     "show_prop": None,
+    #                 },
+    #                 ignore_index=True,
+    #             )
+    #     for uid in self.parent.image_coll.df["uid"].tolist():
+    #         if self.parent.image_coll.get_uid_x_section(uid) == sec_uid:
+    #             this_actor = self.show_actor_with_property(
+    #                 uid=uid, collection="image_coll", show_property=None, visible=False
+    #             )
+    #             self.actors_df = self.actors_df.append(
+    #                 {
+    #                     "uid": uid,
+    #                     "actor": this_actor,
+    #                     "show": False,
+    #                     "collection": "image_coll",
+    #                     "show_prop": None,
+    #                 },
+    #                 ignore_index=True,
+    #             )
+    #     for uid in self.parent.well_coll.df["uid"].tolist():
+    #         this_actor = self.show_actor_with_property(
+    #             uid=uid, collection="well_coll", show_property=None, visible=False
+    #         )
+    #         self.actors_df = self.actors_df.append(
+    #             {
+    #                 "uid": uid,
+    #                 "actor": this_actor,
+    #                 "show": False,
+    #                 "collection": "well_coll",
+    #                 "show_prop": None,
+    #             },
+    #             ignore_index=True,
+    #         )
+    #     for uid in self.parent.fluids_coll.df["uid"].tolist():
+    #         if self.parent.fluids_coll.get_uid_x_section(uid) == sec_uid:
+    #             this_actor = self.show_actor_with_property(
+    #                 uid=uid, collection="fluids_coll", show_property=None, visible=False
+    #             )
+    #             self.actors_df = self.actors_df.append(
+    #                 {
+    #                     "uid": uid,
+    #                     "actor": this_actor,
+    #                     "show": False,
+    #                     "collection": "fluids_coll",
+    #                     "show_prop": None,
+    #                 },
+    #                 ignore_index=True,
+    #             )
+    #     for uid in self.parent.backgrounds_coll.df["uid"].tolist():
+    #         if self.parent.backgrounds_coll.get_uid_x_section(uid) == sec_uid:
+    #             this_actor = self.show_actor_with_property(
+    #                 uid=uid,
+    #                 collection="backgrounds_coll",
+    #                 show_property=None,
+    #                 visible=False,
+    #             )
+    #             self.actors_df = self.actors_df.append(
+    #                 {
+    #                     "uid": uid,
+    #                     "actor": this_actor,
+    #                     "show": False,
+    #                     "collection": "backgrounds_coll",
+    #                     "show_prop": None,
+    #                 },
+    #                 ignore_index=True,
+    #             )
 
-        for uid in self.parent.xsect_coll.df["uid"].tolist():
-            if uid == sec_uid:
-                this_actor = self.show_actor_with_property(
-                    uid=uid, collection="xsect_coll", show_property=None, visible=False
-                )
-                self.actors_df = self.actors_df.append(
-                    {
-                        "uid": uid,
-                        "actor": this_actor,
-                        "show": False,
-                        "collection": "xsect_coll",
-                        "show_prop": None,
-                    },
-                    ignore_index=True,
-                )
+    # def change_actor_color(self, uid=None, collection=None):
+    #     """Update color for actor uid"""
+    #     sec_uid = self.this_x_section_uid
+    #     attr = getattr(self.parent, collection)
+    #     # if attr.get_uid_x_section(uid=uid) == sec_uid:
+    #     #     color_R = attr.get_uid_legend(uid=uid)['color_R']
+    #     #     color_G = attr.get_uid_legend(uid=uid)['color_G']
+    #     #     color_B = attr.get_uid_legend(uid=uid)['color_B']
+    #
+    #     # if attr.get_uid_x_section(uid=uid) == sec_uid:
+    #     if uid in self.actors_df.uid:
+    #         if collection == "geol_coll":
+    #             color_R = self.parent.geol_coll.get_uid_legend(uid=uid)["color_R"]
+    #             color_G = self.parent.geol_coll.get_uid_legend(uid=uid)["color_G"]
+    #             color_B = self.parent.geol_coll.get_uid_legend(uid=uid)["color_B"]
+    #         elif collection == "xsect_coll":
+    #             color_R = self.parent.xsect_coll.get_legend()["color_R"]
+    #             color_G = self.parent.xsect_coll.get_legend()["color_G"]
+    #             color_B = self.parent.xsect_coll.get_legend()["color_B"]
+    #         elif collection == "boundary_coll":
+    #             color_R = self.parent.boundary_coll.get_legend()["color_R"]
+    #             color_G = self.parent.boundary_coll.get_legend()["color_G"]
+    #             color_B = self.parent.boundary_coll.get_legend()["color_B"]
+    #         elif collection == "mesh3d_coll":
+    #             color_R = self.parent.mesh3d_coll.get_legend()["color_R"]
+    #             color_G = self.parent.mesh3d_coll.get_legend()["color_G"]
+    #             color_B = self.parent.mesh3d_coll.get_legend()["color_B"]
+    #         elif collection == "dom_coll":
+    #             color_R = self.parent.dom_coll.get_legend()["color_R"]
+    #             color_G = self.parent.dom_coll.get_legend()["color_G"]
+    #             color_B = self.parent.dom_coll.get_legend()["color_B"]
+    #         elif collection == "well_coll":
+    #             color_R = self.parent.well_coll.get_uid_legend(uid=uid)["color_R"]
+    #             color_G = self.parent.well_coll.get_uid_legend(uid=uid)["color_G"]
+    #             color_B = self.parent.well_coll.get_uid_legend(uid=uid)["color_B"]
+    #         elif collection == "fluids_coll":
+    #             color_R = self.parent.fluids_coll.get_uid_legend(uid=uid)["color_R"]
+    #             color_G = self.parent.fluids_coll.get_uid_legend(uid=uid)["color_G"]
+    #             color_B = self.parent.fluids_coll.get_uid_legend(uid=uid)["color_B"]
+    #         elif collection == "backgrounds_coll":
+    #             color_R = self.parent.backgrounds_coll.get_uid_legend(uid=uid)[
+    #                 "color_R"
+    #             ]
+    #             color_G = self.parent.backgrounds_coll.get_uid_legend(uid=uid)[
+    #                 "color_G"
+    #             ]
+    #             color_B = self.parent.backgrounds_coll.get_uid_legend(uid=uid)[
+    #                 "color_B"
+    #             ]
+    #         """Note: no legend for image."""
+    #         """Update color for actor uid"""
+    #         color_RGB = [color_R / 255, color_G / 255, color_B / 255]
+    #         self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[
+    #             0
+    #         ].GetProperty().SetColor(color_RGB)
 
-        for uid in self.parent.boundary_coll.df["uid"].tolist():
-            if self.parent.boundary_coll.get_uid_x_section(uid) == sec_uid:
-                this_actor = self.show_actor_with_property(
-                    uid=uid,
-                    collection="boundary_coll",
-                    show_property=None,
-                    visible=False,
-                )
-                self.actors_df = self.actors_df.append(
-                    {
-                        "uid": uid,
-                        "actor": this_actor,
-                        "show": False,
-                        "collection": "boundary_coll",
-                        "show_prop": None,
-                    },
-                    ignore_index=True,
-                )
-        for uid in self.parent.mesh3d_coll.df["uid"].tolist():
-            if self.parent.mesh3d_coll.get_uid_x_section(uid) == sec_uid:
-                this_actor = self.show_actor_with_property(
-                    uid=uid, collection="mesh3d_coll", show_property=None, visible=False
-                )
-                self.actors_df = self.actors_df.append(
-                    {
-                        "uid": uid,
-                        "actor": this_actor,
-                        "show": False,
-                        "collection": "mesh3d_coll",
-                        "show_prop": None,
-                    },
-                    ignore_index=True,
-                )
-        for uid in self.parent.dom_coll.df["uid"].tolist():
-            if self.parent.dom_coll.get_uid_x_section(uid) == sec_uid:
-                this_actor = self.show_actor_with_property(
-                    uid=uid, collection="dom_coll", show_property=None, visible=False
-                )
-                self.actors_df = self.actors_df.append(
-                    {
-                        "uid": uid,
-                        "actor": this_actor,
-                        "show": False,
-                        "collection": "dom_coll",
-                        "show_prop": None,
-                    },
-                    ignore_index=True,
-                )
-        for uid in self.parent.image_coll.df["uid"].tolist():
-            if self.parent.image_coll.get_uid_x_section(uid) == sec_uid:
-                this_actor = self.show_actor_with_property(
-                    uid=uid, collection="image_coll", show_property=None, visible=False
-                )
-                self.actors_df = self.actors_df.append(
-                    {
-                        "uid": uid,
-                        "actor": this_actor,
-                        "show": False,
-                        "collection": "image_coll",
-                        "show_prop": None,
-                    },
-                    ignore_index=True,
-                )
-        for uid in self.parent.well_coll.df["uid"].tolist():
-            this_actor = self.show_actor_with_property(
-                uid=uid, collection="well_coll", show_property=None, visible=False
-            )
-            self.actors_df = self.actors_df.append(
-                {
-                    "uid": uid,
-                    "actor": this_actor,
-                    "show": False,
-                    "collection": "well_coll",
-                    "show_prop": None,
-                },
-                ignore_index=True,
-            )
-        for uid in self.parent.fluids_coll.df["uid"].tolist():
-            if self.parent.fluids_coll.get_uid_x_section(uid) == sec_uid:
-                this_actor = self.show_actor_with_property(
-                    uid=uid, collection="fluids_coll", show_property=None, visible=False
-                )
-                self.actors_df = self.actors_df.append(
-                    {
-                        "uid": uid,
-                        "actor": this_actor,
-                        "show": False,
-                        "collection": "fluids_coll",
-                        "show_prop": None,
-                    },
-                    ignore_index=True,
-                )
-        for uid in self.parent.backgrounds_coll.df["uid"].tolist():
-            if self.parent.backgrounds_coll.get_uid_x_section(uid) == sec_uid:
-                this_actor = self.show_actor_with_property(
-                    uid=uid,
-                    collection="backgrounds_coll",
-                    show_property=None,
-                    visible=False,
-                )
-                self.actors_df = self.actors_df.append(
-                    {
-                        "uid": uid,
-                        "actor": this_actor,
-                        "show": False,
-                        "collection": "backgrounds_coll",
-                        "show_prop": None,
-                    },
-                    ignore_index=True,
-                )
+    # def change_actor_line_thick(self, uid=None, collection=None):
+    #     """Update line thickness for actor uid"""
+    #
+    #     sec_uid = self.this_x_section_uid
+    #     attr = getattr(self.parent, collection)
+    #     if attr.get_uid_x_section(uid) == sec_uid:
+    #
+    #         if collection == "geol_coll":
+    #             line_thick = self.parent.geol_coll.get_uid_legend(uid=uid)["line_thick"]
+    #             if isinstance(
+    #                 self.parent.geol_coll.get_uid_vtk_obj(uid), VertexSet
+    #             ) or isinstance(
+    #                 self.parent.geol_coll.get_uid_vtk_obj(uid), XsVertexSet
+    #             ):
+    #                 self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[
+    #                     0
+    #                 ].GetProperty().SetPointSize(line_thick)
+    #             else:
+    #                 self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[
+    #                     0
+    #                 ].GetProperty().SetLineWidth(line_thick)
+    #
+    #         elif collection == "xsect_coll":
+    #             line_thick = self.parent.xsect_coll.get_legend()["line_thick"]
+    #         elif collection == "boundary_coll":
+    #             line_thick = self.parent.boundary_coll.get_legend()["line_thick"]
+    #         elif collection == "mesh3d_coll":
+    #             line_thick = self.parent.mesh3d_coll.get_legend()["line_thick"]
+    #         elif collection == "dom_coll":
+    #             line_thick = self.parent.dom_coll.get_legend()["line_thick"]
+    #             """Note: no legend for image."""
+    #             if isinstance(self.parent.dom_coll.get_uid_vtk_obj(uid), PCDom):
+    #                 """Use line_thick to set point size here."""
+    #                 self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[
+    #                     0
+    #                 ].GetProperty().SetPointSize(line_thick)
+    #             else:
+    #                 self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[
+    #                     0
+    #                 ].GetProperty().SetLineWidth(line_thick)
+    #         elif collection == "well_coll":
+    #             line_thick = self.parent.well_coll.get_uid_legend(uid=uid)["line_thick"]
+    #             self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[
+    #                 0
+    #             ].GetProperty().SetLineWidth(line_thick)
+    #         elif collection == "fluids_coll":
+    #             line_thick = self.parent.fluids_coll.get_uid_legend(uid=uid)[
+    #                 "line_thick"
+    #             ]
+    #
+    #             if isinstance(self.parent.fluids_coll.get_uid_vtk_obj(uid), VertexSet):
+    #                 self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[
+    #                     0
+    #                 ].GetProperty().SetPointSize(line_thick)
+    #             else:
+    #                 self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[
+    #                     0
+    #                 ].GetProperty().SetLineWidth(line_thick)
+    #
+    #         elif collection == "backgrounds_coll":
+    #             line_thick = self.parent.backgrounds_coll.get_uid_legend(uid=uid)[
+    #                 "line_thick"
+    #             ]
+    #
+    #             if isinstance(
+    #                 self.parent.backgrounds_coll.get_uid_vtk_obj(uid), VertexSet
+    #             ):
+    #                 self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[
+    #                     0
+    #                 ].GetProperty().SetPointSize(line_thick)
+    #             else:
+    #                 self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[
+    #                     0
+    #                 ].GetProperty().SetLineWidth(line_thick)
 
-    def change_actor_color(self, uid=None, collection=None):
-        """Update color for actor uid"""
-        sec_uid = self.this_x_section_uid
-        attr = getattr(self.parent, collection)
-        # if attr.get_uid_x_section(uid=uid) == sec_uid:
-        #     color_R = attr.get_uid_legend(uid=uid)['color_R']
-        #     color_G = attr.get_uid_legend(uid=uid)['color_G']
-        #     color_B = attr.get_uid_legend(uid=uid)['color_B']
-
-        # if attr.get_uid_x_section(uid=uid) == sec_uid:
-        if uid in self.actors_df.uid:
-            if collection == "geol_coll":
-                color_R = self.parent.geol_coll.get_uid_legend(uid=uid)["color_R"]
-                color_G = self.parent.geol_coll.get_uid_legend(uid=uid)["color_G"]
-                color_B = self.parent.geol_coll.get_uid_legend(uid=uid)["color_B"]
-            elif collection == "xsect_coll":
-                color_R = self.parent.xsect_coll.get_legend()["color_R"]
-                color_G = self.parent.xsect_coll.get_legend()["color_G"]
-                color_B = self.parent.xsect_coll.get_legend()["color_B"]
-            elif collection == "boundary_coll":
-                color_R = self.parent.boundary_coll.get_legend()["color_R"]
-                color_G = self.parent.boundary_coll.get_legend()["color_G"]
-                color_B = self.parent.boundary_coll.get_legend()["color_B"]
-            elif collection == "mesh3d_coll":
-                color_R = self.parent.mesh3d_coll.get_legend()["color_R"]
-                color_G = self.parent.mesh3d_coll.get_legend()["color_G"]
-                color_B = self.parent.mesh3d_coll.get_legend()["color_B"]
-            elif collection == "dom_coll":
-                color_R = self.parent.dom_coll.get_legend()["color_R"]
-                color_G = self.parent.dom_coll.get_legend()["color_G"]
-                color_B = self.parent.dom_coll.get_legend()["color_B"]
-            elif collection == "well_coll":
-                color_R = self.parent.well_coll.get_uid_legend(uid=uid)["color_R"]
-                color_G = self.parent.well_coll.get_uid_legend(uid=uid)["color_G"]
-                color_B = self.parent.well_coll.get_uid_legend(uid=uid)["color_B"]
-            elif collection == "fluids_coll":
-                color_R = self.parent.fluids_coll.get_uid_legend(uid=uid)["color_R"]
-                color_G = self.parent.fluids_coll.get_uid_legend(uid=uid)["color_G"]
-                color_B = self.parent.fluids_coll.get_uid_legend(uid=uid)["color_B"]
-            elif collection == "backgrounds_coll":
-                color_R = self.parent.backgrounds_coll.get_uid_legend(uid=uid)[
-                    "color_R"
-                ]
-                color_G = self.parent.backgrounds_coll.get_uid_legend(uid=uid)[
-                    "color_G"
-                ]
-                color_B = self.parent.backgrounds_coll.get_uid_legend(uid=uid)[
-                    "color_B"
-                ]
-            """Note: no legend for image."""
-            """Update color for actor uid"""
-            color_RGB = [color_R / 255, color_G / 255, color_B / 255]
-            self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[
-                0
-            ].GetProperty().SetColor(color_RGB)
-
-    def change_actor_line_thick(self, uid=None, collection=None):
-        """Update line thickness for actor uid"""
-
-        sec_uid = self.this_x_section_uid
-        attr = getattr(self.parent, collection)
-        if attr.get_uid_x_section(uid) == sec_uid:
-
-            if collection == "geol_coll":
-                line_thick = self.parent.geol_coll.get_uid_legend(uid=uid)["line_thick"]
-                if isinstance(
-                    self.parent.geol_coll.get_uid_vtk_obj(uid), VertexSet
-                ) or isinstance(
-                    self.parent.geol_coll.get_uid_vtk_obj(uid), XsVertexSet
-                ):
-                    self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[
-                        0
-                    ].GetProperty().SetPointSize(line_thick)
-                else:
-                    self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[
-                        0
-                    ].GetProperty().SetLineWidth(line_thick)
-
-            elif collection == "xsect_coll":
-                line_thick = self.parent.xsect_coll.get_legend()["line_thick"]
-            elif collection == "boundary_coll":
-                line_thick = self.parent.boundary_coll.get_legend()["line_thick"]
-            elif collection == "mesh3d_coll":
-                line_thick = self.parent.mesh3d_coll.get_legend()["line_thick"]
-            elif collection == "dom_coll":
-                line_thick = self.parent.dom_coll.get_legend()["line_thick"]
-                """Note: no legend for image."""
-                if isinstance(self.parent.dom_coll.get_uid_vtk_obj(uid), PCDom):
-                    """Use line_thick to set point size here."""
-                    self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[
-                        0
-                    ].GetProperty().SetPointSize(line_thick)
-                else:
-                    self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[
-                        0
-                    ].GetProperty().SetLineWidth(line_thick)
-            elif collection == "well_coll":
-                line_thick = self.parent.well_coll.get_uid_legend(uid=uid)["line_thick"]
-                self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[
-                    0
-                ].GetProperty().SetLineWidth(line_thick)
-            elif collection == "fluids_coll":
-                line_thick = self.parent.fluids_coll.get_uid_legend(uid=uid)[
-                    "line_thick"
-                ]
-
-                if isinstance(self.parent.fluids_coll.get_uid_vtk_obj(uid), VertexSet):
-                    self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[
-                        0
-                    ].GetProperty().SetPointSize(line_thick)
-                else:
-                    self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[
-                        0
-                    ].GetProperty().SetLineWidth(line_thick)
-
-            elif collection == "backgrounds_coll":
-                line_thick = self.parent.backgrounds_coll.get_uid_legend(uid=uid)[
-                    "line_thick"
-                ]
-
-                if isinstance(
-                    self.parent.backgrounds_coll.get_uid_vtk_obj(uid), VertexSet
-                ):
-                    self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[
-                        0
-                    ].GetProperty().SetPointSize(line_thick)
-                else:
-                    self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[
-                        0
-                    ].GetProperty().SetLineWidth(line_thick)
-
-    def show_actor_with_property(
-        self, uid=None, collection=None, show_property=None, visible=None
-    ):
-        """Show actor with scalar property (default None)
-        https://github.com/pyvista/pyvista/blob/140b15be1d4021b81ded46b1c212c70e86a98ee7/pyvista/plotting/plotting.py#L1045
-        """
-        """First get the vtk object from its collection."""
-        show_property_title = show_property
-        show_scalar_bar = True
-        sec_uid = self.this_x_section_uid
-        if (
-            collection == "geol_coll"
-            and self.parent.geol_coll.get_uid_x_section(uid) == sec_uid
-        ):
-            color_R = self.parent.geol_coll.get_uid_legend(uid=uid)["color_R"]
-            color_G = self.parent.geol_coll.get_uid_legend(uid=uid)["color_G"]
-            color_B = self.parent.geol_coll.get_uid_legend(uid=uid)["color_B"]
-            color_RGB = [color_R / 255, color_G / 255, color_B / 255]
-            line_thick = self.parent.geol_coll.get_uid_legend(uid=uid)["line_thick"]
-            point_size = self.parent.geol_coll.get_uid_legend(uid=uid)["point_size"]
-            opacity = self.parent.geol_coll.get_uid_legend(uid=uid)["opacity"] / 100
-
-            plot_entity = self.parent.geol_coll.get_uid_vtk_obj(uid)
-        elif collection == "xsect_coll" and uid == sec_uid:
-            color_R = self.parent.xsect_coll.get_legend()["color_R"]
-            color_G = self.parent.xsect_coll.get_legend()["color_G"]
-            color_B = self.parent.xsect_coll.get_legend()["color_B"]
-            color_RGB = [color_R / 255, color_G / 255, color_B / 255]
-            line_thick = self.parent.xsect_coll.get_legend()["line_thick"]
-            opacity = self.parent.xsect_coll.get_legend()["opacity"] / 100
-
-            plot_entity = self.parent.xsect_coll.get_uid_vtk_frame(uid)
-        elif (
-            collection == "boundary_coll"
-            and self.parent.boundary_coll.get_uid_x_section(uid) == sec_uid
-        ):
-            color_R = self.parent.boundary_coll.get_legend()["color_R"]
-            color_G = self.parent.boundary_coll.get_legend()["color_G"]
-            color_B = self.parent.boundary_coll.get_legend()["color_B"]
-            color_RGB = [color_R / 255, color_G / 255, color_B / 255]
-            line_thick = self.parent.boundary_coll.get_legend()["line_thick"]
-            opacity = self.parent.boundary_coll.get_legend()["opacity"] / 100
-
-            plot_entity = self.parent.boundary_coll.get_uid_vtk_obj(uid)
-        elif (
-            collection == "mesh3d_coll"
-            and self.parent.mesh3d_coll.get_uid_x_section(uid) == sec_uid
-        ):
-            color_R = self.parent.mesh3d_coll.get_legend()["color_R"]
-            color_G = self.parent.mesh3d_coll.get_legend()["color_G"]
-            color_B = self.parent.mesh3d_coll.get_legend()["color_B"]
-            color_RGB = [color_R / 255, color_G / 255, color_B / 255]
-            line_thick = self.parent.mesh3d_coll.get_legend()["line_thick"]
-            opacity = self.parent.mesh3d_coll.get_legend()["opacity"] / 100
-
-            plot_entity = self.parent.mesh3d_coll.get_uid_vtk_obj(uid)
-        elif (
-            collection == "dom_coll"
-            and self.parent.dom_coll.get_uid_x_section(uid) == sec_uid
-        ):
-            color_R = self.parent.dom_coll.get_legend()["color_R"]
-            color_G = self.parent.dom_coll.get_legend()["color_G"]
-            color_B = self.parent.dom_coll.get_legend()["color_B"]
-            color_RGB = [color_R / 255, color_G / 255, color_B / 255]
-            line_thick = self.parent.dom_coll.get_legend()["line_thick"]
-            opacity = self.parent.dom_coll.get_legend()["opacity"] / 100
-
-            plot_entity = self.parent.dom_coll.get_uid_vtk_obj(uid)
-
-        elif (
-            collection == "image_coll"
-            and self.parent.image_coll.get_uid_x_section(uid) == sec_uid
-        ):
-            """Note: no legend for image."""
-            color_RGB = [255, 255, 255]
-            line_thick = 5.0
-            opacity = self.parent.image_coll.get_legend()["opacity"] / 100
-
-            plot_entity = self.parent.image_coll.get_uid_vtk_obj(uid)
-        elif (
-            collection == "well_coll"
-            and self.parent.well_coll.get_uid_x_section(uid) == sec_uid
-        ):
-            color_R = self.parent.well_coll.get_uid_legend(uid=uid)["color_R"]
-            color_G = self.parent.well_coll.get_uid_legend(uid=uid)["color_G"]
-            color_B = self.parent.well_coll.get_uid_legend(uid=uid)["color_B"]
-            color_RGB = [color_R / 255, color_G / 255, color_B / 255]
-            line_thick = self.parent.well_coll.get_uid_legend(uid=uid)["line_thick"]
-            opacity = self.parent.well_coll.get_uid_legend(uid=uid)["opacity"] / 100
-
-            plot_entity = self.parent.well_coll.get_uid_vtk_obj(uid)
-        elif (
-            collection == "fluids_coll"
-            and self.parent.fluids_coll.get_uid_x_section(uid) == sec_uid
-        ):
-            color_R = self.parent.fluids_coll.get_uid_legend(uid=uid)["color_R"]
-            color_G = self.parent.fluids_coll.get_uid_legend(uid=uid)["color_G"]
-            color_B = self.parent.fluids_coll.get_uid_legend(uid=uid)["color_B"]
-            color_RGB = [color_R / 255, color_G / 255, color_B / 255]
-            line_thick = self.parent.fluids_coll.get_uid_legend(uid=uid)["line_thick"]
-            point_size = self.parent.fluids_coll.get_uid_legend(uid=uid)["point_size"]
-            opacity = self.parent.fluids_coll.get_uid_legend(uid=uid)["opacity"] / 100
-
-            plot_entity = self.parent.fluids_coll.get_uid_vtk_obj(uid)
-        elif (
-            collection == "backgrounds_coll"
-            and self.parent.backgrounds_coll.get_uid_x_section(uid) == sec_uid
-        ):
-            color_R = self.parent.backgrounds_coll.get_uid_legend(uid=uid)["color_R"]
-            color_G = self.parent.backgrounds_coll.get_uid_legend(uid=uid)["color_G"]
-            color_B = self.parent.backgrounds_coll.get_uid_legend(uid=uid)["color_B"]
-            color_RGB = [color_R / 255, color_G / 255, color_B / 255]
-            line_thick = self.parent.backgrounds_coll.get_uid_legend(uid=uid)[
-                "line_thick"
-            ]
-            point_size = self.parent.backgrounds_coll.get_uid_legend(uid=uid)[
-                "point_size"
-            ]
-            opacity = (
-                self.parent.backgrounds_coll.get_uid_legend(uid=uid)["opacity"] / 100
-            )
-
-            plot_entity = self.parent.backgrounds_coll.get_uid_vtk_obj(uid)
-        else:
-            print("no collection")
-            print(collection)
-            return
-        """Then plot the vtk object with proper options."""
-        if isinstance(plot_entity, (PolyLine, TriSurf, XsPolyLine)) and not isinstance(
-            plot_entity, WellTrace
-        ):
-            plot_rgb_option = None
-            if isinstance(plot_entity.points, np_ndarray):
-                """This  check is needed to avoid errors when trying to plot an empty
-                PolyData, just created at the beginning of a digitizing session."""
-                if show_property is None:
-                    show_scalar_bar = False
-                    pass
-                elif show_property == "none":
-                    show_scalar_bar = False
-                    show_property = None
-                elif show_property == "X":
-                    show_property = plot_entity.points_X
-                elif show_property == "Y":
-                    show_property = plot_entity.points_Y
-                elif show_property == "Z":
-                    show_property = plot_entity.points_Z
-                else:
-                    if plot_entity.get_point_data_shape(show_property)[-1] == 3:
-                        plot_rgb_option = True
-                this_actor = self.plot_mesh(
-                    uid=uid,
-                    plot_entity=plot_entity,
-                    color_RGB=color_RGB,
-                    show_property=show_property,
-                    show_scalar_bar=show_scalar_bar,
-                    color_bar_range=None,
-                    show_property_title=show_property_title,
-                    line_thick=line_thick,
-                    plot_texture_option=False,
-                    plot_rgb_option=plot_rgb_option,
-                    visible=visible,
-                )
-            else:
-                this_actor = None
-        elif isinstance(plot_entity, (VertexSet, XsVertexSet, WellMarker, Attitude)):
-            if isinstance(plot_entity, Attitude):
-                pickable = False
-            else:
-                pickable = True
-            style = "points"
-            plot_rgb_option = None
-            texture = False
-            smooth_shading = False
-            if isinstance(plot_entity.points, np_ndarray):
-                """This  check is needed to avoid errors when trying to plot an empty
-                PolyData, just created at the beginning of a digitizing session."""
-                if show_property is None:
-                    show_scalar_bar = False
-                    pass
-                elif show_property == "none":
-                    show_scalar_bar = False
-                    show_property = None
-                elif show_property == "X":
-                    show_property = plot_entity.points_X
-                elif show_property == "Y":
-                    show_property = plot_entity.points_Y
-                elif show_property == "Z":
-                    show_property = plot_entity.points_Z
-                elif show_property == "Normals":
-                    show_scalar_bar = False
-                    show_property_title = None
-                    show_property = None
-                    style = "surface"
-                    appender = vtkAppendPolyData()
-                    r = self.parent.geol_coll.get_uid_legend(uid=uid)["point_size"] * 4
-                    normals = plot_entity.get_point_data("Normals")
-                    dip_vectors, _ = get_dip_dir_vectors(normals=normals)
-
-                    plane_n = -np_array(
-                        self.parent.xsect_coll.get_uid_vtk_plane(
-                            self.this_x_section_uid
-                        ).GetNormal()
-                    )
-                    vector2 = np_cross(plane_n, dip_vectors)
-                    line1 = pv_Line(pointa=(0, 0, 0), pointb=(r, 0, 0))
-                    line2 = pv_Line(pointa=(0, 0, 0), pointb=(r * 0.25, 0, 0))
-
-                    dip_glyph = plot_entity.glyph(geometry=line1, prop=dip_vectors)
-                    n_glyph = plot_entity.glyph(geometry=line2, prop=vector2)
-
-                    appender.AddInputData(dip_glyph)
-                    appender.AddInputData(n_glyph)
-                    appender.Update()
-                    plot_entity = appender.GetOutput()
-
-                elif show_property == "name":
-                    point = plot_entity.points
-                    name_value = plot_entity.get_field_data("name")
-                    self.plotter.add_point_labels(
-                        point,
-                        name_value,
-                        always_visible=True,
-                        show_points=False,
-                        font_size=15,
-                        shape_opacity=0.5,
-                        name=f"{uid}_name",
-                    )
-                    show_property = None
-                    show_property_title = None
-
-                else:
-                    if plot_entity.get_point_data_shape(show_property)[-1] == 3:
-                        plot_rgb_option = True
-                this_actor = self.plot_mesh(
-                    uid=uid,
-                    plot_entity=plot_entity,
-                    color_RGB=color_RGB,
-                    show_property=show_property,
-                    show_scalar_bar=show_scalar_bar,
-                    color_bar_range=None,
-                    show_property_title=show_property_title,
-                    line_thick=line_thick,
-                    plot_texture_option=texture,
-                    plot_rgb_option=plot_rgb_option,
-                    visible=visible,
-                    style=style,
-                    point_size=point_size,
-                    points_as_spheres=True,
-                    pickable=pickable,
-                )
-            else:
-                this_actor = None
-        elif isinstance(plot_entity, DEM):
-            """Show texture specified in show_property"""
-            if (
-                show_property
-                in self.parent.dom_coll.df.loc[
-                    self.parent.dom_coll.df["uid"] == uid, "texture_uids"
-                ].values[0]
-            ):
-                active_image = self.parent.image_coll.get_uid_vtk_obj(show_property)
-                active_image_texture = active_image.texture
-                # active_image_properties_components = active_image.properties_components[0]  # IF USED THIS MUST BE FIXED FOR TEXTURES WITH MORE THAN 3 COMPONENTS
-                this_actor = self.plot_mesh(
-                    uid=uid,
-                    plot_entity=plot_entity,
-                    color_RGB=None,
-                    show_property=None,
-                    show_scalar_bar=None,
-                    color_bar_range=None,
-                    show_property_title=None,
-                    line_thick=None,
-                    plot_texture_option=active_image_texture,
-                    plot_rgb_option=False,
-                    visible=visible,
-                )
-            else:
-                plot_rgb_option = None
-                if show_property is None:
-                    show_scalar_bar = False
-                    pass
-                elif show_property == "none":
-                    show_scalar_bar = False
-                    show_property = None
-                elif show_property == "X":
-                    show_property = plot_entity.points_X
-                elif show_property == "Y":
-                    show_property = plot_entity.points_Y
-                elif show_property == "Z":
-                    show_property = plot_entity.points_Z
-                elif show_property == "RGB":
-                    show_scalar_bar = False
-                    show_property = None
-                else:
-                    if plot_entity.get_point_data_shape(show_property)[-1] == 3:
-                        plot_rgb_option = True
-                this_actor = self.plot_mesh(
-                    uid=uid,
-                    plot_entity=plot_entity,
-                    color_RGB=color_RGB,
-                    show_property=show_property,
-                    show_scalar_bar=show_scalar_bar,
-                    color_bar_range=None,
-                    show_property_title=show_property_title,
-                    line_thick=line_thick,
-                    plot_texture_option=False,
-                    plot_rgb_option=plot_rgb_option,
-                    visible=visible,
-                )
-        elif isinstance(plot_entity, PCDom):
-            plot_rgb_option = None
-            new_plot = pvPointSet()
-            new_plot.ShallowCopy(plot_entity)  # this is temporary
-            file = self.parent.dom_coll.df.loc[
-                self.parent.dom_coll.df["uid"] == uid, "name"
-            ].values[0]
-            if isinstance(plot_entity.points, np_ndarray):
-                """This check is needed to avoid errors when trying to plot an empty
-                PolyData, just created at the beginning of a digitizing session."""
-                if show_property is None:
-                    show_scalar_bar = False
-                    show_property_value = None
-                    pass
-                elif show_property == "none":
-                    show_scalar_bar = False
-                    show_property_value = None
-                elif show_property == "X":
-                    show_property_value = plot_entity.points_X
-                elif show_property == "Y":
-                    show_property_value = plot_entity.points_Y
-                elif show_property == "Z":
-                    show_property_value = plot_entity.points_Z
-                elif show_property[-1] == "]":
-                    """[Gabriele] we can identify multicomponents properties such as RGB[0] or Normals[0] by taking the last character of the property name ("]")."""
-                    show_scalar_bar = True
-                    # [Gabriele] Get the start and end index of the [n_component]
-                    pos1 = show_property.index("[")
-                    pos2 = show_property.index("]")
-                    # [Gabriele] Get the original property (e.g. RGB[0] -> RGB)
-                    original_prop = show_property[:pos1]
-                    # [Gabriele] Get the column index (the n_component value)
-                    index = int(show_property[pos1 + 1 : pos2])
-                    show_property_value = plot_entity.get_point_data(original_prop)[
-                        :, index
-                    ]
-                else:
-                    n_comp = self.parent.dom_coll.get_uid_properties_components(uid)[
-                        self.parent.dom_coll.get_uid_properties_names(uid).index(
-                            show_property
-                        )
-                    ]
-                    """[Gabriele] Get the n of components for the given property. If it's > 1 then do stuff depending on the type of property (e.g. show_rgb_option -> True if the property is RGB)"""
-                    if n_comp > 1:
-                        show_property_value = plot_entity.get_point_data(show_property)
-                        show_scalar_bar = False
-                        # if show_property == 'RGB':
-                        plot_rgb_option = True
-                    else:
-                        show_scalar_bar = True
-                        show_property_value = plot_entity.get_point_data(show_property)
-            this_actor = self.plot_PC_3D(
-                uid=uid,
-                plot_entity=new_plot,
-                color_RGB=color_RGB,
-                show_property=show_property_value,
-                show_scalar_bar=show_scalar_bar,
-                color_bar_range=None,
-                show_property_title=show_property_title,
-                plot_rgb_option=plot_rgb_option,
-                visible=visible,
-                point_size=point_size,
-                opacity=opacity,
-            )
-
-        elif isinstance(plot_entity, (MapImage, XsImage)):
-            """Do not plot directly image - it is much slower.
-            Texture options according to type."""
-            if show_property is None or show_property == "none":
-                plot_texture_option = None
-            else:
-                plot_texture_option = plot_entity.texture
-            this_actor = self.plot_mesh(
-                uid=uid,
-                plot_entity=plot_entity.frame,
-                color_RGB=None,
-                show_property=None,
-                show_scalar_bar=None,
-                color_bar_range=None,
-                show_property_title=None,
-                line_thick=line_thick,
-                plot_texture_option=plot_texture_option,
-                plot_rgb_option=False,
-                visible=visible,
-                opacity=opacity,
-            )
-        elif isinstance(plot_entity, Seismics):
-            plot_rgb_option = None
-            if isinstance(plot_entity.points, np_ndarray):
-                """This  check is needed to avoid errors when trying to plot an empty
-                PolyData, just created at the beginning of a digitizing session."""
-                if show_property is None:
-                    show_scalar_bar = False
-                    pass
-                elif show_property == "none":
-                    show_scalar_bar = False
-                    show_property = None
-                elif show_property == "X":
-                    show_property = plot_entity.points_X
-                elif show_property == "Y":
-                    show_property = plot_entity.points_Y
-                elif show_property == "Z":
-                    show_property = plot_entity.points_Z
-                else:
-                    if plot_entity.get_point_data_shape(show_property)[-1] == 3:
-                        plot_rgb_option = True
-                this_actor = self.plot_mesh(
-                    uid=uid,
-                    plot_entity=plot_entity,
-                    color_RGB=color_RGB,
-                    show_property=show_property,
-                    show_scalar_bar=show_scalar_bar,
-                    color_bar_range=None,
-                    show_property_title=show_property_title,
-                    line_thick=line_thick,
-                    plot_texture_option=False,
-                    plot_rgb_option=plot_rgb_option,
-                    visible=visible,
-                    opacity=opacity,
-                )
-            else:
-                this_actor = None
-        elif isinstance(plot_entity, Voxet):
-            plot_rgb_option = None
-            if plot_entity.cells_number > 0:
-                """This  check is needed to avoid errors when trying to plot an empty Voxet."""
-                if show_property is None:
-                    show_scalar_bar = False
-                elif show_property == "none":
-                    show_property = None
-                    show_scalar_bar = False
-                else:
-                    if plot_entity.get_point_data_shape(show_property)[-1] == 3:
-                        plot_rgb_option = True
-                this_actor = self.plot_mesh(
-                    uid=uid,
-                    plot_entity=plot_entity,
-                    color_RGB=None,
-                    show_property=show_property,
-                    show_scalar_bar=show_scalar_bar,
-                    color_bar_range=None,
-                    show_property_title=show_property_title,
-                    line_thick=line_thick,
-                    plot_texture_option=False,
-                    plot_rgb_option=plot_rgb_option,
-                    visible=visible,
-                    opacity=opacity,
-                )
-            else:
-                this_actor = None
-        elif isinstance(plot_entity, WellTrace):
-            plot_rgb_option = None
-            if show_property is None:
-                show_scalar_bar = False
-                pass
-            elif show_property == "none":
-                show_scalar_bar = False
-                show_property = None
-                self.plotter.remove_actor(f"{uid}_prop")
-            elif show_property == "X":
-                show_property = plot_entity.points_X
-            elif show_property == "Y":
-                show_property = plot_entity.points_Y
-            elif show_property == "Z":
-                show_property = plot_entity.points_Z
-            elif show_property == "MD":
-                show_property = plot_entity.get_point_data(data_key="MD")
-            else:
-                prop = plot_entity.plot_along_trace(
-                    show_property, method=self.trace_method, camera=self.plotter.camera
-                )
-                self.plotter.add_actor(prop, name=f"{uid}_prop")
-                show_property = None
-                show_property_title = None
-            this_actor = self.plot_mesh(
-                uid=uid,
-                plot_entity=plot_entity,
-                color_RGB=color_RGB,
-                show_property=show_property,
-                show_scalar_bar=show_scalar_bar,
-                color_bar_range=None,
-                show_property_title=show_property_title,
-                line_thick=line_thick,
-                plot_texture_option=False,
-                plot_rgb_option=plot_rgb_option,
-                visible=visible,
-                render_lines_as_tubes=False,
-                opacity=opacity,
-            )
-        else:
-            print("[Windows factory]: actor with no class")
-            this_actor = None
-        return this_actor
+    # def show_actor_with_property(
+    #     self, uid=None, collection=None, show_property=None, visible=None
+    # ):
+    #     """Show actor with scalar property (default None)
+    #     https://github.com/pyvista/pyvista/blob/140b15be1d4021b81ded46b1c212c70e86a98ee7/pyvista/plotting/plotting.py#L1045
+    #     """
+    #     """First get the vtk object from its collection."""
+    #     show_property_title = show_property
+    #     show_scalar_bar = True
+    #     sec_uid = self.this_x_section_uid
+    #     if (
+    #         collection == "geol_coll"
+    #         and self.parent.geol_coll.get_uid_x_section(uid) == sec_uid
+    #     ):
+    #         color_R = self.parent.geol_coll.get_uid_legend(uid=uid)["color_R"]
+    #         color_G = self.parent.geol_coll.get_uid_legend(uid=uid)["color_G"]
+    #         color_B = self.parent.geol_coll.get_uid_legend(uid=uid)["color_B"]
+    #         color_RGB = [color_R / 255, color_G / 255, color_B / 255]
+    #         line_thick = self.parent.geol_coll.get_uid_legend(uid=uid)["line_thick"]
+    #         point_size = self.parent.geol_coll.get_uid_legend(uid=uid)["point_size"]
+    #         opacity = self.parent.geol_coll.get_uid_legend(uid=uid)["opacity"] / 100
+    #
+    #         plot_entity = self.parent.geol_coll.get_uid_vtk_obj(uid)
+    #     elif collection == "xsect_coll" and uid == sec_uid:
+    #         color_R = self.parent.xsect_coll.get_legend()["color_R"]
+    #         color_G = self.parent.xsect_coll.get_legend()["color_G"]
+    #         color_B = self.parent.xsect_coll.get_legend()["color_B"]
+    #         color_RGB = [color_R / 255, color_G / 255, color_B / 255]
+    #         line_thick = self.parent.xsect_coll.get_legend()["line_thick"]
+    #         opacity = self.parent.xsect_coll.get_legend()["opacity"] / 100
+    #
+    #         plot_entity = self.parent.xsect_coll.get_uid_vtk_frame(uid)
+    #     elif (
+    #         collection == "boundary_coll"
+    #         and self.parent.boundary_coll.get_uid_x_section(uid) == sec_uid
+    #     ):
+    #         color_R = self.parent.boundary_coll.get_legend()["color_R"]
+    #         color_G = self.parent.boundary_coll.get_legend()["color_G"]
+    #         color_B = self.parent.boundary_coll.get_legend()["color_B"]
+    #         color_RGB = [color_R / 255, color_G / 255, color_B / 255]
+    #         line_thick = self.parent.boundary_coll.get_legend()["line_thick"]
+    #         opacity = self.parent.boundary_coll.get_legend()["opacity"] / 100
+    #
+    #         plot_entity = self.parent.boundary_coll.get_uid_vtk_obj(uid)
+    #     elif (
+    #         collection == "mesh3d_coll"
+    #         and self.parent.mesh3d_coll.get_uid_x_section(uid) == sec_uid
+    #     ):
+    #         color_R = self.parent.mesh3d_coll.get_legend()["color_R"]
+    #         color_G = self.parent.mesh3d_coll.get_legend()["color_G"]
+    #         color_B = self.parent.mesh3d_coll.get_legend()["color_B"]
+    #         color_RGB = [color_R / 255, color_G / 255, color_B / 255]
+    #         line_thick = self.parent.mesh3d_coll.get_legend()["line_thick"]
+    #         opacity = self.parent.mesh3d_coll.get_legend()["opacity"] / 100
+    #
+    #         plot_entity = self.parent.mesh3d_coll.get_uid_vtk_obj(uid)
+    #     elif (
+    #         collection == "dom_coll"
+    #         and self.parent.dom_coll.get_uid_x_section(uid) == sec_uid
+    #     ):
+    #         color_R = self.parent.dom_coll.get_legend()["color_R"]
+    #         color_G = self.parent.dom_coll.get_legend()["color_G"]
+    #         color_B = self.parent.dom_coll.get_legend()["color_B"]
+    #         color_RGB = [color_R / 255, color_G / 255, color_B / 255]
+    #         line_thick = self.parent.dom_coll.get_legend()["line_thick"]
+    #         opacity = self.parent.dom_coll.get_legend()["opacity"] / 100
+    #
+    #         plot_entity = self.parent.dom_coll.get_uid_vtk_obj(uid)
+    #
+    #     elif (
+    #         collection == "image_coll"
+    #         and self.parent.image_coll.get_uid_x_section(uid) == sec_uid
+    #     ):
+    #         """Note: no legend for image."""
+    #         color_RGB = [255, 255, 255]
+    #         line_thick = 5.0
+    #         opacity = self.parent.image_coll.get_legend()["opacity"] / 100
+    #
+    #         plot_entity = self.parent.image_coll.get_uid_vtk_obj(uid)
+    #     elif (
+    #         collection == "well_coll"
+    #         and self.parent.well_coll.get_uid_x_section(uid) == sec_uid
+    #     ):
+    #         color_R = self.parent.well_coll.get_uid_legend(uid=uid)["color_R"]
+    #         color_G = self.parent.well_coll.get_uid_legend(uid=uid)["color_G"]
+    #         color_B = self.parent.well_coll.get_uid_legend(uid=uid)["color_B"]
+    #         color_RGB = [color_R / 255, color_G / 255, color_B / 255]
+    #         line_thick = self.parent.well_coll.get_uid_legend(uid=uid)["line_thick"]
+    #         opacity = self.parent.well_coll.get_uid_legend(uid=uid)["opacity"] / 100
+    #
+    #         plot_entity = self.parent.well_coll.get_uid_vtk_obj(uid)
+    #     elif (
+    #         collection == "fluids_coll"
+    #         and self.parent.fluids_coll.get_uid_x_section(uid) == sec_uid
+    #     ):
+    #         color_R = self.parent.fluids_coll.get_uid_legend(uid=uid)["color_R"]
+    #         color_G = self.parent.fluids_coll.get_uid_legend(uid=uid)["color_G"]
+    #         color_B = self.parent.fluids_coll.get_uid_legend(uid=uid)["color_B"]
+    #         color_RGB = [color_R / 255, color_G / 255, color_B / 255]
+    #         line_thick = self.parent.fluids_coll.get_uid_legend(uid=uid)["line_thick"]
+    #         point_size = self.parent.fluids_coll.get_uid_legend(uid=uid)["point_size"]
+    #         opacity = self.parent.fluids_coll.get_uid_legend(uid=uid)["opacity"] / 100
+    #
+    #         plot_entity = self.parent.fluids_coll.get_uid_vtk_obj(uid)
+    #     elif (
+    #         collection == "backgrounds_coll"
+    #         and self.parent.backgrounds_coll.get_uid_x_section(uid) == sec_uid
+    #     ):
+    #         color_R = self.parent.backgrounds_coll.get_uid_legend(uid=uid)["color_R"]
+    #         color_G = self.parent.backgrounds_coll.get_uid_legend(uid=uid)["color_G"]
+    #         color_B = self.parent.backgrounds_coll.get_uid_legend(uid=uid)["color_B"]
+    #         color_RGB = [color_R / 255, color_G / 255, color_B / 255]
+    #         line_thick = self.parent.backgrounds_coll.get_uid_legend(uid=uid)[
+    #             "line_thick"
+    #         ]
+    #         point_size = self.parent.backgrounds_coll.get_uid_legend(uid=uid)[
+    #             "point_size"
+    #         ]
+    #         opacity = (
+    #             self.parent.backgrounds_coll.get_uid_legend(uid=uid)["opacity"] / 100
+    #         )
+    #
+    #         plot_entity = self.parent.backgrounds_coll.get_uid_vtk_obj(uid)
+    #     else:
+    #         print("no collection")
+    #         print(collection)
+    #         return
+    #     """Then plot the vtk object with proper options."""
+    #     if isinstance(plot_entity, (PolyLine, TriSurf, XsPolyLine)) and not isinstance(
+    #         plot_entity, WellTrace
+    #     ):
+    #         plot_rgb_option = None
+    #         if isinstance(plot_entity.points, np_ndarray):
+    #             """This  check is needed to avoid errors when trying to plot an empty
+    #             PolyData, just created at the beginning of a digitizing session."""
+    #             if show_property is None:
+    #                 show_scalar_bar = False
+    #                 pass
+    #             elif show_property == "none":
+    #                 show_scalar_bar = False
+    #                 show_property = None
+    #             elif show_property == "X":
+    #                 show_property = plot_entity.points_X
+    #             elif show_property == "Y":
+    #                 show_property = plot_entity.points_Y
+    #             elif show_property == "Z":
+    #                 show_property = plot_entity.points_Z
+    #             else:
+    #                 if plot_entity.get_point_data_shape(show_property)[-1] == 3:
+    #                     plot_rgb_option = True
+    #             this_actor = self.plot_mesh(
+    #                 uid=uid,
+    #                 plot_entity=plot_entity,
+    #                 color_RGB=color_RGB,
+    #                 show_property=show_property,
+    #                 show_scalar_bar=show_scalar_bar,
+    #                 color_bar_range=None,
+    #                 show_property_title=show_property_title,
+    #                 line_thick=line_thick,
+    #                 plot_texture_option=False,
+    #                 plot_rgb_option=plot_rgb_option,
+    #                 visible=visible,
+    #             )
+    #         else:
+    #             this_actor = None
+    #     elif isinstance(plot_entity, (VertexSet, XsVertexSet, WellMarker, Attitude)):
+    #         if isinstance(plot_entity, Attitude):
+    #             pickable = False
+    #         else:
+    #             pickable = True
+    #         style = "points"
+    #         plot_rgb_option = None
+    #         texture = False
+    #         smooth_shading = False
+    #         if isinstance(plot_entity.points, np_ndarray):
+    #             """This  check is needed to avoid errors when trying to plot an empty
+    #             PolyData, just created at the beginning of a digitizing session."""
+    #             if show_property is None:
+    #                 show_scalar_bar = False
+    #                 pass
+    #             elif show_property == "none":
+    #                 show_scalar_bar = False
+    #                 show_property = None
+    #             elif show_property == "X":
+    #                 show_property = plot_entity.points_X
+    #             elif show_property == "Y":
+    #                 show_property = plot_entity.points_Y
+    #             elif show_property == "Z":
+    #                 show_property = plot_entity.points_Z
+    #             elif show_property == "Normals":
+    #                 show_scalar_bar = False
+    #                 show_property_title = None
+    #                 show_property = None
+    #                 style = "surface"
+    #                 appender = vtkAppendPolyData()
+    #                 r = self.parent.geol_coll.get_uid_legend(uid=uid)["point_size"] * 4
+    #                 normals = plot_entity.get_point_data("Normals")
+    #                 dip_vectors, _ = get_dip_dir_vectors(normals=normals)
+    #
+    #                 plane_n = -np_array(
+    #                     self.parent.xsect_coll.get_uid_vtk_plane(
+    #                         self.this_x_section_uid
+    #                     ).GetNormal()
+    #                 )
+    #                 vector2 = np_cross(plane_n, dip_vectors)
+    #                 line1 = pv_Line(pointa=(0, 0, 0), pointb=(r, 0, 0))
+    #                 line2 = pv_Line(pointa=(0, 0, 0), pointb=(r * 0.25, 0, 0))
+    #
+    #                 dip_glyph = plot_entity.glyph(geometry=line1, prop=dip_vectors)
+    #                 n_glyph = plot_entity.glyph(geometry=line2, prop=vector2)
+    #
+    #                 appender.AddInputData(dip_glyph)
+    #                 appender.AddInputData(n_glyph)
+    #                 appender.Update()
+    #                 plot_entity = appender.GetOutput()
+    #
+    #             elif show_property == "name":
+    #                 point = plot_entity.points
+    #                 name_value = plot_entity.get_field_data("name")
+    #                 self.plotter.add_point_labels(
+    #                     point,
+    #                     name_value,
+    #                     always_visible=True,
+    #                     show_points=False,
+    #                     font_size=15,
+    #                     shape_opacity=0.5,
+    #                     name=f"{uid}_name",
+    #                 )
+    #                 show_property = None
+    #                 show_property_title = None
+    #
+    #             else:
+    #                 if plot_entity.get_point_data_shape(show_property)[-1] == 3:
+    #                     plot_rgb_option = True
+    #             this_actor = self.plot_mesh(
+    #                 uid=uid,
+    #                 plot_entity=plot_entity,
+    #                 color_RGB=color_RGB,
+    #                 show_property=show_property,
+    #                 show_scalar_bar=show_scalar_bar,
+    #                 color_bar_range=None,
+    #                 show_property_title=show_property_title,
+    #                 line_thick=line_thick,
+    #                 plot_texture_option=texture,
+    #                 plot_rgb_option=plot_rgb_option,
+    #                 visible=visible,
+    #                 style=style,
+    #                 point_size=point_size,
+    #                 points_as_spheres=True,
+    #                 pickable=pickable,
+    #             )
+    #         else:
+    #             this_actor = None
+    #     elif isinstance(plot_entity, DEM):
+    #         """Show texture specified in show_property"""
+    #         if (
+    #             show_property
+    #             in self.parent.dom_coll.df.loc[
+    #                 self.parent.dom_coll.df["uid"] == uid, "texture_uids"
+    #             ].values[0]
+    #         ):
+    #             active_image = self.parent.image_coll.get_uid_vtk_obj(show_property)
+    #             active_image_texture = active_image.texture
+    #             # active_image_properties_components = active_image.properties_components[0]  # IF USED THIS MUST BE FIXED FOR TEXTURES WITH MORE THAN 3 COMPONENTS
+    #             this_actor = self.plot_mesh(
+    #                 uid=uid,
+    #                 plot_entity=plot_entity,
+    #                 color_RGB=None,
+    #                 show_property=None,
+    #                 show_scalar_bar=None,
+    #                 color_bar_range=None,
+    #                 show_property_title=None,
+    #                 line_thick=None,
+    #                 plot_texture_option=active_image_texture,
+    #                 plot_rgb_option=False,
+    #                 visible=visible,
+    #             )
+    #         else:
+    #             plot_rgb_option = None
+    #             if show_property is None:
+    #                 show_scalar_bar = False
+    #                 pass
+    #             elif show_property == "none":
+    #                 show_scalar_bar = False
+    #                 show_property = None
+    #             elif show_property == "X":
+    #                 show_property = plot_entity.points_X
+    #             elif show_property == "Y":
+    #                 show_property = plot_entity.points_Y
+    #             elif show_property == "Z":
+    #                 show_property = plot_entity.points_Z
+    #             elif show_property == "RGB":
+    #                 show_scalar_bar = False
+    #                 show_property = None
+    #             else:
+    #                 if plot_entity.get_point_data_shape(show_property)[-1] == 3:
+    #                     plot_rgb_option = True
+    #             this_actor = self.plot_mesh(
+    #                 uid=uid,
+    #                 plot_entity=plot_entity,
+    #                 color_RGB=color_RGB,
+    #                 show_property=show_property,
+    #                 show_scalar_bar=show_scalar_bar,
+    #                 color_bar_range=None,
+    #                 show_property_title=show_property_title,
+    #                 line_thick=line_thick,
+    #                 plot_texture_option=False,
+    #                 plot_rgb_option=plot_rgb_option,
+    #                 visible=visible,
+    #             )
+    #     elif isinstance(plot_entity, PCDom):
+    #         plot_rgb_option = None
+    #         new_plot = pvPointSet()
+    #         new_plot.ShallowCopy(plot_entity)  # this is temporary
+    #         file = self.parent.dom_coll.df.loc[
+    #             self.parent.dom_coll.df["uid"] == uid, "name"
+    #         ].values[0]
+    #         if isinstance(plot_entity.points, np_ndarray):
+    #             """This check is needed to avoid errors when trying to plot an empty
+    #             PolyData, just created at the beginning of a digitizing session."""
+    #             if show_property is None:
+    #                 show_scalar_bar = False
+    #                 show_property_value = None
+    #                 pass
+    #             elif show_property == "none":
+    #                 show_scalar_bar = False
+    #                 show_property_value = None
+    #             elif show_property == "X":
+    #                 show_property_value = plot_entity.points_X
+    #             elif show_property == "Y":
+    #                 show_property_value = plot_entity.points_Y
+    #             elif show_property == "Z":
+    #                 show_property_value = plot_entity.points_Z
+    #             elif show_property[-1] == "]":
+    #                 """[Gabriele] we can identify multicomponents properties such as RGB[0] or Normals[0] by taking the last character of the property name ("]")."""
+    #                 show_scalar_bar = True
+    #                 # [Gabriele] Get the start and end index of the [n_component]
+    #                 pos1 = show_property.index("[")
+    #                 pos2 = show_property.index("]")
+    #                 # [Gabriele] Get the original property (e.g. RGB[0] -> RGB)
+    #                 original_prop = show_property[:pos1]
+    #                 # [Gabriele] Get the column index (the n_component value)
+    #                 index = int(show_property[pos1 + 1 : pos2])
+    #                 show_property_value = plot_entity.get_point_data(original_prop)[
+    #                     :, index
+    #                 ]
+    #             else:
+    #                 n_comp = self.parent.dom_coll.get_uid_properties_components(uid)[
+    #                     self.parent.dom_coll.get_uid_properties_names(uid).index(
+    #                         show_property
+    #                     )
+    #                 ]
+    #                 """[Gabriele] Get the n of components for the given property. If it's > 1 then do stuff depending on the type of property (e.g. show_rgb_option -> True if the property is RGB)"""
+    #                 if n_comp > 1:
+    #                     show_property_value = plot_entity.get_point_data(show_property)
+    #                     show_scalar_bar = False
+    #                     # if show_property == 'RGB':
+    #                     plot_rgb_option = True
+    #                 else:
+    #                     show_scalar_bar = True
+    #                     show_property_value = plot_entity.get_point_data(show_property)
+    #         this_actor = self.plot_PC_3D(
+    #             uid=uid,
+    #             plot_entity=new_plot,
+    #             color_RGB=color_RGB,
+    #             show_property=show_property_value,
+    #             show_scalar_bar=show_scalar_bar,
+    #             color_bar_range=None,
+    #             show_property_title=show_property_title,
+    #             plot_rgb_option=plot_rgb_option,
+    #             visible=visible,
+    #             point_size=point_size,
+    #             opacity=opacity,
+    #         )
+    #
+    #     elif isinstance(plot_entity, (MapImage, XsImage)):
+    #         """Do not plot directly image - it is much slower.
+    #         Texture options according to type."""
+    #         if show_property is None or show_property == "none":
+    #             plot_texture_option = None
+    #         else:
+    #             plot_texture_option = plot_entity.texture
+    #         this_actor = self.plot_mesh(
+    #             uid=uid,
+    #             plot_entity=plot_entity.frame,
+    #             color_RGB=None,
+    #             show_property=None,
+    #             show_scalar_bar=None,
+    #             color_bar_range=None,
+    #             show_property_title=None,
+    #             line_thick=line_thick,
+    #             plot_texture_option=plot_texture_option,
+    #             plot_rgb_option=False,
+    #             visible=visible,
+    #             opacity=opacity,
+    #         )
+    #     elif isinstance(plot_entity, Seismics):
+    #         plot_rgb_option = None
+    #         if isinstance(plot_entity.points, np_ndarray):
+    #             """This  check is needed to avoid errors when trying to plot an empty
+    #             PolyData, just created at the beginning of a digitizing session."""
+    #             if show_property is None:
+    #                 show_scalar_bar = False
+    #                 pass
+    #             elif show_property == "none":
+    #                 show_scalar_bar = False
+    #                 show_property = None
+    #             elif show_property == "X":
+    #                 show_property = plot_entity.points_X
+    #             elif show_property == "Y":
+    #                 show_property = plot_entity.points_Y
+    #             elif show_property == "Z":
+    #                 show_property = plot_entity.points_Z
+    #             else:
+    #                 if plot_entity.get_point_data_shape(show_property)[-1] == 3:
+    #                     plot_rgb_option = True
+    #             this_actor = self.plot_mesh(
+    #                 uid=uid,
+    #                 plot_entity=plot_entity,
+    #                 color_RGB=color_RGB,
+    #                 show_property=show_property,
+    #                 show_scalar_bar=show_scalar_bar,
+    #                 color_bar_range=None,
+    #                 show_property_title=show_property_title,
+    #                 line_thick=line_thick,
+    #                 plot_texture_option=False,
+    #                 plot_rgb_option=plot_rgb_option,
+    #                 visible=visible,
+    #                 opacity=opacity,
+    #             )
+    #         else:
+    #             this_actor = None
+    #     elif isinstance(plot_entity, Voxet):
+    #         plot_rgb_option = None
+    #         if plot_entity.cells_number > 0:
+    #             """This  check is needed to avoid errors when trying to plot an empty Voxet."""
+    #             if show_property is None:
+    #                 show_scalar_bar = False
+    #             elif show_property == "none":
+    #                 show_property = None
+    #                 show_scalar_bar = False
+    #             else:
+    #                 if plot_entity.get_point_data_shape(show_property)[-1] == 3:
+    #                     plot_rgb_option = True
+    #             this_actor = self.plot_mesh(
+    #                 uid=uid,
+    #                 plot_entity=plot_entity,
+    #                 color_RGB=None,
+    #                 show_property=show_property,
+    #                 show_scalar_bar=show_scalar_bar,
+    #                 color_bar_range=None,
+    #                 show_property_title=show_property_title,
+    #                 line_thick=line_thick,
+    #                 plot_texture_option=False,
+    #                 plot_rgb_option=plot_rgb_option,
+    #                 visible=visible,
+    #                 opacity=opacity,
+    #             )
+    #         else:
+    #             this_actor = None
+    #     elif isinstance(plot_entity, WellTrace):
+    #         plot_rgb_option = None
+    #         if show_property is None:
+    #             show_scalar_bar = False
+    #             pass
+    #         elif show_property == "none":
+    #             show_scalar_bar = False
+    #             show_property = None
+    #             self.plotter.remove_actor(f"{uid}_prop")
+    #         elif show_property == "X":
+    #             show_property = plot_entity.points_X
+    #         elif show_property == "Y":
+    #             show_property = plot_entity.points_Y
+    #         elif show_property == "Z":
+    #             show_property = plot_entity.points_Z
+    #         elif show_property == "MD":
+    #             show_property = plot_entity.get_point_data(data_key="MD")
+    #         else:
+    #             prop = plot_entity.plot_along_trace(
+    #                 show_property, method=self.trace_method, camera=self.plotter.camera
+    #             )
+    #             self.plotter.add_actor(prop, name=f"{uid}_prop")
+    #             show_property = None
+    #             show_property_title = None
+    #         this_actor = self.plot_mesh(
+    #             uid=uid,
+    #             plot_entity=plot_entity,
+    #             color_RGB=color_RGB,
+    #             show_property=show_property,
+    #             show_scalar_bar=show_scalar_bar,
+    #             color_bar_range=None,
+    #             show_property_title=show_property_title,
+    #             line_thick=line_thick,
+    #             plot_texture_option=False,
+    #             plot_rgb_option=plot_rgb_option,
+    #             visible=visible,
+    #             render_lines_as_tubes=False,
+    #             opacity=opacity,
+    #         )
+    #     else:
+    #         print("[Windows factory]: actor with no class")
+    #         this_actor = None
+    #     return this_actor
 
     """[Gabriele] Update the views depending on the sec_uid. We need to redefine the functions to use the sec_uid parameter for the update_dom_list_added func. We just need the x_added_x functions because the x_removed_x works on an already build/modified tree"""
 
-    def geology_added_update_views(self, updated_list=None):
-        """This is called when an entity is added to the geological collection.
-        Disconnect signals to geology and topology tree, if they are set, to avoid a nasty loop
-        that disrupts the trees, then they are reconnected when the trees are rebuilt"""
-        self.GeologyTreeWidget.itemChanged.disconnect()
-        self.TopologyTreeWidget.itemChanged.disconnect()
-        """Create pandas dataframe as list of "new" actors"""
-        actors_df_new = pd_DataFrame(
-            columns=["uid", "actor", "show", "collection", "show_prop"]
-        )
-        for uid in updated_list:
-            this_actor = self.show_actor_with_property(
-                uid=uid, collection="geol_coll", show_property=None, visible=True
-            )
-            self.actors_df = self.actors_df.append(
-                {
-                    "uid": uid,
-                    "actor": this_actor,
-                    "show": True,
-                    "collection": "geol_coll",
-                    "show_prop": None,
-                },
-                ignore_index=True,
-            )
-            actors_df_new = actors_df_new.append(
-                {
-                    "uid": uid,
-                    "actor": this_actor,
-                    "show": True,
-                    "collection": "geol_coll",
-                    "show_prop": None,
-                },
-                ignore_index=True,
-            )
-            self.update_geology_tree_added(
-                actors_df_new, sec_uid=self.this_x_section_uid
-            )
-            self.update_topology_tree_added(
-                actors_df_new, sec_uid=self.this_x_section_uid
-            )
-        """Re-connect signals."""
-        self.GeologyTreeWidget.itemChanged.connect(
-            self.toggle_geology_topology_visibility
-        )
-        self.TopologyTreeWidget.itemChanged.connect(
-            self.toggle_geology_topology_visibility
-        )
-
-    def mesh3d_added_update_views(self, updated_list=None):
-        """This is called when a mesh3d is added to the mesh3d collection.
-        Disconnect signals to mesh3d list, if they are set, then they are
-        reconnected when the list is rebuilt"""
-        self.Mesh3DTableWidget.itemChanged.disconnect()
-        actors_df_new = pd_DataFrame(
-            columns=["uid", "actor", "show", "collection", "show_prop"]
-        )
-        for uid in updated_list:
-            this_actor = self.show_actor_with_property(
-                uid=uid, collection="mesh3d_coll", show_property=None, visible=False
-            )
-            self.actors_df = self.actors_df.append(
-                {
-                    "uid": uid,
-                    "actor": this_actor,
-                    "show": False,
-                    "collection": "mesh3d_coll",
-                    "show_prop": None,
-                },
-                ignore_index=True,
-            )
-            actors_df_new = actors_df_new.append(
-                {
-                    "uid": uid,
-                    "actor": this_actor,
-                    "show": False,
-                    "collection": "mesh3d_coll",
-                    "show_prop": None,
-                },
-                ignore_index=True,
-            )
-            self.update_mesh3d_list_added(
-                actors_df_new, sec_uid=self.this_x_section_uid
-            )
-        self.Mesh3DTableWidget.itemChanged.connect(self.toggle_mesh3d_visibility)
-
-    def dom_added_update_views(self, updated_list=None):
-        """This is called when a DOM is added to the xsect collection.
-        Disconnect signals to dom list, if they are set, then they are
-        reconnected when the list is rebuilt"""
-        self.DOMsTableWidget.itemChanged.disconnect()
-        actors_df_new = pd_DataFrame(
-            columns=["uid", "actor", "show", "collection", "show_prop"]
-        )
-        for uid in updated_list:
-            this_actor = self.show_actor_with_property(
-                uid=uid, collection="dom_coll", show_property=None, visible=False
-            )
-            self.actors_df = self.actors_df.append(
-                {
-                    "uid": uid,
-                    "actor": this_actor,
-                    "show": False,
-                    "collection": "dom_coll",
-                    "show_prop": None,
-                },
-                ignore_index=True,
-            )
-            actors_df_new = actors_df_new.append(
-                {
-                    "uid": uid,
-                    "actor": this_actor,
-                    "show": False,
-                    "collection": "dom_coll",
-                    "show_prop": None,
-                },
-                ignore_index=True,
-            )
-            self.update_dom_list_added(actors_df_new, sec_uid=self.this_x_section_uid)
-        """Re-connect signals."""
-        self.DOMsTableWidget.itemChanged.connect(self.toggle_dom_visibility)
-
-    def xsect_added_update_views(self, updated_list=None):
-        """This is called when a cross-section is added to the xsect collection.
-        Disconnect signals to xsect list, if they are set, then they are
-        reconnected when the list is rebuilt"""
-        self.XSectionTreeWidget.itemChanged.disconnect()
-        actors_df_new = pd_DataFrame(
-            columns=["uid", "actor", "show", "collection", "show_prop"]
-        )
-        for uid in updated_list:
-            this_actor = self.show_actor_with_property(
-                uid=uid, collection="xsect_coll", show_property=None, visible=True
-            )
-            self.actors_df = self.actors_df.append(
-                {
-                    "uid": uid,
-                    "actor": this_actor,
-                    "show": True,
-                    "collection": "xsect_coll",
-                    "show_prop": None,
-                },
-                ignore_index=True,
-            )
-            actors_df_new = actors_df_new.append(
-                {
-                    "uid": uid,
-                    "actor": this_actor,
-                    "show": True,
-                    "collection": "xsect_coll",
-                    "show_prop": None,
-                },
-                ignore_index=True,
-            )
-            self.update_xsections_tree_added(
-                actors_df_new, sec_uid=self.this_x_section_uid
-            )
-        """Re-connect signals."""
-        self.XSectionTreeWidget.itemChanged.connect(self.toggle_xsection_visibility)
+    # def geology_added_update_views(self, updated_list=None):
+    #     """This is called when an entity is added to the geological collection.
+    #     Disconnect signals to geology and topology tree, if they are set, to avoid a nasty loop
+    #     that disrupts the trees, then they are reconnected when the trees are rebuilt"""
+    #     self.GeologyTreeWidget.itemChanged.disconnect()
+    #     self.TopologyTreeWidget.itemChanged.disconnect()
+    #     """Create pandas dataframe as list of "new" actors"""
+    #     actors_df_new = pd_DataFrame(
+    #         columns=["uid", "actor", "show", "collection", "show_prop"]
+    #     )
+    #     for uid in updated_list:
+    #         this_actor = self.show_actor_with_property(
+    #             uid=uid, collection="geol_coll", show_property=None, visible=True
+    #         )
+    #         self.actors_df = self.actors_df.append(
+    #             {
+    #                 "uid": uid,
+    #                 "actor": this_actor,
+    #                 "show": True,
+    #                 "collection": "geol_coll",
+    #                 "show_prop": None,
+    #             },
+    #             ignore_index=True,
+    #         )
+    #         actors_df_new = actors_df_new.append(
+    #             {
+    #                 "uid": uid,
+    #                 "actor": this_actor,
+    #                 "show": True,
+    #                 "collection": "geol_coll",
+    #                 "show_prop": None,
+    #             },
+    #             ignore_index=True,
+    #         )
+    #         self.update_geology_tree_added(
+    #             actors_df_new, sec_uid=self.this_x_section_uid
+    #         )
+    #         self.update_topology_tree_added(
+    #             actors_df_new, sec_uid=self.this_x_section_uid
+    #         )
+    #     """Re-connect signals."""
+    #     self.GeologyTreeWidget.itemChanged.connect(
+    #         self.toggle_geology_topology_visibility
+    #     )
+    #     self.TopologyTreeWidget.itemChanged.connect(
+    #         self.toggle_geology_topology_visibility
+    #     )
+    #
+    # def mesh3d_added_update_views(self, updated_list=None):
+    #     """This is called when a mesh3d is added to the mesh3d collection.
+    #     Disconnect signals to mesh3d list, if they are set, then they are
+    #     reconnected when the list is rebuilt"""
+    #     self.Mesh3DTableWidget.itemChanged.disconnect()
+    #     actors_df_new = pd_DataFrame(
+    #         columns=["uid", "actor", "show", "collection", "show_prop"]
+    #     )
+    #     for uid in updated_list:
+    #         this_actor = self.show_actor_with_property(
+    #             uid=uid, collection="mesh3d_coll", show_property=None, visible=False
+    #         )
+    #         self.actors_df = self.actors_df.append(
+    #             {
+    #                 "uid": uid,
+    #                 "actor": this_actor,
+    #                 "show": False,
+    #                 "collection": "mesh3d_coll",
+    #                 "show_prop": None,
+    #             },
+    #             ignore_index=True,
+    #         )
+    #         actors_df_new = actors_df_new.append(
+    #             {
+    #                 "uid": uid,
+    #                 "actor": this_actor,
+    #                 "show": False,
+    #                 "collection": "mesh3d_coll",
+    #                 "show_prop": None,
+    #             },
+    #             ignore_index=True,
+    #         )
+    #         self.update_mesh3d_list_added(
+    #             actors_df_new, sec_uid=self.this_x_section_uid
+    #         )
+    #     self.Mesh3DTableWidget.itemChanged.connect(self.toggle_mesh3d_visibility)
+    #
+    # def dom_added_update_views(self, updated_list=None):
+    #     """This is called when a DOM is added to the xsect collection.
+    #     Disconnect signals to dom list, if they are set, then they are
+    #     reconnected when the list is rebuilt"""
+    #     self.DOMsTableWidget.itemChanged.disconnect()
+    #     actors_df_new = pd_DataFrame(
+    #         columns=["uid", "actor", "show", "collection", "show_prop"]
+    #     )
+    #     for uid in updated_list:
+    #         this_actor = self.show_actor_with_property(
+    #             uid=uid, collection="dom_coll", show_property=None, visible=False
+    #         )
+    #         self.actors_df = self.actors_df.append(
+    #             {
+    #                 "uid": uid,
+    #                 "actor": this_actor,
+    #                 "show": False,
+    #                 "collection": "dom_coll",
+    #                 "show_prop": None,
+    #             },
+    #             ignore_index=True,
+    #         )
+    #         actors_df_new = actors_df_new.append(
+    #             {
+    #                 "uid": uid,
+    #                 "actor": this_actor,
+    #                 "show": False,
+    #                 "collection": "dom_coll",
+    #                 "show_prop": None,
+    #             },
+    #             ignore_index=True,
+    #         )
+    #         self.update_dom_list_added(actors_df_new, sec_uid=self.this_x_section_uid)
+    #     """Re-connect signals."""
+    #     self.DOMsTableWidget.itemChanged.connect(self.toggle_dom_visibility)
+    #
+    # def xsect_added_update_views(self, updated_list=None):
+    #     """This is called when a cross-section is added to the xsect collection.
+    #     Disconnect signals to xsect list, if they are set, then they are
+    #     reconnected when the list is rebuilt"""
+    #     self.XSectionTreeWidget.itemChanged.disconnect()
+    #     actors_df_new = pd_DataFrame(
+    #         columns=["uid", "actor", "show", "collection", "show_prop"]
+    #     )
+    #     for uid in updated_list:
+    #         this_actor = self.show_actor_with_property(
+    #             uid=uid, collection="xsect_coll", show_property=None, visible=True
+    #         )
+    #         self.actors_df = self.actors_df.append(
+    #             {
+    #                 "uid": uid,
+    #                 "actor": this_actor,
+    #                 "show": True,
+    #                 "collection": "xsect_coll",
+    #                 "show_prop": None,
+    #             },
+    #             ignore_index=True,
+    #         )
+    #         actors_df_new = actors_df_new.append(
+    #             {
+    #                 "uid": uid,
+    #                 "actor": this_actor,
+    #                 "show": True,
+    #                 "collection": "xsect_coll",
+    #                 "show_prop": None,
+    #             },
+    #             ignore_index=True,
+    #         )
+    #         self.update_xsections_tree_added(
+    #             actors_df_new, sec_uid=self.this_x_section_uid
+    #         )
+    #     """Re-connect signals."""
+    #     self.XSectionTreeWidget.itemChanged.connect(self.toggle_xsection_visibility)
 
 
 class ViewStereoplot(MPLView):
