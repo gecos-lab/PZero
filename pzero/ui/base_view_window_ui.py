@@ -9,9 +9,22 @@
 
 
 from PyQt5 import QtCore, QtGui, QtWidgets
+from pzero.helpers.helper_dialogs import SectionManagerDialog
 
 
 class Ui_BaseViewWindow(object):
+    def openSectionManager(self):
+        # Here you should have the logic to retrieve the existing sections
+        # For example:
+        existing_sections = self.getExistingSections()  # This method should retrieve the existing sections
+
+        # You also need a reference to your View3D instance here, which might be part of another attribute
+        view3D_instance = self  # This method should return the instance of View3D
+
+        # Create the SectionManagerDialog with the existing sections and the View3D instance
+        self.sectionManagerDialog = SectionManagerDialog(existing_sections, view3D_instance, self)
+        self.sectionManagerDialog.show()
+
     def setupUi(self, BaseViewWindow):
         BaseViewWindow.setObjectName("BaseViewWindow")
         BaseViewWindow.resize(1280, 800)
@@ -515,6 +528,15 @@ class Ui_BaseViewWindow(object):
         self.menubar.addAction(self.menuWindow.menuAction())
         self.menubar.addAction(self.menuTools.menuAction())
         self.menubar.addAction(self.menuHelp.menuAction())
+        # Section Manager Button
+        self.actionSectionManager = QtWidgets.QAction(BaseViewWindow)
+        self.actionSectionManager.setObjectName("actionSectionManager")
+        self.actionSectionManager.setText("Section Manager")
+        # self.toolBarBase.addAction(self.actionSectionManager)
+        self.menuTools.addAction(self.actionSectionManager)
+
+        # Connect the action to the method to open Section Manager
+        self.actionSectionManager.triggered.connect(self.openSectionManager)
 
         self.retranslateUi(BaseViewWindow)
         self.toolBox.setCurrentIndex(0)
@@ -606,3 +628,4 @@ class Ui_BaseViewWindow(object):
         self.actionManualInner.setText(_translate("BaseViewWindow", "Inner"))
         self.actionManualOuter.setText(_translate("BaseViewWindow", "Outer"))
         self.actionManualBoth.setText(_translate("BaseViewWindow", "Both"))
+        self.actionSectionManager.setText(_translate("BaseViewWindow", "Section Manager"))

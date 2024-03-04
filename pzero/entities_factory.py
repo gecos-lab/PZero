@@ -1728,6 +1728,45 @@ class Seismics(vtkStructuredGrid):
         except:
             return []
 
+    @property
+    def frame(self):
+        """Create an hexahedral frame to be shown e.g. in maps.
+        .bounds is a list with xmin, xmax, ymin, ymax, zmin, zmax."""
+        points = np_array(
+            [
+                [self.bounds[0], self.bounds[2], self.bounds[4]],
+                [self.bounds[1], self.bounds[2], self.bounds[4]],
+                [self.bounds[1], self.bounds[3], self.bounds[4]],
+                [self.bounds[0], self.bounds[3], self.bounds[4]],
+                [self.bounds[0], self.bounds[2], self.bounds[5]],
+                [self.bounds[1], self.bounds[2], self.bounds[5]],
+                [self.bounds[1], self.bounds[3], self.bounds[5]],
+                [self.bounds[0], self.bounds[3], self.bounds[5]],
+            ]
+        )
+        """Create edges of frame."""
+        lines = np_hstack(
+            [
+                [2, 0, 1],
+                [2, 1, 2],
+                [2, 2, 3],
+                [2, 3, 0],
+                [2, 4, 5],
+                [2, 5, 6],
+                [2, 6, 7],
+                [2, 7, 4],
+                [2, 0, 4],
+                [2, 1, 5],
+                [2, 2, 6],
+                [2, 3, 7],
+            ]
+        )
+        frame = pv_PolyData(points, lines)
+        return frame
+
+    @property
+    def center(self):
+        return self.frame.center
     def init_point_data(self, data_key=None, dimension=None):
         """Creates a new point data attribute with name = data_key
         as an empty Numpy array with dimension = 1, 2, 3, 4, 6, or 9.
@@ -1814,42 +1853,6 @@ class Seismics(vtkStructuredGrid):
         # _______________________ TO BE IMPLEMENTED IF WE WANT TO WORK WITH CELL DATA
         """Sets cell attribute from Numpy array"""
         pass
-
-    @property
-    def frame(self):
-        """Create an hexahedral frame to be shown e.g. in maps.
-        .bounds is a list with xmin, xmax, ymin, ymax, zmin, zmax."""
-        points = np_array(
-            [
-                [self.bounds[0], self.bounds[2], self.bounds[4]],
-                [self.bounds[1], self.bounds[2], self.bounds[4]],
-                [self.bounds[1], self.bounds[3], self.bounds[4]],
-                [self.bounds[0], self.bounds[3], self.bounds[4]],
-                [self.bounds[0], self.bounds[2], self.bounds[5]],
-                [self.bounds[1], self.bounds[2], self.bounds[5]],
-                [self.bounds[1], self.bounds[3], self.bounds[5]],
-                [self.bounds[0], self.bounds[3], self.bounds[5]],
-            ]
-        )
-        """Create edges of frame."""
-        lines = np_hstack(
-            [
-                [2, 0, 1],
-                [2, 1, 2],
-                [2, 2, 3],
-                [2, 3, 0],
-                [2, 4, 5],
-                [2, 5, 6],
-                [2, 6, 7],
-                [2, 7, 4],
-                [2, 0, 4],
-                [2, 1, 5],
-                [2, 2, 6],
-                [2, 3, 7],
-            ]
-        )
-        frame = pv_PolyData(points, lines)
-        return frame
 
     def process_segy_file(self, in_file_name):
         # Use segyio to read the SEG-Y file

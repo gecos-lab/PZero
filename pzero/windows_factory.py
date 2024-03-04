@@ -40,6 +40,7 @@ from pzero.helpers.helper_dialogs import (
     NavigatorWidget,
 )
 from pzero.collections.geological_collection import GeologicalCollection
+from pzero.collections.mesh3d_collection import Mesh3DCollection
 from .orientation_analysis import get_dip_dir_vectors
 from pzero.helpers.helper_functions import best_fitting_plane, gen_frame
 from pzero.helpers.helper_widgets import Vector
@@ -66,7 +67,7 @@ from uuid import uuid4
 # import vtk.numpy_interface.dataset_adapter as dsa
 from vtkmodules.util import numpy_support
 from vtkmodules.vtkInteractionWidgets import vtkCameraOrientationWidget
-from vtk import vtkExtractPoints, vtkSphere, vtkAppendPolyData
+from vtk import vtkExtractPoints, vtkSphere, vtkAppendPolyData, vtkCutter, vtkPlane
 
 """3D plotting imports"""
 from pyvista import global_theme as pv_global_theme
@@ -6844,11 +6845,11 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             )
         elif isinstance(plot_entity, Seismics):
             plot_rgb_option = None
-            this_actor = None
+            # this_actor = None
 
             if isinstance(plot_entity.points, np_ndarray):
                 # Define the colormap based on the property name
-                show_property_cmap = None
+                # show_property_cmap = None
                 if show_property_title in self.parent.prop_legend_df["property_name"].values:
                     show_property_cmap = self.parent.prop_legend_df.loc[
                         self.parent.prop_legend_df["property_name"] == show_property_title,
@@ -7536,6 +7537,9 @@ class View3D(BaseView):
         self.toggle_bore_litho = -1
 
         self.trigger_event = "LeftButtonPressEvent"
+        self.mesh3d_collection = Mesh3DCollection(parent=self)
+
+
 
     """Re-implementations of functions that appear in all views - see placeholders in BaseView()"""
 
@@ -7837,270 +7841,289 @@ class View3D(BaseView):
             self.plotter.camera_position = camera_position
         return this_actor
 
-    def plot_seismics(
-            self,
-            uid=None,
-            plot_entity=None,
-            color_RGB=None,
-            show_property=None,
-            show_scalar_bar=None,
-            color_bar_range=None,
-            show_property_title=None,
-            line_thick=None,
-            plot_texture_option=None,
-            plot_rgb_option=None,
-            visible=None,
-            style="surface",
-            point_size=None,
-            points_as_spheres=False,
-            render_lines_as_tubes=False,
-            pickable=True,
-            opacity=1.0,
-            smooth_shading=False,
-    ):
+    import copy
+    def getExistingSections(self):
         """
-        Plots a seismic volume.
-
-        Args:
-            uid (str): A unique identifier for the plot.
-            plot_entity (Union[str, np.ndarray, xarray.DataArray]): The seismic volume to be plotted.
-            color_RGB (Iterable[int]): The RGB color of the seismic volume.
-            show_property (str): The name of the property to visualize.
-            show_scalar_bar (bool): Whether to show a colorbar for the visualized property.
-            color_bar_range (Tuple[float, float]): The range of values for the colorbar.
-            show_property_title (str): The title of the colorbar.
-            line_thick (int): The thickness of the lines.
-            plot_texture_option (Union[bool, vtk.vtkTexture, np.ndarray]): The texture to apply to the seismic volume.
-            plot_rgb_option (bool): Whether to use the input data as RGB data.
-            visible (bool): Whether the plot is visible initially.
-            style (str): The style of the plot ("surface", "wireframe", or "points").
-            point_size (int): The size of the points.
-            points_as_spheres (bool): Whether to render points as spheres.
-            render_lines_as_tubes (bool): Whether to render lines as tubes.
-            pickable (bool): Whether the plot is pickable (i.e., can be selected interactively).
-            opacity (float): The opacity of the seismic volume.
-            smooth_shading (bool): Whether to use smooth shading for the surface plot.
-
-        Returns:
-            vtk.vtkAssembly: The assembly containing the plotted data.
+        Retrieve existing sections from the Mesh3DCollection's DataFrame.
         """
-
-        if not self.actors_df.empty:
-            camera_position = self.plotter.camera_position
-
-        if show_property_title is not None and show_property_title != "none":
-            show_property_cmap = self.parent.prop_legend_df.loc[
-                self.parent.prop_legend_df["property_name"] == show_property_title,
-                "colormap",
-            ].values[0]
+        # Ensure mesh3d_coll is correctly referenced and has a DataFrame with the 'name' column
+        if hasattr(self.parent, 'mesh3d_coll') and 'name' in self.parent.mesh3d_coll.df.columns:
+            # Retrieve unique, non-null section names from the DataFrame
+            existing_sections = self.parent.mesh3d_coll.df['name'].dropna().unique().tolist()
+            return existing_sections
         else:
-            show_property_cmap = None   
+            print("The 'name' column does not exist in the DataFrame or the DataFrame is not accessible.")
+            return []
 
-        vtk_grid = pv.wrap(plot_entity)
+    def addOrthogonalSlices(self, uid, section_type, x_slice_location=None, y_slice_location=None,
+                            z_slice_location=None):
+        # uid = self.get_uid_by_name(section_name)
+        #
+        # if not uid:
+        #     print(f"Section {section_name} not found.")
+        #     return
+
+        # Fetch the corresponding vtkStructuredGrid object for the UID
+        vtk_grid = self.retrieve_vtkStructuredGrid(uid) # here it should be get_uid_vtk_obj mesh3dCollection
+
+        if vtk_grid is None:
+            print(f"No vtkStructuredGrid found for UID: {uid}.")
+            return
+
+        # Visualization arguments for slices
+        dargs = {
+            'cmap': 'gist_ncar_r',  # Example colormap
+            # Add any other PyVista mesh display options here
+        }
+
+        # Perform orthogonal slicing based on the type of slice requested
+        slices = None
+        cutter = vtkCutter()
 
 
-        # Interactive Slicing
-        # slice_actors = []
-        combined_assembly = vtk.vtkAssembly()
+        if section_type == 'Inline':
 
-        x_slice = self.plotter.add_mesh_slice(
-            vtk_grid,
-            normal=(1, 0, 0),
-            normal_rotation=False,
-            assign_to_axis='x',
-            color=None,
-            style=style,  # 'surface' (default), 'wireframe', or 'points'
-            scalars=show_property,  # str pointing to vtk property or numpy.ndarray
-            clim=color_bar_range,  # color bar range for scalars, e.g. [-1, 2]
-            show_edges=None,  # bool
-            edge_color=None,  # default black
-            point_size=point_size,  # was 5.0
-            line_width=line_thick,
-            opacity=opacity,
-            flip_scalars=False,  # flip direction of cmap
-            lighting=None,  # bool to enable view-direction lighting
-            n_colors=256,  # number of colors to use when
-            interpolate_before_map=True,
-            # bool for smoother scalars display (default True)
-            cmap=show_property_cmap,
-            # ____________________________ name of the Matplotlib colormap, includes 'colorcet' and 'cmocean', and custom colormaps like ['green', 'red', 'blue']
-            label=None,  # string label for legend with pyvista.BasePlotter.add_legend
-            reset_camera=None,
-            scalar_bar_args={
-                "title": show_property_title,
-                "title_font_size": 10,
-                "label_font_size": 8,
-                "shadow": True,
-                "interactive": True,
-            },
-            # keyword arguments for scalar bar, see pyvista.BasePlotter.add_scalar_bar
-            show_scalar_bar=show_scalar_bar,  # bool (default True)
-            multi_colors=False,  # for MultiBlock datasets
-            name='x_slice',  # actor name
-            texture=plot_texture_option,
-            # ________________________________ vtk.vtkTexture or np_ndarray or boolean, will work if input mesh has texture coordinates. True > first available texture. String > texture with that name already associated to mesh.
-            render_points_as_spheres=points_as_spheres,
-            render_lines_as_tubes=render_lines_as_tubes,
-            smooth_shading=smooth_shading,
-            ambient=0.0,
-            diffuse=1.0,
-            specular=0.0,
-            specular_power=100.0,
-            nan_color=None,  # color to use for all NaN values
-            nan_opacity=1.0,  # opacity to use for all NaN values
-            culling=None,
-            # 'front', 'back', 'false' (default) > does not render faces that are culled
-            rgb=plot_rgb_option,  # True > plot array values as RGB(A) colors
-            categories=False,
-            # True > number of unique values in the scalar used as 'n_colors' argument
-            use_transparency=False,
-            # _______________________ invert the opacity mapping as transparency mapping
-            below_color=None,
-            # solid color for values below the scalars range in 'clim'
-            above_color=None,
-            # solid color for values above the scalars range in 'clim'
-            annotations=None,
-            # dictionary of annotations for scale bar withor 'points'h keys = float values and values = string annotations
-            pickable=pickable,  # bool
-            preference="point",
-            log_scale=False,
-        )
-        x_slice.SetVisibility(visible)
-        combined_assembly.AddPart(x_slice)
+            # [gabriele] This should be generalized in a function (eg in three_d_surfaces)
 
-        y_slice = self.plotter.add_mesh_slice(
-            vtk_grid,
-            normal=(0, 1, 0),
-            normal_rotation=False,
-            assign_to_axis='y',
-            color=None,
-            style=style,  # 'surface' (default), 'wireframe', or 'points'
-            scalars=show_property,  # str pointing to vtk property or numpy.ndarray
-            clim=color_bar_range,  # color bar range for scalars, e.g. [-1, 2]
-            show_edges=None,  # bool
-            edge_color=None,  # default black
-            point_size=point_size,  # was 5.0
-            line_width=line_thick,
-            opacity=opacity,
-            flip_scalars=False,  # flip direction of cmap
-            lighting=None,  # bool to enable view-direction lighting
-            n_colors=256,  # number of colors to use when
-            interpolate_before_map=True,
-            # bool for smoother scalars display (default True)
-            cmap=show_property_cmap,
-            # ____________________________ name of the Matplotlib colormap, includes 'colorcet' and 'cmocean', and custom colormaps like ['green', 'red', 'blue']
-            label=None,  # string label for legend with pyvista.BasePlotter.add_legend
-            reset_camera=None,
-            scalar_bar_args={
-                "title": show_property_title,
-                "title_font_size": 10,
-                "label_font_size": 8,
-                "shadow": True,
-                "interactive": True,
-            },
-            # keyword arguments for scalar bar, see pyvista.BasePlotter.add_scalar_bar
-            show_scalar_bar=show_scalar_bar,  # bool (default True)
-            multi_colors=False,  # for MultiBlock datasets
-            name='y_slice',  # actor name
-            texture=plot_texture_option,
-            # ________________________________ vtk.vtkTexture or np_ndarray or boolean, will work if input mesh has texture coordinates. True > first available texture. String > texture with that name already associated to mesh.
-            render_points_as_spheres=points_as_spheres,
-            render_lines_as_tubes=render_lines_as_tubes,
-            smooth_shading=smooth_shading,
-            ambient=0.0,
-            diffuse=1.0,
-            specular=0.0,
-            specular_power=100.0,
-            nan_color=None,  # color to use for all NaN values
-            nan_opacity=1.0,  # opacity to use for all NaN values
-            culling=None,
-            # 'front', 'back', 'false' (default) > does not render faces that are culled
-            rgb=plot_rgb_option,  # True > plot array values as RGB(A) colors
-            categories=False,
-            # True > number of unique values in the scalar used as 'n_colors' argument
-            use_transparency=False,
-            # _______________________ invert the opacity mapping as transparency mapping
-            below_color=None,
-            # solid color for values below the scalars range in 'clim'
-            above_color=None,
-            # solid color for values above the scalars range in 'clim'
-            annotations=None,
-            # dictionary of annotations for scale bar withor 'points'h keys = float values and values = string annotations
-            pickable=pickable,  # bool
-            preference="point",
-            log_scale=False,
-        )
+            normals = [1, 0, 0]
+            center = vtk_grid.center
+            plane = vtkPlane()
+            plane.SetNormal(normals)
+            plane.SetOrigin(center)
 
-        combined_assembly.AddPart(y_slice)
-        y_slice.SetVisibility(visible)
-        z_slice = self.plotter.add_mesh_slice(
-            vtk_grid,
-            normal=(0, 0, 1),
-            normal_rotation=False,
-            assign_to_axis='z',
-            color=None,
-            style=style,  # 'surface' (default), 'wireframe', or 'points'
-            scalars=show_property,  # str pointing to vtk property or numpy.ndarray
-            clim=color_bar_range,  # color bar range for scalars, e.g. [-1, 2]
-            show_edges=None,  # bool
-            edge_color=None,  # default black
-            point_size=point_size,  # was 5.0
-            line_width=line_thick,
-            opacity=opacity,
-            flip_scalars=False,  # flip direction of cmap
-            lighting=None,  # bool to enable view-direction lighting
-            n_colors=256,  # number of colors to use when
-            interpolate_before_map=True,
-            # bool for smoother scalars display (default True)
-            cmap=show_property_cmap,
-            # ____________________________ name of the Matplotlib colormap, includes 'colorcet' and 'cmocean', and custom colormaps like ['green', 'red', 'blue']
-            label=None,  # string label for legend with pyvista.BasePlotter.add_legend
-            reset_camera=None,
-            scalar_bar_args={
-                "title": show_property_title,
-                "title_font_size": 10,
-                "label_font_size": 8,
-                "shadow": True,
-                "interactive": True,
-            },
-            # keyword arguments for scalar bar, see pyvista.BasePlotter.add_scalar_bar
-            show_scalar_bar=show_scalar_bar,  # bool (default True)
-            multi_colors=False,  # for MultiBlock datasets
-            name='z_slice',  # actor name
-            texture=plot_texture_option,
-            # ________________________________ vtk.vtkTexture or np_ndarray or boolean, will work if input mesh has texture coordinates. True > first available texture. String > texture with that name already associated to mesh.
-            render_points_as_spheres=points_as_spheres,
-            render_lines_as_tubes=render_lines_as_tubes,
-            smooth_shading=smooth_shading,
-            ambient=0.0,
-            diffuse=1.0,
-            specular=0.0,
-            specular_power=100.0,
-            nan_color=None,  # color to use for all NaN values
-            nan_opacity=1.0,  # opacity to use for all NaN values
-            culling=None,
-            # 'front', 'back', 'false' (default) > does not render faces that are culled
-            rgb=plot_rgb_option,  # True > plot array values as RGB(A) colors
-            categories=False,
-            # True > number of unique values in the scalar used as 'n_colors' argument
-            use_transparency=False,
-            # _______________________ invert the opacity mapping as transparency mapping
-            below_color=None,
-            # solid color for values below the scalars range in 'clim'
-            above_color=None,
-            # solid color for values above the scalars range in 'clim'
-            annotations=None,
-            # dictionary of annotations for scale bar withor 'points'h keys = float values and values = string annotations
-            pickable=pickable,  # bool
-            preference="point",
-            log_scale=False,
-        )
-        z_slice.SetVisibility(visible)
-        combined_assembly.AddPart(z_slice)
+            cutter.SetCutFunction(plane)
+            cutter.SetInputData(vtk_grid)
+            cutter.Update()
+            slices = cutter.GetOutput()
 
-        if not visible:
-            self.plotter.clear()
-        return combined_assembly
+        elif section_type == 'Xline':
+            normals = [0, 1, 0]
+            center = vtk_grid.center
+            plane = vtkPlane()
+            plane.SetNormal(normals)
+            plane.SetOrigin(center)
+
+            cutter.SetCutFunction(plane)
+            cutter.SetInputData(vtk_grid)
+            cutter.Update()
+            slices = cutter.GetOutput()
+        elif section_type == 'Z Slice':
+            normals = [0, 0, 1]
+            center = vtk_grid.center
+            plane = vtkPlane()
+            plane.SetNormal(normals)
+            plane.SetOrigin(center)
+
+            cutter.SetCutFunction(plane)
+            cutter.SetInputData(vtk_grid)
+            cutter.Update()
+            slices = cutter.GetOutput()
+        if slices:
+            # Define a unique identifier for the slice
+            slice_uid = f"{uid}_{section_type}"
+            slice_name = f"{section_type} of {uid}"
+
+            # Plot the slice
+            slice_actor = self.plot_seismics(uid=slice_uid, plot_entity=slices, section_type=section_type)
+
+            # Update actors DataFrame (assuming self.actors_df exists and is the correct DataFrame for tracking actors)
+            self.actors_df = self.actors_df.append({
+                'uid': slice_uid,
+                'actor': slice_actor,
+                'show': True,  # Or use the 'visible' variable if it's meant to control visibility
+                'collection': 'seismic',
+                'properties_names': ['intensity'],  # Adjust based on actual properties of the slice
+            }, ignore_index=True)
+
+            # Update Mesh3DCollection with new slice entity
+            mesh3d_entity_dict = {
+                'uid': slice_uid,
+                'name': slice_name,
+                'mesh3d_type': 'seismic_slice',
+                'properties_names': ['intensity'],  # Adjust as necessary
+                'vtk_obj': slices,  # Store the vtk object of the slice
+            }
+            self.parent.mesh3d_coll.add_entity_from_dict(mesh3d_entity_dict)
+
+        elif slices:
+            self.plot_seismics(uid=f'{uid}_Inline',plot_entity=slices, section_type='Inline')
+        else:
+            print(f"Failed to create orthogonal slices for section type: {section_type}")
+
+    def retrieve_vtkStructuredGrid(self, uid):
+
+        # [gabriele] This is redundant, there is already the get_uid_vtk_obj method in mesh3d_collection
+
+        # Attempt to retrieve the vtkStructuredGrid object using the UID
+        vtk_grid = self.parent.mesh3d_coll.df.loc[self.parent.mesh3d_coll.df['uid'] == uid, 'vtk_obj'].values[0]
+
+        if isinstance(vtk_grid, Seismics):
+            return vtk_grid
+        else:
+            print(f"The object retrieved is not a vtkStructuredGrid: {type(vtk_grid)}")
+            return None
+        # try:
+        #     vtk_grid = self.parent.mesh3d_coll.df.loc[self.parent.mesh3d_coll.df['uid'] == uid, 'vtk_obj']
+        #     print(vtk_grid)
+        #
+        #     if isinstance(vtk_grid, pv.core.pointset.StructuredGrid):
+        #         return vtk_grid
+        #     else:
+        #         print(f"The object retrieved is not a vtkStructuredGrid: {type(vtk_grid)}")
+        #         return None
+        # except IndexError:
+        #     print(f"No entry found in DataFrame for UID: {uid}")
+        #     return None
+        # except Exception as e:
+        #     print(f"An error occurred: {e}")
+        #     return None
+
+    def get_uid_by_name(self, section_name):
+
+        # [gabriele] This can be put in the mesh3d_collection
+        """
+        Retrieve the UID of a seismic section based on its name.
+        It's assumed that self.parent has access to mesh3d_coll, which contains a DataFrame.
+        """
+        # Ensure mesh3d_coll is correctly referenced and contains the DataFrame
+        if hasattr(self.parent, 'mesh3d_coll') and hasattr(self.parent.mesh3d_coll, 'df'):
+            # Output the DataFrame for debugging
+            # print(self.parent.mesh3d_coll.df)
+
+            # Output the section name for debugging
+            # print(f"Searching for section name: {section_name}")
+
+            # Filter the DataFrame for rows where the 'name' matches section_name
+            filtered_df = self.parent.mesh3d_coll.df[
+                self.parent.mesh3d_coll.df['name'].str.strip() == section_name.strip()]
+
+            # Output the filtered DataFrame for debugging
+            # print(filtered_df)
+
+            if not filtered_df.empty:
+                # Return the 'uid' of the first matching row
+                return filtered_df.iloc[0]['uid']
+        else:
+            print("mesh3d_coll or its DataFrame does not exist or is not accessible.")
+
+        return None
+
+    def manage_section(self, action, section_name, section_type=None):
+
+        # [gabriele] this should go in the SectionManagerDialog class
+
+        # ... (existing code)
+        mesh3d_collection = self.mesh3d_collection
+        # print("Before managing section, DataFrame state:")
+        # print(mesh3d_collection.df)  # Corrected access to the DataFrame
+        if action == 'add':
+            # Logic to add a new section
+            uid = self.get_uid_by_name(section_name)
+            if uid:
+                # Check if we are adding an orthogonal slice
+                print(section_type)
+                if section_type in ['Inline', 'Xline', 'Z Slice']:
+                    self.addOrthogonalSlices(uid, section_type)
+                else:
+                    # For other types, use existing logic
+                    self.plot_seismics(uid=uid, section_type=section_type)
+                # Refresh the display, update UI, etc.
+                # self.refresh_display()
+            else:
+                print(f"Section {section_name} not found, cannot add.")
+
+        elif action == 'remove':
+            # Logic to remove a section
+            uid = self.get_uid_by_name(section_name)
+            if uid:
+                self.remove_seismic_section(uid)
+                # Refresh the display, update UI, etc.
+                # self.refresh_display()
+            else:
+                print(f"Section {section_name} not found, cannot remove.")
+
+    def plot_seismics(
+        self,
+        uid=None,
+        plot_entity=None,
+        color_RGB=None,
+        show_property=None,
+        show_scalar_bar=None,
+        color_bar_range=None,
+        show_property_title=None,
+        x_slice_location=None,
+        y_slice_location=None,
+        z_slice_location=None,
+        line_thick=None,
+        plot_texture_option=None,
+        plot_rgb_option=None,
+        visible=None,
+        style="wireframe",
+        point_size=None,
+        points_as_spheres=False,
+        render_lines_as_tubes=False,
+        pickable=True,
+        opacity=1.0,
+        smooth_shading=False,
+        section_type=None,  # New parameter for orthogonal slices
+    ):
+        # Visualization arguments for slices
+        dargs = {
+            'color': color_RGB if color_RGB else 'white',
+            'line_width': line_thick,
+            'opacity': opacity,
+            'style': style,
+            # Additional visualization arguments as needed
+        }
+
+        # Debug print to check the initial state of plot_entity
+        # print(f"Initial plot_entity type: {type(plot_entity)}, provided section_type: {section_type}")
+        print(plot_entity)
+        if plot_entity is None:
+            print("No plot entity provided at all.")
+            return
+
+
+
+        # Determine if plot_entity is for slicing or the main mesh
+        if section_type is None:
+            # Assuming main mesh visualization has no section_type
+            if hasattr(plot_entity, 'frame'):
+                print("Wrapping plot_entity.frame as vtk grid for main mesh visualization.")
+                vtk_grid = pv.wrap(plot_entity.frame)
+            else:
+                print("Warning: plot_entity does not have a 'frame' attribute. Unable to wrap as vtk grid.")
+                return
+        else:
+            # For orthogonal slices, use plot_entity directly
+            print("Using plot_entity directly for slicing.")
+            vtk_grid = plot_entity  # Assuming plot_entity is a PyVista-compatible object
+
+        if vtk_grid is None:
+            print("Failed to prepare vtk_grid from plot_entity.")
+            return
+
+        # Perform visualization based on section type
+        if section_type:
+            dargs['style'] = 'surface'
+            # print(f"Performing {section_type} on vtk_grid.")
+            # slices = None
+            # if section_type == 'x_slice':
+            #     slices = vtk_grid.slice_orthogonal(x=x_slice_location)
+            # elif section_type == 'y_slice':
+            #     slices = vtk_grid.slice_orthogonal(y=y_slice_location)
+            # elif section_type == 'z_plane':
+            #     slices = vtk_grid.slice_orthogonal(z=z_slice_location)
+
+            mesh_actor = self.plotter.add_mesh(vtk_grid, **dargs)
+        else:
+            print("Visualizing main mesh.")
+            mesh_actor = self.plotter.add_mesh(vtk_grid, **dargs)
+
+        if visible is not None and mesh_actor is not None:
+            mesh_actor.SetVisibility(bool(visible))
+
+        return mesh_actor
 
         # slice_actors.append()  # X-axis
 
@@ -10751,6 +10774,7 @@ class ViewStereoplot(BaseView):
         self.TopologyTreeWidget.expandAll()
 
     def set_actor_visible(self, uid=None, visible=None):
+
         # print(self.actors_df)
         """Set actor uid visible or invisible (visible = True or False)"""
         if isinstance(

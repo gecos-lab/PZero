@@ -6,6 +6,7 @@ from difflib import SequenceMatcher
 from os import path as os_path
 
 from PyQt5.QtCore import QEventLoop, Qt, QAbstractTableModel
+from PyQt5 import QtWidgets
 
 # from PyQt5.QtWidgets import QSpinBox, QDoubleSpinBox
 from PyQt5.QtGui import QColor
@@ -1143,3 +1144,71 @@ class PreviewWidget(QMainWindow, Ui_PreviewWindow):
 
         mod_mesh = self.function(self.parent, 0, *parameters)
         self.close()
+
+
+class SectionManagerDialog(QtWidgets.QDialog):
+    def __init__(self, existing_sections, view3D_instance, parent=None):
+        super(SectionManagerDialog, self).__init__(parent)
+        self.view3D_instance = view3D_instance  # Reference to the View3D instance
+        self.existing_sections = existing_sections
+        self.initUI()
+
+    def initUI(self):
+        self.setWindowTitle("Section Manager")
+        self.mainLayout = QtWidgets.QVBoxLayout(self)
+        self.infoLabel = QtWidgets.QLabel("Here you can manage your project sections:")
+        self.mainLayout.addWidget(self.infoLabel)
+
+        # Section Name ComboBox
+        self.sectionNameComboBox = QtWidgets.QComboBox()
+        self.sectionNameComboBox.addItems(self.existing_sections)  # Use the existing_sections from __init__
+        self.mainLayout.addWidget(self.sectionNameComboBox)
+
+        # Section Type ComboBox
+        self.sectionTypeComboBox = QtWidgets.QComboBox()
+        self.sectionTypeComboBox.addItems(["Inline", "Xline", "Z Slice"])  # Example types
+        self.mainLayout.addWidget(self.sectionTypeComboBox)
+
+        # Add buttons for managing sections
+        self.addButton = QtWidgets.QPushButton("Add Section")
+        self.removeButton = QtWidgets.QPushButton("Remove Section")
+        self.buttonsLayout = QtWidgets.QHBoxLayout()
+        self.buttonsLayout.addWidget(self.addButton)
+        self.buttonsLayout.addWidget(self.removeButton)
+        self.mainLayout.addLayout(self.buttonsLayout)
+
+        # Add standard dialog buttons
+        self.dialogButtons = QtWidgets.QDialogButtonBox(
+            QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel,
+            parent=self
+        )
+        self.mainLayout.addWidget(self.dialogButtons)
+
+        # Connect signals
+        self.dialogButtons.accepted.connect(self.accept)
+        self.dialogButtons.rejected.connect(self.reject)
+        self.addButton.clicked.connect(self.addSection)
+        self.removeButton.clicked.connect(self.removeSection)
+
+    def addSection(self):
+        selected_section = self.sectionNameComboBox.currentText()
+        selected_type = self.sectionTypeComboBox.currentText()
+        # Call the method in the View3D instance to add the section
+        self.view3D_instance.manage_section('add', selected_section, selected_type)
+
+    def removeSection(self):
+        selected_section = self.sectionNameComboBox.currentText()
+        # Notify the View3D instance to remove the section
+        self.view3D_instance.manage_section('remove', selected_section)
+# This would be called somewhere in your main application window code
+def openSectionManagerDialog(self, view3D_instance):
+    existing_sections = view3D_instance.getExistingSections()  # Replace with actual data
+    dialog = SectionManagerDialog(existing_sections, view3D_instance, self)
+    result = dialog.exec_()
+    if result == QtWidgets.QDialog.Accepted:
+        print("Dialog accepted, apply changes.")
+    else:
+        print("Dialog rejected, discard changes.")
+
+# This is just an example call, you'll want to integrate this into your application flow
+# openSectionManagerDialog(self)

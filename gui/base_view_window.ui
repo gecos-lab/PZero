@@ -103,15 +103,15 @@
         <enum>QFrame::Raised</enum>
        </property>
        <property name="currentIndex">
-        <number>0</number>
+        <number>4</number>
        </property>
        <widget class="QWidget" name="GeologyTreePage">
         <property name="geometry">
          <rect>
           <x>0</x>
           <y>0</y>
-          <width>328</width>
-          <height>272</height>
+          <width>274</width>
+          <height>384</height>
          </rect>
         </property>
         <property name="sizePolicy">
@@ -176,8 +176,8 @@
          <rect>
           <x>0</x>
           <y>0</y>
-          <width>107</width>
-          <height>107</height>
+          <width>274</width>
+          <height>384</height>
          </rect>
         </property>
         <property name="sizePolicy">
@@ -236,8 +236,8 @@
          <rect>
           <x>0</x>
           <y>0</y>
-          <width>107</width>
-          <height>107</height>
+          <width>274</width>
+          <height>384</height>
          </rect>
         </property>
         <property name="sizePolicy">
@@ -311,8 +311,8 @@
          <rect>
           <x>0</x>
           <y>0</y>
-          <width>107</width>
-          <height>107</height>
+          <width>274</width>
+          <height>384</height>
          </rect>
         </property>
         <property name="sizePolicy">
@@ -354,8 +354,8 @@
          <rect>
           <x>0</x>
           <y>0</y>
-          <width>107</width>
-          <height>107</height>
+          <width>274</width>
+          <height>384</height>
          </rect>
         </property>
         <property name="sizePolicy">
@@ -402,6 +402,9 @@
            </property>
           </widget>
          </item>
+         <item>
+          <widget class="QSpinBox" name="spinBox"/>
+         </item>
         </layout>
        </widget>
        <widget class="QWidget" name="DOMsPage">
@@ -409,8 +412,8 @@
          <rect>
           <x>0</x>
           <y>0</y>
-          <width>107</width>
-          <height>107</height>
+          <width>274</width>
+          <height>384</height>
          </rect>
         </property>
         <property name="sizePolicy">
@@ -464,8 +467,8 @@
          <rect>
           <x>0</x>
           <y>0</y>
-          <width>107</width>
-          <height>107</height>
+          <width>274</width>
+          <height>384</height>
          </rect>
         </property>
         <attribute name="label">
@@ -488,8 +491,8 @@
          <rect>
           <x>0</x>
           <y>0</y>
-          <width>107</width>
-          <height>107</height>
+          <width>274</width>
+          <height>384</height>
          </rect>
         </property>
         <attribute name="label">
@@ -512,8 +515,8 @@
          <rect>
           <x>0</x>
           <y>0</y>
-          <width>107</width>
-          <height>107</height>
+          <width>274</width>
+          <height>384</height>
          </rect>
         </property>
         <attribute name="label">
@@ -536,8 +539,8 @@
          <rect>
           <x>0</x>
           <y>0</y>
-          <width>107</width>
-          <height>107</height>
+          <width>274</width>
+          <height>384</height>
          </rect>
         </property>
         <attribute name="label">
@@ -560,8 +563,8 @@
          <rect>
           <x>0</x>
           <y>0</y>
-          <width>107</width>
-          <height>107</height>
+          <width>274</width>
+          <height>384</height>
          </rect>
         </property>
         <attribute name="label">
@@ -584,8 +587,8 @@
          <rect>
           <x>0</x>
           <y>0</y>
-          <width>107</width>
-          <height>107</height>
+          <width>274</width>
+          <height>384</height>
          </rect>
         </property>
         <property name="sizePolicy">
@@ -794,6 +797,7 @@
     <addaction name="actionCalibration"/>
     <addaction name="actionManual_picking"/>
     <addaction name="menuAutomatic_segmentation"/>
+    <addaction name="actionSecondary_Window"/>
    </widget>
    <addaction name="menuBaseView"/>
    <addaction name="menuWindow"/>
@@ -964,6 +968,11 @@
   <action name="actionManualBoth">
    <property name="text">
     <string>Both</string>
+   </property>
+  </action>
+  <action name="actionSecondary_Window">
+   <property name="text">
+    <string>Section Manager</string>
    </property>
   </action>
  </widget>
