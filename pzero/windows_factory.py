@@ -8049,6 +8049,42 @@ class View3D(BaseView):
             else:
                 print(f"Section {section_name} not found, cannot remove.")
 
+    def remove_seismic_section(self, uid, section_type=None):
+        """Removes orthogonal slices of a specified type associated with the given mesh UID.
+
+        Args:
+            uid (str): The unique identifier of the seismic section from which slices are to be removed.
+            section_type (str, optional): The type of slice to remove ('Inline', 'Xline', 'Z Slice'). If None, removes all slices associated with the UID.
+        """
+
+        def is_target_slice(slice_uid):
+            """Helper to determine if a slice UID belongs to the given mesh UID and matches the specified section type"""
+            if section_type:
+                # Check if slice UID matches the pattern for the specified section type
+                return slice_uid.startswith(f"{uid}_{section_type}") and slice_uid != uid
+            else:
+                # If no section type specified, match any slice associated with the mesh UID
+                return slice_uid.startswith(uid) and slice_uid != uid
+
+        # Filter actors_df for target slice actors to remove
+        target_actors_to_remove = self.actors_df[self.actors_df["uid"].apply(is_target_slice)]
+
+        # Remove target slice actors from the Plotter
+        for index, row in target_actors_to_remove.iterrows():
+            actor = row['actor']
+            self.plotter.remove_actor(actor)
+
+        # Remove target slice entries from the actors DataFrame
+        self.actors_df.drop(target_actors_to_remove.index, inplace=True)
+
+        # Additionally, remove entities from Mesh3DCollection
+        for slice_uid in target_actors_to_remove["uid"]:
+            self.parent.mesh3d_coll.remove_entity(slice_uid)
+
+        # Update UI and emit signals
+        self.parent.prop_legend.update_widget(self.parent)
+        self.parent.mesh3d_removed_signal.emit(list(target_actors_to_remove["uid"]))
+
     def plot_seismics(
         self,
         uid=None,
