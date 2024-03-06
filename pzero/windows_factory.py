@@ -7918,6 +7918,10 @@ class View3D(BaseView):
             cutter.SetInputData(vtk_grid)
             cutter.Update()
             slices = cutter.GetOutput()
+
+        slices = TriSurf()
+        slices.ShallowCopy(cutter.GetOutput())
+
         if slices:
             # Define a unique identifier for the slice
             slice_uid = f"{uid}_{section_type}"
@@ -7931,8 +7935,9 @@ class View3D(BaseView):
                 'uid': slice_uid,
                 'actor': slice_actor,
                 'show': True,  # Or use the 'visible' variable if it's meant to control visibility
-                'collection': 'seismic',
-                'properties_names': ['intensity'],  # Adjust based on actual properties of the slice
+                'collection': 'mesh3d_coll',
+                'properties_names': ['intensity'],
+                "properties_components": [1],# Adjust based on actual properties of the slice
             }, ignore_index=True)
 
             # Update Mesh3DCollection with new slice entity
@@ -7940,7 +7945,9 @@ class View3D(BaseView):
                 'uid': slice_uid,
                 'name': slice_name,
                 'mesh3d_type': 'seismic_slice',
-                'properties_names': ['intensity'],  # Adjust as necessary
+                'properties_names': ['intensity'],
+                "properties_components": [1],
+                "x_section": "",# Adjust as necessary
                 'vtk_obj': slices,  # Store the vtk object of the slice
             }
             self.parent.mesh3d_coll.add_entity_from_dict(mesh3d_entity_dict)
@@ -8078,7 +8085,7 @@ class View3D(BaseView):
 
         # Debug print to check the initial state of plot_entity
         # print(f"Initial plot_entity type: {type(plot_entity)}, provided section_type: {section_type}")
-        print(plot_entity)
+        # print(plot_entity)
         if plot_entity is None:
             print("No plot entity provided at all.")
             return
@@ -8089,14 +8096,14 @@ class View3D(BaseView):
         if section_type is None:
             # Assuming main mesh visualization has no section_type
             if hasattr(plot_entity, 'frame'):
-                print("Wrapping plot_entity.frame as vtk grid for main mesh visualization.")
+                # print("Wrapping plot_entity.frame as vtk grid for main mesh visualization.")
                 vtk_grid = pv.wrap(plot_entity.frame)
             else:
                 print("Warning: plot_entity does not have a 'frame' attribute. Unable to wrap as vtk grid.")
                 return
         else:
             # For orthogonal slices, use plot_entity directly
-            print("Using plot_entity directly for slicing.")
+            # print("Using plot_entity directly for slicing.")
             vtk_grid = plot_entity  # Assuming plot_entity is a PyVista-compatible object
 
         if vtk_grid is None:
@@ -8117,7 +8124,7 @@ class View3D(BaseView):
 
             mesh_actor = self.plotter.add_mesh(vtk_grid, **dargs)
         else:
-            print("Visualizing main mesh.")
+            # print("Visualizing main mesh.")
             mesh_actor = self.plotter.add_mesh(vtk_grid, **dargs)
 
         if visible is not None and mesh_actor is not None:

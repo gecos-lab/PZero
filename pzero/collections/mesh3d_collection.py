@@ -88,8 +88,8 @@ class Mesh3DCollection(QAbstractTableModel):
         self.parent.mesh3d_added_signal.emit(
             [entity_dict["uid"]]
         )  # a list of uids is emitted, even if the entity is just one
-        print(f"Entity {entity_dict['uid']} added. Current DataFrame state:")
-        print(self.df)
+        #print(f"Entity {entity_dict['uid']} added. Current DataFrame state:")
+        #print(self.df)
         return entity_dict["uid"]
 
     def remove_entity(self, uid=None):
