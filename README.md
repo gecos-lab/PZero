@@ -23,6 +23,7 @@ The ***PZero*** developers are (or have been):
 * Riccardo Monti (since November 2023)
 * Ivano Brunet (since March 2024)
 * Francesco Visentin (since March 2024)
+* Waqas Hussain (since November 2023)
 
 ***PZero*** © 2020 by Andrea Bistacchi, released under [GNU AGPLv3 license](LICENSE.txt).
 
