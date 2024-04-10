@@ -63,7 +63,7 @@ We have uploaded some test project on public repositories:
 \
 \
 \
-<img src='https://github.com/gecos-lab/PZero/images/pzero_QR.png' width='200'>
+<img src='https://github.com/gecos-lab/PZero/blob/master/images/pzero_QR.png' width='200'>
 
 
 
