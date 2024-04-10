@@ -57,6 +57,9 @@ We have uploaded some test project on public repositories:
 [PZero-test Simple-synthetic](https://github.com/andrea-bistacchi/PZero-test-Simple-synthetic)
 
 [PZero-test Llyn-Padarn](https://github.com/andrea-bistacchi/PZero-test-Llyn-Padarn)
-
+\
+\
+\
+<img src='https://github.com/gecos-lab/PZero/images/pzero_QR.png' width='200'>
 
 
