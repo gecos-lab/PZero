@@ -6422,7 +6422,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[
                 0
             ].GetProperty().SetPointSize(point_size)
-         else:
+        else:
             return
 
     def set_actor_visible(self, uid=None, visible=None, name=None):
