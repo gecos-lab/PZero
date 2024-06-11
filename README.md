@@ -52,8 +52,8 @@ We have uploaded some test project on public repositories:
 
 [PZero-test Llyn-Padarn](https://github.com/gecos-lab/PZero-test-Llyn-Padarn)
 
-\
-\
-\
+<br />
+<br />
+<br />
 
 <img src='https://github.com/gecos-lab/PZero/blob/master/images/pzero_QR.png' width='200'>
