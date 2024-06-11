@@ -55,13 +55,5 @@ We have uploaded some test project on public repositories:
 \
 \
 \
-<<<<<<< HEAD
 
 <img src='https://github.com/gecos-lab/PZero/images/pzero_QR.png' width='200'>
-=======
-<img src='https://github.com/gecos-lab/PZero/blob/master/images/pzero_QR.png' width='200'>
-
-
->>>>>>> 1af4f74cc7ed5e2b973979eddb7b62566364f944
-
-
