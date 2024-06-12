@@ -26,6 +26,7 @@ class WellCollection(QAbstractTableModel):
         "properties_components": [],
         "properties_types": [],
         "markers": [],
+        "x_section": [], # this is the uid of the cross section for "XsVertexSet", "XsPolyLine", and "XsImage", empty for all others
         "vtk_obj": None,
     }
 
@@ -37,7 +38,6 @@ class WellCollection(QAbstractTableModel):
         "properties_types": list,
         "markers": list,
         "x_section": str,
-        # this is the uid of the cross section for "XsVertexSet", "XsPolyLine", and "XsImage", empty for all others
         "vtk_obj": object,
     }
 
