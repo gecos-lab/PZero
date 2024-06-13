@@ -27,7 +27,7 @@ from numpy.linalg import norm as np_linalg_norm
 from pyvista import Plotter  # this should be removed
 from pyvista import PolyData as pv_PolyData  # this should be removed
 from pyvista import Spline  # this should be removed
-from pyvista import helpers as pv_helpers  # very useful. Can be used when dsa fails
+from pyvista import convert_array as pv_convert_array  # very useful. Can be used when dsa fails
 from pyvista import image_to_texture as pv_image_to_texture
 from pyvista import wrap as pv_wrap
 from pyvista.core.filters import _update_alg
@@ -573,7 +573,7 @@ class PolyData(vtkPolyData):
         """[Gabriele] for field data pv_helpers is useful since we can have arrays of strings
         that are not well managed by dsa"""
 
-        arr = pv_helpers.convert_array(data, name=name)
+        arr = pv_convert_array(data, name=name)
         WrapDataObject(self).GetFieldData().AddArray(arr)
 
     def get_field_data_keys(self):
