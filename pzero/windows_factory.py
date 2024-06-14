@@ -141,16 +141,14 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         # actor = the actor
         # show = a boolean to show (True) or hide (false) the actor
         # collection = the original collection of the actor, e.g. geol_coll, xsect_coll, etc.
-        self.actors_df = pd_DataFrame(columns=["uid", "actor", "show", "collection"])
+        # show_prop = currently shown property
+        self.actors_df = pd_DataFrame(columns=["uid", "actor", "show", "collection","show_prop"])
         # Create list of selected uid's
         # _____________________________________________
-        # SEE IF IT IA A GOOD IDEA TO USE A selected COLUMN IN self.actors_df
+        # SEE IF IT IA A GOOD IDEA TO USE INSTEAD A NEW "selected" COLUMN IN self.actors_df
         # _____________________________________________
         # Create empty list of selected uids
         self.selected_uids = []
-        # Set self.this_x_section_uid = None for all views except X-section
-        # not elegant but works and reduces a lot of code repetition and reimplementation
-        # for x-sections. try finding a better solution in the future
         # Set view_filter attribute to a string indicating that all entities must be selected (i.e. no filtering).
         # Somebody says 'ilevel_0 in ilevel_0' is more robust than 'index == index', but it seems OK.
         if not hasattr(self, 'view_filter'):
@@ -335,7 +333,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                 updated_list=updated_list
             )
         )
-        # COnnect BOUNDARY lamda functions and signals
+        # Connect BOUNDARY lamda functions and signals
         self.parent.boundary_added_signal.connect(self.upd_list_bound_add)
         self.parent.boundary_removed_signal.connect(self.upd_list_bound_rm)
         self.parent.boundary_geom_modified_signal.connect(self.upd_list_bound_geo_mod)
@@ -715,7 +713,11 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
     # Methods used to build and update the GEOLOGY and TOPOLOGY trees
 
     def disconnect_all_signals(self):
-        """Help to disconnect all windows signals correctly, if this method is removed PZero will crash"""
+        """Used to disconnect all windows signals correctly, when a window is closed.
+        If this method is removed PZero will crash when closing a window.
+        If new signals are added, they must be listed also here.
+        It would be nicer to keep a list of signals and then disconnect all signals in
+        the list, but we have not find a way to do this at the moment."""
         # Disconnect GEOLOGY signals
         self.parent.geology_added_signal.disconnect(self.upd_list_geo_add)
         self.parent.geology_removed_signal.disconnect(self.upd_list_geo_rm)
@@ -2103,30 +2105,16 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
 
     def toggle_property_mesh3d(self):
         """Method to toggle the texture shown by a Mesh3D that is already present in the view."""
-        """Collect values from combo box."""
+        # Collect values from combo box.
         combo = self.sender()
         show_property = combo.currentText()
         uid = combo.uid
         show = self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]
-        collection = self.actors_df.loc[
-            self.actors_df["uid"] == uid, "collection"
-        ].values[0]
-        """This removes the previous copy of the actor with the same uid, then calls the viewer-specific function that shows an actor with a property.
-        IN THE FUTURE see if it is possible and more efficient to keep the actor and just change the property shown."""
-        self.remove_actor_in_view(uid=uid)
-        this_actor = self.show_actor_with_property(
-            uid=uid, collection=collection, show_property=show_property, visible=show
-        )
-        self.actors_df = self.actors_df.append(
-            {
-                "uid": uid,
-                "actor": this_actor,
-                "show": show,
-                "collection": collection,
-                "show_prop": show_property,
-            },
-            ignore_index=True,
-        )  # self.set_actor_visible(uid=uid, visible=show)
+        collection = self.actors_df.loc[self.actors_df["uid"] == uid, "collection"].values[0]
+        # This replaces the previous copy of the actor with the same uid, and updates the actors dataframe.
+        # See issue #33 for a discussion on actors replacement by the PyVista add_mesh and add_volume methods.
+        this_actor = self.show_actor_with_property(uid=uid, collection=collection, show_property=show_property, visible=show)
+        self.actors_df.loc[self.actors_df["uid"] == uid, ["show_prop"]] = show_property
 
     # Methods used to build and update the DOM table
 
@@ -2314,54 +2302,27 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
 
     def toggle_property_texture(self):
         """Method to toggle the texture shown by a DEM that is already present in the view."""
-        """Collect values from combo box."""
-
+        # Collect values from combo box and actor's dataframe.
         combo = self.sender()
         uid = combo.uid
+        show = self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]
+        collection = self.actors_df.loc[self.actors_df["uid"] == uid, "collection"].values[0]
         property_texture_id = combo.currentIndex()  # 0 means "none"
         property_texture_list = combo.texture_uid_list
         property_texture_uid = property_texture_list[property_texture_id]
-        """Set the active texture coordinates."""
-        if (
-                property_texture_uid
-                in self.parent.dom_coll.df.loc[
-            self.parent.dom_coll.df["uid"] == uid, "texture_uids"
-        ].values[0]
-        ):
-            self.parent.dom_coll.set_active_texture_on_dom(
-                dom_uid=uid, map_image_uid=property_texture_uid
-            )
-        """Show DOM with current texture"""
-        show = self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]
-        collection = self.actors_df.loc[
-            self.actors_df["uid"] == uid, "collection"
-        ].values[0]
-        """This removes the previous copy of the actor with the same uid, then calls the viewer-specific function that shows an actor with a property.
-        IN THE FUTURE see if it is possible and more efficient to keep the actor and just change the property shown."""
-
-        # [Gabriele] Remove the previous scalar bar if present
+        # Set the active texture coordinates.
+        if property_texture_uid in self.parent.dom_coll.df.loc[self.parent.dom_coll.df["uid"] == uid, "texture_uids"].values[0]:
+            self.parent.dom_coll.set_active_texture_on_dom(dom_uid=uid, map_image_uid=property_texture_uid)
+        # Remove the previous scalar bar if present
         if hasattr(self, "plotter"):
             try:
                 self.plotter.remove_scalar_bar()
             except IndexError:
                 pass
-        self.remove_actor_in_view(uid=uid)
-        this_actor = self.show_actor_with_property(
-            uid=uid,
-            collection=collection,
-            show_property=property_texture_uid,
-            visible=show,
-        )
-        self.actors_df = self.actors_df.append(
-            {
-                "uid": uid,
-                "actor": this_actor,
-                "show": show,
-                "collection": collection,
-                "show_prop": property_texture_uid,
-            },
-            ignore_index=True,
-        )  # self.set_actor_visible(uid=uid, visible=show)
+        # This replaces the previous copy of the actor with the same uid, and updates the actors dataframe.
+        # See issue #33 for a discussion on actors replacement by the PyVista add_mesh and add_volume methods.
+        this_actor = self.show_actor_with_property(uid=uid, collection=collection, show_property=property_texture_uid, visible=show)
+        self.actors_df.loc[self.actors_df["uid"] == uid, ["show_prop"]] = property_texture_uid
 
     # Methods used to build and update the IMAGE table
 
@@ -2481,30 +2442,17 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
 
     def toggle_property_image(self):
         """Method to toggle the property shown by an image that is already present in the view."""
-        """Collect values from combo box."""
+        # Collect values from combo box.
         combo = self.sender()
         show_property = combo.currentText()
         uid = combo.uid
         show = self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]
-        collection = self.actors_df.loc[
-            self.actors_df["uid"] == uid, "collection"
-        ].values[0]
-        """This removes the previous copy of the actor with the same uid, then calls the viewer-specific function that shows an actor with a property.
-        IN THE FUTURE see if it is possible and more efficient to keep the actor and just change the property shown."""
-        self.remove_actor_in_view(uid=uid)
-        this_actor = self.show_actor_with_property(
-            uid=uid, collection=collection, show_property=show_property, visible=show
-        )
-        self.actors_df = self.actors_df.append(
-            {
-                "uid": uid,
-                "actor": this_actor,
-                "show": show,
-                "collection": collection,
-                "show_prop": show_property,
-            },
-            ignore_index=True,
-        )  # self.set_actor_visible(uid=uid, visible=show)
+        collection = self.actors_df.loc[self.actors_df["uid"] == uid, "collection"].values[0]
+        # This replaces the previous copy of the actor with the same uid, and updates the actors dataframe.
+        # See issue #33 for a discussion on actors replacement by the PyVista add_mesh and add_volume methods.
+        this_actor = self.show_actor_with_property(uid=uid, collection=collection, show_property=show_property, visible=show)
+        self.actors_df.loc[self.actors_df["uid"] == uid, ["show_prop"]] = show_property
+        print(f"TEST uid {uid} property {show_property}")
 
     # Methods used to build and update the WELLS table
 
@@ -4460,82 +4408,42 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         )
 
     def geology_geom_modified_update_views(self, updated_list=None):
-        """This is called when an entity geometry or topology is modified (i.e. the vtk object is modified).
-        Disconnect signals to geology and topology tree, if they are set, to avoid a nasty loop
-        that disrupts the trees, then they are reconnected when the trees are rebuilt"""
-        self.GeologyTreeWidget.itemChanged.disconnect()
-        self.TopologyTreeWidget.itemChanged.disconnect()
+        """This is called when an entity geometry or topology is modified (i.e. the vtk object is modified)."""
+        # In a previous version of this method, signals have to disconnected, but this seems no longer required.
+        # # Disconnect signals to geology and topology tree, if they are set, to avoid a nasty loop
+        # # that disrupts the trees, then they are reconnected when the trees are rebuilt
+        # self.GeologyTreeWidget.itemChanged.disconnect()
+        # self.TopologyTreeWidget.itemChanged.disconnect()
         for uid in updated_list:
-            """This calls the viewer-specific function that shows an actor with property = None.
-            IN THE FUTURE update required to keep the current property shown.____________
-            """
-            self.remove_actor_in_view(uid=uid)
-            this_actor = self.show_actor_with_property(
-                uid=uid, collection="geol_coll", show_property=None, visible=True
-            )
-            self.actors_df = self.actors_df.append(
-                {
-                    "uid": uid,
-                    "actor": this_actor,
-                    "show": True,
-                    "collection": "geol_coll",
-                    "show_prop": None,
-                },
-                ignore_index=True,
-            )  # self.actors_df.loc[self.actors_df["uid"] == uid, 'actor'] = this_actor
-        """Re-connect signals."""
-        self.GeologyTreeWidget.itemChanged.connect(
-            self.toggle_geology_topology_visibility
-        )
-        self.TopologyTreeWidget.itemChanged.connect(
-            self.toggle_geology_topology_visibility
-        )
+            # This replaces the previous copy of the actor with the same uid, and updates the actors dataframe.
+            # See issue #33 for a discussion on actors replacement by the PyVista add_mesh and add_volume methods.
+            show = self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]
+            show_property = self.actors_df.loc[self.actors_df["uid"] == uid, "show_prop"].values[0]
+            this_actor = self.show_actor_with_property(uid=uid, collection="geol_coll", show_property=show_property, visible=show)
+        # # Re-connect signals.
+        # self.GeologyTreeWidget.itemChanged.connect(self.toggle_geology_topology_visibility)
+        # self.TopologyTreeWidget.itemChanged.connect(self.toggle_geology_topology_visibility)
 
     def geology_data_keys_modified_update_views(self, updated_list=None):
-        """This is called when entity point or cell data are modified.
+        """This is called when point or cell data (properties) are modified.
         Disconnect signals to geology and topology tree, if they are set, to avoid a nasty loop
         that disrupts the trees, then they are reconnected when the trees are rebuilt"""
         self.GeologyTreeWidget.itemChanged.disconnect()
         self.TopologyTreeWidget.itemChanged.disconnect()
         for uid in updated_list:
-            if (
-                    not self.actors_df.loc[
-                            self.actors_df["uid"] == uid, "show_prop"
-                        ].to_list()
-                        == []
-            ):
-                if not self.actors_df.loc[
-                           self.actors_df["uid"] == uid, "show_prop"
-                       ].values[0] in self.parent.geol_coll.get_uid_properties_names(uid):
-                    show = self.actors_df.loc[
-                        self.actors_df["uid"] == uid, "show"
-                    ].to_list()[0]
-                    self.remove_actor_in_view(uid=uid)
-                    this_actor = self.show_actor_with_property(
-                        uid=uid,
-                        collection="geol_coll",
-                        show_property=None,
-                        visible=show,
-                    )
-                    self.actors_df = self.actors_df.append(
-                        {
-                            "uid": uid,
-                            "actor": this_actor,
-                            "show": show,
-                            "collection": "geol_coll",
-                            "show_prop": None,
-                        },
-                        ignore_index=True,
-                    )  # self.actors_df.loc[self.actors_df["uid"] == uid, 'actor'] = this_actor
+            if not self.actors_df.loc[self.actors_df["uid"] == uid, "show_prop"].to_list() == []:
+                if not self.actors_df.loc[self.actors_df["uid"] == uid, "show_prop"].values[0] in self.parent.geol_coll.get_uid_properties_names(uid):
+                    show = self.actors_df.loc[self.actors_df["uid"] == uid, "show"].to_list()[0]
+                    # This replaces the previous copy of the actor with the same uid, and updates the actors dataframe.
+                    # See issue #33 for a discussion on actors replacement by the PyVista add_mesh and add_volume methods.
+                    this_actor = self.show_actor_with_property(uid=uid, collection="geol_coll", show_property=None, visible=show)
+                    self.actors_df.loc[self.actors_df["uid"] == uid, ["show"]] = show
+                    # This rebuilds the trees to add/remove the properties that have been changed.
                     self.create_geology_tree()
                     self.create_topology_tree()
         """Re-connect signals."""
-        self.GeologyTreeWidget.itemChanged.connect(
-            self.toggle_geology_topology_visibility
-        )
-        self.TopologyTreeWidget.itemChanged.connect(
-            self.toggle_geology_topology_visibility
-        )
+        self.GeologyTreeWidget.itemChanged.connect(self.toggle_geology_topology_visibility)
+        self.TopologyTreeWidget.itemChanged.connect(self.toggle_geology_topology_visibility)
 
     def geology_data_val_modified_update_views(self, updated_list=None):
         """This is called when entity point or cell data are modified.
@@ -4698,23 +4606,12 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.XSectionTreeWidget.itemChanged.connect(self.toggle_xsection_visibility)
 
     def xsect_geom_modified_update_views(self, updated_list=None):
-        """This is called when an cross-section geometry is modified (i.e. the frame is modified).
-        Disconnect signals to xsect list, if they are set, then they are
-        reconnected when the list is rebuilt"""
-        self.XSectionTreeWidget.itemChanged.disconnect()
+        """This is called when a cross-section geometry is modified (i.e. the frame is modified)."""
         for uid in updated_list:
-            """This calls the viewer-specific function that shows an actor with property = None.
-            IN THE FUTURE update required to keep the current property shown.____________
-            """
-            self.remove_actor_in_view(uid=uid)
-            this_actor = self.show_actor_with_property(
-                uid=uid, collection="xsect_coll", show_property=None, visible=True
-            )
-            self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[
-                0
-            ] = this_actor
-        """Re-connect signals."""
-        self.XSectionTreeWidget.itemChanged.connect(self.toggle_xsection_visibility)
+            show = self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]
+            # This replaces the previous copy of the actor with the same uid, and updates the actors dataframe.
+            # See issue #33 for a discussion on actors replacement by the PyVista add_mesh and add_volume methods.
+            this_actor = self.show_actor_with_property(uid=uid, collection="xsect_coll", show_property=None, visible=show)
 
     def xsect_metadata_modified_update_views(self, updated_list=None):
         """This is called when the cross-section metadata are modified.
@@ -4812,28 +4709,12 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.BoundariesTableWidget.itemChanged.connect(self.toggle_boundary_visibility)
 
     def boundary_geom_modified_update_views(self, updated_list=None):
-        """This is called when an entity geometry or topology is modified (i.e. the vtk object is modified).
-        Disconnect signals to boundary list, if they are set, then they are
-        reconnected when the list is rebuilt"""
-        self.BoundariesTableWidget.itemChanged.disconnect()
+        """This is called when an entity geometry or topology is modified (i.e. the vtk object is modified)."""
         for uid in updated_list:
-            """This calls the viewer-specific function that shows an actor with property = None."""
-            self.remove_actor_in_view(uid=uid)
-            this_actor = self.show_actor_with_property(
-                uid=uid, collection="boundary_coll", show_property=None, visible=True
-            )
-            self.actors_df = self.actors_df.append(
-                {
-                    "uid": uid,
-                    "actor": this_actor,
-                    "show": True,
-                    "collection": "boundary_coll",
-                    "show_prop": None,
-                },
-                ignore_index=True,
-            )  # self.actors_df.loc[self.actors_df["uid"] == uid, 'actor'] = this_actor
-        """Re-connect signals."""
-        self.BoundariesTableWidget.itemChanged.connect(self.toggle_boundary_visibility)
+            show = self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]
+            # This replaces the previous copy of the actor with the same uid, and updates the actors dataframe.
+            # See issue #33 for a discussion on actors replacement by the PyVista add_mesh and add_volume methods.
+            this_actor = self.show_actor_with_property(uid=uid, collection="boundary_coll", show_property=None, visible=show)
 
     def boundary_metadata_modified_update_views(self, updated_list=None):
         """This is called when the boundary metadata are modified.
@@ -4931,40 +4812,17 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.Mesh3DTableWidget.itemChanged.connect(self.toggle_mesh3d_visibility)
 
     def mesh3d_data_keys_modified_update_views(self, updated_list=None):
-        """This is called when entity point or cell data are modified.
-        Disconnect signals to geology and topology tree, if they are set, to avoid a nasty loop
-        that disrupts the trees, then they are reconnected when the trees are rebuilt"""
+        """This is called when point or cell data (properties) are modified.
+        Disconnect signals to the mesh 3d tree, if they are set, to avoid a nasty loop
+        that disrupts the tree, then they are reconnected when the trees are rebuilt"""
         self.Mesh3DTableWidget.itemChanged.disconnect()
         for uid in updated_list:
-            if (
-                    not self.actors_df.loc[
-                            self.actors_df["uid"] == uid, "show_prop"
-                        ].to_list()
-                        == []
-            ):
-                if not self.actors_df.loc[
-                           self.actors_df["uid"] == uid, "show_prop"
-                       ].values[0] in self.parent.mesh3d_coll.get_uid_properties_names(uid):
-                    show = self.actors_df.loc[
-                        self.actors_df["uid"] == uid, "show"
-                    ].to_list()[0]
-                    self.remove_actor_in_view(uid=uid)
-                    this_actor = self.show_actor_with_property(
-                        uid=uid,
-                        collection="mesh3d_coll",
-                        show_property=None,
-                        visible=show,
-                    )
-                    self.actors_df = self.actors_df.append(
-                        {
-                            "uid": uid,
-                            "actor": this_actor,
-                            "show": show,
-                            "collection": "mesh3d_coll",
-                            "show_prop": None,
-                        },
-                        ignore_index=True,
-                    )  # self.actors_df.loc[self.actors_df["uid"] == uid, 'actor'] = this_actor
+            if not self.actors_df.loc[self.actors_df["uid"] == uid, "show_prop"].to_list() == []:
+                if not self.actors_df.loc[self.actors_df["uid"] == uid, "show_prop"].values[0] in self.parent.mesh3d_coll.get_uid_properties_names(uid):
+                    show = self.actors_df.loc[self.actors_df["uid"] == uid, "show"].to_list()[0]
+                    # This replaces the previous copy of the actor with the same uid, and updates the actors dataframe.
+                    # See issue #33 for a discussion on actors replacement by the PyVista add_mesh and add_volume methods.
+                    this_actor = self.show_actor_with_property(uid=uid, collection="mesh3d_coll", show_property=None, visible=show)
                     self.create_mesh3d_list()
         """Re-connect signals."""
         self.Mesh3DTableWidget.itemChanged.connect(self.toggle_dom_visibility)
@@ -5079,32 +4937,12 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         that disrupts the trees, then they are reconnected when the trees are rebuilt"""
         self.DOMsTableWidget.itemChanged.disconnect()
         for uid in updated_list:
-            if (
-                    not self.actors_df.loc[
-                            self.actors_df["uid"] == uid, "show_prop"
-                        ].to_list()
-                        == []
-            ):
-                if not self.actors_df.loc[
-                           self.actors_df["uid"] == uid, "show_prop"
-                       ].values[0] in self.parent.dom_coll.get_uid_properties_names(uid):
-                    show = self.actors_df.loc[
-                        self.actors_df["uid"] == uid, "show"
-                    ].to_list()[0]
-                    self.remove_actor_in_view(uid=uid)
-                    this_actor = self.show_actor_with_property(
-                        uid=uid, collection="dom_coll", show_property=None, visible=show
-                    )
-                    self.actors_df = self.actors_df.append(
-                        {
-                            "uid": uid,
-                            "actor": this_actor,
-                            "show": show,
-                            "collection": "dom_coll",
-                            "show_prop": None,
-                        },
-                        ignore_index=True,
-                    )  # self.actors_df.loc[self.actors_df["uid"] == uid, 'actor'] = this_actor
+            if not self.actors_df.loc[self.actors_df["uid"] == uid, "show_prop"].to_list() == []:
+                if not self.actors_df.loc[self.actors_df["uid"] == uid, "show_prop"].values[0] in self.parent.dom_coll.get_uid_properties_names(uid):
+                    show = self.actors_df.loc[self.actors_df["uid"] == uid, "show"].to_list()[0]
+                    # This replaces the previous copy of the actor with the same uid, and updates the actors dataframe.
+                    # See issue #33 for a discussion on actors replacement by the PyVista add_mesh and add_volume methods.
+                    this_actor = self.show_actor_with_property(uid=uid, collection="dom_coll", show_property=None, visible=show)
                     self.create_dom_list()
         """Re-connect signals."""
         self.DOMsTableWidget.itemChanged.connect(self.toggle_dom_visibility)
@@ -5287,8 +5125,8 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.WellsTreeWidget.itemChanged.connect(self.toggle_well_visibility)
 
     def well_removed_update_views(self, updated_list=None):
-        """This is called when an entity is removed from the geological collection.
-        Disconnect signals to geology and topology tree, if they are set, to avoid a nasty loop
+        """This is called when a well is removed from the wells collection.
+        Disconnect signals to well tree, if they are set, to avoid a nasty loop
         that disrupts the trees, then they are reconnected when the trees are rebuilt"""
         self.WellsTreeWidget.itemChanged.disconnect()
         for uid in updated_list:
@@ -5298,40 +5136,17 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.WellsTreeWidget.itemChanged.connect(self.toggle_well_visibility)
 
     def well_data_keys_modified_update_views(self, updated_list=None):
-        """This is called when entity point or cell data are modified.
+        """This is called when point or cell data (properties) are modified.
         Disconnect signals to geology and topology tree, if they are set, to avoid a nasty loop
         that disrupts the trees, then they are reconnected when the trees are rebuilt"""
         self.WellsTreeWidget.itemChanged.disconnect()
         for uid in updated_list:
-            if (
-                    not self.actors_df.loc[
-                            self.actors_df["uid"] == uid, "show_prop"
-                        ].to_list()
-                        == []
-            ):
-                if not self.actors_df.loc[
-                           self.actors_df["uid"] == uid, "show_prop"
-                       ].values[0] in self.parent.geol_coll.get_uid_properties_names(uid):
-                    show = self.actors_df.loc[
-                        self.actors_df["uid"] == uid, "show"
-                    ].to_list()[0]
-                    self.remove_actor_in_view(uid=uid)
-                    this_actor = self.show_actor_with_property(
-                        uid=uid,
-                        collection="geol_coll",
-                        show_property=None,
-                        visible=show,
-                    )
-                    self.actors_df = self.actors_df.append(
-                        {
-                            "uid": uid,
-                            "actor": this_actor,
-                            "show": show,
-                            "collection": "well_coll",
-                            "show_prop": None,
-                        },
-                        ignore_index=True,
-                    )  # self.actors_df.loc[self.actors_df["uid"] == uid, 'actor'] = this_actor
+            if not self.actors_df.loc[self.actors_df["uid"] == uid, "show_prop"].to_list() == []:
+                if not self.actors_df.loc[self.actors_df["uid"] == uid, "show_prop"].values[0] in self.parent.geol_coll.get_uid_properties_names(uid):
+                    show = self.actors_df.loc[self.actors_df["uid"] == uid, "show"].to_list()[0]
+                    # This replaces the previous copy of the actor with the same uid, and updates the actors dataframe.
+                    # See issue #33 for a discussion on actors replacement by the PyVista add_mesh and add_volume methods.
+                    this_actor = self.show_actor_with_property(uid=uid, collection="geol_coll", show_property=None, visible=show)
                     self.create_well_tree()
         """Re-connect signals."""
         self.WellsTreeWidget.itemChanged.connect(self.toggle_well_visibility)
@@ -5450,82 +5265,32 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         )
 
     def fluid_geom_modified_update_views(self, updated_list=None):
-        """This is called when an entity geometry or topology is modified (i.e. the vtk object is modified).
-        Disconnect signals to fluid and topology tree, if they are set, to avoid a nasty loop
-        that disrupts the trees, then they are reconnected when the trees are rebuilt"""
-        self.FluidsTreeWidget.itemChanged.disconnect()
-        self.FluidsTopologyTreeWidget.itemChanged.disconnect()
+        """This is called when an entity geometry or topology is modified (i.e. the vtk object is modified)."""
         for uid in updated_list:
-            """This calls the viewer-specific function that shows an actor with property = None.
-            IN THE FUTURE update required to keep the current property shown.____________
-            """
-            self.remove_actor_in_view(uid=uid)
-            this_actor = self.show_actor_with_property(
-                uid=uid, collection="fluids_coll", show_property=None, visible=True
-            )
-            self.actors_df = self.actors_df.append(
-                {
-                    "uid": uid,
-                    "actor": this_actor,
-                    "show": True,
-                    "collection": "fluids_coll",
-                    "show_prop": None,
-                },
-                ignore_index=True,
-            )  # self.actors_df.loc[self.actors_df["uid"] == uid, 'actor'] = this_actor
-        """Re-connect signals."""
-        self.FluidsTreeWidget.itemChanged.connect(
-            self.toggle_fluids_topology_visibility
-        )
-        self.FluidsTopologyTreeWidget.itemChanged.connect(
-            self.toggle_fluids_topology_visibility
-        )
+            show = self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]
+            show_property = self.actors_df.loc[self.actors_df["uid"] == uid, "show_prop"].values[0]
+            # This replaces the previous copy of the actor with the same uid, and updates the actors dataframe.
+            # See issue #33 for a discussion on actors replacement by the PyVista add_mesh and add_volume methods.
+            this_actor = self.show_actor_with_property(uid=uid, collection="fluids_coll", show_property=show_property, visible=show)
 
     def fluid_data_keys_modified_update_views(self, updated_list=None):
-        """This is called when entity point or cell data are modified.
+        """This is called when point or cell data (properties) are modified.
         Disconnect signals to fluid and topology tree, if they are set, to avoid a nasty loop
         that disrupts the trees, then they are reconnected when the trees are rebuilt"""
         self.FluidsTreeWidget.itemChanged.disconnect()
         self.FluidsTopologyTreeWidget.itemChanged.disconnect()
         for uid in updated_list:
-            if (
-                    not self.actors_df.loc[
-                            self.actors_df["uid"] == uid, "show_prop"
-                        ].to_list()
-                        == []
-            ):
-                if not self.actors_df.loc[
-                           self.actors_df["uid"] == uid, "show_prop"
-                       ].values[0] in self.parent.fluids_coll.get_uid_properties_names(uid):
-                    show = self.actors_df.loc[
-                        self.actors_df["uid"] == uid, "show"
-                    ].to_list()[0]
-                    self.remove_actor_in_view(uid=uid)
-                    this_actor = self.show_actor_with_property(
-                        uid=uid,
-                        collection="fluids_coll",
-                        show_property=None,
-                        visible=show,
-                    )
-                    self.actors_df = self.actors_df.append(
-                        {
-                            "uid": uid,
-                            "actor": this_actor,
-                            "show": show,
-                            "collection": "fluids_coll",
-                            "show_prop": None,
-                        },
-                        ignore_index=True,
-                    )  # self.actors_df.loc[self.actors_df["uid"] == uid, 'actor'] = this_actor
+            if not self.actors_df.loc[self.actors_df["uid"] == uid, "show_prop"].to_list() == []:
+                if not self.actors_df.loc[self.actors_df["uid"] == uid, "show_prop"].values[0] in self.parent.fluids_coll.get_uid_properties_names(uid):
+                    show = self.actors_df.loc[self.actors_df["uid"] == uid, "show"].to_list()[0]
+                    # This replaces the previous copy of the actor with the same uid, and updates the actors dataframe.
+                    # See issue #33 for a discussion on actors replacement by the PyVista add_mesh and add_volume methods.
+                    this_actor = self.show_actor_with_property(uid=uid, collection="fluids_coll", show_property=None, visible=show)
                     self.create_fluid_tree()
                     self.create_fluids_topology_tree()
         """Re-connect signals."""
-        self.FluidsTreeWidget.itemChanged.connect(
-            self.toggle_fluids_topology_visibility
-        )
-        self.FluidsTopologyTreeWidget.itemChanged.connect(
-            self.toggle_fluids_topology_visibility
-        )
+        self.FluidsTreeWidget.itemChanged.connect(self.toggle_fluids_topology_visibility)
+        self.FluidsTopologyTreeWidget.itemChanged.connect(self.toggle_fluids_topology_visibility)
 
     def fluid_data_val_modified_update_views(self, updated_list=None):
         """This is called when entity point or cell data are modified.
@@ -5703,84 +5468,32 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         )
 
     def background_geom_modified_update_views(self, updated_list=None):
-        """This is called when an entity geometry or topology is modified (i.e. the vtk object is modified).
-        Disconnect signals to fluid and topology tree, if they are set, to avoid a nasty loop
-        that disrupts the trees, then they are reconnected when the trees are rebuilt"""
-        self.BackgroundsTreeWidget.itemChanged.disconnect()
-        self.BackgroundsTopologyTreeWidget.itemChanged.disconnect()
+        """This is called when an entity geometry or topology is modified (i.e. the vtk object is modified)."""
         for uid in updated_list:
-            """This calls the viewer-specific function that shows an actor with property = None.
-            IN THE FUTURE update required to keep the current property shown.____________
-            """
-            self.remove_actor_in_view(uid=uid)
-            this_actor = self.show_actor_with_property(
-                uid=uid, collection="backgrounds_coll", show_property=None, visible=True
-            )
-            self.actors_df = self.actors_df.append(
-                {
-                    "uid": uid,
-                    "actor": this_actor,
-                    "show": True,
-                    "collection": "backgrounds_coll",
-                    "show_prop": None,
-                },
-                ignore_index=True,
-            )  # self.actors_df.loc[self.actors_df["uid"] == uid, 'actor'] = this_actor
-        """Re-connect signals."""
-        self.BackgroundsTreeWidget.itemChanged.connect(
-            self.toggle_backgrounds_topology_visibility
-        )
-        self.BackgroundsTopologyTreeWidget.itemChanged.connect(
-            self.toggle_backgrounds_topology_visibility
-        )
+            show = self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]
+            show_property = self.actors_df.loc[self.actors_df["uid"] == uid, "show_prop"].values[0]
+            # This replaces the previous copy of the actor with the same uid, and updates the actors dataframe.
+            # See issue #33 for a discussion on actors replacement by the PyVista add_mesh and add_volume methods.
+            this_actor = self.show_actor_with_property(uid=uid, collection="backgrounds_coll", show_property=show_property, visible=show)
 
     def background_data_keys_modified_update_views(self, updated_list=None):
-        """This is called when entity point or cell data are modified.
+        """This is called when point or cell data (properties) are modified.
         Disconnect signals to fluid and topology tree, if they are set, to avoid a nasty loop
         that disrupts the trees, then they are reconnected when the trees are rebuilt"""
         self.BackgroundsTreeWidget.itemChanged.disconnect()
         self.BackgroundsTopologyTreeWidget.itemChanged.disconnect()
         for uid in updated_list:
-            if (
-                    not self.actors_df.loc[
-                            self.actors_df["uid"] == uid, "show_prop"
-                        ].to_list()
-                        == []
-            ):
-                if not self.actors_df.loc[
-                           self.actors_df["uid"] == uid, "show_prop"
-                       ].values[0] in self.parent.backgrounds_coll.get_uid_properties_names(
-                    uid
-                ):
-                    show = self.actors_df.loc[
-                        self.actors_df["uid"] == uid, "show"
-                    ].to_list()[0]
-                    self.remove_actor_in_view(uid=uid)
-                    this_actor = self.show_actor_with_property(
-                        uid=uid,
-                        collection="backgrounds_coll",
-                        show_property=None,
-                        visible=show,
-                    )
-                    self.actors_df = self.actors_df.append(
-                        {
-                            "uid": uid,
-                            "actor": this_actor,
-                            "show": show,
-                            "collection": "backgrounds_coll",
-                            "show_prop": None,
-                        },
-                        ignore_index=True,
-                    )  # self.actors_df.loc[self.actors_df["uid"] == uid, 'actor'] = this_actor
+            if not self.actors_df.loc[self.actors_df["uid"] == uid, "show_prop"].to_list() == []:
+                if not self.actors_df.loc[self.actors_df["uid"] == uid, "show_prop"].values[0] in self.parent.backgrounds_coll.get_uid_properties_names(uid):
+                    show = self.actors_df.loc[self.actors_df["uid"] == uid, "show"].to_list()[0]
+                    # This replaces the previous copy of the actor with the same uid, and updates the actors dataframe.
+                    # See issue #33 for a discussion on actors replacement by the PyVista add_mesh and add_volume methods.
+                    this_actor = self.show_actor_with_property(uid=uid, collection="backgrounds_coll", show_property=None, visible=show)
                     self.create_fluid_tree()
                     self.create_fluids_topology_tree()
         """Re-connect signals."""
-        self.BackgroundsTreeWidget.itemChanged.connect(
-            self.toggle_backgrounds_topology_visibility
-        )
-        self.BackgroundsTopologyTreeWidget.itemChanged.connect(
-            self.toggle_backgrounds_topology_visibility
-        )
+        self.BackgroundsTreeWidget.itemChanged.connect(self.toggle_backgrounds_topology_visibility)
+        self.BackgroundsTopologyTreeWidget.itemChanged.connect(self.toggle_backgrounds_topology_visibility)
 
     def background_data_val_modified_update_views(self, updated_list=None):
         """This is called when entity point or cell data are modified.
@@ -5907,9 +5620,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         except AttributeError:
             name = None
         show = self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]
-        collection = self.actors_df.loc[
-            self.actors_df["uid"] == uid, "collection"
-        ].values[0]
+        collection = self.actors_df.loc[self.actors_df["uid"] == uid, "collection"].values[0]
         # This removes the previous copy of the actor with the same uid, then calls the viewer-specific function that
         # shows an actor with a property.
         # IN THE FUTURE see if it is possible and more efficient to keep the actor and just change the property shown
@@ -5918,29 +5629,10 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             self.show_markers(uid=uid, show_property=show_property)
         elif name == "Annotations":
             # case for Annotations
-            self.show_labels(
-                uid=uid, show_property=show_property, collection=collection
-            )
+            self.show_labels(uid=uid, show_property=show_property, collection=collection)
         else:
             # case for all other properties
-            self.remove_actor_in_view(uid=uid)
-
-            this_actor = self.show_actor_with_property(
-                uid=uid,
-                collection=collection,
-                show_property=show_property,
-                visible=show,
-            )
-            self.actors_df = self.actors_df.append(
-                {
-                    "uid": uid,
-                    "actor": this_actor,
-                    "show": show,
-                    "collection": collection,
-                    "show_prop": show_property,
-                },
-                ignore_index=True,
-            )  # self.set_actor_visible(uid=uid, visible=show)
+            this_actor = self.show_actor_with_property(uid=uid, collection=collection, show_property=show_property, visible=show)
 
     def add_all_entities(self):
         """Add all entities in project collections.
@@ -5948,7 +5640,6 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         This must be reimplemented for cross-sections in order
         to show entities belonging to the section only."""
         for uid in self.parent.geol_coll.df.query(self.view_filter)["uid"].tolist():
-            print("inner uid: ", uid)
             this_actor = self.show_actor_with_property(
                 uid=uid, collection="geol_coll", show_property=None, visible=True
             )
@@ -6097,39 +5788,13 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
     def prop_legend_cmap_modified_update_views(self, this_property=None):
         """Redraw all actors that are currently shown with a property whose colormap has been changed."""
         for uid in self.actors_df["uid"].to_list():
-            if (
-                    self.actors_df.loc[self.actors_df["uid"] == uid, "show_prop"].to_list()[
-                        0
-                    ]
-                    == this_property
-            ):
-                show = self.actors_df.loc[
-                    self.actors_df["uid"] == uid, "show"
-                ].to_list()[0]
-                collection = self.actors_df.loc[
-                    self.actors_df["uid"] == uid, "collection"
-                ].to_list()[0]
-                # This removes the previous copy of the actor with the same uid, then calls the viewer-specific
-                # function that shows an actor with a property.
-                # IN THE FUTURE see if it is possible and more efficient to keep the actor and just change
-                # the property shown.
-                self.remove_actor_in_view(uid=uid)
-                this_actor = self.show_actor_with_property(
-                    uid=uid,
-                    collection=collection,
-                    show_property=this_property,
-                    visible=show,
-                )
-                self.actors_df = self.actors_df.append(
-                    {
-                        "uid": uid,
-                        "actor": this_actor,
-                        "show": show,
-                        "collection": collection,
-                        "show_prop": this_property,
-                    },
-                    ignore_index=True,
-                )
+            if self.actors_df.loc[self.actors_df["uid"] == uid, "show_prop"].to_list()[0] == this_property:
+                show = self.actors_df.loc[self.actors_df["uid"] == uid, "show"].to_list()[0]
+                collection = self.actors_df.loc[self.actors_df["uid"] == uid, "collection"].to_list()[0]
+                # This replaces the previous copy of the actor with the same uid, and updates the actors dataframe.
+                # See issue #33 for a discussion on actors replacement by the PyVista add_mesh and add_volume methods.
+                this_actor = self.show_actor_with_property(uid=uid, collection=collection, show_property=this_property, visible=show)
+                self.actors_df.loc[self.actors_df["uid"] == uid, ["show_prop"]] = this_property
 
     def change_actor_color(self, uid=None, collection=None):
         """Dummy method to update color for actor uid. Must be implemented in subclasses."""
@@ -8527,7 +8192,7 @@ class NewViewXsection(NewView2D):
         super(NewViewXsection, self).__init__(parent, *args, **kwargs)
 
         # Rename Base View, Menu and Tool
-        self.setWindowTitle("Xsection View")
+        self.setWindowTitle(f"Xsection View: {self.this_x_section_name}")
 
         # Commented due to more general implementation in BaseView
         # self.create_geology_tree(sec_uid=self.this_x_section_uid)
@@ -10375,13 +10040,9 @@ class ViewStereoplot(MPLView):
         self.ViewFrameLayout.removeWidget(self.canvas)
         self.ViewFrameLayout.removeWidget(self.navi_toolbar)
         self.initialize_interactor(kind=kind, projection=self.proj_type)
-        uids = self.parent.geol_coll.df.loc[
-            self.parent.geol_coll.df["topological_type"] == "VertexSet", "uid"
-        ]
+        uids = self.parent.geol_coll.df.loc[self.parent.geol_coll.df["topological_type"] == "VertexSet", "uid"]
 
-        # print(uids)
-        """[Gabriele]It is not always the case that VertexSets have normal data (are attitude measurements). When importing from shp we should add a dialog to identify VertexSets as Attitude measurements
-        """
+        # [Gabriele]It is not always the case that VertexSets have normal data (are attitude measurements). When importing from shp we should add a dialog to identify VertexSets as Attitude measurements
 
         # att_uid_list = []
         # for uid in uids:
