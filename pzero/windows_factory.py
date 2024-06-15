@@ -143,29 +143,22 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         # collection = the original collection of the actor, e.g. geol_coll, xsect_coll, etc.
         # show_prop = currently shown property
         self.actors_df = pd_DataFrame(columns=["uid", "actor", "show", "collection","show_prop"])
-        # Create list of selected uid's
+        # Create empty list of selected uid's
         # _____________________________________________
         # SEE IF IT IA A GOOD IDEA TO USE INSTEAD A NEW "selected" COLUMN IN self.actors_df
         # _____________________________________________
-        # Create empty list of selected uids
         self.selected_uids = []
         # Set view_filter attribute to a string indicating that all entities must be selected (i.e. no filtering).
         # Somebody says 'ilevel_0 in ilevel_0' is more robust than 'index == index', but it seems OK.
         if not hasattr(self, 'view_filter'):
             self.view_filter = 'index == index'
             self.this_x_section_uid = []
-        # Initialize menus and tools, canvas, add actors and show it. These methods must be defined in subclasses
-        # _____________________________________________
-        # CHECK IMPLEMENTATION FOR X-SECTIONS, STEREOPLOTS, ETC. THAT MUST BE LIMITED TO SOME ENTITIES ONLY
-        # _____________________________________________
+        # Initialize menus and tools, canvas, add actors and show it. These methods must be defined in subclasses.
         self.initialize_menu_tools()
         self.initialize_interactor()
         self.add_all_entities()
         self.show_qt_canvas()
         # Build and show geology and topology trees, and cross-section, DOM, image, lists.
-        # _____________________________________________
-        # CHECK IMPLEMENTATION FOR X-SECTIONS, STEREOPLOTS, ETC. THAT MUST BE LIMITED TO SOME ENTITIES ONLY
-        # _____________________________________________
         self.create_geology_tree()
         self.create_topology_tree()
         self.create_xsections_tree()
@@ -178,9 +171,22 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.create_fluids_topology_tree()
         self.create_backgrounds_tree()
         self.create_backgrounds_topology_tree()
-        # Build and show other widgets, icons, tools, etc. here ___
+        # Build and show other widgets, icons, tools, etc.
+        # ----
+
         # Connect signals to update functions. Use lambda functions where we need to pass additional
         # arguments such as parent in addition to the signal itself, e.g. the updated_list
+        # Note that it could be possible to connect the (lambda) functions directly, without naming them, as in:
+        # self.parent.geology_added_signal.connect(lambda updated_list: self.geology_added_update_views(
+        #             updated_list=updated_list
+        #         ))
+        # but in this way it will be impossible to disconnect them selectively when closing this window, so we use:
+        # self.upd_list_geo_add = lambda updated_list: self.geology_added_update_views(
+        #             updated_list=updated_list
+        #         )
+        # self.parent.geology_added_signal.connect(self.upd_list_geo_add)
+        # self.parent.geology_added_signal.disconnect(self.upd_list_geo_add)
+
         # Define GEOLOGY lamda functions and signals
         self.upd_list_geo_add = lambda updated_list: self.geology_added_update_views(
             updated_list=updated_list
@@ -188,50 +194,40 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.upd_list_geo_rm = lambda updated_list: self.geology_removed_update_views(
             updated_list=updated_list
         )
-        self.upd_list_geo_mod = (
-            lambda updated_list: self.geology_geom_modified_update_views(
-                updated_list=updated_list
-            )
+        self.upd_list_geo_mod = lambda updated_list: self.geology_geom_modified_update_views(
+            updated_list=updated_list
         )
-        self.upd_list_geo_datakeys_mod = (
-            lambda updated_list: self.geology_data_keys_modified_update_views(
+        self.upd_list_geo_datakeys_mod = lambda updated_list: self.geology_data_keys_modified_update_views(
                 updated_list=updated_list
-            )
         )
-        self.upd_list_geo_dataval_mod = (
-            lambda updated_list: self.geology_data_val_modified_update_views(
+        self.upd_list_geo_dataval_mod = lambda updated_list: self.geology_data_val_modified_update_views(
                 updated_list=updated_list
-            )
         )
-        self.upd_list_geo_metadata_mod = (
-            lambda updated_list: self.geology_metadata_modified_update_views(
+        self.upd_list_geo_metadata_mod = lambda updated_list: self.geology_metadata_modified_update_views(
                 updated_list=updated_list
-            )
         )
-        self.upd_list_geo_leg_col_mod = (
-            lambda updated_list: self.geology_legend_color_modified_update_views(
+        self.upd_list_geo_leg_col_mod = lambda updated_list: self.geology_legend_color_modified_update_views(
                 updated_list=updated_list
-            )
         )
-        self.upd_list_geo_leg_thick_mod = (
-            lambda updated_list: self.geology_legend_thick_modified_update_views(
+        self.upd_list_geo_leg_thick_mod = lambda updated_list: self.geology_legend_thick_modified_update_views(
                 updated_list=updated_list
-            )
         )
-        self.upd_list_geo_leg_point_mod = (
-            lambda updated_list: self.geology_legend_point_size_modified_update_views(
+        self.upd_list_geo_leg_point_mod = lambda updated_list: self.geology_legend_point_size_modified_update_views(
                 updated_list=updated_list
-            )
         )
-        self.upd_list_geo_leg_op_mod = (
-            lambda updated_list: self.geology_legend_opacity_modified_update_views(
+        self.upd_list_geo_leg_op_mod = lambda updated_list: self.geology_legend_opacity_modified_update_views(
                 updated_list=updated_list
-            )
         )
         # Connect GEOLOGY lamda functions and signals
-        self.parent.geology_added_signal.connect(self.upd_list_geo_add)
-        self.parent.geology_removed_signal.connect(self.upd_list_geo_rm)
-        self.parent.geology_geom_modified_signal.connect(self.upd_list_geo_mod)
+        self.parent.geology_added_signal.connect(
+            self.upd_list_geo_add
+        )
+        self.parent.geology_removed_signal.connect(
+            self.upd_list_geo_rm
+        )
+        self.parent.geology_geom_modified_signal.connect(
+            self.upd_list_geo_mod
+        )
         self.parent.geology_data_keys_removed_signal.connect(
             self.upd_list_geo_datakeys_mod
         )
@@ -253,6 +249,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.parent.geology_legend_opacity_modified_signal.connect(
             self.upd_list_geo_leg_op_mod
         )
+
         # Define X SECTION lamda functions and signals
         self.upd_list_x_add = lambda updated_list: self.xsect_added_update_views(
             updated_list=updated_list
@@ -260,36 +257,34 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.upd_list_x_rm = lambda updated_list: self.xsect_removed_update_views(
             updated_list=updated_list
         )
-        self.upd_list_x_mod = (
-            lambda updated_list: self.xsect_geom_modified_update_views(
+        self.upd_list_x_mod = lambda updated_list: self.xsect_geom_modified_update_views(
                 updated_list=updated_list
-            )
         )
-        self.upd_list_x_metadata_mod = (
-            lambda updated_list: self.xsect_metadata_modified_update_views(
+        self.upd_list_x_metadata_mod = lambda updated_list: self.xsect_metadata_modified_update_views(
                 updated_list=updated_list
-            )
         )
-        self.upd_list_x_leg_col_mod = (
-            lambda updated_list: self.xsect_legend_color_modified_update_views(
+        self.upd_list_x_leg_col_mod = lambda updated_list: self.xsect_legend_color_modified_update_views(
                 updated_list=updated_list
-            )
         )
-        self.upd_list_x_leg_thick_mod = (
-            lambda updated_list: self.xsect_legend_thick_modified_update_views(
+        self.upd_list_x_leg_thick_mod = lambda updated_list: self.xsect_legend_thick_modified_update_views(
                 updated_list=updated_list
-            )
         )
-        self.upd_list_x_leg_op_mod = (
-            lambda updated_list: self.xsect_legend_opacity_modified_update_views(
+        self.upd_list_x_leg_op_mod = lambda updated_list: self.xsect_legend_opacity_modified_update_views(
                 updated_list=updated_list
-            )
         )
         # Connect X SECTION lamda functions and signals
-        self.parent.xsect_added_signal.connect(self.upd_list_x_add)
-        self.parent.xsect_removed_signal.connect(self.upd_list_x_rm)
-        self.parent.xsect_geom_modified_signal.connect(self.upd_list_x_mod)
-        self.parent.xsect_metadata_modified_signal.connect(self.upd_list_x_metadata_mod)
+        self.parent.xsect_added_signal.connect(
+            self.upd_list_x_add
+        )
+        self.parent.xsect_removed_signal.connect(
+            self.upd_list_x_rm
+        )
+        self.parent.xsect_geom_modified_signal.connect(
+            self.upd_list_x_mod
+        )
+        self.parent.xsect_metadata_modified_signal.connect(
+            self.upd_list_x_metadata_mod
+        )
         self.parent.xsect_legend_color_modified_signal.connect(
             self.upd_list_x_leg_col_mod
         )
@@ -299,44 +294,39 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.parent.xsect_legend_opacity_modified_signal.connect(
             self.upd_list_x_leg_op_mod
         )
+
         # Define BOUNDARY lamda functions and signals
         self.upd_list_bound_add = lambda updated_list: self.boundary_added_update_views(
             updated_list=updated_list
         )
-        self.upd_list_bound_rm = (
-            lambda updated_list: self.boundary_removed_update_views(
+        self.upd_list_bound_rm = lambda updated_list: self.boundary_removed_update_views(
                 updated_list=updated_list
-            )
         )
-        self.upd_list_bound_geo_mod = (
-            lambda updated_list: self.boundary_geom_modified_update_views(
+        self.upd_list_bound_geo_mod = lambda updated_list: self.boundary_geom_modified_update_views(
                 updated_list=updated_list
-            )
         )
-        self.upd_list_bound_metadata_mod = (
-            lambda updated_list: self.boundary_metadata_modified_update_views(
+        self.upd_list_bound_metadata_mod = lambda updated_list: self.boundary_metadata_modified_update_views(
                 updated_list=updated_list
-            )
         )
-        self.upd_list_bound_leg_col_mod = (
-            lambda updated_list: self.boundary_legend_color_modified_update_views(
+        self.upd_list_bound_leg_col_mod = lambda updated_list: self.boundary_legend_color_modified_update_views(
                 updated_list=updated_list
-            )
         )
-        self.upd_list_bound_leg_thick_mod = (
-            lambda updated_list: self.boundary_legend_thick_modified_update_views(
+        self.upd_list_bound_leg_thick_mod = lambda updated_list: self.boundary_legend_thick_modified_update_views(
                 updated_list=updated_list
-            )
         )
-        self.upd_list_bound_leg_op_mod = (
-            lambda updated_list: self.boundary_legend_opacity_modified_update_views(
+        self.upd_list_bound_leg_op_mod = lambda updated_list: self.boundary_legend_opacity_modified_update_views(
                 updated_list=updated_list
-            )
         )
         # Connect BOUNDARY lamda functions and signals
-        self.parent.boundary_added_signal.connect(self.upd_list_bound_add)
-        self.parent.boundary_removed_signal.connect(self.upd_list_bound_rm)
-        self.parent.boundary_geom_modified_signal.connect(self.upd_list_bound_geo_mod)
+        self.parent.boundary_added_signal.connect(
+            self.upd_list_bound_add
+        )
+        self.parent.boundary_removed_signal.connect(
+            self.upd_list_bound_rm
+        )
+        self.parent.boundary_geom_modified_signal.connect(
+            self.upd_list_bound_geo_mod
+        )
         self.parent.boundary_metadata_modified_signal.connect(
             self.upd_list_bound_metadata_mod
         )
@@ -349,6 +339,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.parent.boundary_legend_opacity_modified_signal.connect(
             self.upd_list_bound_leg_op_mod
         )
+
         # Define MESH 3D lamda functions and signals
         self.upd_list_mesh3d_add = lambda updated_list: self.mesh3d_added_update_views(
             updated_list=updated_list
@@ -356,39 +347,31 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.upd_list_mesh3d_rm = lambda updated_list: self.mesh3d_removed_update_views(
             updated_list=updated_list
         )
-        self.upd_list_mesh3d_data_keys_mod = (
-            lambda updated_list: self.mesh3d_data_keys_modified_update_views(
+        self.upd_list_mesh3d_data_keys_mod = lambda updated_list: self.mesh3d_data_keys_modified_update_views(
                 updated_list=updated_list
-            )
         )
-        self.upd_list_mesh3d_data_val_mod = (
-            lambda updated_list: self.mesh3d_data_val_modified_update_views(
+        self.upd_list_mesh3d_data_val_mod =  lambda updated_list: self.mesh3d_data_val_modified_update_views(
                 updated_list=updated_list
-            )
         )
-        self.upd_list_mesh3d_metadata_mod = (
-            lambda updated_list: self.mesh3d_metadata_modified_update_views(
+        self.upd_list_mesh3d_metadata_mod = lambda updated_list: self.mesh3d_metadata_modified_update_views(
                 updated_list=updated_list
-            )
         )
-        self.upd_list_mesh3d_leg_col_mod = (
-            lambda updated_list: self.mesh3d_legend_color_modified_update_views(
+        self.upd_list_mesh3d_leg_col_mod = lambda updated_list: self.mesh3d_legend_color_modified_update_views(
                 updated_list=updated_list
-            )
         )
-        self.upd_list_mesh3d_leg_thick_mod = (
-            lambda updated_list: self.mesh3d_legend_thick_modified_update_views(
+        self.upd_list_mesh3d_leg_thick_mod = lambda updated_list: self.mesh3d_legend_thick_modified_update_views(
                 updated_list=updated_list
-            )
         )
-        self.upd_list_mesh3d_leg_op_mod = (
-            lambda updated_list: self.mesh3d_legend_opacity_modified_update_views(
+        self.upd_list_mesh3d_leg_op_mod = lambda updated_list: self.mesh3d_legend_opacity_modified_update_views(
                 updated_list=updated_list
-            )
         )
         # Connect MESH 3D lamda functions and signals
-        self.parent.mesh3d_added_signal.connect(self.upd_list_mesh3d_add)
-        self.parent.mesh3d_removed_signal.connect(self.upd_list_mesh3d_rm)
+        self.parent.mesh3d_added_signal.connect(
+            self.upd_list_mesh3d_add
+        )
+        self.parent.mesh3d_removed_signal.connect(
+            self.upd_list_mesh3d_rm
+        )
         self.parent.mesh3d_data_keys_removed_signal.connect(
             self.upd_list_mesh3d_data_keys_mod
         )
@@ -407,6 +390,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.parent.mesh3d_legend_opacity_modified_signal.connect(
             self.upd_list_mesh3d_leg_op_mod
         )
+
         # Define DOM lamda functions and signals
         self.upd_list_dom_add = lambda updated_list: self.dom_added_update_views(
             updated_list=updated_list
@@ -414,49 +398,43 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.upd_list_dom_rm = lambda updated_list: self.dom_removed_update_views(
             updated_list=updated_list
         )
-        self.upd_list_dom_data_keys_mod = (
-            lambda updated_list: self.dom_data_keys_modified_update_views(
+        self.upd_list_dom_data_keys_mod = lambda updated_list: self.dom_data_keys_modified_update_views(
                 updated_list=updated_list
-            )
         )
-        self.upd_list_dom_data_val_mod = (
-            lambda updated_list: self.dom_data_val_modified_update_views(
+        self.upd_list_dom_data_val_mod = lambda updated_list: self.dom_data_val_modified_update_views(
                 updated_list=updated_list
-            )
         )
-        self.upd_list_dom_metadata_mod = (
-            lambda updated_list: self.dom_metadata_modified_update_views(
+        self.upd_list_dom_metadata_mod = lambda updated_list: self.dom_metadata_modified_update_views(
                 updated_list=updated_list
-            )
         )
-        self.upd_list_dom_leg_col_mod = (
-            lambda updated_list: self.dom_legend_color_modified_update_views(
+        self.upd_list_dom_leg_col_mod = lambda updated_list: self.dom_legend_color_modified_update_views(
                 updated_list=updated_list
-            )
         )
-        self.upd_list_dom_leg_thick_mod = (
-            lambda updated_list: self.dom_legend_thick_modified_update_views(
+        self.upd_list_dom_leg_thick_mod = lambda updated_list: self.dom_legend_thick_modified_update_views(
                 updated_list=updated_list
-            )
         )
-        self.upd_list_dom_leg_point_mod = (
-            lambda updated_list: self.dom_legend_point_size_modified_update_views(
+        self.upd_list_dom_leg_point_mod = lambda updated_list: self.dom_legend_point_size_modified_update_views(
                 updated_list=updated_list
-            )
         )
-        self.upd_list_dom_leg_op_mod = (
-            lambda updated_list: self.dom_legend_opacity_modified_update_views(
+        self.upd_list_dom_leg_op_mod = lambda updated_list: self.dom_legend_opacity_modified_update_views(
                 updated_list=updated_list
-            )
         )
         # Collect DOM lamda functions and signals
-        self.parent.dom_added_signal.connect(self.upd_list_dom_add)
-        self.parent.dom_removed_signal.connect(self.upd_list_dom_rm)
+        self.parent.dom_added_signal.connect(
+            self.upd_list_dom_add
+        )
+        self.parent.dom_removed_signal.connect(
+            self.upd_list_dom_rm
+        )
         self.parent.dom_data_keys_removed_signal.connect(
             self.upd_list_dom_data_keys_mod
         )
-        self.parent.dom_data_val_modified_signal.connect(self.upd_list_dom_data_val_mod)
-        self.parent.dom_metadata_modified_signal.connect(self.upd_list_dom_metadata_mod)
+        self.parent.dom_data_val_modified_signal.connect(
+            self.upd_list_dom_data_val_mod
+        )
+        self.parent.dom_metadata_modified_signal.connect(
+            self.upd_list_dom_metadata_mod
+        )
         self.parent.dom_legend_color_modified_signal.connect(
             self.upd_list_dom_leg_col_mod
         )
@@ -469,6 +447,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.parent.dom_legend_opacity_modified_signal.connect(
             self.upd_list_dom_leg_op_mod
         )
+
         # Define IMAGE lamda functions and signals
         self.upd_list_img_add = lambda updated_list: self.image_added_update_views(
             updated_list=updated_list
@@ -476,23 +455,26 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.upd_list_img_rm = lambda updated_list: self.image_removed_update_views(
             updated_list=updated_list
         )
-        self.upd_list_metadata_mod = (
-            lambda updated_list: self.image_metadata_modified_update_views(
+        self.upd_list_metadata_mod = lambda updated_list: self.image_metadata_modified_update_views(
                 updated_list=updated_list
-            )
         )
-        self.upd_list_img_leg_op_mod = (
-            lambda updated_list: self.image_legend_opacity_modified_update_views(
+        self.upd_list_img_leg_op_mod = lambda updated_list: self.image_legend_opacity_modified_update_views(
                 updated_list=updated_list
-            )
         )
         # Connect IMAGE lamda functions and signals
-        self.parent.image_added_signal.connect(self.upd_list_img_add)
-        self.parent.image_removed_signal.connect(self.upd_list_img_rm)
-        self.parent.image_metadata_modified_signal.connect(self.upd_list_metadata_mod)
+        self.parent.image_added_signal.connect(
+            self.upd_list_img_add
+        )
+        self.parent.image_removed_signal.connect(
+            self.upd_list_img_rm
+        )
+        self.parent.image_metadata_modified_signal.connect(
+            self.upd_list_metadata_mod
+        )
         self.parent.image_legend_opacity_modified_signal.connect(
             self.upd_list_img_leg_op_mod
         )
+
         # Define WELL lamda functions and signals
         self.upd_list_well_add = lambda updated_list: self.well_added_update_views(
             updated_list=updated_list
@@ -500,39 +482,31 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.upd_list_well_rm = lambda updated_list: self.well_removed_update_views(
             updated_list=updated_list
         )
-        self.upd_list_well_data_keys_mod = (
-            lambda updated_list: self.well_data_keys_modified_update_views(
+        self.upd_list_well_data_keys_mod = lambda updated_list: self.well_data_keys_modified_update_views(
                 updated_list=updated_list
-            )
         )
-        self.upd_list_well_data_val_mod = (
-            lambda updated_list: self.well_data_val_modified_update_views(
+        self.upd_list_well_data_val_mod = lambda updated_list: self.well_data_val_modified_update_views(
                 updated_list=updated_list
-            )
         )
-        self.upd_list_well_metadata_mod = (
-            lambda updated_list: self.well_metadata_modified_update_views(
+        self.upd_list_well_metadata_mod = lambda updated_list: self.well_metadata_modified_update_views(
                 updated_list=updated_list
-            )
         )
-        self.upd_list_well_leg_col_mod = (
-            lambda updated_list: self.well_legend_color_modified_update_views(
+        self.upd_list_well_leg_col_mod = lambda updated_list: self.well_legend_color_modified_update_views(
                 updated_list=updated_list
-            )
         )
-        self.upd_list_well_leg_thick_mod = (
-            lambda updated_list: self.well_legend_thick_modified_update_views(
+        self.upd_list_well_leg_thick_mod = lambda updated_list: self.well_legend_thick_modified_update_views(
                 updated_list=updated_list
-            )
         )
-        self.upd_list_well_leg_op_mod = (
-            lambda updated_list: self.well_legend_opacity_modified_update_views(
+        self.upd_list_well_leg_op_mod = lambda updated_list: self.well_legend_opacity_modified_update_views(
                 updated_list=updated_list
-            )
         )
         # Connect WELL lamda functions and signals
-        self.parent.well_added_signal.connect(self.upd_list_well_add)
-        self.parent.well_removed_signal.connect(self.upd_list_well_rm)
+        self.parent.well_added_signal.connect(
+            self.upd_list_well_add
+        )
+        self.parent.well_removed_signal.connect(
+            self.upd_list_well_rm
+        )
         self.parent.well_data_keys_removed_signal.connect(
             self.upd_list_well_data_keys_mod
         )
@@ -551,6 +525,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.parent.well_legend_opacity_modified_signal.connect(
             self.upd_list_well_leg_op_mod
         )
+
         # Define FLUID lamda functions and signals
         self.upd_list_fluid_add = lambda updated_list: self.fluid_added_update_views(
             updated_list=updated_list
@@ -558,50 +533,40 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.upd_list_fluid_rm = lambda updated_list: self.fluid_removed_update_views(
             updated_list=updated_list
         )
-        self.upd_list_fluid_geo_mod = (
-            lambda updated_list: self.fluid_geom_modified_update_views(
+        self.upd_list_fluid_geo_mod = lambda updated_list: self.fluid_geom_modified_update_views(
                 updated_list=updated_list
-            )
         )
-        self.upd_list_fluid_data_keys_mod = (
-            lambda updated_list: self.fluid_data_keys_modified_update_views(
+        self.upd_list_fluid_data_keys_mod = lambda updated_list: self.fluid_data_keys_modified_update_views(
                 updated_list=updated_list
-            )
         )
-        self.upd_list_fluid_data_val_mod = (
-            lambda updated_list: self.fluid_data_val_modified_update_views(
+        self.upd_list_fluid_data_val_mod = lambda updated_list: self.fluid_data_val_modified_update_views(
                 updated_list=updated_list
-            )
         )
-        self.upd_list_fluid_metadata_mod = (
-            lambda updated_list: self.fluid_metadata_modified_update_views(
+        self.upd_list_fluid_metadata_mod = lambda updated_list: self.fluid_metadata_modified_update_views(
                 updated_list=updated_list
-            )
         )
-        self.upd_list_fluid_leg_col_mod = (
-            lambda updated_list: self.fluid_legend_color_modified_update_views(
+        self.upd_list_fluid_leg_col_mod = lambda updated_list: self.fluid_legend_color_modified_update_views(
                 updated_list=updated_list
-            )
         )
-        self.upd_list_fluid_leg_thick_mod = (
-            lambda updated_list: self.fluid_legend_thick_modified_update_views(
+        self.upd_list_fluid_leg_thick_mod = lambda updated_list: self.fluid_legend_thick_modified_update_views(
                 updated_list=updated_list
-            )
         )
-        self.upd_list_fluid_leg_point_mod = (
-            lambda updated_list: self.fluid_legend_point_size_modified_update_views(
+        self.upd_list_fluid_leg_point_mod = lambda updated_list: self.fluid_legend_point_size_modified_update_views(
                 updated_list=updated_list
-            )
         )
-        self.upd_list_fluid_leg_op_mod = (
-            lambda updated_list: self.fluid_legend_opacity_modified_update_views(
+        self.upd_list_fluid_leg_op_mod = lambda updated_list: self.fluid_legend_opacity_modified_update_views(
                 updated_list=updated_list
-            )
         )
         # Connect FLUID lamda functions and signals
-        self.parent.fluid_added_signal.connect(self.upd_list_fluid_add)
-        self.parent.fluid_removed_signal.connect(self.upd_list_fluid_rm)
-        self.parent.fluid_geom_modified_signal.connect(self.upd_list_fluid_geo_mod)
+        self.parent.fluid_added_signal.connect(
+            self.upd_list_fluid_add
+        )
+        self.parent.fluid_removed_signal.connect(
+            self.upd_list_fluid_rm
+        )
+        self.parent.fluid_geom_modified_signal.connect(
+            self.upd_list_fluid_geo_mod
+        )
         self.parent.fluid_data_keys_removed_signal.connect(
             self.upd_list_fluid_data_keys_mod
         )
@@ -623,59 +588,45 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.parent.fluid_legend_opacity_modified_signal.connect(
             self.upd_list_fluid_leg_op_mod
         )
+
         # Define BACKGROUND lamda functions and signals
-        self.upd_list_background_add = (
-            lambda updated_list: self.background_added_update_views(
+        self.upd_list_background_add = lambda updated_list: self.background_added_update_views(
                 updated_list=updated_list
-            )
         )
-        self.upd_list_background_rm = (
-            lambda updated_list: self.background_removed_update_views(
+        self.upd_list_background_rm = lambda updated_list: self.background_removed_update_views(
                 updated_list=updated_list
-            )
         )
-        self.upd_list_background_geo_mod = (
-            lambda updated_list: self.background_geom_modified_update_views(
+        self.upd_list_background_geo_mod = lambda updated_list: self.background_geom_modified_update_views(
                 updated_list=updated_list
-            )
         )
-        self.upd_list_background_data_keys = (
-            lambda updated_list: self.background_data_keys_modified_update_views(
+        self.upd_list_background_data_keys = lambda updated_list: self.background_data_keys_modified_update_views(
                 updated_list=updated_list
-            )
         )
-        self.upd_list_background_data_val = (
-            lambda updated_list: self.background_data_val_modified_update_views(
+        self.upd_list_background_data_val = lambda updated_list: self.background_data_val_modified_update_views(
                 updated_list=updated_list
-            )
         )
-        self.upd_list_background_metadata = (
-            lambda updated_list: self.background_metadata_modified_update_views(
+        self.upd_list_background_metadata = lambda updated_list: self.background_metadata_modified_update_views(
                 updated_list=updated_list
-            )
         )
-        self.upd_list_background_leg_col = (
-            lambda updated_list: self.background_legend_color_modified_update_views(
+        self.upd_list_background_leg_col = lambda updated_list: self.background_legend_color_modified_update_views(
                 updated_list=updated_list
-            )
         )
-        self.upd_list_background_leg_thick = (
-            lambda updated_list: self.background_legend_thick_modified_update_views(
+        self.upd_list_background_leg_thick = lambda updated_list: self.background_legend_thick_modified_update_views(
                 updated_list=updated_list
-            )
         )
-        self.upd_list_background_leg_point = lambda \
-            updated_list: self.background_legend_point_size_modified_update_views(
+        self.upd_list_background_leg_point = lambda updated_list: self.background_legend_point_size_modified_update_views(
             updated_list=updated_list
         )
-        self.upd_list_background_leg_op = (
-            lambda updated_list: self.background_legend_opacity_modified_update_views(
+        self.upd_list_background_leg_op = lambda updated_list: self.background_legend_opacity_modified_update_views(
                 updated_list=updated_list
-            )
         )
         # Connect BACKGROUND lamda functions and signals
-        self.parent.background_added_signal.connect(self.upd_list_background_add)
-        self.parent.background_removed_signal.connect(self.upd_list_background_rm)
+        self.parent.background_added_signal.connect(
+            self.upd_list_background_add
+        )
+        self.parent.background_removed_signal.connect(
+            self.upd_list_background_rm
+        )
         self.parent.background_geom_modified_signal.connect(
             self.upd_list_background_geo_mod
         )
@@ -700,11 +651,10 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.parent.background_legend_opacity_modified_signal.connect(
             self.upd_list_background_leg_op
         )
+
         # Define and connect PROPERTY LEGEND lamda functions and signals
-        self.prop_legend_lambda = (
-            lambda this_property: self.prop_legend_cmap_modified_update_views(
+        self.prop_legend_lambda = lambda this_property: self.prop_legend_cmap_modified_update_views(
                 this_property=this_property
-            )
         )
         self.parent.prop_legend_cmap_modified_signal.connect(self.prop_legend_lambda)
 
