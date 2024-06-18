@@ -31,8 +31,7 @@ from pzero.collections.geological_collection import GeologicalCollection
 from pzero.collections.image_collection import ImageCollection
 from pzero.collections.mesh3d_collection import Mesh3DCollection
 from pzero.collections.well_collection import WellCollection
-from pzero.collections.xsection_collection import XSectionCollection
-from pzero.collections.xsection_collection import sections_from_file
+from pzero.collections.xsection_collection import XSectionCollection, sections_from_file, section_from_entities
 from pzero.helpers.helper_dialogs import (
     options_dialog,
     save_file_dialog,
@@ -294,6 +293,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.actionProject2XSection.triggered.connect(lambda: project_2_xs(self))
         self.actionSplitSurf.triggered.connect(lambda: split_surf(self))
         self.actionRetopologize.triggered.connect(self.retopologize_surface)
+        self.actionConvert2XSection.triggered.connect(lambda: section_from_entities(self))
 
         """View actions -> slots"""
         self.actionView3D.triggered.connect(lambda: View3D(parent=self))

@@ -634,9 +634,12 @@
     <addaction name="actionRetopologize"/>
     <addaction name="separator"/>
     <addaction name="actionExtrusion"/>
-    <addaction name="actionIntersectionXSection"/>
-    <addaction name="actionProject2XSection"/>
     <addaction name="actionProject2DEM"/>
+    <addaction name="separator"/>
+    <addaction name="actionProject2XSection"/>
+    <addaction name="actionConvert2XSection"/>
+    <addaction name="actionIntersectionXSection"/>
+    <addaction name="separator"/>
     <addaction name="actionSplitSurf"/>
    </widget>
    <addaction name="menuFile"/>
@@ -947,6 +950,11 @@
   <action name="actionImportSections">
    <property name="text">
     <string>Import Sections</string>
+   </property>
+  </action>
+  <action name="actionConvert2XSection">
+   <property name="text">
+    <string>Convert to XSection</string>
    </property>
   </action>
  </widget>
