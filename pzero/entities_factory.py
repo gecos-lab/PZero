@@ -694,6 +694,11 @@ class Plane(vtkPlane):
     def __init__(self, *args, **kwargs):
         super(Plane, self).__init__(*args, **kwargs)
 
+    @property
+    def normal(self):
+        """Returns plane normal vector."""
+        return self.GetNormal()
+
 
 class VertexSet(PolyData):
     """VertexSet is a set of points, e.g. a point cloud, derived from BaseEntity and vtkPolyData"""

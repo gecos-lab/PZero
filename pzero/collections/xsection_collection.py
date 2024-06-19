@@ -18,7 +18,7 @@ from numpy import repeat as np_repeat
 from numpy import set_printoptions as np_set_printoptions
 from numpy import sin as np_sin
 from numpy.linalg import inv as np_linalg_inv
-from vtk import vtkPoints, vtkCellArray, vtkLine
+from vtk import vtkPoints, vtkCellArray, vtkLine, vtkAppendPolyData, vtkProjectPointsToPlane, vtkDoubleArray, reference
 
 # from PyQt5.QtGui import QStandardItem, QImage
 from pzero.entities_factory import Plane, XsPolyLine
@@ -268,226 +268,84 @@ def sections_from_file(self):
                 )
 
 
-def section_from_entities(self):
-    """
-    Create cross section from selected PolyLine and VertexSet, and convert these entities to XsPolyLine and XsVertexSet.
-    """
-    print("TEST section_from_entities")
-    # Get input objects.
-    if self.shown_table != "tabGeology":
-        print(" -- Only geological objects can be used at the moment -- ")
-        return
-    # Check if some vtkPolyData is selected.
-    if not self.selected_uids:
-        print("No input data selected.")
-        return
-    else:
-        # Deep copy list of selected uids needed otherwise problems can arise if the main geology table is
-        # deseselcted while the dataframe is being built.
-        input_uids = deepcopy(self.selected_uids)
-    # Select points and polylines only.
-    input_uids_clean = deepcopy(input_uids)
-    for uid in input_uids:
-        if self.geol_coll.get_uid_topological_type(uid) not in [
-            "VertexSet",
-            "PolyLine",
-            "XsVertexSet",
-            "XsPolyLine",
-        ]:
-            input_uids_clean.remove(uid)
-    input_uids = deepcopy(input_uids_clean)
-    del input_uids_clean
-    if not input_uids:
-        print("No valid input data selected.")
-        return
-
-    # Create a vtkAppendPolyData filter to merge all input vtk objects.
-    vtkappend = vtk.vtkAppendPolyData()
-    for uid in input_uids:
-        vtkappend.AddInputData(self.geol_coll.get_uid_vtk_obj(uid))
-    vtkappend.Update()
-
-    # Fit new cross section plane.
-    new_xs_plane = Plane()
-    new_xs_plane.ComputeBestFittingPlane(vtkappend.GetOutput())
-
-    #########################################################
-
-
-
-
-
-    """Define projection parameters (float64 needed for "t" afterwards)"""
-    xs_names = self.xsect_coll.get_names()
-    input_dict = {
-        "xs_name": ["XSection: ", xs_names],
-        "proj_plunge": ["Projection axis plunge: ", 0.0],
-        "proj_trend": ["Projection axis trend: ", 0.0],
-        "dist_sec": ["Maximum distance from section: ", 0.0],
-    }
-    options_dict = multiple_input_dialog(
-        title="Projection to XSection", input_dict=input_dict
-    )
-    if options_dict is None:
-        return
-    xs_name = options_dict["xs_name"]
-    xs_dist = options_dict["dist_sec"]
-    xs_uid = self.xsect_coll.df.loc[
-        self.xsect_coll.df["name"] == xs_name, "uid"
-    ].values[0]
-    proj_plunge = np_float64(options_dict["proj_plunge"])
-    proj_trend = np_float64(options_dict["proj_trend"])
-    """Constrain to 0-180."""
-    if proj_trend > 180.0:
-        proj_trend -= 180.0
-        proj_plunge = -proj_plunge
-    """Check for projection trend parallel to cross section."""
-    if (
-            abs(self.xsect_coll.get_uid_azimuth(xs_uid) - proj_trend) < 10.0
-            or abs(self.xsect_coll.get_uid_azimuth(xs_uid) - 180.0 - proj_trend) < 10.0
-    ):
-        print("Plunge too close to being parallel to XSection (angle < 10°)")
-        return
-    """Get cross section start and end points (float64 needed for "t" afterwards)."""
-    xa = np_float64(self.xsect_coll.get_uid_base_x(xs_uid))
-    ya = np_float64(self.xsect_coll.get_uid_base_y(xs_uid))
-    xb = np_float64(self.xsect_coll.get_uid_end_x(xs_uid))
-    yb = np_float64(self.xsect_coll.get_uid_end_y(xs_uid))
-
-    """Calculate projection direction cosines (float64 needed for "t" afterwards)."""
-    alpha = np_float64(
-        np_sin(proj_trend * np_pi / 180.0) * np_cos(proj_plunge * np_pi / 180.0)
-    )
-    beta = np_float64(
-        np_cos(proj_trend * np_pi / 180.0) * np_cos(proj_plunge * np_pi / 180.0)
-    )
-    gamma = np_float64(-np_sin(proj_plunge * np_pi / 180.0))
-    """Project each entity."""
-    for uid in input_uids:
-        """Clone entity."""
-        entity_dict = deepcopy(self.geol_coll.geological_entity_dict)
-        entity_dict["name"] = self.geol_coll.get_uid_name(uid) + "_prj_" + xs_name
-        entity_dict["geological_type"] = self.geol_coll.get_uid_geological_type(uid)
-        entity_dict["geological_feature"] = self.geol_coll.get_uid_geological_feature(
-            uid
-        )
-        entity_dict["scenario"] = self.geol_coll.get_uid_scenario(uid)
-        entity_dict["properties_names"] = self.geol_coll.get_uid_properties_names(uid)
-        entity_dict[
-            "properties_components"
-        ] = self.geol_coll.get_uid_properties_components(uid)
-        entity_dict["x_section"] = xs_uid
-        if self.geol_coll.get_uid_topological_type(uid) == "VertexSet":
-            entity_dict["topological_type"] = "XsVertexSet"
-            out_vtk = XsVertexSet(x_section_uid=xs_uid, parent=self)
-            out_vtk.DeepCopy(self.geol_coll.get_uid_vtk_obj(uid))
-        elif (
-                self.geol_coll.get_uid_topological_type(uid) == "PolyLine"
-                or self.geol_coll.get_uid_topological_type(uid) == "XsPolyLine"
-        ):
-            entity_dict["topological_type"] = "XsPolyLine"
-            out_vtk = XsPolyLine(x_section_uid=xs_uid, parent=self)
-            out_vtk.DeepCopy(self.geol_coll.get_uid_vtk_obj(uid))
-        else:
-            entity_dict["topological_type"] = self.geol_coll.get_uid_topological_type(
-                uid
-            )
-            out_vtk = self.geol_coll.get_uid_vtk_obj(uid).deep_copy()
-        """Perform projection on clone (the last two steps could be merged).
-         np_float64 is needed to calculate "t" with a good precision
-         when X and Y are in UTM coordinates with very large values,
-         then the result is cast to float32 that is the VTK standard."""
-        xo = out_vtk.points_X.astype(np_float64)
-        yo = out_vtk.points_Y.astype(np_float64)
-        zo = out_vtk.points_Z.astype(np_float64)
-        t = (-xo * (yb - ya) - yo * (xa - xb) - ya * xb + yb * xa) / (
-                alpha * (yb - ya) + beta * (xa - xb)
-        )
-
-        out_vtk.points_X[:] = (xo + alpha * t).astype(np_float32)
-        out_vtk.points_Y[:] = (yo + beta * t).astype(np_float32)
-        out_vtk.points_Z[:] = (zo + gamma * t).astype(np_float32)
-
-        out_vtk.set_point_data("distance", np_abs(t))
-
-        if entity_dict["topological_type"] == "XsVertexSet":
-            # print(out_vtk.get_point_data('distance'))
-            if xs_dist <= 0:
-                entity_dict["vtk_obj"] = out_vtk
-                self.geol_coll.add_entity_from_dict(entity_dict=entity_dict)
-            else:
-                thresh = vtk.vtkThresholdPoints()
-                thresh.SetInputData(out_vtk)
-                thresh.ThresholdByLower(xs_dist)
-                thresh.SetInputArrayToProcess(
-                    0, 0, 0, vtk.vtkDataObject().FIELD_ASSOCIATION_POINTS, "distance"
-                )
-                thresh.Update()
-
-                thresholded = thresh.GetOutput()
-
-                if thresholded.GetNumberOfPoints() > 0:
-                    out_vtk.DeepCopy(thresholded)
-                    entity_dict["vtk_obj"] = out_vtk
-                    out_uid = self.geol_coll.add_entity_from_dict(
-                        entity_dict=entity_dict
-                    )
-                else:
-                    print(
-                        f'No measure found for group {entity_dict["name"]}, try to extend the maximum distance'
-                    )
-
-        elif entity_dict["topological_type"] == "XsPolyLine":
-            """Output, checking for multipart for polylines."""
-            connectivity = vtk.vtkPolyDataConnectivityFilter()
-            connectivity.SetInputData(out_vtk)
-            connectivity.SetExtractionModeToAllRegions()
-            connectivity.Update()
-            n_regions = connectivity.GetNumberOfExtractedRegions()
-            connectivity.SetExtractionModeToSpecifiedRegions()
-            connectivity.Update()
-            # entity_dict['vtk_obj'] = XsPolyLine()
-            for region in range(n_regions):
-                connectivity.InitializeSpecifiedRegionList()
-                connectivity.AddSpecifiedRegion(region)
-                connectivity.Update()
-                """connectivity_clean, used to remove orphan points left behind by connectivity"""
-                connectivity_clean = vtk.vtkCleanPolyData()
-                connectivity_clean.SetInputConnection(connectivity.GetOutputPort())
-                connectivity_clean.Update()
-                """Check if polyline really exists then create entity"""
-                if xs_dist <= 0:
-                    out_vtk = connectivity_clean.GetOutput()
-                else:
-                    thresh = vtk.vtkThresholdPoints()
-                    thresh.SetInputConnection(connectivity_clean.GetOutputPort())
-                    thresh.ThresholdByLower(xs_dist)
-                    thresh.SetInputArrayToProcess(
-                        0,
-                        0,
-                        0,
-                        vtk.vtkDataObject().FIELD_ASSOCIATION_POINTS,
-                        "distance",
-                    )
-                    thresh.Update()
-
-                    out_vtk = thresh.GetOutput()
-                if out_vtk.GetNumberOfPoints() > 0:
-                    # vtkAppendPolyData...
-                    entity_dict["vtk_obj"] = XsPolyLine(
-                        x_section_uid=xs_uid, parent=self
-                    )
-                    entity_dict["vtk_obj"].DeepCopy(connectivity_clean.GetOutput())
-                    for data_key in entity_dict["vtk_obj"].point_data_keys:
-                        if not data_key in entity_dict["properties_names"]:
-                            entity_dict["vtk_obj"].remove_point_data(data_key)
-                    out_uid = self.geol_coll.add_entity_from_dict(
-                        entity_dict=entity_dict
-                    )
-                else:
-                    print(" -- empty object -- ")
-
-        ##################################################################################################################
+# def section_from_entities(self):
+#     """
+#     Create cross section from selected PolyLine and VertexSet, and convert these entities to XsPolyLine and XsVertexSet.
+#     """
+#     print("TEST section_from_entities")
+#     # Get input objects.
+#     if self.shown_table != "tabGeology":
+#         print(" -- Only geological objects can be used at the moment -- ")
+#         return
+#     # Check if some vtkPolyData is selected.
+#     if not self.selected_uids:
+#         print("No input data selected.")
+#         return
+#     else:
+#         # Deep copy list of selected uids needed otherwise problems can arise if the main geology table is
+#         # deseselcted while the dataframe is being built.
+#         input_uids = deepcopy(self.selected_uids)
+#     # Select points and polylines only.
+#     input_uids_clean = deepcopy(input_uids)
+#     for uid in input_uids:
+#         if self.geol_coll.get_uid_topological_type(uid) not in [
+#             "VertexSet",
+#             "PolyLine",
+#             "XsVertexSet",
+#             "XsPolyLine",
+#         ]:
+#             input_uids_clean.remove(uid)
+#     input_uids = deepcopy(input_uids_clean)
+#     del input_uids_clean
+#     if not input_uids:
+#         print("No valid input data selected.")
+#         return
+#
+#     # Create a vtkAppendPolyData filter to merge all input vtk objects.
+#     vtkappend = vtkAppendPolyData()
+#     for uid in input_uids:
+#         vtkappend.AddInputData(self.geol_coll.get_uid_vtk_obj(uid))
+#     vtkappend.Update()
+#     print("vtkappend:\n", vtkappend)
+#     print("vtkappend.GetOutput():\n", vtkappend.GetOutput())
+#     print("vtkappend.GetOutput().GetPoints():\n", vtkappend.GetOutput().GetPoints())
+#
+#     # Fit new cross section plane.
+#     new_xs_plane = Plane()
+#     print("new_xs_plane:\n", new_xs_plane)
+#
+#     new_xs_plane_origin = reference(new_xs_plane.GetOrigin())
+#     new_xs_plane_normal = reference(new_xs_plane.GetNormal())
+#     print("new_xs_plane_origin: ", new_xs_plane_origin)
+#     print("new_xs_plane_normal: ", new_xs_plane_normal)
+#
+#     append_points = vtkappend.GetOutput().GetPoints()
+#     print("append_points:\n", append_points)
+#
+#     new_test = new_xs_plane.ComputeBestFittingPlane(vtkappend.GetOutput().GetPoints(), new_xs_plane_origin, new_xs_plane_normal)
+#     print("new_test: ", new_test)
+#     print("new_xs_plane:\n", new_xs_plane)
+#
+#     print("new_xs_plane.GetOrigin(): ", new_xs_plane.GetOrigin())
+#     print("new_xs_plane.GetNormal(): ", new_xs_plane.GetNormal())
+#     print("new_xs_plane_origin: ", new_xs_plane_origin)
+#     print("new_xs_plane_normal: ", new_xs_plane_normal)
+#
+#     # Project entities to section plane
+#     for uid in input_uids:
+#         project2plane = vtkProjectPointsToPlane()
+#         project2plane.SetProjectionTypeToSpecifiedPlane()
+#         project2plane.SetNormal(new_xs_plane.GetNormal())
+#         project2plane.SetOrigin(new_xs_plane.GetOrigin())
+#         project2plane.SetInputData(self.geol_coll.get_uid_vtk_obj(uid))
+#         """ShallowCopy is the way to copy the new entity into the instance created at the beginning"""
+#         self.geol_coll.df.loc[self.geol_coll.df["uid"] == uid, "vtk_obj"] = project2plane.GetOutput()
+#         print('self.geol_coll.df.loc[self.geol_coll.df["uid"] == uid, "vtk_obj"]:\n', self.geol_coll.df.loc[self.geol_coll.df["uid"] == uid, "vtk_obj"])
+#
+#
+#
+#
+#         ##################################################################################################################
 
 
 class XSectionCollection(QAbstractTableModel):
