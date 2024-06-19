@@ -14,11 +14,13 @@ from vtk import (
     vtkLine,
     vtkTriangle,
     vtkVertex,
+    vtkAppendPolyData,
+    reference,
 )
 
 from pzero.collections.boundary_collection import BoundaryCollection
 from pzero.collections.geological_collection import GeologicalCollection
-from pzero.entities_factory import VertexSet, PolyLine, TriSurf, XsVertexSet, XsPolyLine
+from pzero.entities_factory import VertexSet, PolyLine, TriSurf, XsVertexSet, XsPolyLine, Plane
 from pzero.helpers.helper_dialogs import (
     input_text_dialog,
     input_combo_dialog,
@@ -450,11 +452,12 @@ def gocad2vtk(self=None, in_file_name=None, uid_from_name=None):
     self.TextTerminal.appendPlainText("Entities imported: " + str(entity_counter))
 
 
-def gocad2vtk_section(self=None, in_file_name=None, uid_from_name=None, x_section=None):
+def gocad2vtk_section(self=None, in_file_name=None, uid_from_name=None, x_section=None, append_opt=None):
     """
-    Read a GOCAD ASCII file and add, to the geol_coll GeologicalCollection(), all the
-    pointset, polyline, triangulated surfaces as VTK polydata entities.
-    This is the specific implementation for objects belonging to a cross section.
+    Read a GOCAD ASCII file with entities belonging to a single cross-section, and add,
+    to the geol_coll GeologicalCollection(), all the
+    pointset and polyline VTK polydata entities.
+    This is the specific implementation for objects belonging to a cross-section.
     <self> is the calling ProjectWindow() instance.
     """
     """Define import options."""
@@ -488,6 +491,7 @@ def gocad2vtk_section(self=None, in_file_name=None, uid_from_name=None, x_sectio
     n_entities_before = self.geol_coll.get_number_of_entities()
     """Initialize entity_counter"""
     entity_counter = 0
+    input_uids = []
     """Parse fin file"""
     for line in fin:
         """Read one line from file."""
@@ -505,6 +509,7 @@ def gocad2vtk_section(self=None, in_file_name=None, uid_from_name=None, x_sectio
 
             """Store uid and topological type of new entity."""
             curr_obj_dict["uid"] = str(uuid.uuid4())
+            input_uids += curr_obj_dict["uid"]
 
             """Create the empty vtk object with class = topological_type."""
             if clean_line[1] == "VSet":
@@ -750,6 +755,51 @@ def gocad2vtk_section(self=None, in_file_name=None, uid_from_name=None, x_sectio
         "Entities after importing: " + str(n_entities_after)
     )
     self.TextTerminal.appendPlainText("Entities imported: " + str(entity_counter))
+
+    if append_opt:
+        print("append_opt: ", append_opt)
+        # Re-orient XSection only if it is a new one.
+        # Create a vtkAppendPolyData filter to merge all input vtk objects.
+        vtkappend = vtkAppendPolyData()
+        for uid in input_uids:
+            vtkappend.AddInputData(self.geol_coll.get_uid_vtk_obj(uid))
+        vtkappend.Update()
+        print("vtkappend:\n", vtkappend)
+        print("vtkappend.GetOutput():\n", vtkappend.GetOutput())
+        print("vtkappend.GetOutput().GetPoints():\n", vtkappend.GetOutput().GetPoints())
+
+        # Fit new cross section plane.
+        new_xs_plane = Plane()
+        print("new_xs_plane:\n", new_xs_plane)
+
+        new_xs_plane_origin = reference(new_xs_plane.GetOrigin())
+        new_xs_plane_normal = reference(new_xs_plane.GetNormal())
+        print("new_xs_plane_origin: ", new_xs_plane_origin)
+        print("new_xs_plane_normal: ", new_xs_plane_normal)
+
+        append_points = vtkappend.GetOutput().GetPoints()
+        print("append_points:\n", append_points)
+
+        new_test = new_xs_plane.ComputeBestFittingPlane(vtkappend, new_xs_plane_origin, new_xs_plane_normal)
+        print("new_test: ", new_test)
+        print("new_xs_plane:\n", new_xs_plane)
+
+        print("new_xs_plane.GetOrigin(): ", new_xs_plane.GetOrigin())
+        print("new_xs_plane.GetNormal(): ", new_xs_plane.GetNormal())
+        print("new_xs_plane_origin: ", new_xs_plane_origin)
+        print("new_xs_plane_normal: ", new_xs_plane_normal)
+
+    # # Project entities to section plane
+    # for uid in input_uids:
+    #     project2plane = vtkProjectPointsToPlane()
+    #     project2plane.SetProjectionTypeToSpecifiedPlane()
+    #     project2plane.SetNormal(new_xs_plane.GetNormal())
+    #     project2plane.SetOrigin(new_xs_plane.GetOrigin())
+    #     project2plane.SetInputData(self.geol_coll.get_uid_vtk_obj(uid))
+    #     """ShallowCopy is the way to copy the new entity into the instance created at the beginning"""
+    #     self.geol_coll.df.loc[self.geol_coll.df["uid"] == uid, "vtk_obj"] = project2plane.GetOutput()
+    #     print('self.geol_coll.df.loc[self.geol_coll.df["uid"] == uid, "vtk_obj"]:\n', self.geol_coll.df.loc[self.geol_coll.df["uid"] == uid, "vtk_obj"])
+
 
 
 def gocad2vtk_boundary(self=None, in_file_name=None, uid_from_name=None):

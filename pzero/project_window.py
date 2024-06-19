@@ -36,6 +36,7 @@ from pzero.helpers.helper_dialogs import (
     options_dialog,
     save_file_dialog,
     open_file_dialog,
+    open_files_dialog,
     input_combo_dialog,
     message_dialog,
     multiple_input_dialog,
@@ -235,7 +236,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
 
         """File>Import actions -> slots"""
         self.actionImportGocad.triggered.connect(self.import_gocad)
-        self.actionImportGocadXsection.triggered.connect(self.import_gocad_section)
+        self.actionImportGocadXsection.triggered.connect(self.import_gocad_sections)
         self.actionImportGocadBoundary.triggered.connect(self.import_gocad_boundary)
         self.actionImportPyvista.triggered.connect(lambda: pyvista2vtk(self=self))
         self.actionImportPC.triggered.connect(self.import_PC)
@@ -718,8 +719,8 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         if self.shown_table == "tabGeology":
             for uid in self.selected_uids:
                 if not updt_dict[
-                    "property_name"
-                ] in self.geol_coll.get_uid_properties_names(uid):
+                           "property_name"
+                       ] in self.geol_coll.get_uid_properties_names(uid):
                     self.geol_coll.append_uid_property(
                         uid=uid,
                         property_name=updt_dict["property_name"],
@@ -728,8 +729,8 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         elif self.shown_table == "tabMeshes3D":
             for uid in self.selected_uids:
                 if not updt_dict[
-                    "property_name"
-                ] in self.mesh3d_coll.get_uid_properties_names(uid):
+                           "property_name"
+                       ] in self.mesh3d_coll.get_uid_properties_names(uid):
                     self.mesh3d_coll.append_uid_property(
                         uid=uid,
                         property_name=updt_dict["property_name"],
@@ -738,8 +739,8 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         elif self.shown_table == "tabDOMs":
             for uid in self.selected_uids:
                 if not updt_dict[
-                    "property_name"
-                ] in self.dom_coll.get_uid_properties_names(uid):
+                           "property_name"
+                       ] in self.dom_coll.get_uid_properties_names(uid):
                     self.dom_coll.append_uid_property(
                         uid=uid,
                         property_name=updt_dict["property_name"],
@@ -857,13 +858,13 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
     def decimate_pc_dialog(self):
         if self.selected_uids:
             fac = (
-                input_one_value_dialog(
-                    parent=self,
-                    title="Decimation factor",
-                    label="Set the decimation factor (% of the original)",
-                    default_value=100.0,
-                )
-                / 100
+                    input_one_value_dialog(
+                        parent=self,
+                        title="Decimation factor",
+                        label="Set the decimation factor (% of the original)",
+                        default_value=100.0,
+                    )
+                    / 100
             )
             for uid in self.selected_uids:
                 if self.shown_table == "tabDOMs":
@@ -1158,9 +1159,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         out_dir_name = self.out_file_name[:-3] + "_p0/rev_" + now
         self.TextTerminal.appendPlainText(
             (
-                "Saving project as VTK files and csv tables with metada and legend.\n"
-                + "In file/folder: "
-                "" + self.out_file_name + " / " + out_dir_name + "\n"
+                    "Saving project as VTK files and csv tables with metada and legend.\n"
+                    + "In file/folder: "
+                      "" + self.out_file_name + " / " + out_dir_name + "\n"
             )
         )
         """Create the folder if it does not exist already."""
@@ -1254,10 +1255,10 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         )
         for uid in self.dom_coll.df["uid"].to_list():
             if (
-                self.dom_coll.df.loc[self.dom_coll.df["uid"] == uid, "dom_type"].values[
-                    0
-                ]
-                == "DEM"
+                    self.dom_coll.df.loc[self.dom_coll.df["uid"] == uid, "dom_type"].values[
+                        0
+                    ]
+                    == "DEM"
             ):
                 sg_writer = vtkXMLStructuredGridWriter()
                 sg_writer.SetFileName(out_dir_name + "/" + uid + ".vts")
@@ -1265,10 +1266,10 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 sg_writer.Write()
                 prgs_bar.add_one()
             elif (
-                self.dom_coll.df.loc[self.dom_coll.df["uid"] == uid, "dom_type"].values[
-                    0
-                ]
-                == "DomXs"
+                    self.dom_coll.df.loc[self.dom_coll.df["uid"] == uid, "dom_type"].values[
+                        0
+                    ]
+                    == "DomXs"
             ):
                 pl_writer = vtkXMLPolyDataWriter()
                 pl_writer.SetFileName(out_dir_name + "/" + uid + ".vtp")
@@ -1276,10 +1277,10 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 pl_writer.Write()
                 prgs_bar.add_one()
             elif (
-                self.dom_coll.df.loc[self.dom_coll.df["uid"] == uid, "dom_type"].values[
-                    0
-                ]
-                == "PCDom"
+                    self.dom_coll.df.loc[self.dom_coll.df["uid"] == uid, "dom_type"].values[
+                        0
+                    ]
+                    == "PCDom"
             ):  # _____________ PROBABLY THE SAME WILL WORK FOR TSDOMs
                 """Save PCDOm collection entities as VTK"""
                 pd_writer = vtkXMLPolyDataWriter()
@@ -1492,7 +1493,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
 
         """Read geological legend tables."""
         if os.path.isfile((in_dir_name + "/geol_legend_table.csv")) or os.path.isfile(
-            (in_dir_name + "/geol_legend_table.json")
+                (in_dir_name + "/geol_legend_table.json")
         ):
             if os.path.isfile((in_dir_name + "/geol_legend_table.json")):
                 new_geol_legend_df = pd_read_json(
@@ -1525,7 +1526,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         """Read well legend tables."""
 
         if os.path.isfile((in_dir_name + "/well_legend_table.csv")) or os.path.isfile(
-            (in_dir_name + "/well_legend_table.json")
+                (in_dir_name + "/well_legend_table.json")
         ):
             if os.path.isfile((in_dir_name + "/well_legend_table.json")):
                 new_well_legend_df = pd_read_json(
@@ -1553,7 +1554,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         """Read fluids legend tables."""
 
         if os.path.isfile((in_dir_name + "/fluids_legend_table.csv")) or os.path.isfile(
-            (in_dir_name + "/fluids_legend_table.json")
+                (in_dir_name + "/fluids_legend_table.json")
         ):
             if os.path.isfile((in_dir_name + "/fluids_legend_table.json")):
                 new_fluids_legend_df = pd_read_json(
@@ -1584,7 +1585,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         """Read Backgrounds legend tables."""
 
         if os.path.isfile(
-            (in_dir_name + "/backgrounds_legend_table.csv")
+                (in_dir_name + "/backgrounds_legend_table.csv")
         ) or os.path.isfile((in_dir_name + "/backgrounds_legend_table.json")):
             if os.path.isfile((in_dir_name + "/backgrounds_legend_table.json")):
                 new_backgrounds_legend_df = pd_read_json(
@@ -1612,7 +1613,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         """Read other legend tables."""
 
         if os.path.isfile((in_dir_name + "/others_legend_table.csv")) or os.path.isfile(
-            (in_dir_name + "/others_legend_table.json")
+                (in_dir_name + "/others_legend_table.json")
         ):
             if os.path.isfile((in_dir_name + "/others_legend_table.json")):
                 new_others_legend_df = pd_read_json(
@@ -1636,7 +1637,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 self.others_legend_df[diff] = Legend.others_legend_dict[diff]
 
         if os.path.isfile((in_dir_name + "/prop_legend_df.csv")) or os.path.isfile(
-            (in_dir_name + "/prop_legend_df.json")
+                (in_dir_name + "/prop_legend_df.json")
         ):
             if os.path.isfile((in_dir_name + "/prop_legend_df.json")):
                 new_prop_legend_df = pd_read_json(
@@ -1656,7 +1657,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
 
         """Read x_section table and build cross-sections. Note beginResetModel() and endResetModel()."""
         if os.path.isfile((in_dir_name + "/xsection_table.csv")) or os.path.isfile(
-            (in_dir_name + "/xsection_table.json")
+                (in_dir_name + "/xsection_table.json")
         ):
             self.xsect_coll.beginResetModel()
             if os.path.isfile((in_dir_name + "/xsection_table.json")):
@@ -1688,7 +1689,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
 
         """Read DOM table and files. Note beginResetModel() and endResetModel()."""
         if os.path.isfile((in_dir_name + "/dom_table.csv")) or os.path.isfile(
-            (in_dir_name + "/dom_table.json")
+                (in_dir_name + "/dom_table.json")
         ):
             self.dom_coll.beginResetModel()
             if os.path.isfile((in_dir_name + "/dom_table.json")):
@@ -1733,18 +1734,18 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     vtk_object.ShallowCopy(pl_reader.GetOutput())
                     vtk_object.Modified()
                 elif (
-                    self.dom_coll.df.loc[
-                        self.dom_coll.df["uid"] == uid, "dom_type"
-                    ].values[0]
-                    == "TSDom"
+                        self.dom_coll.df.loc[
+                            self.dom_coll.df["uid"] == uid, "dom_type"
+                        ].values[0]
+                        == "TSDom"
                 ):
                     """Add code to read TSDOM here__________"""
                     vtk_object = TSDom()
                 elif (
-                    self.dom_coll.df.loc[
-                        self.dom_coll.df["uid"] == uid, "dom_type"
-                    ].values[0]
-                    == "PCDom"
+                        self.dom_coll.df.loc[
+                            self.dom_coll.df["uid"] == uid, "dom_type"
+                        ].values[0]
+                        == "PCDom"
                 ):
                     """Open saved PCDoms data"""
                     vtk_object = PCDom()
@@ -1759,7 +1760,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
 
         """Read image collection and files"""
         if os.path.isfile((in_dir_name + "/image_table.csv")) or os.path.isfile(
-            (in_dir_name + "/image_table.json")
+                (in_dir_name + "/image_table.json")
         ):
             self.image_coll.beginResetModel()
             if os.path.isfile((in_dir_name + "/image_table.json")):
@@ -1832,7 +1833,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
 
         """Read mesh3d collection and files"""
         if os.path.isfile((in_dir_name + "/mesh3d_table.csv")) or os.path.isfile(
-            (in_dir_name + "/mesh3d_table.json")
+                (in_dir_name + "/mesh3d_table.json")
         ):
             self.mesh3d_coll.beginResetModel()
             if os.path.isfile((in_dir_name + "/mesh3d_table.json")):
@@ -1893,7 +1894,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
 
         """Read boundaries collection and files"""
         if os.path.isfile((in_dir_name + "/boundary_table.csv")) or os.path.isfile(
-            (in_dir_name + "/boundary_table.json")
+                (in_dir_name + "/boundary_table.json")
         ):
             self.boundary_coll.beginResetModel()
             if os.path.isfile((in_dir_name + "/boundary_table.json")):
@@ -1937,7 +1938,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
 
         """Read well table and files"""
         if os.path.isfile((in_dir_name + "/well_table.csv")) or os.path.isfile(
-            (in_dir_name + "/well_table.json")
+                (in_dir_name + "/well_table.json")
         ):
             self.well_coll.beginResetModel()
             if os.path.isfile((in_dir_name + "/well_table.json")):
@@ -1982,7 +1983,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
 
         """Read geological table and files. Note beginResetModel() and endResetModel()."""
         if os.path.isfile((in_dir_name + "/geological_table.csv")) or os.path.isfile(
-            (in_dir_name + "/geological_table.json")
+                (in_dir_name + "/geological_table.json")
         ):
             self.geol_coll.beginResetModel()
             if os.path.isfile((in_dir_name + "/geological_table.json")):
@@ -2041,7 +2042,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
 
         """Read fluids table and files. Note beginResetModel() and endResetModel()."""
         if os.path.isfile((in_dir_name + "/fluids_table.csv")) or os.path.isfile(
-            (in_dir_name + "/fluids_table.json")
+                (in_dir_name + "/fluids_table.json")
         ):
             self.fluids_coll.beginResetModel()
             if os.path.isfile((in_dir_name + "/fluids_table.json")):
@@ -2097,7 +2098,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
 
         """Read Backgrounds table and files. Note beginResetModel() and endResetModel()."""
         if os.path.isfile((in_dir_name + "/backgrounds_table.csv")) or os.path.isfile(
-            (in_dir_name + "/backgrounds_table.json")
+                (in_dir_name + "/backgrounds_table.json")
         ):
             self.backgrounds_coll.beginResetModel()
             if os.path.isfile((in_dir_name + "/backgrounds_table.json")):
@@ -2166,42 +2167,54 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             gocad2vtk(self=self, in_file_name=in_file_name, uid_from_name=False)
             self.prop_legend.update_widget(parent=self)
 
-    def import_gocad_section(self):
-        """Import Gocad ASCII file and update geological collection."""
+    def import_gocad_sections(self):
+        """Import cross-section saved as Gocad ASCII file and update geological collection."""
         self.TextTerminal.appendPlainText("Importing Gocad ASCII format")
         self.TextTerminal.appendPlainText(
             "Properties are discarded if they are not 1D, 2D, 3D, 4D, 6D or 9D (due to VTK limitations)"
         )
-        """Select and open input file"""
-        in_file_name = open_file_dialog(
+        # Select input files.
+        in_file_names = open_files_dialog(
             parent=self,
-            caption="Import entities from Gocad ASCII file",
+            caption="Import entities from Gocad ASCII files",
             filter="Gocad ASCII (*.*)",
         )
-        if in_file_name:
+        if not in_file_names:
+            return
+        print("in_file_names: ", in_file_names)
+        for in_file_name in in_file_names:
+            print("in_file_name: ", in_file_name)
             self.TextTerminal.appendPlainText("in_file_name: " + in_file_name)
-            """Select the Xsection"""
-            if self.xsect_coll.get_uids():
-                x_section_name = input_combo_dialog(
-                    parent=None,
-                    title="Xsection",
-                    label="Choose Xsection",
-                    choice_list=self.xsect_coll.get_names(),
-                )
+            # Get x-section name from file.
+            x_section_name = os.path.splitext(os.path.basename(in_file_name))[0]
+            print("x_section_name: ", x_section_name)
+            if x_section_name in self.xsect_coll.get_uids():
+                # Decide what to do if a XSection with this name already exists.
+                append_opt = options_dialog(
+                    title="Append option",
+                    message=f"Append entities to {x_section_name} XSection?\nSection will not be re-oriented.",
+                    yes_role="Cancel",
+                    no_role="OK",
+                    reject_role=None)
+                if append_opt == 0:
+                    return
+                else:
+                    x_section_uid = self.xsect_coll.df.loc[
+                        self.xsect_coll.df["name"] == x_section_name, "uid"
+                    ].values[0]
             else:
-                message_dialog(title="Xsection", message="No Xsection in project")
-                return
-            if x_section_name:
-                x_section_uid = self.xsect_coll.df.loc[
-                    self.xsect_coll.df["name"] == x_section_name, "uid"
-                ].values[0]
-                gocad2vtk_section(
-                    self=self,
-                    in_file_name=in_file_name,
-                    uid_from_name=False,
-                    x_section=x_section_uid,
-                )
-                self.prop_legend.update_widget(parent=self)
+                append_opt = 0
+                section_dict = deepcopy(self.parent.xsect_coll.section_dict)
+                section_dict["name"] = x_section_name
+                x_section_uid = self.parent.xsect_coll.add_entity_from_dict(entity_dict=section_dict)
+            gocad2vtk_section(
+                self=self,
+                in_file_name=in_file_name,
+                uid_from_name=False,
+                x_section=x_section_uid,
+                append_opt=append_opt
+            )
+            self.prop_legend.update_widget(parent=self)
 
     def import_gocad_boundary(self):
         """Import Gocad ASCII file and update boundary collection."""
@@ -2534,9 +2547,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             )
             # print(self.out_file_name)
             for (
-                uid
+                    uid
             ) in (
-                self.selected_uids
+                    self.selected_uids
             ):  # [gabriele] this could be generalized with a helper function
                 if self.shown_table == "tabGeology":
                     entity = self.geol_coll.get_uid_vtk_obj(uid)
@@ -2607,9 +2620,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             )
             # print(self.out_file_name)
             for (
-                uid
+                    uid
             ) in (
-                self.selected_uids
+                    self.selected_uids
             ):  # [gabriele] this could be generalized with a helper function
                 if self.shown_table == "tabGeology":
                     entity = self.geol_coll.get_uid_vtk_obj(uid)
