@@ -62,10 +62,7 @@ from vtk import (
     vtkLocator,
     vtkQuad,
 )
-from vtkmodules.numpy_interface.dataset_adapter import (
-    WrapDataObject,
-    vtkDataArrayToVTKArray,
-)
+from vtkmodules.numpy_interface.dataset_adapter import WrapDataObject, vtkDataArrayToVTKArray
 from vtkmodules.util.numpy_support import vtk_to_numpy
 from vtkmodules.vtkFiltersCore import vtkThresholdPoints
 from vtkmodules.vtkFiltersPoints import vtkConvertToPointCloud

@@ -2181,13 +2181,10 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         )
         if not in_file_names:
             return
-        print("in_file_names: ", in_file_names)
         for in_file_name in in_file_names:
-            print("in_file_name: ", in_file_name)
             self.TextTerminal.appendPlainText("in_file_name: " + in_file_name)
             # Get x-section name from file.
             x_section_name = os.path.splitext(os.path.basename(in_file_name))[0]
-            print("x_section_name: ", x_section_name)
             if x_section_name in self.xsect_coll.get_uids():
                 # Decide what to do if a XSection with this name already exists.
                 append_opt = options_dialog(
@@ -2204,14 +2201,14 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     ].values[0]
             else:
                 append_opt = 0
-                section_dict = deepcopy(self.parent.xsect_coll.section_dict)
+                section_dict = deepcopy(self.xsect_coll.section_dict)
                 section_dict["name"] = x_section_name
-                x_section_uid = self.parent.xsect_coll.add_entity_from_dict(entity_dict=section_dict)
+                x_section_uid = self.xsect_coll.add_entity_from_dict(entity_dict=section_dict)
             gocad2vtk_section(
                 self=self,
                 in_file_name=in_file_name,
                 uid_from_name=False,
-                x_section=x_section_uid,
+                x_section_uid=x_section_uid,
                 append_opt=append_opt
             )
             self.prop_legend.update_widget(parent=self)
