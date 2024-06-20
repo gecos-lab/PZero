@@ -9632,7 +9632,8 @@ class NewViewXsection(NewView2D):
 
         section_plane = parent.xsect_coll.get_uid_vtk_plane(self.this_x_section_uid)
         center = np_array(section_plane.GetOrigin())
-        direction = -np_array(section_plane.GetNormal())
+        # direction = -np_array(section_plane.GetNormal())
+        direction = np_array(section_plane.GetNormal())
 
         self.plotter.camera.focal_point = center
         self.plotter.camera.position = center + direction

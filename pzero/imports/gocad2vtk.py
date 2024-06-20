@@ -464,7 +464,7 @@ def gocad2vtk_section(self=None, in_file_name=None, uid_from_name=None, x_sectio
     This is the specific implementation for objects belonging to a cross-section.
     <self> is the calling ProjectWindow() instance.
     """
-    """Define import options."""
+    # Define import options.
     scenario_default = input_text_dialog(
         parent=None, title="Scenario", label="Default scenario", default_text="undef"
     )
@@ -489,33 +489,30 @@ def gocad2vtk_section(self=None, in_file_name=None, uid_from_name=None, x_sectio
         geological_feature_from_name = True
     else:
         geological_feature_from_name = False
-    """Open input file"""
+    # Open input file.
     fin = open(in_file_name, "rt")
-    """Number of entities before importing________________________________"""
+    # Number of entities before importing.
     n_entities_before = self.geol_coll.get_number_of_entities()
-    """Initialize entity_counter"""
+    # Initialize entity_counter.
     entity_counter = 0
     input_uids = []
-    """Parse fin file"""
+    # Parse fin file.
     for line in fin:
-        """Read one line from file."""
+        # Read one line from file.
         clean_line = line.strip().split()
-
-        """The effect of the following if/elif cascade is to loop for every single object marked by
-        the GOCAD keyword, reading the lines that we want to import and skipping the others."""
+        # The effect of the following if/elif cascade is to loop for every single object marked by
+        # the GOCAD keyword, reading the lines that we want to import and skipping the others.
         if clean_line[0] == "GOCAD":
-            """A new entity starts here in a GOCAD file, so here we create a new empty dictionary,
-            then we will fill its components in the next lines. Use deepcopy otherwise the
-            original dictionary would be altered."""
+            # A new entity starts here in a GOCAD file, so here we create a new empty dictionary,
+            # then we will fill its components in the next lines. Use deepcopy otherwise the
+            # original dictionary would be altered.
             curr_obj_dict = deepcopy(GeologicalCollection.geological_entity_dict)
             curr_obj_dict["x_section"] = x_section_uid
             curr_obj_dict["scenario"] = scenario_default
-
-            """Store uid and topological type of new entity."""
+            # Store uid and topological type of new entity.
             curr_obj_dict["uid"] = str(uuid.uuid4())
             input_uids.append(curr_obj_dict["uid"])
-
-            """Create the empty vtk object with class = topological_type."""
+            # Create the empty vtk object with class = topological_type.
             if clean_line[1] == "VSet":
                 curr_obj_dict["vtk_obj"] = XsVertexSet(
                     x_section_uid=x_section_uid, parent=self
@@ -537,8 +534,7 @@ def gocad2vtk_section(self=None, in_file_name=None, uid_from_name=None, x_sectio
                 self.TextTerminal.appendPlainText(
                     "gocad2vtk - entity type not recognized ERROR."
                 )
-
-            """Create empty arrays for coordinates and topology and a counter for properties."""
+            # Create empty arrays for coordinates and topology and a counter for properties.
             curr_obj_points = vtkPoints()
             curr_obj_cells = vtkCellArray()
             curr_obj_properties_collection = vtkDataArrayCollection()
@@ -765,19 +761,13 @@ def gocad2vtk_section(self=None, in_file_name=None, uid_from_name=None, x_sectio
         # Create a vtkAppendPolyData filter to merge all input vtk objects.
         vtkappend = vtkAppendPolyData()
         for uid in input_uids:
-            print("uid: ", uid)
             vtkappend.AddInputData(self.geol_coll.get_uid_vtk_obj(uid))
-            print("vtkappend:\n", vtkappend)
         vtkappend.Update()
         append_points = WrapDataObject(vtkappend.GetOutput()).Points
-        print("append_points:\n", append_points)
-
-        # # Fit new cross section plane.
+        # Fit new XSection plane.
         # new_xs_plane = Plane()
         # new_xs_plane_origin = reference((0., 0., 0.))
         # new_test = new_xs_plane.ComputeBestFittingPlane(append_points, new_xs_plane_origin, new_xs_plane_normal)
-
-        # Fit new XSection plane.
         origin, normal = best_fitting_plane(append_points)
         del vtkappend
         del append_points
@@ -788,12 +778,14 @@ def gocad2vtk_section(self=None, in_file_name=None, uid_from_name=None, x_sectio
         normal[2] = 0
         normal[0] /= np_sqrt(normal[0]**2 + normal[1]**2)
         normal[1] /= np_sqrt(normal[0] ** 2 + normal[1] ** 2)
-        print(origin, normal)
+        azimuth = np_rad2deg(np_arctan2(normal[0], normal[1]))-90
+        if azimuth < 0:
+            azimuth += 360
         # set normal, azimuth and dip in XSection
         self.xsect_coll.set_uid_normal_x(x_section_uid, normal[0])
         self.xsect_coll.set_uid_normal_y(x_section_uid, normal[1])
-        self.xsect_coll.set_uid_normal_z(x_section_uid, 0)
-        self.xsect_coll.set_uid_azimuth(x_section_uid, np_rad2deg(np_arctan2(normal[1], normal[0])-90))
+        self.xsect_coll.set_uid_normal_z(x_section_uid, 0.)
+        self.xsect_coll.set_uid_azimuth(x_section_uid, azimuth)
     else:
         # Get normal and origin from XSection if it is an old one.
         normal = (self.xsect_coll.get_uid_normal_x(x_section_uid),
@@ -802,53 +794,44 @@ def gocad2vtk_section(self=None, in_file_name=None, uid_from_name=None, x_sectio
         origin = ((self.xsect_coll.get_uid_base_x(x_section_uid) + self.xsect_coll.get_uid_end_x(x_section_uid))/2,
                   (self.xsect_coll.get_uid_base_y(x_section_uid) + self.xsect_coll.get_uid_end_y(x_section_uid))/2,
                   (self.xsect_coll.get_uid_top(x_section_uid) + self.xsect_coll.get_uid_bottom(x_section_uid))/2)
+        azimuth = self.xsect_coll.get_uid_azimuth(x_section_uid)
 
-    # In any case, project (force) new entities to section plane
-    for uid in input_uids:
-        project2plane = vtkProjectPointsToPlane()
-        project2plane.SetProjectionTypeToSpecifiedPlane()
-        project2plane.SetNormal(normal)
-        project2plane.SetOrigin(origin)
-        project2plane.SetInputData(self.geol_coll.get_uid_vtk_obj(uid))
-        # ShallowCopy is the way to copy the new entity into the instance created at the beginning
-        self.geol_coll.df.loc[self.geol_coll.df["uid"] == uid, "vtk_obj"] = project2plane.GetOutput()
+    # # In any case, project (force) new entities to section plane
+    # for uid in input_uids:
+    #     project2plane = vtkProjectPointsToPlane()
+    #     project2plane.SetProjectionTypeToSpecifiedPlane()
+    #     project2plane.SetNormal(normal)
+    #     project2plane.SetOrigin(origin)
+    #     project2plane.SetInputData(self.geol_coll.get_uid_vtk_obj(uid))
+    #     # ShallowCopy is the way to copy the new entity into the instance created at the beginning
+    #     self.geol_coll.df.loc[self.geol_coll.df["uid"] == uid, "vtk_obj"].tolist()[0].ShallowCopy(project2plane.GetOutput())
+    #     # print("check type: ", curr_obj_dict["topological_type"], " -> ", isinstance(self.geol_coll.get_uid_vtk_obj(uid)), eval(curr_obj_dict["topological_type"]))
 
-    # Create a vtkAppendPolyData filter to merge all vtk objects
-    # belonging to this XSection, new and old..
+    # Create a vtkAppendPolyData filter to merge all vtk objects belonging to this XSection,
+    # including new and old entities for in case entities are appended to an old XSection.
     vtkappend_all = vtkAppendPolyData()
     for uid in self.geol_coll.df.loc[self.geol_coll.df["x_section"] == x_section_uid, "uid"].tolist():
-        print("uid: ", uid)
         vtkappend_all.AddInputData(self.geol_coll.get_uid_vtk_obj(uid))
-        print("vtkappend_all;\n", vtkappend_all)
     vtkappend_all.Update()
     append_points_all = WrapDataObject(vtkappend_all.GetOutput()).Points
-    print("append_points_all:\n", append_points_all)
     self.xsect_coll.set_uid_base_x(x_section_uid, min(append_points_all[:, 0]))
     self.xsect_coll.set_uid_end_x(x_section_uid, max(append_points_all[:, 0]))
-    if np_sign(normal[0]) == np_sign(normal[1]):
-        # case for 1st and 3rd quadrant
+    if azimuth <= 90:
+        # case for 1st quadrant
         self.xsect_coll.set_uid_base_y(x_section_uid, min(append_points_all[:, 1]))
         self.xsect_coll.set_uid_end_y(x_section_uid, max(append_points_all[:, 1]))
     else:
-        # case for 2nd and 4th quadrant
+        # case for 2nd quadrant
         self.xsect_coll.set_uid_base_y(x_section_uid, max(append_points_all[:, 1]))
         self.xsect_coll.set_uid_end_y(x_section_uid, min(append_points_all[:, 1]))
-    self.xsect_coll.set_uid_length(x_section_uid, np_sqrt(sum(
-        (max(append_points_all[:, 0]) - min(append_points_all[:, 0]))**2,
-        (max(append_points_all[:, 1]) - min(append_points_all[:, 1]))**2)))
+    self.xsect_coll.set_length(x_section_uid)
     height_buffer = (max(append_points_all[:, 2]) - min(append_points_all[:, 2])) * 0.05
     self.xsect_coll.set_uid_top(x_section_uid, max(append_points_all[:, 2]) + height_buffer)
     self.xsect_coll.set_uid_bottom(x_section_uid, min(append_points_all[:, 2]) - height_buffer)
+    self.xsect_coll.set_width(x_section_uid)
     del vtkappend_all
     del append_points_all
-    self.xsect_coll.set_from_table(uid = x_section_uid)
-
-
-
-
-
-
-
+    self.xsect_coll.set_from_table(uid=x_section_uid)
 
 
 def gocad2vtk_boundary(self=None, in_file_name=None, uid_from_name=None):

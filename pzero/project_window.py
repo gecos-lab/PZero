@@ -2185,11 +2185,11 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             self.TextTerminal.appendPlainText("in_file_name: " + in_file_name)
             # Get x-section name from file.
             x_section_name = os.path.splitext(os.path.basename(in_file_name))[0]
-            if x_section_name in self.xsect_coll.get_uids():
+            if x_section_name in self.xsect_coll.df["name"].to_list():
                 # Decide what to do if a XSection with this name already exists.
                 append_opt = options_dialog(
                     title="Append option",
-                    message=f"Append entities to {x_section_name} XSection?\nSection will not be re-oriented.",
+                    message=f"Append entities to {x_section_name} XSection?\nSection will NOT be re-oriented.",
                     yes_role="Cancel",
                     no_role="OK",
                     reject_role=None)
