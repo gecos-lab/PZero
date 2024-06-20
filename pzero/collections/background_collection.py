@@ -60,7 +60,7 @@ class BackgroundCollection(BaseCollection):
             "vtk_obj": object,
         }
 
-        self.valid_types = ["undef", "Annotations", "Cultural"]
+        self.valid_types = ["undef", "Annotations", "Imported"]
 
         self.valid_topological_types = [
             "VertexSet",

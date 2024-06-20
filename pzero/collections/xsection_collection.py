@@ -275,7 +275,7 @@ def sections_from_file(self):
 
 class XSectionCollection(BaseCollection):
 
-    def __init__(self, parent = None, *args, **kwargs):
+    def __init__(self, parent=None, *args, **kwargs):
         super(XSectionCollection, self).__init__(*args, **kwargs)
 
         self.parent = parent
@@ -324,10 +324,7 @@ class XSectionCollection(BaseCollection):
             "vtk_frame": object,
         }
 
-        self.valid_topological_types = [
-            "XsVertexSet",
-            "XsPolyLine",
-        ]
+        self.valid_topological_types = ['']
 
         self.editable_columns_names = ["name"]
 
