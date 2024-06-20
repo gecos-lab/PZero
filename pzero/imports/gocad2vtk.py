@@ -142,7 +142,7 @@ def gocad2vtk(self=None, in_file_name=None, uid_from_name=None):
             """A new entity starts here in a GOCAD file, so here we create a new empty dictionary,
             then we will fill its components in the next lines. Use deepcopy otherwise the
             original dictionary would be altered."""
-            curr_obj_dict = deepcopy(GeologicalCollection.geological_entity_dict)
+            curr_obj_dict = deepcopy(GeologicalCollection.entity_dict)
             curr_obj_dict["scenario"] = scenario_default
 
             """Store uid of new entity."""
@@ -499,7 +499,7 @@ def gocad2vtk_section(self=None, in_file_name=None, uid_from_name=None, x_sectio
             """A new entity starts here in a GOCAD file, so here we create a new empty dictionary,
             then we will fill its components in the next lines. Use deepcopy otherwise the
             original dictionary would be altered."""
-            curr_obj_dict = deepcopy(GeologicalCollection.geological_entity_dict)
+            curr_obj_dict = deepcopy(GeologicalCollection.entity_dict)
             curr_obj_dict["x_section"] = x_section
             curr_obj_dict["scenario"] = scenario_default
 
@@ -787,7 +787,7 @@ def gocad2vtk_boundary(self=None, in_file_name=None, uid_from_name=None):
             """A new entity starts here in a GOCAD file, so here we create a new empty dictionary,
             then we will fill its components in the next lines. Use deepcopy otherwise the
             original dictionary would be altered."""
-            curr_obj_dict = deepcopy(BoundaryCollection.boundary_entity_dict)
+            curr_obj_dict = deepcopy(BoundaryCollection.entity_dict)
             # curr_obj_dict['scenario'] = scenario_default
 
             """Store uid and topological type of new entity."""

@@ -60,7 +60,7 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
             for row in range(gdf.shape[0]):
                 # print("____ROW: ", row)
                 # print("geometry type: ", gdf.geom_type[row])
-                curr_obj_dict = deepcopy(GeologicalCollection.geological_entity_dict)
+                curr_obj_dict = deepcopy(GeologicalCollection.entity_dict)
                 # if gdf.is_valid[row] and not gdf.is_empty[row]:
                 # try:
                 if "name" in column_names:
@@ -124,7 +124,7 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
 
                 for i in feat_list:
                     curr_obj_dict = deepcopy(
-                        GeologicalCollection.geological_entity_dict
+                        GeologicalCollection.entity_dict
                     )
                     if "dip" in gdf.columns:
                         vtk_obj = Attitude()
@@ -232,7 +232,7 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
             for row in range(gdf.shape[0]):
                 # print("____ROW: ", row)
                 # print("geometry type: ", gdf.geom_type[row])
-                curr_obj_dict = deepcopy(FluidsCollection.fluid_entity_dict)
+                curr_obj_dict = deepcopy(FluidsCollection.entity_dict)
                 # if gdf.is_valid[row] and not gdf.is_empty[row]:
                 # try:
                 if "name" in column_names:
@@ -289,7 +289,7 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
                 feat_list = set(gdf_index.index)
 
                 for i in feat_list:
-                    curr_obj_dict = deepcopy(FluidsCollection.fluid_entity_dict)
+                    curr_obj_dict = deepcopy(FluidsCollection.entity_dict)
                     if "dip" in gdf.columns:
                         vtk_obj = Attitude()
                     else:
@@ -371,7 +371,7 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
             for row in range(gdf.shape[0]):
                 # print("____ROW: ", row)
                 # print("geometry type: ", gdf.geom_type[row])
-                curr_obj_dict = deepcopy(BackgroundCollection.background_entity_dict)
+                curr_obj_dict = deepcopy(BackgroundCollection.entity_dict)
                 # if gdf.is_valid[row] and not gdf.is_empty[row]:
                 # try:
                 if "name" in column_names:
@@ -443,7 +443,7 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
 
                 for i in feat_list:
                     curr_obj_dict = deepcopy(
-                        BackgroundCollection.background_entity_dict
+                        BackgroundCollection.entity_dict
                     )
 
                     vtk_obj = VertexSet()

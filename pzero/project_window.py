@@ -6,7 +6,7 @@ from copy import deepcopy
 from datetime import datetime
 
 import pandas as pd
-from PyQt5.QtCore import Qt, QSortFilterProxyModel, pyqtSignal
+from PyQt5.QtCore import Qt, QSortFilterProxyModel, pyqtSignal, QObject
 from PyQt5.QtWidgets import QMainWindow, QMessageBox
 from pandas import DataFrame as pd_DataFrame
 from pandas import read_csv as pd_read_csv
@@ -534,7 +534,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         if self.shown_table == "tabGeology":
             collection = self.geol_coll
             """Create deepcopy of the geological entity dictionary."""
-            new_dict = deepcopy(collection.geological_entity_dict)
+            new_dict = deepcopy(collection.entity_dict)
             name_list = []
             topo_type_list = []
             geo_type_list = []
@@ -565,13 +565,13 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         elif self.shown_table == "tabDOMs":
             collection = self.dom_coll
             """Create deepcopy of the geological entity dictionary."""
-            new_dict = deepcopy(collection.geological_entity_dict)
+            new_dict = deepcopy(collection.entity_dict)
             name_list = []
             dom_type_list = []
             xsect_list = []
             for uid in self.selected_uids:
                 name_list.append(collection.get_uid_name(uid))
-                dom_type_list.append(collection.get_uid_dom_type(uid))
+                dom_type_list.append(collection.get_uid_topological_type(uid))
                 xsect_list.append(collection.get_uid_scenario(uid))
             name_list = list(set(name_list))
             dom_type_list = list(set(dom_type_list))
@@ -660,7 +660,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         map_image_uid = self.image_coll.df.loc[
             self.image_coll.df["name"] == map_image_name, "uid"
         ].values[0]
-        if map_image_uid not in self.image_coll.get_uids():
+        if map_image_uid not in self.image_coll.get_uids:
             return
         """Add textures."""
         dom_uids = self.selected_uids
@@ -691,10 +691,10 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         map_image_uid = self.image_coll.df.loc[
             self.image_coll.df["name"] == map_image_name, "uid"
         ].values[0]
-        if map_image_uid not in self.image_coll.get_uids():
+        if map_image_uid not in self.image_coll.get_uids:
             return
         """Remove textures."""
-        if map_image_uid in self.image_coll.get_uids():
+        if map_image_uid in self.image_coll.get_uids:
             dom_uids = self.selected_uids
             for dom_uid in dom_uids:
                 self.dom_coll.remove_map_texture_from_dom(
@@ -1256,7 +1256,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         )
         for uid in self.dom_coll.df["uid"].to_list():
             if (
-                self.dom_coll.df.loc[self.dom_coll.df["uid"] == uid, "dom_type"].values[
+                self.dom_coll.df.loc[self.dom_coll.df["uid"] == uid, "topological_type"].values[
                     0
                 ]
                 == "DEM"
@@ -1267,7 +1267,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 sg_writer.Write()
                 prgs_bar.add_one()
             elif (
-                self.dom_coll.df.loc[self.dom_coll.df["uid"] == uid, "dom_type"].values[
+                self.dom_coll.df.loc[self.dom_coll.df["uid"] == uid, "topological_type"].values[
                     0
                 ]
                 == "DomXs"
@@ -1278,7 +1278,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 pl_writer.Write()
                 prgs_bar.add_one()
             elif (
-                self.dom_coll.df.loc[self.dom_coll.df["uid"] == uid, "dom_type"].values[
+                self.dom_coll.df.loc[self.dom_coll.df["uid"] == uid, "topological_type"].values[
                     0
                 ]
                 == "PCDom"
@@ -1433,7 +1433,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
     def new_project(self):
         """Creates a new empty project, after having cleared all variables."""
         """Ask confirmation if the project already contains entities in the geological collection."""
-        if self.geol_coll.get_number_of_entities() > 0:
+        if self.geol_coll.get_number_of_entities > 0:
             confirm_new = QMessageBox.question(
                 self,
                 "New Project",
@@ -1452,7 +1452,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         """Opens a project previously saved to disk."""
 
         """Create empty containers. This clears all previous objects and also allows for missing tables below."""
-        if self.geol_coll.get_number_of_entities() > 0:
+        if self.geol_coll.get_number_of_entities > 0:
             confirm_new = QMessageBox.question(
                 self,
                 "Open Project",
@@ -1665,7 +1665,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 new_xsect_coll_df = pd_read_json(
                     in_dir_name + "/xsection_table.json",
                     orient="index",
-                    dtype=XSectionCollection.section_type_dict,
+                    dtype=XSectionCollection.entity_type_dict,
                 )
                 if not new_xsect_coll_df.empty:
                     if not "dip" in new_xsect_coll_df:
@@ -1681,7 +1681,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 self.xsect_coll.df = pd_read_csv(
                     in_dir_name + "/xsection_table.csv",
                     encoding="utf-8",
-                    dtype=XSectionCollection.section_type_dict,
+                    dtype=XSectionCollection.entity_type_dict,
                     keep_default_na=False,
                 )
             for uid in self.xsect_coll.df["uid"].tolist():
@@ -1697,7 +1697,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 new_dom_coll_df = pd_read_json(
                     in_dir_name + "/dom_table.json",
                     orient="index",
-                    dtype=DomCollection.dom_entity_type_dict,
+                    dtype=DomCollection.entity_type_dict,
                 )
                 if not new_dom_coll_df.empty:
                     self.dom_coll.df = new_dom_coll_df
@@ -1705,9 +1705,12 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 self.dom_coll.df = pd_read_csv(
                     in_dir_name + "/dom_table.csv",
                     encoding="utf-8",
-                    dtype=DomCollection.dom_entity_type_dict,
+                    dtype=DomCollection.entity_type_dict,
                     keep_default_na=False,
                 )
+
+            if 'dom_type' in self.dom_coll.df.columns:
+                self.dom_coll.df.rename(columns={'dom_type': 'topological_type'}, inplace=True)
             prgs_bar = progress_dialog(
                 max_value=self.dom_coll.df.shape[0],
                 title_txt="Open DOM",
@@ -1716,7 +1719,8 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 parent=self,
             )
             for uid in self.dom_coll.df["uid"].to_list():
-                if self.dom_coll.get_uid_dom_type(uid) == "DEM":
+
+                if self.dom_coll.get_uid_topological_type(uid) == "DEM":
                     if not os.path.isfile((in_dir_name + "/" + uid + ".vts")):
                         print("error: missing VTK file")
                         return
@@ -1726,7 +1730,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     sg_reader.Update()
                     vtk_object.ShallowCopy(sg_reader.GetOutput())
                     vtk_object.Modified()
-                elif self.dom_coll.get_uid_dom_type(uid) == "DomXs":
+                elif self.dom_coll.get_uid_topological_type(uid) == "DomXs":
                     xsect_uid = self.dom_coll.get_uid_x_section(uid)
                     vtk_object = XsPolyLine(x_section_uid=xsect_uid, parent=self)
                     pl_reader = vtkXMLPolyDataReader()
@@ -1736,7 +1740,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     vtk_object.Modified()
                 elif (
                     self.dom_coll.df.loc[
-                        self.dom_coll.df["uid"] == uid, "dom_type"
+                        self.dom_coll.df["uid"] == uid, "topological_type"
                     ].values[0]
                     == "TSDom"
                 ):
@@ -1744,7 +1748,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     vtk_object = TSDom()
                 elif (
                     self.dom_coll.df.loc[
-                        self.dom_coll.df["uid"] == uid, "dom_type"
+                        self.dom_coll.df["uid"] == uid, "topological_type"
                     ].values[0]
                     == "PCDom"
                 ):
@@ -1768,7 +1772,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 new_image_coll_df = pd_read_json(
                     in_dir_name + "/image_table.json",
                     orient="index",
-                    dtype=ImageCollection.image_entity_type_dict,
+                    dtype=ImageCollection.entity_type_dict,
                 )
                 if not new_image_coll_df.empty:
                     self.image_coll.df = new_image_coll_df
@@ -1776,7 +1780,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 self.image_coll.df = pd_read_csv(
                     in_dir_name + "/image_table.csv",
                     encoding="utf-8",
-                    dtype=ImageCollection.image_entity_type_dict,
+                    dtype=ImageCollection.entity_type_dict,
                     keep_default_na=False,
                 )
             prgs_bar = progress_dialog(
@@ -1841,7 +1845,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 new_mesh3d_coll_df = pd_read_json(
                     in_dir_name + "/mesh3d_table.json",
                     orient="index",
-                    dtype=Mesh3DCollection.mesh3d_entity_type_dict,
+                    dtype=Mesh3DCollection.entity_type_dict,
                 )
                 if not new_mesh3d_coll_df.empty:
                     self.mesh3d_coll.df = new_mesh3d_coll_df
@@ -1849,7 +1853,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 self.mesh3d_coll.df = pd_read_csv(
                     in_dir_name + "/mesh3d_table.csv",
                     encoding="utf-8",
-                    dtype=Mesh3DCollection.mesh3d_entity_type_dict,
+                    dtype=Mesh3DCollection.entity_type_dict,
                     keep_default_na=False,
                 )
             prgs_bar = progress_dialog(
@@ -1902,7 +1906,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 new_boundary_coll_df = pd_read_json(
                     in_dir_name + "/boundary_table.json",
                     orient="index",
-                    dtype=BoundaryCollection.boundary_entity_type_dict,
+                    dtype=BoundaryCollection.entity_type_dict,
                 )
                 if not new_boundary_coll_df.empty:
                     self.boundary_coll.df = new_boundary_coll_df
@@ -1910,7 +1914,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 self.boundary_coll.df = pd_read_csv(
                     in_dir_name + "/boundary_table.csv",
                     encoding="utf-8",
-                    dtype=BoundaryCollection.boundary_entity_type_dict,
+                    dtype=BoundaryCollection.entity_type_dict,
                     keep_default_na=False,
                 )
             prgs_bar = progress_dialog(
@@ -1946,7 +1950,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 new_well_coll_df = pd_read_json(
                     in_dir_name + "/well_table.json",
                     orient="index",
-                    dtype=WellCollection.well_entity_type_dict,
+                    dtype=WellCollection.entity_type_dict,
                 )
                 if not new_well_coll_df.empty:
                     self.well_coll.df = new_well_coll_df
@@ -1954,7 +1958,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 self.well_coll.df = pd_read_csv(
                     in_dir_name + "/well_table.csv",
                     encoding="utf-8",
-                    dtype=WellCollection.well_entity_type_dict,
+                    dtype=WellCollection.entity_type_dict,
                     keep_default_na=False,
                 )
             prgs_bar = progress_dialog(
@@ -1988,20 +1992,23 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         ):
             self.geol_coll.beginResetModel()
             if os.path.isfile((in_dir_name + "/geological_table.json")):
+                # noinspection PyTypeChecker
                 new_geol_coll_df = pd_read_json(
                     in_dir_name + "/geological_table.json",
                     orient="index",
-                    dtype=GeologicalCollection.geological_entity_type_dict,
+                    dtype=GeologicalCollection.entity_type_dict,
                 )
                 if not new_geol_coll_df.empty:
                     self.geol_coll.df = new_geol_coll_df
             else:
+                # noinspection PyTypeChecker
                 self.geol_coll.df = pd_read_csv(
                     in_dir_name + "/geological_table.csv",
                     encoding="utf-8",
-                    dtype=GeologicalCollection.geological_entity_type_dict,
+                    dtype=GeologicalCollection.entity_type_dict,
                     keep_default_na=False,
                 )
+
             prgs_bar = progress_dialog(
                 max_value=self.geol_coll.df.shape[0],
                 title_txt="Open geology",
@@ -2050,7 +2057,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 new_fluids_coll_df = pd_read_json(
                     in_dir_name + "/fluids_table.json",
                     orient="index",
-                    dtype=FluidsCollection.fluid_entity_type_dict,
+                    dtype=FluidsCollection.entity_type_dict,
                 )
                 if not new_fluids_coll_df.empty:
                     self.fluids_coll.df = new_fluids_coll_df
@@ -2058,7 +2065,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 self.fluids_coll.df = pd_read_csv(
                     in_dir_name + "/fluids_table.csv",
                     encoding="utf-8",
-                    dtype=FluidsCollection.fluid_entity_type_dict,
+                    dtype=FluidsCollection.entity_type_dict,
                     keep_default_na=False,
                 )
             prgs_bar = progress_dialog(
@@ -2106,7 +2113,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 new_backgrounds_coll_df = pd_read_json(
                     in_dir_name + "/backgrounds_table.json",
                     orient="index",
-                    dtype=FluidsCollection.fluid_entity_type_dict,
+                    dtype=FluidsCollection.entity_type_dict,
                 )
                 if not new_backgrounds_coll_df.empty:
                     self.backgrounds_coll.df = new_backgrounds_coll_df
@@ -2114,7 +2121,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 self.backgrounds_coll.df = pd_read_csv(
                     in_dir_name + "/backgrounds_table.csv",
                     encoding="utf-8",
-                    dtype=FluidsCollection.fluid_entity_type_dict,
+                    dtype=FluidsCollection.entity_type_dict,
                     keep_default_na=False,
                 )
             prgs_bar = progress_dialog(
@@ -2183,12 +2190,12 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         if in_file_name:
             self.TextTerminal.appendPlainText("in_file_name: " + in_file_name)
             """Select the Xsection"""
-            if self.xsect_coll.get_uids():
+            if self.xsect_coll.get_uids:
                 x_section_name = input_combo_dialog(
                     parent=None,
                     title="Xsection",
                     label="Choose Xsection",
-                    choice_list=self.xsect_coll.get_names(),
+                    choice_list=self.xsect_coll.get_names,
                 )
             else:
                 message_dialog(title="Xsection", message="No Xsection in project")
@@ -2331,12 +2338,12 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         if in_file_name:
             self.TextTerminal.appendPlainText("in_file_name: " + in_file_name)
             """Select the Xsection"""
-            if self.xsect_coll.get_uids():
+            if self.xsect_coll.get_uids:
                 x_section_name = input_combo_dialog(
                     parent=None,
                     title="Xsection",
                     label="Choose Xsection",
-                    choice_list=self.xsect_coll.get_names(),
+                    choice_list=self.xsect_coll.get_names,
                 )
             else:
                 message_dialog(title="Xsection", message="No Xsection in project")

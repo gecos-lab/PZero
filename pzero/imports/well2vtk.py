@@ -199,7 +199,7 @@ def well2vtk(self, path=None):
             types.append(annotation.trace.get_point_data_type(key))
 
         annotation_obj_attributes = deepcopy(
-            BackgroundCollection.background_entity_dict
+            BackgroundCollection.entity_dict
         )
         annotation_obj_attributes["uid"] = str(uuid4())
         annotation_obj_attributes["name"] = name

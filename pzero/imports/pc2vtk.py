@@ -184,7 +184,7 @@ def pc2vtk(
         # point_cloud.generate_point_set()
 
         """Create dictionary."""
-        curr_obj_attributes = deepcopy(DomCollection.dom_entity_dict)
+        curr_obj_attributes = deepcopy(DomCollection.entity_dict)
         curr_obj_attributes["uid"] = str(uuid4())
         point_cloud.Modified()
         curr_obj_attributes["name"] = basename

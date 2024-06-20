@@ -47,7 +47,7 @@ def draw_line(self):
 
     self.disable_actions()
     """Create deepcopy of the geological entity dictionary."""
-    line_dict = deepcopy(self.parent.geol_coll.geological_entity_dict)
+    line_dict = deepcopy(self.parent.geol_coll.entity_dict)
     """One dictionary is set as input for a general widget of multiple-value-input"""
     line_dict_in = {
         "name": ["PolyLine name: ", "new_pline"],
@@ -416,7 +416,7 @@ def split_line_line(self):
         uids = [current_uid_scissors]
         for line in lines:
             """Create empty dictionary for the output lines."""
-            new_line = deepcopy(self.parent.geol_coll.geological_entity_dict)
+            new_line = deepcopy(self.parent.geol_coll.entity_dict)
             new_line["name"] = (
                 self.parent.geol_coll.df.loc[
                     self.parent.geol_coll.df["uid"] == current_uid_paper, "name"
@@ -489,8 +489,8 @@ def split_line_existing_point(self):
         point_pos = selector.active_pos
         self.plotter.untrack_click_position(side="right")
         """Create empty dictionary for the output line"""
-        new_line_1 = deepcopy(self.parent.geol_coll.geological_entity_dict)
-        new_line_2 = deepcopy(self.parent.geol_coll.geological_entity_dict)
+        new_line_1 = deepcopy(self.parent.geol_coll.entity_dict)
+        new_line_2 = deepcopy(self.parent.geol_coll.entity_dict)
         new_line_2["name"] = (
             self.parent.geol_coll.df.loc[
                 self.parent.geol_coll.df["uid"] == uid, "name"
@@ -658,7 +658,7 @@ def merge_lines(self):
     current_uid_one = self.selected_uids[0]
     current_uid_two = self.selected_uids[1]
     """Create empty dictionary for the output line."""
-    new_line = deepcopy(self.parent.geol_coll.geological_entity_dict)
+    new_line = deepcopy(self.parent.geol_coll.entity_dict)
     if isinstance(self, NewViewMap):
         # if isinstance(self, (ViewMap, NewViewMap)):
         new_line["vtk_obj"] = PolyLine()
@@ -815,8 +815,8 @@ def snap_line(self):
             return
 
         """Create empty dictionary for the output line."""
-        new_line_snap = deepcopy(self.parent.geol_coll.geological_entity_dict)
-        new_line_goal = deepcopy(self.parent.geol_coll.geological_entity_dict)
+        new_line_snap = deepcopy(self.parent.geol_coll.entity_dict)
+        new_line_goal = deepcopy(self.parent.geol_coll.entity_dict)
 
         """Editing loop. Get coordinates of the line to be modified (snap-line)."""
         if isinstance(self, NewViewMap):
@@ -971,7 +971,7 @@ def resample_line_distance(
         if distance_delta <= 0:
             distance_delta = 20
         """Create empty dictionary for the output line"""
-        new_line = deepcopy(self.parent.geol_coll.geological_entity_dict)
+        new_line = deepcopy(self.parent.geol_coll.entity_dict)
         if isinstance(self, NewViewMap):
             new_line["topological_type"] = "PolyLine"
             new_line["x_section"] = None
@@ -1073,7 +1073,7 @@ def resample_line_number_points(
             number_of_points = 20
         """Editing loop"""
         """Create empty dictionary for the output line"""
-        new_line = deepcopy(self.parent.geol_coll.geological_entity_dict)
+        new_line = deepcopy(self.parent.geol_coll.entity_dict)
         """Define topological_type and x_section. Get coordinates of input line"""
         if isinstance(self, NewViewMap):
             # if isinstance(self, (ViewMap, NewViewMap)):
@@ -1179,7 +1179,7 @@ def simplify_line(
         if tolerance_p <= 0:
             tolerance_p = 0.1
         """Editing loop. Create empty dictionary for the output line"""
-        new_line = deepcopy(self.parent.geol_coll.geological_entity_dict)
+        new_line = deepcopy(self.parent.geol_coll.entity_dict)
         """Get coordinates of input line."""
         if isinstance(self, NewViewMap):
             # if isinstance(self, (ViewMap, NewViewMap)):
@@ -1289,7 +1289,7 @@ def copy_parallel(
 
     """Create empty dictionary for the output line and set name and geological_type.
     IN THE FUTURE see if other metadata should be automatically set."""
-    line_dict = deepcopy(self.parent.geol_coll.geological_entity_dict)
+    line_dict = deepcopy(self.parent.geol_coll.entity_dict)
     line_dict["name"] = out_line_name
     line_dict["geological_type"] = self.parent.geol_coll.df.loc[
         self.parent.geol_coll.df["uid"] == input_uid, "geological_type"
@@ -1408,7 +1408,7 @@ def copy_kink(
 
     """Create empty dictionary for the output line and set name and geological_type.
     IN THE FUTURE see if other metadata should be automatically set."""
-    line_dict = deepcopy(self.parent.geol_coll.geological_entity_dict)
+    line_dict = deepcopy(self.parent.geol_coll.entity_dict)
     line_dict["name"] = out_line_name
     line_dict["geological_type"] = self.parent.geol_coll.df.loc[
         self.parent.geol_coll.df["uid"] == input_uid, "geological_type"
@@ -1507,7 +1507,7 @@ def copy_similar(
     """IN THE FUTURE add a test to check that the selected feature is a geological feature"""
     """Create empty dictionary for the output line and set name and geological_type.
     IN THE FUTURE see if other metadata should be automatically set."""
-    line_dict = deepcopy(self.parent.geol_coll.geological_entity_dict)
+    line_dict = deepcopy(self.parent.geol_coll.entity_dict)
     line_dict["geological_type"] = self.parent.geol_coll.df.loc[
         self.parent.geol_coll.df["uid"] == input_uid, "geological_type"
     ].values[0]

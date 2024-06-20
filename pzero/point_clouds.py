@@ -111,7 +111,7 @@ def cut_pc(self, method="both"):
         )
 
         clip_out, clip_in = extract_pc(vtk_obj, loop)
-        entity_dict = deepcopy(self.parent.dom_coll.dom_entity_dict)
+        entity_dict = deepcopy(self.parent.dom_coll.entity_dict)
         # print(entity_dict)
         if method == "both":
             entity_dict["name"] = self.parent.dom_coll.get_uid_name(uid) + "_cut_in"
@@ -127,7 +127,7 @@ def cut_pc(self, method="both"):
             entity_dict["vtk_obj"] = clip_in
             self.parent.dom_coll.add_entity_from_dict(entity_dict)
 
-            entity_dict = deepcopy(self.parent.dom_coll.dom_entity_dict)
+            entity_dict = deepcopy(self.parent.dom_coll.entity_dict)
             # print(entity_dict)
             entity_dict["name"] = self.parent.dom_coll.get_uid_name(uid) + "_cut_out"
             entity_dict["vtk_obj"] = clip_out
@@ -155,7 +155,7 @@ def cut_pc(self, method="both"):
             entity_dict["vtk_obj"] = clip_in
             self.parent.dom_coll.add_entity_from_dict(entity_dict)
         elif method == "outer":
-            entity_dict = deepcopy(self.parent.dom_coll.dom_entity_dict)
+            entity_dict = deepcopy(self.parent.dom_coll.entity_dict)
             # print(entity_dict)
             entity_dict["name"] = self.parent.dom_coll.get_uid_name(uid) + "_cut_out"
             entity_dict["vtk_obj"] = clip_out
@@ -314,7 +314,7 @@ def segment_pc(self):
             seg_pc.get_point_data_shape(c)[1] for c in properties_name
         ]
 
-        curr_obj_dict = deepcopy(DomCollection.dom_entity_dict)
+        curr_obj_dict = deepcopy(DomCollection.entity_dict)
         curr_obj_dict["uid"] = str(uuid4())
         curr_obj_dict["name"] = f'pc_{dialog["name"]}'
         curr_obj_dict["dom_type"] = "PCDom"
@@ -412,7 +412,7 @@ def facets_pc(self):
     properties_name = facets.point_data_keys
     properties_components = [facets.get_point_data_shape(i)[1] for i in properties_name]
 
-    curr_obj_dict = deepcopy(GeologicalCollection.geological_entity_dict)
+    curr_obj_dict = deepcopy(GeologicalCollection.entity_dict)
     curr_obj_dict["uid"] = str(uuid4())
     curr_obj_dict["name"] = f"{name}facets"
     curr_obj_dict["geological_type"] = "undef"
@@ -530,7 +530,7 @@ def auto_pick(self):
     properties_name = points.point_data_keys
     properties_components = [points.get_point_data_shape(i)[1] for i in properties_name]
 
-    curr_obj_dict = deepcopy(GeologicalCollection.geological_entity_dict)
+    curr_obj_dict = deepcopy(GeologicalCollection.entity_dict)
     curr_obj_dict["uid"] = str(uuid4())
     curr_obj_dict["name"] = f"{name}auto_pick"
     curr_obj_dict["geological_type"] = "undef"
@@ -572,7 +572,7 @@ def thresh_filt(self):
         out.generate_cells()
         # out.plot()
         # self.parent.dom_coll.replace_vtk(uid[0],out)
-        entity_dict = deepcopy(self.parent.dom_coll.dom_entity_dict)
+        entity_dict = deepcopy(self.parent.dom_coll.entity_dict)
         # print(entity_dict)
         entity_dict["name"] = (
             self.parent.dom_coll.get_uid_name(uid)

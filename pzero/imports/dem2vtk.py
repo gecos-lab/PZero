@@ -38,7 +38,7 @@ def dem2vtk(self=None, in_file_name=None, collection=None):
     curr_obj.Modified()
     """Create dictionary."""
     if collection == "DEMs and DOMs":
-        curr_obj_attributes = deepcopy(DomCollection.dom_entity_dict)
+        curr_obj_attributes = deepcopy(DomCollection.entity_dict)
         curr_obj_attributes["uid"] = str(uuid.uuid4())
         curr_obj_attributes["name"] = os.path.basename(in_file_name)
         curr_obj_attributes["dom_type"] = "DEM"
@@ -49,7 +49,7 @@ def dem2vtk(self=None, in_file_name=None, collection=None):
         """Add to entity collection."""
         self.dom_coll.add_entity_from_dict(entity_dict=curr_obj_attributes)
     elif collection == "Fluid contacts":
-        curr_obj_attributes = deepcopy(FluidsCollection.fluid_entity_dict)
+        curr_obj_attributes = deepcopy(FluidsCollection.entity_dict)
         curr_obj_attributes["uid"] = str(uuid.uuid4())
         curr_obj_attributes["name"] = os.path.basename(in_file_name)
         curr_obj_attributes["fluid_type"] = "raster"

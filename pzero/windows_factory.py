@@ -4,7 +4,8 @@ from vtkmodules.vtkRenderingCore import vtkPropPicker
 
 """QT imports"""
 from PyQt5.QtWidgets import *
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, pyqtSignal
+from PyQt5 import QtCore
 
 """PZero imports"""
 from pzero.ui.base_view_window_ui import Ui_BaseViewWindow
@@ -142,23 +143,32 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         # show = a boolean to show (True) or hide (false) the actor
         # collection = the original collection of the actor, e.g. geol_coll, xsect_coll, etc.
         # show_property = currently shown property
+
         self.actors_df = pd_DataFrame(columns=["uid", "actor", "show", "collection", "show_property"])
+
         # Create empty list of selected uid's
         # _____________________________________________
         # SEE IF IT IA A GOOD IDEA TO USE INSTEAD A NEW "selected" COLUMN IN self.actors_df
         # _____________________________________________
+
         self.selected_uids = []
+
         # Set view_filter attribute to a string indicating that all entities must be selected (i.e. no filtering).
         # Somebody says 'ilevel_0 in ilevel_0' is more robust than 'index == index', but it seems OK.
+
         if not hasattr(self, 'view_filter'):
             self.view_filter = 'index == index'
             self.this_x_section_uid = []
+
         # Initialize menus and tools, canvas, add actors and show it. These methods must be defined in subclasses.
+
         self.initialize_menu_tools()
         self.initialize_interactor()
         self.add_all_entities()
         self.show_qt_canvas()
+
         # Build and show geology and topology trees, and cross-section, DOM, image, lists.
+
         self.create_geology_tree()
         self.create_topology_tree()
         self.create_xsections_tree()
@@ -171,6 +181,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.create_fluids_topology_tree()
         self.create_backgrounds_tree()
         self.create_backgrounds_topology_tree()
+
         # Build and show other widgets, icons, tools, etc.
         # ----
 
@@ -188,6 +199,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         # self.parent.geology_added_signal.disconnect(self.upd_list_geo_add)
 
         # Define GEOLOGY lamda functions and signals
+
         self.upd_list_geo_add = lambda updated_list: self.geology_added_update_views(
             updated_list=updated_list
         )
@@ -230,39 +242,45 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.upd_list_geo_leg_op_mod = lambda updated_list: self.geology_legend_modified_update_views(
             updated_list=updated_list
         )
+
         # Connect GEOLOGY lamda functions and signals
+
         self.parent.geology_added_signal.connect(
             self.upd_list_geo_add
-        )
+        )  # this is emitted from the collection
         self.parent.geology_removed_signal.connect(
             self.upd_list_geo_rm
-        )
-        self.parent.geology_geom_modified_signal.connect(
-            self.upd_list_geo_mod
-        )
+        )  # this is emitted from the collection
         self.parent.geology_data_keys_removed_signal.connect(
             self.upd_list_geo_datakeys_mod
-        )
-        self.parent.geology_data_val_modified_signal.connect(
-            self.upd_list_geo_dataval_mod
-        )
+        )  # this is emitted from collection
         self.parent.geology_metadata_modified_signal.connect(
             self.upd_list_geo_metadata_mod
-        )
+        )  # this is emitted from collection and three_d_surfaces
+
+        self.parent.geology_geom_modified_signal.connect(
+            self.upd_list_geo_mod
+        )  # this is emitted from two_d_lines and three_d_surfaces
+
+        self.parent.geology_data_val_modified_signal.connect(
+            self.upd_list_geo_dataval_mod
+        )  # this is emitted from nowhere (?)
+
         self.parent.geology_legend_color_modified_signal.connect(
             self.upd_list_geo_leg_col_mod
-        )
+        )  # this is emitted from legend manager
         self.parent.geology_legend_thick_modified_signal.connect(
             self.upd_list_geo_leg_thick_mod
-        )
+        )  # this is emitted from legend manager
         self.parent.geology_legend_point_size_modified_signal.connect(
             self.upd_list_geo_leg_point_mod
-        )
+        )  # this is emitted from legend manager
         self.parent.geology_legend_opacity_modified_signal.connect(
             self.upd_list_geo_leg_op_mod
-        )
+        )  # this is emitted from legend manager
 
         # Define X SECTION lamda functions and signals
+
         self.upd_list_x_add = lambda updated_list: self.xsect_added_update_views(
             updated_list=updated_list
         )
@@ -284,30 +302,35 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.upd_list_x_leg_op_mod = lambda updated_list: self.xsect_legend_opacity_modified_update_views(
             updated_list=updated_list
         )
+
         # Connect X SECTION lamda functions and signals
+
         self.parent.xsect_added_signal.connect(
             self.upd_list_x_add
-        )
+        )  # this is emitted from the collection
         self.parent.xsect_removed_signal.connect(
             self.upd_list_x_rm
-        )
-        self.parent.xsect_geom_modified_signal.connect(
-            self.upd_list_x_mod
-        )
+        )  # this is emitted from the collection
         self.parent.xsect_metadata_modified_signal.connect(
             self.upd_list_x_metadata_mod
-        )
+        )  # this is emitted from the collection
+
+        self.parent.xsect_geom_modified_signal.connect(
+            self.upd_list_x_mod
+        )  # this is emitted from nowhere (?)
+
         self.parent.xsect_legend_color_modified_signal.connect(
             self.upd_list_x_leg_col_mod
-        )
+        )  # this is emitted from the legend manager
         self.parent.xsect_legend_thick_modified_signal.connect(
             self.upd_list_x_leg_thick_mod
-        )
+        )  # this is emitted from the legend manager
         self.parent.xsect_legend_opacity_modified_signal.connect(
             self.upd_list_x_leg_op_mod
-        )
+        )  # this is emitted from the legend manager
 
         # Define BOUNDARY lamda functions and signals
+
         self.upd_list_bound_add = lambda updated_list: self.boundary_added_update_views(
             updated_list=updated_list
         )
@@ -329,30 +352,35 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.upd_list_bound_leg_op_mod = lambda updated_list: self.boundary_legend_opacity_modified_update_views(
             updated_list=updated_list
         )
+
         # Connect BOUNDARY lamda functions and signals
+
         self.parent.boundary_added_signal.connect(
             self.upd_list_bound_add
-        )
+        )  # this is emitted from the collection
         self.parent.boundary_removed_signal.connect(
             self.upd_list_bound_rm
-        )
-        self.parent.boundary_geom_modified_signal.connect(
-            self.upd_list_bound_geo_mod
-        )
+        )  # this is emitted from the collection
         self.parent.boundary_metadata_modified_signal.connect(
             self.upd_list_bound_metadata_mod
-        )
+        )  # this is emitted from the collection
+
+        self.parent.boundary_geom_modified_signal.connect(
+            self.upd_list_bound_geo_mod
+        )  # this is emitted from nowhere(?)
+
         self.parent.boundary_legend_color_modified_signal.connect(
             self.upd_list_bound_leg_col_mod
-        )
+        )  # this is emitted from the legend manager
         self.parent.boundary_legend_thick_modified_signal.connect(
             self.upd_list_bound_leg_thick_mod
-        )
+        )  # this is emitted from the legend manager
         self.parent.boundary_legend_opacity_modified_signal.connect(
             self.upd_list_bound_leg_op_mod
-        )
+        )  # this is emitted from the legend manager
 
         # Define MESH 3D lamda functions and signals
+
         self.upd_list_mesh3d_add = lambda updated_list: self.mesh3d_added_update_views(
             updated_list=updated_list
         )
@@ -377,33 +405,38 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.upd_list_mesh3d_leg_op_mod = lambda updated_list: self.mesh3d_legend_opacity_modified_update_views(
             updated_list=updated_list
         )
+
         # Connect MESH 3D lamda functions and signals
+
         self.parent.mesh3d_added_signal.connect(
             self.upd_list_mesh3d_add
-        )
+        )  # this is emitted from the collection
         self.parent.mesh3d_removed_signal.connect(
             self.upd_list_mesh3d_rm
-        )
+        )  # this is emitted from the collection
         self.parent.mesh3d_data_keys_removed_signal.connect(
             self.upd_list_mesh3d_data_keys_mod
-        )
-        self.parent.mesh3d_data_val_modified_signal.connect(
-            self.upd_list_mesh3d_data_val_mod
-        )
+        )  # this is emitted from the collection
         self.parent.mesh3d_metadata_modified_signal.connect(
             self.upd_list_mesh3d_metadata_mod
-        )
+        )  # this is emitted from the collection
+
+        self.parent.mesh3d_data_val_modified_signal.connect(
+            self.upd_list_mesh3d_data_val_mod
+        )  # this is emitted from nowhere (?)
+
         self.parent.mesh3d_legend_color_modified_signal.connect(
             self.upd_list_mesh3d_leg_col_mod
-        )
+        )  # this is emitted from the legend manager
         self.parent.mesh3d_legend_thick_modified_signal.connect(
             self.upd_list_mesh3d_leg_thick_mod
-        )
+        )  # this is emitted from the legend manager
         self.parent.mesh3d_legend_opacity_modified_signal.connect(
             self.upd_list_mesh3d_leg_op_mod
-        )
+        )  # this is emitted from the legend manager
 
         # Define DOM lamda functions and signals
+
         self.upd_list_dom_add = lambda updated_list: self.dom_added_update_views(
             updated_list=updated_list
         )
@@ -431,36 +464,41 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.upd_list_dom_leg_op_mod = lambda updated_list: self.dom_legend_opacity_modified_update_views(
             updated_list=updated_list
         )
+
         # Collect DOM lamda functions and signals
+
         self.parent.dom_added_signal.connect(
             self.upd_list_dom_add
-        )
+        )  # this is emitted from the collection
         self.parent.dom_removed_signal.connect(
             self.upd_list_dom_rm
-        )
+        )  # this is emitted from the collection
         self.parent.dom_data_keys_removed_signal.connect(
             self.upd_list_dom_data_keys_mod
-        )
-        self.parent.dom_data_val_modified_signal.connect(
-            self.upd_list_dom_data_val_mod
-        )
+        )  # this is emitted from the collection
         self.parent.dom_metadata_modified_signal.connect(
             self.upd_list_dom_metadata_mod
-        )
+        )  # this is emitted from the collection
+
+        self.parent.dom_data_val_modified_signal.connect(
+            self.upd_list_dom_data_val_mod
+        )  # this is emitted from nowhere(?)
+
         self.parent.dom_legend_color_modified_signal.connect(
             self.upd_list_dom_leg_col_mod
-        )
+        )  # this is emitted from the legend manager
         self.parent.dom_legend_thick_modified_signal.connect(
             self.upd_list_dom_leg_thick_mod
-        )
+        )  # this is emitted from the legend manager
         self.parent.dom_legend_point_size_modified_signal.connect(
             self.upd_list_dom_leg_point_mod
-        )
+        )  # this is emitted from the legend manager
         self.parent.dom_legend_opacity_modified_signal.connect(
             self.upd_list_dom_leg_op_mod
-        )
+        )  # this is emitted from the legend manager
 
         # Define IMAGE lamda functions and signals
+
         self.upd_list_img_add = lambda updated_list: self.image_added_update_views(
             updated_list=updated_list
         )
@@ -473,21 +511,25 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.upd_list_img_leg_op_mod = lambda updated_list: self.image_legend_opacity_modified_update_views(
             updated_list=updated_list
         )
+
         # Connect IMAGE lamda functions and signals
+
         self.parent.image_added_signal.connect(
             self.upd_list_img_add
-        )
+        )  # this is emitted from the collection
         self.parent.image_removed_signal.connect(
             self.upd_list_img_rm
-        )
+        )  # this is emitted from the collection
         self.parent.image_metadata_modified_signal.connect(
             self.upd_list_metadata_mod
-        )
+        )  # this is emitted from the collection
+
         self.parent.image_legend_opacity_modified_signal.connect(
             self.upd_list_img_leg_op_mod
-        )
+        )  # this is emitted from the legend manager
 
         # Define WELL lamda functions and signals
+
         self.upd_list_well_add = lambda updated_list: self.well_added_update_views(
             updated_list=updated_list
         )
@@ -512,33 +554,38 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.upd_list_well_leg_op_mod = lambda updated_list: self.well_legend_opacity_modified_update_views(
             updated_list=updated_list
         )
+
         # Connect WELL lamda functions and signals
+
         self.parent.well_added_signal.connect(
             self.upd_list_well_add
-        )
+        )  # this is emitted from the collection
         self.parent.well_removed_signal.connect(
             self.upd_list_well_rm
-        )
+        )  # this is emitted from the collection
         self.parent.well_data_keys_removed_signal.connect(
             self.upd_list_well_data_keys_mod
-        )
-        self.parent.well_data_val_modified_signal.connect(
-            self.upd_list_well_data_val_mod
-        )
+        )  # this is emitted from the collection
         self.parent.well_metadata_modified_signal.connect(
             self.upd_list_well_metadata_mod
-        )
+        )  # this is emitted from the collection
+
+        self.parent.well_data_val_modified_signal.connect(
+            self.upd_list_well_data_val_mod
+        )  # this is emitted from nowhere(?)
+
         self.parent.well_legend_color_modified_signal.connect(
             self.upd_list_well_leg_col_mod
-        )
+        )  # this is emitted from the legend manager
         self.parent.well_legend_thick_modified_signal.connect(
             self.upd_list_well_leg_thick_mod
-        )
+        )  # this is emitted from the legend manager
         self.parent.well_legend_opacity_modified_signal.connect(
             self.upd_list_well_leg_op_mod
-        )
+        )  # this is emitted from the legend manager
 
         # Define FLUID lamda functions and signals
+
         self.upd_list_fluid_add = lambda updated_list: self.fluid_added_update_views(
             updated_list=updated_list
         )
@@ -569,39 +616,45 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.upd_list_fluid_leg_op_mod = lambda updated_list: self.fluid_legend_opacity_modified_update_views(
             updated_list=updated_list
         )
+
         # Connect FLUID lamda functions and signals
+
         self.parent.fluid_added_signal.connect(
             self.upd_list_fluid_add
-        )
+        )  # this is emitted from the collection
         self.parent.fluid_removed_signal.connect(
             self.upd_list_fluid_rm
-        )
-        self.parent.fluid_geom_modified_signal.connect(
-            self.upd_list_fluid_geo_mod
-        )
+        )  # this is emitted from the collection
         self.parent.fluid_data_keys_removed_signal.connect(
             self.upd_list_fluid_data_keys_mod
-        )
-        self.parent.fluid_data_val_modified_signal.connect(
-            self.upd_list_fluid_data_val_mod
-        )
+        )  # this is emitted from the collection
         self.parent.fluid_metadata_modified_signal.connect(
             self.upd_list_fluid_metadata_mod
-        )
+        )  # this is emitted from the collection
+
+        self.parent.fluid_geom_modified_signal.connect(
+            self.upd_list_fluid_geo_mod
+        )  # this is emitted from nowhere(?)
+
+        self.parent.fluid_data_val_modified_signal.connect(
+            self.upd_list_fluid_data_val_mod
+        )  # this is emitted from nowhere(?)
+
         self.parent.fluid_legend_color_modified_signal.connect(
             self.upd_list_fluid_leg_col_mod
-        )
+        )  # this is emitted from the legend manager
         self.parent.fluid_legend_thick_modified_signal.connect(
             self.upd_list_fluid_leg_thick_mod
-        )
+        )  # this is emitted from the legend manager
         self.parent.fluid_legend_point_size_modified_signal.connect(
             self.upd_list_fluid_leg_point_mod
-        )
+        )  # this is emitted from the legend manager
         self.parent.fluid_legend_opacity_modified_signal.connect(
             self.upd_list_fluid_leg_op_mod
-        )
+        )  # this is emitted from the legend manager
 
         # Define BACKGROUND lamda functions and signals
+
         self.upd_list_background_add = lambda updated_list: self.background_added_update_views(
             updated_list=updated_list
         )
@@ -633,55 +686,59 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.upd_list_background_leg_op = lambda updated_list: self.background_legend_opacity_modified_update_views(
             updated_list=updated_list
         )
+
         # Connect BACKGROUND lamda functions and signals
+
         self.parent.background_added_signal.connect(
             self.upd_list_background_add
-        )
+        )  # this is emitted from the collection
         self.parent.background_removed_signal.connect(
             self.upd_list_background_rm
-        )
-        self.parent.background_geom_modified_signal.connect(
-            self.upd_list_background_geo_mod
-        )
+        )  # this is emitted from the collection
         self.parent.background_data_keys_removed_signal.connect(
             self.upd_list_background_data_keys
-        )
-        self.parent.background_data_val_modified_signal.connect(
-            self.upd_list_background_data_val
-        )
+        )  # this is emitted from the collection
         self.parent.background_metadata_modified_signal.connect(
             self.upd_list_background_metadata
-        )
+        )  # this is emitted from the collection
+
+        self.parent.background_geom_modified_signal.connect(
+            self.upd_list_background_geo_mod
+        )  # this is emitted from nowhere(?)
+        self.parent.background_data_val_modified_signal.connect(
+            self.upd_list_background_data_val
+        )  # this is emitted from nowhere(?)
+
         self.parent.background_legend_color_modified_signal.connect(
             self.upd_list_background_leg_col
-        )
+        )  # this is emitted from the legend manager
         self.parent.background_legend_thick_modified_signal.connect(
             self.upd_list_background_leg_thick
-        )
+        )  # this is emitted from the legend manager
         self.parent.background_legend_point_size_modified_signal.connect(
             self.upd_list_background_leg_point
-        )
+        )  # this is emitted from the legend manager
         self.parent.background_legend_opacity_modified_signal.connect(
             self.upd_list_background_leg_op
-        )
+        )  # this is emitted from the legend manager
 
         # Define and connect PROPERTY LEGEND lamda functions and signals
+
         self.prop_legend_lambda = lambda this_property: self.prop_legend_cmap_modified_update_views(
             this_property=this_property
         )
+
         self.parent.prop_legend_cmap_modified_signal.connect(self.prop_legend_lambda)
-
-    # ================================  build and update trees and tables ================================
-
-    # Methods used to build and update the GEOLOGY and TOPOLOGY trees
 
     def disconnect_all_signals(self):
         """Used to disconnect all windows signals correctly, when a window is closed.
         If this method is removed PZero will crash when closing a window.
         If new signals are added, they must be listed also here.
         It would be nicer to keep a list of signals and then disconnect all signals in
-        the list, but we have not find a way to do this at the moment."""
+        the list, but we have not found a way to do this at the moment."""
+
         # Disconnect GEOLOGY signals
+
         self.parent.geology_added_signal.disconnect(self.upd_list_geo_add)
         self.parent.geology_removed_signal.disconnect(self.upd_list_geo_rm)
         self.parent.geology_geom_modified_signal.disconnect(self.upd_list_geo_mod)
@@ -706,7 +763,9 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.parent.geology_legend_opacity_modified_signal.disconnect(
             self.upd_list_geo_leg_op_mod
         )
+
         # Disconnect X-SECTION signals
+
         self.parent.xsect_added_signal.disconnect(self.upd_list_x_add)
         self.parent.xsect_removed_signal.disconnect(self.upd_list_x_rm)
         self.parent.xsect_geom_modified_signal.disconnect(self.upd_list_x_mod)
@@ -722,7 +781,9 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.parent.xsect_legend_opacity_modified_signal.disconnect(
             self.upd_list_x_leg_op_mod
         )
+
         # Disconnect BOUNDARY signals
+
         self.parent.boundary_added_signal.disconnect(self.upd_list_bound_add)
         self.parent.boundary_removed_signal.disconnect(self.upd_list_bound_rm)
         self.parent.boundary_geom_modified_signal.disconnect(
@@ -740,7 +801,9 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.parent.boundary_legend_opacity_modified_signal.disconnect(
             self.upd_list_bound_leg_op_mod
         )
+
         # Disconnect MESH3D signals
+
         self.parent.mesh3d_added_signal.disconnect(self.upd_list_mesh3d_add)
         self.parent.mesh3d_removed_signal.disconnect(self.upd_list_mesh3d_rm)
         self.parent.mesh3d_data_keys_removed_signal.disconnect(
@@ -761,7 +824,9 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.parent.mesh3d_legend_opacity_modified_signal.disconnect(
             self.upd_list_mesh3d_leg_op_mod
         )
+
         # Disconnect DOM signals
+
         self.parent.dom_added_signal.disconnect(self.upd_list_dom_add)
         self.parent.dom_removed_signal.disconnect(self.upd_list_dom_rm)
         self.parent.dom_data_keys_removed_signal.disconnect(
@@ -785,7 +850,9 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.parent.dom_legend_opacity_modified_signal.disconnect(
             self.upd_list_dom_leg_op_mod
         )
+
         # Disconnect IMAGE signals
+
         self.parent.image_added_signal.disconnect(self.upd_list_img_add)
         self.parent.image_removed_signal.disconnect(self.upd_list_img_rm)
         self.parent.image_metadata_modified_signal.disconnect(
@@ -794,7 +861,9 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.parent.image_legend_opacity_modified_signal.disconnect(
             self.upd_list_img_leg_op_mod
         )
+
         # Disconnect WELL signals
+
         self.parent.well_added_signal.disconnect(self.upd_list_well_add)
         self.parent.well_removed_signal.disconnect(self.upd_list_well_rm)
         self.parent.well_data_keys_removed_signal.disconnect(
@@ -815,7 +884,9 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.parent.well_legend_opacity_modified_signal.disconnect(
             self.upd_list_well_leg_op_mod
         )
+
         # Disconnect FLUID signals
+
         self.parent.fluid_added_signal.disconnect(self.upd_list_fluid_add)
         self.parent.fluid_removed_signal.disconnect(self.upd_list_fluid_rm)
         self.parent.fluid_geom_modified_signal.disconnect(self.upd_list_fluid_geo_mod)
@@ -840,7 +911,9 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.parent.fluid_legend_opacity_modified_signal.disconnect(
             self.upd_list_fluid_leg_op_mod
         )
+
         # Disconnect BACKGROUND signals
+
         self.parent.background_added_signal.disconnect(self.upd_list_background_add)
         self.parent.background_removed_signal.disconnect(self.upd_list_background_rm)
         self.parent.background_geom_modified_signal.disconnect(
@@ -867,8 +940,14 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.parent.background_legend_opacity_modified_signal.disconnect(
             self.upd_list_background_leg_op
         )
+
         # Disconnect PROPERTY LEGEND signals
+
         self.parent.prop_legend_cmap_modified_signal.disconnect(self.prop_legend_lambda)
+
+    # ================================  build and update trees and tables ================================
+
+    # Methods used to build and update the GEOLOGY and TOPOLOGY trees
 
     def create_geology_tree(self):
         """Create geology tree with checkboxes and properties"""
@@ -5312,7 +5391,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.FluidsTopologyTreeWidget.itemChanged.disconnect()
         for uid in updated_list:
             """Case for color changed"""
-            wells_list = self.parent.well_coll.get_uids()
+            wells_list = self.parent.well_coll.get_uids
             if self.parent.fluids_coll.get_uid_x_section(uid) in wells_list:
                 self.change_actor_color(
                     uid=self.parent.fluids_coll.get_uid_x_section(uid),
@@ -5518,7 +5597,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.BackgroundsTopologyTreeWidget.itemChanged.disconnect()
         for uid in updated_list:
             """Case for color changed"""
-            wells_list = self.parent.well_coll.get_uids()
+            wells_list = self.parent.well_coll.get_uids
             if self.parent.backgrounds_coll.get_uid_x_section(uid) in wells_list:
                 self.change_actor_color(
                     uid=self.parent.backgrounds_coll.get_uid_x_section(uid),
@@ -7213,7 +7292,7 @@ class View3D(VTKView):
                 att_point.get_point_data_shape(i)[1] for i in properties_name
             ]
 
-            curr_obj_dict = deepcopy(GeologicalCollection.geological_entity_dict)
+            curr_obj_dict = deepcopy(GeologicalCollection.entity_dict)
             curr_obj_dict["uid"] = str(uuid4())
             curr_obj_dict["name"] = set_opt["name"]
             curr_obj_dict["geological_type"] = set_opt["geological_type"]
@@ -7320,7 +7399,7 @@ class View3D(VTKView):
 
     def change_bore_vis(self, method):
         actors = set(self.plotter.renderer.actors.copy())
-        wells = set(self.parent.well_coll.get_uids())
+        wells = set(self.parent.well_coll.get_uids)
 
         well_actors = actors.intersection(wells)
         if method == "trace":
@@ -8141,12 +8220,12 @@ class NewViewMap(NewView2D):
 class NewViewXsection(NewView2D):
     def __init__(self, parent=None, *args, **kwargs):
         # Choose section name with dialog.
-        if parent.xsect_coll.get_names():
+        if parent.xsect_coll.get_names:
             self.this_x_section_name = input_combo_dialog(
                 parent=None,
                 title="Xsection",
                 label="Choose Xsection",
-                choice_list=parent.xsect_coll.get_names(),
+                choice_list=parent.xsect_coll.get_names,
             )
             print("self.this_x_section_name: ", self.this_x_section_name)
         else:

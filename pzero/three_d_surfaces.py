@@ -81,7 +81,7 @@ def interpolation_delaunay_2d(self):
             print(" -- Error input type -- ")
             return
     """Create deepcopy of the geological entity dictionary."""
-    surf_dict = deepcopy(self.geol_coll.geological_entity_dict)
+    surf_dict = deepcopy(self.geol_coll.entity_dict)
     input_dict = {
         "name": [
             "TriSurf name: ",
@@ -185,7 +185,7 @@ def poisson_interpolation(self):
             print(" -- Error input type -- ")
             return
     """Create deepcopy of the geological entity dictionary."""
-    surf_dict = deepcopy(self.geol_coll.geological_entity_dict)
+    surf_dict = deepcopy(self.geol_coll.entity_dict)
     input_dict = {
         "name": [
             "TriSurf name: ",
@@ -394,14 +394,14 @@ def implicit_model_loop_structural(self):
     print("all_input_data_df:\n", all_input_data_df)
     """Ask for bounding box for the model"""
     input_dict = {
-        "boundary": ["Boundary: ", self.boundary_coll.get_names()],
+        "boundary": ["Boundary: ", self.boundary_coll.get_names],
         "method": ["Interpolation method: ", ["PLI", "FDI", "surfe"]],
     }
     options_dict = multiple_input_dialog(
         title="Implicit Modelling - LoopStructural algorithms", input_dict=input_dict
     )
     if options_dict is None:
-        options_dict["boundary"] = self.boundary_coll.get_names()[0]
+        options_dict["boundary"] = self.boundary_coll.get_names[0]
         options_dict["method"] = "PLI"
     boundary_uid = self.boundary_coll.df.loc[
         self.boundary_coll.df["name"] == options_dict["boundary"], "uid"
@@ -553,7 +553,7 @@ def implicit_model_loop_structural(self):
     """Create deepcopy of the Mesh3D entity dictionary."""
     print("-> create Voxet...")
     tic()
-    voxet_dict = deepcopy(self.mesh3d_coll.mesh3d_entity_dict)
+    voxet_dict = deepcopy(self.mesh3d_coll.entity_dict)
     """Get output Voxet name."""
     model_name = input_text_dialog(
         title="Implicit Modelling - LoopStructural algorithms",
@@ -625,7 +625,7 @@ def implicit_model_loop_structural(self):
         iso_surface.SetValue(0, value)
         iso_surface.Update()
         """Create new TriSurf and populate with iso-surface"""
-        surf_dict = deepcopy(self.geol_coll.geological_entity_dict)
+        surf_dict = deepcopy(self.geol_coll.entity_dict)
         surf_dict["name"] = geological_feature + "_from_" + model_name
         surf_dict["topological_type"] = "TriSurf"
         surf_dict["geological_type"] = geological_type
@@ -674,7 +674,7 @@ def surface_smoothing(
                 return smoother.GetOutput()
             else:
                 """Create deepcopy of the geological entity dictionary."""
-                surf_dict = deepcopy(self.geol_coll.geological_entity_dict)
+                surf_dict = deepcopy(self.geol_coll.entity_dict)
                 surf_dict["name"] = self.geol_coll.get_uid_name(uid) + "_smoothed"
                 surf_dict[
                     "geological_feature"
@@ -768,7 +768,7 @@ def linear_extrusion(self):
             print(" -- Error input type: only PolyLine and XsPolyLine type -- ")
             return
     """Create deepcopy of the geological entity dictionary."""
-    surf_dict = deepcopy(self.geol_coll.geological_entity_dict)
+    surf_dict = deepcopy(self.geol_coll.entity_dict)
     input_dict = {
         "name": [
             "TriSurf name: ",
@@ -885,7 +885,7 @@ def decimation_pro_resampling(self):
             print(" -- Error input type: only TriSurf type -- ")
             return
     """Create deepcopy of the geological entity dictionary."""
-    surf_dict = deepcopy(self.geol_coll.geological_entity_dict)
+    surf_dict = deepcopy(self.geol_coll.entity_dict)
     surf_dict["name"] = self.geol_coll.get_uid_name(input_uids[0]) + "_decimated"
     surf_dict["geological_feature"] = self.geol_coll.get_uid_geological_feature(
         input_uids[0]
@@ -978,7 +978,7 @@ def decimation_quadric_resampling(self):
             print(" -- Error input type: only TriSurf type -- ")
             return
     """Create deepcopy of the geological entity dictionary."""
-    surf_dict = deepcopy(self.geol_coll.geological_entity_dict)
+    surf_dict = deepcopy(self.geol_coll.entity_dict)
     surf_dict["name"] = self.geol_coll.get_uid_name(input_uids[0]) + "_decimated"
     surf_dict["geological_feature"] = self.geol_coll.get_uid_geological_feature(
         input_uids[0]
@@ -1052,7 +1052,7 @@ def subdivision_resampling(self, mode=0, type="linear", n_subd=2):
             else:
                 # Add new entity from surf_dict. Function add_entity_from_dict creates a new uid
                 """Create deepcopy of the geological entity dictionary."""
-                surf_dict = deepcopy(self.geol_coll.geological_entity_dict)
+                surf_dict = deepcopy(self.geol_coll.entity_dict)
                 surf_dict["name"] = self.geol_coll.get_uid_name(uid) + "_subdivided"
                 surf_dict[
                     "geological_feature"
@@ -1096,7 +1096,7 @@ def intersection_xs(self):
     xsect_names = input_checkbox_dialog(
         title="Intersection XSection",
         label="Choose XSections to intersect",
-        choice_list=self.xsect_coll.get_names(),
+        choice_list=self.xsect_coll.get_names,
     )
     if xsect_names is None:
         return
@@ -1124,7 +1124,7 @@ def intersection_xs(self):
                         if cutter.GetOutput().GetNumberOfPoints() > 0:
                             """Create new dict for the new XsVertexSet"""
 
-                            obj_dict = deepcopy(self.geol_coll.geological_entity_dict)
+                            obj_dict = deepcopy(self.geol_coll.entity_dict)
                             obj_dict["x_section"] = xsect_uid
                             obj_dict["topological_type"] = "XsVertexSet"
                             obj_dict["vtk_obj"] = XsVertexSet(
@@ -1222,7 +1222,7 @@ def intersection_xs(self):
                             if connectivity_clean.GetOutput().GetNumberOfPoints() > 0:
                                 """Create new dict for the new XsPolyLine"""
                                 obj_dict = deepcopy(
-                                    self.geol_coll.geological_entity_dict
+                                    self.geol_coll.entity_dict
                                 )
                                 obj_dict["x_section"] = xsect_uid
                                 obj_dict["topological_type"] = "XsPolyLine"
@@ -1396,7 +1396,7 @@ def intersection_xs(self):
                             self.mesh3d_coll.get_uid_properties_names(uid)[0]
                         )
                         """Create new dict for the new XsVoxet"""
-                        obj_dict = deepcopy(self.mesh3d_coll.mesh3d_entity_dict)
+                        obj_dict = deepcopy(self.mesh3d_coll.entity_dict)
                         obj_dict[
                             "name"
                         ] = f"{self.mesh3d_coll.get_uid_name(uid)}{postfix}"
@@ -1420,14 +1420,14 @@ def intersection_xs(self):
                         print(" -- empty object -- ")
         elif self.shown_table == "tabDOMs":
             for uid in input_uids:
-                if self.dom_coll.get_uid_dom_type(uid) == "DEM":
+                if self.dom_coll.get_uid_topological_type(uid) == "DEM":
                     """Create cutter"""
                     cutter = vtk.vtkCutter()
                     cutter.SetCutFunction(self.xsect_coll.get_uid_vtk_plane(xsect_uid))
                     cutter.SetInputData(self.dom_coll.get_uid_vtk_obj(uid))
                     cutter.Update()
                     """Create new dict for the new DomXs"""
-                    obj_dict = deepcopy(self.dom_coll.dom_entity_dict)
+                    obj_dict = deepcopy(self.dom_coll.entity_dict)
                     obj_dict["name"] = f"{self.dom_coll.get_uid_name(uid)}{postfix}"
                     obj_dict["dom_type"] = "DomXs"
                     obj_dict[
@@ -1493,7 +1493,7 @@ def project_2_dem(self):
     ):
         return
     """Ask for the DOM (/DEM), source of the projection"""
-    dom_list_uids = self.dom_coll.get_uids()
+    dom_list_uids = self.dom_coll.get_uids
     dom_list_names = []
     for uid in dom_list_uids:
         dom_list_names.append(self.dom_coll.get_uid_name(uid))
@@ -1542,7 +1542,7 @@ def project_2_dem(self):
         projection.SetZArrayName("elevation")
         projection.Update()
         """Create deepcopy of the geological entity dictionary."""
-        obj_dict = deepcopy(self.geol_coll.geological_entity_dict)
+        obj_dict = deepcopy(self.geol_coll.entity_dict)
         if replace_on_off == "YES" or replace_on_off == "yes" or replace_on_off == "y":
             obj_dict["uid"] = uid
         elif replace_on_off == "NO" or replace_on_off == "no" or replace_on_off == "n":
@@ -1614,7 +1614,7 @@ def project_2_xs(self):
         print("No valid input data selected.")
         return
     """Define projection parameters (float64 needed for "t" afterwards)"""
-    xs_names = self.xsect_coll.get_names()
+    xs_names = self.xsect_coll.get_names
     input_dict = {
         "xs_name": ["XSection: ", xs_names],
         "proj_plunge": ["Projection axis plunge: ", 0.0],
@@ -1661,7 +1661,7 @@ def project_2_xs(self):
     """Project each entity."""
     for uid in input_uids:
         """Clone entity."""
-        entity_dict = deepcopy(self.geol_coll.geological_entity_dict)
+        entity_dict = deepcopy(self.geol_coll.entity_dict)
         entity_dict["name"] = self.geol_coll.get_uid_name(uid) + "_prj_" + xs_name
         entity_dict["geological_type"] = self.geol_coll.get_uid_geological_type(uid)
         entity_dict["geological_feature"] = self.geol_coll.get_uid_geological_feature(
@@ -1852,7 +1852,7 @@ def split_surf(self):
             final_obj = TriSurf()
             final_obj.DeepCopy(appender.GetOutput())
 
-            obj_dict = deepcopy(self.geol_coll.geological_entity_dict)
+            obj_dict = deepcopy(self.geol_coll.entity_dict)
 
             obj_dict["uid"] = str(uuid4())
 
@@ -1885,7 +1885,7 @@ def split_surf(self):
             self.geol_coll.get_uid_vtk_obj(obj_dict["uid"]).connected_calc()
 
             # Add line intersection
-            obj_dict = deepcopy(self.geol_coll.geological_entity_dict)
+            obj_dict = deepcopy(self.geol_coll.entity_dict)
 
             obj_dict["uid"] = str(uuid4())
 
@@ -1968,7 +1968,7 @@ def retopo(self, mode=0, dec_int=0.2, n_iter=40, rel_fac=0.1):
                     return clean.GetOutput()
                 else:
                     """Create deepcopy of the geological entity dictionary."""
-                    surf_dict = deepcopy(self.geol_coll.geological_entity_dict)
+                    surf_dict = deepcopy(self.geol_coll.entity_dict)
                     surf_dict["name"] = self.geol_coll.get_uid_name(uid) + "_retopo"
                     surf_dict[
                         "geological_feature"

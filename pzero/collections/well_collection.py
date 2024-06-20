@@ -2,10 +2,218 @@ import uuid
 from copy import deepcopy
 
 from PyQt5.QtCore import QAbstractTableModel, Qt, QVariant
-from numpy import random as np_random
+from numpy import random as np_random, ndarray
 from numpy import round as np_round
-from pandas import DataFrame as pd_DataFrame
+from pandas import DataFrame as pd_DataFrame, DataFrame
 from pandas import unique as pd_unique
+from vtkmodules.vtkCommonDataModel import vtkDataObject
+
+from .AbstractCollection import BaseCollection
+
+
+class WellCollection(BaseCollection):
+
+    def __init__(self, parent=None, *args, **kwargs):
+        super(WellCollection, self).__init__(*args, **kwargs)
+
+        self.parent = parent
+
+        self.entity_dict = {
+            "uid": "",
+            "Loc ID": "undef",
+            "properties_names": [],
+            "properties_components": [],
+            "properties_types": [],
+            "markers": [],
+            "x_section": [], # this is the uid of the cross section for "XsVertexSet", "XsPolyLine", and "XsImage", empty for all others
+            "vtk_obj": None,
+        }
+
+        self.entity_type_dict = {
+            "uid": str,
+            "Loc ID": str,
+            "properties_names": list,
+            "properties_components": list,
+            "properties_types": list,
+            "markers": list,
+            "x_section": str,
+            "vtk_obj": object,
+        }
+
+        self.valid_topological_types = [
+            "VertexSet",
+            "PolyLine",
+            "XsVertexSet",
+            "XsPolyLine",
+        ]
+
+        self.editable_columns_names = ["name"]
+
+        self.collection_name = 'wells'
+
+        self.initialize_df()
+
+    def add_entity_from_dict(self, entity_dict: DataFrame = None, color: ndarray = None):
+        if not entity_dict["uid"]:
+            entity_dict["uid"] = str(uuid.uuid4())
+        """"Append new row to dataframe. Note that the 'append()' method for Pandas dataframes DOES NOT
+        work in place, hence a NEW dataframe is created every time and then substituted to the old one."""
+        self.df = self.df.append(entity_dict, ignore_index=True)
+        """Reset data model"""
+        self.modelReset.emit()
+        self.parent.prop_legend.update_widget(self.parent)
+        """Then emit signal to update the views."""
+        locid = entity_dict["Loc ID"]
+        if self.parent.well_legend_df.loc[
+            self.parent.well_legend_df["Loc ID"] == locid
+        ].empty:
+            R, G, B = np_round(np_random.random(3) * 255)
+            self.parent.well_legend_df = self.parent.well_legend_df.append(
+                {
+                    "Loc ID": locid,
+                    "color_R": R,
+                    "color_G": G,
+                    "color_B": B,
+                    "line_thick": 2.0,
+                    "opacity": 100,
+                },
+                ignore_index=True,
+            )
+            self.parent.legend.update_widget(self.parent)
+            self.parent.prop_legend.update_widget(self.parent)
+        """Then emit signal to update the views."""
+        self.parent.well_added_signal.emit(
+            [entity_dict["uid"]]
+        )  # a list of uids is emitted, even if the entity is just one
+        return entity_dict["uid"]
+
+    def remove_entity(self, uid: str = None) -> str:
+        self.df.drop(self.df[self.df["uid"] == uid].index, inplace=True)
+        self.modelReset.emit()  # is this really necessary?
+        self.parent.prop_legend.update_widget(self.parent)
+        """When done, send a signal over to the views."""
+        self.parent.well_removed_signal.emit(
+            [uid]
+        )  # a list of uids is emitted, even if the entity is just one
+        return uid
+
+    def clone_entity(self, uid: str = None) -> str:
+        pass
+
+    def replace_vtk(self, uid: str = None, vtk_object: vtkDataObject = None, const_color: bool = True):
+        if isinstance(
+                vtk_object, type(self.df.loc[self.df["uid"] == uid, "vtk_obj"].values[0])
+        ):
+            new_dict = deepcopy(
+                self.df.loc[
+                    self.df["uid"] == uid, self.df.columns != "vtk_obj"
+                ].to_dict("records")[0]
+            )
+            new_dict["vtk_obj"] = vtk_object
+            self.remove_entity(uid)
+            self.add_entity_from_dict(entity_dict=new_dict)
+        else:
+            print("ERROR - replace_vtk with vtk of a different type.")
+
+    def attr_modified_update_legend_table(self):
+        table_updated = False
+        """First remove unused locid / feature"""
+        locid_in_legend = pd_unique(self.parent.well_legend_df["Loc ID"])
+        features_in_legend = pd_unique(self.parent.well_legend_df["geological_feature"])
+        for loc_id in locid_in_legend:
+            if self.parent.well_coll.df.loc[
+                self.parent.well_coll.df["Loc ID"] == loc_id
+            ].empty:
+                """Get index of row to be removed, then remove it in place with .drop()."""
+                idx_remove = self.parent.well_legend_df[
+                    self.parent.well_legend_df["Loc ID"] == loc_id
+                    ].index
+                self.parent.well_legend_df.drop(idx_remove, inplace=True)
+                table_updated = table_updated or True
+            for feature in features_in_legend:
+                if self.parent.well_coll.df.loc[
+                    (self.parent.well_coll.df["Loc ID"] == loc_id)
+                    & (self.parent.well_coll.df["geological_feature"] == feature)
+                ].empty:
+                    """Get index of row to be removed, then remove it in place with .drop()."""
+                    idx_remove = self.parent.well_legend_df[
+                        (self.parent.well_legend_df["Loc ID"] == loc_id)
+                        & (self.parent.well_legend_df["geological_feature"] == feature)
+                        ].index
+                    self.parent.well_legend_df.drop(idx_remove, inplace=True)
+                    table_updated = table_updated or True
+
+        for feature in features_in_legend:
+            if self.parent.well_coll.df.loc[
+                self.parent.well_coll.df["geological_feature"] == feature
+            ].empty:
+                """Get index of row to be removed, then remove it in place with .drop()."""
+                idx_remove = self.parent.well_legend_df[
+                    self.parent.well_legend_df["geological_feature"] == feature
+                    ].index
+                self.parent.well_legend_df.drop(idx_remove, inplace=True)
+                table_updated = table_updated or True
+
+        """Then add new locid / feature"""
+        for uid in self.parent.well_coll.df["uid"].to_list():
+            locid = self.parent.well_coll.df.loc[
+                self.parent.well_coll.df["uid"] == uid, "Loc ID"
+            ].values[0]
+            feature = self.parent.well_coll.df.loc[
+                self.parent.well_coll.df["uid"] == uid, "geological_feature"
+            ].values[0]
+            if self.parent.well_legend_df.loc[
+                (self.parent.well_legend_df["Loc ID"] == locid)
+                & (self.parent.well_legend_df["geological_feature"] == feature)
+            ].empty:
+                self.parent.well_legend_df = self.parent.well_legend_df.append(
+                    {
+                        "Loc ID": locid,
+                        "geological_feature": feature,
+                        "color_R": round(np_random.random() * 255),
+                        "color_G": round(np_random.random() * 255),
+                        "color_B": round(np_random.random() * 255),
+                        "line_thick": 2.0,
+                    },
+                    ignore_index=True,
+                )
+                table_updated = table_updated or True
+        """When done, if the table was updated update the widget. No signal is sent here to the views."""
+        if table_updated:
+            self.parent.legend.update_widget(self.parent)
+
+    def get_uid_legend(self, uid: str = None) -> dict:
+        locid = self.df.loc[self.df["uid"] == uid, "Loc ID"].values[0]
+
+        legend_dict = self.parent.well_legend_df.loc[
+            self.parent.well_legend_df["Loc ID"] == locid
+            ].to_dict("records")
+
+        return legend_dict[0]
+
+    def set_uid_legend(self, uid: str = None, color_R: float = None, color_G: float = None, color_B: float = None,
+                       line_thick: float = None, point_size: float = None, opacity: float = None):
+        pass
+
+    def metadata_modified_signal(self, updated_list: list = None):
+        self.parent.well_metadata_modified_signal.emit(updated_list)
+
+    def data_keys_removed_signal(self, updated_list: list = None):
+        self.parent.well_data_keys_removed_signal.emit(updated_list)
+
+    # =================================== Additional methods ===========================================
+
+    def get_well_locid_uids(self, locid=None):
+        """Get list of uids of a given locid."""
+        return self.df.loc[self.df["Loc ID"] == locid, "uid"].to_list()
+
+    def get_uid_well_locid(self, uid=None):
+        """Get value(s) stored in dataframe (as pointer) from uid."""
+        return self.df.loc[self.df["uid"] == uid, "Loc ID"].values[0]
+
+    def set_uid_well_locid(self, uid=None, locid=None):
+        """Set value(s) stored in dataframe (as pointer) from uid.."""
+        self.df.loc[self.df["uid"] == uid, "Loc ID"] = locid
 
 
 class WellCollection(QAbstractTableModel):
@@ -119,7 +327,7 @@ class WellCollection(QAbstractTableModel):
             print("ERROR - replace_vtk with vtk of a different type.")
 
     def well_attr_modified_update_legend_table(self):
-        able_updated = False
+        table_updated = False
         """First remove unused locid / feature"""
         locid_in_legend = pd_unique(self.parent.well_legend_df["Loc ID"])
         features_in_legend = pd_unique(self.parent.well_legend_df["geological_feature"])
