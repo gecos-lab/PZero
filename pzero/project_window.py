@@ -44,6 +44,7 @@ from pzero.helpers.helper_dialogs import (
     progress_dialog,
     import_dialog,
     PreviewWidget,
+    input_text_dialog,
 )
 from pzero.imports.cesium2vtk import vtk2cesium
 from pzero.imports.dem2vtk import dem2vtk
@@ -2181,18 +2182,43 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         )
         if not in_file_names:
             return
+        # Define import options.
+        scenario_default = input_text_dialog(
+            parent=None, title="Scenario", label="Default scenario", default_text="undef"
+        )
+        if not scenario_default:
+            scenario_default = "undef"
+        geological_type_default = input_combo_dialog(
+            parent=None,
+            title="Geological type",
+            label="Default geological type",
+            choice_list=GeologicalCollection.valid_geological_types,
+        )
+        if not geological_type_default:
+            geological_type_default = "undef"
+        geological_feature_from_name = options_dialog(
+            title="Feature from name",
+            message="Get geological feature from object name if not defined in file",
+            yes_role="Yes",
+            no_role="No",
+            reject_role=None,
+        )
+        if geological_feature_from_name == 0:
+            geological_feature_from_name = True
+        else:
+            geological_feature_from_name = False
+        append_opt = options_dialog(
+            title="Append option",
+            message=f"Append entities to XSections?\nSection will NOT be re-oriented.",
+            yes_role="Cancel",
+            no_role="OK",
+            reject_role=None)
+        # Process files.
         for in_file_name in in_file_names:
             self.TextTerminal.appendPlainText("in_file_name: " + in_file_name)
             # Get x-section name from file.
             x_section_name = os.path.splitext(os.path.basename(in_file_name))[0]
             if x_section_name in self.xsect_coll.df["name"].to_list():
-                # Decide what to do if a XSection with this name already exists.
-                append_opt = options_dialog(
-                    title="Append option",
-                    message=f"Append entities to {x_section_name} XSection?\nSection will NOT be re-oriented.",
-                    yes_role="Cancel",
-                    no_role="OK",
-                    reject_role=None)
                 if append_opt == 0:
                     return
                 else:
@@ -2209,7 +2235,10 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 in_file_name=in_file_name,
                 uid_from_name=False,
                 x_section_uid=x_section_uid,
-                append_opt=append_opt
+                scenario_default=scenario_default,
+                geological_type_default=geological_type_default,
+                geological_feature_from_name=geological_feature_from_name,
+                append_opt=append_opt,
             )
             self.prop_legend.update_widget(parent=self)
 
@@ -2228,7 +2257,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         if in_file_name:
             self.TextTerminal.appendPlainText("in_file_name: " + in_file_name)
             gocad2vtk_boundary(
-                self=self, in_file_name=in_file_name, uid_from_name=False
+                self=self,
+                in_file_name=in_file_name,
+                uid_from_name=False,
             )
 
     def import_PC(self):

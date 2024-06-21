@@ -456,7 +456,14 @@ def gocad2vtk(self=None, in_file_name=None, uid_from_name=None):
     self.TextTerminal.appendPlainText("Entities imported: " + str(entity_counter))
 
 
-def gocad2vtk_section(self=None, in_file_name=None, uid_from_name=None, x_section_uid=None, append_opt=None):
+def gocad2vtk_section(self=None,
+                      in_file_name=None,
+                      uid_from_name=None,
+                      x_section_uid=None,
+                      scenario_default=None,
+                      geological_type_default=None,
+                      geological_feature_from_name=None,
+                      append_opt=None):
     """
     Read a GOCAD ASCII file with entities belonging to a single cross-section, and add,
     to the geol_coll GeologicalCollection(), all the
@@ -464,31 +471,6 @@ def gocad2vtk_section(self=None, in_file_name=None, uid_from_name=None, x_sectio
     This is the specific implementation for objects belonging to a cross-section.
     <self> is the calling ProjectWindow() instance.
     """
-    # Define import options.
-    scenario_default = input_text_dialog(
-        parent=None, title="Scenario", label="Default scenario", default_text="undef"
-    )
-    if not scenario_default:
-        scenario_default = "undef"
-    geological_type_default = input_combo_dialog(
-        parent=None,
-        title="Geological type",
-        label="Default geological type",
-        choice_list=GeologicalCollection.valid_geological_types,
-    )
-    if not geological_type_default:
-        geological_type_default = "undef"
-    geological_feature_from_name = options_dialog(
-        title="Feature from name",
-        message="Get geological feature from object name if not defined in file",
-        yes_role="Yes",
-        no_role="No",
-        reject_role=None,
-    )
-    if geological_feature_from_name == 0:
-        geological_feature_from_name = True
-    else:
-        geological_feature_from_name = False
     # Open input file.
     fin = open(in_file_name, "rt")
     # Number of entities before importing.
