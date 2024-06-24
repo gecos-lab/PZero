@@ -109,6 +109,10 @@ class BaseCollection(QAbstractTableModel, ABC, metaclass=Meta):
 
         pass
 
+    # @staticmethod
+    # @abstractmethod
+    # def import_data(path: str):
+    #     pass
     # =================================== Common properties ================================================
 
     @property
