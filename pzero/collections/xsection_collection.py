@@ -276,7 +276,7 @@ def sections_from_file(self):
 class XSectionCollection(BaseCollection):
 
     def __init__(self, parent=None, *args, **kwargs):
-        super().__init__(parent, *args, **kwargs)
+        super(XSectionCollection, self).__init__(parent, *args, **kwargs)
 
         self.entity_dict = {
             "uid": "",

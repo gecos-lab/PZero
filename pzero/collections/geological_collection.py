@@ -30,9 +30,7 @@ pd_set_option("display.max_colwidth", pd_max_colwidth)
 class GeologicalCollection(BaseCollection):
 
     def __init__(self, parent=None, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-        self.parent = parent
+        super(GeologicalCollection, self).__init__(parent, *args, **kwargs)
 
         self.entity_dict = {
             "uid": "",

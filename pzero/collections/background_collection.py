@@ -29,7 +29,7 @@ class BackgroundCollection(BaseCollection):
 
     def __init__(self, parent=None, *args, **kwargs):
 
-        super().__init__(parent, *args, **kwargs)
+        super(BackgroundCollection, self).__init__(parent, *args, **kwargs)
 
         self.entity_dict = {
                 "uid": "",

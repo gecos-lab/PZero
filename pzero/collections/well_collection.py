@@ -14,7 +14,7 @@ from .AbstractCollection import BaseCollection
 class WellCollection(BaseCollection):
 
     def __init__(self, parent=None, *args, **kwargs):
-        super().__init__(parent, *args, **kwargs)
+        super(WellCollection, self).__init__(parent, *args, **kwargs)
 
         self.entity_dict = {
             "uid": "",

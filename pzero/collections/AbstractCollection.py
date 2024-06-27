@@ -8,23 +8,21 @@ import numpy as np
 from vtkmodules.vtkCommonDataModel import vtkDataObject
 
 
-class Meta:
-    required_attributes = []
-
-    def __call__(self, *args, **kwargs):
-        obj = super(Meta, self).__call__(*args, **kwargs)
-        for attr_name in obj.required_attributes:
-            if not getattr(obj, attr_name):
-                raise ValueError('required attribute (%s) not set' % attr_name)
-        return obj
+# class Meta:
+#     required_attributes = []
+#
+#     def __call__(self, *args, **kwargs):
+#         obj = super(Meta, self).__call__(*args, **kwargs)
+#         for attr_name in obj.required_attributes:
+#             if not getattr(obj, attr_name):
+#                 raise ValueError('required attribute (%s) not set' % attr_name)
+#         return obj
 
 
 class BaseCollection(ABC):
-    required_attributes = ['parent', 'entity_dict', 'entity_type_dict', 'valid_topological_types',
-                           'editable_columns_names', 'collection_name']
 
     def __init__(self, parent=None, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+        super(BaseCollection, self).__init__(*args, **kwargs)
         """Import reference to parent, otherwise it is difficult to reference them in SetData() 
         that has a standard list of inputs."""
 
@@ -39,12 +37,6 @@ class BaseCollection(ABC):
 
         self._table_model = BaseTableModel(self.parent, self)
 
-    # def __call__(self, *args, **kwargs):
-    #     obj = super(BaseCollection, self).__call__(*args, **kwargs)
-    #     for attr_name in obj.required_attributes:
-    #         if not getattr(obj, attr_name):
-    #             raise ValueError('required attribute (%s) not set' % attr_name)
-    #     return obj
     # =========================== Abstract (obligatory) methods ================================
 
     @abstractmethod
@@ -283,9 +275,13 @@ class BaseCollection(ABC):
     def proxy_table_model(self) -> QSortFilterProxyModel:
         proxy_coll = QSortFilterProxyModel(self.parent)
         proxy_coll.setSourceModel(self.table_model)
-        proxy_coll.invalidateFilter()
         return proxy_coll
+
+    @property  # I've put this property to avoid changing the code in the different collections 20 times.
+    def modelReset(self):
+        return self.table_model.modelReset
     # =================================== Common methods ================================================
+
 
     def initialize_df(self):
         """Initialize Pandas dataframe."""
@@ -479,7 +475,7 @@ class BaseTableModel(QAbstractTableModel):
                 self.collection.attr_modified_update_legend_table()
                 self.parent.metadata_modified_signal.emit(
                     [uid]
-                )  # a list of uids is emitted, even if the entity is just one
+                )  # a list of uids is emitted, even if the entity is just one # this signal should be moved in the collection!
                 return True
 
         return QVariant()

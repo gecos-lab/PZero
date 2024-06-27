@@ -168,7 +168,7 @@ def boundary_from_points(self, vector):
 class BoundaryCollection(BaseCollection):
 
     def __init__(self, parent=None, *args, **kwargs):
-        super().__init__(parent, *args, **kwargs)
+        super(BoundaryCollection, self).__init__(parent, *args, **kwargs)
 
         self.entity_dict = {
             "uid": "",
