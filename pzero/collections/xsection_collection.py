@@ -276,9 +276,7 @@ def sections_from_file(self):
 class XSectionCollection(BaseCollection):
 
     def __init__(self, parent=None, *args, **kwargs):
-        super(XSectionCollection, self).__init__(*args, **kwargs)
-
-        self.parent = parent
+        super().__init__(parent, *args, **kwargs)
 
         self.entity_dict = {
             "uid": "",
@@ -331,6 +329,7 @@ class XSectionCollection(BaseCollection):
         self.collection_name = 'xsection'
 
         self.initialize_df()
+        # self.initialize_table_model()
 
     def add_entity_from_dict(self, entity_dict: DataFrame = None, color: ndarray = None):
         """Create a new uid if it is not included in the dictionary."""

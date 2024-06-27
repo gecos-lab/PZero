@@ -1,4 +1,4 @@
-from PyQt5.QtCore import QAbstractTableModel, Qt, QVariant
+from PyQt5.QtCore import QAbstractTableModel, Qt, QVariant, QSortFilterProxyModel
 from abc import abstractmethod, ABC
 
 from pandas import DataFrame
@@ -8,7 +8,7 @@ import numpy as np
 from vtkmodules.vtkCommonDataModel import vtkDataObject
 
 
-class Meta(type(ABC), type(QAbstractTableModel)):
+class Meta:
     required_attributes = []
 
     def __call__(self, *args, **kwargs):
@@ -19,16 +19,16 @@ class Meta(type(ABC), type(QAbstractTableModel)):
         return obj
 
 
-class BaseCollection(QAbstractTableModel, ABC, metaclass=Meta):
+class BaseCollection(ABC):
     required_attributes = ['parent', 'entity_dict', 'entity_type_dict', 'valid_topological_types',
                            'editable_columns_names', 'collection_name']
 
-    def __init__(self, *args, **kwargs):
-        super(BaseCollection, self).__init__(*args, **kwargs)
+    def __init__(self, parent=None, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         """Import reference to parent, otherwise it is difficult to reference them in SetData() 
         that has a standard list of inputs."""
 
-        self._parent = None
+        self._parent = parent
         self._entity_dict: dict = dict()
         self._entity_type_dict: dict = dict()
         self._valid_types: list = list()
@@ -36,6 +36,15 @@ class BaseCollection(QAbstractTableModel, ABC, metaclass=Meta):
         self._df: DataFrame = DataFrame()
         self._editable_columns_names: list = list()
         self._collection_name: str = ''
+
+        self._table_model = BaseTableModel(self.parent, self)
+
+    # def __call__(self, *args, **kwargs):
+    #     obj = super(BaseCollection, self).__call__(*args, **kwargs)
+    #     for attr_name in obj.required_attributes:
+    #         if not getattr(obj, attr_name):
+    #             raise ValueError('required attribute (%s) not set' % attr_name)
+    #     return obj
     # =========================== Abstract (obligatory) methods ================================
 
     @abstractmethod
@@ -259,6 +268,23 @@ class BaseCollection(QAbstractTableModel, ABC, metaclass=Meta):
 
         return self.df["name"].to_list()
 
+    @property
+    def table_model(self):
+        """
+        Get the table model
+        """
+        return self._table_model
+
+    # @table_model.setter
+    # def table_model(self, table_model):
+    #     self._table_model = table_model
+
+    @property
+    def proxy_table_model(self) -> QSortFilterProxyModel:
+        proxy_coll = QSortFilterProxyModel(self.parent)
+        proxy_coll.setSourceModel(self.table_model)
+        proxy_coll.invalidateFilter()
+        return proxy_coll
     # =================================== Common methods ================================================
 
     def initialize_df(self):
@@ -396,34 +422,46 @@ class BaseCollection(QAbstractTableModel, ABC, metaclass=Meta):
 
     # =================== Common QT methods slightly adapted to the data source ====================================
 
+
+class BaseTableModel(QAbstractTableModel):
+    def __init__(self, parent=None, collection: BaseCollection = None, *args, **kwargs):
+        super().__init__(parent, *args, **kwargs)
+
+        self.parent = parent
+        self._collection = collection
+
+    @property
+    def collection(self):
+        return self._collection
+
     def data(self, index, role):
         """Data is updated on the fly:
         .row() index points to an entity in the vtkCollection
         .column() index points to an element in the list created on the fly
         based on the column headers stored in the dictionary."""
         if role == Qt.DisplayRole:
-            value = self.df.iloc[index.row(), index.column()]
+            value = self.collection.df.iloc[index.row(), index.column()]
             return str(value)
 
     def headerData(self, section, orientation, role):
         """Set header from pandas dataframe. "section" is a standard Qt variable."""
         if role == Qt.DisplayRole:
             if orientation == Qt.Horizontal:
-                return str(self.df.columns[section])
+                return str(self.collection.df.columns[section])
             if orientation == Qt.Vertical:
-                return str(self.df.index[section])
+                return str(self.collection.df.index[section])
 
     def rowCount(self, index):
         """Set row count from pandas dataframe"""
-        return self.df.shape[0]
+        return self.collection.df.shape[0]
 
     def columnCount(self, index):
         """Set column count from pandas dataframe"""
-        return self.df.shape[1]
+        return self.collection.df.shape[1]
 
     def flags(self, index):
         """Set editable columns."""
-        if index.column() in self.editable_columns:
+        if index.column() in self.collection.editable_columns:
             return Qt.ItemFlags(
                 QAbstractTableModel.flags(self, index) | Qt.ItemIsEditable
             )
@@ -434,14 +472,15 @@ class BaseCollection(QAbstractTableModel, ABC, metaclass=Meta):
         "self.parent is" is used to point to parent, because the standard Qt setData
         method does not allow for extra variables to be passed into this method."""
         if index.isValid():
-            self.df.iloc[index.row(), index.column()] = value
+            self.collection.df.iloc[index.row(), index.column()] = value
             if self.data(index, Qt.DisplayRole) == value:
                 self.dataChanged.emit(index, index)
-                uid = self.df.iloc[index.row(), 0]
-                self.geology_attr_modified_update_legend_table()
+                uid = self.collection.df.iloc[index.row(), 0]
+                self.collection.attr_modified_update_legend_table()
                 self.parent.metadata_modified_signal.emit(
                     [uid]
                 )  # a list of uids is emitted, even if the entity is just one
                 return True
+
         return QVariant()
 

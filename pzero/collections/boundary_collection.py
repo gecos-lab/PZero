@@ -168,9 +168,7 @@ def boundary_from_points(self, vector):
 class BoundaryCollection(BaseCollection):
 
     def __init__(self, parent=None, *args, **kwargs):
-        super(BoundaryCollection, self).__init__(*args, **kwargs)
-
-        self.parent = parent
+        super().__init__(parent, *args, **kwargs)
 
         self.entity_dict = {
             "uid": "",
@@ -196,6 +194,7 @@ class BoundaryCollection(BaseCollection):
         self.collection_name = 'boundary'
 
         self.initialize_df()
+        # self.initialize_table_model()
 
     # =================================== Obligatory methods ===========================================
 

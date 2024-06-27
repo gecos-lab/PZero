@@ -344,79 +344,82 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         if self.shown_table == "tabGeology":
             selected_idxs_proxy = self.GeologyTableView.selectionModel().selectedRows()
             for idx_proxy in selected_idxs_proxy:
-                selected_idxs.append(self.proxy_geol_coll.mapToSource(idx_proxy))
-            for idx in selected_idxs:
-                selected_uids.append(
-                    self.geol_coll.data(index=idx, role=Qt.DisplayRole)
-                )
-        elif self.shown_table == "tabXSections":
-            selected_idxs_proxy = (
-                self.XSectionsTableView.selectionModel().selectedRows()
-            )
-            for idx_proxy in selected_idxs_proxy:
-                selected_idxs.append(self.proxy_xsect_coll.mapToSource(idx_proxy))
-            for idx in selected_idxs:
-                selected_uids.append(
-                    self.xsect_coll.data(index=idx, role=Qt.DisplayRole)
-                )
-        elif self.shown_table == "tabMeshes3D":
-            selected_idxs_proxy = self.Meshes3DTableView.selectionModel().selectedRows()
-            for idx_proxy in selected_idxs_proxy:
-                selected_idxs.append(self.proxy_mesh3d_coll.mapToSource(idx_proxy))
-            for idx in selected_idxs:
-                selected_uids.append(
-                    self.mesh3d_coll.data(index=idx, role=Qt.DisplayRole)
-                )
-        elif self.shown_table == "tabDOMs":
-            selected_idxs_proxy = self.DOMsTableView.selectionModel().selectedRows()
-            for idx_proxy in selected_idxs_proxy:
-                selected_idxs.append(self.proxy_dom_coll.mapToSource(idx_proxy))
-            for idx in selected_idxs:
-                selected_uids.append(self.dom_coll.data(index=idx, role=Qt.DisplayRole))
-        elif self.shown_table == "tabImages":
-            selected_idxs_proxy = self.ImagesTableView.selectionModel().selectedRows()
-            for idx_proxy in selected_idxs_proxy:
-                selected_idxs.append(self.proxy_image_coll.mapToSource(idx_proxy))
-            for idx in selected_idxs:
-                selected_uids.append(
-                    self.image_coll.data(index=idx, role=Qt.DisplayRole)
-                )
-        elif self.shown_table == "tabBoundaries":
-            selected_idxs_proxy = (
-                self.BoundariesTableView.selectionModel().selectedRows()
-            )
-            for idx_proxy in selected_idxs_proxy:
-                selected_idxs.append(self.proxy_boundary_coll.mapToSource(idx_proxy))
-            for idx in selected_idxs:
-                selected_uids.append(
-                    self.boundary_coll.data(index=idx, role=Qt.DisplayRole)
-                )
-        elif self.shown_table == "tabWells":
-            selected_idxs_proxy = self.WellsTableView.selectionModel().selectedRows()
-            for idx_proxy in selected_idxs_proxy:
-                selected_idxs.append(self.proxy_well_coll.mapToSource(idx_proxy))
-            for idx in selected_idxs:
-                selected_uids.append(
-                    self.well_coll.data(index=idx, role=Qt.DisplayRole)
-                )
-        elif self.shown_table == "tabFluids":
-            selected_idxs_proxy = self.FluidsTableView.selectionModel().selectedRows()
-            for idx_proxy in selected_idxs_proxy:
-                selected_idxs.append(self.proxy_fluids_coll.mapToSource(idx_proxy))
-            for idx in selected_idxs:
-                selected_uids.append(
-                    self.fluids_coll.data(index=idx, role=Qt.DisplayRole)
-                )
-        elif self.shown_table == "tabBackgrounds":
-            selected_idxs_proxy = (
-                self.BackgroundsTableView.selectionModel().selectedRows()
-            )
-            for idx_proxy in selected_idxs_proxy:
-                selected_idxs.append(self.proxy_backgrounds_coll.mapToSource(idx_proxy))
-            for idx in selected_idxs:
-                selected_uids.append(
-                    self.backgrounds_coll.data(index=idx, role=Qt.DisplayRole)
-                )
+                print(idx_proxy)
+                # print(idx_proxy.row(), idx_proxy.column())
+                selected_idxs.append(self.geol_coll.proxy_table_model.mapToSource(idx_proxy))
+
+            # for idx in selected_idxs:
+            #     selected_uids.append(
+            #         self.geol_coll.table_model.data(index=idx, role=Qt.DisplayRole)
+            #     )
+        # elif self.shown_table == "tabXSections":
+        #     selected_idxs_proxy = (
+        #         self.XSectionsTableView.selectionModel().selectedRows()
+        #     )
+        #     for idx_proxy in selected_idxs_proxy:
+        #         selected_idxs.append(self.proxy_xsect_coll.mapToSource(idx_proxy))
+        #     for idx in selected_idxs:
+        #         selected_uids.append(
+        #             self.xsect_coll.table_model.data(index=idx, role=Qt.DisplayRole)
+        #         )
+        # elif self.shown_table == "tabMeshes3D":
+        #     selected_idxs_proxy = self.Meshes3DTableView.selectionModel().selectedRows()
+        #     for idx_proxy in selected_idxs_proxy:
+        #         selected_idxs.append(self.proxy_mesh3d_coll.mapToSource(idx_proxy))
+        #     for idx in selected_idxs:
+        #         selected_uids.append(
+        #             self.mesh3d_coll.table_model.data(index=idx, role=Qt.DisplayRole)
+        #         )
+        # elif self.shown_table == "tabDOMs":
+        #     selected_idxs_proxy = self.DOMsTableView.selectionModel().selectedRows()
+        #     for idx_proxy in selected_idxs_proxy:
+        #         selected_idxs.append(self.proxy_dom_coll.mapToSource(idx_proxy))
+        #     for idx in selected_idxs:
+        #         selected_uids.append(self.dom_coll.table_model.data(index=idx, role=Qt.DisplayRole))
+        # elif self.shown_table == "tabImages":
+        #     selected_idxs_proxy = self.ImagesTableView.selectionModel().selectedRows()
+        #     for idx_proxy in selected_idxs_proxy:
+        #         selected_idxs.append(self.proxy_image_coll.mapToSource(idx_proxy))
+        #     for idx in selected_idxs:
+        #         selected_uids.append(
+        #             self.image_coll.table_model.data(index=idx, role=Qt.DisplayRole)
+        #         )
+        # elif self.shown_table == "tabBoundaries":
+        #     selected_idxs_proxy = (
+        #         self.BoundariesTableView.selectionModel().selectedRows()
+        #     )
+        #     for idx_proxy in selected_idxs_proxy:
+        #         selected_idxs.append(self.proxy_boundary_coll.mapToSource(idx_proxy))
+        #     for idx in selected_idxs:
+        #         selected_uids.append(
+        #             self.boundary_coll.table_model.data(index=idx, role=Qt.DisplayRole)
+        #         )
+        # elif self.shown_table == "tabWells":
+        #     selected_idxs_proxy = self.WellsTableView.selectionModel().selectedRows()
+        #     for idx_proxy in selected_idxs_proxy:
+        #         selected_idxs.append(self.proxy_well_coll.mapToSource(idx_proxy))
+        #     for idx in selected_idxs:
+        #         selected_uids.append(
+        #             self.well_coll.table_model.data(index=idx, role=Qt.DisplayRole)
+        #         )
+        # elif self.shown_table == "tabFluids":
+        #     selected_idxs_proxy = self.FluidsTableView.selectionModel().selectedRows()
+        #     for idx_proxy in selected_idxs_proxy:
+        #         selected_idxs.append(self.proxy_fluids_coll.mapToSource(idx_proxy))
+        #     for idx in selected_idxs:
+        #         selected_uids.append(
+        #             self.fluids_coll.table_model.data(index=idx, role=Qt.DisplayRole)
+        #         )
+        # elif self.shown_table == "tabBackgrounds":
+        #     selected_idxs_proxy = (
+        #         self.BackgroundsTableView.selectionModel().selectedRows()
+        #     )
+        #     for idx_proxy in selected_idxs_proxy:
+        #         selected_idxs.append(self.proxy_backgrounds_coll.mapToSource(idx_proxy))
+        #     for idx in selected_idxs:
+        #         selected_uids.append(
+        #             self.backgrounds_coll.table_model.data(index=idx, role=Qt.DisplayRole)
+        #         )
         return selected_uids
 
     # [Gabriele] This is should be used for cross collection operations (e.g. cut surfaces in the geology table with the DEM).
@@ -1054,73 +1057,55 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         and connect the model to GeologyTableView (a Qt QTableView created with QTDesigner and provided by
         Ui_ProjectWindow). Setting the model also updates the view."""
         self.geol_coll = GeologicalCollection(parent=self)
-        self.proxy_geol_coll = QSortFilterProxyModel(self)
-        self.proxy_geol_coll.setSourceModel(self.geol_coll)
-        self.GeologyTableView.setModel(self.proxy_geol_coll)
+        self.GeologyTableView.setModel(self.geol_coll.proxy_table_model)
 
         """Create the xsect_coll XSectionCollection (a Qt QAbstractTableModel with a Pandas dataframe as attribute)
         and connect the model to XSectionsTableView (a Qt QTableView created with QTDesigner and provided by
         Ui_ProjectWindow). Setting the model also updates the view."""
         self.xsect_coll = XSectionCollection(parent=self)
-        self.proxy_xsect_coll = QSortFilterProxyModel(self)
-        self.proxy_xsect_coll.setSourceModel(self.xsect_coll)
-        self.XSectionsTableView.setModel(self.proxy_xsect_coll)
+        self.XSectionsTableView.setModel(self.xsect_coll.proxy_table_model)
 
         """Create the dom_coll DomCollection (a Qt QAbstractTableModel with a Pandas dataframe as attribute)
         and connect the model to DOMsTableView (a Qt QTableView created with QTDesigner and provided by
         Ui_ProjectWindow). Setting the model also updates the view."""
         self.dom_coll = DomCollection(parent=self)
-        self.proxy_dom_coll = QSortFilterProxyModel(self)
-        self.proxy_dom_coll.setSourceModel(self.dom_coll)
-        self.DOMsTableView.setModel(self.proxy_dom_coll)
+        self.DOMsTableView.setModel(self.dom_coll.proxy_table_model)
 
         """Create the image_coll ImageCollection (a Qt QAbstractTableModel with a Pandas dataframe as attribute)
         and connect the model to ImagesTableView (a Qt QTableView created with QTDesigner and provided by
         Ui_ProjectWindow). Setting the model also updates the view."""
         self.image_coll = ImageCollection(parent=self)
-        self.proxy_image_coll = QSortFilterProxyModel(self)
-        self.proxy_image_coll.setSourceModel(self.image_coll)
-        self.ImagesTableView.setModel(self.proxy_image_coll)
+        self.ImagesTableView.setModel(self.image_coll.proxy_table_model)
 
         """Create the mesh3d_coll Mesh3DCollection (a Qt QAbstractTableModel with a Pandas dataframe as attribute)
         and connect the model to Meshes3DTableView (a Qt QTableView created with QTDesigner and provided by
         Ui_ProjectWindow). Setting the model also updates the view."""
         self.mesh3d_coll = Mesh3DCollection(parent=self)
-        self.proxy_mesh3d_coll = QSortFilterProxyModel(self)
-        self.proxy_mesh3d_coll.setSourceModel(self.mesh3d_coll)
-        self.Meshes3DTableView.setModel(self.proxy_mesh3d_coll)
+        self.Meshes3DTableView.setModel(self.mesh3d_coll.proxy_table_model)
 
         """Create the boundary_coll BoundaryCollection (a Qt QAbstractTableModel with a Pandas dataframe as attribute)
         and connect the model to BoundaryTableView (a Qt QTableView created with QTDesigner and provided by
         Ui_ProjectWindow). Setting the model also updates the view."""
         self.boundary_coll = BoundaryCollection(parent=self)
-        self.proxy_boundary_coll = QSortFilterProxyModel(self)
-        self.proxy_boundary_coll.setSourceModel(self.boundary_coll)
-        self.BoundariesTableView.setModel(self.proxy_boundary_coll)
+        self.BoundariesTableView.setModel(self.boundary_coll.proxy_table_model)
 
         """[Gabriele]  Create the weel_coll WellCollection (a Qt QAbstractTableModel with a Pandas dataframe as attribute)
         and connect the model to WellTableView (a Qt QTableView created with QTDesigner and provided by
         Ui_ProjectWindow). Setting the model also updates the view."""
         self.well_coll = WellCollection(parent=self)
-        self.proxy_well_coll = QSortFilterProxyModel(self)
-        self.proxy_well_coll.setSourceModel(self.well_coll)
-        self.WellsTableView.setModel(self.proxy_well_coll)
+        self.WellsTableView.setModel(self.well_coll.proxy_table_model)
 
         """[Gabriele]  Create the fluids_coll FluidsCollection (a Qt QAbstractTableModel with a Pandas dataframe as attribute)
         and connect the model to FluidTableView (a Qt QTableView created with QTDesigner and provided by
         Ui_ProjectWindow). Setting the model also updates the view."""
         self.fluids_coll = FluidsCollection(parent=self)
-        self.proxy_fluids_coll = QSortFilterProxyModel(self)
-        self.proxy_fluids_coll.setSourceModel(self.fluids_coll)
-        self.FluidsTableView.setModel(self.proxy_fluids_coll)
+        self.FluidsTableView.setModel(self.fluids_coll.proxy_table_model)
 
         """[Gabriele]  Create the backgrounds_coll BackgroundCollection (a Qt QAbstractTableModel with a Pandas dataframe as attribute)
         and connect the model to FluidTableView (a Qt QTableView created with QTDesigner and provided by
         Ui_ProjectWindow). Setting the model also updates the view."""
         self.backgrounds_coll = BackgroundCollection(parent=self)
-        self.proxy_backgrounds_coll = QSortFilterProxyModel(self)
-        self.proxy_backgrounds_coll.setSourceModel(self.backgrounds_coll)
-        self.BackgroundsTableView.setModel(self.proxy_backgrounds_coll)
+        self.BackgroundsTableView.setModel(self.backgrounds_coll.proxy_table_model)
 
         """Create the geol_legend_df legend table (a Pandas dataframe), create the corresponding QT
         Legend self.legend (a Qt QTreeWidget that is internally connected to its data source),
@@ -1660,7 +1645,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         if os.path.isfile((in_dir_name + "/xsection_table.csv")) or os.path.isfile(
             (in_dir_name + "/xsection_table.json")
         ):
-            self.xsect_coll.beginResetModel()
+            self.xsect_coll.table_model.beginResetModel()
             if os.path.isfile((in_dir_name + "/xsection_table.json")):
                 new_xsect_coll_df = pd_read_json(
                     in_dir_name + "/xsection_table.json",
@@ -1686,13 +1671,13 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 )
             for uid in self.xsect_coll.df["uid"].tolist():
                 self.xsect_coll.set_geometry(uid=uid)
-            self.xsect_coll.endResetModel()
+            self.xsect_coll.table_model.endResetModel()
 
         """Read DOM table and files. Note beginResetModel() and endResetModel()."""
         if os.path.isfile((in_dir_name + "/dom_table.csv")) or os.path.isfile(
             (in_dir_name + "/dom_table.json")
         ):
-            self.dom_coll.beginResetModel()
+            self.dom_coll.table_model.beginResetModel()
             if os.path.isfile((in_dir_name + "/dom_table.json")):
                 new_dom_coll_df = pd_read_json(
                     in_dir_name + "/dom_table.json",
@@ -1761,13 +1746,13 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     vtk_object.Modified()
                 self.dom_coll.set_uid_vtk_obj(uid=uid, vtk_obj=vtk_object)
                 prgs_bar.add_one()
-            self.dom_coll.endResetModel()
+            self.dom_coll.table_model.endResetModel()
 
         """Read image collection and files"""
         if os.path.isfile((in_dir_name + "/image_table.csv")) or os.path.isfile(
             (in_dir_name + "/image_table.json")
         ):
-            self.image_coll.beginResetModel()
+            self.image_coll.table_model.beginResetModel()
             if os.path.isfile((in_dir_name + "/image_table.json")):
                 new_image_coll_df = pd_read_json(
                     in_dir_name + "/image_table.json",
@@ -1834,13 +1819,13 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     vtk_object.Modified()
                 self.image_coll.set_uid_vtk_obj(uid=uid, vtk_obj=vtk_object)
                 prgs_bar.add_one()
-            self.image_coll.endResetModel()
+            self.image_coll.table_model.endResetModel()
 
         """Read mesh3d collection and files"""
         if os.path.isfile((in_dir_name + "/mesh3d_table.csv")) or os.path.isfile(
             (in_dir_name + "/mesh3d_table.json")
         ):
-            self.mesh3d_coll.beginResetModel()
+            self.mesh3d_coll.table_model.beginResetModel()
             if os.path.isfile((in_dir_name + "/mesh3d_table.json")):
                 new_mesh3d_coll_df = pd_read_json(
                     in_dir_name + "/mesh3d_table.json",
@@ -1895,13 +1880,13 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     vtk_object.Modified()
                 self.mesh3d_coll.set_uid_vtk_obj(uid=uid, vtk_obj=vtk_object)
                 prgs_bar.add_one()
-            self.mesh3d_coll.endResetModel()
+            self.mesh3d_coll.table_model.endResetModel()
 
         """Read boundaries collection and files"""
         if os.path.isfile((in_dir_name + "/boundary_table.csv")) or os.path.isfile(
             (in_dir_name + "/boundary_table.json")
         ):
-            self.boundary_coll.beginResetModel()
+            self.boundary_coll.table_model.beginResetModel()
             if os.path.isfile((in_dir_name + "/boundary_table.json")):
                 new_boundary_coll_df = pd_read_json(
                     in_dir_name + "/boundary_table.json",
@@ -1939,13 +1924,13 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 vtk_object.Modified()
                 self.boundary_coll.set_uid_vtk_obj(uid=uid, vtk_obj=vtk_object)
                 prgs_bar.add_one()
-            self.boundary_coll.endResetModel()
+            self.boundary_coll.table_model.endResetModel()
 
         """Read well table and files"""
         if os.path.isfile((in_dir_name + "/well_table.csv")) or os.path.isfile(
             (in_dir_name + "/well_table.json")
         ):
-            self.well_coll.beginResetModel()
+            self.well_coll.table_model.beginResetModel()
             if os.path.isfile((in_dir_name + "/well_table.json")):
                 new_well_coll_df = pd_read_json(
                     in_dir_name + "/well_table.json",
@@ -1983,14 +1968,14 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 # Maybe it's better to always add to the vtkobject column the
                 # Well and not the WellTrace instance and then call well.trace/head where needed
                 prgs_bar.add_one()
-            self.well_coll.endResetModel()
+            self.well_coll.table_model.endResetModel()
         self.prop_legend.update_widget(parent=self)
 
         """Read geological table and files. Note beginResetModel() and endResetModel()."""
         if os.path.isfile((in_dir_name + "/geological_table.csv")) or os.path.isfile(
             (in_dir_name + "/geological_table.json")
         ):
-            self.geol_coll.beginResetModel()
+            self.geol_coll.table_model.beginResetModel()
             if os.path.isfile((in_dir_name + "/geological_table.json")):
                 # noinspection PyTypeChecker
                 new_geol_coll_df = pd_read_json(
@@ -2044,7 +2029,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 vtk_object.Modified()
                 self.geol_coll.set_uid_vtk_obj(uid=uid, vtk_obj=vtk_object)
                 prgs_bar.add_one()
-            self.geol_coll.endResetModel()
+            self.geol_coll.table_model.endResetModel()
         """Update legend."""
         self.prop_legend.update_widget(parent=self)
 
@@ -2052,7 +2037,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         if os.path.isfile((in_dir_name + "/fluids_table.csv")) or os.path.isfile(
             (in_dir_name + "/fluids_table.json")
         ):
-            self.fluids_coll.beginResetModel()
+            self.fluids_coll.table_model.beginResetModel()
             if os.path.isfile((in_dir_name + "/fluids_table.json")):
                 new_fluids_coll_df = pd_read_json(
                     in_dir_name + "/fluids_table.json",
@@ -2100,7 +2085,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 vtk_object.Modified()
                 self.fluids_coll.set_uid_vtk_obj(uid=uid, vtk_obj=vtk_object)
                 prgs_bar.add_one()
-            self.fluids_coll.endResetModel()
+            self.fluids_coll.table_model.endResetModel()
         """Update legend."""
         self.prop_legend.update_widget(parent=self)
 
@@ -2108,7 +2093,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         if os.path.isfile((in_dir_name + "/backgrounds_table.csv")) or os.path.isfile(
             (in_dir_name + "/backgrounds_table.json")
         ):
-            self.backgrounds_coll.beginResetModel()
+            self.backgrounds_coll.table_model.beginResetModel()
             if os.path.isfile((in_dir_name + "/backgrounds_table.json")):
                 new_backgrounds_coll_df = pd_read_json(
                     in_dir_name + "/backgrounds_table.json",
@@ -2152,7 +2137,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 vtk_object.Modified()
                 self.backgrounds_coll.set_uid_vtk_obj(uid=uid, vtk_obj=vtk_object)
                 prgs_bar.add_one()
-            self.backgrounds_coll.endResetModel()
+            self.backgrounds_coll.table_model.endResetModel()
         """Update legend."""
         self.prop_legend.update_widget(parent=self)
 

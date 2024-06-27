@@ -30,7 +30,7 @@ pd_set_option("display.max_colwidth", pd_max_colwidth)
 class GeologicalCollection(BaseCollection):
 
     def __init__(self, parent=None, *args, **kwargs):
-        super(GeologicalCollection, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
         self.parent = parent
 
@@ -89,6 +89,8 @@ class GeologicalCollection(BaseCollection):
         self.collection_name = 'geological'
 
         self.initialize_df()
+
+        # self.initialize_table_model()
 
     # =================================== Obligatory methods ===========================================
     def add_entity_from_dict(self, entity_dict: DataFrame = None, color: ndarray = None):

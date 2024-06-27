@@ -28,9 +28,8 @@ pd.set_option("display.max_colwidth", pd_max_colwidth)
 class BackgroundCollection(BaseCollection):
 
     def __init__(self, parent=None, *args, **kwargs):
-        super(BackgroundCollection, self).__init__(*args, **kwargs)
 
-        self.parent = parent
+        super().__init__(parent, *args, **kwargs)
 
         self.entity_dict = {
                 "uid": "",
@@ -75,6 +74,7 @@ class BackgroundCollection(BaseCollection):
         self.collection_name = 'background'
 
         self.initialize_df()
+        # self.initialize_table_model()
 
     def add_entity_from_dict(self, entity_dict: DataFrame = None, color: ndarray = None):
         """Create a new uid if it is not included in the dictionary."""

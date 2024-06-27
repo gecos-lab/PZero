@@ -16,35 +16,35 @@ from pzero.collections.dom_collection import DomCollection
 from pzero.collections.fluid_collection import FluidsCollection
 from pzero.entities_factory import DEM
 
-from AbstractImporter import BaseIO
-
-
-class DomIO(BaseIO):
-
-    def __init__(self, input_file):
-        super().__init__(input_file)
-
-    def import_from_file(self):
-        """Read raster file format (geotiff) with xarray and rasterio and create DEM structured grid.
-            Helpful: http://xarray.pydata.org/en/stable/auto_gallery/plot_rasterio.html
-            https://github.com/pyvista/pyvista-support/issues/205, thanks to Bane Sullivan"""
-        data = xr.open_rasterio(self.input_file)
-        values = np_asarray(data)
-        nans = values == data.nodatavals
-        if np_any(nans):
-            values[nans] = np_nan
-        xx, yy = np_meshgrid(data["x"], data["y"])
-        zz = values.reshape(xx.shape)
-        """Convert to DEM() instance."""
-        curr_obj = DEM()
-        temp_obj = pv_StructuredGrid(xx, yy, zz)
-        temp_obj["elevation"] = zz.ravel(order="F")
-        curr_obj.ShallowCopy(temp_obj)
-        curr_obj.Modified()
-
-    @staticmethod
-    def output_to_file():
-        pass
+# from AbstractImporter import BaseIO
+#
+#
+# class DomIO(BaseIO):
+#
+#     def __init__(self, input_file):
+#         super().__init__(input_file)
+#
+#     def import_from_file(self):
+#         """Read raster file format (geotiff) with xarray and rasterio and create DEM structured grid.
+#             Helpful: http://xarray.pydata.org/en/stable/auto_gallery/plot_rasterio.html
+#             https://github.com/pyvista/pyvista-support/issues/205, thanks to Bane Sullivan"""
+#         data = xr.open_rasterio(self.input_file)
+#         values = np_asarray(data)
+#         nans = values == data.nodatavals
+#         if np_any(nans):
+#             values[nans] = np_nan
+#         xx, yy = np_meshgrid(data["x"], data["y"])
+#         zz = values.reshape(xx.shape)
+#         """Convert to DEM() instance."""
+#         curr_obj = DEM()
+#         temp_obj = pv_StructuredGrid(xx, yy, zz)
+#         temp_obj["elevation"] = zz.ravel(order="F")
+#         curr_obj.ShallowCopy(temp_obj)
+#         curr_obj.Modified()
+#
+#     @staticmethod
+#     def output_to_file():
+#         pass
 
 
 def dem2vtk(self=None, in_file_name=None, collection=None):
