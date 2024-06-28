@@ -6,6 +6,8 @@ from PyQt5.QtCore import Qt
 
 # Methods used to build and update the GEOLOGY and TOPOLOGY trees
 
+# It would be nice to find a way to further separate the two trees but it looks like they are very co-dependent
+
 
 def create_geology_tree(self):
     """Create geology tree with checkboxes and properties"""

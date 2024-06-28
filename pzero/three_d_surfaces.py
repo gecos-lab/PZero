@@ -51,8 +51,10 @@ from LoopStructural import GeologicalModel
 
 
 def interpolation_delaunay_2d(self):
+
+
     """The vtkDelaunay2D object takes vtkPointSet (or any of its subclasses) as input and
-    generates a vtkPolyData on output - tipically a triangle mesh if Alpha value is not defined.
+    generates a vtkPolyData on output - typically a triangle mesh if Alpha value is not defined.
     Select the whole line of two or more vtkPointSet entities and start the algorithm.
     """
     print("Delaunay2D: interpolation of Points, Lines and Surfaces")
@@ -89,7 +91,7 @@ def interpolation_delaunay_2d(self):
         ],
         "geological_type": [
             "Geological type: ",
-            GeologicalCollection.valid_geological_types,
+            self.geol_coll.valid_types,
             self.geol_coll.get_uid_geological_type(input_uids[0]),
         ],
         "geological_feature": [
@@ -193,7 +195,7 @@ def poisson_interpolation(self):
         ],
         "geological_type": [
             "Geological type: ",
-            GeologicalCollection.valid_geological_types,
+            self.geol_coll.valid_types,
         ],
         "geological_feature": [
             "Geological feature: ",
@@ -776,7 +778,7 @@ def linear_extrusion(self):
         ],
         "geological_type": [
             "Geological type: ",
-            GeologicalCollection.valid_geological_types,
+            self.geol_coll.valid_types,
         ],
         "geological_feature": [
             "Geological feature: ",

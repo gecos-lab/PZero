@@ -33,6 +33,7 @@ from .windows_factory import NewViewMap, NewViewXsection
 
 
 def draw_line(self):
+
     def end_digitize(event, input_dict):
         # Signal called to end the digitization of a trace. It returns a new polydata
         self.plotter.untrack_click_position()
@@ -53,7 +54,7 @@ def draw_line(self):
         "name": ["PolyLine name: ", "new_pline"],
         "geological_type": [
             "Geological type: ",
-            GeologicalCollection.valid_geological_types,
+            self.parent.geol_coll.valid_types,
         ],
         "geological_feature": [
             "Geological feature: ",
