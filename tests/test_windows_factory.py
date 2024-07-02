@@ -1,6 +1,6 @@
 import pytest
 
-from pzero.windows_factory import BaseView, View3D, View2D, ViewMap, ViewStereoplot, NavigationToolbar, NewView2D, \
+from pzero.windows_factory import BaseView, View3D, ViewStereoplot, NavigationToolbar, NewView2D, \
     NewViewMap
 from pzero.project_window import ProjectWindow
 
@@ -208,50 +208,6 @@ class TestView3D:
         assert view_3d.menuBoreTraceVis.isWidgetType() is True
         assert view_3d.menuBoreTraceVis.isVisible() is True
         assert view_3d.actionBoreTrace.isVisible() is True
-
-
-# Testing View2D class
-class TestView2D:
-
-    # @pytest.fixture
-    # Testing if view 2d is initialized and showed
-    @pytest.mark.skip(reason="View2D has no attribute 'entity_remove_selected")
-    def test_show_canvas(self, qtbot):
-        parent = ProjectWindow()
-        view_2d = View2D(parent=parent)
-        view_2d.show_qt_canvas()
-
-        assert view_2d.isWindow() is True \
-               and view_2d.isVisible() is True
-
-
-# Testing ViewMap class
-class TestViewMap:
-
-    # @pytest.fixture
-    # Testing if ViewMap is initialized and showed
-    @pytest.mark.skip(reason="ViewMap has no attribute 'entity_remove_selected")
-    def test_show_canvas(self, qtbot):
-        parent = ProjectWindow()
-        view_map = ViewMap(parent=parent)
-        view_map.show_qt_canvas()
-
-        assert view_map.isWindow() is True \
-               and view_map.isVisible() is True
-
-    # @pytest.fixture
-    # Testing ViewMap initialize_menu_tools
-    @pytest.mark.skip(reason="ViewMap has no attribute 'entity_remove_selected")
-    def test_initialize_menu_tools(self, qtbot):
-        parent = ProjectWindow()
-        view_map = ViewMap(parent=parent)
-
-        view_map.initialize_menu_tools()
-
-        assert view_map.menuBoreTraceVis.isWidgetType() is True
-        assert view_map.menuBoreTraceVis.isVisible() is True
-        assert view_map.actionBoreTrace.isVisible() is True
-
 
 # Testing ViewStereoplot class
 class TestViewStereoplot:
