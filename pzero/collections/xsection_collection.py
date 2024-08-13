@@ -140,9 +140,12 @@ def section_from_azimuth(self, vector):
             new_points = np_matmul(homo_points, trans_mat)[:, :-1]
             section_dict["base_x"] = new_points[0, 0]
             section_dict["base_y"] = new_points[0, 1]
+            section_dict["base_z"] = new_points[0, 2]
             section_dict["end_x"] = new_points[3, 0]
             section_dict["end_y"] = new_points[3, 1]
+            section_dict["end_z"] = new_points[3, 2]
             section_dict["bottom"] = new_points[0, 2]
+            section_dict["top"] = new_points[3, 2]
             section_dict["uid"] = None
             uid = self.parent.xsect_coll.add_entity_from_dict(entity_dict=section_dict)
     # At the end un-freeze the Qt interface before returning.
@@ -164,6 +167,7 @@ def sections_from_file(self):
     # OR CREATE A METHOD TO FILL MISSING PARAMETERS IN THE COLLECTION??
 
     from os.path import splitext
+    section_dict = deepcopy(self.parent.xsect_coll.section_dict)
     section_dict_updt = {
         "name": "",
         "base_x": 0,
@@ -188,9 +192,7 @@ def sections_from_file(self):
     section_dict_in = {
         "warning": [
             "XSection from file",
-            "Build new XSection from a GOCAD ASCII or simple ASCII "
-            "file.\nChoose the top and bottom limit of the sections to "
-            "continue",
+            "Build new XSection from a GOCAD ASCII or simple ASCII file.\nChoose the top and bottom limit of the sections to continue",
             "QLabel",
         ],
         "top": ["Insert top", 0.0, "QLineEdit"],
@@ -207,22 +209,24 @@ def sections_from_file(self):
                 for line in IN:
                     if "name:" in line:
                         line_data = line.strip().split(":")
-                        section_dict_updt["name"] = line_data[1]
+                        section_dict["name"] = line_data[1]
                     elif "VRTX 1" in line:
                         line_data = line.strip().split()
-                        section_dict_updt["base_x"] = float(line_data[2])
-                        section_dict_updt["base_y"] = float(line_data[3])
+                        section_dict["base_x"] = float(line_data[2])
+                        section_dict["base_y"] = float(line_data[3])
                     elif "VRTX 2" in line:
                         line_data = line.strip().split()
-                        section_dict_updt["end_x"] = float(line_data[2])
-                        section_dict_updt["end_y"] = float(line_data[3])
+                        section_dict["end_x"] = float(line_data[2])
+                        section_dict["end_y"] = float(line_data[3])
                     elif line.strip() == "END":
-                        # [Gabriele] When the END of the entry is reached create a section
-                        section_dict_updt["top"] = top_bottom["top"]
-                        section_dict_updt["bottom"] = top_bottom["bottom"]
-                        section_from_points(
-                            self, drawn=False, section_dict_updt=section_dict_updt
-                        )
+                        # When the END line is reached create a section
+                        section_dict["base_z"] = top_bottom["bottom"]
+                        section_dict["bottom"] = top_bottom["bottom"]
+                        section_dict["end_z"] = top_bottom["top"]
+                        section_dict["top"] = top_bottom["top"]
+                        # UPDATE OTHER PARAMETERS BEFORE CREATING SECTION _______________________________________
+                        uid = self.parent.xsect_coll.add_entity_from_dict(entity_dict=section_dict)
+
         elif extension == ".dat":
             top_bottom = general_input_dialog(
                 title="XSection from files", input_dict=section_dict_in
@@ -231,41 +235,44 @@ def sections_from_file(self):
             pd_df = pd.read_csv(file, sep=sep)
             unique_traces = pd.unique(pd_df["Name"])
             for trace in unique_traces:
-                section_dict_updt["name"] = trace
-                section_dict_updt["base_x"] = pd_df.loc[
+                section_dict["name"] = trace
+                section_dict["base_x"] = pd_df.loc[
                     (pd_df["Name"] == trace) & (pd_df["Vertex Index"] == 1)
                 ]["x"].values
-                section_dict_updt["base_y"] = pd_df.loc[
+                section_dict["base_y"] = pd_df.loc[
                     (pd_df["Name"] == trace) & (pd_df["Vertex Index"] == 1)
                 ]["y"].values
-                section_dict_updt["base_z"] = pd_df.loc[
+                section_dict["base_z"] = pd_df.loc[
                     (pd_df["Name"] == trace) & (pd_df["Vertex Index"] == 1)
                 ]["y"].values
-                section_dict_updt["end_x"] = pd_df.loc[
+                section_dict["end_x"] = pd_df.loc[
                     (pd_df["Name"] == trace) & (pd_df["Vertex Index"] == 2)
                 ]["x"].values
-                section_dict_updt["end_y"] = pd_df.loc[
+                section_dict["end_y"] = pd_df.loc[
                     (pd_df["Name"] == trace) & (pd_df["Vertex Index"] == 2)
                 ]["y"].values
-                section_dict_updt["top"] = top_bottom["top"]
-                section_dict_updt["bottom"] = top_bottom["bottom"]
-                section_from_points(
-                    self, drawn=False, section_dict_updt=section_dict_updt
-                )
+                section_dict["base_z"] = top_bottom["bottom"]
+                section_dict["bottom"] = top_bottom["bottom"]
+                section_dict["end_z"] = top_bottom["top"]
+                section_dict["top"] = top_bottom["top"]
+                # UPDATE OTHER PARAMETERS BEFORE CREATING SECTION _______________________________________
+                uid = self.parent.xsect_coll.add_entity_from_dict(entity_dict=section_dict)
+
         elif extension == ".csv":
             sep = auto_sep(file)
             pd_df = pd.read_csv(file, sep=sep)
             for index, sec in pd_df.iterrows():
-                section_dict_updt["name"] = sec["name"]
-                section_dict_updt["base_x"] = sec["base_x"]
-                section_dict_updt["base_y"] = sec["base_y"]
-                section_dict_updt["end_x"] = sec["end_x"]
-                section_dict_updt["end_y"] = sec["end_y"]
-                section_dict_updt["top"] = sec["top"]
-                section_dict_updt["bottom"] = sec["bottom"]
-                section_from_points(
-                    self, drawn=False, section_dict_updt=section_dict_updt
-                )
+                section_dict["name"] = sec["name"]
+                section_dict["base_x"] = sec["base_x"]
+                section_dict["base_y"] = sec["base_y"]
+                section_dict["end_x"] = sec["end_x"]
+                section_dict["end_y"] = sec["end_y"]
+                section_dict["base_z"] = top_bottom["bottom"]
+                section_dict["bottom"] = top_bottom["bottom"]
+                section_dict["end_z"] = top_bottom["top"]
+                section_dict["top"] = top_bottom["top"]
+                # UPDATE OTHER PARAMETERS BEFORE CREATING SECTION _______________________________________
+                uid = self.parent.xsect_coll.add_entity_from_dict(entity_dict=section_dict)
 
 
 class XSectionCollection(BaseCollection):
@@ -273,6 +280,7 @@ class XSectionCollection(BaseCollection):
     def __init__(self, parent=None, *args, **kwargs):
         super(XSectionCollection, self).__init__(parent, *args, **kwargs)
 
+        # Initialize properties required by the abstract superclass.
         self.entity_dict = {
             "uid": "",
             "name": "undef",
@@ -294,7 +302,6 @@ class XSectionCollection(BaseCollection):
             "vtk_plane": None,  # None to avoid errors with deepcopy
             "vtk_frame": None,  # None to avoid errors with deepcopy
         }
-
         self.entity_type_dict = {
             "uid": str,
             "name": str,
@@ -316,66 +323,73 @@ class XSectionCollection(BaseCollection):
             "vtk_plane": object,
             "vtk_frame": object,
         }
-
         self.valid_topological_types = ['']
-
         self.editable_columns_names = ["name"]
-
         self.collection_name = 'xsection'
-
         self.initialize_df()
-        # self.initialize_table_model()
 
     def add_entity_from_dict(self, entity_dict: DataFrame = None, color: ndarray = None):
-        """Create a new uid if it is not included in the dictionary."""
+        """Add new cross-section from a suitable dictionary shaped like self.entity_dict."""
+        # Create a new uid if it is not included in the dictionary.
         if not entity_dict["uid"]:
             entity_dict["uid"] = str(uuid.uuid4())
-        """Append new row to dataframe. Note that the 'append()' method for Pandas dataframes DOES NOT
-        work in place, hence a NEW dataframe is created every time and then substituted to the old one."""
+        # Append new row to dataframe. Note that the 'append()' method for Pandas dataframes DOES NOT
+        # work in place, hence a NEW dataframe is created every time and then substituted to the old one.
         self.df = self.df.append(entity_dict, ignore_index=True)
         self.set_geometry(uid=entity_dict["uid"])
-        """Reset data model"""
+        # Reset data model
         self.modelReset.emit()
-        self.parent.xsect_added_signal.emit(
-            [entity_dict["uid"]]
-        )  # a list of uids is emitted, even if the entity is just one
+        # Emit a list of uids, even if the entity is just one
+        self.parent.xsect_added_signal.emit([entity_dict["uid"]])
         return entity_dict["uid"]
 
     def remove_entity(self, uid: str = None) -> str:
-        """Remove row from dataframe and reset data model."""
-        """NOTE THAT AT THE MOMENT REMOVING A SECTION DOES NOT REMOVE THE ASSOCIATED OBJECTS."""
+        """Remove row from dataframe and reset data model. NOTE THAT AT THE MOMENT
+        REMOVING A SECTION DOES NOT REMOVE THE ASSOCIATED OBJECTS."""
         if uid not in self.get_uids:
             return
         self.df.drop(self.df[self.df["uid"] == uid].index, inplace=True)
         self.modelReset.emit()  # is this really necessary?
-        self.parent.xsect_removed_signal.emit(
-            [uid]
-        )  # a list of uids is emitted, even if the entity is just one
+        # Emit a list of uids, even if the entity is just one
+        self.parent.xsect_removed_signal.emit([uid])
         return uid
 
     def clone_entity(self, uid: str = None) -> str:
+        """Not implemented for XSectionCollection, but required by the abstract superclass."""
         pass
 
     def replace_vtk(self, uid: str = None, vtk_object: vtkDataObject = None, const_color: bool = True):
+        """Not implemented for XSectionCollection, but required by the abstract superclass."""
         pass
 
     def attr_modified_update_legend_table(self):
+        """Not implemented for XSectionCollection, but required by the abstract superclass."""
         pass
 
     def get_uid_legend(self, uid: str = None) -> dict:
+        """Get legend for a particular uid."""
         legend_dict = self.parent.others_legend_df.loc[
             self.parent.others_legend_df["other_type"] == "XSection"
             ].to_dict("records")
         return legend_dict[0]
 
-    def set_uid_legend(self, uid: str = None, color_R: float = None, color_G: float = None, color_B: float = None,
-                       line_thick: float = None, point_size: float = None, opacity: float = None):
+    def set_uid_legend(self,
+                       uid: str = None,
+                       color_R: float = None,
+                       color_G: float = None,
+                       color_B: float = None,
+                       line_thick: float = None,
+                       point_size: float = None,
+                       opacity: float = None):
+        """Not implemented for XSectionCollection, but required by the abstract superclass."""
         pass
 
     def metadata_modified_signal(self, updated_list: list = None):
+        """Not implemented for XSectionCollection, but required by the abstract superclass."""
         pass
 
     def data_keys_removed_signal(self, updated_list: list = None):
+        """Not implemented for XSectionCollection, but required by the abstract superclass."""
         pass
 
     # =================================== Additional methods ===========================================
