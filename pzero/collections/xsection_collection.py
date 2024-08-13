@@ -28,10 +28,10 @@ from pzero.helpers.helper_dialogs import general_input_dialog, open_file_dialog
 from pzero.helpers.helper_functions import auto_sep
 from pzero.orientation_analysis import dip_directions2normals, get_dip_dir_vectors
 
-
 from .AbstractCollection import BaseCollection
 
-"""Options to print Pandas dataframes in console"""
+# =================================== Options to print Pandas dataframes in console ===================================
+
 pd_desired_width = 800
 pd_max_columns = 20
 pd_show_precision = 4
@@ -42,12 +42,12 @@ pd.set_option("display.max_columns", pd_max_columns)
 pd.set_option("display.precision", pd_show_precision)
 pd.set_option("display.max_colwidth", pd_max_colwidth)
 
-""""Methods used to create cross sections."""
+# =================================== Methods used to create cross sections ===========================================
 
 
 def section_from_azimuth(self, vector):
+    """Create cross section from one point and azimuth."""
     section_dict = deepcopy(self.parent.xsect_coll.section_dict)
-
     self.plotter.untrack_click_position(side="left")
 
     # points = np.array([vector.p1, vector.p2])
@@ -55,8 +55,7 @@ def section_from_azimuth(self, vector):
     section_dict_in = {
         "warning": [
             "XSection from azimuth",
-            "Build new XSection from a user-drawn line.\nOnce drawn, values can be "
-            "modified from keyboard\nor by drawing another vector.",
+            "Build new XSection from a user-drawn line.\nOnce drawn, values can be modified from keyboard\nor by drawing another vector.",
             "QLabel",
         ],
         "name": ["Insert Xsection name", "new_section", "QLineEdit"],
@@ -69,11 +68,7 @@ def section_from_azimuth(self, vector):
         "length": ["Insert length", vector.length, "QLineEdit"],
         "width": ["Insert width", 0.0, "QLineEdit"],
         "bottom": ["Insert bottom", 0.0, "QLineEdit"],
-        "activate": [
-            "Multiple XSections",
-            "Draw a set of parallel XSections",
-            "QCheckBox",
-        ],
+        "multiple": ["Multiple XSections", "Draw a set of parallel XSections", "QCheckBox",],
         "spacing": ["Spacing", 1000.0, "QLineEdit"],
         "num_xs": ["Number of XSections", 5, "QLineEdit"],
         "along": ["Repeat parallel to:", ["Normal", "Azimuth"], "QComboBox"],
@@ -82,42 +77,46 @@ def section_from_azimuth(self, vector):
         title="New XSection from points", input_dict=section_dict_in
     )
     if section_dict_updt is None:
+        # Check for a valid input dictionary.
+        # If None un-freeze the Qt interface and return.
         self.enable_actions()
         return
-
     while True:
+        # Add "_0" to section name to ensure uniqueness.
         if section_dict_updt["name"] in self.parent.xsect_coll.get_names:
             section_dict_updt["name"] = section_dict_updt["name"] + "_0"
         else:
             break
-
     for key in section_dict_updt:
+        # Update section dictionary entries.
         section_dict[key] = section_dict_updt[key]
-
-    activate = section_dict["activate"]
+    # Use other dialog dictionary entries as parameters for multiple sections.
+    multiple = section_dict["multiple"]
     num_xs = section_dict["num_xs"]
     along = section_dict["along"]
-
-    section_dict.pop("activate", None)
+    section_dict.pop("multiple", None)
     section_dict.pop("num_xs", None)
-
+    # Define other (redundant) section parameters.
     section_dict["base_z"] = section_dict["bottom"]
     section_dict["end_z"] = section_dict["top"]
+    # Calculate normals.
     normals = dip_directions2normals(
         dips=section_dict["dip"], directions=(section_dict["azimuth"] + 90) % 360
     )
     section_dict["normal_x"] = normals[0]
     section_dict["normal_y"] = normals[1]
     section_dict["normal_z"] = normals[2]
+    # ADD CROSS-SECTION TO COLLECTION.
     uid = self.parent.xsect_coll.add_entity_from_dict(entity_dict=section_dict)
-
-    if section_dict is None:
-        """Un-Freeze QT interface"""
-        self.enable_actions()
-    if activate == "uncheck":
-        """Un-Freeze QT interface"""
-        self.enable_actions()
-    else:
+    # The following seems not necessary
+    # if section_dict is None:
+    #     """Un-Freeze QT interface"""
+    #     self.enable_actions()
+    # if multiple == "uncheck":
+    #     """Un-Freeze QT interface"""
+    #     self.enable_actions()
+    # The following adds more parallel seriated cross-sections.
+    if multiple == "check":
         name_original_xs = section_dict["name"]
         spacing = section_dict["spacing"]
         for xsect in range(num_xs - 1):
@@ -127,47 +126,44 @@ def section_from_azimuth(self, vector):
                     section_dict["name"] = section_dict["name"] + "_0"
                 else:
                     break
-
             tx = self.parent.xsect_coll.get_uid_normal_x(uid) * spacing
             ty = self.parent.xsect_coll.get_uid_normal_y(uid) * spacing
             if along == "Normal":
                 tz = self.parent.xsect_coll.get_uid_normal_z(uid) * spacing
             else:
                 tz = 0
-
             trans_mat = np_array(
                 [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [tx, ty, tz, 1]]
             )
-
             frame = self.parent.xsect_coll.get_uid_vtk_frame(uid)
             homo_points = frame.get_homo_points()
             new_points = np_matmul(homo_points, trans_mat)[:, :-1]
             section_dict["base_x"] = new_points[0, 0]
             section_dict["base_y"] = new_points[0, 1]
-
             section_dict["end_x"] = new_points[3, 0]
             section_dict["end_y"] = new_points[3, 1]
             section_dict["bottom"] = new_points[0, 2]
             section_dict["uid"] = None
-
             uid = self.parent.xsect_coll.add_entity_from_dict(entity_dict=section_dict)
-
-        self.enable_actions()
+    # At the end un-freeze the Qt interface before returning.
+    self.enable_actions()
 
 
 def sections_from_file(self):
+    """Create cross section from file."""
+    # Read GOCAD ASCII (.pl) or ASCII files (.dat) to extract the data necessary to create a section (or
+    # multiple sections). The necessary keys are defined in the section_dict_updt dict.
+    # For GOCAD ASCII the file is parsed for every line searching for key words that define the line containing the data.
+    # For normal ASCII files exported from MOVE the data is registered as a csv and so the pd.read_csv function can be
+    # used. The separator is automatically extracted using csv.Sniffer() (auto_sep helper function).
+    # For both importing methods the user must define the top and bottom values of the section.
+
+    # section_from_points IS MISSING! BUT IT IS NOT NECESSARY. SIMILAR FUNCTIONALITY
+    # IS ALREADY PRESENT IN section_from_azimuth
+    # USE THAT OR EXTRACT "FROM POINTS" IN A SEPARATE FUNCTION
+    # OR CREATE A METHOD TO FILL MISSING PARAMETERS IN THE COLLECTION??
+
     from os.path import splitext
-
-    """[Gabriele]  Read GOCAD ASCII (.pl) or ASCII files (.dat) to extract the data necessary to create a section (or 
-    multiple sections). The necessary keys are defined in the section_dict_updt dict.
-
-    For GOCAD ASCII the file is parsed for every line searching for key words that define the line containing the data.
-
-    For normal ASCII files exported from MOVE the data is registered as a csv and so the pd.read_csv function can be 
-    used. The separator is automatically extracted using csv.Sniffer() (auto_sep helper function).
-
-    For both importing methods the user must define the top and bottom values of the section.
-    """
     section_dict_updt = {
         "name": "",
         "base_x": 0,
@@ -184,12 +180,11 @@ def sections_from_file(self):
         filter="GOCAD ASCII (*.*);;ASCII (*.dat);;CSV (*.csv)",
         multiple=True,
     )
-
+    # return file and extension list
+    # This could be implemented automatically in open_file_dialog
     name, extension = splitext(
         files[0]
-    )  # [Gabriele] This could be implemented automatically in open_file_dialog
-    # return file and extension list
-
+    )
     section_dict_in = {
         "warning": [
             "XSection from file",
@@ -201,9 +196,9 @@ def sections_from_file(self):
         "top": ["Insert top", 0.0, "QLineEdit"],
         "bottom": ["Insert bottom", 0.0, "QLineEdit"],
     }
-
-    # [Gabriele] Check the file type
     for file in files:
+        # Check the file type and import accordingly
+        # If no valid type is found, do nothing.
         if extension == ".pl":
             top_bottom = general_input_dialog(
                 title="XSection from files", input_dict=section_dict_in
@@ -274,7 +269,7 @@ def sections_from_file(self):
 
 
 class XSectionCollection(BaseCollection):
-
+    """Cross-section collection."""
     def __init__(self, parent=None, *args, **kwargs):
         super(XSectionCollection, self).__init__(parent, *args, **kwargs)
 
@@ -297,8 +292,8 @@ class XSectionCollection(BaseCollection):
             "top": 0.0,
             "bottom": 0.0,
             "vtk_plane": None,  # None to avoid errors with deepcopy
-            "vtk_frame": None,
-        }  # None to avoid errors with deepcopy
+            "vtk_frame": None,  # None to avoid errors with deepcopy
+        }
 
         self.entity_type_dict = {
             "uid": str,
