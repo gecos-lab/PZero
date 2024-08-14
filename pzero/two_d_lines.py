@@ -105,7 +105,7 @@ def edit_line(self):
                 x_section_uid=self.this_x_section_uid, parent=self.parent
             )
         vtk_obj.ShallowCopy(traced_pld)
-        self.parent.geol_coll.replace_vtk(uid=uid, vtk_object=vtk_obj, const_color=True)
+        self.parent.geol_coll.replace_vtk(uid=uid, vtk_object=vtk_obj)
         editor.EnabledOff()
         self.clear_selection()
         self.enable_actions()
@@ -291,7 +291,7 @@ def extend_line(self):
             )
         vtk_obj.ShallowCopy(traced_pld)
 
-        self.parent.geol_coll.replace_vtk(uid=uid, vtk_object=vtk_obj, const_color=True)
+        self.parent.geol_coll.replace_vtk(uid=uid, vtk_object=vtk_obj)
         extender.EnabledOff()
         self.clear_selection()
         self.enable_actions()
@@ -461,9 +461,7 @@ def split_line_line(self):
             if new_line["vtk_obj"].points_number > 0:
                 """Replace VTK object"""
                 if replace == 1:
-                    self.parent.geol_coll.replace_vtk(
-                        uid=current_uid_paper, vtk_object=new_line["vtk_obj"]
-                    )
+                    self.parent.geol_coll.replace_vtk(uid=current_uid_paper, vtk_object=new_line["vtk_obj"])
                     self.parent.geology_geom_modified_signal.emit(
                         [current_uid_paper]
                     )  # emit uid as list to force redraw()
@@ -757,9 +755,7 @@ def merge_lines(self):
     new_line["vtk_obj"].auto_cells()
     """Replace VTK object"""
     if new_line["vtk_obj"].points_number > 0:
-        self.parent.geol_coll.replace_vtk(
-            uid=current_uid_one, vtk_object=new_line["vtk_obj"]
-        )
+        self.parent.geol_coll.replace_vtk(uid=current_uid_one, vtk_object=new_line["vtk_obj"])
         del new_line
     else:
         print("Empty object")
@@ -915,16 +911,8 @@ def snap_line(self):
         new_line_goal["vtk_obj"].auto_cells()
         """Replace VTK object"""
         if new_line_snap["vtk_obj"].points_number > 0:
-            self.parent.geol_coll.replace_vtk(
-                uid=current_uid_snap,
-                vtk_object=new_line_snap["vtk_obj"],
-                const_color=True,
-            )
-            self.parent.geol_coll.replace_vtk(
-                uid=current_uid_goal,
-                vtk_object=new_line_goal["vtk_obj"],
-                const_color=True,
-            )
+            self.parent.geol_coll.replace_vtk(uid=current_uid_snap,vtk_object=new_line_snap["vtk_obj"])
+            self.parent.geol_coll.replace_vtk(uid=current_uid_goal,vtk_object=new_line_goal["vtk_obj"])
             del new_line_snap
             del new_line_goal
         else:
@@ -1021,9 +1009,7 @@ def resample_line_distance(
         new_line["vtk_obj"].auto_cells()
         """Replace VTK object"""
         if new_line["vtk_obj"].points_number > 0:
-            self.parent.geol_coll.replace_vtk(
-                uid=current_uid, vtk_object=new_line["vtk_obj"]
-            )
+            self.parent.geol_coll.replace_vtk(uid=current_uid, vtk_object=new_line["vtk_obj"])
             del new_line
         else:
             print("Empty object")
@@ -1125,9 +1111,7 @@ def resample_line_number_points(
         new_line["vtk_obj"].auto_cells()
         """Replace VTK object"""
         if new_line["vtk_obj"].points_number > 0:
-            self.parent.geol_coll.replace_vtk(
-                uid=current_uid, vtk_object=new_line["vtk_obj"]
-            )
+            self.parent.geol_coll.replace_vtk(uid=current_uid, vtk_object=new_line["vtk_obj"])
             del new_line
         else:
             print("Empty object")
@@ -1228,9 +1212,7 @@ def simplify_line(
         new_line["vtk_obj"].auto_cells()
         """Replace VTK object"""
         if new_line["vtk_obj"].points_number > 0:
-            self.parent.geol_coll.replace_vtk(
-                uid=current_uid, vtk_object=new_line["vtk_obj"]
-            )
+            self.parent.geol_coll.replace_vtk(uid=current_uid, vtk_object=new_line["vtk_obj"])
             del new_line
         else:
             print("Empty object")

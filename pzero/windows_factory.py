@@ -2591,7 +2591,7 @@ class View3D(VTKView):
             old_plane_n = np_append(old_plane_n, plane_n).reshape(-1, 3)
             old_vtk_obj.set_point_data("Normals", old_plane_n)
             old_vtk_obj.auto_cells()
-            self.parent.geol_coll.replace_vtk(uid, old_vtk_obj, const_color=True)
+            self.parent.geol_coll.replace_vtk(uid, old_vtk_obj)
         else:
             att_point = Attitude()
 

@@ -55,7 +55,7 @@ class BaseCollection(ABC):
         pass
 
     @abstractmethod
-    def replace_vtk(self, uid: str = None, vtk_object: vtkDataObject = None, const_color: bool = True):
+    def replace_vtk(self, uid: str = None, vtk_object: vtkDataObject = None):
         """Replace the vtk object of a given uid with another vtkobject. Const_color
         is a flag, if True the color is maintained while if False it is generated again."""
         # Is the Const_color flag really useful? It seems to mix visualization and collection, which is a bad style.

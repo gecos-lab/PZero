@@ -32,6 +32,7 @@ class GeologicalCollection(BaseCollection):
     def __init__(self, parent=None, *args, **kwargs):
         super(GeologicalCollection, self).__init__(parent, *args, **kwargs)
 
+        # Initialize properties required by the abstract superclass.
         self.entity_dict = {
             "uid": "",
             "name": "undef",
@@ -111,6 +112,7 @@ class GeologicalCollection(BaseCollection):
                 R, G, B = color
             else:
                 R, G, B = np_round(np_random.random(3) * 255)
+            # Use default generic values for legend.
             self.parent.geol_legend_df = self.parent.geol_legend_df.append(
                 {
                     "geological_type": geo_type,
@@ -141,10 +143,7 @@ class GeologicalCollection(BaseCollection):
         # Remove row from dataframe and reset data model.
         if uid not in self.get_uids:
             return
-        self.df.drop(
-            self.parent.geol_coll.df[self.parent.geol_coll.df["uid"] == uid].index,
-            inplace=True,
-        )
+        self.df.drop(self.parent.geol_coll.df[self.parent.geol_coll.df["uid"] == uid].index, inplace=True)
         self.modelReset.emit()  # is this really necessary?
         # Then remove geo_type / feature / scenario from legend if needed.
         # legend_updated is used to record if the table is updated or not.
@@ -153,15 +152,16 @@ class GeologicalCollection(BaseCollection):
         if legend_updated:
             self.parent.legend.update_widget(self.parent)
             self.parent.prop_legend.update_widget(self.parent)
-        self.parent.geology_removed_signal.emit(
-            [uid]
-        )  # a list of uids is emitted, even if the entity is just one
+        # A list of uids is emitted, even if the entity is just one
+        self.parent.geology_removed_signal.emit([uid])
         return uid
 
     def clone_entity(self, uid: str = None) -> str:
-
+        """Clone an entity. Take care since this sends signals immediately (?)."""
+        # First check whether the uid to be cloned exists.
         if uid not in self.get_uids:
             return
+        # Ten deep-copy the base disctionary, copy parameters and the VTK object, and create new entity.
         entity_dict = deepcopy(self.entity_dict)
         entity_dict["name"] = self.get_uid_name(uid)
         entity_dict["topological_type"] = self.get_uid_topological_type(uid)
@@ -175,8 +175,9 @@ class GeologicalCollection(BaseCollection):
         out_uid = self.add_entity_from_dict(entity_dict=entity_dict)
         return out_uid
 
-    def replace_vtk(self, uid: str = None, vtk_object: vtkDataObject = None, const_color: bool = True):
-
+    def replace_vtk(self, uid: str = None, vtk_object: vtkDataObject = None):
+        """Replace the vtk object of a given uid with another vtkobject. Const_color
+        is a flag, if True the color is maintained while if False it is generated again."""
         if isinstance(
                 vtk_object, type(self.df.loc[self.df["uid"] == uid, "vtk_obj"].values[0])
         ):
@@ -186,13 +187,10 @@ class GeologicalCollection(BaseCollection):
                 ].to_dict("records")[0]
             )
             new_dict["vtk_obj"] = vtk_object
-            if const_color:
-                R = self.get_uid_legend(uid=uid)["color_R"]
-                G = self.get_uid_legend(uid=uid)["color_G"]
-                B = self.get_uid_legend(uid=uid)["color_B"]
-                color = [R, G, B]
-            else:
-                color = None
+            R = self.get_uid_legend(uid=uid)["color_R"]
+            G = self.get_uid_legend(uid=uid)["color_G"]
+            B = self.get_uid_legend(uid=uid)["color_B"]
+            color = [R, G, B]
             self.remove_entity(uid)
             self.add_entity_from_dict(entity_dict=new_dict, color=color)
         else:

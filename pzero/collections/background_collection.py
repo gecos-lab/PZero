@@ -159,7 +159,7 @@ class BackgroundCollection(BaseCollection):
         out_uid = self.add_entity_from_dict(entity_dict=entity_dict)
         return out_uid
 
-    def replace_vtk(self, uid: str = None, vtk_object: vtkDataObject = None, const_color: bool = True):
+    def replace_vtk(self, uid: str = None, vtk_object: vtkDataObject = None):
         if isinstance(
                 vtk_object, type(self.df.loc[self.df["uid"] == uid, "vtk_obj"].values[0])
         ):
@@ -169,13 +169,10 @@ class BackgroundCollection(BaseCollection):
                 ].to_dict("records")[0]
             )
             new_dict["vtk_obj"] = vtk_object
-            if const_color:
-                R = self.get_uid_legend(uid=uid)["color_R"]
-                G = self.get_uid_legend(uid=uid)["color_G"]
-                B = self.get_uid_legend(uid=uid)["color_B"]
-                color = [R, G, B]
-            else:
-                color = None
+            R = self.get_uid_legend(uid=uid)["color_R"]
+            G = self.get_uid_legend(uid=uid)["color_G"]
+            B = self.get_uid_legend(uid=uid)["color_B"]
+            color = [R, G, B]
             self.remove_entity(uid)
             self.add_entity_from_dict(entity_dict=new_dict, color=color)
         else:

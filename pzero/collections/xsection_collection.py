@@ -358,7 +358,7 @@ class XSectionCollection(BaseCollection):
         """Not implemented for XSectionCollection, but required by the abstract superclass."""
         pass
 
-    def replace_vtk(self, uid: str = None, vtk_object: vtkDataObject = None, const_color: bool = True):
+    def replace_vtk(self, uid: str = None, vtk_object: vtkDataObject = None):
         """Not implemented for XSectionCollection, but required by the abstract superclass."""
         pass
 

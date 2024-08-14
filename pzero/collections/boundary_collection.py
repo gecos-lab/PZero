@@ -224,10 +224,8 @@ class BoundaryCollection(BaseCollection):
     def clone_entity(self, uid: str = None) -> str:
         pass
 
-    def replace_vtk(self, uid: str = None, vtk_object: vtkDataObject = None, const_color: bool = True):
-        if isinstance(
-                vtk_object, type(self.df.loc[self.df["uid"] == uid, "vtk_obj"].values[0])
-        ):
+    def replace_vtk(self, uid: str = None, vtk_object: vtkDataObject = None):
+        if isinstance(vtk_object, type(self.df.loc[self.df["uid"] == uid, "vtk_obj"].values[0])):
             new_dict = deepcopy(
                 self.df.loc[
                     self.df["uid"] == uid, self.df.columns != "vtk_obj"
