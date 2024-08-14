@@ -366,6 +366,11 @@ class XSectionCollection(BaseCollection):
         """Not implemented for XSectionCollection, but required by the abstract superclass."""
         pass
 
+    def remove_unused_from_legend(self):
+        """Remove unused types / features from a legend table."""
+        legend_updated: bool = False
+        return legend_updated
+
     def get_uid_legend(self, uid: str = None) -> dict:
         """Get legend for a particular uid."""
         legend_dict = self.parent.others_legend_df.loc[

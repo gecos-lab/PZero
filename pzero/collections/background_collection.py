@@ -132,58 +132,10 @@ class BackgroundCollection(BaseCollection):
         )
         self.modelReset.emit()  # is this really necessary?
         """Then remove background_type / feature from legend if needed."""
-        """table_updated is used to record if the table is updated or not"""
-        table_updated = False
-        backgrounds_types_in_legend = pd.unique(
-            self.parent.backgrounds_legend_df["background_type"]
-        )
-        features_in_legend = pd.unique(
-            self.parent.backgrounds_legend_df["background_feature"]
-        )
-        for background_type in backgrounds_types_in_legend:
-            if self.parent.backgrounds_coll.df.loc[
-                self.parent.backgrounds_coll.df["background_type"] == background_type
-            ].empty:
-                """Get index of row to be removed, then remove it in place with .drop()."""
-                idx_remove = self.parent.backgrounds_legend_df[
-                    self.parent.backgrounds_legend_df["background_type"]
-                    == background_type
-                    ].index
-                self.parent.backgrounds_legend_df.drop(idx_remove, inplace=True)
-                table_updated = table_updated or True
-            for feature in features_in_legend:
-                if self.parent.backgrounds_coll.df.loc[
-                    (
-                            self.parent.backgrounds_coll.df["background_type"]
-                            == background_type
-                    )
-                    & (self.parent.backgrounds_coll.df["background_feature"] == feature)
-                ].empty:
-                    """Get index of row to be removed, then remove it in place with .drop()."""
-                    idx_remove = self.parent.backgrounds_legend_df[
-                        (
-                                self.parent.backgrounds_legend_df["background_type"]
-                                == background_type
-                        )
-                        & (
-                                self.parent.backgrounds_legend_df["background_feature"]
-                                == feature
-                        )
-                        ].index
-                    self.parent.backgrounds_legend_df.drop(idx_remove, inplace=True)
-                    table_updated = table_updated or True
-        for feature in features_in_legend:
-            if self.parent.backgrounds_coll.df.loc[
-                self.parent.backgrounds_coll.df["background_feature"] == feature
-            ].empty:
-                """Get index of row to be removed, then remove it in place with .drop()."""
-                idx_remove = self.parent.backgrounds_legend_df[
-                    self.parent.backgrounds_legend_df["background_feature"] == feature
-                    ].index
-                self.parent.backgrounds_legend_df.drop(idx_remove, inplace=True)
-                table_updated = table_updated or True
+        """legend_updated is used to record if the table is updated or not"""
+        legend_updated = self.remove_unused_from_legend()
         """When done, if the table was updated update the widget, and in any case send the signal over to the views."""
-        if table_updated:
+        if legend_updated:
             self.parent.legend.update_widget(self.parent)
             self.parent.prop_legend.update_widget(self.parent)
         self.parent.background_removed_signal.emit(
@@ -230,57 +182,9 @@ class BackgroundCollection(BaseCollection):
             print("ERROR - replace_vtk with vtk of a different type.")
 
     def attr_modified_update_legend_table(self):
-        """table_updated is used to record if the table is updated or not"""
-        table_updated = False
+        """legend_updated is used to record if the table is updated or not"""
         """First remove unused background_type / feature"""
-        backgrounds_types_in_legend = pd.unique(
-            self.parent.backgrounds_legend_df["background_type"]
-        )
-        features_in_legend = pd.unique(
-            self.parent.backgrounds_legend_df["background_feature"]
-        )
-        for background_type in backgrounds_types_in_legend:
-            if self.parent.backgrounds_coll.df.loc[
-                self.parent.backgrounds_coll.df["background_type"] == background_type
-            ].empty:
-                """Get index of row to be removed, then remove it in place with .drop()."""
-                idx_remove = self.parent.backgrounds_legend_df[
-                    self.parent.backgrounds_legend_df["background_type"]
-                    == background_type
-                    ].index
-                self.parent.backgrounds_legend_df.drop(idx_remove, inplace=True)
-                table_updated = table_updated or True
-            for feature in features_in_legend:
-                if self.parent.backgrounds_coll.df.loc[
-                    (
-                            self.parent.backgrounds_coll.df["background_type"]
-                            == background_type
-                    )
-                    & (self.parent.backgrounds_coll.df["background_feature"] == feature)
-                ].empty:
-                    """Get index of row to be removed, then remove it in place with .drop()."""
-                    idx_remove = self.parent.backgrounds_legend_df[
-                        (
-                                self.parent.backgrounds_legend_df["background_type"]
-                                == background_type
-                        )
-                        & (
-                                self.parent.backgrounds_legend_df["background_feature"]
-                                == feature
-                        )
-                        ].index
-                    self.parent.backgrounds_legend_df.drop(idx_remove, inplace=True)
-                    table_updated = table_updated or True
-        for feature in features_in_legend:
-            if self.parent.backgrounds_coll.df.loc[
-                self.parent.backgrounds_coll.df["background_feature"] == feature
-            ].empty:
-                """Get index of row to be removed, then remove it in place with .drop()."""
-                idx_remove = self.parent.backgrounds_legend_df[
-                    self.parent.backgrounds_legend_df["background_feature"] == feature
-                    ].index
-                self.parent.backgrounds_legend_df.drop(idx_remove, inplace=True)
-                table_updated = table_updated or True
+        legend_updated = self.remove_unused_from_legend()
         """Then add new background_type or feature"""
         for uid in self.parent.backgrounds_coll.df["uid"].to_list():
             background_type = self.parent.backgrounds_coll.df.loc[
@@ -309,10 +213,63 @@ class BackgroundCollection(BaseCollection):
                         ignore_index=True,
                     )
                 )
-                table_updated = table_updated or True
+                legend_updated = legend_updated or True
         """When done, if the table was updated update the widget. No signal is sent here to the views."""
-        if table_updated:
+        if legend_updated:
             self.parent.legend.update_widget(self.parent)
+
+    def remove_unused_from_legend(self):
+        """ ---- """
+        legend_updated = False
+        backgrounds_types_in_legend = pd.unique(
+            self.parent.backgrounds_legend_df["background_type"]
+        )
+        features_in_legend = pd.unique(
+            self.parent.backgrounds_legend_df["background_feature"]
+        )
+        for background_type in backgrounds_types_in_legend:
+            if self.parent.backgrounds_coll.df.loc[
+                self.parent.backgrounds_coll.df["background_type"] == background_type
+            ].empty:
+                """Get index of row to be removed, then remove it in place with .drop()."""
+                idx_remove = self.parent.backgrounds_legend_df[
+                    self.parent.backgrounds_legend_df["background_type"]
+                    == background_type
+                    ].index
+                self.parent.backgrounds_legend_df.drop(idx_remove, inplace=True)
+                legend_updated = legend_updated or True
+            for feature in features_in_legend:
+                if self.parent.backgrounds_coll.df.loc[
+                    (
+                            self.parent.backgrounds_coll.df["background_type"]
+                            == background_type
+                    )
+                    & (self.parent.backgrounds_coll.df["background_feature"] == feature)
+                ].empty:
+                    """Get index of row to be removed, then remove it in place with .drop()."""
+                    idx_remove = self.parent.backgrounds_legend_df[
+                        (
+                                self.parent.backgrounds_legend_df["background_type"]
+                                == background_type
+                        )
+                        & (
+                                self.parent.backgrounds_legend_df["background_feature"]
+                                == feature
+                        )
+                        ].index
+                    self.parent.backgrounds_legend_df.drop(idx_remove, inplace=True)
+                    legend_updated = legend_updated or True
+        for feature in features_in_legend:
+            if self.parent.backgrounds_coll.df.loc[
+                self.parent.backgrounds_coll.df["background_feature"] == feature
+            ].empty:
+                """Get index of row to be removed, then remove it in place with .drop()."""
+                idx_remove = self.parent.backgrounds_legend_df[
+                    self.parent.backgrounds_legend_df["background_feature"] == feature
+                    ].index
+                self.parent.backgrounds_legend_df.drop(idx_remove, inplace=True)
+                legend_updated = legend_updated or True
+        return legend_updated
 
     def get_uid_legend(self, uid: str = None) -> dict:
         background_type = self.df.loc[self.df["uid"] == uid, "background_type"].values[
@@ -504,8 +461,8 @@ class BackgroundCollection(BaseCollection):
 #         )
 #         self.modelReset.emit()  # is this really necessary?
 #         """Then remove background_type / feature from legend if needed."""
-#         """table_updated is used to record if the table is updated or not"""
-#         table_updated = False
+#         """legend_updated is used to record if the table is updated or not"""
+#         legend_updated = False
 #         backgrounds_types_in_legend = pd.unique(
 #             self.parent.backgrounds_legend_df["background_type"]
 #         )
@@ -522,7 +479,7 @@ class BackgroundCollection(BaseCollection):
 #                     == background_type
 #                 ].index
 #                 self.parent.backgrounds_legend_df.drop(idx_remove, inplace=True)
-#                 table_updated = table_updated or True
+#                 legend_updated = legend_updated or True
 #             for feature in features_in_legend:
 #                 if self.parent.backgrounds_coll.df.loc[
 #                     (
@@ -543,7 +500,7 @@ class BackgroundCollection(BaseCollection):
 #                         )
 #                     ].index
 #                     self.parent.backgrounds_legend_df.drop(idx_remove, inplace=True)
-#                     table_updated = table_updated or True
+#                     legend_updated = legend_updated or True
 #         for feature in features_in_legend:
 #             if self.parent.backgrounds_coll.df.loc[
 #                 self.parent.backgrounds_coll.df["background_feature"] == feature
@@ -553,9 +510,9 @@ class BackgroundCollection(BaseCollection):
 #                     self.parent.backgrounds_legend_df["background_feature"] == feature
 #                 ].index
 #                 self.parent.backgrounds_legend_df.drop(idx_remove, inplace=True)
-#                 table_updated = table_updated or True
+#                 legend_updated = legend_updated or True
 #         """When done, if the table was updated update the widget, and in any case send the signal over to the views."""
-#         if table_updated:
+#         if legend_updated:
 #             self.parent.legend.update_widget(self.parent)
 #             self.parent.prop_legend.update_widget(self.parent)
 #         self.parent.background_removed_signal.emit(
@@ -606,8 +563,8 @@ class BackgroundCollection(BaseCollection):
 #         """Update legend table, adding or removing items, based on metadata table.
 #         This is called when editing the background dataframe with setData(). Slightly different versions
 #         are found in add_entity_from_dict and remove_entity methods."""
-#         """table_updated is used to record if the table is updated or not"""
-#         table_updated = False
+#         """legend_updated is used to record if the table is updated or not"""
+#         legend_updated = False
 #         """First remove unused background_type / feature"""
 #         backgrounds_types_in_legend = pd.unique(
 #             self.parent.backgrounds_legend_df["background_type"]
@@ -625,7 +582,7 @@ class BackgroundCollection(BaseCollection):
 #                     == background_type
 #                 ].index
 #                 self.parent.backgrounds_legend_df.drop(idx_remove, inplace=True)
-#                 table_updated = table_updated or True
+#                 legend_updated = legend_updated or True
 #             for feature in features_in_legend:
 #                 if self.parent.backgrounds_coll.df.loc[
 #                     (
@@ -646,7 +603,7 @@ class BackgroundCollection(BaseCollection):
 #                         )
 #                     ].index
 #                     self.parent.backgrounds_legend_df.drop(idx_remove, inplace=True)
-#                     table_updated = table_updated or True
+#                     legend_updated = legend_updated or True
 #         for feature in features_in_legend:
 #             if self.parent.backgrounds_coll.df.loc[
 #                 self.parent.backgrounds_coll.df["background_feature"] == feature
@@ -656,7 +613,7 @@ class BackgroundCollection(BaseCollection):
 #                     self.parent.backgrounds_legend_df["background_feature"] == feature
 #                 ].index
 #                 self.parent.backgrounds_legend_df.drop(idx_remove, inplace=True)
-#                 table_updated = table_updated or True
+#                 legend_updated = legend_updated or True
 #         """Then add new background_type or feature"""
 #         for uid in self.parent.backgrounds_coll.df["uid"].to_list():
 #             background_type = self.parent.backgrounds_coll.df.loc[
@@ -685,9 +642,9 @@ class BackgroundCollection(BaseCollection):
 #                         ignore_index=True,
 #                     )
 #                 )
-#                 table_updated = table_updated or True
+#                 legend_updated = legend_updated or True
 #         """When done, if the table was updated update the widget. No signal is sent here to the views."""
-#         if table_updated:
+#         if legend_updated:
 #             self.parent.legend.update_widget(self.parent)
 #
 #     def get_number_of_entities(self):

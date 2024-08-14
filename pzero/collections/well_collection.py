@@ -115,45 +115,10 @@ class WellCollection(BaseCollection):
             print("ERROR - replace_vtk with vtk of a different type.")
 
     def attr_modified_update_legend_table(self):
-        table_updated = False
-        """First remove unused locid / feature"""
-        locid_in_legend = pd_unique(self.parent.well_legend_df["Loc ID"])
-        features_in_legend = pd_unique(self.parent.well_legend_df["geological_feature"])
-        for loc_id in locid_in_legend:
-            if self.parent.well_coll.df.loc[
-                self.parent.well_coll.df["Loc ID"] == loc_id
-            ].empty:
-                """Get index of row to be removed, then remove it in place with .drop()."""
-                idx_remove = self.parent.well_legend_df[
-                    self.parent.well_legend_df["Loc ID"] == loc_id
-                    ].index
-                self.parent.well_legend_df.drop(idx_remove, inplace=True)
-                table_updated = table_updated or True
-            for feature in features_in_legend:
-                if self.parent.well_coll.df.loc[
-                    (self.parent.well_coll.df["Loc ID"] == loc_id)
-                    & (self.parent.well_coll.df["geological_feature"] == feature)
-                ].empty:
-                    """Get index of row to be removed, then remove it in place with .drop()."""
-                    idx_remove = self.parent.well_legend_df[
-                        (self.parent.well_legend_df["Loc ID"] == loc_id)
-                        & (self.parent.well_legend_df["geological_feature"] == feature)
-                        ].index
-                    self.parent.well_legend_df.drop(idx_remove, inplace=True)
-                    table_updated = table_updated or True
-
-        for feature in features_in_legend:
-            if self.parent.well_coll.df.loc[
-                self.parent.well_coll.df["geological_feature"] == feature
-            ].empty:
-                """Get index of row to be removed, then remove it in place with .drop()."""
-                idx_remove = self.parent.well_legend_df[
-                    self.parent.well_legend_df["geological_feature"] == feature
-                    ].index
-                self.parent.well_legend_df.drop(idx_remove, inplace=True)
-                table_updated = table_updated or True
-
-        """Then add new locid / feature"""
+        """    ---------- """
+        # First remove unused locid / feature.
+        legend_updated = self.remove_unused_from_legend()
+        # Then add new locid / feature.
         for uid in self.parent.well_coll.df["uid"].to_list():
             locid = self.parent.well_coll.df.loc[
                 self.parent.well_coll.df["uid"] == uid, "Loc ID"
@@ -176,10 +141,49 @@ class WellCollection(BaseCollection):
                     },
                     ignore_index=True,
                 )
-                table_updated = table_updated or True
-        """When done, if the table was updated update the widget. No signal is sent here to the views."""
-        if table_updated:
+                legend_updated = legend_updated or True
+        # When done, if the table was updated update the widget. No signal is sent here to the views.
+        if legend_updated:
             self.parent.legend.update_widget(self.parent)
+
+    def remove_unused_from_legend(self):
+        """   ----------------  """
+        legend_updated = False
+        locid_in_legend = pd_unique(self.parent.well_legend_df["Loc ID"])
+        features_in_legend = pd_unique(self.parent.well_legend_df["geological_feature"])
+        for loc_id in locid_in_legend:
+            if self.parent.well_coll.df.loc[
+                self.parent.well_coll.df["Loc ID"] == loc_id
+            ].empty:
+                """Get index of row to be removed, then remove it in place with .drop()."""
+                idx_remove = self.parent.well_legend_df[
+                    self.parent.well_legend_df["Loc ID"] == loc_id
+                    ].index
+                self.parent.well_legend_df.drop(idx_remove, inplace=True)
+                legend_updated = legend_updated or True
+            for feature in features_in_legend:
+                if self.parent.well_coll.df.loc[
+                    (self.parent.well_coll.df["Loc ID"] == loc_id)
+                    & (self.parent.well_coll.df["geological_feature"] == feature)
+                ].empty:
+                    """Get index of row to be removed, then remove it in place with .drop()."""
+                    idx_remove = self.parent.well_legend_df[
+                        (self.parent.well_legend_df["Loc ID"] == loc_id)
+                        & (self.parent.well_legend_df["geological_feature"] == feature)
+                        ].index
+                    self.parent.well_legend_df.drop(idx_remove, inplace=True)
+                    legend_updated = legend_updated or True
+        for feature in features_in_legend:
+            if self.parent.well_coll.df.loc[
+                self.parent.well_coll.df["geological_feature"] == feature
+            ].empty:
+                """Get index of row to be removed, then remove it in place with .drop()."""
+                idx_remove = self.parent.well_legend_df[
+                    self.parent.well_legend_df["geological_feature"] == feature
+                    ].index
+                self.parent.well_legend_df.drop(idx_remove, inplace=True)
+                legend_updated = legend_updated or True
+        return legend_updated
 
     def get_uid_legend(self, uid: str = None) -> dict:
         locid = self.df.loc[self.df["uid"] == uid, "Loc ID"].values[0]
@@ -326,7 +330,7 @@ class WellCollection(BaseCollection):
 #             print("ERROR - replace_vtk with vtk of a different type.")
 #
 #     def well_attr_modified_update_legend_table(self):
-#         table_updated = False
+#         legend_updated = False
 #         """First remove unused locid / feature"""
 #         locid_in_legend = pd_unique(self.parent.well_legend_df["Loc ID"])
 #         features_in_legend = pd_unique(self.parent.well_legend_df["geological_feature"])
@@ -339,7 +343,7 @@ class WellCollection(BaseCollection):
 #                     self.parent.well_legend_df["Loc ID"] == loc_id
 #                 ].index
 #                 self.parent.well_legend_df.drop(idx_remove, inplace=True)
-#                 table_updated = table_updated or True
+#                 legend_updated = legend_updated or True
 #             for feature in features_in_legend:
 #                 if self.parent.well_coll.df.loc[
 #                     (self.parent.well_coll.df["Loc ID"] == loc_id)
@@ -351,7 +355,7 @@ class WellCollection(BaseCollection):
 #                         & (self.parent.well_legend_df["geological_feature"] == feature)
 #                     ].index
 #                     self.parent.well_legend_df.drop(idx_remove, inplace=True)
-#                     table_updated = table_updated or True
+#                     legend_updated = legend_updated or True
 #
 #         for feature in features_in_legend:
 #             if self.parent.well_coll.df.loc[
@@ -362,7 +366,7 @@ class WellCollection(BaseCollection):
 #                     self.parent.well_legend_df["geological_feature"] == feature
 #                 ].index
 #                 self.parent.well_legend_df.drop(idx_remove, inplace=True)
-#                 table_updated = table_updated or True
+#                 legend_updated = legend_updated or True
 #
 #         """Then add new locid / feature"""
 #         for uid in self.parent.well_coll.df["uid"].to_list():
@@ -387,9 +391,9 @@ class WellCollection(BaseCollection):
 #                     },
 #                     ignore_index=True,
 #                 )
-#                 table_updated = table_updated or True
+#                 legend_updated = legend_updated or True
 #         """When done, if the table was updated update the widget. No signal is sent here to the views."""
-#         if table_updated:
+#         if legend_updated:
 #             self.parent.legend.update_widget(self.parent)
 #
 #     def get_number_of_entities(self):

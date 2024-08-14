@@ -116,6 +116,11 @@ class Mesh3DCollection(BaseCollection):
     def attr_modified_update_legend_table(self):
         pass
 
+    def remove_unused_from_legend(self):
+        """Remove unused types / features from a legend table."""
+        legend_updated: bool = False
+        return legend_updated
+
     def get_uid_legend(self, uid: str = None) -> dict:
         legend_dict = self.parent.others_legend_df.loc[
             self.parent.others_legend_df["other_type"] == "Mesh3D"

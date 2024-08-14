@@ -138,81 +138,10 @@ class FluidsCollection(BaseCollection):
         )
         self.modelReset.emit()  # is this really necessary?
         """Then remove fluid_type / feature / scenario from legend if needed."""
-        """table_updated is used to record if the table is updated or not"""
-        table_updated = False
-        fluid_types_in_legend = pd.unique(self.parent.fluids_legend_df["fluid_type"])
-        features_in_legend = pd.unique(self.parent.fluids_legend_df["fluid_feature"])
-        scenarios_in_legend = pd.unique(self.parent.fluids_legend_df["scenario"])
-        for fluid_type in fluid_types_in_legend:
-            if self.parent.fluids_coll.df.loc[
-                self.parent.fluids_coll.df["fluid_type"] == fluid_type
-            ].empty:
-                """Get index of row to be removed, then remove it in place with .drop()."""
-                idx_remove = self.parent.fluids_legend_df[
-                    self.parent.fluids_legend_df["fluid_type"] == fluid_type
-                    ].index
-                self.parent.fluids_legend_df.drop(idx_remove, inplace=True)
-                table_updated = table_updated or True
-            for feature in features_in_legend:
-                if self.parent.fluids_coll.df.loc[
-                    (self.parent.fluids_coll.df["fluid_type"] == fluid_type)
-                    & (self.parent.fluids_coll.df["fluid_feature"] == feature)
-                ].empty:
-                    """Get index of row to be removed, then remove it in place with .drop()."""
-                    idx_remove = self.parent.fluids_legend_df[
-                        (self.parent.fluids_legend_df["fluid_type"] == fluid_type)
-                        & (self.parent.fluids_legend_df["fluid_feature"] == feature)
-                        ].index
-                    self.parent.fluids_legend_df.drop(idx_remove, inplace=True)
-                    table_updated = table_updated or True
-                for scenario in scenarios_in_legend:
-                    if self.parent.fluids_coll.df.loc[
-                        (self.parent.fluids_coll.df["fluid_type"] == fluid_type)
-                        & (self.parent.fluids_coll.df["fluid_feature"] == feature)
-                        & (self.parent.fluids_coll.df["scenario"] == scenario)
-                    ].empty:
-                        """Get index of row to be removed, then remove it in place with .drop()."""
-                        idx_remove = self.parent.fluids_legend_df[
-                            (self.parent.fluids_legend_df["fluid_type"] == fluid_type)
-                            & (self.parent.fluids_legend_df["fluid_feature"] == feature)
-                            & (self.parent.fluids_legend_df["scenario"] == scenario)
-                            ].index
-                        self.parent.fluids_legend_df.drop(idx_remove, inplace=True)
-                        table_updated = table_updated or True
-        for feature in features_in_legend:
-            if self.parent.fluids_coll.df.loc[
-                self.parent.fluids_coll.df["fluid_feature"] == feature
-            ].empty:
-                """Get index of row to be removed, then remove it in place with .drop()."""
-                idx_remove = self.parent.fluids_legend_df[
-                    self.parent.fluids_legend_df["fluid_feature"] == feature
-                    ].index
-                self.parent.fluids_legend_df.drop(idx_remove, inplace=True)
-                table_updated = table_updated or True
-            for scenario in scenarios_in_legend:
-                if self.parent.fluids_coll.df.loc[
-                    (self.parent.fluids_coll.df["fluid_feature"] == feature)
-                    & (self.parent.fluids_coll.df["scenario"] == scenario)
-                ].empty:
-                    """Get index of row to be removed, then remove it in place with .drop()."""
-                    idx_remove = self.parent.fluids_legend_df[
-                        (self.parent.fluids_legend_df["fluid_feature"] == feature)
-                        & (self.parent.fluids_legend_df["scenario"] == scenario)
-                        ].index
-                    self.parent.fluids_legend_df.drop(idx_remove, inplace=True)
-                    table_updated = table_updated or True
-        for scenario in scenarios_in_legend:
-            if self.parent.fluids_coll.df.loc[
-                self.parent.fluids_coll.df["scenario"] == scenario
-            ].empty:
-                """Get index of row to be removed, then remove it in place with .drop()."""
-                idx_remove = self.parent.fluids_legend_df[
-                    self.parent.fluids_legend_df["scenario"] == scenario
-                    ].index
-                self.parent.fluids_legend_df.drop(idx_remove, inplace=True)
-                table_updated = table_updated or True
+        """legend_updated is used to record if the table is updated or not"""
+        legend_updated = self.remove_unused_from_legend()
         """When done, if the table was updated update the widget, and in any case send the signal over to the views."""
-        if table_updated:
+        if legend_updated:
             self.parent.legend.update_widget(self.parent)
             self.parent.prop_legend.update_widget(self.parent)
         self.parent.fluid_removed_signal.emit(
@@ -259,80 +188,9 @@ class FluidsCollection(BaseCollection):
             print("ERROR - replace_vtk with vtk of a different type.")
 
     def attr_modified_update_legend_table(self):
-        """table_updated is used to record if the table is updated or not"""
-        table_updated = False
+        """legend_updated is used to record if the table is updated or not"""
         """First remove unused fluid_type / feature"""
-        fluid_types_in_legend = pd.unique(self.parent.fluids_legend_df["fluid_type"])
-        features_in_legend = pd.unique(self.parent.fluids_legend_df["fluid_feature"])
-        scenarios_in_legend = pd.unique(self.parent.fluids_legend_df["scenario"])
-        for fluid_type in fluid_types_in_legend:
-            if self.parent.fluids_coll.df.loc[
-                self.parent.fluids_coll.df["fluid_type"] == fluid_type
-            ].empty:
-                """Get index of row to be removed, then remove it in place with .drop()."""
-                idx_remove = self.parent.fluids_legend_df[
-                    self.parent.fluids_legend_df["fluid_type"] == fluid_type
-                    ].index
-                self.parent.fluids_legend_df.drop(idx_remove, inplace=True)
-                table_updated = table_updated or True
-            for feature in features_in_legend:
-                if self.parent.fluids_coll.df.loc[
-                    (self.parent.fluids_coll.df["fluid_type"] == fluid_type)
-                    & (self.parent.fluids_coll.df["fluid_feature"] == feature)
-                ].empty:
-                    """Get index of row to be removed, then remove it in place with .drop()."""
-                    idx_remove = self.parent.fluids_legend_df[
-                        (self.parent.fluids_legend_df["fluid_type"] == fluid_type)
-                        & (self.parent.fluids_legend_df["fluid_feature"] == feature)
-                        ].index
-                    self.parent.fluids_legend_df.drop(idx_remove, inplace=True)
-                    table_updated = table_updated or True
-                for scenario in scenarios_in_legend:
-                    if self.parent.fluids_coll.df.loc[
-                        (self.parent.fluids_coll.df["fluid_type"] == fluid_type)
-                        & (self.parent.fluids_coll.df["fluid_feature"] == feature)
-                        & (self.parent.fluids_coll.df["scenario"] == scenario)
-                    ].empty:
-                        """Get index of row to be removed, then remove it in place with .drop()."""
-                        idx_remove = self.parent.fluids_legend_df[
-                            (self.parent.fluids_legend_df["fluid_type"] == fluid_type)
-                            & (self.parent.fluids_legend_df["fluid_feature"] == feature)
-                            & (self.parent.fluids_legend_df["scenario"] == scenario)
-                            ].index
-                        self.parent.fluids_legend_df.drop(idx_remove, inplace=True)
-                        table_updated = table_updated or True
-        for feature in features_in_legend:
-            if self.parent.fluids_coll.df.loc[
-                self.parent.fluids_coll.df["fluid_feature"] == feature
-            ].empty:
-                """Get index of row to be removed, then remove it in place with .drop()."""
-                idx_remove = self.parent.fluids_legend_df[
-                    self.parent.fluids_legend_df["fluid_feature"] == feature
-                    ].index
-                self.parent.fluids_legend_df.drop(idx_remove, inplace=True)
-                table_updated = table_updated or True
-            for scenario in scenarios_in_legend:
-                if self.parent.fluids_coll.df.loc[
-                    (self.parent.fluids_coll.df["fluid_feature"] == feature)
-                    & (self.parent.fluids_coll.df["scenario"] == scenario)
-                ].empty:
-                    """Get index of row to be removed, then remove it in place with .drop()."""
-                    idx_remove = self.parent.fluids_legend_df[
-                        (self.parent.fluids_legend_df["fluid_feature"] == feature)
-                        & (self.parent.fluids_legend_df["scenario"] == scenario)
-                        ].index
-                    self.parent.fluids_legend_df.drop(idx_remove, inplace=True)
-                    table_updated = table_updated or True
-        for scenario in scenarios_in_legend:
-            if self.parent.fluids_coll.df.loc[
-                self.parent.fluids_coll.df["scenario"] == scenario
-            ].empty:
-                """Get index of row to be removed, then remove it in place with .drop()."""
-                idx_remove = self.parent.fluids_legend_df[
-                    self.parent.fluids_legend_df["scenario"] == scenario
-                    ].index
-                self.parent.fluids_legend_df.drop(idx_remove, inplace=True)
-                table_updated = table_updated or True
+        legend_updated = self.remove_unused_from_legend()
         """Then add new fluid_type / feature"""
         for uid in self.parent.fluids_coll.df["uid"].to_list():
             fluid_type = self.parent.fluids_coll.df.loc[
@@ -363,10 +221,86 @@ class FluidsCollection(BaseCollection):
                     },
                     ignore_index=True,
                 )
-                table_updated = table_updated or True
+                legend_updated = legend_updated or True
         """When done, if the table was updated update the widget. No signal is sent here to the views."""
-        if table_updated:
+        if legend_updated:
             self.parent.legend.update_widget(self.parent)
+
+    def remove_unused_from_legend(self):
+        """  --------- """
+        legend_updated = False
+        fluid_types_in_legend = pd.unique(self.parent.fluids_legend_df["fluid_type"])
+        features_in_legend = pd.unique(self.parent.fluids_legend_df["fluid_feature"])
+        scenarios_in_legend = pd.unique(self.parent.fluids_legend_df["scenario"])
+        for fluid_type in fluid_types_in_legend:
+            if self.parent.fluids_coll.df.loc[
+                self.parent.fluids_coll.df["fluid_type"] == fluid_type
+            ].empty:
+                """Get index of row to be removed, then remove it in place with .drop()."""
+                idx_remove = self.parent.fluids_legend_df[
+                    self.parent.fluids_legend_df["fluid_type"] == fluid_type
+                    ].index
+                self.parent.fluids_legend_df.drop(idx_remove, inplace=True)
+                legend_updated = legend_updated or True
+            for feature in features_in_legend:
+                if self.parent.fluids_coll.df.loc[
+                    (self.parent.fluids_coll.df["fluid_type"] == fluid_type)
+                    & (self.parent.fluids_coll.df["fluid_feature"] == feature)
+                ].empty:
+                    """Get index of row to be removed, then remove it in place with .drop()."""
+                    idx_remove = self.parent.fluids_legend_df[
+                        (self.parent.fluids_legend_df["fluid_type"] == fluid_type)
+                        & (self.parent.fluids_legend_df["fluid_feature"] == feature)
+                        ].index
+                    self.parent.fluids_legend_df.drop(idx_remove, inplace=True)
+                    legend_updated = legend_updated or True
+                for scenario in scenarios_in_legend:
+                    if self.parent.fluids_coll.df.loc[
+                        (self.parent.fluids_coll.df["fluid_type"] == fluid_type)
+                        & (self.parent.fluids_coll.df["fluid_feature"] == feature)
+                        & (self.parent.fluids_coll.df["scenario"] == scenario)
+                    ].empty:
+                        """Get index of row to be removed, then remove it in place with .drop()."""
+                        idx_remove = self.parent.fluids_legend_df[
+                            (self.parent.fluids_legend_df["fluid_type"] == fluid_type)
+                            & (self.parent.fluids_legend_df["fluid_feature"] == feature)
+                            & (self.parent.fluids_legend_df["scenario"] == scenario)
+                            ].index
+                        self.parent.fluids_legend_df.drop(idx_remove, inplace=True)
+                        legend_updated = legend_updated or True
+        for feature in features_in_legend:
+            if self.parent.fluids_coll.df.loc[
+                self.parent.fluids_coll.df["fluid_feature"] == feature
+            ].empty:
+                """Get index of row to be removed, then remove it in place with .drop()."""
+                idx_remove = self.parent.fluids_legend_df[
+                    self.parent.fluids_legend_df["fluid_feature"] == feature
+                    ].index
+                self.parent.fluids_legend_df.drop(idx_remove, inplace=True)
+                legend_updated = legend_updated or True
+            for scenario in scenarios_in_legend:
+                if self.parent.fluids_coll.df.loc[
+                    (self.parent.fluids_coll.df["fluid_feature"] == feature)
+                    & (self.parent.fluids_coll.df["scenario"] == scenario)
+                ].empty:
+                    """Get index of row to be removed, then remove it in place with .drop()."""
+                    idx_remove = self.parent.fluids_legend_df[
+                        (self.parent.fluids_legend_df["fluid_feature"] == feature)
+                        & (self.parent.fluids_legend_df["scenario"] == scenario)
+                        ].index
+                    self.parent.fluids_legend_df.drop(idx_remove, inplace=True)
+                    legend_updated = legend_updated or True
+        for scenario in scenarios_in_legend:
+            if self.parent.fluids_coll.df.loc[
+                self.parent.fluids_coll.df["scenario"] == scenario
+            ].empty:
+                """Get index of row to be removed, then remove it in place with .drop()."""
+                idx_remove = self.parent.fluids_legend_df[
+                    self.parent.fluids_legend_df["scenario"] == scenario
+                    ].index
+                self.parent.fluids_legend_df.drop(idx_remove, inplace=True)
+                legend_updated = legend_updated or True
+        return legend_updated
 
     def get_uid_legend(self, uid: str = None) -> dict:
         fluid_type = self.df.loc[self.df["uid"] == uid, "fluid_type"].values[0]
@@ -565,8 +499,8 @@ class FluidsCollection(BaseCollection):
 #         )
 #         self.modelReset.emit()  # is this really necessary?
 #         """Then remove fluid_type / feature / scenario from legend if needed."""
-#         """table_updated is used to record if the table is updated or not"""
-#         table_updated = False
+#         """legend_updated is used to record if the table is updated or not"""
+#         legend_updated = False
 #         fluid_types_in_legend = pd.unique(self.parent.fluids_legend_df["fluid_type"])
 #         features_in_legend = pd.unique(self.parent.fluids_legend_df["fluid_feature"])
 #         scenarios_in_legend = pd.unique(self.parent.fluids_legend_df["scenario"])
@@ -579,7 +513,7 @@ class FluidsCollection(BaseCollection):
 #                     self.parent.fluids_legend_df["fluid_type"] == fluid_type
 #                 ].index
 #                 self.parent.fluids_legend_df.drop(idx_remove, inplace=True)
-#                 table_updated = table_updated or True
+#                 legend_updated = legend_updated or True
 #             for feature in features_in_legend:
 #                 if self.parent.fluids_coll.df.loc[
 #                     (self.parent.fluids_coll.df["fluid_type"] == fluid_type)
@@ -591,7 +525,7 @@ class FluidsCollection(BaseCollection):
 #                         & (self.parent.fluids_legend_df["fluid_feature"] == feature)
 #                     ].index
 #                     self.parent.fluids_legend_df.drop(idx_remove, inplace=True)
-#                     table_updated = table_updated or True
+#                     legend_updated = legend_updated or True
 #                 for scenario in scenarios_in_legend:
 #                     if self.parent.fluids_coll.df.loc[
 #                         (self.parent.fluids_coll.df["fluid_type"] == fluid_type)
@@ -605,7 +539,7 @@ class FluidsCollection(BaseCollection):
 #                             & (self.parent.fluids_legend_df["scenario"] == scenario)
 #                         ].index
 #                         self.parent.fluids_legend_df.drop(idx_remove, inplace=True)
-#                         table_updated = table_updated or True
+#                         legend_updated = legend_updated or True
 #         for feature in features_in_legend:
 #             if self.parent.fluids_coll.df.loc[
 #                 self.parent.fluids_coll.df["fluid_feature"] == feature
@@ -615,7 +549,7 @@ class FluidsCollection(BaseCollection):
 #                     self.parent.fluids_legend_df["fluid_feature"] == feature
 #                 ].index
 #                 self.parent.fluids_legend_df.drop(idx_remove, inplace=True)
-#                 table_updated = table_updated or True
+#                 legend_updated = legend_updated or True
 #             for scenario in scenarios_in_legend:
 #                 if self.parent.fluids_coll.df.loc[
 #                     (self.parent.fluids_coll.df["fluid_feature"] == feature)
@@ -627,7 +561,7 @@ class FluidsCollection(BaseCollection):
 #                         & (self.parent.fluids_legend_df["scenario"] == scenario)
 #                     ].index
 #                     self.parent.fluids_legend_df.drop(idx_remove, inplace=True)
-#                     table_updated = table_updated or True
+#                     legend_updated = legend_updated or True
 #         for scenario in scenarios_in_legend:
 #             if self.parent.fluids_coll.df.loc[
 #                 self.parent.fluids_coll.df["scenario"] == scenario
@@ -637,9 +571,9 @@ class FluidsCollection(BaseCollection):
 #                     self.parent.fluids_legend_df["scenario"] == scenario
 #                 ].index
 #                 self.parent.fluids_legend_df.drop(idx_remove, inplace=True)
-#                 table_updated = table_updated or True
+#                 legend_updated = legend_updated or True
 #         """When done, if the table was updated update the widget, and in any case send the signal over to the views."""
-#         if table_updated:
+#         if legend_updated:
 #             self.parent.legend.update_widget(self.parent)
 #             self.parent.prop_legend.update_widget(self.parent)
 #         self.parent.fluid_removed_signal.emit(
@@ -690,8 +624,8 @@ class FluidsCollection(BaseCollection):
 #         """Update legend table, adding or removing items, based on metadata table.
 #         This is called when editing the fluid dataframe with setData(). Slightly different versions
 #         are found in add_entity_from_dict and remove_entity methods."""
-#         """table_updated is used to record if the table is updated or not"""
-#         table_updated = False
+#         """legend_updated is used to record if the table is updated or not"""
+#         legend_updated = False
 #         """First remove unused fluid_type / feature"""
 #         fluid_types_in_legend = pd.unique(self.parent.fluids_legend_df["fluid_type"])
 #         features_in_legend = pd.unique(self.parent.fluids_legend_df["fluid_feature"])
@@ -705,7 +639,7 @@ class FluidsCollection(BaseCollection):
 #                     self.parent.fluids_legend_df["fluid_type"] == fluid_type
 #                 ].index
 #                 self.parent.fluids_legend_df.drop(idx_remove, inplace=True)
-#                 table_updated = table_updated or True
+#                 legend_updated = legend_updated or True
 #             for feature in features_in_legend:
 #                 if self.parent.fluids_coll.df.loc[
 #                     (self.parent.fluids_coll.df["fluid_type"] == fluid_type)
@@ -717,7 +651,7 @@ class FluidsCollection(BaseCollection):
 #                         & (self.parent.fluids_legend_df["fluid_feature"] == feature)
 #                     ].index
 #                     self.parent.fluids_legend_df.drop(idx_remove, inplace=True)
-#                     table_updated = table_updated or True
+#                     legend_updated = legend_updated or True
 #                 for scenario in scenarios_in_legend:
 #                     if self.parent.fluids_coll.df.loc[
 #                         (self.parent.fluids_coll.df["fluid_type"] == fluid_type)
@@ -731,7 +665,7 @@ class FluidsCollection(BaseCollection):
 #                             & (self.parent.fluids_legend_df["scenario"] == scenario)
 #                         ].index
 #                         self.parent.fluids_legend_df.drop(idx_remove, inplace=True)
-#                         table_updated = table_updated or True
+#                         legend_updated = legend_updated or True
 #         for feature in features_in_legend:
 #             if self.parent.fluids_coll.df.loc[
 #                 self.parent.fluids_coll.df["fluid_feature"] == feature
@@ -741,7 +675,7 @@ class FluidsCollection(BaseCollection):
 #                     self.parent.fluids_legend_df["fluid_feature"] == feature
 #                 ].index
 #                 self.parent.fluids_legend_df.drop(idx_remove, inplace=True)
-#                 table_updated = table_updated or True
+#                 legend_updated = legend_updated or True
 #             for scenario in scenarios_in_legend:
 #                 if self.parent.fluids_coll.df.loc[
 #                     (self.parent.fluids_coll.df["fluid_feature"] == feature)
@@ -753,7 +687,7 @@ class FluidsCollection(BaseCollection):
 #                         & (self.parent.fluids_legend_df["scenario"] == scenario)
 #                     ].index
 #                     self.parent.fluids_legend_df.drop(idx_remove, inplace=True)
-#                     table_updated = table_updated or True
+#                     legend_updated = legend_updated or True
 #         for scenario in scenarios_in_legend:
 #             if self.parent.fluids_coll.df.loc[
 #                 self.parent.fluids_coll.df["scenario"] == scenario
@@ -763,7 +697,7 @@ class FluidsCollection(BaseCollection):
 #                     self.parent.fluids_legend_df["scenario"] == scenario
 #                 ].index
 #                 self.parent.fluids_legend_df.drop(idx_remove, inplace=True)
-#                 table_updated = table_updated or True
+#                 legend_updated = legend_updated or True
 #         """Then add new fluid_type / feature"""
 #         for uid in self.parent.fluids_coll.df["uid"].to_list():
 #             fluid_type = self.parent.fluids_coll.df.loc[
@@ -794,9 +728,9 @@ class FluidsCollection(BaseCollection):
 #                     },
 #                     ignore_index=True,
 #                 )
-#                 table_updated = table_updated or True
+#                 legend_updated = legend_updated or True
 #         """When done, if the table was updated update the widget. No signal is sent here to the views."""
-#         if table_updated:
+#         if legend_updated:
 #             self.parent.legend.update_widget(self.parent)
 #
 #     def get_number_of_entities(self):
