@@ -176,25 +176,23 @@ class GeologicalCollection(BaseCollection):
         return out_uid
 
     def replace_vtk(self, uid: str = None, vtk_object: vtkDataObject = None):
-        """Replace the vtk object of a given uid with another vtkobject. Const_color
-        is a flag, if True the color is maintained while if False it is generated again."""
-        if isinstance(
-                vtk_object, type(self.df.loc[self.df["uid"] == uid, "vtk_obj"].values[0])
-        ):
-            new_dict = deepcopy(
-                self.df.loc[
-                    self.df["uid"] == uid, self.df.columns != "vtk_obj"
-                ].to_dict("records")[0]
-            )
-            new_dict["vtk_obj"] = vtk_object
-            R = self.get_uid_legend(uid=uid)["color_R"]
-            G = self.get_uid_legend(uid=uid)["color_G"]
-            B = self.get_uid_legend(uid=uid)["color_B"]
-            color = [R, G, B]
-            self.remove_entity(uid)
-            self.add_entity_from_dict(entity_dict=new_dict, color=color)
+        """Replace the vtk object of a given uid with another vtkobject."""
+        # ============ CAN BE UNIFIED AS COMMON METHOD OF THE ABSTRACT COLLECTION WHEN SIGNALS WILL BE UNIFIED ==========
+        if isinstance(vtk_object, type(self.df.loc[self.df["uid"] == uid, "vtk_obj"].values[0])):
+            # Replace old properties names and components with new ones
+            keys = vtk_object.point_data_keys
+            self.df.loc[self.df["uid"] == uid, "properties_names"].values[0] = []
+            self.df.loc[self.df["uid"] == uid, "properties_components"].values[0] = []
+            for key in keys:
+                components = vtk_object.get_point_data_shape(key)[1]
+                self.df.loc[self.df["uid"] == uid, "properties_names"].append(key)
+                self.df.loc[self.df["uid"] == uid, "properties_components"].append(components)
+            self.df.loc[self.df["uid"] == uid, "vtk_obj"] = vtk_object
+            self.parent.prop_legend.update_widget(self.parent)
+            self.parent.geology_data_keys_modified_signal.emit([uid])
+            self.parent.geology_geom_modified_signal.emit([uid])
         else:
-            print("ERROR - replace_vtk with vtk of a different type.")
+            print("ERROR - replace_vtk with vtk of a different type not allowed.")
 
     def attr_modified_update_legend_table(self):
         """Update legend table when attributes are changed."""
@@ -430,8 +428,8 @@ class GeologicalCollection(BaseCollection):
     def metadata_modified_signal(self, updated_list: list = None):
         self.parent.geology_metadata_modified_signal.emit(updated_list)
 
-    def data_keys_removed_signal(self, updated_list: list = None):
-        self.parent.geology_data_keys_removed_signal.emit(updated_list)
+    def data_keys_modified_signal(self, updated_list: list = None):
+        self.parent.geology_data_keys_modified_signal.emit(updated_list)
 
     # =================================== Additional methods ===========================================
 
@@ -1110,7 +1108,7 @@ class GeologicalCollection(BaseCollection):
 #         )
 #         self.get_uid_vtk_obj(uid=uid).remove_point_data(data_key=property_name)
 #         """IN THE FUTURE add cell data"""
-#         self.parent.geology_data_keys_removed_signal.emit([uid])
+#         self.parent.geology_data_keys_modified_signal.emit([uid])
 #
 #     def get_uid_property_shape(self, uid=None, property_name=None):
 #         """Returns an array with property data."""

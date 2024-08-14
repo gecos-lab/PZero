@@ -94,24 +94,8 @@ class DomCollection(BaseCollection):
         pass
 
     def replace_vtk(self, uid: str = None, vtk_object: vtkDataObject = None):
-        if isinstance(vtk_object, type(self.df.loc[self.df["uid"] == uid, "vtk_obj"].values[0])):
-            new_dict = deepcopy(
-                self.df.loc[
-                    self.df["uid"] == uid, self.df.columns != "vtk_obj"
-                ].to_dict("records")[0]
-            )
-            keys = vtk_object.point_data_keys
-            for key in keys:
-                if key not in new_dict["properties_names"] and "tag_" not in key:
-                    components = vtk_object.get_point_data_shape(key)[1]
-                    new_dict["properties_names"].append(key)
-                    new_dict["properties_components"].append(components)
-
-            new_dict["vtk_obj"] = vtk_object
-            self.remove_entity(uid)
-            self.add_entity_from_dict(entity_dict=new_dict)
-        else:
-            print("ERROR - replace_vtk with vtk of a different type.")
+        """Not implemented for this collection, but required by the abstract superclass."""
+        pass
 
     def attr_modified_update_legend_table(self):
         pass
@@ -134,8 +118,8 @@ class DomCollection(BaseCollection):
     def metadata_modified_signal(self, updated_list: list = None):
         self.parent.dom_metadata_modified_signal.emit(updated_list)
 
-    def data_keys_removed_signal(self, updated_list: list = None):
-        self.parent.dom_data_keys_removed_signal.emit(updated_list)
+    def data_keys_modified_signal(self, updated_list: list = None):
+        self.parent.dom_data_keys_modified_signal.emit(updated_list)
 
     # =================================== Additional methods ===========================================
 
@@ -162,7 +146,7 @@ class DomCollection(BaseCollection):
         if map_image_uid in self.df.at[row, "texture_uids"]:
             self.get_uid_vtk_obj(dom_uid).remove_texture(map_image_uid=map_image_uid)
             self.df.at[row, "texture_uids"].remove(map_image_uid)
-            self.parent.dom_data_keys_removed_signal.emit([dom_uid])
+            self.parent.dom_data_keys_modified_signal.emit([dom_uid])
             # self.parent.dom_metadata_modified_signal.emit([dom_uid])
 
     def set_active_texture_on_dom(self, dom_uid=None, map_image_uid=None):
@@ -386,7 +370,7 @@ class DomCollection(BaseCollection):
 #         self.get_uid_vtk_obj(uid=uid).remove_point_data(data_key=property_name)
 #         """IN THE FUTURE add cell data"""
 #         # self.parent.prop_legend.update_widget(self.parent)
-#         self.parent.dom_data_keys_removed_signal.emit([uid])
+#         self.parent.dom_data_keys_modified_signal.emit([uid])
 #
 #     def add_map_texture_to_dom(self, dom_uid=None, map_image_uid=None):
 #         row = self.df[self.df["uid"] == dom_uid].index.values[0]
@@ -403,7 +387,7 @@ class DomCollection(BaseCollection):
 #         if map_image_uid in self.df.at[row, "texture_uids"]:
 #             self.get_uid_vtk_obj(dom_uid).remove_texture(map_image_uid=map_image_uid)
 #             self.df.at[row, "texture_uids"].remove(map_image_uid)
-#             self.parent.dom_data_keys_removed_signal.emit([dom_uid])
+#             self.parent.dom_data_keys_modified_signal.emit([dom_uid])
 #             # self.parent.dom_metadata_modified_signal.emit([dom_uid])
 #
 #     def set_active_texture_on_dom(self, dom_uid=None, map_image_uid=None):

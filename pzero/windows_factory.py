@@ -286,7 +286,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.parent.geology_removed_signal.connect(
             self.upd_list_geo_rm
         )  # this is emitted from the collection
-        self.parent.geology_data_keys_removed_signal.connect(
+        self.parent.geology_data_keys_modified_signal.connect(
             self.upd_list_geo_datakeys_mod
         )  # this is emitted from collection
         self.parent.geology_metadata_modified_signal.connect(
@@ -449,7 +449,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.parent.mesh3d_removed_signal.connect(
             self.upd_list_mesh3d_rm
         )  # this is emitted from the collection
-        self.parent.mesh3d_data_keys_removed_signal.connect(
+        self.parent.mesh3d_data_keys_modified_signal.connect(
             self.upd_list_mesh3d_data_keys_mod
         )  # this is emitted from the collection
         self.parent.mesh3d_metadata_modified_signal.connect(
@@ -508,7 +508,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.parent.dom_removed_signal.connect(
             self.upd_list_dom_rm
         )  # this is emitted from the collection
-        self.parent.dom_data_keys_removed_signal.connect(
+        self.parent.dom_data_keys_modified_signal.connect(
             self.upd_list_dom_data_keys_mod
         )  # this is emitted from the collection
         self.parent.dom_metadata_modified_signal.connect(
@@ -598,7 +598,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.parent.well_removed_signal.connect(
             self.upd_list_well_rm
         )  # this is emitted from the collection
-        self.parent.well_data_keys_removed_signal.connect(
+        self.parent.well_data_keys_modified_signal.connect(
             self.upd_list_well_data_keys_mod
         )  # this is emitted from the collection
         self.parent.well_metadata_modified_signal.connect(
@@ -660,7 +660,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.parent.fluid_removed_signal.connect(
             self.upd_list_fluid_rm
         )  # this is emitted from the collection
-        self.parent.fluid_data_keys_removed_signal.connect(
+        self.parent.fluid_data_keys_modified_signal.connect(
             self.upd_list_fluid_data_keys_mod
         )  # this is emitted from the collection
         self.parent.fluid_metadata_modified_signal.connect(
@@ -729,7 +729,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.parent.background_removed_signal.connect(
             self.upd_list_background_rm
         )  # this is emitted from the collection
-        self.parent.background_data_keys_removed_signal.connect(
+        self.parent.background_data_keys_modified_signal.connect(
             self.upd_list_background_data_keys
         )  # this is emitted from the collection
         self.parent.background_metadata_modified_signal.connect(
@@ -776,7 +776,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.parent.geology_added_signal.disconnect(self.upd_list_geo_add)
         self.parent.geology_removed_signal.disconnect(self.upd_list_geo_rm)
         self.parent.geology_geom_modified_signal.disconnect(self.upd_list_geo_mod)
-        self.parent.geology_data_keys_removed_signal.disconnect(
+        self.parent.geology_data_keys_modified_signal.disconnect(
             self.upd_list_geo_datakeys_mod
         )
         self.parent.geology_data_val_modified_signal.disconnect(
@@ -840,7 +840,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
 
         self.parent.mesh3d_added_signal.disconnect(self.upd_list_mesh3d_add)
         self.parent.mesh3d_removed_signal.disconnect(self.upd_list_mesh3d_rm)
-        self.parent.mesh3d_data_keys_removed_signal.disconnect(
+        self.parent.mesh3d_data_keys_modified_signal.disconnect(
             self.upd_list_mesh3d_data_keys_mod
         )
         self.parent.mesh3d_data_val_modified_signal.disconnect(
@@ -863,7 +863,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
 
         self.parent.dom_added_signal.disconnect(self.upd_list_dom_add)
         self.parent.dom_removed_signal.disconnect(self.upd_list_dom_rm)
-        self.parent.dom_data_keys_removed_signal.disconnect(
+        self.parent.dom_data_keys_modified_signal.disconnect(
             self.upd_list_dom_data_keys_mod
         )
         self.parent.dom_data_val_modified_signal.disconnect(
@@ -900,7 +900,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
 
         self.parent.well_added_signal.disconnect(self.upd_list_well_add)
         self.parent.well_removed_signal.disconnect(self.upd_list_well_rm)
-        self.parent.well_data_keys_removed_signal.disconnect(
+        self.parent.well_data_keys_modified_signal.disconnect(
             self.upd_list_well_data_keys_mod
         )
         self.parent.well_data_val_modified_signal.disconnect(
@@ -924,7 +924,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.parent.fluid_added_signal.disconnect(self.upd_list_fluid_add)
         self.parent.fluid_removed_signal.disconnect(self.upd_list_fluid_rm)
         self.parent.fluid_geom_modified_signal.disconnect(self.upd_list_fluid_geo_mod)
-        self.parent.fluid_data_keys_removed_signal.disconnect(
+        self.parent.fluid_data_keys_modified_signal.disconnect(
             self.upd_list_fluid_data_keys_mod
         )
         self.parent.fluid_data_val_modified_signal.disconnect(
@@ -953,7 +953,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.parent.background_geom_modified_signal.disconnect(
             self.upd_list_background_geo_mod
         )
-        self.parent.background_data_keys_removed_signal.disconnect(
+        self.parent.background_data_keys_modified_signal.disconnect(
             self.upd_list_background_data_keys
         )
         self.parent.background_data_val_modified_signal.disconnect(

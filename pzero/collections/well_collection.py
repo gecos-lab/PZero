@@ -100,17 +100,8 @@ class WellCollection(BaseCollection):
         pass
 
     def replace_vtk(self, uid: str = None, vtk_object: vtkDataObject = None):
-        if isinstance(vtk_object, type(self.df.loc[self.df["uid"] == uid, "vtk_obj"].values[0])):
-            new_dict = deepcopy(
-                self.df.loc[
-                    self.df["uid"] == uid, self.df.columns != "vtk_obj"
-                ].to_dict("records")[0]
-            )
-            new_dict["vtk_obj"] = vtk_object
-            self.remove_entity(uid)
-            self.add_entity_from_dict(entity_dict=new_dict)
-        else:
-            print("ERROR - replace_vtk with vtk of a different type.")
+        """Not implemented for this collection, but required by the abstract superclass."""
+        pass
 
     def attr_modified_update_legend_table(self):
         """    ---------- """
@@ -199,8 +190,8 @@ class WellCollection(BaseCollection):
     def metadata_modified_signal(self, updated_list: list = None):
         self.parent.well_metadata_modified_signal.emit(updated_list)
 
-    def data_keys_removed_signal(self, updated_list: list = None):
-        self.parent.well_data_keys_removed_signal.emit(updated_list)
+    def data_keys_modified_signal(self, updated_list: list = None):
+        self.parent.well_data_keys_modified_signal.emit(updated_list)
 
     # =================================== Additional methods ===========================================
 
@@ -506,7 +497,7 @@ class WellCollection(BaseCollection):
 #         self.get_uid_vtk_obj(uid=uid).remove_point_data(data_key=property_name)
 #         """IN THE FUTURE add cell data"""
 #         # self.parent.prop_legend.update_widget(self.parent)
-#         self.parent.well_data_keys_removed_signal.emit([uid])
+#         self.parent.well_data_keys_modified_signal.emit([uid])
 #
 #     """Standard QT methods slightly adapted to the data source."""
 #

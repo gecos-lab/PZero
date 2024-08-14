@@ -359,7 +359,7 @@ class XSectionCollection(BaseCollection):
         pass
 
     def replace_vtk(self, uid: str = None, vtk_object: vtkDataObject = None):
-        """Not implemented for XSectionCollection, but required by the abstract superclass."""
+        """Not implemented for this collection, but required by the abstract superclass."""
         pass
 
     def attr_modified_update_legend_table(self):
@@ -393,7 +393,7 @@ class XSectionCollection(BaseCollection):
         """Not implemented for XSectionCollection, but required by the abstract superclass."""
         pass
 
-    def data_keys_removed_signal(self, updated_list: list = None):
+    def data_keys_modified_signal(self, updated_list: list = None):
         """Not implemented for XSectionCollection, but required by the abstract superclass."""
         pass
 

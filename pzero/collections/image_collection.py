@@ -117,34 +117,8 @@ class ImageCollection(BaseCollection):
         pass
 
     def replace_vtk(self, uid: str = None, vtk_object: vtkDataObject = None):
-        if isinstance(vtk_object, type(self.df.loc[self.df["uid"] == uid, "vtk_obj"].values[0])):
-            new_dict = deepcopy(
-                self.df.loc[
-                    self.df["uid"] == uid, self.df.columns != "vtk_obj"
-                ].to_dict("records")[0]
-            )
-            new_dict["vtk_obj"] = vtk_object
-            """Check properties attributes"""
-            if isinstance(self, MapImage):  # "TSDomImage"???
-                new_dict["image_type"] = "MapImage"
-            elif isinstance(self, XsImage):
-                new_dict["image_type"] = "XsImage"
-            elif isinstance(self, Seismics):
-                new_dict["image_type"] = "Seismics"
-            elif isinstance(self, Image3D):
-                new_dict["image_type"] = "Image3D"
-            else:
-                print("ERROR - class not recognized.")
-            new_dict["properties_names"] = vtk_object.properties_names
-            new_dict["properties_components"] = vtk_object.properties_components
-            new_dict["properties_types"] = vtk_object.properties_types
-            """Remove and add"""
-            self.remove_entity(uid)
-            self.add_entity_from_dict(entity_dict=new_dict)
-            self.modelReset.emit()  # is this really necessary?
-            self.parent.prop_legend.update_widget(self.parent)
-        else:
-            print("ERROR - replace_vtk with vtk of a different type.")
+        """Not implemented for this collection, but required by the abstract superclass."""
+        pass
 
     def attr_modified_update_legend_table(self):
         pass
@@ -167,7 +141,7 @@ class ImageCollection(BaseCollection):
     def metadata_modified_signal(self, updated_list: list = None):
         self.parent.image_metadata_modified_signal.emit(updated_list)
 
-    def data_keys_removed_signal(self, updated_list: list = None):
+    def data_keys_modified_signal(self, updated_list: list = None):
         pass
 
 

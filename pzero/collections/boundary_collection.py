@@ -225,17 +225,23 @@ class BoundaryCollection(BaseCollection):
         pass
 
     def replace_vtk(self, uid: str = None, vtk_object: vtkDataObject = None):
+        """Replace the vtk object of a given uid with another vtkobject."""
+        # ============ CAN BE UNIFIED AS COMMON METHOD OF THE ABSTRACT COLLECTION WHEN SIGNALS WILL BE UNIFIED ==========
         if isinstance(vtk_object, type(self.df.loc[self.df["uid"] == uid, "vtk_obj"].values[0])):
-            new_dict = deepcopy(
-                self.df.loc[
-                    self.df["uid"] == uid, self.df.columns != "vtk_obj"
-                ].to_dict("records")[0]
-            )
-            new_dict["vtk_obj"] = vtk_object
-            self.remove_entity(uid)
-            self.add_entity_from_dict(entity_dict=new_dict)
+            # Replace old properties names and components with new ones
+            # keys = vtk_object.point_data_keys
+            # self.df.loc[self.df["uid"] == uid, "properties_names"].values[0] = []
+            # self.df.loc[self.df["uid"] == uid, "properties_components"].values[0] = []
+            # for key in keys:
+            #     components = vtk_object.get_point_data_shape(key)[1]
+            #     self.df.loc[self.df["uid"] == uid, "properties_names"].append(key)
+            #     self.df.loc[self.df["uid"] == uid, "properties_components"].append(components)
+            self.df.loc[self.df["uid"] == uid, "vtk_obj"] = vtk_object
+            # self.parent.prop_legend.update_widget(self.parent)
+            # self.parent.boundary_data_keys_modified_signal.emit([uid])
+            self.parent.boundary_geom_modified_signal.emit([uid])
         else:
-            print("ERROR - replace_vtk with vtk of a different type.")
+            print("ERROR - replace_vtk with vtk of a different type not allowed.")
 
     def attr_modified_update_legend_table(self):
         pass
@@ -255,7 +261,7 @@ class BoundaryCollection(BaseCollection):
     def metadata_modified_signal(self, updated_list: list = None):
         self.parent.boundary_metadata_modified_signal.emit(updated_list)
 
-    def data_keys_removed_signal(self, updated_list: list = None):
+    def data_keys_modified_signal(self, updated_list: list = None):
         pass
 
 

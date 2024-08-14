@@ -56,9 +56,9 @@ class BaseCollection(ABC):
 
     @abstractmethod
     def replace_vtk(self, uid: str = None, vtk_object: vtkDataObject = None):
-        """Replace the vtk object of a given uid with another vtkobject. Const_color
-        is a flag, if True the color is maintained while if False it is generated again."""
-        # Is the Const_color flag really useful? It seems to mix visualization and collection, which is a bad style.
+        """Replace the vtk object of a given uid with another vtkobject."""
+        # ============ CAN BE UNIFIED AS COMMON METHOD OF THE ABSTRACT COLLECTION WHEN SIGNALS WILL BE UNIFIED ==========
+        # ============ NOT CLEAR HOW TO DEAL WITH COLLECTIONS OF IMMUTABLE VTKs (images, DOMs, meshes, etc.) ==========
         pass
 
     @abstractmethod
@@ -98,7 +98,7 @@ class BaseCollection(ABC):
         pass
 
     @abstractmethod
-    def data_keys_removed_signal(self, updated_list: list = None):
+    def data_keys_modified_signal(self, updated_list: list = None):
         """Method used to emit the data keys removed signal modified signal for the given collection."""
         pass
 
@@ -364,7 +364,7 @@ class BaseCollection(ABC):
         )
         self.get_uid_vtk_obj(uid=uid).remove_point_data(data_key=property_name)
         # IN THE FUTURE add cell data.
-        self.data_keys_removed_signal([uid])
+        self.data_keys_modified_signal([uid])
 
     def get_uid_property_shape(self, uid: str = None, property_name: str = None) -> tuple:
         """Returns the shape of the property data array."""

@@ -116,7 +116,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
     geology_added_signal = pyqtSignal(list)
     geology_removed_signal = pyqtSignal(list)
     geology_geom_modified_signal = pyqtSignal(list)  # this includes topology modified
-    geology_data_keys_removed_signal = pyqtSignal(list)
+    geology_data_keys_modified_signal = pyqtSignal(list)
     geology_data_val_modified_signal = pyqtSignal(list)
     geology_metadata_modified_signal = pyqtSignal(list)
     geology_legend_color_modified_signal = pyqtSignal(list)
@@ -142,7 +142,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
 
     mesh3d_added_signal = pyqtSignal(list)
     mesh3d_removed_signal = pyqtSignal(list)
-    mesh3d_data_keys_removed_signal = pyqtSignal(list)
+    mesh3d_data_keys_modified_signal = pyqtSignal(list)
     mesh3d_data_val_modified_signal = pyqtSignal(list)
     mesh3d_metadata_modified_signal = pyqtSignal(list)
     mesh3d_legend_color_modified_signal = pyqtSignal(list)
@@ -151,7 +151,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
 
     dom_added_signal = pyqtSignal(list)
     dom_removed_signal = pyqtSignal(list)
-    dom_data_keys_removed_signal = pyqtSignal(list)
+    dom_data_keys_modified_signal = pyqtSignal(list)
     dom_data_val_modified_signal = pyqtSignal(list)
     dom_metadata_modified_signal = pyqtSignal(list)
     dom_legend_color_modified_signal = pyqtSignal(list)
@@ -166,7 +166,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
 
     well_added_signal = pyqtSignal(list)
     well_removed_signal = pyqtSignal(list)
-    well_data_keys_removed_signal = pyqtSignal(list)
+    well_data_keys_modified_signal = pyqtSignal(list)
     well_data_val_modified_signal = pyqtSignal(list)
     well_metadata_modified_signal = pyqtSignal(list)
     well_legend_color_modified_signal = pyqtSignal(list)
@@ -176,7 +176,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
     fluid_added_signal = pyqtSignal(list)
     fluid_removed_signal = pyqtSignal(list)
     fluid_geom_modified_signal = pyqtSignal(list)  # this includes topology modified
-    fluid_data_keys_removed_signal = pyqtSignal(list)
+    fluid_data_keys_modified_signal = pyqtSignal(list)
     fluid_data_val_modified_signal = pyqtSignal(list)
     fluid_metadata_modified_signal = pyqtSignal(list)
     fluid_legend_color_modified_signal = pyqtSignal(list)
@@ -189,7 +189,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
     background_geom_modified_signal = pyqtSignal(
         list
     )  # this includes topology modified
-    background_data_keys_removed_signal = pyqtSignal(list)
+    background_data_keys_modified_signal = pyqtSignal(list)
     background_data_val_modified_signal = pyqtSignal(list)
     background_metadata_modified_signal = pyqtSignal(list)
     background_legend_color_modified_signal = pyqtSignal(list)
