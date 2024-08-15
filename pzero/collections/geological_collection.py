@@ -99,7 +99,9 @@ class GeologicalCollection(BaseCollection):
         self.df = self.df.append(entity_dict, ignore_index=True)
         # Reset data model.
         self.modelReset.emit()
-        # Then add new geo_type / feature / scenario to the legend if needed.
+        # Then add new type / feature / scenario to the legend if needed.
+        # Note that for performance reasons this is done explicitly here, when adding an entity to the
+        # collection, and not with a signal telling the legend to be updated by scanning the whole collection.
         geo_type = entity_dict["geological_type"]
         feature = entity_dict["geological_feature"]
         scenario = entity_dict["scenario"]
@@ -121,8 +123,7 @@ class GeologicalCollection(BaseCollection):
                     "color_R": R,
                     "color_G": G,
                     "color_B": B,
-                    "line_thick": 5.0,
-                    "point_size": 10.0,
+                    "line_thick": 5.0,                    "point_size": 10.0,
                     "opacity": 100,
                     "geological_time": 0.0,
                     "geological_sequence": "strati_0",
@@ -145,8 +146,10 @@ class GeologicalCollection(BaseCollection):
             return
         self.df.drop(self.parent.geol_coll.df[self.parent.geol_coll.df["uid"] == uid].index, inplace=True)
         self.modelReset.emit()  # is this really necessary?
-        # Then remove geo_type / feature / scenario from legend if needed.
+        # Then remove type / feature / scenario from legend if needed.
         # legend_updated is used to record if the table is updated or not.
+        # Note that for performance reasons this is done explicitly here, when adding an entity to the
+        # collection, and not with a signal telling the legend to be updated by scanning the whole collection.
         legend_updated = self.remove_unused_from_legend()
         """When done, if the table was updated update the widget, and in any case send the signal over to the views."""
         if legend_updated:

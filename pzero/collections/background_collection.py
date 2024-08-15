@@ -85,7 +85,9 @@ class BackgroundCollection(BaseCollection):
         self.df = self.df.append(entity_dict, ignore_index=True)
         """Reset data model"""
         self.modelReset.emit()
-        """Then add new background_type / feature to the legend if needed."""
+        # Then add new type / feature / scenario to the legend if needed.
+        # Note that for performance reasons this is done explicitly here, when adding an entity to the
+        # collection, and not with a signal telling the legend to be updated by scanning the whole collection.
         background_type = entity_dict["background_type"]
         feature = entity_dict["background_feature"]
         if self.parent.backgrounds_legend_df.loc[
@@ -131,8 +133,10 @@ class BackgroundCollection(BaseCollection):
             inplace=True,
         )
         self.modelReset.emit()  # is this really necessary?
-        """Then remove background_type / feature from legend if needed."""
-        """legend_updated is used to record if the table is updated or not"""
+        # Then remove type / feature / scenario from legend if needed.
+        # legend_updated is used to record if the table is updated or not.
+        # Note that for performance reasons this is done explicitly here, when adding an entity to the
+        # collection, and not with a signal telling the legend to be updated by scanning the whole collection.
         legend_updated = self.remove_unused_from_legend()
         """When done, if the table was updated update the widget, and in any case send the signal over to the views."""
         if legend_updated:

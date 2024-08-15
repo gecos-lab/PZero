@@ -61,7 +61,9 @@ class WellCollection(BaseCollection):
         """Reset data model"""
         self.modelReset.emit()
         self.parent.prop_legend.update_widget(self.parent)
-        """Then emit signal to update the views."""
+        # Then update the legend if needed.
+        # Note that for performance reasons this is done explicitly here, when adding an entity to the
+        # collection, and not with a signal telling the legend to be updated by scanning the whole collection.
         locid = entity_dict["Loc ID"]
         if self.parent.well_legend_df.loc[
             self.parent.well_legend_df["Loc ID"] == locid
