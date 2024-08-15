@@ -228,17 +228,7 @@ class BoundaryCollection(BaseCollection):
         """Replace the vtk object of a given uid with another vtkobject."""
         # ============ CAN BE UNIFIED AS COMMON METHOD OF THE ABSTRACT COLLECTION WHEN SIGNALS WILL BE UNIFIED ==========
         if isinstance(vtk_object, type(self.df.loc[self.df["uid"] == uid, "vtk_obj"].values[0])):
-            # Replace old properties names and components with new ones
-            # keys = vtk_object.point_data_keys
-            # self.df.loc[self.df["uid"] == uid, "properties_names"].values[0] = []
-            # self.df.loc[self.df["uid"] == uid, "properties_components"].values[0] = []
-            # for key in keys:
-            #     components = vtk_object.get_point_data_shape(key)[1]
-            #     self.df.loc[self.df["uid"] == uid, "properties_names"].append(key)
-            #     self.df.loc[self.df["uid"] == uid, "properties_components"].append(components)
             self.df.loc[self.df["uid"] == uid, "vtk_obj"] = vtk_object
-            # self.parent.prop_legend.update_widget(self.parent)
-            # self.parent.boundary_data_keys_modified_signal.emit([uid])
             self.parent.boundary_geom_modified_signal.emit([uid])
         else:
             print("ERROR - replace_vtk with vtk of a different type not allowed.")

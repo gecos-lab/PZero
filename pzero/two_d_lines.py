@@ -110,10 +110,10 @@ def edit_line(self):
         self.clear_selection()
         self.enable_actions()
 
-    self.disable_actions()
     if not self.selected_uids:
         print(" -- No input data selected -- ")
         return
+    self.disable_actions()
     sel_uid = self.selected_uids[0]
     actor = self.plotter.renderer.actors[sel_uid]
     data = actor.mapper.dataset

@@ -36,9 +36,8 @@ def cmap2qpixmap(cmap=None, steps=50):
 
 
 class PropertiesCMaps(QObject):
-    """Properties legend.
-    Dictionaries used to define types of legend columns."""
-
+    """Properties legend manager."""
+    # Dictionaries used to define types of legend columns.
     prop_cmap_dict = {
         "property_name": ["X", "Y", "Z"],
         "colormap": ["rainbow", "rainbow", "terrain"],
@@ -46,15 +45,13 @@ class PropertiesCMaps(QObject):
 
     prop_cmap_type_dict = {"property_name": str, "colormap": str}
 
-    """List of all  matplotlib, colorcet, or cmocean colormaps used by PyVista
-    https://docs.pyvista.org/examples/02-plot/cmap.html"""
+    # List of all  matplotlib, colorcet, or cmocean colormaps used by PyVista
+    # https://docs.pyvista.org/examples/02-plot/cmap.html
     colormaps_list = (
         plt.colormaps()
         + ["cet_" + cmap for cmap in list(cc.cm.keys())]
         + cmo.cm.cmapnames
     )
-
-    # print("colormaps_list:\n", colormaps_list)
 
     def __init__(self, parent=None, *args, **kwargs):
         QObject.__init__(self, parent)
@@ -63,25 +60,32 @@ class PropertiesCMaps(QObject):
         """Update the properties colormap dataframe and widget. This is different from legend manager,
         where the geol_legend_df dataframe is managed directly by the geol_coll class. The reason for
         this difference is that property colormaps are managed at the whole project level, across the
-        geological, dom and mesh3d collections."""
-        """The pattern to extract a cell value from a Pandas dataframe is: dataframe.loc[boolean_index_rows, boolean_index_columns].values[cell_id]
+        geological, dom and mesh3d collections.
+        The pattern to extract a cell value from a Pandas dataframe is:
+        dataframe.loc[boolean_index_rows, boolean_index_columns].values[cell_id]
         The boolean indexes used by loc can be:
         - the name of a column (e.g. "color")
-        - a boolean indexing series (i.e. a sequence of True and False values) obtained by one or more conditions applied on the dataframe
+        - a boolean indexing series (i.e. a sequence of True and False values) obtained by one or more
+        conditions applied on the dataframe
         - a numeric index or a range of indexes as used by iloc (i.e. 3 or 3:5)
-        The method values[] applied at the end returns the cell value(s) at specified cell(s), otherwise a dataframe would be returned
+        The method values() applied at the end returns the cell value(s) at specified cell(s), otherwise
+        a dataframe would be returned
         The function pd.unique() used above returns a list of unique values from a set of cells.
-        TO ADD MORE PROPERTIES TO THE LEGEND, SIMPLY ADD MORE COLUMNS TO THE legend AND NEW WIDGETS HERE POINTING TO THE NEW COLUMNS
-        Note that at and iat can be used to access a single value in a cell directly (so values[] is not required), but do not work with conditional indexing."""
-        """"Update the prop_legend_df. X, Y Z are added to the list in order not to alter them."""
+        TO ADD MORE PROPERTIES TO THE LEGEND, SIMPLY ADD MORE COLUMNS TO THE legend AND NEW
+        WIDGETS HERE POINTING TO THE NEW COLUMNS.
+        Note that at and iat can be used to access a single value in a cell directly (so values()
+        is not required), but do not work with conditional indexing."""
+        # Update the prop_legend_df. X, Y Z are added to the list in order not to alter them.
         all_props = ["X", "Y", "Z"]
         add_props = []
-        """Make a list of all properties (unique values)."""
+        # Make a list of all properties (unique values).
         for collection in [
             parent.geol_coll,
             parent.dom_coll,
-            parent.mesh3d_coll,
             parent.image_coll,
+            parent.mesh3d_coll,
+            parent.fluids_coll,
+            parent.backgrounds_coll,
         ]:
             coll_props = collection.df["properties_names"].to_list()
             coll_props = list(pd_flatten(coll_props))
@@ -101,9 +105,7 @@ class PropertiesCMaps(QObject):
         if parent.well_coll.df["properties_names"].to_list():
             add_props.append("MD")
 
-        add_props = list(
-            set(add_props)
-        )  # a set is composed of unique values from a list
+        add_props = list(set(add_props))  # a set is composed of unique values from a list
         add_props = list(filter(None, add_props))  # eliminate empty elements
         all_props = all_props + add_props
         """Add new properties to dataframe."""
