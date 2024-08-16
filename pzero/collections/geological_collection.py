@@ -31,7 +31,6 @@ class GeologicalCollection(BaseCollection):
     """Collection for all geological entities and their metadata."""
     def __init__(self, parent=None, *args, **kwargs):
         super(GeologicalCollection, self).__init__(parent, *args, **kwargs)
-
         # Initialize properties required by the abstract superclass.
         self.entity_dict = {
             "uid": "",
@@ -55,7 +54,7 @@ class GeologicalCollection(BaseCollection):
             "scenario": str,
             "properties_names": list,
             "properties_components": list,
-            "x_section": str,
+            "x_section": str,  # this is the uid of the cross section for "XsVertexSet", "XsPolyLine", and "XsImage", empty for all others
             "vtk_obj": object,
         }
 
@@ -119,14 +118,15 @@ class GeologicalCollection(BaseCollection):
                 {
                     "geological_type": geo_type,
                     "geological_feature": feature,
+                    "geological_time": 0.0,
+                    "geological_sequence": "strati_0",
                     "scenario": scenario,
                     "color_R": R,
                     "color_G": G,
                     "color_B": B,
-                    "line_thick": 5.0,                    "point_size": 10.0,
+                    "line_thick": 5.0,
+                    "point_size": 10.0,
                     "opacity": 100,
-                    "geological_time": 0.0,
-                    "geological_sequence": "strati_0",
                 },
                 ignore_index=True,
             )
@@ -151,7 +151,7 @@ class GeologicalCollection(BaseCollection):
         # Note that for performance reasons this is done explicitly here, when adding an entity to the
         # collection, and not with a signal telling the legend to be updated by scanning the whole collection.
         legend_updated = self.remove_unused_from_legend()
-        """When done, if the table was updated update the widget, and in any case send the signal over to the views."""
+        # When done, if the table was updated update the widget, and in any case send the signal over to the views.
         if legend_updated:
             self.parent.legend.update_widget(self.parent)
             self.parent.prop_legend.update_widget(self.parent)
@@ -224,13 +224,13 @@ class GeologicalCollection(BaseCollection):
                     {
                         "geological_type": geo_type,
                         "geological_feature": feature,
+                        "geological_time": 0.0,
+                        "geological_sequence": "strati_0",
                         "scenario": scenario,
                         "color_R": round(np_random.random() * 255),
                         "color_G": round(np_random.random() * 255),
                         "color_B": round(np_random.random() * 255),
                         "line_thick": 2.0,
-                        "geological_time": 0.0,
-                        "geological_sequence": "strati_0",
                     },
                     ignore_index=True,
                 )
@@ -387,9 +387,11 @@ class GeologicalCollection(BaseCollection):
                 ] = opacity
 
     def metadata_modified_signal(self, updated_list: list = None):
+        """Signal emitted when metadata change."""
         self.parent.geology_metadata_modified_signal.emit(updated_list)
 
     def data_keys_modified_signal(self, updated_list: list = None):
+        """Signal emitted when point data keys change."""
         self.parent.geology_data_keys_modified_signal.emit(updated_list)
 
     # =================================== Additional methods ===========================================

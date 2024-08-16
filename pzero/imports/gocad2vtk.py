@@ -1062,9 +1062,6 @@ def vtk2gocad(self=None, out_file_name=None):
             geological_type = self.geol_coll.df.loc[
                 self.geol_coll.df["uid"] == uid, "geological_type"
             ].values[0]
-            geological_age = self.geol_coll.df.loc[
-                self.geol_coll.df["uid"] == uid, "geological_age"
-            ].values[0]
             geological_time = self.a_t_df.loc[
                 self.a_t_df["uid"] == uid, "geological_time"
             ].values[0]
@@ -1096,13 +1093,7 @@ def vtk2gocad(self=None, out_file_name=None):
             fout.write("}\n")
             fout.write("GEOLOGICAL_FEATURE " + geological_feature + "\n")
             fout.write("GEOLOGICAL_TYPE " + geological_type + "\n")
-            fout.write(
-                "STRATIGRAPHIC_POSITION "
-                + geological_age
-                + " "
-                + str(geological_time)
-                + "\n"
-            )
+            fout.write("STRATIGRAPHIC_POSITION " + str(geological_time) + "\n")
             """Options for properties"""
             if properties_names:
                 fout.write(

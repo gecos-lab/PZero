@@ -23,7 +23,6 @@ class Legend(QObject):
     geol_legend_dict = {
         "geological_type": "undef",
         "geological_feature": "undef",
-        "geological_age": "undef",
         "geological_time": 0.0,
         "geological_sequence": "strati_0",
         "scenario": "undef",
@@ -34,22 +33,11 @@ class Legend(QObject):
         "point_size": 10.0,
         "opacity": int(100),
     }
-
-    well_legend_dict = {
-        "Loc ID": "undef",
-        "geological_feature": "undef",
-        "color_R": int(255),
-        "color_G": int(255),
-        "color_B": int(255),
-        "line_thick": 2.0,
-        "opacity": 100,
-    }
     fluids_legend_dict = {
         "fluid_type": "undef",
         "fluid_feature": "undef",
-        "fluid_age": "undef",
         "fluid_time": 0.0,
-        # 'geological_sequence': "strati_0",
+        "fluid_sequence": "fluid_0",
         "scenario": "undef",
         "color_R": int(255),
         "color_G": int(255),
@@ -61,7 +49,9 @@ class Legend(QObject):
     backgrounds_legend_dict = {
         "background_type": "undef",
         "background_feature": "undef",
-        # 'geological_sequence': "strati_0",
+        "background_time": 0.0,
+        "background_sequence": "back_0",
+        "scenario": "undef",
         "color_R": int(255),
         "color_G": int(255),
         "color_B": int(255),
@@ -70,18 +60,29 @@ class Legend(QObject):
         "opacity": 100,
     }
 
+    well_legend_dict = {
+        "Loc ID": "undef",
+        "geological_feature": "undef",
+        "color_R": int(255),
+        "color_G": int(255),
+        "color_B": int(255),
+        "line_thick": 2.0,
+        "opacity": 100,
+    }
+
     legend_type_dict = {
         "geological_type": str,
         "geological_feature": str,
-        "geological_age": str,
         "geological_time": float,
         "geological_sequence": str,
         "fluid_type": str,
         "fluid_feature": str,
-        "fluid_age": str,
         "fluid_time": float,
+        "fluid_sequence": str,
         "background_type": str,
         "background_feature": str,
+        "background_time": float,
+        "background_sequence": str,
         "scenario": str,
         "color_R": int,
         "color_G": int,
@@ -92,7 +93,7 @@ class Legend(QObject):
     }
 
     others_legend_dict = {
-        "other_type": ["XSection", "Boundary", "Mesh3D", "DOM", "Image"],
+        "other_type": ["Boundary", "DOM", "Image", "Mesh3D", "XSection"],
         "color_R": [255, 255, 255, 255, 255],
         "color_G": [255, 255, 255, 255, 255],
         "color_B": [255, 255, 255, 255, 255],
@@ -128,8 +129,8 @@ class Legend(QObject):
                 "Line thickness",
                 "Point size",
                 "Opacity",
-                "Geological Time",
-                "Stratigraphic sequence",
+                "Time",
+                "Sequence",
                 "Show edges",
                 "Show nodes",
             ]

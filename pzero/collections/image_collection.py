@@ -39,8 +39,7 @@ class ImageCollection(BaseCollection):
             "properties_names": [],
             "properties_components": [],
             "properties_types": [],
-            "x_section": "",
-            # this is the uid of the cross section for "XsVertexSet", "XsPolyLine", and "XsImage", empty for all others
+            "x_section": "",  # this is the uid of the cross section for "XsVertexSet", "XsPolyLine", and "XsImage", empty for all others
             "vtk_obj": None,
         }
 
