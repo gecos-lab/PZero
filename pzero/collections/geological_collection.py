@@ -15,7 +15,7 @@ from vtkmodules.vtkCommonDataModel import vtkDataObject
 
 from .AbstractCollection import BaseCollection
 
-"""Options to print Pandas dataframes in console when testing."""
+# Options to print Pandas dataframes in console when testing.
 pd_desired_width = 800
 pd_max_columns = 20
 pd_show_precision = 4
@@ -41,7 +41,7 @@ class GeologicalCollection(BaseCollection):
             "scenario": "undef",
             "properties_names": [],
             "properties_components": [],
-            "x_section": "",  # this is the uid of the cross section for "XsVertexSet", "XsPolyLine", and "XsImage", empty for all others
+            "x_section": "",  # this is the uid of the cross-section for "XsVertexSet", "XsPolyLine", and "XsImage", empty for all others
             "vtk_obj": None,
         }
 
@@ -54,7 +54,7 @@ class GeologicalCollection(BaseCollection):
             "scenario": str,
             "properties_names": list,
             "properties_components": list,
-            "x_section": str,  # this is the uid of the cross section for "XsVertexSet", "XsPolyLine", and "XsImage", empty for all others
+            "x_section": str,
             "vtk_obj": object,
         }
 
@@ -89,7 +89,7 @@ class GeologicalCollection(BaseCollection):
     # =================================== Obligatory methods ===========================================
 
     def add_entity_from_dict(self, entity_dict: DataFrame = None, color: ndarray = None):
-        """Add a entity from a dictionary shaped as self.entity_dict."""
+        """Add an entity from a dictionary shaped as self.entity_dict."""
         # Create a new uid if it is not included in the dictionary.
         if not entity_dict["uid"]:
             entity_dict["uid"] = str(uuid.uuid4())

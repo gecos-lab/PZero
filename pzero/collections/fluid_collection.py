@@ -13,7 +13,7 @@ from vtkmodules.vtkCommonDataModel import vtkDataObject
 
 from .AbstractCollection import BaseCollection
 
-"""Options to print Pandas dataframes in console when testing."""
+# Options to print Pandas dataframes in console when testing.
 pd_desired_width = 800
 pd_max_columns = 20
 pd_show_precision = 4

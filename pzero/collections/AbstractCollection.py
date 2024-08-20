@@ -8,17 +8,6 @@ import numpy as np
 from vtkmodules.vtkCommonDataModel import vtkDataObject
 
 
-# class Meta:
-#     required_attributes = []
-#
-#     def __call__(self, *args, **kwargs):
-#         obj = super(Meta, self).__call__(*args, **kwargs)
-#         for attr_name in obj.required_attributes:
-#             if not getattr(obj, attr_name):
-#                 raise ValueError('required attribute (%s) not set' % attr_name)
-#         return obj
-
-
 class BaseCollection(ABC):
 
     def __init__(self, parent=None, *args, **kwargs):

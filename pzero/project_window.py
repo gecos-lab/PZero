@@ -1398,8 +1398,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
 
     def open_project(self):
         """Opens a project previously saved to disk."""
-
-        """Create empty containers. This clears all previous objects and also allows for missing tables below."""
+        # Create empty containers. This clears all previous objects and also allows for missing tables below.
         if self.geol_coll.get_number_of_entities > 0:
             confirm_new = QMessageBox.question(
                 self,
@@ -1412,7 +1411,8 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 self.save_project()
 
         self.create_empty()
-        """Select and open project file."""
+
+        # Select and open project file.
         in_file_name = open_file_dialog(
             parent=self, caption="Open PZero project", filter=("PZero (*.p0)")
         )
@@ -1420,8 +1420,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             return
         self.out_file_name = in_file_name
 
-        """Read name of last revision in project file. This opens the last revision.
-        To open a different one, edit the project file."""  # _________________________________________________________________________ IN THE FUTURE an option to open a specific revision could be added
+        # Read name of last revision in project file. This opens the last revision.
+        # To open a different one, edit the project file.
+        # ___________________________________ IN THE FUTURE an option to open a specific revision could be added
         fin = open(in_file_name, "rt")
         rev_name = fin.readlines()[2].strip()
         fin.close()
@@ -1433,14 +1434,17 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             print(in_dir_name)
             print("error: missing folder")
             return
-        """In the following it is still possible to open old projects with metadata stored
-         as CSV tables, however JSON is used now because it leads to less problems and errors
-         for numeric and list fields. In fact, reading Pandas dataframes from JSON, dtype
-         from the class definitions specifies the type of each column."""  # ____________________________________ CONSIDER REMOVING THE POSSIBILITY TO OPEN OLD PROJECTS WITH CSV TABLES, THAT WILL CAUSE ERRORS IN CASE OF LISTS
 
-        """--------------------- READ LEGENDS ---------------------"""
+        #  In the following it is still possible to open old projects with metadata stored
+        #  as CSV tables, however JSON is used now because it leads to fewer problems and errors
+        #  for numeric and list fields. In fact, reading Pandas dataframes from JSON, dtype
+        #  from the class definitions specifies the type of each column.
+        # ______ CONSIDER REMOVING THE POSSIBILITY TO OPEN OLD PROJECTS WITH CSV TABLES
+        # ______ THAT WILL CAUSE ERRORS IN CASE OF LISTS
 
-        """Read geological legend tables."""
+        # --------------------- READ LEGENDS ---------------------
+
+        # Read geological legend tables.
         if os.path.isfile((in_dir_name + "/geol_legend_table.csv")) or os.path.isfile(
             (in_dir_name + "/geol_legend_table.json")
         ):
@@ -1450,7 +1454,8 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     orient="index",
                     dtype=Legend.legend_type_dict,
                 )
-                # in a branch called "Riccardo", a control to set opacity to 100 in case it was null was added here, but it is most problably useless
+                # in the branch called "Riccardo", a control to set opacity to 100 in
+                # case it was null was added here, but it is most problably useless
             else:
                 new_geol_legend_df = pd_read_csv(
                     in_dir_name + "/geol_legend_table.csv",
@@ -1472,8 +1477,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 by="geological_time", ascending=True, inplace=True
             )
 
-        """Read well legend tables."""
-
+        # Read well legend tables.
         if os.path.isfile((in_dir_name + "/well_legend_table.csv")) or os.path.isfile(
             (in_dir_name + "/well_legend_table.json")
         ):
@@ -1500,8 +1504,8 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             for diff in diffs:
                 self.well_legend_df[diff] = Legend.well_legend_dict[diff]
             self.well_legend_df.sort_values(by="Loc ID", ascending=True, inplace=True)
-        """Read fluids legend tables."""
 
+        # Read fluids legend tables.
         if os.path.isfile((in_dir_name + "/fluids_legend_table.csv")) or os.path.isfile(
             (in_dir_name + "/fluids_legend_table.json")
         ):
@@ -1531,8 +1535,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 by="fluid_time", ascending=True, inplace=True
             )
 
-        """Read Backgrounds legend tables."""
-
+        # Read Backgrounds legend tables.
         if os.path.isfile(
             (in_dir_name + "/backgrounds_legend_table.csv")
         ) or os.path.isfile((in_dir_name + "/backgrounds_legend_table.json")):
@@ -1559,8 +1562,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             for diff in diffs:
                 self.backgrounds_legend_df[diff] = Legend.backgrounds_legend_dict[diff]
 
-        """Read other legend tables."""
-
+        # Read other legend tables.
         if os.path.isfile((in_dir_name + "/others_legend_table.csv")) or os.path.isfile(
             (in_dir_name + "/others_legend_table.json")
         ):
@@ -1599,12 +1601,12 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             else:
                 self.prop_legend.update_widget(parent=self)
 
-        """Update all legends."""
+        # Update all legends.
         self.legend.update_widget(parent=self)
 
-        """--------------------- READ TABLES ---------------------"""
+        # --------------------- READ TABLES ---------------------
 
-        """Read x_section table and build cross-sections. Note beginResetModel() and endResetModel()."""
+        # Read x_section table and build cross-sections. Note beginResetModel() and endResetModel().
         if os.path.isfile((in_dir_name + "/xsection_table.csv")) or os.path.isfile(
             (in_dir_name + "/xsection_table.json")
         ):
@@ -1615,28 +1617,26 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     orient="index",
                     dtype=XSectionCollection.entity_type_dict,
                 )
-                if not new_xsect_coll_df.empty:
-                    if not "dip" in new_xsect_coll_df:
-                        new_xsect_coll_df.insert(12, "dip", 90.0)
-                    if not "width" in new_xsect_coll_df:
-                        new_xsect_coll_df.insert(
-                            14,
-                            "width",
-                            new_xsect_coll_df.top - new_xsect_coll_df.bottom,
-                        )
-                    self.xsect_coll.df = new_xsect_coll_df
             else:
-                self.xsect_coll.df = pd_read_csv(
+                new_xsect_coll_df = pd_read_csv(
                     in_dir_name + "/xsection_table.csv",
                     encoding="utf-8",
                     dtype=XSectionCollection.entity_type_dict,
                     keep_default_na=False,
                 )
+            if not new_xsect_coll_df.empty:
+                if not "scenario" in new_xsect_coll_df:
+                    new_xsect_coll_df.insert(2, "scenario", "undef")
+                if not "dip" in new_xsect_coll_df:
+                    new_xsect_coll_df.insert(13, "dip", 90.0)
+                if not "width" in new_xsect_coll_df:
+                    new_xsect_coll_df.insert(15, "width", new_xsect_coll_df.top - new_xsect_coll_df.bottom)
+                self.xsect_coll.df = new_xsect_coll_df
             for uid in self.xsect_coll.df["uid"].tolist():
                 self.xsect_coll.set_geometry(uid=uid)
             self.xsect_coll.table_model.endResetModel()
 
-        """Read DOM table and files. Note beginResetModel() and endResetModel()."""
+        # Read DOM table and files. Note beginResetModel() and endResetModel().
         if os.path.isfile((in_dir_name + "/dom_table.csv")) or os.path.isfile(
             (in_dir_name + "/dom_table.json")
         ):
@@ -1647,16 +1647,17 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     orient="index",
                     dtype=DomCollection.entity_type_dict,
                 )
-                if not new_dom_coll_df.empty:
-                    self.dom_coll.df = new_dom_coll_df
             else:
-                self.dom_coll.df = pd_read_csv(
+                new_dom_coll_df = pd_read_csv(
                     in_dir_name + "/dom_table.csv",
                     encoding="utf-8",
                     dtype=DomCollection.entity_type_dict,
                     keep_default_na=False,
                 )
-
+            if not new_dom_coll_df.empty:
+                if not "scenario" in new_dom_coll_df:
+                    new_dom_coll_df.insert(3, "scenario", "undef")
+                self.dom_coll.df = new_dom_coll_df
             if 'dom_type' in self.dom_coll.df.columns:
                 self.dom_coll.df.rename(columns={'dom_type': 'topological_type'}, inplace=True)
             prgs_bar = progress_dialog(
@@ -1667,7 +1668,6 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 parent=self,
             )
             for uid in self.dom_coll.df["uid"].to_list():
-
                 if self.dom_coll.get_uid_topological_type(uid) == "DEM":
                     if not os.path.isfile((in_dir_name + "/" + uid + ".vts")):
                         print("error: missing VTK file")
@@ -1711,7 +1711,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 prgs_bar.add_one()
             self.dom_coll.table_model.endResetModel()
 
-        """Read image collection and files"""
+        # Read image collection and files.
         if os.path.isfile((in_dir_name + "/image_table.csv")) or os.path.isfile(
             (in_dir_name + "/image_table.json")
         ):
@@ -1722,15 +1722,17 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     orient="index",
                     dtype=ImageCollection.entity_type_dict,
                 )
-                if not new_image_coll_df.empty:
-                    self.image_coll.df = new_image_coll_df
             else:
-                self.image_coll.df = pd_read_csv(
+                new_image_coll_df = pd_read_csv(
                     in_dir_name + "/image_table.csv",
                     encoding="utf-8",
                     dtype=ImageCollection.entity_type_dict,
                     keep_default_na=False,
                 )
+            if not new_image_coll_df.empty:
+                if not "scenario" in new_image_coll_df:
+                    new_image_coll_df.insert(3, "scenario", "undef")
+                self.image_coll.df = new_image_coll_df
             prgs_bar = progress_dialog(
                 max_value=self.image_coll.df.shape[0],
                 title_txt="Open image",
@@ -1784,7 +1786,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 prgs_bar.add_one()
             self.image_coll.table_model.endResetModel()
 
-        """Read mesh3d collection and files"""
+        # Read mesh3d collection and files.
         if os.path.isfile((in_dir_name + "/mesh3d_table.csv")) or os.path.isfile(
             (in_dir_name + "/mesh3d_table.json")
         ):
@@ -1795,15 +1797,17 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     orient="index",
                     dtype=Mesh3DCollection.entity_type_dict,
                 )
-                if not new_mesh3d_coll_df.empty:
-                    self.mesh3d_coll.df = new_mesh3d_coll_df
             else:
-                self.mesh3d_coll.df = pd_read_csv(
+                new_mesh3d_coll_df = pd_read_csv(
                     in_dir_name + "/mesh3d_table.csv",
                     encoding="utf-8",
                     dtype=Mesh3DCollection.entity_type_dict,
                     keep_default_na=False,
                 )
+            if not new_mesh3d_coll_df.empty:
+                if not "scenario" in new_mesh3d_coll_df:
+                    new_mesh3d_coll_df.insert(3, "scenario", "undef")
+                self.mesh3d_coll.df = new_mesh3d_coll_df
             prgs_bar = progress_dialog(
                 max_value=self.mesh3d_coll.df.shape[0],
                 title_txt="Open 3D mesh",
@@ -1845,7 +1849,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 prgs_bar.add_one()
             self.mesh3d_coll.table_model.endResetModel()
 
-        """Read boundaries collection and files"""
+        # Read boundaries collection and files.
         if os.path.isfile((in_dir_name + "/boundary_table.csv")) or os.path.isfile(
             (in_dir_name + "/boundary_table.json")
         ):
@@ -1856,15 +1860,17 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     orient="index",
                     dtype=BoundaryCollection.entity_type_dict,
                 )
-                if not new_boundary_coll_df.empty:
-                    self.boundary_coll.df = new_boundary_coll_df
             else:
-                self.boundary_coll.df = pd_read_csv(
+                new_boundary_coll_df = pd_read_csv(
                     in_dir_name + "/boundary_table.csv",
                     encoding="utf-8",
                     dtype=BoundaryCollection.entity_type_dict,
                     keep_default_na=False,
                 )
+            if not new_boundary_coll_df.empty:
+                if not "scenario" in new_boundary_coll_df:
+                    new_boundary_coll_df.insert(3, "scenario", "undef")
+                self.boundary_coll.df = new_boundary_coll_df
             prgs_bar = progress_dialog(
                 max_value=self.boundary_coll.df.shape[0],
                 title_txt="Open boundary",
@@ -1889,7 +1895,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 prgs_bar.add_one()
             self.boundary_coll.table_model.endResetModel()
 
-        """Read well table and files"""
+        # Read well table and files.
         if os.path.isfile((in_dir_name + "/well_table.csv")) or os.path.isfile(
             (in_dir_name + "/well_table.json")
         ):
@@ -1900,15 +1906,17 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     orient="index",
                     dtype=WellCollection.entity_type_dict,
                 )
-                if not new_well_coll_df.empty:
-                    self.well_coll.df = new_well_coll_df
             else:
-                self.well_coll.df = pd_read_csv(
+                new_well_coll_df = pd_read_csv(
                     in_dir_name + "/well_table.csv",
                     encoding="utf-8",
                     dtype=WellCollection.entity_type_dict,
                     keep_default_na=False,
                 )
+            if not new_well_coll_df.empty:
+                if not "scenario" in new_well_coll_df:
+                    new_well_coll_df.insert(2, "scenario", "undef")
+                self.well_coll.df = new_well_coll_df
             prgs_bar = progress_dialog(
                 max_value=self.well_coll.df.shape[0],
                 title_txt="Open wells",
@@ -1934,7 +1942,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             self.well_coll.table_model.endResetModel()
         self.prop_legend.update_widget(parent=self)
 
-        """Read geological table and files. Note beginResetModel() and endResetModel()."""
+        # Read geological table and files.
         if os.path.isfile((in_dir_name + "/geological_table.csv")) or os.path.isfile(
             (in_dir_name + "/geological_table.json")
         ):
@@ -1946,16 +1954,15 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     orient="index",
                     dtype=GeologicalCollection.entity_type_dict,
                 )
-                if not new_geol_coll_df.empty:
-                    self.geol_coll.df = new_geol_coll_df
             else:
-                # noinspection PyTypeChecker
-                self.geol_coll.df = pd_read_csv(
+                new_geol_coll_df = pd_read_csv(
                     in_dir_name + "/geological_table.csv",
                     encoding="utf-8",
                     dtype=GeologicalCollection.entity_type_dict,
                     keep_default_na=False,
                 )
+            if not new_geol_coll_df.empty:
+                self.geol_coll.df = new_geol_coll_df
 
             prgs_bar = progress_dialog(
                 max_value=self.geol_coll.df.shape[0],
@@ -1993,10 +2000,10 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 self.geol_coll.set_uid_vtk_obj(uid=uid, vtk_obj=vtk_object)
                 prgs_bar.add_one()
             self.geol_coll.table_model.endResetModel()
-        """Update legend."""
+        # Update legend.
         self.prop_legend.update_widget(parent=self)
 
-        """Read fluids table and files. Note beginResetModel() and endResetModel()."""
+        # Read fluids table and files.
         if os.path.isfile((in_dir_name + "/fluids_table.csv")) or os.path.isfile(
             (in_dir_name + "/fluids_table.json")
         ):
@@ -2007,15 +2014,15 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     orient="index",
                     dtype=FluidsCollection.entity_type_dict,
                 )
-                if not new_fluids_coll_df.empty:
-                    self.fluids_coll.df = new_fluids_coll_df
             else:
-                self.fluids_coll.df = pd_read_csv(
+                new_fluids_coll_df = pd_read_csv(
                     in_dir_name + "/fluids_table.csv",
                     encoding="utf-8",
                     dtype=FluidsCollection.entity_type_dict,
                     keep_default_na=False,
                 )
+            if not new_fluids_coll_df.empty:
+                self.fluids_coll.df = new_fluids_coll_df
             prgs_bar = progress_dialog(
                 max_value=self.fluids_coll.df.shape[0],
                 title_txt="Open fluids",
@@ -2049,10 +2056,10 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 self.fluids_coll.set_uid_vtk_obj(uid=uid, vtk_obj=vtk_object)
                 prgs_bar.add_one()
             self.fluids_coll.table_model.endResetModel()
-        """Update legend."""
+        # Update legend.
         self.prop_legend.update_widget(parent=self)
 
-        """Read Backgrounds table and files. Note beginResetModel() and endResetModel()."""
+        # Read Backgrounds table and files."""
         if os.path.isfile((in_dir_name + "/backgrounds_table.csv")) or os.path.isfile(
             (in_dir_name + "/backgrounds_table.json")
         ):
@@ -2063,15 +2070,17 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     orient="index",
                     dtype=FluidsCollection.entity_type_dict,
                 )
-                if not new_backgrounds_coll_df.empty:
-                    self.backgrounds_coll.df = new_backgrounds_coll_df
             else:
-                self.backgrounds_coll.df = pd_read_csv(
+                new_backgrounds_coll_df = pd_read_csv(
                     in_dir_name + "/backgrounds_table.csv",
                     encoding="utf-8",
                     dtype=FluidsCollection.entity_type_dict,
                     keep_default_na=False,
                 )
+            if not new_backgrounds_coll_df.empty:
+                if not "scenario" in new_backgrounds_coll_df:
+                    new_backgrounds_coll_df.insert(5, "scenario", "undef")
+                self.backgrounds_coll.df = new_backgrounds_coll_df
             prgs_bar = progress_dialog(
                 max_value=self.backgrounds_coll.df.shape[0],
                 title_txt="Open fluids",
@@ -2101,10 +2110,10 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 self.backgrounds_coll.set_uid_vtk_obj(uid=uid, vtk_obj=vtk_object)
                 prgs_bar.add_one()
             self.backgrounds_coll.table_model.endResetModel()
-        """Update legend."""
+        # Update legend.
         self.prop_legend.update_widget(parent=self)
 
-    """Methods used to import entities from other file formats."""
+    # ---- Methods used to import entities from other file formats. ----
 
     def import_gocad(self):
         """Import Gocad ASCII file and update geological collection."""
