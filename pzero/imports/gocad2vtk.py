@@ -103,17 +103,17 @@ def gocad2vtk(self=None, in_file_name=None, uid_from_name=None):
     )
     if not geological_type_default:
         geological_type_default = "undef"
-    geological_feature_from_name = options_dialog(
+    feature_from_name = options_dialog(
         title="Feature from name",
         message="Get geological feature from object name if not defined in file",
         yes_role="Yes",
         no_role="No",
         reject_role=None,
     )
-    if geological_feature_from_name == 0:
-        geological_feature_from_name = True
+    if feature_from_name == 0:
+        feature_from_name = True
     else:
-        geological_feature_from_name = False
+        feature_from_name = False
     reset_legend = options_dialog(
         title="Legend reset",
         message="Reset color in legend from object properties defined in file",
@@ -188,7 +188,7 @@ def gocad2vtk(self=None, in_file_name=None, uid_from_name=None):
                 curr_obj_dict["name"] = "_".join(
                     clean_line[1:]
                 )  # see if a suffix must be added to split multipart
-                if geological_feature_from_name:
+                if feature_from_name:
                     curr_obj_dict["geological_feature"] = curr_obj_dict["name"]
             else:
                 """solves a bug in Move that does not add a space after name:"""
@@ -196,7 +196,7 @@ def gocad2vtk(self=None, in_file_name=None, uid_from_name=None):
                 curr_obj_dict["name"] = curr_obj_dict["name"][
                     5:
                 ]  # this removes 'name:'
-                if geological_feature_from_name:
+                if feature_from_name:
                     curr_obj_dict["geological_feature"] = curr_obj_dict["name"]
             if uid_from_name:
                 curr_obj_dict["uid"] = curr_obj_dict["name"]
@@ -471,17 +471,17 @@ def gocad2vtk_section(self=None, in_file_name=None, uid_from_name=None, x_sectio
     )
     if not geological_type_default:
         geological_type_default = "undef"
-    geological_feature_from_name = options_dialog(
+    feature_from_name = options_dialog(
         title="Feature from name",
         message="Get geological feature from object name if not defined in file",
         yes_role="Yes",
         no_role="No",
         reject_role=None,
     )
-    if geological_feature_from_name == 0:
-        geological_feature_from_name = True
+    if feature_from_name == 0:
+        feature_from_name = True
     else:
-        geological_feature_from_name = False
+        feature_from_name = False
     """Open input file"""
     fin = open(in_file_name, "rt")
     """Number of entities before importing________________________________"""
@@ -541,7 +541,7 @@ def gocad2vtk_section(self=None, in_file_name=None, uid_from_name=None, x_sectio
                 curr_obj_dict["name"] = "_".join(
                     clean_line[1:]
                 )  # see if a suffix must be added to split multipart
-                if geological_feature_from_name:
+                if feature_from_name:
                     curr_obj_dict["geological_feature"] = curr_obj_dict["name"]
             else:
                 """solves a bug in Move that does not add a space after name:"""
@@ -549,7 +549,7 @@ def gocad2vtk_section(self=None, in_file_name=None, uid_from_name=None, x_sectio
                 curr_obj_dict["name"] = curr_obj_dict["name"][
                     5:
                 ]  # this removes 'name:'
-                if geological_feature_from_name:
+                if feature_from_name:
                     curr_obj_dict["geological_feature"] = curr_obj_dict["name"]
             if uid_from_name:
                 curr_obj_dict["uid"] = curr_obj_dict["name"]
@@ -765,11 +765,11 @@ def gocad2vtk_boundary(self=None, in_file_name=None, uid_from_name=None):
     # geological_type_default = input_combo_dialog(parent=None, title="Geological type", label="Default geological type", choice_list=GeologicalCollection.valid_geological_types)
     # if not geological_type_default:
     #     geological_type_default = "undef"
-    # geological_feature_from_name = options_dialog(title="Feature from name", message="Get geological feature from object name if not defined in file", yes_role="Yes", no_role="No", reject_role=None)
-    # if geological_feature_from_name == 0:
-    #     geological_feature_from_name = True
+    # feature_from_name = options_dialog(title="Feature from name", message="Get geological feature from object name if not defined in file", yes_role="Yes", no_role="No", reject_role=None)
+    # if feature_from_name == 0:
+    #     feature_from_name = True
     # else:
-    #     geological_feature_from_name = False
+    #     feature_from_name = False
     """Open input file"""
     fin = open(in_file_name, "rt")
     """Number of entities before importing________________________________"""
@@ -828,7 +828,7 @@ def gocad2vtk_boundary(self=None, in_file_name=None, uid_from_name=None):
                 curr_obj_dict["name"] = "_".join(
                     clean_line[1:]
                 )  # see if a suffix must be added to split multipart
-                # if geological_feature_from_name:
+                # if feature_from_name:
                 #     curr_obj_dict['geological_feature'] = curr_obj_dict['name']
             else:
                 """solves a bug in Move that does not add a space after name:"""
@@ -836,7 +836,7 @@ def gocad2vtk_boundary(self=None, in_file_name=None, uid_from_name=None):
                 curr_obj_dict["name"] = curr_obj_dict["name"][
                     5:
                 ]  # this removes 'name:'
-                # if geological_feature_from_name:
+                # if feature_from_name:
                 #     curr_obj_dict['geological_feature'] = curr_obj_dict['name']
             if uid_from_name:
                 curr_obj_dict["uid"] = curr_obj_dict["name"]
