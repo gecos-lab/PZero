@@ -9,20 +9,29 @@ from vtkmodules.vtkCommonDataModel import vtkDataObject
 
 
 class BaseCollection(ABC):
-
+    """Abstract class used as a base for all collections, implemented with ABC in order to
+    set a mandatory standard for all subclasses with the @abstractmethod decorator."""
     def __init__(self, parent=None, *args, **kwargs):
         super(BaseCollection, self).__init__(*args, **kwargs)
-        # Import reference to parent, otherwise it is difficult to reference them
-        # in SetData() that has a standard list of inputs.
+        # Import reference to parent = the project, otherwise it is difficult
+        # to reference it in SetData() that has a standard list of inputs.
+        # Then initialise some standard lists and dictionaries and the
+        # Qt table model as a property (hence using composition).
+        # All these properties are defined as private protected properties, and
+        # then exposed with public @property and @__.setter decorators
+        # because .... _____________EXPLAIN WHY HERE!
 
         self._parent = parent
+        self._collection_name: str = ''
+
         self._entity_dict: dict = dict()
         self._entity_type_dict: dict = dict()
+
         self._valid_types: list = list()
-        self._valid_topological_types: list = list()
+        self._valid_topology: list = list()
+
         self._df: DataFrame = DataFrame()
         self._editable_columns_names: list = list()
-        self._collection_name: str = ''
 
         self._table_model = BaseTableModel(self.parent, self)
 
@@ -141,12 +150,12 @@ class BaseCollection(ABC):
     @property
     def valid_topological_types(self) -> list:
         """Get the valid topological list of the Collection."""
-        return self._valid_topological_types
+        return self._valid_topology
 
     @valid_topological_types.setter
     def valid_topological_types(self, valid_topological_types: list):
         """Set the valid topological list of the Collection."""
-        self._valid_topological_types = valid_topological_types
+        self._valid_topology = valid_topological_types
 
     @property
     def editable_columns_names(self):
@@ -374,8 +383,11 @@ class BaseCollection(ABC):
 
 
 class BaseTableModel(QAbstractTableModel):
+    """BaseTableModel inherits from QAbstractTableModel setting a few methods and
+    the data connection to the Pandas dataframe self.collection.df."""
     def __init__(self, parent=None, collection: BaseCollection = None, *args, **kwargs):
         super().__init__(parent, *args, **kwargs)
+        # Initialize just parent (the project) and the collection.
 
         self.parent = parent
         self._collection = collection
