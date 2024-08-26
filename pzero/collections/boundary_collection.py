@@ -185,7 +185,7 @@ class BoundaryCollection(BaseCollection):
             "vtk_obj": object,
         }
 
-        self.valid_topological_types = ["PolyLine", "TriSurf", "XsPolyLine"]
+        self.valid_topologies = ["PolyLine", "TriSurf", "XsPolyLine"]
 
         self.editable_columns_names = ["name", "scenario"]
 

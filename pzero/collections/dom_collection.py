@@ -56,7 +56,7 @@ class DomCollection(BaseCollection):
             "vtk_obj": object,
         }
 
-        self.valid_topological_types = ["DEM", "TSDom", "PCDom"]
+        self.valid_topologies = ["DEM", "TSDom", "PCDom"]
 
         self.editable_columns_names = ["name", "scenario"]
 

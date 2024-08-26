@@ -28,7 +28,7 @@ class BaseCollection(ABC):
         self._entity_type_dict: dict = dict()
 
         self._valid_types: list = list()
-        self._valid_topology: list = list()
+        self._valid_topologies: list = list()
 
         self._df: DataFrame = DataFrame()
         self._editable_columns_names: list = list()
@@ -148,14 +148,14 @@ class BaseCollection(ABC):
         self._valid_types = valid_types
 
     @property
-    def valid_topological_types(self) -> list:
+    def valid_topologies(self) -> list:
         """Get the valid topological list of the Collection."""
-        return self._valid_topology
+        return self._valid_topologies
 
-    @valid_topological_types.setter
-    def valid_topological_types(self, valid_topological_types: list):
+    @valid_topologies.setter
+    def valid_topologies(self, valid_topologies: list):
         """Set the valid topological list of the Collection."""
-        self._valid_topology = valid_topological_types
+        self._valid_topologies = valid_topologies
 
     @property
     def editable_columns_names(self):

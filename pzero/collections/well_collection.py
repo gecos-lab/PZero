@@ -43,7 +43,7 @@ class WellCollection(BaseCollection):
             "vtk_obj": object,
         }
 
-        self.valid_topological_types = [
+        self.valid_topologies = [
             "VertexSet",
             "PolyLine",
             "XsVertexSet",

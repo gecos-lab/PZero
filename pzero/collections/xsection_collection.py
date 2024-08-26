@@ -325,7 +325,7 @@ class XSectionCollection(BaseCollection):
             "vtk_plane": object,
             "vtk_frame": object,
         }
-        self.valid_topological_types = ['']
+        self.valid_topologies = ['']
         self.editable_columns_names = ["name", "scenario"]
         self.collection_name = 'xsection'
         self.initialize_df()

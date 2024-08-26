@@ -72,7 +72,7 @@ class GeologicalCollection(BaseCollection):
             "fold_axis",
         ]
 
-        self.valid_topological_types = [
+        self.valid_topologies = [
             "VertexSet",
             "PolyLine",
             "TriSurf",

@@ -51,7 +51,7 @@ class Mesh3DCollection(BaseCollection):
             "vtk_obj": object,
         }
 
-        self.valid_topological_types = ["TetraSolid", "Voxet", "XsVoxet"]
+        self.valid_topologies = ["TetraSolid", "Voxet", "XsVoxet"]
 
         self.editable_columns_names = ["name", "scenario"]
 

@@ -177,7 +177,7 @@ Note that cell type in VTK is defined as follows (we use just a limited number o
 """
 
 """List of valid topological types, corresponding to classes (abstract classes are not listed here)."""
-valid_topological_types = [
+valid_topologies = [
     "VertexSet",
     "PolyLine",
     "TriSurf",
@@ -598,7 +598,7 @@ class PolyData(vtkPolyData):
 
     @property
     def topological_type(self):
-        for topological_type in valid_topological_types:
+        for topological_type in valid_topologies:
             """Here we use eval to convert a string with the class name to the class itself."""
             if isinstance(self, eval(topological_type)):
                 return topological_type

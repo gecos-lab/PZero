@@ -65,7 +65,7 @@ class FluidsCollection(BaseCollection):
             "other",
         ]
 
-        self.valid_topological_types = [
+        self.valid_topologies = [
             "VertexSet",
             "PolyLine",
             "TriSurf",

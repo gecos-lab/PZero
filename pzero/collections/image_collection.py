@@ -56,7 +56,7 @@ class ImageCollection(BaseCollection):
             "vtk_obj": object,
         }
 
-        self.valid_topological_types = [
+        self.valid_topologies = [
             "MapImage",
             "XsImage",
             "Seismics",

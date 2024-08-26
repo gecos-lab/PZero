@@ -61,7 +61,7 @@ class BackgroundCollection(BaseCollection):
 
         self.valid_types = ["undef", "Annotations", "Imported"]
 
-        self.valid_topological_types = [
+        self.valid_topologies = [
             "VertexSet",
             "PolyLine",
             "TriSurf",
