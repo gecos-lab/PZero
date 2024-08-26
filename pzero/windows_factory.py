@@ -186,15 +186,15 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.add_all_entities()
         self.show_qt_canvas()
 
-        self.toggle_backgrounds_topology_visibility = lambda item: toggle_backgrounds_topology_visibility(self, item)
+        self.toggle_backgrounds_visibility = lambda item: toggle_backgrounds_visibility(self, item)
 
         self.toggle_boundary_visibility = lambda item: toggle_boundary_visibility(self, item)
 
         self.toggle_dom_visibility = lambda cell: toggle_dom_visibility(self, cell)
 
-        self.toggle_fluids_topology_visibility = lambda item: toggle_fluids_topology_visibility(self, item)
+        self.toggle_fluids_visibility  = lambda item: toggle_fluids_visibility (self, item)
 
-        self.toggle_geology_topology_visibility = lambda item: toggle_geology_topology_visibility(self, item)
+        self.toggle_geology_visibility  = lambda item: toggle_geology_visibility (self, item)
 
         self.toggle_image_visibility = lambda cell: toggle_image_visibility(self, cell)
 
@@ -4657,7 +4657,7 @@ class ViewStereoplot(MPLView):
         """Send messages. Note that with tristate several signals are emitted in a sequence, one for each
         changed item, but upper levels do not broadcast uid's so they are filtered in the toggle method."""
         self.GeologyTreeWidget.itemChanged.connect(
-            self.toggle_geology_topology_visibility
+            self.toggle_geology_visibility 
         )
         self.GeologyTreeWidget.expandAll()
 
@@ -4736,7 +4736,7 @@ class ViewStereoplot(MPLView):
         """Send messages. Note that with tristate several signals are emitted in a sequence, one for each
         changed item, but upper levels do not broadcast uid's so they are filtered in the toggle method."""
         self.TopologyTreeWidget.itemChanged.connect(
-            self.toggle_geology_topology_visibility
+            self.toggle_geology_visibility 
         )
         self.TopologyTreeWidget.expandAll()
 
@@ -5026,7 +5026,7 @@ class ViewStereoplot(MPLView):
                 self.GeologyTreeWidget.insertTopLevelItem(0, glevel_4)
                 break
         self.GeologyTreeWidget.itemChanged.connect(
-            self.toggle_geology_topology_visibility
+            self.toggle_geology_visibility 
         )
         self.GeologyTreeWidget.expandAll()
 
@@ -5190,7 +5190,7 @@ class ViewStereoplot(MPLView):
                 self.TopologyTreeWidget.insertTopLevelItem(0, tlevel_3)
                 break
         self.TopologyTreeWidget.itemChanged.connect(
-            self.toggle_geology_topology_visibility
+            self.toggle_geology_visibility 
         )
         self.TopologyTreeWidget.expandAll()
 

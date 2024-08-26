@@ -43,10 +43,10 @@ def fluid_added_update_views(self, updated_list=None):
         update_fluids_topology_tree_added(self, actors_df_new)
     """Re-connect signals."""
     self.FluidsTreeWidget.itemChanged.connect(
-        self.toggle_fluids_topology_visibility
+        self.toggle_fluids_visibility 
     )
     self.FluidsTopologyTreeWidget.itemChanged.connect(
-        self.toggle_fluids_topology_visibility
+        self.toggle_fluids_visibility 
     )
 
 
@@ -62,10 +62,10 @@ def fluid_removed_update_views(self, updated_list=None):
     update_fluids_topology_tree_removed(self, removed_list=updated_list)
     """Re-connect signals."""
     self.FluidsTreeWidget.itemChanged.connect(
-        self.toggle_fluids_topology_visibility
+        self.toggle_fluids_visibility 
     )
     self.FluidsTopologyTreeWidget.itemChanged.connect(
-        self.toggle_fluids_topology_visibility
+        self.toggle_fluids_visibility 
     )
 
 
@@ -98,8 +98,8 @@ def fluid_data_keys_modified_update_views(self, updated_list=None):
                 create_fluids_tree(self)
                 create_fluids_topology_tree(self)
     """Re-connect signals."""
-    self.FluidsTreeWidget.itemChanged.connect(self.toggle_fluids_topology_visibility)
-    self.FluidsTopologyTreeWidget.itemChanged.connect(self.toggle_fluids_topology_visibility)
+    self.FluidsTreeWidget.itemChanged.connect(self.toggle_fluids_visibility )
+    self.FluidsTopologyTreeWidget.itemChanged.connect(self.toggle_fluids_visibility )
 
 
 def fluid_data_val_modified_update_views(self, updated_list=None):
@@ -111,10 +111,10 @@ def fluid_data_val_modified_update_views(self, updated_list=None):
     """IN THE FUTURE - generally just update the properties list - more complicate if we modify or delete the property that is shown_____________________"""
     """Re-connect signals."""
     self.FluidsTreeWidget.itemChanged.connect(
-        self.toggle_fluids_topology_visibility
+        self.toggle_fluids_visibility 
     )
     self.FluidsTopologyTreeWidget.itemChanged.connect(
-        self.toggle_fluids_topology_visibility
+        self.toggle_fluids_visibility 
     )
 
 
@@ -132,10 +132,10 @@ def fluid_metadata_modified_update_views(self, updated_list=None):
         create_fluids_topology_tree(self)
     """Re-connect signals."""
     self.FluidsTreeWidget.itemChanged.connect(
-        self.toggle_fluids_topology_visibility
+        self.toggle_fluids_visibility 
     )
     self.FluidsTopologyTreeWidget.itemChanged.connect(
-        self.toggle_fluids_topology_visibility
+        self.toggle_fluids_visibility 
     )
 
 
@@ -158,10 +158,10 @@ def fluid_legend_color_modified_update_views(self, updated_list=None):
 
     """Re-connect signals."""
     self.FluidsTreeWidget.itemChanged.connect(
-        self.toggle_fluids_topology_visibility
+        self.toggle_fluids_visibility 
     )
     self.FluidsTopologyTreeWidget.itemChanged.connect(
-        self.toggle_fluids_topology_visibility
+        self.toggle_fluids_visibility 
     )
 
 
@@ -176,10 +176,10 @@ def fluid_legend_thick_modified_update_views(self, updated_list=None):
         self.change_actor_line_thick(uid=uid, collection="fluids_coll")
     """Re-connect signals."""
     self.FluidsTreeWidget.itemChanged.connect(
-        self.toggle_fluids_topology_visibility
+        self.toggle_fluids_visibility 
     )
     self.FluidsTopologyTreeWidget.itemChanged.connect(
-        self.toggle_fluids_topology_visibility
+        self.toggle_fluids_visibility 
     )
 
 
@@ -194,10 +194,10 @@ def fluid_legend_point_size_modified_update_views(self, updated_list=None):
         self.change_actor_line_point_size(uid=uid, collection="fluids_coll")
     """Re-connect signals."""
     self.FluidsTreeWidget.itemChanged.connect(
-        self.toggle_fluids_topology_visibility
+        self.toggle_fluids_visibility 
     )
     self.FluidsTopologyTreeWidget.itemChanged.connect(
-        self.toggle_fluids_topology_visibility
+        self.toggle_fluids_visibility 
     )
 
 
@@ -212,8 +212,8 @@ def fluid_legend_opacity_modified_update_views(self, updated_list=None):
         self.change_actor_opacity(uid=uid, collection="fluids_coll")
     """Re-connect signals."""
     self.FluidsTreeWidget.itemChanged.connect(
-        self.toggle_fluids_topology_visibility
+        self.toggle_fluids_visibility 
     )
     self.FluidsTopologyTreeWidget.itemChanged.connect(
-        self.toggle_fluids_topology_visibility
+        self.toggle_fluids_visibility 
     )

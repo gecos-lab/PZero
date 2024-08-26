@@ -102,7 +102,7 @@ def create_geology_tree(self):
                         glevel_4.setCheckState(0, Qt.Unchecked)
     # Send messages. Note that with tristate several signals are emitted in a sequence, one for each
     # changed item, but upper levels do not broadcast uid's so they are filtered in the toggle method.
-    self.GeologyTreeWidget.itemChanged.connect(self.toggle_geology_topology_visibility)
+    self.GeologyTreeWidget.itemChanged.connect(self.toggle_geology_visibility )
     self.GeologyTreeWidget.expandAll()
 
 
@@ -399,7 +399,7 @@ def update_geology_tree_added(self, uid_list=None):
                 glevel_4.setCheckState(0, Qt.Unchecked)
             self.GeologyTreeWidget.insertTopLevelItem(0, glevel_4)
             break
-    self.GeologyTreeWidget.itemChanged.connect(self.toggle_geology_topology_visibility)
+    self.GeologyTreeWidget.itemChanged.connect(self.toggle_geology_visibility )
     self.GeologyTreeWidget.expandAll()
 
 
@@ -575,7 +575,7 @@ def create_topology_tree(self):
     # Send messages. Note that with tristate several signals are emitted in a sequence, one for each
     # changed item, but upper levels do not broadcast uid's so they are filtered in the toggle method
     self.TopologyTreeWidget.itemChanged.connect(
-        self.toggle_geology_topology_visibility
+        self.toggle_geology_visibility 
     )
     self.TopologyTreeWidget.expandAll()
 
@@ -745,7 +745,7 @@ def update_topology_tree_added(self, uid_list=None):
             self.TopologyTreeWidget.insertTopLevelItem(0, tlevel_3)
             break
     self.TopologyTreeWidget.itemChanged.connect(
-        self.toggle_geology_topology_visibility
+        self.toggle_geology_visibility 
     )
     self.TopologyTreeWidget.expandAll()
 
@@ -823,9 +823,9 @@ def update_topology_checkboxes(self, uid=None, uid_checkState=None):
         item.setCheckState(0, Qt.Unchecked)
 
 
-def toggle_geology_topology_visibility(self, item):
-    """Called by self.GeologyTreeWidget.itemChanged.connect(self.toggle_geology_topology_visibility) and
-    self.TopologyTreeWidget.itemChanged.connect(self.toggle_geology_topology_visibility)"""
+def toggle_geology_visibility (self, item):
+    """Called by self.GeologyTreeWidget.itemChanged.connect(self.toggle_geology_visibility ) and
+    self.TopologyTreeWidget.itemChanged.connect(self.toggle_geology_visibility )"""
     # name = item.text(0)  # not used
 
     uid = item.text(1)
@@ -852,8 +852,8 @@ def toggle_geology_topology_visibility(self, item):
         update_geology_checkboxes(self, uid=uid, uid_checkState=uid_checkState)
         update_topology_checkboxes(self, uid=uid, uid_checkState=uid_checkState)
         self.GeologyTreeWidget.itemChanged.connect(
-            self.toggle_geology_topology_visibility
+            self.toggle_geology_visibility 
         )
         self.TopologyTreeWidget.itemChanged.connect(
-            self.toggle_geology_topology_visibility
+            self.toggle_geology_visibility 
         )

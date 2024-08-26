@@ -88,7 +88,7 @@ def create_fluids_tree(self):
     """Send messages. Note that with tristate several signals are emitted in a sequence, one for each
     changed item, but upper levels do not broadcast uid's so they are filtered in the toggle method."""
     self.FluidsTreeWidget.itemChanged.connect(
-        self.toggle_fluids_topology_visibility
+        self.toggle_fluids_visibility 
     )
     self.FluidsTreeWidget.expandAll()
 
@@ -161,7 +161,7 @@ def create_fluids_topology_tree(self):
     """Send messages. Note that with tristate several signals are emitted in a sequence, one for each
     changed item, but upper levels do not broadcast uid's so they are filtered in the toggle method."""
     self.FluidsTopologyTreeWidget.itemChanged.connect(
-        self.toggle_fluids_topology_visibility
+        self.toggle_fluids_visibility 
     )
     self.FluidsTopologyTreeWidget.expandAll()
 
@@ -461,7 +461,7 @@ def update_fluids_tree_added(self, new_list=None, sec_uid=None):
             self.FluidsTreeWidget.insertTopLevelItem(0, flevel_4)
             break
     self.FluidsTreeWidget.itemChanged.connect(
-        self.toggle_fluids_topology_visibility
+        self.toggle_fluids_visibility 
     )
     self.FluidsTreeWidget.expandAll()
 
@@ -737,7 +737,7 @@ def update_fluids_topology_tree_added(self, new_list=None, sec_uid=None):
             self.FluidsTopologyTreeWidget.insertTopLevelItem(0, tlevel_3)
             break
     self.FluidsTopologyTreeWidget.itemChanged.connect(
-        self.toggle_fluids_topology_visibility
+        self.toggle_fluids_visibility 
     )
     self.FluidsTopologyTreeWidget.expandAll()
 
@@ -833,8 +833,8 @@ def update_fluids_topology_checkboxes(self, uid=None, uid_checkState=None):
         item.setCheckState(0, Qt.Unchecked)
 
 
-def toggle_fluids_topology_visibility(self, item):
-    """Called by self.FluidsTreeWidget.itemChanged.connect(self.toggle_fluids_topology_visibility) and self.FluidsTopologyTreeWidget.itemChanged.connect(self.toggle_fluids_topology_visibility)"""
+def toggle_fluids_visibility (self, item):
+    """Called by self.FluidsTreeWidget.itemChanged.connect(self.toggle_fluids_visibility ) and self.FluidsTopologyTreeWidget.itemChanged.connect(self.toggle_fluids_visibility )"""
     name = item.text(0)  # not used
     uid = item.text(1)
     uid_checkState = item.checkState(0)
@@ -861,8 +861,8 @@ def toggle_fluids_topology_visibility(self, item):
             uid=uid, uid_checkState=uid_checkState
         )
         self.FluidsTreeWidget.itemChanged.connect(
-            self.toggle_fluids_topology_visibility
+            self.toggle_fluids_visibility 
         )
         self.FluidsTopologyTreeWidget.itemChanged.connect(
-            self.toggle_fluids_topology_visibility
+            self.toggle_fluids_visibility 
         )

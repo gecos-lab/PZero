@@ -34,8 +34,8 @@ def geology_added_update_views(self, updated_list=None):
     update_geology_tree_added(self, uid_list=updated_list)
     update_topology_tree_added(self, uid_list=updated_list)
     """Re-connect signals."""
-    self.GeologyTreeWidget.itemChanged.connect(self.toggle_geology_topology_visibility)
-    self.TopologyTreeWidget.itemChanged.connect(self.toggle_geology_topology_visibility)
+    self.GeologyTreeWidget.itemChanged.connect(self.toggle_geology_visibility )
+    self.TopologyTreeWidget.itemChanged.connect(self.toggle_geology_visibility )
 
 
 def geology_removed_update_views(self, updated_list=None):
@@ -51,8 +51,8 @@ def geology_removed_update_views(self, updated_list=None):
     update_geology_tree_removed(self, removed_list=updated_list)
     update_topology_tree_removed(self, removed_list=updated_list)
     """Re-connect signals."""
-    self.GeologyTreeWidget.itemChanged.connect(self.toggle_geology_topology_visibility)
-    self.TopologyTreeWidget.itemChanged.connect(self.toggle_geology_topology_visibility)
+    self.GeologyTreeWidget.itemChanged.connect(self.toggle_geology_visibility )
+    self.TopologyTreeWidget.itemChanged.connect(self.toggle_geology_visibility )
 
 
 def geology_geom_modified_update_views(self, updated_list=None):
@@ -104,8 +104,8 @@ def geology_data_keys_modified_update_views(self, updated_list=None):
     create_geology_tree(self)
     create_topology_tree(self)
     """Re-connect signals."""
-    self.GeologyTreeWidget.itemChanged.connect(self.toggle_geology_topology_visibility)
-    self.TopologyTreeWidget.itemChanged.connect(self.toggle_geology_topology_visibility)
+    self.GeologyTreeWidget.itemChanged.connect(self.toggle_geology_visibility )
+    self.TopologyTreeWidget.itemChanged.connect(self.toggle_geology_visibility )
 
 
 def geology_data_val_modified_update_views(self, updated_list=None):
@@ -143,8 +143,8 @@ def geology_metadata_modified_update_views(self, updated_list=None):
     create_geology_tree(self)
     create_topology_tree(self)
     """Re-connect signals."""
-    self.GeologyTreeWidget.itemChanged.connect(self.toggle_geology_topology_visibility)
-    self.TopologyTreeWidget.itemChanged.connect(self.toggle_geology_topology_visibility)
+    self.GeologyTreeWidget.itemChanged.connect(self.toggle_geology_visibility )
+    self.TopologyTreeWidget.itemChanged.connect(self.toggle_geology_visibility )
 
 
 def geology_legend_modified_update_views(self, updated_list=None):

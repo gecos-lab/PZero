@@ -83,7 +83,7 @@ def create_backgrounds_tree(self):
     """Send messages. Note that with tristate several signals are emitted in a sequence, one for each
     changed item, but upper levels do not broadcast uid's so they are filtered in the toggle method."""
     self.BackgroundsTreeWidget.itemChanged.connect(
-        self.toggle_backgrounds_topology_visibility
+        self.toggle_backgrounds_visibility
     )
     self.BackgroundsTreeWidget.expandAll()
 
@@ -163,7 +163,7 @@ def create_backgrounds_topology_tree(self):
     """Send messages. Note that with tristate several signals are emitted in a sequence, one for each
     changed item, but upper levels do not broadcast uid's so they are filtered in the toggle method."""
     self.BackgroundsTopologyTreeWidget.itemChanged.connect(
-        self.toggle_backgrounds_topology_visibility
+        self.toggle_backgrounds_visibility
     )
     self.BackgroundsTopologyTreeWidget.expandAll()
 
@@ -353,7 +353,7 @@ def update_backgrounds_tree_added(self, new_list=None, sec_uid=None):
             self.BackgroundsTreeWidget.insertTopLevelItem(0, flevel_3)
             break
     self.BackgroundsTreeWidget.itemChanged.connect(
-        self.toggle_backgrounds_topology_visibility
+        self.toggle_backgrounds_visibility
     )
     self.BackgroundsTreeWidget.expandAll()
 
@@ -617,7 +617,7 @@ def update_backgrounds_topology_tree_added(self, new_list=None, sec_uid=None):
             self.BackgroundsTopologyTreeWidget.insertTopLevelItem(0, tlevel_3)
             break
     self.BackgroundsTopologyTreeWidget.itemChanged.connect(
-        self.toggle_geology_topology_visibility
+        self.toggle_geology_visibility 
     )
     self.BackgroundsTopologyTreeWidget.expandAll()
 
@@ -715,9 +715,9 @@ def update_backgrounds_topology_checkboxes(self, uid=None, uid_checkState=None):
         item.setCheckState(0, Qt.Unchecked)
 
 
-def toggle_backgrounds_topology_visibility(self, item):
+def toggle_backgrounds_visibility(self, item):
 
-    """Called by self.BackgroundsTreeWidget.itemChanged.connect(self.toggle_backgrounds_topology_visibility) and self.BackgroundsTopologyTreeWidget.itemChanged.connect(self.toggle_backgrounds_topology_visibility)"""
+    """Called by self.BackgroundsTreeWidget.itemChanged.connect(self.toggle_backgrounds_visibility) and self.BackgroundsTopologyTreeWidget.itemChanged.connect(self.toggle_backgrounds_visibility)"""
 
     name = item.text(0)  # not used
     uid = item.text(1)
@@ -745,8 +745,8 @@ def toggle_backgrounds_topology_visibility(self, item):
             uid=uid, uid_checkState=uid_checkState
         )
         self.BackgroundsTreeWidget.itemChanged.connect(
-            self.toggle_backgrounds_topology_visibility
+            self.toggle_backgrounds_visibility
         )
         self.BackgroundsTopologyTreeWidget.itemChanged.connect(
-            self.toggle_backgrounds_topology_visibility
+            self.toggle_backgrounds_visibility
         )
