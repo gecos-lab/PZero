@@ -169,9 +169,9 @@ def move_line(self, vector):
 
     for current_uid in self.selected_uids:
         if (
-            self.parent.geol_coll.get_uid_topological_type(current_uid) != "PolyLine"
+            self.parent.geol_coll.get_uid_topology(current_uid) != "PolyLine"
         ) and (
-            self.parent.geol_coll.get_uid_topological_type(current_uid) != "XsPolyLine"
+            self.parent.geol_coll.get_uid_topology(current_uid) != "XsPolyLine"
         ):
             print(" -- Selected data is not a line -- ")
             return
@@ -225,9 +225,9 @@ def rotate_line(self):
     )
     for current_uid in self.selected_uids:
         if (
-            self.parent.geol_coll.get_uid_topological_type(current_uid) != "PolyLine"
+            self.parent.geol_coll.get_uid_topology(current_uid) != "PolyLine"
         ) and (
-            self.parent.geol_coll.get_uid_topological_type(current_uid) != "XsPolyLine"
+            self.parent.geol_coll.get_uid_topology(current_uid) != "XsPolyLine"
         ):
             print(" -- Selected data is not a line -- ")
             return
@@ -305,10 +305,10 @@ def extend_line(self):
         print(" -- No input data selected -- ")
         return
     if (
-        self.parent.geol_coll.get_uid_topological_type(self.selected_uids[0])
+        self.parent.geol_coll.get_uid_topology(self.selected_uids[0])
         != "PolyLine"
     ) and (
-        self.parent.geol_coll.get_uid_topological_type(self.selected_uids[0])
+        self.parent.geol_coll.get_uid_topology(self.selected_uids[0])
         != "XsPolyLine"
     ):
         print(" -- Selected data is not a line -- ")
@@ -350,10 +350,10 @@ def split_line_line(self):
     self.disable_actions()
     current_uid_scissors = self.selected_uids[-1]
     if (
-        self.parent.geol_coll.get_uid_topological_type(current_uid_scissors)
+        self.parent.geol_coll.get_uid_topology(current_uid_scissors)
         != "PolyLine"
     ) and (
-        self.parent.geol_coll.get_uid_topological_type(current_uid_scissors)
+        self.parent.geol_coll.get_uid_topology(current_uid_scissors)
         != "XsPolyLine"
     ):
         print(" -- Selected scissor is not a line -- ")
@@ -372,10 +372,10 @@ def split_line_line(self):
 
     for current_uid_paper in self.selected_uids[:-1]:
         if (
-            self.parent.geol_coll.get_uid_topological_type(current_uid_paper)
+            self.parent.geol_coll.get_uid_topology(current_uid_paper)
             != "PolyLine"
         ) and (
-            self.parent.geol_coll.get_uid_topological_type(current_uid_paper)
+            self.parent.geol_coll.get_uid_topology(current_uid_paper)
             != "XsPolyLine"
         ):
             print(" -- Selected paper is not a line -- ")
@@ -598,10 +598,10 @@ def split_line_existing_point(self):
         print(" -- No input data selected -- ")
         return
     if (
-        self.parent.geol_coll.get_uid_topological_type(self.selected_uids[0])
+        self.parent.geol_coll.get_uid_topology(self.selected_uids[0])
         != "PolyLine"
     ) and (
-        self.parent.geol_coll.get_uid_topological_type(self.selected_uids[0])
+        self.parent.geol_coll.get_uid_topology(self.selected_uids[0])
         != "XsPolyLine"
     ):
         print(" -- Selected data is not a line -- ")
@@ -643,10 +643,10 @@ def merge_lines(self):
         print(" -- Not enough input data selected. Select at least 2 objects -- ")
         return
     if (
-        self.parent.geol_coll.get_uid_topological_type(self.selected_uids[0])
+        self.parent.geol_coll.get_uid_topology(self.selected_uids[0])
         != "PolyLine"
     ) and (
-        self.parent.geol_coll.get_uid_topological_type(self.selected_uids[0])
+        self.parent.geol_coll.get_uid_topology(self.selected_uids[0])
         != "XsPolyLine"
     ):
         print(" -- Selected data is not a line -- ")
@@ -786,9 +786,9 @@ def snap_line(self):
     self.disable_actions()
     current_uid_goal = self.selected_uids[-1]
     if (
-        self.parent.geol_coll.get_uid_topological_type(current_uid_goal) != "PolyLine"
+        self.parent.geol_coll.get_uid_topology(current_uid_goal) != "PolyLine"
     ) and (
-        self.parent.geol_coll.get_uid_topological_type(current_uid_goal) != "XsPolyLine"
+        self.parent.geol_coll.get_uid_topology(current_uid_goal) != "XsPolyLine"
     ):
         print(" -- Selected goal is not a line -- ")
         return
@@ -802,10 +802,10 @@ def snap_line(self):
     for current_uid_snap in self.selected_uids[:-1]:
         print(current_uid_snap)
         if (
-            self.parent.geol_coll.get_uid_topological_type(current_uid_snap)
+            self.parent.geol_coll.get_uid_topology(current_uid_snap)
             != "PolyLine"
         ) and (
-            self.parent.geol_coll.get_uid_topological_type(current_uid_snap)
+            self.parent.geol_coll.get_uid_topology(current_uid_snap)
             != "XsPolyLine"
         ):
             print(" -- Selected snap is not a line -- ")
@@ -943,9 +943,9 @@ def resample_line_distance(
     )
     for current_uid in self.selected_uids:
         if (
-            self.parent.geol_coll.get_uid_topological_type(current_uid) != "PolyLine"
+            self.parent.geol_coll.get_uid_topology(current_uid) != "PolyLine"
         ) and (
-            self.parent.geol_coll.get_uid_topological_type(current_uid) != "XsPolyLine"
+            self.parent.geol_coll.get_uid_topology(current_uid) != "XsPolyLine"
         ):
             print(" -- Selected data is not a line -- ")
             return
@@ -1043,9 +1043,9 @@ def resample_line_number_points(
     )
     for current_uid in self.selected_uids:
         if (
-            self.parent.geol_coll.get_uid_topological_type(current_uid) != "PolyLine"
+            self.parent.geol_coll.get_uid_topology(current_uid) != "PolyLine"
         ) and (
-            self.parent.geol_coll.get_uid_topological_type(current_uid) != "XsPolyLine"
+            self.parent.geol_coll.get_uid_topology(current_uid) != "XsPolyLine"
         ):
             print(" -- Selected data is not a line -- ")
             return
@@ -1150,9 +1150,9 @@ def simplify_line(
     )
     for current_uid in self.selected_uids:
         if (
-            self.parent.geol_coll.get_uid_topological_type(current_uid) != "PolyLine"
+            self.parent.geol_coll.get_uid_topology(current_uid) != "PolyLine"
         ) and (
-            self.parent.geol_coll.get_uid_topological_type(current_uid) != "XsPolyLine"
+            self.parent.geol_coll.get_uid_topology(current_uid) != "XsPolyLine"
         ):
             print(" -- Selected data is not a line -- ")
             return
@@ -1240,10 +1240,10 @@ def copy_parallel(
         print(" -- No input data selected -- ")
         return
     if (
-        self.parent.geol_coll.get_uid_topological_type(self.selected_uids[0])
+        self.parent.geol_coll.get_uid_topology(self.selected_uids[0])
         != "PolyLine"
     ) and (
-        self.parent.geol_coll.get_uid_topological_type(self.selected_uids[0])
+        self.parent.geol_coll.get_uid_topology(self.selected_uids[0])
         != "XsPolyLine"
     ):
         print(" -- Selected data is not a line -- ")
@@ -1277,7 +1277,7 @@ def copy_parallel(
     line_dict["geological_type"] = self.parent.geol_coll.df.loc[
         self.parent.geol_coll.df["uid"] == input_uid, "geological_type"
     ].values[0]
-    line_dict["geological_feature"] = self.parent.geol_coll.get_uid_geological_feature(
+    line_dict["geological_feature"] = self.parent.geol_coll.get_uid_feature(
         self.selected_uids[0]
     )
     line_dict["scenario"] = self.parent.geol_coll.get_uid_scenario(
@@ -1359,10 +1359,10 @@ def copy_kink(
         print(" -- No input data selected -- ")
         return
     if (
-        self.parent.geol_coll.get_uid_topological_type(self.selected_uids[0])
+        self.parent.geol_coll.get_uid_topology(self.selected_uids[0])
         != "PolyLine"
     ) and (
-        self.parent.geol_coll.get_uid_topological_type(self.selected_uids[0])
+        self.parent.geol_coll.get_uid_topology(self.selected_uids[0])
         != "XsPolyLine"
     ):
         print(" -- Selected data is not a line -- ")
@@ -1396,7 +1396,7 @@ def copy_kink(
     line_dict["geological_type"] = self.parent.geol_coll.df.loc[
         self.parent.geol_coll.df["uid"] == input_uid, "geological_type"
     ].values[0]
-    line_dict["geological_feature"] = self.parent.geol_coll.get_uid_geological_feature(
+    line_dict["geological_feature"] = self.parent.geol_coll.get_uid_feature(
         self.selected_uids[0]
     )
     line_dict["scenario"] = self.parent.geol_coll.get_uid_scenario(
@@ -1475,10 +1475,10 @@ def copy_similar(
         print(" -- No input data selected -- ")
         return
     if (
-        self.parent.geol_coll.get_uid_topological_type(self.selected_uids[0])
+        self.parent.geol_coll.get_uid_topology(self.selected_uids[0])
         != "PolyLine"
     ) and (
-        self.parent.geol_coll.get_uid_topological_type(self.selected_uids[0])
+        self.parent.geol_coll.get_uid_topology(self.selected_uids[0])
         != "XsPolyLine"
     ):
         print(" -- Selected data is not a line -- ")
@@ -1494,7 +1494,7 @@ def copy_similar(
     line_dict["geological_type"] = self.parent.geol_coll.df.loc[
         self.parent.geol_coll.df["uid"] == input_uid, "geological_type"
     ].values[0]
-    line_dict["geological_feature"] = self.parent.geol_coll.get_uid_geological_feature(
+    line_dict["geological_feature"] = self.parent.geol_coll.get_uid_feature(
         self.selected_uids[0]
     )
     line_dict["scenario"] = self.parent.geol_coll.get_uid_scenario(

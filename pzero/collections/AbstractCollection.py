@@ -242,7 +242,7 @@ class BaseCollection(ABC):
         """Initialize Pandas dataframe."""
         self.df = DataFrame(columns=self.entity_dict_keys)
 
-    def get_topological_type_uids(self, topological_type: str = None) -> list:
+    def get_topology_uids(self, topological_type: str = None) -> list:
         """Get list of uids of a given topological_type."""
         # Use the query method in the future?
         return self.df.loc[self.df["topological_type"] == topological_type, "uid"].to_list()
@@ -261,12 +261,12 @@ class BaseCollection(ABC):
         # Use the query method in the future?
         return self.df.loc[self.df["name"] == name, "uid"].to_list()
 
-    def get_uid_topological_type(self, uid: str = None) -> str:
+    def get_uid_topology(self, uid: str = None) -> str:
         """Get value topological type from uid."""
         # Use the query method in the future?
         return self.df.loc[self.df["uid"] == uid, "topological_type"].values[0]
 
-    def set_uid_topological_type(self, uid: str = None, topological_type: str = None):
+    def set_uid_topology(self, uid: str = None, topological_type: str = None):
         """Set topological type from uid."""
         self.df.loc[self.df["uid"] == uid, "topological_type"] = topological_type
 

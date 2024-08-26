@@ -509,9 +509,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             xsect_list = []
             for uid in self.selected_uids:
                 name_list.append(collection.get_uid_name(uid))
-                topo_type_list.append(collection.get_uid_topological_type(uid))
-                geo_type_list.append(collection.get_uid_geological_type(uid))
-                feature_list.append(collection.get_uid_geological_feature(uid))
+                topo_type_list.append(collection.get_uid_topology(uid))
+                geo_type_list.append(collection.get_uid_type(uid))
+                feature_list.append(collection.get_uid_feature(uid))
                 scenario_list.append(collection.get_uid_scenario(uid))
                 xsect_list.append(collection.get_uid_scenario(uid))
             name_list = list(set(name_list))
@@ -537,7 +537,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             xsect_list = []
             for uid in self.selected_uids:
                 name_list.append(collection.get_uid_name(uid))
-                dom_type_list.append(collection.get_uid_topological_type(uid))
+                dom_type_list.append(collection.get_uid_topology(uid))
                 xsect_list.append(collection.get_uid_scenario(uid))
             name_list = list(set(name_list))
             dom_type_list = list(set(dom_type_list))
@@ -591,7 +591,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         """Loop that collects all selected items to create the merge. Only entities of the same
         topological_type as chosen in the widget are merged, others are discarded."""
         for uid in self.selected_uids:
-            if new_dict["topological_type"] == collection.get_uid_topological_type(uid):
+            if new_dict["topological_type"] == collection.get_uid_topology(uid):
                 vtkappend.AddInputData(collection.get_uid_vtk_obj(uid))
                 if remove_merged_option == 1:
                     collection.remove_entity(uid=uid)
@@ -1668,7 +1668,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 parent=self,
             )
             for uid in self.dom_coll.df["uid"].to_list():
-                if self.dom_coll.get_uid_topological_type(uid) == "DEM":
+                if self.dom_coll.get_uid_topology(uid) == "DEM":
                     if not os.path.isfile((in_dir_name + "/" + uid + ".vts")):
                         print("error: missing VTK file")
                         return
@@ -1678,7 +1678,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     sg_reader.Update()
                     vtk_object.ShallowCopy(sg_reader.GetOutput())
                     vtk_object.Modified()
-                elif self.dom_coll.get_uid_topological_type(uid) == "DomXs":
+                elif self.dom_coll.get_uid_topology(uid) == "DomXs":
                     xsect_uid = self.dom_coll.get_uid_x_section(uid)
                     vtk_object = XsPolyLine(x_section_uid=xsect_uid, parent=self)
                     pl_reader = vtkXMLPolyDataReader()
@@ -1882,9 +1882,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 if not os.path.isfile((in_dir_name + "/" + uid + ".vtp")):
                     print("error: missing VTK file")
                     return
-                if self.boundary_coll.get_uid_topological_type(uid) == "PolyLine":
+                if self.boundary_coll.get_uid_topology(uid) == "PolyLine":
                     vtk_object = PolyLine()
-                elif self.boundary_coll.get_uid_topological_type(uid) == "TriSurf":
+                elif self.boundary_coll.get_uid_topology(uid) == "TriSurf":
                     vtk_object = TriSurf()
                 pd_reader = vtkXMLPolyDataReader()
                 pd_reader.SetFileName(in_dir_name + "/" + uid + ".vtp")
@@ -1975,20 +1975,20 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 if not os.path.isfile((in_dir_name + "/" + uid + ".vtp")):
                     print("error: missing VTK file")
                     return
-                if self.geol_coll.get_uid_topological_type(uid) == "VertexSet":
+                if self.geol_coll.get_uid_topology(uid) == "VertexSet":
                     if "dip" in self.geol_coll.get_uid_properties_names(uid):
                         vtk_object = Attitude()
                     else:
                         vtk_object = VertexSet()
-                elif self.geol_coll.get_uid_topological_type(uid) == "PolyLine":
+                elif self.geol_coll.get_uid_topology(uid) == "PolyLine":
                     vtk_object = PolyLine()
-                elif self.geol_coll.get_uid_topological_type(uid) == "TriSurf":
+                elif self.geol_coll.get_uid_topology(uid) == "TriSurf":
                     vtk_object = TriSurf()
-                elif self.geol_coll.get_uid_topological_type(uid) == "XsVertexSet":
+                elif self.geol_coll.get_uid_topology(uid) == "XsVertexSet":
                     vtk_object = XsVertexSet(
                         self.geol_coll.get_uid_x_section(uid), parent=self
                     )
-                elif self.geol_coll.get_uid_topological_type(uid) == "XsPolyLine":
+                elif self.geol_coll.get_uid_topology(uid) == "XsPolyLine":
                     vtk_object = XsPolyLine(
                         self.geol_coll.get_uid_x_section(uid), parent=self
                     )
@@ -2034,17 +2034,17 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 if not os.path.isfile((in_dir_name + "/" + uid + ".vtp")):
                     print("error: missing VTK file")
                     return
-                if self.fluids_coll.get_uid_topological_type(uid) == "VertexSet":
+                if self.fluids_coll.get_uid_topology(uid) == "VertexSet":
                     vtk_object = VertexSet()
-                elif self.fluids_coll.get_uid_topological_type(uid) == "PolyLine":
+                elif self.fluids_coll.get_uid_topology(uid) == "PolyLine":
                     vtk_object = PolyLine()
-                elif self.fluids_coll.get_uid_topological_type(uid) == "TriSurf":
+                elif self.fluids_coll.get_uid_topology(uid) == "TriSurf":
                     vtk_object = TriSurf()
-                elif self.fluids_coll.get_uid_topological_type(uid) == "XsVertexSet":
+                elif self.fluids_coll.get_uid_topology(uid) == "XsVertexSet":
                     vtk_object = XsVertexSet(
                         self.fluids_coll.get_uid_x_section(uid), parent=self
                     )
-                elif self.fluids_coll.get_uid_topological_type(uid) == "XsPolyLine":
+                elif self.fluids_coll.get_uid_topology(uid) == "XsPolyLine":
                     vtk_object = XsPolyLine(
                         self.fluids_coll.get_uid_x_section(uid), parent=self
                     )
@@ -2092,15 +2092,15 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 if not os.path.isfile((in_dir_name + "/" + uid + ".vtp")):
                     print("error: missing VTK file")
                     return
-                if self.backgrounds_coll.get_uid_topological_type(uid) == "VertexSet":
+                if self.backgrounds_coll.get_uid_topology(uid) == "VertexSet":
                     vtk_object = VertexSet()
-                elif self.backgrounds_coll.get_uid_topological_type(uid) == "PolyLine":
+                elif self.backgrounds_coll.get_uid_topology(uid) == "PolyLine":
                     vtk_object = PolyLine()
-                # elif self.backgrounds_coll.get_uid_topological_type(uid) == 'TriSurf':
+                # elif self.backgrounds_coll.get_uid_topology(uid) == 'TriSurf':
                 #     vtk_object = TriSurf()
-                # elif self.backgrounds_coll.get_uid_topological_type(uid) == 'XsVertexSet':
+                # elif self.backgrounds_coll.get_uid_topology(uid) == 'XsVertexSet':
                 #     vtk_object = XsVertexSet(self.backgrounds_coll.get_uid_x_section(uid), parent=self)
-                # elif self.backgrounds_coll.get_uid_topological_type(uid) == 'XsPolyLine':
+                # elif self.backgrounds_coll.get_uid_topology(uid) == 'XsPolyLine':
                 #     vtk_object = XsPolyLine(self.backgrounds_coll.get_uid_x_section(uid), parent=self)
                 pd_reader = vtkXMLPolyDataReader()
                 pd_reader.SetFileName(in_dir_name + "/" + uid + ".vtp")

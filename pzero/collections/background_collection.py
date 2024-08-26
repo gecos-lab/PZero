@@ -164,9 +164,9 @@ class BackgroundCollection(BaseCollection):
         # ====== CAN BE UNIFIED AS COMMON METHOD OF THE ABSTRACT COLLECTION IF "GEOLOGICAL" METHODS WILL BE UNIFIED ====
         entity_dict = deepcopy(self.entity_dict)
         entity_dict["name"] = self.get_uid_name(uid)
-        entity_dict["topological_type"] = self.get_uid_topological_type(uid)
-        entity_dict["background_type"] = self.get_uid_background_type(uid)
-        entity_dict["background_feature"] = self.get_uid_background_feature(uid)
+        entity_dict["topological_type"] = self.get_uid_topology(uid)
+        entity_dict["background_type"] = self.get_uid_type(uid)
+        entity_dict["background_feature"] = self.get_uid_feature(uid)
         entity_dict["scenario"] = self.get_uid_scenario(uid)
         entity_dict["properties_names"] = self.get_uid_properties_names(uid)
         entity_dict["properties_components"] = self.get_uid_properties_components(uid)
@@ -325,11 +325,11 @@ class BackgroundCollection(BaseCollection):
         # ====== in the future use the query method? ========================================
         return self.df.loc[self.df[self.coll_type_name] == coll_type, "uid"].to_list()
 
-    def get_uid_background_type(self, uid: str = None):
+    def get_uid_type(self, uid: str = None):
         """Get collection type from uid."""
         return self.df.loc[self.df["uid"] == uid, self.coll_type_name].values[0]
 
-    def set_uid_background_type(self, uid=None, background_type=None):
+    def set_uid_type(self, uid=None, background_type=None):
         """Set collection type from uid."""
         self.df.loc[self.df["uid"] == uid, self.coll_type_name] = background_type
 
@@ -338,10 +338,10 @@ class BackgroundCollection(BaseCollection):
         # ====== in the future use the query method? ========================================
         return self.df.loc[self.df[self.coll_feature_name] == coll_feature, "uid"].to_list()
 
-    def get_uid_background_feature(self, uid: str = None):
+    def get_uid_feature(self, uid: str = None):
         """Get collection type from uid."""
         return self.df.loc[self.df["uid"] == uid, self.coll_feature_name].values[0]
 
-    def set_uid_background_feature(self, uid=None, geological_feature=None):
+    def set_uid_feature(self, uid=None, geological_feature=None):
         """Set collection type from uid."""
         self.df.loc[self.df["uid"] == uid, self.coll_feature_name] = geological_feature

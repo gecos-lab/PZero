@@ -184,7 +184,7 @@ def update_backgrounds_tree_added(self, new_list=None, sec_uid=None):
     for uid in uid_list:
         if (
                 self.BackgroundsTreeWidget.findItems(
-                    self.parent.backgrounds_coll.get_uid_background_type(uid),
+                    self.parent.backgrounds_coll.get_uid_type(uid),
                     Qt.MatchExactly,
                     0,
                 )
@@ -194,37 +194,37 @@ def update_backgrounds_tree_added(self, new_list=None, sec_uid=None):
             counter_1 = 0
             for child_1 in range(
                     self.BackgroundsTreeWidget.findItems(
-                        self.parent.backgrounds_coll.get_uid_background_type(uid),
+                        self.parent.backgrounds_coll.get_uid_type(uid),
                         Qt.MatchExactly,
                         0,
                     )[0].childCount()
             ):
                 """for cycle that loops n times as the number of subItems in the specific background type branch"""
                 if self.BackgroundsTreeWidget.findItems(
-                        self.parent.backgrounds_coll.get_uid_background_type(uid),
+                        self.parent.backgrounds_coll.get_uid_type(uid),
                         Qt.MatchExactly,
                         0,
                 )[0].child(child_1).text(
                     0
-                ) == self.parent.backgrounds_coll.get_uid_background_feature(
+                ) == self.parent.backgrounds_coll.get_uid_feature(
                     uid
                 ):
                     counter_1 += 1
             if counter_1 != 0:
                 for child_1 in range(
                         self.BackgroundsTreeWidget.findItems(
-                            self.parent.backgrounds_coll.get_uid_background_type(uid),
+                            self.parent.backgrounds_coll.get_uid_type(uid),
                             Qt.MatchExactly,
                             0,
                         )[0].childCount()
                 ):
                     if self.BackgroundsTreeWidget.findItems(
-                            self.parent.backgrounds_coll.get_uid_background_type(uid),
+                            self.parent.backgrounds_coll.get_uid_type(uid),
                             Qt.MatchExactly,
                             0,
                     )[0].child(child_1).text(
                         0
-                    ) == self.parent.backgrounds_coll.get_uid_background_feature(
+                    ) == self.parent.backgrounds_coll.get_uid_feature(
                         uid
                     ):
                         """Already exists a TreeItem (2 level) for the background feature"""
@@ -244,7 +244,7 @@ def update_backgrounds_tree_added(self, new_list=None, sec_uid=None):
                         name = self.parent.backgrounds_coll.get_uid_name(uid)
                         flevel_3 = QTreeWidgetItem(
                             self.BackgroundsTreeWidget.findItems(
-                                self.parent.backgrounds_coll.get_uid_background_type(
+                                self.parent.backgrounds_coll.get_uid_type(
                                     uid
                                 ),
                                 Qt.MatchExactly,
@@ -273,11 +273,11 @@ def update_backgrounds_tree_added(self, new_list=None, sec_uid=None):
                 """Same background type, different background feature"""
                 flevel_2 = QTreeWidgetItem(
                     self.BackgroundsTreeWidget.findItems(
-                        self.parent.backgrounds_coll.get_uid_background_type(uid),
+                        self.parent.backgrounds_coll.get_uid_type(uid),
                         Qt.MatchExactly,
                         0,
                     )[0],
-                    [self.parent.backgrounds_coll.get_uid_background_feature(uid)],
+                    [self.parent.backgrounds_coll.get_uid_feature(uid)],
                 )
                 flevel_2.setFlags(
                     flevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
@@ -316,7 +316,7 @@ def update_backgrounds_tree_added(self, new_list=None, sec_uid=None):
             """Different background type and background feature"""
             flevel_1 = QTreeWidgetItem(
                 self.BackgroundsTreeWidget,
-                [self.parent.backgrounds_coll.get_uid_background_type(uid)],
+                [self.parent.backgrounds_coll.get_uid_type(uid)],
             )
             flevel_1.setFlags(
                 flevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
@@ -324,7 +324,7 @@ def update_backgrounds_tree_added(self, new_list=None, sec_uid=None):
             self.BackgroundsTreeWidget.insertTopLevelItem(0, flevel_1)
             flevel_2 = QTreeWidgetItem(
                 flevel_1,
-                [self.parent.backgrounds_coll.get_uid_background_feature(uid)],
+                [self.parent.backgrounds_coll.get_uid_feature(uid)],
             )
             flevel_2.setFlags(
                 flevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
@@ -447,7 +447,7 @@ def update_backgrounds_topology_tree_added(self, new_list=None, sec_uid=None):
     for uid in uid_list:
         if (
                 self.BackgroundsTopologyTreeWidget.findItems(
-                    self.parent.backgrounds_coll.get_uid_topological_type(uid),
+                    self.parent.backgrounds_coll.get_uid_topology(uid),
                     Qt.MatchExactly,
                     0,
                 )
@@ -457,37 +457,37 @@ def update_backgrounds_topology_tree_added(self, new_list=None, sec_uid=None):
             counter_1 = 0
             for child_1 in range(
                     self.BackgroundsTopologyTreeWidget.findItems(
-                        self.parent.backgrounds_coll.get_uid_topological_type(uid),
+                        self.parent.backgrounds_coll.get_uid_topology(uid),
                         Qt.MatchExactly,
                         0,
                     )[0].childCount()
             ):
                 """for cycle that loops n times as the number of subItems in the specific topological type branch"""
                 if self.BackgroundsTopologyTreeWidget.findItems(
-                        self.parent.backgrounds_coll.get_uid_topological_type(uid),
+                        self.parent.backgrounds_coll.get_uid_topology(uid),
                         Qt.MatchExactly,
                         0,
                 )[0].child(child_1).text(
                     0
-                ) == self.parent.backgrounds_coll.get_uid_background_feature(
+                ) == self.parent.backgrounds_coll.get_uid_feature(
                     uid
                 ):
                     counter_1 += 1
             if counter_1 != 0:
                 for child_1 in range(
                         self.BackgroundsTopologyTreeWidget.findItems(
-                            self.parent.backgrounds_coll.get_uid_topological_type(uid),
+                            self.parent.backgrounds_coll.get_uid_topology(uid),
                             Qt.MatchExactly,
                             0,
                         )[0].childCount()
                 ):
                     if self.BackgroundsTopologyTreeWidget.findItems(
-                            self.parent.backgrounds_coll.get_uid_topological_type(uid),
+                            self.parent.backgrounds_coll.get_uid_topology(uid),
                             Qt.MatchExactly,
                             0,
                     )[0].child(child_1).text(
                         0
-                    ) == self.parent.backgrounds_coll.get_uid_background_feature(
+                    ) == self.parent.backgrounds_coll.get_uid_feature(
                         uid
                     ):
                         """Same topological type and feature"""
@@ -505,7 +505,7 @@ def update_backgrounds_topology_tree_added(self, new_list=None, sec_uid=None):
                         name = self.parent.backgrounds_coll.get_uid_name(uid)
                         tlevel_3 = QTreeWidgetItem(
                             self.BackgroundsTopologyTreeWidget.findItems(
-                                self.parent.backgrounds_coll.get_uid_topological_type(
+                                self.parent.backgrounds_coll.get_uid_topology(
                                     uid
                                 ),
                                 Qt.MatchExactly,
@@ -536,11 +536,11 @@ def update_backgrounds_topology_tree_added(self, new_list=None, sec_uid=None):
                 """Same topological type, different feature"""
                 tlevel_2 = QTreeWidgetItem(
                     self.BackgroundsTopologyTreeWidget.findItems(
-                        self.parent.backgrounds_coll.get_uid_topological_type(uid),
+                        self.parent.backgrounds_coll.get_uid_topology(uid),
                         Qt.MatchExactly,
                         0,
                     )[0],
-                    [self.parent.backgrounds_coll.get_uid_background_feature(uid)],
+                    [self.parent.backgrounds_coll.get_uid_feature(uid)],
                 )
                 tlevel_2.setFlags(
                     tlevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
@@ -578,7 +578,7 @@ def update_backgrounds_topology_tree_added(self, new_list=None, sec_uid=None):
             """Different topological type and feature"""
             tlevel_1 = QTreeWidgetItem(
                 self.BackgroundsTopologyTreeWidget,
-                [self.parent.backgrounds_coll.get_uid_topological_type(uid)],
+                [self.parent.backgrounds_coll.get_uid_topology(uid)],
             )
             tlevel_1.setFlags(
                 tlevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
@@ -586,7 +586,7 @@ def update_backgrounds_topology_tree_added(self, new_list=None, sec_uid=None):
             self.BackgroundsTopologyTreeWidget.insertTopLevelItem(0, tlevel_1)
             tlevel_2 = QTreeWidgetItem(
                 tlevel_1,
-                [self.parent.backgrounds_coll.get_uid_background_feature(uid)],
+                [self.parent.backgrounds_coll.get_uid_feature(uid)],
             )
             tlevel_2.setFlags(
                 tlevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
