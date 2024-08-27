@@ -102,7 +102,7 @@ def create_fluids_topology_tree(self):
     )
     self.FluidsTopologyTreeWidget.hideColumn(1)  # hide the uid column
     self.FluidsTopologyTreeWidget.setItemsExpandable(True)
-    topo_types = pd_unique(self.parent.fluids_coll.df.query(self.view_filter)["topological_type"])
+    topo_types = pd_unique(self.parent.fluids_coll.df.query(self.view_filter)["topology"])
 
     for topo_type in topo_types:
         tlevel_1 = QTreeWidgetItem(
@@ -113,7 +113,7 @@ def create_fluids_topology_tree(self):
         )
         for scenario in pd_unique(
                 self.parent.fluids_coll.df.query(self.view_filter).loc[
-                    self.parent.fluids_coll.df.query(self.view_filter)["topological_type"] == topo_type,
+                    self.parent.fluids_coll.df.query(self.view_filter)["topology"] == topo_type,
                     "scenario",
                 ]
         ):
@@ -124,7 +124,7 @@ def create_fluids_topology_tree(self):
                 tlevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
             )
             uids = self.parent.fluids_coll.df.query(self.view_filter).loc[
-                (self.parent.fluids_coll.df.query(self.view_filter)["topological_type"] == topo_type)
+                (self.parent.fluids_coll.df.query(self.view_filter)["topology"] == topo_type)
                 & (self.parent.fluids_coll.df.query(self.view_filter)["scenario"] == scenario),
                 "uid",
             ].to_list()

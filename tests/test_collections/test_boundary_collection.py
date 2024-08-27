@@ -29,22 +29,22 @@ class TestBoundaryCollection:
 
     boundary_entity_dict = {'uid': "9",
                             'name': "boundary-test",
-                            'topological_type': "test_topological_type",
+                            'topology': "test_topological_type",
                             'x_section': "[2, 0]",
                             'vtk_obj': test_vtk_obj}
     boundary_entity_dict2 = {'uid': "10",
                             'name': "boundary-test2",
-                            'topological_type': "Polyline",
+                            'topology': "Polyline",
                             'x_section': "[4, 3]",
                             'vtk_obj': test_vtk_obj2}
     boundary_entity_dict3 = {'uid': "213a",
                         'name': "boundary-test3",
-                        'topological_type': "VertexSet",
+                        'topology': "VertexSet",
                         'x_section': "[-3, -5]",
                         'vtk_obj': test_vtk_obj3}
     boundary_entity_dict4 = {'uid': "81f3a",
                     'name': "boundary-test4",
-                    'topological_type': "VertexSet",
+                    'topology': "VertexSet",
                     'x_section': "[5, 9]",
                     'vtk_obj': test_vtk_obj4}
 
@@ -128,9 +128,9 @@ class TestBoundaryCollection:
         boundary_coll_istance.add_entity_from_dict(self.boundary_entity_dict2)
         boundary_coll_istance.add_entity_from_dict(self.boundary_entity_dict3)
 
-        assert [self.boundary_entity_dict['uid']] == boundary_coll_istance.get_topology_uids(self.boundary_entity_dict['topological_type'])
-        assert [self.boundary_entity_dict2['uid']] == boundary_coll_istance.get_topology_uids(self.boundary_entity_dict2['topological_type'])
-        assert [self.boundary_entity_dict3['uid']] == boundary_coll_istance.get_topology_uids(self.boundary_entity_dict3['topological_type'])
+        assert [self.boundary_entity_dict['uid']] == boundary_coll_istance.get_topology_uids(self.boundary_entity_dict['topology'])
+        assert [self.boundary_entity_dict2['uid']] == boundary_coll_istance.get_topology_uids(self.boundary_entity_dict2['topology'])
+        assert [self.boundary_entity_dict3['uid']] == boundary_coll_istance.get_topology_uids(self.boundary_entity_dict3['topology'])
     
     def test_get_same_topological_type_uids(self):
         boundary_coll_istance = BoundaryCollection(parent=FakeWindow)
@@ -142,7 +142,7 @@ class TestBoundaryCollection:
         boundary_coll_istance.add_entity_from_dict(self.boundary_entity_dict4)
 
         assert boundary_coll_istance.get_number_of_entities() == 4
-        assert [self.boundary_entity_dict3['uid'], self.boundary_entity_dict4['uid']] == boundary_coll_istance.get_topology_uids(self.boundary_entity_dict3['topological_type'])
+        assert [self.boundary_entity_dict3['uid'], self.boundary_entity_dict4['uid']] == boundary_coll_istance.get_topology_uids(self.boundary_entity_dict3['topology'])
 
     def test_get_uid_names(self):
         boundary_coll_istance = BoundaryCollection(parent=FakeWindow)
@@ -186,9 +186,9 @@ class TestBoundaryCollection:
         boundary_coll_istance.add_entity_from_dict(self.boundary_entity_dict2)
         boundary_coll_istance.add_entity_from_dict(self.boundary_entity_dict3)
 
-        assert self.boundary_entity_dict['topological_type'] == boundary_coll_istance.get_uid_topology(self.boundary_entity_dict['uid'])
-        assert self.boundary_entity_dict2['topological_type'] == boundary_coll_istance.get_uid_topology(self.boundary_entity_dict2['uid'])
-        assert self.boundary_entity_dict3['topological_type'] == boundary_coll_istance.get_uid_topology(self.boundary_entity_dict3['uid'])
+        assert self.boundary_entity_dict['topology'] == boundary_coll_istance.get_uid_topology(self.boundary_entity_dict['uid'])
+        assert self.boundary_entity_dict2['topology'] == boundary_coll_istance.get_uid_topology(self.boundary_entity_dict2['uid'])
+        assert self.boundary_entity_dict3['topology'] == boundary_coll_istance.get_uid_topology(self.boundary_entity_dict3['uid'])
 
     def test_set_uid_topological_type(self):
         boundary_coll_istance = BoundaryCollection(parent=FakeWindow)

@@ -32,7 +32,7 @@ class Mesh3DCollection(BaseCollection):
         self.entity_dict = {
             "uid": "",
             "name": "undef",
-            "topological_type": "undef",
+            "topology": "undef",
             "scenario": "undef",
             "properties_names": [],
             "properties_components": [],
@@ -43,7 +43,7 @@ class Mesh3DCollection(BaseCollection):
         self.entity_type_dict = {
             "uid": str,
             "name": str,
-            "topological_type": str,
+            "topology": str,
             "scenario": str,
             "properties_names": list,
             "properties_components": list,

@@ -522,7 +522,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             xsect_list = list(set(xsect_list))
             input_dict = {
                 "name": ["New name: ", name_list],
-                "topological_type": ["Topological type", topo_type_list],
+                "topology": ["Topological type", topo_type_list],
                 "geological_type": ["Geological type: ", geo_type_list],
                 "geological_feature": ["Geological feature: ", feature_list],
                 "scenario": ["Scenario: ", scenario_list],
@@ -560,19 +560,19 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             new_dict[key] = updt_dict[key]
         """Create an empty vtk entity from classes VertexSet, PolyLine, TriSurf, XsVertexSet, XsPolyLine (geology), 
         TSDom, PCDom (DOM)."""
-        if new_dict["topological_type"] == "VertexSet":
+        if new_dict["topology"] == "VertexSet":
             new_dict["vtk_obj"] = VertexSet()
-        elif new_dict["topological_type"] == "PolyLine":
+        elif new_dict["topology"] == "PolyLine":
             new_dict["vtk_obj"] = PolyLine()
-        elif new_dict["topological_type"] == "TriSurf":
+        elif new_dict["topology"] == "TriSurf":
             new_dict["vtk_obj"] = TriSurf()
-        elif new_dict["topological_type"] == "XsVertexSet":
+        elif new_dict["topology"] == "XsVertexSet":
             new_dict["vtk_obj"] = XsVertexSet()
-        elif new_dict["topological_type"] == "XsPolyLine":
+        elif new_dict["topology"] == "XsPolyLine":
             new_dict["vtk_obj"] = XsPolyLine()
-        elif new_dict["topological_type"] == "TSDom":
+        elif new_dict["topology"] == "TSDom":
             new_dict["vtk_obj"] = TSDom()
-        elif new_dict["topological_type"] == "PCDom":
+        elif new_dict["topology"] == "PCDom":
             new_dict["vtk_obj"] = PCDom()
         else:
             return
@@ -589,9 +589,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         """Create a vtkAppendPolyData filter to merge all input vtk objects"""
         vtkappend = vtkAppendPolyData()
         """Loop that collects all selected items to create the merge. Only entities of the same
-        topological_type as chosen in the widget are merged, others are discarded."""
+        topology as chosen in the widget are merged, others are discarded."""
         for uid in self.selected_uids:
-            if new_dict["topological_type"] == collection.get_uid_topology(uid):
+            if new_dict["topology"] == collection.get_uid_topology(uid):
                 vtkappend.AddInputData(collection.get_uid_vtk_obj(uid))
                 if remove_merged_option == 1:
                     collection.remove_entity(uid=uid)
@@ -1204,7 +1204,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         )
         for uid in self.dom_coll.df["uid"].to_list():
             if (
-                self.dom_coll.df.loc[self.dom_coll.df["uid"] == uid, "topological_type"].values[
+                self.dom_coll.df.loc[self.dom_coll.df["uid"] == uid, "topology"].values[
                     0
                 ]
                 == "DEM"
@@ -1215,7 +1215,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 sg_writer.Write()
                 prgs_bar.add_one()
             elif (
-                self.dom_coll.df.loc[self.dom_coll.df["uid"] == uid, "topological_type"].values[
+                self.dom_coll.df.loc[self.dom_coll.df["uid"] == uid, "topology"].values[
                     0
                 ]
                 == "DomXs"
@@ -1226,7 +1226,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 pl_writer.Write()
                 prgs_bar.add_one()
             elif (
-                self.dom_coll.df.loc[self.dom_coll.df["uid"] == uid, "topological_type"].values[
+                self.dom_coll.df.loc[self.dom_coll.df["uid"] == uid, "topology"].values[
                     0
                 ]
                 == "PCDom"
@@ -1659,7 +1659,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     new_dom_coll_df.insert(3, "scenario", "undef")
                 self.dom_coll.df = new_dom_coll_df
             if 'dom_type' in self.dom_coll.df.columns:
-                self.dom_coll.df.rename(columns={'dom_type': 'topological_type'}, inplace=True)
+                self.dom_coll.df.rename(columns={'dom_type': 'topology'}, inplace=True)
             prgs_bar = progress_dialog(
                 max_value=self.dom_coll.df.shape[0],
                 title_txt="Open DOM",
@@ -1688,7 +1688,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     vtk_object.Modified()
                 elif (
                     self.dom_coll.df.loc[
-                        self.dom_coll.df["uid"] == uid, "topological_type"
+                        self.dom_coll.df["uid"] == uid, "topology"
                     ].values[0]
                     == "TSDom"
                 ):
@@ -1696,7 +1696,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     vtk_object = TSDom()
                 elif (
                     self.dom_coll.df.loc[
-                        self.dom_coll.df["uid"] == uid, "topological_type"
+                        self.dom_coll.df["uid"] == uid, "topology"
                     ].values[0]
                     == "PCDom"
                 ):

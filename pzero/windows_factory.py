@@ -2611,7 +2611,7 @@ class View3D(VTKView):
             curr_obj_dict["uid"] = str(uuid4())
             curr_obj_dict["name"] = set_opt["name"]
             curr_obj_dict["geological_type"] = set_opt["geological_type"]
-            curr_obj_dict["topological_type"] = "VertexSet"
+            curr_obj_dict["topology"] = "VertexSet"
             curr_obj_dict["geological_feature"] = set_opt["name"]
             curr_obj_dict["properties_names"] = properties_name
             curr_obj_dict["properties_components"] = properties_components
@@ -4573,8 +4573,8 @@ class ViewStereoplot(MPLView):
         self.GeologyTreeWidget.setItemsExpandable(True)
 
         filtered_geo = self.parent.geol_coll.df.loc[
-            (self.parent.geol_coll.df["topological_type"] == "VertexSet")
-            | (self.parent.geol_coll.df["topological_type"] == "XsVertexSet"),
+            (self.parent.geol_coll.df["topology"] == "VertexSet")
+            | (self.parent.geol_coll.df["topology"] == "XsVertexSet"),
             "geological_type"
         ]
         geo_types = pd_unique(filtered_geo)
@@ -4590,8 +4590,8 @@ class ViewStereoplot(MPLView):
             filtered_geo_feat = self.parent.geol_coll.df.loc[
                 (self.parent.geol_coll.df["geological_type"] == geo_type)
                 & (
-                        (self.parent.geol_coll.df["topological_type"] == "VertexSet")
-                        | (self.parent.geol_coll.df["topological_type"] == "XsVertexSet")
+                        (self.parent.geol_coll.df["topology"] == "VertexSet")
+                        | (self.parent.geol_coll.df["topology"] == "XsVertexSet")
                 ),
                 "geological_feature"
             ]
@@ -4623,8 +4623,8 @@ class ViewStereoplot(MPLView):
                         & (self.parent.geol_coll.df["geological_feature"] == feature)
                         & (self.parent.geol_coll.df["scenario"] == scenario)
                         & (
-                                (self.parent.geol_coll.df["topological_type"] == "VertexSet")
-                                | (self.parent.geol_coll.df["topological_type"] == "XsVertexSet")
+                                (self.parent.geol_coll.df["topology"] == "VertexSet")
+                                | (self.parent.geol_coll.df["topology"] == "XsVertexSet")
                         ),
                         "uid"
                     ].to_list()
@@ -4672,9 +4672,9 @@ class ViewStereoplot(MPLView):
         self.TopologyTreeWidget.setItemsExpandable(True)
 
         filtered_topo = self.parent.geol_coll.df.loc[
-            (self.parent.geol_coll.df["topological_type"] == "VertexSet")
-            | (self.parent.geol_coll.df["topological_type"] == "XsVertexSet"),
-            "topological_type"
+            (self.parent.geol_coll.df["topology"] == "VertexSet")
+            | (self.parent.geol_coll.df["topology"] == "XsVertexSet"),
+            "topology"
         ]
         topo_types = pd_unique(filtered_topo)
         for topo_type in topo_types:
@@ -4686,7 +4686,7 @@ class ViewStereoplot(MPLView):
             )
             for scenario in pd_unique(
                     self.parent.geol_coll.df.loc[
-                        self.parent.geol_coll.df["topological_type"] == topo_type,
+                        self.parent.geol_coll.df["topology"] == topo_type,
                         "scenario"
                     ]
             ):
@@ -4698,12 +4698,12 @@ class ViewStereoplot(MPLView):
                 )
 
                 uids = self.parent.geol_coll.df.loc[
-                    (self.parent.geol_coll.df["topological_type"] == topo_type)
+                    (self.parent.geol_coll.df["topology"] == topo_type)
                     & (self.parent.geol_coll.df["scenario"] == scenario)
                     & (
-                            (self.parent.geol_coll.df["topological_type"] == "VertexSet")
+                            (self.parent.geol_coll.df["topology"] == "VertexSet")
                             | (
-                                    self.parent.geol_coll.df["topological_type"]
+                                    self.parent.geol_coll.df["topology"]
                                     == "XsVertexSet"
                             )
                     ),
@@ -5362,7 +5362,7 @@ class ViewStereoplot(MPLView):
         self.ViewFrameLayout.removeWidget(self.canvas)
         self.ViewFrameLayout.removeWidget(self.navi_toolbar)
         self.initialize_interactor(kind=kind, projection=self.proj_type)
-        uids = self.parent.geol_coll.df.loc[self.parent.geol_coll.df["topological_type"] == "VertexSet", "uid"]
+        uids = self.parent.geol_coll.df.loc[self.parent.geol_coll.df["topology"] == "VertexSet", "uid"]
 
         # [Gabriele]It is not always the case that VertexSets have normal data (are attitude measurements). When importing from shp we should add a dialog to identify VertexSets as Attitude measurements
 
@@ -5394,7 +5394,7 @@ class ViewStereoplot(MPLView):
         self.ViewFrameLayout.removeWidget(self.navi_toolbar)
         self.initialize_interactor(kind=self.grid_kind, projection=self.proj_type)
         uids = self.parent.geol_coll.df.loc[
-            self.parent.geol_coll.df["topological_type"] == "VertexSet", "uid"
+            self.parent.geol_coll.df["topology"] == "VertexSet", "uid"
         ]
         for uid in uids:
             show = self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]
@@ -5421,8 +5421,8 @@ class ViewStereoplot(MPLView):
 
         self.initialize_interactor(kind=self.grid_kind, projection=self.proj_type)
         uids = self.parent.geol_coll.df.loc[
-            (self.parent.geol_coll.df["topological_type"] == "VertexSet")
-            | (self.parent.geol_coll.df["topological_type"] == "XsVertexSet"),
+            (self.parent.geol_coll.df["topology"] == "VertexSet")
+            | (self.parent.geol_coll.df["topology"] == "XsVertexSet"),
             "uid",
         ]
 

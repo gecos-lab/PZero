@@ -148,17 +148,17 @@ def gocad2vtk(self=None, in_file_name=None, uid_from_name=None):
             """Store uid of new entity."""
             curr_obj_dict["uid"] = str(uuid.uuid4())
 
-            """Create the empty vtk object with class = topological_type."""
+            """Create the empty vtk object with class = topology."""
             if clean_line[1] == "VSet":
-                curr_obj_dict["topological_type"] = "VertexSet"
+                curr_obj_dict["topology"] = "VertexSet"
                 curr_obj_dict["vtk_obj"] = VertexSet()
                 curr_obj_dict["geological_type"] = type_default 
             elif clean_line[1] == "PLine":
-                curr_obj_dict["topological_type"] = "PolyLine"
+                curr_obj_dict["topology"] = "PolyLine"
                 curr_obj_dict["vtk_obj"] = PolyLine()
                 curr_obj_dict["geological_type"] = type_default 
             elif clean_line[1] == "TSurf":
-                curr_obj_dict["topological_type"] = "TriSurf"
+                curr_obj_dict["topology"] = "TriSurf"
                 curr_obj_dict["vtk_obj"] = TriSurf()
                 curr_obj_dict["geological_type"] = type_default 
             else:
@@ -384,7 +384,7 @@ def gocad2vtk(self=None, in_file_name=None, uid_from_name=None):
             entity_counter += 1  # update entity counter
 
             """Write points and cells TO VTK OBJECT"""
-            if curr_obj_dict["topological_type"] == "VertexSet":
+            if curr_obj_dict["topology"] == "VertexSet":
                 self.TextTerminal.appendPlainText(
                     "Importing Gocad VSet (VertexSet) as a PolyData 0D in VTK with name: "
                     + curr_obj_dict["name"]
@@ -397,7 +397,7 @@ def gocad2vtk(self=None, in_file_name=None, uid_from_name=None):
                     curr_obj_cells.InsertNextCell(vertex)
                 curr_obj_dict["vtk_obj"].SetVerts(curr_obj_cells)
 
-            elif curr_obj_dict["topological_type"] == "PolyLine":
+            elif curr_obj_dict["topology"] == "PolyLine":
                 self.TextTerminal.appendPlainText(
                     "Importing GOCAD PLine (PolyLine) as a PolyData 1D in VTK with name: "
                     + curr_obj_dict["name"]
@@ -405,7 +405,7 @@ def gocad2vtk(self=None, in_file_name=None, uid_from_name=None):
                 curr_obj_dict["vtk_obj"].SetPoints(curr_obj_points)
                 curr_obj_dict["vtk_obj"].SetLines(curr_obj_cells)
 
-            elif curr_obj_dict["topological_type"] == "TriSurf":
+            elif curr_obj_dict["topology"] == "TriSurf":
                 self.TextTerminal.appendPlainText(
                     "Importing GOCAD TSurf (TriSurf) as a PolyData 2D in VTK with name: "
                     + curr_obj_dict["name"]
@@ -423,7 +423,7 @@ def gocad2vtk(self=None, in_file_name=None, uid_from_name=None):
 
             """Add current_entity to entities collection, after checking if the entity is valid."""
             if curr_obj_dict["vtk_obj"].points_number > 0:
-                if curr_obj_dict["topological_type"] == "VertexSet":
+                if curr_obj_dict["topology"] == "VertexSet":
                     self.geol_coll.add_entity_from_dict(entity_dict=curr_obj_dict)
                 else:
                     if curr_obj_dict["vtk_obj"].cells_number > 0:
@@ -511,18 +511,18 @@ def gocad2vtk_section(self=None, in_file_name=None, uid_from_name=None, x_sectio
             """Store uid and topological type of new entity."""
             curr_obj_dict["uid"] = str(uuid.uuid4())
 
-            """Create the empty vtk object with class = topological_type."""
+            """Create the empty vtk object with class = topology."""
             if clean_line[1] == "VSet":
                 curr_obj_dict["vtk_obj"] = XsVertexSet(
                     x_section_uid=x_section, parent=self
                 )
-                curr_obj_dict["topological_type"] = "XsVertexSet"
+                curr_obj_dict["topology"] = "XsVertexSet"
                 curr_obj_dict["geological_type"] = type_default 
             elif clean_line[1] == "PLine":
                 curr_obj_dict["vtk_obj"] = XsPolyLine(
                     x_section_uid=x_section, parent=self
                 )
-                curr_obj_dict["topological_type"] = "XsPolyLine"
+                curr_obj_dict["topology"] = "XsPolyLine"
                 curr_obj_dict["geological_type"] = type_default 
             else:
                 """Here topological types different from the allowed ones are handled.
@@ -708,7 +708,7 @@ def gocad2vtk_section(self=None, in_file_name=None, uid_from_name=None, x_sectio
             entity_counter += 1  # update entity counter
 
             """Write points and cells TO VTK OBJECT"""
-            if curr_obj_dict["topological_type"] == "XsVertexSet":
+            if curr_obj_dict["topology"] == "XsVertexSet":
                 self.TextTerminal.appendPlainText(
                     "Importing Gocad VSet (VertexSet) as a PolyData 0D in VTK with name: "
                     + curr_obj_dict["name"]
@@ -721,7 +721,7 @@ def gocad2vtk_section(self=None, in_file_name=None, uid_from_name=None, x_sectio
                     curr_obj_cells.InsertNextCell(vertex)
                 curr_obj_dict["vtk_obj"].SetVerts(curr_obj_cells)
 
-            elif curr_obj_dict["topological_type"] == "XsPolyLine":
+            elif curr_obj_dict["topology"] == "XsPolyLine":
                 self.TextTerminal.appendPlainText(
                     "Importing GOCAD PLine (PolyLine) as a PolyData 1D in VTK with name: "
                     + curr_obj_dict["name"]
@@ -798,17 +798,17 @@ def gocad2vtk_boundary(self=None, in_file_name=None, uid_from_name=None):
             """Store uid and topological type of new entity."""
             curr_obj_dict["uid"] = str(uuid.uuid4())
 
-            """Create the empty vtk object with class = topological_type."""
+            """Create the empty vtk object with class = topology."""
             # if clean_line[1] == 'VSet':
-            #     curr_obj_dict['topological_type'] = 'VertexSet'
+            #     curr_obj_dict['topology'] = 'VertexSet'
             #     curr_obj_dict['vtk_obj'] = VertexSet()
             #     curr_obj_dict['geological_type'] = type_default 
             if clean_line[1] == "PLine":
-                curr_obj_dict["topological_type"] = "PolyLine"
+                curr_obj_dict["topology"] = "PolyLine"
                 curr_obj_dict["vtk_obj"] = PolyLine()
                 # curr_obj_dict['geological_type'] = type_default 
             elif clean_line[1] == "TSurf":
-                curr_obj_dict["topological_type"] = "TriSurf"
+                curr_obj_dict["topology"] = "TriSurf"
                 curr_obj_dict["vtk_obj"] = TriSurf()
                 # curr_obj_dict['geological_type'] = type_default 
             else:
@@ -984,7 +984,7 @@ def gocad2vtk_boundary(self=None, in_file_name=None, uid_from_name=None):
             entity_counter += 1  # update entity counter
 
             """Write points and cells TO VTK OBJECT"""
-            # if curr_obj_dict['topological_type'] == 'VertexSet':
+            # if curr_obj_dict['topology'] == 'VertexSet':
             #     self.TextTerminal.appendPlainText("Importing Gocad VSet (VertexSet) as a PolyData 0D in VTK with name: " + curr_obj_dict['name'])
             #     curr_obj_dict['vtk_obj'].SetPoints(curr_obj_points)
             #     """Vertex cells, one for each point, are added here."""
@@ -994,7 +994,7 @@ def gocad2vtk_boundary(self=None, in_file_name=None, uid_from_name=None):
             #         curr_obj_cells.InsertNextCell(vertex)
             #     curr_obj_dict['vtk_obj'].SetVerts(curr_obj_cells)
             #
-            if curr_obj_dict["topological_type"] == "PolyLine":
+            if curr_obj_dict["topology"] == "PolyLine":
                 self.TextTerminal.appendPlainText(
                     "Importing GOCAD PLine (PolyLine) as a PolyData 1D in VTK with name: "
                     + curr_obj_dict["name"]
@@ -1002,7 +1002,7 @@ def gocad2vtk_boundary(self=None, in_file_name=None, uid_from_name=None):
                 curr_obj_dict["vtk_obj"].SetPoints(curr_obj_points)
                 curr_obj_dict["vtk_obj"].SetLines(curr_obj_cells)
 
-            elif curr_obj_dict["topological_type"] == "TriSurf":
+            elif curr_obj_dict["topology"] == "TriSurf":
                 self.TextTerminal.appendPlainText(
                     "Importing GOCAD TSurf (TriSurf) as a PolyData 2D in VTK with name: "
                     + curr_obj_dict["name"]
@@ -1045,11 +1045,11 @@ def vtk2gocad(self=None, out_file_name=None):
     """Write entities"""
     for uid in self.geol_coll.df["uid"].to_list():
         """Loop over uids"""
-        topological_type = self.geol_coll.df.loc[
-            self.geol_coll.df["uid"] == uid, "topological_type"
+        topology = self.geol_coll.df.loc[
+            self.geol_coll.df["uid"] == uid, "topology"
         ].values[0]
         """Check if this uid is compatible with Gocad Ascii"""
-        if topological_type in [
+        if topology in [
             "VertexSet",
             "PolyLine",
             "TriSurf",
@@ -1085,7 +1085,7 @@ def vtk2gocad(self=None, out_file_name=None):
             else:
                 properties_components = []
             """Write header for each uid"""
-            fout.write("GOCAD " + topological_type + " 1\n")
+            fout.write("GOCAD " + topology + " 1\n")
             fout.write("HEADER {\n")
             fout.write(
                 "*solid*color: "
@@ -1123,18 +1123,18 @@ def vtk2gocad(self=None, out_file_name=None):
                 """Build VRTX matrix here"""
                 vrtx_mtx = self.geol_coll.get_uid_vtk_obj(uid).points
             """Options for different topological types"""
-            if topological_type in ["VertexSet", "XsVertexSet"]:
+            if topology in ["VertexSet", "XsVertexSet"]:
                 fout.write("SUBVSET\n")
                 """No connectivity matrix in this case."""
-            elif topological_type in ["PolyLine", "XsPolyLine"]:
+            elif topology in ["PolyLine", "XsPolyLine"]:
                 fout.write("ILINE\n")
                 """Build connectivity matrix here."""
                 connectivity = self.geol_coll.get_uid_vtk_obj(uid).cells
-            elif topological_type in ["TriSurf"]:
+            elif topology in ["TriSurf"]:
                 fout.write("TFACE\n")
                 """Build connectivity matrix here."""
                 connectivity = self.geol_coll.get_uid_vtk_obj(uid).cells
-            elif topological_type in ["TetraSolid"]:
+            elif topology in ["TetraSolid"]:
                 fout.write("TVOLUME\n")
                 """Build connectivity matrix here."""
                 connectivity = self.geol_coll.get_uid_vtk_obj(uid).cells
@@ -1158,23 +1158,23 @@ def vtk2gocad(self=None, out_file_name=None):
                     )  # row+1 since indexes in Gocad Ascii start from 1
                 del vrtx_mtx
             """Write connectivity"""
-            if topological_type in ["VertexSet", "XsVertexSet"]:
+            if topology in ["VertexSet", "XsVertexSet"]:
                 pass
-            elif topological_type in ["PolyLine", "XsPolyLine"]:
+            elif topology in ["PolyLine", "XsPolyLine"]:
                 for row in range(np_shape(connectivity)[0]):
                     data_row = " ".join(
                         ["{}".format(cell + 1) for cell in connectivity[row, :]]
                     )  # cell+1 since indexes in Gocad Ascii start from 1 - do not alter connectivity that is a shallow copy
                     fout.write("SEG " + data_row + "\n")
                 del connectivity
-            elif topological_type in ["TriSurf"]:
+            elif topology in ["TriSurf"]:
                 for row in range(np_shape(connectivity)[0]):
                     data_row = " ".join(
                         ["{}".format(cell + 1) for cell in connectivity[row, :]]
                     )  # cell+1 since indexes in Gocad Ascii start from 1 - do not alter connectivity that is a shallow copy
                     fout.write("TRGL " + data_row + "\n")
                 del connectivity
-            elif topological_type in ["TetraSolid"]:
+            elif topology in ["TetraSolid"]:
                 for row in range(np_shape(connectivity)[0]):
                     data_row = " ".join(
                         ["{}".format(cell + 1) for cell in connectivity[row, :]]

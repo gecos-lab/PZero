@@ -416,7 +416,7 @@ def facets_pc(self):
     curr_obj_dict["uid"] = str(uuid4())
     curr_obj_dict["name"] = f"{name}facets"
     curr_obj_dict["geological_type"] = "undef"
-    curr_obj_dict["topological_type"] = "TriSurf"
+    curr_obj_dict["topology"] = "TriSurf"
     curr_obj_dict["geological_feature"] = name
     curr_obj_dict["properties_names"] = properties_name
     curr_obj_dict["properties_components"] = properties_components
@@ -534,7 +534,7 @@ def auto_pick(self):
     curr_obj_dict["uid"] = str(uuid4())
     curr_obj_dict["name"] = f"{name}auto_pick"
     curr_obj_dict["geological_type"] = "undef"
-    curr_obj_dict["topological_type"] = "VertexSet"
+    curr_obj_dict["topology"] = "VertexSet"
     curr_obj_dict["geological_feature"] = name
     curr_obj_dict["properties_names"] = properties_name
     curr_obj_dict["properties_components"] = properties_components

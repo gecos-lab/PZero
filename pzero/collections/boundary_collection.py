@@ -81,7 +81,7 @@ def boundary_from_points(self, vector):
     boundary_dict["name"] = boundary_dict_updt["name"]
     if boundary_dict_updt["activatevolume"] == "check":
         # Build rectangular polyline at Z=0 meters.
-        boundary_dict["topological_type"] = "PolyLine"
+        boundary_dict["topology"] = "PolyLine"
         boundary_dict["vtk_obj"] = PolyLine()
         boundary_dict["vtk_obj"].points = [
             (boundary_dict_updt["origin_x"], boundary_dict_updt["origin_y"], 0.0),
@@ -93,7 +93,7 @@ def boundary_from_points(self, vector):
         boundary_dict["vtk_obj"].auto_cells()
     else:
         # Build Boundary as volume.
-        boundary_dict["topological_type"] = "TriSurf"
+        boundary_dict["topology"] = "TriSurf"
         boundary_dict["vtk_obj"] = TriSurf()
         nodes = vtkPoints()
         nodes.InsertPoint(
@@ -170,7 +170,7 @@ class BoundaryCollection(BaseCollection):
         self.entity_dict = {
             "uid": "",
             "name": "undef",
-            "topological_type": "undef",
+            "topology": "undef",
             "scenario": "undef",
             "x_section": "", # this is the uid of the cross section for "XsVertexSet", "XsPolyLine", and "XsImage", empty for all others
             "vtk_obj": None,
@@ -179,7 +179,7 @@ class BoundaryCollection(BaseCollection):
         self.entity_type_dict = {
             "uid": str,
             "name": str,
-            "topological_type": str,
+            "topology": str,
             "scenario": str,
             "x_section": str,
             "vtk_obj": object,

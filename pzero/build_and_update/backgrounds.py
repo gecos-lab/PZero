@@ -97,7 +97,7 @@ def create_backgrounds_topology_tree(self):
     )
     self.BackgroundsTopologyTreeWidget.hideColumn(1)  # hide the uid column
     self.BackgroundsTopologyTreeWidget.setItemsExpandable(True)
-    topo_types = pd_unique(self.parent.backgrounds_coll.df.query(self.view_filter)["topological_type"])
+    topo_types = pd_unique(self.parent.backgrounds_coll.df.query(self.view_filter)["topology"])
     for topo_type in topo_types:
         tlevel_1 = QTreeWidgetItem(
             self.BackgroundsTopologyTreeWidget, [topo_type]
@@ -108,7 +108,7 @@ def create_backgrounds_topology_tree(self):
 
         for background_type in pd_unique(
                 self.parent.backgrounds_coll.df.query(self.view_filter).loc[
-                    self.parent.backgrounds_coll.df.query(self.view_filter)["topological_type"] == topo_type,
+                    self.parent.backgrounds_coll.df.query(self.view_filter)["topology"] == topo_type,
                     "background_type",
                 ]
         ):
@@ -120,7 +120,7 @@ def create_backgrounds_topology_tree(self):
             )
             uids = self.parent.backgrounds_coll.df.query(self.view_filter).loc[
                 (
-                        self.parent.backgrounds_coll.df.query(self.view_filter)["topological_type"]
+                        self.parent.backgrounds_coll.df.query(self.view_filter)["topology"]
                         == topo_type
                 )
                 & (

@@ -37,7 +37,7 @@ class TestFluidCollection:
     test_vtk_obj2 = DEM()
     fluid_entity_dict = {'uid': "4",
                          'name': "fluid-test",
-                         'topological_type': "undef",
+                         'topology': "undef",
                          'fluid_type': "undef",
                          'fluid_feature': "undef",
                          'scenario': "undef",

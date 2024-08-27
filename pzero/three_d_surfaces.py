@@ -127,7 +127,7 @@ def interpolation_delaunay_2d(self):
     """Getting the values that have been typed by the user through the multiple input widget"""
     for key in surf_dict_updt:
         surf_dict[key] = surf_dict_updt[key]
-    surf_dict["topological_type"] = "TriSurf"
+    surf_dict["topology"] = "TriSurf"
     surf_dict["vtk_obj"] = TriSurf()
     """Create a vtkAppendPolyData filter to merge all input vtk objects. Else, it does not seem possible to
     input multiple objects into vtkDelaunay2D"""
@@ -212,7 +212,7 @@ def poisson_interpolation(self):
     """Getting the values that have been typed by the user through the multiple input widget"""
     for key in surf_dict_updt:
         surf_dict[key] = surf_dict_updt[key]
-    surf_dict["topological_type"] = "TriSurf"
+    surf_dict["topology"] = "TriSurf"
     surf_dict["vtk_obj"] = TriSurf()
     """Create a new instance of the interpolation class"""
     surf_from_points = vtk.vtkSurfaceReconstructionFilter()
@@ -629,7 +629,7 @@ def implicit_model_loop_structural(self):
         """Create new TriSurf and populate with iso-surface"""
         surf_dict = deepcopy(self.geol_coll.entity_dict)
         surf_dict["name"] = geological_feature + "_from_" + model_name
-        surf_dict["topological_type"] = "TriSurf"
+        surf_dict["topology"] = "TriSurf"
         surf_dict["geological_type"] = geological_type
         surf_dict["geological_feature"] = geological_feature
         surf_dict["scenario"] = scenario
@@ -685,7 +685,7 @@ def surface_smoothing(
                 surf_dict["geological_type"] = self.geol_coll.get_uid_type(
                     uid
                 )
-                surf_dict["topological_type"] = "TriSurf"
+                surf_dict["topology"] = "TriSurf"
                 surf_dict["vtk_obj"] = TriSurf()
                 surf_dict["vtk_obj"].ShallowCopy(smoother.GetOutput())
                 surf_dict["vtk_obj"].Modified()
@@ -708,7 +708,7 @@ def surface_smoothing(
     # """Getting the values that have been typed by the user through the multiple input widget"""
     # for key in surf_dict_updt:
     #     surf_dict[key] = surf_dict_updt[key]
-    # surf_dict['topological_type'] = 'TriSurf'
+    # surf_dict['topology'] = 'TriSurf'
     # surf_dict['vtk_obj'] = TriSurf()
     # """Create a new instance of the interpolation class"""
     # smoother = vtk.vtkSmoothPolyDataFilter()
@@ -795,7 +795,7 @@ def linear_extrusion(self):
     """Getting the values that have been typed by the user through the multiple input widget"""
     for key in surf_dict_updt:
         surf_dict[key] = surf_dict_updt[key]
-    surf_dict["topological_type"] = "TriSurf"
+    surf_dict["topology"] = "TriSurf"
     surf_dict["vtk_obj"] = TriSurf()
     """Check if the output of the widget is empty or not. If the Cancel button was clicked, the tool quits"""
     if surf_dict_updt is None:
@@ -894,7 +894,7 @@ def decimation_pro_resampling(self):
     )
     surf_dict["scenario"] = self.geol_coll.get_uid_scenario(input_uids[0])
     surf_dict["geological_type"] = self.geol_coll.get_uid_type(input_uids[0])
-    surf_dict["topological_type"] = "TriSurf"
+    surf_dict["topology"] = "TriSurf"
     surf_dict["vtk_obj"] = TriSurf()
     """Create a new instance of the decimation class"""
     deci = vtk.vtkDecimatePro()
@@ -987,7 +987,7 @@ def decimation_quadric_resampling(self):
     )
     surf_dict["scenario"] = self.geol_coll.get_uid_scenario(input_uids[0])
     surf_dict["geological_type"] = self.geol_coll.get_uid_type(input_uids[0])
-    surf_dict["topological_type"] = "TriSurf"
+    surf_dict["topology"] = "TriSurf"
     surf_dict["vtk_obj"] = TriSurf()
     """Create a new instance of the decimation class"""
     deci = vtk.vtkQuadricDecimation()
@@ -1063,7 +1063,7 @@ def subdivision_resampling(self, mode=0, type="linear", n_subd=2):
                 surf_dict["geological_type"] = self.geol_coll.get_uid_type(
                     uid
                 )
-                surf_dict["topological_type"] = "TriSurf"
+                surf_dict["topology"] = "TriSurf"
                 surf_dict["vtk_obj"] = TriSurf()
                 surf_dict["vtk_obj"].ShallowCopy(subdiv_filter.GetOutput())
                 surf_dict["vtk_obj"].Modified()
@@ -1128,7 +1128,7 @@ def intersection_xs(self):
 
                             obj_dict = deepcopy(self.geol_coll.entity_dict)
                             obj_dict["x_section"] = xsect_uid
-                            obj_dict["topological_type"] = "XsVertexSet"
+                            obj_dict["topology"] = "XsVertexSet"
                             obj_dict["vtk_obj"] = XsVertexSet(
                                 x_section_uid=xsect_uid, parent=self
                             )
@@ -1227,7 +1227,7 @@ def intersection_xs(self):
                                     self.geol_coll.entity_dict
                                 )
                                 obj_dict["x_section"] = xsect_uid
-                                obj_dict["topological_type"] = "XsPolyLine"
+                                obj_dict["topology"] = "XsPolyLine"
                                 obj_dict["vtk_obj"] = XsPolyLine(
                                     x_section_uid=xsect_uid, parent=self
                                 )
@@ -1553,7 +1553,7 @@ def project_2_dem(self):
         obj_dict["geological_feature"] = self.geol_coll.get_uid_feature(uid)
         obj_dict["scenario"] = self.geol_coll.get_uid_scenario(uid)
         obj_dict["geological_type"] = self.geol_coll.get_uid_type(uid)
-        obj_dict["topological_type"] = self.geol_coll.get_uid_topology(uid)
+        obj_dict["topology"] = self.geol_coll.get_uid_topology(uid)
         if isinstance(self.geol_coll.get_uid_vtk_obj(uid), PolyLine):
             obj_dict["vtk_obj"] = PolyLine()
         elif isinstance(
@@ -1676,18 +1676,18 @@ def project_2_xs(self):
         ] = self.geol_coll.get_uid_properties_components(uid)
         entity_dict["x_section"] = xs_uid
         if self.geol_coll.get_uid_topology(uid) == "VertexSet":
-            entity_dict["topological_type"] = "XsVertexSet"
+            entity_dict["topology"] = "XsVertexSet"
             out_vtk = XsVertexSet(x_section_uid=xs_uid, parent=self)
             out_vtk.DeepCopy(self.geol_coll.get_uid_vtk_obj(uid))
         elif (
             self.geol_coll.get_uid_topology(uid) == "PolyLine"
             or self.geol_coll.get_uid_topology(uid) == "XsPolyLine"
         ):
-            entity_dict["topological_type"] = "XsPolyLine"
+            entity_dict["topology"] = "XsPolyLine"
             out_vtk = XsPolyLine(x_section_uid=xs_uid, parent=self)
             out_vtk.DeepCopy(self.geol_coll.get_uid_vtk_obj(uid))
         else:
-            entity_dict["topological_type"] = self.geol_coll.get_uid_topology(
+            entity_dict["topology"] = self.geol_coll.get_uid_topology(
                 uid
             )
             out_vtk = self.geol_coll.get_uid_vtk_obj(uid).deep_copy()
@@ -1708,7 +1708,7 @@ def project_2_xs(self):
 
         out_vtk.set_point_data("distance", np_abs(t))
 
-        if entity_dict["topological_type"] == "XsVertexSet":
+        if entity_dict["topology"] == "XsVertexSet":
             # print(out_vtk.get_point_data('distance'))
             if xs_dist <= 0:
                 entity_dict["vtk_obj"] = out_vtk
@@ -1735,7 +1735,7 @@ def project_2_xs(self):
                         f'No measure found for group {entity_dict["name"]}, try to extend the maximum distance'
                     )
 
-        elif entity_dict["topological_type"] == "XsPolyLine":
+        elif entity_dict["topology"] == "XsPolyLine":
             """Output, checking for multipart for polylines."""
             connectivity = vtk.vtkPolyDataConnectivityFilter()
             connectivity.SetInputData(out_vtk)
@@ -1858,7 +1858,7 @@ def split_surf(self):
 
             obj_dict["uid"] = str(uuid4())
 
-            obj_dict["topological_type"] = self.geol_coll.get_uid_topology(
+            obj_dict["topology"] = self.geol_coll.get_uid_topology(
                 paper_uid
             )
 
@@ -1891,7 +1891,7 @@ def split_surf(self):
 
             obj_dict["uid"] = str(uuid4())
 
-            obj_dict["topological_type"] = "PolyLine"
+            obj_dict["topology"] = "PolyLine"
 
             obj_dict["vtk_obj"] = line_intersection
 
@@ -1979,7 +1979,7 @@ def retopo(self, mode=0, dec_int=0.2, n_iter=40, rel_fac=0.1):
                     surf_dict[
                         "geological_type"
                     ] = self.geol_coll.get_uid_type(uid)
-                    surf_dict["topological_type"] = "TriSurf"
+                    surf_dict["topology"] = "TriSurf"
                     surf_dict["vtk_obj"] = TriSurf()
                     surf_dict["vtk_obj"].ShallowCopy(clean.GetOutput())
                     surf_dict["vtk_obj"].Modified()

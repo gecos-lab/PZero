@@ -9,7 +9,7 @@ from pzero.project_window import ProjectWindow
 class TestBaseView:
     geological_entity_dict1 = {'uid': "0",
                                'name': "geoname",
-                               'topological_type': "topol",
+                               'topology': "topol",
                                'geological_type': "undef",
                                'geological_feature': "undef",
                                'scenario': "sc1",
@@ -20,7 +20,7 @@ class TestBaseView:
 
     geological_entity_dict2 = {'uid': "2",
                                'name': "geoname2",
-                               'topological_type': "topol2",
+                               'topology': "topol2",
                                'geological_type': "undef",
                                'geological_feature': "undef",
                                'scenario': "sc2",

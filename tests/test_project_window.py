@@ -17,7 +17,7 @@ class TestProjectWindow:
 
     geological_entity_dict = {'uid': "0",
                               'name': "geoname",
-                              'topological_type': "VertexSet",
+                              'topology': "VertexSet",
                               'geological_type': "undef",
                               'geological_feature': "undef",
                               'scenario': "sc1",
@@ -28,7 +28,7 @@ class TestProjectWindow:
 
     geological_entity_dict2 = {'uid': "2",
                                'name': "geoname2",
-                               'topological_type': "VertexSet",
+                               'topology': "VertexSet",
                                'geological_type': "undef",
                                'geological_feature': "undef",
                                'scenario': "sc2",

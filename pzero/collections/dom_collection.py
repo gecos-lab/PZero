@@ -32,7 +32,7 @@ class DomCollection(BaseCollection):
         self.entity_dict = {
             "uid": "",
             "name": "undef",
-            "topological_type": "undef",
+            "topology": "undef",
             "scenario": "undef",
             "texture_uids": [],
             # this refers to the uids of image data for which the texture coordinates have been calculated
@@ -47,7 +47,7 @@ class DomCollection(BaseCollection):
             "uid": str,
             "name": str,
             "scenario": str,
-            "topological_type": str,
+            "topology": str,
             "texture_uids": list,
             "properties_names": list,
             "properties_components": list,

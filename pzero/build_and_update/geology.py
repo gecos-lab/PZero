@@ -515,7 +515,7 @@ def create_topology_tree(self):
     # hide the uid column
     self.TopologyTreeWidget.hideColumn(1)
     self.TopologyTreeWidget.setItemsExpandable(True)
-    topo_types = pd_unique(self.parent.geol_coll.df.query(self.view_filter)["topological_type"])
+    topo_types = pd_unique(self.parent.geol_coll.df.query(self.view_filter)["topology"])
 
     for topo_type in topo_types:
         # self.GeologyTreeWidget as parent -> top level
@@ -527,7 +527,7 @@ def create_topology_tree(self):
         )
         for scenario in pd_unique(
                 self.parent.geol_coll.df.query(self.view_filter).loc[
-                    self.parent.geol_coll.df.query(self.view_filter)["topological_type"] == topo_type,
+                    self.parent.geol_coll.df.query(self.view_filter)["topology"] == topo_type,
                     "scenario",
                 ]
         ):
@@ -539,7 +539,7 @@ def create_topology_tree(self):
                 tlevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
             )
             uids = self.parent.geol_coll.df.query(self.view_filter).loc[
-                (self.parent.geol_coll.df.query(self.view_filter)["topological_type"] == topo_type)
+                (self.parent.geol_coll.df.query(self.view_filter)["topology"] == topo_type)
                 & (self.parent.geol_coll.df.query(self.view_filter)["scenario"] == scenario),
                 "uid",
             ].to_list()

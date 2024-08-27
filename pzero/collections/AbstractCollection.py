@@ -251,10 +251,10 @@ class BaseCollection(ABC):
         """Initialize Pandas dataframe."""
         self.df = DataFrame(columns=self.entity_dict_keys)
 
-    def get_topology_uids(self, topological_type: str = None) -> list:
-        """Get list of uids of a given topological_type."""
+    def get_topology_uids(self, topology: str = None) -> list:
+        """Get list of uids of a given topology."""
         # Use the query method in the future?
-        return self.df.loc[self.df["topological_type"] == topological_type, "uid"].to_list()
+        return self.df.loc[self.df["topology"] == topology, "uid"].to_list()
 
     def get_uid_name(self, uid: str = None) -> str:
         """Get value(s) stored in dataframe (as pointer) from uid."""
@@ -273,11 +273,11 @@ class BaseCollection(ABC):
     def get_uid_topology(self, uid: str = None) -> str:
         """Get value topological type from uid."""
         # Use the query method in the future?
-        return self.df.loc[self.df["uid"] == uid, "topological_type"].values[0]
+        return self.df.loc[self.df["uid"] == uid, "topology"].values[0]
 
-    def set_uid_topology(self, uid: str = None, topological_type: str = None):
+    def set_uid_topology(self, uid: str = None, topology: str = None):
         """Set topological type from uid."""
-        self.df.loc[self.df["uid"] == uid, "topological_type"] = topological_type
+        self.df.loc[self.df["uid"] == uid, "topology"] = topology
 
     def get_uid_scenario(self, uid: str = None) -> str:
         """Get scenario from uid."""

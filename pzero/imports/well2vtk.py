@@ -99,7 +99,7 @@ def well2vtk(self, path=None):
                             marker_obj_dict = deepcopy(
                                 GeologicalCollection.geological_entity_dict
                             )
-                            marker_obj_dict["topological_type"] = "VertexSet"
+                            marker_obj_dict["topology"] = "VertexSet"
                             marker_obj_dict["uid"] = str(uuid4())
                             marker_obj_dict["name"] = f"marker_{value}"
                             marker_obj_dict["geological_type"] = "top"
@@ -203,7 +203,7 @@ def well2vtk(self, path=None):
         )
         annotation_obj_attributes["uid"] = str(uuid4())
         annotation_obj_attributes["name"] = name
-        annotation_obj_attributes["topological_type"] = "VertexSet"
+        annotation_obj_attributes["topology"] = "VertexSet"
         annotation_obj_attributes["background_type"] = "Annotations"
         annotation_obj_attributes["background_feature"] = well_obj.ID
 
@@ -325,7 +325,7 @@ def well2vtk(self, path=None):
     #     # marker_obj_attributes = deepcopy(GeologicalCollection.geological_entity_dict)
     #     # marker_obj_attributes['uid'] = str(uuid4())
     #     # marker_obj_attributes['name'] = f'{data.loc[i,"GeologyCode"]}_marker'
-    #     # marker_obj_attributes["topological_type"] = "VertexSet"
+    #     # marker_obj_attributes["topology"] = "VertexSet"
     #     # marker_obj_attributes['geological_type'] = 'top'
     #     # marker_obj_attributes['geological_feature'] = f'{geo_code}'
     #     # marker_obj_attributes['scenario'] = f'{unique_id[0]}'

@@ -37,7 +37,7 @@ class TestDomCollection:
     test_vtk_obj2 = DEM()
     geological_entity_dict = {'uid': "0",
                               'name': "geoname",
-                              'topological_type': "topol",
+                              'topology': "topol",
                               'geological_type': "undef",
                               'geological_feature': "undef",
                               'scenario': "sc1",

@@ -7,7 +7,7 @@ from PyQt5.QtWidgets import QMainWindow
 # Global Variable
 background_entity_dict = {'uid': "53",
                           'name': "background-test",
-                          'topological_type': "undef",
+                          'topology': "undef",
                           'background_type': "undef",
                           'background_feature': "undef",
                           'properties_names': [],

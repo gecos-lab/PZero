@@ -34,7 +34,7 @@ class BackgroundCollection(BaseCollection):
         self.entity_dict = {
                 "uid": "",
                 "name": "undef",
-                "topological_type": "undef",
+                "topology": "undef",
                 "background_type": "undef",
                 "background_feature": "undef",
                 "scenario": "undef",
@@ -48,7 +48,7 @@ class BackgroundCollection(BaseCollection):
         self.entity_type_dict = {
             "uid": str,
             "name": str,
-            "topological_type": str,
+            "topology": str,
             "background_type": str,
             "background_feature": str,
             "scenario": str,
@@ -164,7 +164,7 @@ class BackgroundCollection(BaseCollection):
         # ====== CAN BE UNIFIED AS COMMON METHOD OF THE ABSTRACT COLLECTION IF "GEOLOGICAL" METHODS WILL BE UNIFIED ====
         entity_dict = deepcopy(self.entity_dict)
         entity_dict["name"] = self.get_uid_name(uid)
-        entity_dict["topological_type"] = self.get_uid_topology(uid)
+        entity_dict["topology"] = self.get_uid_topology(uid)
         entity_dict["background_type"] = self.get_uid_type(uid)
         entity_dict["background_feature"] = self.get_uid_feature(uid)
         entity_dict["scenario"] = self.get_uid_scenario(uid)

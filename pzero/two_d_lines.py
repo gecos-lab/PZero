@@ -76,11 +76,11 @@ def draw_line(self):
     for key in line_dict_updt:
         line_dict[key] = line_dict_updt[key]
     if isinstance(self, NewViewMap):
-        line_dict["topological_type"] = "PolyLine"
+        line_dict["topology"] = "PolyLine"
         line_dict["x_section"] = None
         line_dict["vtk_obj"] = PolyLine()
     elif isinstance(self, NewViewXsection):
-        line_dict["topological_type"] = "XsPolyLine"
+        line_dict["topology"] = "XsPolyLine"
         line_dict["x_section"] = self.this_x_section_uid
         line_dict["vtk_obj"] = XsPolyLine(
             x_section_uid=self.this_x_section_uid, parent=self.parent
@@ -424,8 +424,8 @@ def split_line_line(self):
                 ].values[0]
                 + "_split"
             )
-            new_line["topological_type"] = self.parent.geol_coll.df.loc[
-                self.parent.geol_coll.df["uid"] == current_uid_paper, "topological_type"
+            new_line["topology"] = self.parent.geol_coll.df.loc[
+                self.parent.geol_coll.df["uid"] == current_uid_paper, "topology"
             ].values[0]
             new_line["geological_type"] = self.parent.geol_coll.df.loc[
                 self.parent.geol_coll.df["uid"] == current_uid_paper, "geological_type"
@@ -496,8 +496,8 @@ def split_line_existing_point(self):
             ].values[0]
             + "_split"
         )
-        new_line_2["topological_type"] = self.parent.geol_coll.df.loc[
-            self.parent.geol_coll.df["uid"] == uid, "topological_type"
+        new_line_2["topology"] = self.parent.geol_coll.df.loc[
+            self.parent.geol_coll.df["uid"] == uid, "topology"
         ].values[0]
         new_line_2["geological_type"] = self.parent.geol_coll.df.loc[
             self.parent.geol_coll.df["uid"] == uid, "geological_type"
@@ -962,7 +962,7 @@ def resample_line_distance(
         """Create empty dictionary for the output line"""
         new_line = deepcopy(self.parent.geol_coll.entity_dict)
         if isinstance(self, NewViewMap):
-            new_line["topological_type"] = "PolyLine"
+            new_line["topology"] = "PolyLine"
             new_line["x_section"] = None
             inU = deepcopy(
                 self.parent.geol_coll.get_uid_vtk_obj(current_uid).points[:, 0]
@@ -971,7 +971,7 @@ def resample_line_distance(
                 self.parent.geol_coll.get_uid_vtk_obj(current_uid).points[:, 1]
             )
         elif isinstance(self, NewViewXsection):
-            new_line["topological_type"] = "XsPolyLine"
+            new_line["topology"] = "XsPolyLine"
             new_line["x_section"] = self.this_x_section_uid
             inU, inV = self.parent.geol_coll.get_uid_vtk_obj(current_uid).world2plane()
         """Stack coordinates in two-columns matrix"""
@@ -1061,10 +1061,10 @@ def resample_line_number_points(
         """Editing loop"""
         """Create empty dictionary for the output line"""
         new_line = deepcopy(self.parent.geol_coll.entity_dict)
-        """Define topological_type and x_section. Get coordinates of input line"""
+        """Define topology and x_section. Get coordinates of input line"""
         if isinstance(self, NewViewMap):
             # if isinstance(self, (ViewMap, NewViewMap)):
-            new_line["topological_type"] = "PolyLine"
+            new_line["topology"] = "PolyLine"
             new_line["x_section"] = None
             inU = deepcopy(
                 self.parent.geol_coll.get_uid_vtk_obj(current_uid).points[:, 0]
@@ -1074,7 +1074,7 @@ def resample_line_number_points(
             )
         # elif isinstance(self, (ViewXsection, NewViewXsection)):
         elif isinstance(self, NewViewXsection):
-            new_line["topological_type"] = "XsPolyLine"
+            new_line["topology"] = "XsPolyLine"
             new_line["x_section"] = self.this_x_section_uid
 
             inU, inV = self.parent.geol_coll.get_uid_vtk_obj(current_uid).world2plane()
@@ -1168,7 +1168,7 @@ def simplify_line(
         """Get coordinates of input line."""
         if isinstance(self, NewViewMap):
             # if isinstance(self, (ViewMap, NewViewMap)):
-            new_line["topological_type"] = "PolyLine"
+            new_line["topology"] = "PolyLine"
             new_line["x_section"] = None
             inU = deepcopy(
                 self.parent.geol_coll.get_uid_vtk_obj(current_uid).points[:, 0]
@@ -1178,7 +1178,7 @@ def simplify_line(
             )
         # elif isinstance(self, (ViewXsection, NewViewXsection)):
         elif isinstance(self, NewViewXsection):
-            new_line["topological_type"] = "XsPolyLine"
+            new_line["topology"] = "XsPolyLine"
             new_line["x_section"] = self.this_x_section_uid
             inU, inV = deepcopy(
                 self.parent.geol_coll.get_uid_vtk_obj(current_uid).world2plane()
@@ -1289,12 +1289,12 @@ def copy_parallel(
         inV = self.parent.geol_coll.get_uid_vtk_obj(input_uid).points_Y
 
         line_dict["vtk_obj"] = PolyLine()
-        line_dict["topological_type"] = "PolyLine"
+        line_dict["topology"] = "PolyLine"
     # elif isinstance(self, (ViewXsection, NewViewXsection)):
     elif isinstance(self, NewViewXsection):
         inU, inV = self.parent.geol_coll.get_uid_vtk_obj(input_uid).world2plane()
         line_dict["vtk_obj"] = XsPolyLine(self.this_x_section_uid, parent=self.parent)
-        line_dict["topological_type"] = "XsPolyLine"
+        line_dict["topology"] = "XsPolyLine"
         line_dict["x_section"] = self.this_x_section_uid
 
     inUV = np_column_stack((inU, inV))
@@ -1405,13 +1405,13 @@ def copy_kink(
     if isinstance(self, NewViewMap):
         # if isinstance(self, (ViewMap, NewViewMap)):
         line_dict["vtk_obj"] = PolyLine()
-        line_dict["topological_type"] = "PolyLine"
+        line_dict["topology"] = "PolyLine"
         inU = self.parent.geol_coll.get_uid_vtk_obj(input_uid).points_X
         inV = self.parent.geol_coll.get_uid_vtk_obj(input_uid).points_Y
     # elif isinstance(self, (ViewXsection, NewViewXsection)):
     elif isinstance(self, NewViewXsection):
         line_dict["vtk_obj"] = XsPolyLine(self.this_x_section_uid, parent=self.parent)
-        line_dict["topological_type"] = "XsPolyLine"
+        line_dict["topology"] = "XsPolyLine"
         line_dict["x_section"] = self.this_x_section_uid
         inU, inV = self.parent.geol_coll.get_uid_vtk_obj(input_uid).world2plane()
 
@@ -1502,10 +1502,10 @@ def copy_similar(
     )
     if isinstance(self, NewViewMap):
         line_dict["vtk_obj"] = PolyLine()
-        line_dict["topological_type"] = "PolyLine"
+        line_dict["topology"] = "PolyLine"
     elif isinstance(self, NewViewXsection):
         line_dict["vtk_obj"] = XsPolyLine(self.this_x_section_uid, parent=self.parent)
-        line_dict["topological_type"] = "XsPolyLine"
+        line_dict["topology"] = "XsPolyLine"
         line_dict["x_section"] = self.this_x_section_uid
     """Get coordinates of input line."""
     inX = self.parent.geol_coll.get_uid_vtk_obj(input_uid).points_X
@@ -1696,7 +1696,7 @@ def clean_intersection(self):
     data = []
     if isinstance(self, NewViewMap):
         for i, line in self.parent.geol_coll.df.loc[
-            self.parent.geol_coll.df["topological_type"] == "PolyLine"
+            self.parent.geol_coll.df["topology"] == "PolyLine"
         ].iterrows():
             vtkgeom = line["vtk_obj"]
             uid = line["uid"]
@@ -1704,7 +1704,7 @@ def clean_intersection(self):
             data.append({"uid": uid, "geometry": geom})
     elif isinstance(self, NewViewXsection):
         for i, line in self.parent.geol_coll.df.loc[
-            self.parent.geol_coll.df["topological_type"] == "XsPolyLine"
+            self.parent.geol_coll.df["topology"] == "XsPolyLine"
         ].iterrows():
             vtkgeom = line["vtk_obj"]
             uid = line["uid"]

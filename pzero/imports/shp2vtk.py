@@ -24,7 +24,7 @@ Points not handled correctly."""
 
 
 # 'name': "undef"  ###
-# 'topological_type': "undef"  ###
+# 'topology': "undef"  ###
 # 'geological_type': "undef"  ###
 # 'geological_feature': "undef"  ###
 # 'scenario': "undef"
@@ -77,7 +77,7 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
                     curr_obj_dict["geological_feature"] = gdf.loc[row, "geo_feat"]
                 if "scenario" in column_names:
                     curr_obj_dict["scenario"] = gdf.loc[row, "scenario"]
-                curr_obj_dict["topological_type"] = "PolyLine"
+                curr_obj_dict["topology"] = "PolyLine"
                 curr_obj_dict["vtk_obj"] = PolyLine()
                 if gdf.geom_type[row] == "LineString":
                     outXYZ = np_array(
@@ -150,7 +150,7 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
                             gdf_index.loc[i, "scenario"]
                         )[0]
 
-                    curr_obj_dict["topological_type"] = "VertexSet"
+                    curr_obj_dict["topology"] = "VertexSet"
                     curr_obj_dict["vtk_obj"] = vtk_obj
 
                     gdf_index["coords"] = gdf_index.geometry.apply(
@@ -245,7 +245,7 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
                     curr_obj_dict["fluid_feature"] = gdf.loc[row, "fluid_feat"]
                 if "scenario" in column_names:
                     curr_obj_dict["scenario"] = gdf.loc[row, "scenario"]
-                curr_obj_dict["topological_type"] = "PolyLine"
+                curr_obj_dict["topology"] = "PolyLine"
                 curr_obj_dict["vtk_obj"] = PolyLine()
 
                 if gdf.geom_type[row] == "LineString":
@@ -314,7 +314,7 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
                             gdf_index.loc[i, "scenario"]
                         )[0]
 
-                    curr_obj_dict["topological_type"] = "VertexSet"
+                    curr_obj_dict["topology"] = "VertexSet"
                     curr_obj_dict["vtk_obj"] = vtk_obj
 
                     gdf_index["coords"] = gdf_index.geometry.apply(
@@ -385,7 +385,7 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
                 if "bkg_feat" in column_names:
                     curr_obj_dict["background_feature"] = gdf.loc[row, "bkg_feat"]
 
-                curr_obj_dict["topological_type"] = "PolyLine"
+                curr_obj_dict["topology"] = "PolyLine"
                 curr_obj_dict["vtk_obj"] = PolyLine()
                 if gdf.geom_type[row] == "LineString":
                     outXYZ = np_array(gdf.loc[row].geometry)
@@ -459,7 +459,7 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
                     if "bkg_feat" in column_names:
                         curr_obj_dict["background_feature"] = i
 
-                    curr_obj_dict["topological_type"] = "VertexSet"
+                    curr_obj_dict["topology"] = "VertexSet"
                     curr_obj_dict["vtk_obj"] = vtk_obj
 
                     gdf_index["coords"] = gdf_index.geometry.apply(

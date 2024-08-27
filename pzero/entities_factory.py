@@ -597,13 +597,13 @@ class PolyData(vtkPolyData):
         return WrapDataObject(self).FieldData[data_key].GetDataTypeAsString()
 
     @property
-    def topological_type(self):
+    def topology(self):
         """Return class name as string"""
         return self.__class__.__name__
-        # for topological_type in valid_topologies:
+        # for topology in valid_topologies:
         #     """Here we use eval to convert a string with the class name to the class itself."""
-        #     if isinstance(self, eval(topological_type)):
-        #         return topological_type
+        #     if isinstance(self, eval(topology)):
+        #         return topology
         #     else:
         #         return None
 
