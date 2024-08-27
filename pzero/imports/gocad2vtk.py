@@ -95,14 +95,14 @@ def gocad2vtk(self=None, in_file_name=None, uid_from_name=None):
     )
     if not scenario_default:
         scenario_default = "undef"
-    geological_type_default = input_combo_dialog(
+    type_default  = input_combo_dialog(
         parent=None,
         title="Geological type",
         label="Default geological type",
         choice_list=self.geol_coll.valid_types,
     )
-    if not geological_type_default:
-        geological_type_default = "undef"
+    if not type_default :
+        type_default  = "undef"
     feature_from_name = options_dialog(
         title="Feature from name",
         message="Get geological feature from object name if not defined in file",
@@ -152,15 +152,15 @@ def gocad2vtk(self=None, in_file_name=None, uid_from_name=None):
             if clean_line[1] == "VSet":
                 curr_obj_dict["topological_type"] = "VertexSet"
                 curr_obj_dict["vtk_obj"] = VertexSet()
-                curr_obj_dict["geological_type"] = geological_type_default
+                curr_obj_dict["geological_type"] = type_default 
             elif clean_line[1] == "PLine":
                 curr_obj_dict["topological_type"] = "PolyLine"
                 curr_obj_dict["vtk_obj"] = PolyLine()
-                curr_obj_dict["geological_type"] = geological_type_default
+                curr_obj_dict["geological_type"] = type_default 
             elif clean_line[1] == "TSurf":
                 curr_obj_dict["topological_type"] = "TriSurf"
                 curr_obj_dict["vtk_obj"] = TriSurf()
-                curr_obj_dict["geological_type"] = geological_type_default
+                curr_obj_dict["geological_type"] = type_default 
             else:
                 """Here topological types different from the allowed ones are handled.
                 At the moment THIS WILL CAUSE ERRORS - KEEP THIS MESSAGE JUST FOR DEBUGGING.
@@ -468,14 +468,14 @@ def gocad2vtk_section(self=None, in_file_name=None, uid_from_name=None, x_sectio
     )
     if not scenario_default:
         scenario_default = "undef"
-    geological_type_default = input_combo_dialog(
+    type_default  = input_combo_dialog(
         parent=None,
         title="Geological type",
         label="Default geological type",
         choice_list=self.geol_coll.valid_types,
     )
-    if not geological_type_default:
-        geological_type_default = "undef"
+    if not type_default :
+        type_default  = "undef"
     feature_from_name = options_dialog(
         title="Feature from name",
         message="Get geological feature from object name if not defined in file",
@@ -517,13 +517,13 @@ def gocad2vtk_section(self=None, in_file_name=None, uid_from_name=None, x_sectio
                     x_section_uid=x_section, parent=self
                 )
                 curr_obj_dict["topological_type"] = "XsVertexSet"
-                curr_obj_dict["geological_type"] = geological_type_default
+                curr_obj_dict["geological_type"] = type_default 
             elif clean_line[1] == "PLine":
                 curr_obj_dict["vtk_obj"] = XsPolyLine(
                     x_section_uid=x_section, parent=self
                 )
                 curr_obj_dict["topological_type"] = "XsPolyLine"
-                curr_obj_dict["geological_type"] = geological_type_default
+                curr_obj_dict["geological_type"] = type_default 
             else:
                 """Here topological types different from the allowed ones are handled.
                 At the moment THIS WILL CAUSE ERRORS - KEEP THIS MESSAGE JUST FOR DEBUGGING.
@@ -767,9 +767,9 @@ def gocad2vtk_boundary(self=None, in_file_name=None, uid_from_name=None):
     # scenario_default = input_text_dialog(parent=None, title="Scenario", label="Default scenario", default_text="undef")
     # if not scenario_default:
     #     scenario_default = "undef"
-    # geological_type_default = input_combo_dialog(parent=None, title="Geological type", label="Default geological type", choice_list=self.geol_coll.valid_types)
-    # if not geological_type_default:
-    #     geological_type_default = "undef"
+    # type_default  = input_combo_dialog(parent=None, title="Geological type", label="Default geological type", choice_list=self.geol_coll.valid_types)
+    # if not type_default :
+    #     type_default  = "undef"
     # feature_from_name = options_dialog(title="Feature from name", message="Get geological feature from object name if not defined in file", yes_role="Yes", no_role="No", reject_role=None)
     # if feature_from_name == 0:
     #     feature_from_name = True
@@ -802,15 +802,15 @@ def gocad2vtk_boundary(self=None, in_file_name=None, uid_from_name=None):
             # if clean_line[1] == 'VSet':
             #     curr_obj_dict['topological_type'] = 'VertexSet'
             #     curr_obj_dict['vtk_obj'] = VertexSet()
-            #     curr_obj_dict['geological_type'] = geological_type_default
+            #     curr_obj_dict['geological_type'] = type_default 
             if clean_line[1] == "PLine":
                 curr_obj_dict["topological_type"] = "PolyLine"
                 curr_obj_dict["vtk_obj"] = PolyLine()
-                # curr_obj_dict['geological_type'] = geological_type_default
+                # curr_obj_dict['geological_type'] = type_default 
             elif clean_line[1] == "TSurf":
                 curr_obj_dict["topological_type"] = "TriSurf"
                 curr_obj_dict["vtk_obj"] = TriSurf()
-                # curr_obj_dict['geological_type'] = geological_type_default
+                # curr_obj_dict['geological_type'] = type_default 
             else:
                 """Here topological types different from the allowed ones are handled.
                 At the moment THIS WILL CAUSE ERRORS - KEEP THIS MESSAGE JUST FOR DEBUGGING.
