@@ -176,19 +176,19 @@ Note that cell type in VTK is defined as follows (we use just a limited number o
    VTK_BEZIER_PYRAMID = 81,
 """
 
-"""List of valid topological types, corresponding to classes (abstract classes are not listed here)."""
-valid_topologies = [
-    "VertexSet",
-    "PolyLine",
-    "TriSurf",
-    "TetraSolid",
-    "XsVertexSet",
-    "XsPolyLine",
-    "DEM",
-    "MapImage",
-    "XsImage",
-    "Voxet",
-]
+# """List of valid topological types, corresponding to classes (abstract classes are not listed here)."""
+# valid_topologies = [
+#     "VertexSet",
+#     "PolyLine",
+#     "TriSurf",
+#     "TetraSolid",
+#     "XsVertexSet",
+#     "XsPolyLine",
+#     "DEM",
+#     "MapImage",
+#     "XsImage",
+#     "Voxet",
+# ]
 
 
 class PolyData(vtkPolyData):
@@ -598,12 +598,14 @@ class PolyData(vtkPolyData):
 
     @property
     def topological_type(self):
-        for topological_type in valid_topologies:
-            """Here we use eval to convert a string with the class name to the class itself."""
-            if isinstance(self, eval(topological_type)):
-                return topological_type
-            else:
-                return None
+        """Return class name as string"""
+        return self.__class__.__name__
+        # for topological_type in valid_topologies:
+        #     """Here we use eval to convert a string with the class name to the class itself."""
+        #     if isinstance(self, eval(topological_type)):
+        #         return topological_type
+        #     else:
+        #         return None
 
     def connected_calc(self):
         """Adds a scalar property called RegionId with the connected region index, useful for processing and
