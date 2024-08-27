@@ -94,7 +94,7 @@ def interpolation_delaunay_2d(self):
             self.parent.geol_coll.valid_types,
             self.parent.geol_coll.get_uid_type(input_uids[0]),
         ],
-        "geological_feature": [
+        "feature": [
             "Geological feature: ",
             self.geol_coll.get_uid_feature(input_uids[0]),
         ],
@@ -197,7 +197,7 @@ def poisson_interpolation(self):
             "Geological type: ",
             self.parent.geol_coll.valid_types,
         ],
-        "geological_feature": [
+        "feature": [
             "Geological feature: ",
             self.geol_coll.get_uid_feature(input_uids[0]),
         ],
@@ -281,7 +281,7 @@ def implicit_model_loop_structural(self):
     X - x component of the cartesian coordinates
     Y - y component of the cartesian coordinates
     Z - z component of the cartesian coordinates
-    feature_name - unique name of the geological feature being modelled - this is not the geological_feature generally defined in geological_collection.py, but the geological_sequence defined in legend_manager.py
+    feature_name - unique name of the geological feature being modelled - this is not the feature generally defined in geological_collection.py, but the geological_sequence defined in legend_manager.py
     val - value observations of the scalar field - this is the geological_time defined in legend_manager.py
     interface - unique identifier for an interface containing similar scalar field values
     nx - x component of the gradient norm
@@ -356,7 +356,7 @@ def implicit_model_loop_structural(self):
                 == self.geol_coll.get_uid_type(uid)
             )
             & (
-                self.geol_legend_df["geological_feature"]
+                self.geol_legend_df["feature"]
                 == self.geol_coll.get_uid_feature(uid)
             )
             & (self.geol_legend_df["scenario"] == self.geol_coll.get_uid_scenario(uid)),
@@ -370,7 +370,7 @@ def implicit_model_loop_structural(self):
                 == self.geol_coll.get_uid_type(uid)
             )
             & (
-                self.geol_legend_df["geological_feature"]
+                self.geol_legend_df["feature"]
                 == self.geol_coll.get_uid_feature(uid)
             )
             & (self.geol_legend_df["scenario"] == self.geol_coll.get_uid_scenario(uid)),
@@ -608,8 +608,8 @@ def implicit_model_loop_structural(self):
         geological_type = self.geol_legend_df.loc[
             self.geol_legend_df["geological_time"] == value, "geological_type"
         ].values[0]
-        geological_feature = self.geol_legend_df.loc[
-            self.geol_legend_df["geological_time"] == value, "geological_feature"
+        feature = self.geol_legend_df.loc[
+            self.geol_legend_df["geological_time"] == value, "feature"
         ].values[0]
         scenario = self.geol_legend_df.loc[
             self.geol_legend_df["geological_time"] == value, "scenario"
@@ -628,10 +628,10 @@ def implicit_model_loop_structural(self):
         iso_surface.Update()
         """Create new TriSurf and populate with iso-surface"""
         surf_dict = deepcopy(self.geol_coll.entity_dict)
-        surf_dict["name"] = geological_feature + "_from_" + model_name
+        surf_dict["name"] = feature + "_from_" + model_name
         surf_dict["topology"] = "TriSurf"
         surf_dict["geological_type"] = geological_type
-        surf_dict["geological_feature"] = geological_feature
+        surf_dict["feature"] = feature
         surf_dict["scenario"] = scenario
         surf_dict["vtk_obj"] = TriSurf()
         surf_dict["vtk_obj"].ShallowCopy(iso_surface.GetOutput())
@@ -679,7 +679,7 @@ def surface_smoothing(
                 surf_dict = deepcopy(self.geol_coll.entity_dict)
                 surf_dict["name"] = self.geol_coll.get_uid_name(uid) + "_smoothed"
                 surf_dict[
-                    "geological_feature"
+                    "feature"
                 ] = self.geol_coll.get_uid_feature(uid)
                 surf_dict["scenario"] = self.geol_coll.get_uid_scenario(uid)
                 surf_dict["geological_type"] = self.geol_coll.get_uid_type(
@@ -700,7 +700,7 @@ def surface_smoothing(
             return
     # """Create deepcopy of the geological entity dictionary."""
     # surf_dict = deepcopy(self.geol_coll.geological_entity_dict)
-    # input_dict = {'name': ['TriSurf name: ', self.geol_coll.get_uid_name(input_uids[0]) + '_smooth'], 'geological_type': ['Geological type: ', self.parent.geol_coll.valid_types], 'geological_feature': ['Geological feature: ', self.geol_coll.get_uid_feature(input_uids[0])], 'scenario': ['Scenario: ', self.geol_coll.get_uid_scenario(input_uids[0])]}
+    # input_dict = {'name': ['TriSurf name: ', self.geol_coll.get_uid_name(input_uids[0]) + '_smooth'], 'geological_type': ['Geological type: ', self.parent.geol_coll.valid_types], 'feature': ['Geological feature: ', self.geol_coll.get_uid_feature(input_uids[0])], 'scenario': ['Scenario: ', self.geol_coll.get_uid_scenario(input_uids[0])]}
     # surf_dict_updt = multiple_input_dialog(title='Surface smoothing', input_dict=input_dict)
     # """Check if the output of the widget is empty or not. If the Cancel button was clicked, the tool quits"""
     # if surf_dict_updt is None:
@@ -780,7 +780,7 @@ def linear_extrusion(self):
             "Geological type: ",
             self.parent.geol_coll.valid_types,
         ],
-        "geological_feature": [
+        "feature": [
             "Geological feature: ",
             self.geol_coll.get_uid_feature(input_uids[0]),
         ],
@@ -889,7 +889,7 @@ def decimation_pro_resampling(self):
     """Create deepcopy of the geological entity dictionary."""
     surf_dict = deepcopy(self.geol_coll.entity_dict)
     surf_dict["name"] = self.geol_coll.get_uid_name(input_uids[0]) + "_decimated"
-    surf_dict["geological_feature"] = self.geol_coll.get_uid_feature(
+    surf_dict["feature"] = self.geol_coll.get_uid_feature(
         input_uids[0]
     )
     surf_dict["scenario"] = self.geol_coll.get_uid_scenario(input_uids[0])
@@ -982,7 +982,7 @@ def decimation_quadric_resampling(self):
     """Create deepcopy of the geological entity dictionary."""
     surf_dict = deepcopy(self.geol_coll.entity_dict)
     surf_dict["name"] = self.geol_coll.get_uid_name(input_uids[0]) + "_decimated"
-    surf_dict["geological_feature"] = self.geol_coll.get_uid_feature(
+    surf_dict["feature"] = self.geol_coll.get_uid_feature(
         input_uids[0]
     )
     surf_dict["scenario"] = self.geol_coll.get_uid_scenario(input_uids[0])
@@ -1057,7 +1057,7 @@ def subdivision_resampling(self, mode=0, type="linear", n_subd=2):
                 surf_dict = deepcopy(self.geol_coll.entity_dict)
                 surf_dict["name"] = self.geol_coll.get_uid_name(uid) + "_subdivided"
                 surf_dict[
-                    "geological_feature"
+                    "feature"
                 ] = self.geol_coll.get_uid_feature(uid)
                 surf_dict["scenario"] = self.geol_coll.get_uid_scenario(uid)
                 surf_dict["geological_type"] = self.geol_coll.get_uid_type(
@@ -1139,7 +1139,7 @@ def intersection_xs(self):
                                 "geological_type"
                             ] = self.geol_coll.get_uid_type(uid)
                             obj_dict[
-                                "geological_feature"
+                                "feature"
                             ] = self.geol_coll.get_uid_feature(uid)
                             obj_dict["scenario"] = self.geol_coll.get_uid_scenario(uid)
                             obj_dict[
@@ -1238,7 +1238,7 @@ def intersection_xs(self):
                                     "geological_type"
                                 ] = self.geol_coll.get_uid_type(uid)
                                 obj_dict[
-                                    "geological_feature"
+                                    "feature"
                                 ] = self.geol_coll.get_uid_feature(uid)
                                 obj_dict["scenario"] = self.geol_coll.get_uid_scenario(
                                     uid
@@ -1550,7 +1550,7 @@ def project_2_dem(self):
         elif replace_on_off == "NO" or replace_on_off == "no" or replace_on_off == "n":
             obj_dict["uid"] = None
         obj_dict["name"] = f"{self.geol_coll.get_uid_name(uid)}_proj_DEM"
-        obj_dict["geological_feature"] = self.geol_coll.get_uid_feature(uid)
+        obj_dict["feature"] = self.geol_coll.get_uid_feature(uid)
         obj_dict["scenario"] = self.geol_coll.get_uid_scenario(uid)
         obj_dict["geological_type"] = self.geol_coll.get_uid_type(uid)
         obj_dict["topology"] = self.geol_coll.get_uid_topology(uid)
@@ -1666,7 +1666,7 @@ def project_2_xs(self):
         entity_dict = deepcopy(self.geol_coll.entity_dict)
         entity_dict["name"] = self.geol_coll.get_uid_name(uid) + "_prj_" + xs_name
         entity_dict["geological_type"] = self.geol_coll.get_uid_type(uid)
-        entity_dict["geological_feature"] = self.geol_coll.get_uid_feature(
+        entity_dict["feature"] = self.geol_coll.get_uid_feature(
             uid
         )
         entity_dict["scenario"] = self.geol_coll.get_uid_scenario(uid)
@@ -1870,7 +1870,7 @@ def split_surf(self):
                 paper_uid
             )
 
-            obj_dict["geological_feature"] = self.geol_coll.get_uid_feature(
+            obj_dict["feature"] = self.geol_coll.get_uid_feature(
                 paper_uid
             )
 
@@ -1901,7 +1901,7 @@ def split_surf(self):
                 paper_uid
             )
 
-            obj_dict["geological_feature"] = self.geol_coll.get_uid_feature(
+            obj_dict["feature"] = self.geol_coll.get_uid_feature(
                 paper_uid
             )
 
@@ -1973,7 +1973,7 @@ def retopo(self, mode=0, dec_int=0.2, n_iter=40, rel_fac=0.1):
                     surf_dict = deepcopy(self.geol_coll.entity_dict)
                     surf_dict["name"] = self.geol_coll.get_uid_name(uid) + "_retopo"
                     surf_dict[
-                        "geological_feature"
+                        "feature"
                     ] = self.geol_coll.get_uid_feature(uid)
                     surf_dict["scenario"] = self.geol_coll.get_uid_scenario(uid)
                     surf_dict[

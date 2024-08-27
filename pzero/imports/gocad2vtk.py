@@ -194,7 +194,7 @@ def gocad2vtk(self=None, in_file_name=None, uid_from_name=None):
                     clean_line[1:]
                 )  # see if a suffix must be added to split multipart
                 if feature_from_name:
-                    curr_obj_dict["geological_feature"] = curr_obj_dict["name"]
+                    curr_obj_dict["feature"] = curr_obj_dict["name"]
             else:
                 """solves a bug in Move that does not add a space after name:"""
                 curr_obj_dict["name"] = "_".join(clean_line[:])
@@ -202,7 +202,7 @@ def gocad2vtk(self=None, in_file_name=None, uid_from_name=None):
                     5:
                 ]  # this removes 'name:'
                 if feature_from_name:
-                    curr_obj_dict["geological_feature"] = curr_obj_dict["name"]
+                    curr_obj_dict["feature"] = curr_obj_dict["name"]
             if uid_from_name:
                 curr_obj_dict["uid"] = curr_obj_dict["name"]
 
@@ -222,7 +222,7 @@ def gocad2vtk(self=None, in_file_name=None, uid_from_name=None):
                     curr_obj_dict["geological_type"] = "undef"
 
         elif clean_line[0] == "GEOLOGICAL_FEATURE":
-            curr_obj_dict["geological_feature"] = "_".join(clean_line[1:])
+            curr_obj_dict["feature"] = "_".join(clean_line[1:])
 
         elif clean_line[0] == "PROPERTIES":
             """Populate the list of property names, the properties number, and initialize the VTK arrays."""
@@ -547,7 +547,7 @@ def gocad2vtk_section(self=None, in_file_name=None, uid_from_name=None, x_sectio
                     clean_line[1:]
                 )  # see if a suffix must be added to split multipart
                 if feature_from_name:
-                    curr_obj_dict["geological_feature"] = curr_obj_dict["name"]
+                    curr_obj_dict["feature"] = curr_obj_dict["name"]
             else:
                 """solves a bug in Move that does not add a space after name:"""
                 curr_obj_dict["name"] = "_".join(clean_line[:])
@@ -555,7 +555,7 @@ def gocad2vtk_section(self=None, in_file_name=None, uid_from_name=None, x_sectio
                     5:
                 ]  # this removes 'name:'
                 if feature_from_name:
-                    curr_obj_dict["geological_feature"] = curr_obj_dict["name"]
+                    curr_obj_dict["feature"] = curr_obj_dict["name"]
             if uid_from_name:
                 curr_obj_dict["uid"] = curr_obj_dict["name"]
 
@@ -575,7 +575,7 @@ def gocad2vtk_section(self=None, in_file_name=None, uid_from_name=None, x_sectio
                     curr_obj_dict["geological_type"] = "undef"
 
         elif clean_line[0] == "GEOLOGICAL_FEATURE":
-            curr_obj_dict["geological_feature"] = "_".join(clean_line[1:])
+            curr_obj_dict["feature"] = "_".join(clean_line[1:])
 
         elif clean_line[0] == "PROPERTIES":
             """Populate the list of property names, the properties number, and initialize the VTK arrays."""
@@ -834,7 +834,7 @@ def gocad2vtk_boundary(self=None, in_file_name=None, uid_from_name=None):
                     clean_line[1:]
                 )  # see if a suffix must be added to split multipart
                 # if feature_from_name:
-                #     curr_obj_dict['geological_feature'] = curr_obj_dict['name']
+                #     curr_obj_dict['feature'] = curr_obj_dict['name']
             else:
                 """solves a bug in Move that does not add a space after name:"""
                 curr_obj_dict["name"] = "_".join(clean_line[:])
@@ -842,7 +842,7 @@ def gocad2vtk_boundary(self=None, in_file_name=None, uid_from_name=None):
                     5:
                 ]  # this removes 'name:'
                 # if feature_from_name:
-                #     curr_obj_dict['geological_feature'] = curr_obj_dict['name']
+                #     curr_obj_dict['feature'] = curr_obj_dict['name']
             if uid_from_name:
                 curr_obj_dict["uid"] = curr_obj_dict["name"]
 
@@ -859,7 +859,7 @@ def gocad2vtk_boundary(self=None, in_file_name=None, uid_from_name=None):
         #             curr_obj_dict['geological_type'] = "undef"
         #
         # elif clean_line[0] == 'GEOLOGICAL_FEATURE':
-        #     curr_obj_dict['geological_feature'] = ("_".join(clean_line[1:]))
+        #     curr_obj_dict['feature'] = ("_".join(clean_line[1:]))
         #
         # elif clean_line[0] == 'PROPERTIES':
         #     """Populate the list of property names, the properties number, and initialize the VTK arrays."""
@@ -1061,8 +1061,8 @@ def vtk2gocad(self=None, out_file_name=None):
             color_R = self.geol_coll.get_uid_legend(uid=uid)["color_R"] / 255
             color_G = self.geol_coll.get_uid_legend(uid=uid)["color_G"] / 255
             color_B = self.geol_coll.get_uid_legend(uid=uid)["color_B"] / 255
-            geological_feature = self.geol_coll.df.loc[
-                self.geol_coll.df["uid"] == uid, "geological_feature"
+            feature = self.geol_coll.df.loc[
+                self.geol_coll.df["uid"] == uid, "feature"
             ].values[0]
             geological_type = self.geol_coll.df.loc[
                 self.geol_coll.df["uid"] == uid, "geological_type"
@@ -1096,7 +1096,7 @@ def vtk2gocad(self=None, out_file_name=None):
                 "name: " + uid + "\n"
             )  # IMPORTANT: 'name' is uid, not the 'name' shown as a text label that is not unique
             fout.write("}\n")
-            fout.write("GEOLOGICAL_FEATURE " + geological_feature + "\n")
+            fout.write("GEOLOGICAL_FEATURE " + feature + "\n")
             fout.write("GEOLOGICAL_TYPE " + geological_type + "\n")
             fout.write("STRATIGRAPHIC_POSITION " + str(geological_time) + "\n")
             """Options for properties"""

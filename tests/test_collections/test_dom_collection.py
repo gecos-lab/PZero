@@ -39,7 +39,7 @@ class TestDomCollection:
                               'name': "geoname",
                               'topology': "topol",
                               'geological_type': "undef",
-                              'geological_feature': "undef",
+                              'feature': "undef",
                               'scenario': "sc1",
                               'properties_names': [],
                               'properties_components': [],

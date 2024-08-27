@@ -28,7 +28,7 @@ def create_backgrounds_tree(self):
             self.parent.backgrounds_coll.df.query(self.view_filter).loc[
                 self.parent.backgrounds_coll.df.query(self.view_filter)["background_type"]
                 == background_type,
-                "background_feature",
+                "feature",
             ]
         )
         for feature in background_features:
@@ -44,7 +44,7 @@ def create_backgrounds_tree(self):
                         == background_type
                 )
                 & (
-                        self.parent.backgrounds_coll.df.query(self.view_filter)["background_feature"]
+                        self.parent.backgrounds_coll.df.query(self.view_filter)["feature"]
                         == feature
                 ),
                 "uid",

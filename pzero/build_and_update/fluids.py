@@ -25,7 +25,7 @@ def create_fluids_tree(self):
         fluid_features = pd_unique(
             self.parent.fluids_coll.df.query(self.view_filter).loc[
                 self.parent.fluids_coll.df.query(self.view_filter)["fluid_type"] == fluid_type,
-                "fluid_feature",
+                "feature",
             ]
         )
         for feature in fluid_features:
@@ -38,7 +38,7 @@ def create_fluids_tree(self):
             fluid_scenario = pd_unique(
                 self.parent.fluids_coll.df.query(self.view_filter).loc[
                     (self.parent.fluids_coll.df.query(self.view_filter)["fluid_type"] == fluid_type)
-                    & (self.parent.fluids_coll.df.query(self.view_filter)["fluid_feature"] == feature),
+                    & (self.parent.fluids_coll.df.query(self.view_filter)["feature"] == feature),
                     "scenario",
                 ]
             )
@@ -51,7 +51,7 @@ def create_fluids_tree(self):
                 )
                 uids = self.parent.fluids_coll.df.query(self.view_filter).loc[
                     (self.parent.fluids_coll.df.query(self.view_filter)["fluid_type"] == fluid_type)
-                    & (self.parent.fluids_coll.df.query(self.view_filter)["fluid_feature"] == feature)
+                    & (self.parent.fluids_coll.df.query(self.view_filter)["feature"] == feature)
                     & (self.parent.fluids_coll.df.query(self.view_filter)["scenario"] == scenario),
                     "uid",
                 ].to_list()

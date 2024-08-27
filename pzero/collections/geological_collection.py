@@ -37,7 +37,7 @@ class GeologicalCollection(BaseCollection):
             "name": "undef",
             "topology": "undef",
             "geological_type": "undef",
-            "geological_feature": "undef",
+            "feature": "undef",
             "scenario": "undef",
             "properties_names": [],
             "properties_components": [],
@@ -50,7 +50,7 @@ class GeologicalCollection(BaseCollection):
             "name": str,
             "topology": str,
             "geological_type": str,
-            "geological_feature": str,
+            "feature": str,
             "scenario": str,
             "properties_names": list,
             "properties_components": list,
@@ -80,7 +80,7 @@ class GeologicalCollection(BaseCollection):
             "XsPolyLine",
         ]
 
-        self.editable_columns_names = ["name", "geological_type", "geological_feature", "scenario"]
+        self.editable_columns_names = ["name", "geological_type", "feature", "scenario"]
 
         self.collection_name = 'geological'
 
@@ -102,11 +102,11 @@ class GeologicalCollection(BaseCollection):
         # Note that for performance reasons this is done explicitly here, when adding an entity to the
         # collection, and not with a signal telling the legend to be updated by scanning the whole collection.
         geo_type = entity_dict["geological_type"]
-        feature = entity_dict["geological_feature"]
+        feature = entity_dict["feature"]
         scenario = entity_dict["scenario"]
         if self.parent.geol_legend_df.loc[
             (self.parent.geol_legend_df["geological_type"] == geo_type)
-            & (self.parent.geol_legend_df["geological_feature"] == feature)
+            & (self.parent.geol_legend_df["feature"] == feature)
             & (self.parent.geol_legend_df["scenario"] == scenario)
         ].empty:
             if color:
@@ -117,7 +117,7 @@ class GeologicalCollection(BaseCollection):
             self.parent.geol_legend_df = self.parent.geol_legend_df.append(
                 {
                     "geological_type": geo_type,
-                    "geological_feature": feature,
+                    "feature": feature,
                     "geological_time": 0.0,
                     "geological_sequence": "strati_0",
                     "scenario": scenario,
@@ -171,7 +171,7 @@ class GeologicalCollection(BaseCollection):
         entity_dict["name"] = self.get_uid_name(uid)
         entity_dict["topology"] = self.get_uid_topology(uid)
         entity_dict["geological_type"] = self.get_uid_type(uid)
-        entity_dict["geological_feature"] = self.get_uid_feature(uid)
+        entity_dict["feature"] = self.get_uid_feature(uid)
         entity_dict["scenario"] = self.get_uid_scenario(uid)
         entity_dict["properties_names"] = self.get_uid_properties_names(uid)
         entity_dict["properties_components"] = self.get_uid_properties_components(uid)
@@ -210,20 +210,20 @@ class GeologicalCollection(BaseCollection):
                 self.parent.geol_coll.df["uid"] == uid, "geological_type"
             ].values[0]
             feature = self.parent.geol_coll.df.loc[
-                self.parent.geol_coll.df["uid"] == uid, "geological_feature"
+                self.parent.geol_coll.df["uid"] == uid, "feature"
             ].values[0]
             scenario = self.parent.geol_coll.df.loc[
                 self.parent.geol_coll.df["uid"] == uid, "scenario"
             ].values[0]
             if self.parent.geol_legend_df.loc[
                 (self.parent.geol_legend_df["geological_type"] == geo_type)
-                & (self.parent.geol_legend_df["geological_feature"] == feature)
+                & (self.parent.geol_legend_df["feature"] == feature)
                 & (self.parent.geol_legend_df["scenario"] == scenario)
             ].empty:
                 self.parent.geol_legend_df = self.parent.geol_legend_df.append(
                     {
                         "geological_type": geo_type,
-                        "geological_feature": feature,
+                        "feature": feature,
                         "geological_time": 0.0,
                         "geological_sequence": "strati_0",
                         "scenario": scenario,
@@ -244,7 +244,7 @@ class GeologicalCollection(BaseCollection):
         # legend_updated is used to record if the table is updated or not.
         legend_updated = False
         geo_types_in_legend = pd_unique(self.parent.geol_legend_df["geological_type"])
-        features_in_legend = pd_unique(self.parent.geol_legend_df["geological_feature"])
+        features_in_legend = pd_unique(self.parent.geol_legend_df["feature"])
         scenarios_in_legend = pd_unique(self.parent.geol_legend_df["scenario"])
         for geo_type in geo_types_in_legend:
             if self.parent.geol_coll.df.loc[
@@ -259,26 +259,26 @@ class GeologicalCollection(BaseCollection):
             for feature in features_in_legend:
                 if self.parent.geol_coll.df.loc[
                     (self.parent.geol_coll.df["geological_type"] == geo_type)
-                    & (self.parent.geol_coll.df["geological_feature"] == feature)
+                    & (self.parent.geol_coll.df["feature"] == feature)
                 ].empty:
                     # Get index of row to be removed, then remove it in place with .drop().
                     idx_remove = self.parent.geol_legend_df[
                         (self.parent.geol_legend_df["geological_type"] == geo_type)
-                        & (self.parent.geol_legend_df["geological_feature"] == feature)
+                        & (self.parent.geol_legend_df["feature"] == feature)
                         ].index
                     self.parent.geol_legend_df.drop(idx_remove, inplace=True)
                     legend_updated = legend_updated or True
                 for scenario in scenarios_in_legend:
                     if self.parent.geol_coll.df.loc[
                         (self.parent.geol_coll.df["geological_type"] == geo_type)
-                        & (self.parent.geol_coll.df["geological_feature"] == feature)
+                        & (self.parent.geol_coll.df["feature"] == feature)
                         & (self.parent.geol_coll.df["scenario"] == scenario)
                     ].empty:
                         # Get index of row to be removed, then remove it in place with .drop().
                         idx_remove = self.parent.geol_legend_df[
                             (self.parent.geol_legend_df["geological_type"] == geo_type)
                             & (
-                                    self.parent.geol_legend_df["geological_feature"]
+                                    self.parent.geol_legend_df["feature"]
                                     == feature
                             )
                             & (self.parent.geol_legend_df["scenario"] == scenario)
@@ -287,22 +287,22 @@ class GeologicalCollection(BaseCollection):
                         legend_updated = legend_updated or True
         for feature in features_in_legend:
             if self.parent.geol_coll.df.loc[
-                self.parent.geol_coll.df["geological_feature"] == feature
+                self.parent.geol_coll.df["feature"] == feature
             ].empty:
                 # Get index of row to be removed, then remove it in place with .drop().
                 idx_remove = self.parent.geol_legend_df[
-                    self.parent.geol_legend_df["geological_feature"] == feature
+                    self.parent.geol_legend_df["feature"] == feature
                     ].index
                 self.parent.geol_legend_df.drop(idx_remove, inplace=True)
                 legend_updated = legend_updated or True
             for scenario in scenarios_in_legend:
                 if self.parent.geol_coll.df.loc[
-                    (self.parent.geol_coll.df["geological_feature"] == feature)
+                    (self.parent.geol_coll.df["feature"] == feature)
                     & (self.parent.geol_coll.df["scenario"] == scenario)
                 ].empty:
                     # Get index of row to be removed, then remove it in place with .drop().
                     idx_remove = self.parent.geol_legend_df[
-                        (self.parent.geol_legend_df["geological_feature"] == feature)
+                        (self.parent.geol_legend_df["feature"] == feature)
                         & (self.parent.geol_legend_df["scenario"] == scenario)
                         ].index
                     self.parent.geol_legend_df.drop(idx_remove, inplace=True)
@@ -322,11 +322,11 @@ class GeologicalCollection(BaseCollection):
     def get_uid_legend(self, uid: str = None) -> dict:
         """Get legend for a particular uid."""
         geo_type = self.df.loc[self.df["uid"] == uid, "geological_type"].values[0]
-        feature = self.df.loc[self.df["uid"] == uid, "geological_feature"].values[0]
+        feature = self.df.loc[self.df["uid"] == uid, "feature"].values[0]
         scenario = self.df.loc[self.df["uid"] == uid, "scenario"].values[0]
         legend_dict = self.parent.geol_legend_df.loc[
             (self.parent.geol_legend_df["geological_type"] == geo_type)
-            & (self.parent.geol_legend_df["geological_feature"] == feature)
+            & (self.parent.geol_legend_df["feature"] == feature)
             & (self.parent.geol_legend_df["scenario"] == scenario)
             ].to_dict("records")
         return legend_dict[0]  # the '[0]' is needed since .to_dict('records') returns a list of dictionaries (with just one element in this case)
@@ -341,7 +341,7 @@ class GeologicalCollection(BaseCollection):
             if 0.0 <= color_R <= 255.0:
                 self.parent.geol_legend_df.loc[
                     (self.parent.geol_legend_df["geological_type"] == legend_dict["geological_type"])
-                    & (self.parent.geol_legend_df["geological_feature"] == legend_dict["geological_feature"])
+                    & (self.parent.geol_legend_df["feature"] == legend_dict["feature"])
                     & (self.parent.geol_legend_df["scenario"] == legend_dict["scenario"]),
                     "color_R",
                 ] = color_R
@@ -349,7 +349,7 @@ class GeologicalCollection(BaseCollection):
             if 0.0 <= color_G <= 255.0:
                 self.parent.geol_legend_df.loc[
                     (self.parent.geol_legend_df["geological_type"] == legend_dict["geological_type"])
-                    & (self.parent.geol_legend_df["geological_feature"] == legend_dict["geological_feature"])
+                    & (self.parent.geol_legend_df["feature"] == legend_dict["feature"])
                     & (self.parent.geol_legend_df["scenario"] == legend_dict["scenario"]),
                     "color_G",
                 ] = color_G
@@ -357,7 +357,7 @@ class GeologicalCollection(BaseCollection):
             if 0.0 <= color_B <= 255.0:
                 self.parent.geol_legend_df.loc[
                     (self.parent.geol_legend_df["geological_type"] == legend_dict["geological_type"])
-                    & (self.parent.geol_legend_df["geological_feature"] == legend_dict["geological_feature"])
+                    & (self.parent.geol_legend_df["feature"] == legend_dict["feature"])
                     & (self.parent.geol_legend_df["scenario"] == legend_dict["scenario"]),
                     "color_B",
                 ] = color_B
@@ -365,7 +365,7 @@ class GeologicalCollection(BaseCollection):
             if line_thick >= 0.0:
                 self.parent.geol_legend_df.loc[
                     (self.parent.geol_legend_df["geological_type"] == legend_dict["geological_type"])
-                    & (self.parent.geol_legend_df["geological_feature"] == legend_dict["geological_feature"])
+                    & (self.parent.geol_legend_df["feature"] == legend_dict["feature"])
                     & (self.parent.geol_legend_df["scenario"] == legend_dict["scenario"]),
                     "line_thick",
                 ] = line_thick
@@ -373,7 +373,7 @@ class GeologicalCollection(BaseCollection):
             if point_size >= 0.0:
                 self.parent.geol_legend_df.loc[
                     (self.parent.geol_legend_df["geological_type"] == legend_dict["geological_type"])
-                    & (self.parent.geol_legend_df["geological_feature"] == legend_dict["geological_feature"])
+                    & (self.parent.geol_legend_df["feature"] == legend_dict["feature"])
                     & (self.parent.geol_legend_df["scenario"] == legend_dict["scenario"]),
                     "point_size",
                 ] = point_size
@@ -381,7 +381,7 @@ class GeologicalCollection(BaseCollection):
             if 0.0 <= opacity <= 100.0:
                 self.parent.geol_legend_df.loc[
                     (self.parent.geol_legend_df["geological_type"] == legend_dict["geological_type"])
-                    & (self.parent.geol_legend_df["geological_feature"] == legend_dict["geological_feature"])
+                    & (self.parent.geol_legend_df["feature"] == legend_dict["feature"])
                     & (self.parent.geol_legend_df["scenario"] == legend_dict["scenario"]),
                     "opacity",
                 ] = opacity
@@ -413,12 +413,12 @@ class GeologicalCollection(BaseCollection):
     def get_feature_uids(self, coll_feature: str = None) -> list:
         """Get list of uids of a given collection feature."""
         # ====== in the future use the query method? ========================================
-        return self.df.loc[self.df[self.coll_feature_name] == coll_feature, "uid"].to_list()
+        return self.df.loc[self.df['feature'] == coll_feature, "uid"].to_list()
 
     def get_uid_feature(self, uid: str = None):
         """Get collection type from uid."""
-        return self.df.loc[self.df["uid"] == uid, self.coll_feature_name].values[0]
+        return self.df.loc[self.df["uid"] == uid, 'feature'].values[0]
 
-    def set_uid_feature(self, uid=None, geological_feature=None):
+    def set_uid_feature(self, uid=None, feature=None):
         """Set collection type from uid."""
-        self.df.loc[self.df["uid"] == uid, self.coll_feature_name] = geological_feature
+        self.df.loc[self.df["uid"] == uid, 'feature'] = feature

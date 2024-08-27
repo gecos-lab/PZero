@@ -31,7 +31,7 @@ def create_geology_tree(self):
         geo_features = pd_unique(
             self.parent.geol_coll.df.query(self.view_filter).loc[
                 self.parent.geol_coll.df.query(self.view_filter)["geological_type"] == geo_type,
-                "geological_feature",
+                "feature",
             ]
         )
         for feature in geo_features:
@@ -46,7 +46,7 @@ def create_geology_tree(self):
                 self.parent.geol_coll.df.query(self.view_filter).loc[
                     (self.parent.geol_coll.df.query(self.view_filter)["geological_type"] == geo_type)
                     & (
-                            self.parent.geol_coll.df.query(self.view_filter)["geological_feature"]
+                            self.parent.geol_coll.df.query(self.view_filter)["feature"]
                             == feature
                     ),
                     "scenario",
@@ -63,7 +63,7 @@ def create_geology_tree(self):
                 uids = self.parent.geol_coll.df.query(self.view_filter).loc[
                     (self.parent.geol_coll.df.query(self.view_filter)["geological_type"] == geo_type)
                     & (
-                            self.parent.geol_coll.df.query(self.view_filter)["geological_feature"]
+                            self.parent.geol_coll.df.query(self.view_filter)["feature"]
                             == feature
                     )
                     & (self.parent.geol_coll.df.query(self.view_filter)["scenario"] == scenario),

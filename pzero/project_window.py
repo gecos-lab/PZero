@@ -524,7 +524,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 "name": ["New name: ", name_list],
                 "topology": ["Topological type", topo_type_list],
                 "geological_type": ["Geological type: ", geo_type_list],
-                "geological_feature": ["Geological feature: ", feature_list],
+                "feature": ["Geological feature: ", feature_list],
                 "scenario": ["Scenario: ", scenario_list],
                 "x_section": ["XSection: ", xsect_list],
             }

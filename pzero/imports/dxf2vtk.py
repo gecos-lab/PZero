@@ -34,7 +34,7 @@ def vtk2dxf(self=None, out_dir_name=None):
                 # test_pc.ShallowCopy(vtk_entity)
                 # test_pc.plot()
 
-                layer = f'{self.geol_coll.df.loc[self.geol_coll.df["uid"] == uid, "geological_feature"].values[0]}'
+                layer = f'{self.geol_coll.df.loc[self.geol_coll.df["uid"] == uid, "feature"].values[0]}'
 
                 layer_b = f"{layer}_boundary"
 
@@ -151,7 +151,7 @@ def vtk2dxf(self=None, out_dir_name=None):
         dxf_model = dxf_out.modelspace()
         # print(part)
         df = pd_DataFrame()
-        layer = f'{self.well_coll.df.loc[self.well_coll.df["uid"] == uid, "geological_feature"].values[0]}'
+        layer = f'{self.well_coll.df.loc[self.well_coll.df["uid"] == uid, "feature"].values[0]}'
 
         xyz = numpy_support.vtk_to_numpy(vtk_entity.GetPoints().GetData())
 

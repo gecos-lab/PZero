@@ -56,9 +56,9 @@ def draw_line(self):
             "Geological type: ",
             self.parent.geol_coll.valid_types,
         ],
-        "geological_feature": [
+        "feature": [
             "Geological feature: ",
-            self.parent.geol_legend_df["geological_feature"].tolist(),
+            self.parent.geol_legend_df["feature"].tolist(),
         ],
         "scenario": [
             "Scenario: ",
@@ -430,9 +430,9 @@ def split_line_line(self):
             new_line["geological_type"] = self.parent.geol_coll.df.loc[
                 self.parent.geol_coll.df["uid"] == current_uid_paper, "geological_type"
             ].values[0]
-            new_line["geological_feature"] = self.parent.geol_coll.df.loc[
+            new_line["feature"] = self.parent.geol_coll.df.loc[
                 self.parent.geol_coll.df["uid"] == current_uid_paper,
-                "geological_feature",
+                "feature",
             ].values[0]
             new_line["scenario"] = self.parent.geol_coll.df.loc[
                 self.parent.geol_coll.df["uid"] == current_uid_paper, "scenario"
@@ -502,8 +502,8 @@ def split_line_existing_point(self):
         new_line_2["geological_type"] = self.parent.geol_coll.df.loc[
             self.parent.geol_coll.df["uid"] == uid, "geological_type"
         ].values[0]
-        new_line_2["geological_feature"] = self.parent.geol_coll.df.loc[
-            self.parent.geol_coll.df["uid"] == uid, "geological_feature"
+        new_line_2["feature"] = self.parent.geol_coll.df.loc[
+            self.parent.geol_coll.df["uid"] == uid, "feature"
         ].values[0]
         new_line_2["scenario"] = self.parent.geol_coll.df.loc[
             self.parent.geol_coll.df["uid"] == uid, "scenario"
@@ -1277,7 +1277,7 @@ def copy_parallel(
     line_dict["geological_type"] = self.parent.geol_coll.df.loc[
         self.parent.geol_coll.df["uid"] == input_uid, "geological_type"
     ].values[0]
-    line_dict["geological_feature"] = self.parent.geol_coll.get_uid_feature(
+    line_dict["feature"] = self.parent.geol_coll.get_uid_feature(
         self.selected_uids[0]
     )
     line_dict["scenario"] = self.parent.geol_coll.get_uid_scenario(
@@ -1396,7 +1396,7 @@ def copy_kink(
     line_dict["geological_type"] = self.parent.geol_coll.df.loc[
         self.parent.geol_coll.df["uid"] == input_uid, "geological_type"
     ].values[0]
-    line_dict["geological_feature"] = self.parent.geol_coll.get_uid_feature(
+    line_dict["feature"] = self.parent.geol_coll.get_uid_feature(
         self.selected_uids[0]
     )
     line_dict["scenario"] = self.parent.geol_coll.get_uid_scenario(
@@ -1494,7 +1494,7 @@ def copy_similar(
     line_dict["geological_type"] = self.parent.geol_coll.df.loc[
         self.parent.geol_coll.df["uid"] == input_uid, "geological_type"
     ].values[0]
-    line_dict["geological_feature"] = self.parent.geol_coll.get_uid_feature(
+    line_dict["feature"] = self.parent.geol_coll.get_uid_feature(
         self.selected_uids[0]
     )
     line_dict["scenario"] = self.parent.geol_coll.get_uid_scenario(

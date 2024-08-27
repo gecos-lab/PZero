@@ -35,7 +35,7 @@ class FluidsCollection(BaseCollection):
             "name": "undef",
             "topology": "undef",
             "fluid_type": "undef",
-            "fluid_feature": "undef",
+            "feature": "undef",
             "scenario": "undef",
             "properties_names": [],
             "properties_components": [],
@@ -48,7 +48,7 @@ class FluidsCollection(BaseCollection):
             "name": str,
             "topology": str,
             "fluid_type": str,
-            "fluid_feature": str,
+            "feature": str,
             "scenario": str,
             "properties_names": list,
             "properties_components": list,
@@ -73,7 +73,7 @@ class FluidsCollection(BaseCollection):
             "XsPolyLine",
         ]
 
-        self.editable_columns_names = ["name", "fluid_type", "fluid_feature", "scenario"]
+        self.editable_columns_names = ["name", "fluid_type", "feature", "scenario"]
 
         self.collection_name = 'fluids'
 
@@ -93,11 +93,11 @@ class FluidsCollection(BaseCollection):
         # Note that for performance reasons this is done explicitly here, when adding an entity to the
         # collection, and not with a signal telling the legend to be updated by scanning the whole collection.
         fluid_type = entity_dict["fluid_type"]
-        feature = entity_dict["fluid_feature"]
+        feature = entity_dict["feature"]
         scenario = entity_dict["scenario"]
         if self.parent.fluids_legend_df.loc[
             (self.parent.fluids_legend_df["fluid_type"] == fluid_type)
-            & (self.parent.fluids_legend_df["fluid_feature"] == feature)
+            & (self.parent.fluids_legend_df["feature"] == feature)
             & (self.parent.fluids_legend_df["scenario"] == scenario)
         ].empty:
             if color:
@@ -108,7 +108,7 @@ class FluidsCollection(BaseCollection):
             self.parent.fluids_legend_df = self.parent.fluids_legend_df.append(
                 {
                     "fluid_type": fluid_type,
-                    "fluid_feature": feature,
+                    "feature": feature,
                     "fluid_time": 0.0,
                     "fluid_sequence": "fluid_0",
                     "scenario": scenario,
@@ -167,7 +167,7 @@ class FluidsCollection(BaseCollection):
         entity_dict["name"] = self.get_uid_name(uid)
         entity_dict["topology"] = self.get_uid_topology(uid)
         entity_dict["fluid_type"] = self.get_uid_type(uid)
-        entity_dict["fluid_feature"] = self.get_uid_feature(uid)
+        entity_dict["feature"] = self.get_uid_feature(uid)
         entity_dict["scenario"] = self.get_uid_scenario(uid)
         entity_dict["properties_names"] = self.get_uid_properties_names(uid)
         entity_dict["properties_components"] = self.get_uid_properties_components(uid)
@@ -206,20 +206,20 @@ class FluidsCollection(BaseCollection):
                 self.parent.fluids_coll.df["uid"] == uid, "fluid_type"
             ].values[0]
             feature = self.parent.fluids_coll.df.loc[
-                self.parent.fluids_coll.df["uid"] == uid, "fluid_feature"
+                self.parent.fluids_coll.df["uid"] == uid, "feature"
             ].values[0]
             scenario = self.parent.fluids_coll.df.loc[
                 self.parent.fluids_coll.df["uid"] == uid, "scenario"
             ].values[0]
             if self.parent.fluids_legend_df.loc[
                 (self.parent.fluids_legend_df["fluid_type"] == fluid_type)
-                & (self.parent.fluids_legend_df["fluid_feature"] == feature)
+                & (self.parent.fluids_legend_df["feature"] == feature)
                 & (self.parent.fluids_legend_df["scenario"] == scenario)
             ].empty:
                 self.parent.fluids_legend_df = self.parent.fluids_legend_df.append(
                     {
                         "fluid_type": fluid_type,
-                        "fluid_feature": feature,
+                        "feature": feature,
                         "fluid_time": 0.0,
                         "fluid_sequence": "strati_0",
                         "scenario": scenario,
@@ -240,7 +240,7 @@ class FluidsCollection(BaseCollection):
         # legend_updated is used to record if the table is updated or not.
         legend_updated = False
         fluid_types_in_legend = pd.unique(self.parent.fluids_legend_df["fluid_type"])
-        features_in_legend = pd.unique(self.parent.fluids_legend_df["fluid_feature"])
+        features_in_legend = pd.unique(self.parent.fluids_legend_df["feature"])
         scenarios_in_legend = pd.unique(self.parent.fluids_legend_df["scenario"])
         for fluid_type in fluid_types_in_legend:
             if self.parent.fluids_coll.df.loc[
@@ -255,47 +255,47 @@ class FluidsCollection(BaseCollection):
             for feature in features_in_legend:
                 if self.parent.fluids_coll.df.loc[
                     (self.parent.fluids_coll.df["fluid_type"] == fluid_type)
-                    & (self.parent.fluids_coll.df["fluid_feature"] == feature)
+                    & (self.parent.fluids_coll.df["feature"] == feature)
                 ].empty:
                     # Get index of row to be removed, then remove it in place with .drop().
                     idx_remove = self.parent.fluids_legend_df[
                         (self.parent.fluids_legend_df["fluid_type"] == fluid_type)
-                        & (self.parent.fluids_legend_df["fluid_feature"] == feature)
+                        & (self.parent.fluids_legend_df["feature"] == feature)
                         ].index
                     self.parent.fluids_legend_df.drop(idx_remove, inplace=True)
                     legend_updated = legend_updated or True
                 for scenario in scenarios_in_legend:
                     if self.parent.fluids_coll.df.loc[
                         (self.parent.fluids_coll.df["fluid_type"] == fluid_type)
-                        & (self.parent.fluids_coll.df["fluid_feature"] == feature)
+                        & (self.parent.fluids_coll.df["feature"] == feature)
                         & (self.parent.fluids_coll.df["scenario"] == scenario)
                     ].empty:
                         # Get index of row to be removed, then remove it in place with .drop().
                         idx_remove = self.parent.fluids_legend_df[
                             (self.parent.fluids_legend_df["fluid_type"] == fluid_type)
-                            & (self.parent.fluids_legend_df["fluid_feature"] == feature)
+                            & (self.parent.fluids_legend_df["feature"] == feature)
                             & (self.parent.fluids_legend_df["scenario"] == scenario)
                             ].index
                         self.parent.fluids_legend_df.drop(idx_remove, inplace=True)
                         legend_updated = legend_updated or True
         for feature in features_in_legend:
             if self.parent.fluids_coll.df.loc[
-                self.parent.fluids_coll.df["fluid_feature"] == feature
+                self.parent.fluids_coll.df["feature"] == feature
             ].empty:
                 # Get index of row to be removed, then remove it in place with .drop().
                 idx_remove = self.parent.fluids_legend_df[
-                    self.parent.fluids_legend_df["fluid_feature"] == feature
+                    self.parent.fluids_legend_df["feature"] == feature
                     ].index
                 self.parent.fluids_legend_df.drop(idx_remove, inplace=True)
                 legend_updated = legend_updated or True
             for scenario in scenarios_in_legend:
                 if self.parent.fluids_coll.df.loc[
-                    (self.parent.fluids_coll.df["fluid_feature"] == feature)
+                    (self.parent.fluids_coll.df["feature"] == feature)
                     & (self.parent.fluids_coll.df["scenario"] == scenario)
                 ].empty:
                     # Get index of row to be removed, then remove it in place with .drop().
                     idx_remove = self.parent.fluids_legend_df[
-                        (self.parent.fluids_legend_df["fluid_feature"] == feature)
+                        (self.parent.fluids_legend_df["feature"] == feature)
                         & (self.parent.fluids_legend_df["scenario"] == scenario)
                         ].index
                     self.parent.fluids_legend_df.drop(idx_remove, inplace=True)
@@ -315,11 +315,11 @@ class FluidsCollection(BaseCollection):
     def get_uid_legend(self, uid: str = None) -> dict:
         """Get legend for a particular uid."""
         fluid_type = self.df.loc[self.df["uid"] == uid, "fluid_type"].values[0]
-        feature = self.df.loc[self.df["uid"] == uid, "fluid_feature"].values[0]
+        feature = self.df.loc[self.df["uid"] == uid, "feature"].values[0]
         scenario = self.df.loc[self.df["uid"] == uid, "scenario"].values[0]
         legend_dict = self.parent.fluids_legend_df.loc[
             (self.parent.fluids_legend_df["fluid_type"] == fluid_type)
-            & (self.parent.fluids_legend_df["fluid_feature"] == feature)
+            & (self.parent.fluids_legend_df["feature"] == feature)
             & (self.parent.fluids_legend_df["scenario"] == scenario)
             ].to_dict("records")
         return legend_dict[0]  # the '[0]' is needed since .to_dict('records') returns a list of dictionaries (with just one element in this case)
@@ -358,12 +358,12 @@ class FluidsCollection(BaseCollection):
     def get_feature_uids(self, coll_feature: str = None) -> list:
         """Get list of uids of a given collection feature."""
         # ====== in the future use the query method? ========================================
-        return self.df.loc[self.df[self.coll_feature_name] == coll_feature, "uid"].to_list()
+        return self.df.loc[self.df['feature'] == coll_feature, "uid"].to_list()
 
     def get_uid_feature(self, uid: str = None):
         """Get collection type from uid."""
-        return self.df.loc[self.df["uid"] == uid, self.coll_feature_name].values[0]
+        return self.df.loc[self.df["uid"] == uid, 'feature'].values[0]
 
-    def set_uid_feature(self, uid=None, geological_feature=None):
+    def set_uid_feature(self, uid=None, feature=None):
         """Set collection type from uid."""
-        self.df.loc[self.df["uid"] == uid, self.coll_feature_name] = geological_feature
+        self.df.loc[self.df["uid"] == uid, 'feature'] = feature

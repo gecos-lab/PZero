@@ -192,10 +192,10 @@ class BaseCollection(ABC):
         """Helper property to get the full collection type column name for the given collection."""
         return f'{self.collection_name}_type'
 
-    @property
-    def coll_feature_name(self) -> str:
-        """Helper property to get the full collection feature column name for the given collection."""
-        return f'{self.collection_name}_feature'
+    # @property
+    # def coll_feature_name(self) -> str:
+    #     """Helper property to get the full collection feature column name for the given collection."""
+    #     return f'{self.collection_name}_feature'
 
     @property
     def entity_dict_keys(self) -> list:

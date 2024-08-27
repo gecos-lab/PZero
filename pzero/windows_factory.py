@@ -2612,7 +2612,7 @@ class View3D(VTKView):
             curr_obj_dict["name"] = set_opt["name"]
             curr_obj_dict["geological_type"] = set_opt["geological_type"]
             curr_obj_dict["topology"] = "VertexSet"
-            curr_obj_dict["geological_feature"] = set_opt["name"]
+            curr_obj_dict["feature"] = set_opt["name"]
             curr_obj_dict["properties_names"] = properties_name
             curr_obj_dict["properties_components"] = properties_components
             curr_obj_dict["vtk_obj"] = att_point
@@ -4593,7 +4593,7 @@ class ViewStereoplot(MPLView):
                         (self.parent.geol_coll.df["topology"] == "VertexSet")
                         | (self.parent.geol_coll.df["topology"] == "XsVertexSet")
                 ),
-                "geological_feature"
+                "feature"
             ]
             geo_features = pd_unique(filtered_geo_feat)
             print("geo_features: ", geo_features)
@@ -4607,7 +4607,7 @@ class ViewStereoplot(MPLView):
                 geo_scenario = pd_unique(
                     self.parent.geol_coll.df.loc[
                         (self.parent.geol_coll.df["geological_type"] == geo_type)
-                        & (self.parent.geol_coll.df["geological_feature"] == feature),
+                        & (self.parent.geol_coll.df["feature"] == feature),
                         "scenario"
                     ]
                 )
@@ -4620,7 +4620,7 @@ class ViewStereoplot(MPLView):
                     )
                     uids = self.parent.geol_coll.df.loc[
                         (self.parent.geol_coll.df["geological_type"] == geo_type)
-                        & (self.parent.geol_coll.df["geological_feature"] == feature)
+                        & (self.parent.geol_coll.df["feature"] == feature)
                         & (self.parent.geol_coll.df["scenario"] == scenario)
                         & (
                                 (self.parent.geol_coll.df["topology"] == "VertexSet")

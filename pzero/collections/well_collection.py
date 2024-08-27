@@ -123,16 +123,16 @@ class WellCollection(BaseCollection):
                 self.parent.well_coll.df["uid"] == uid, "Loc ID"
             ].values[0]
             feature = self.parent.well_coll.df.loc[
-                self.parent.well_coll.df["uid"] == uid, "geological_feature"
+                self.parent.well_coll.df["uid"] == uid, "feature"
             ].values[0]
             if self.parent.well_legend_df.loc[
                 (self.parent.well_legend_df["Loc ID"] == locid)
-                & (self.parent.well_legend_df["geological_feature"] == feature)
+                & (self.parent.well_legend_df["feature"] == feature)
             ].empty:
                 self.parent.well_legend_df = self.parent.well_legend_df.append(
                     {
                         "Loc ID": locid,
-                        "geological_feature": feature,
+                        "feature": feature,
                         "color_R": round(np_random.random() * 255),
                         "color_G": round(np_random.random() * 255),
                         "color_B": round(np_random.random() * 255),
@@ -149,7 +149,7 @@ class WellCollection(BaseCollection):
         """Remove unused types / features from a legend table."""
         legend_updated = False
         locid_in_legend = pd_unique(self.parent.well_legend_df["Loc ID"])
-        features_in_legend = pd_unique(self.parent.well_legend_df["geological_feature"])
+        features_in_legend = pd_unique(self.parent.well_legend_df["feature"])
         for loc_id in locid_in_legend:
             if self.parent.well_coll.df.loc[
                 self.parent.well_coll.df["Loc ID"] == loc_id
@@ -163,22 +163,22 @@ class WellCollection(BaseCollection):
             for feature in features_in_legend:
                 if self.parent.well_coll.df.loc[
                     (self.parent.well_coll.df["Loc ID"] == loc_id)
-                    & (self.parent.well_coll.df["geological_feature"] == feature)
+                    & (self.parent.well_coll.df["feature"] == feature)
                 ].empty:
                     # Get index of row to be removed, then remove it in place with .drop().
                     idx_remove = self.parent.well_legend_df[
                         (self.parent.well_legend_df["Loc ID"] == loc_id)
-                        & (self.parent.well_legend_df["geological_feature"] == feature)
+                        & (self.parent.well_legend_df["feature"] == feature)
                         ].index
                     self.parent.well_legend_df.drop(idx_remove, inplace=True)
                     legend_updated = legend_updated or True
         for feature in features_in_legend:
             if self.parent.well_coll.df.loc[
-                self.parent.well_coll.df["geological_feature"] == feature
+                self.parent.well_coll.df["feature"] == feature
             ].empty:
                 # Get index of row to be removed, then remove it in place with .drop().
                 idx_remove = self.parent.well_legend_df[
-                    self.parent.well_legend_df["geological_feature"] == feature
+                    self.parent.well_legend_df["feature"] == feature
                     ].index
                 self.parent.well_legend_df.drop(idx_remove, inplace=True)
                 legend_updated = legend_updated or True

@@ -39,7 +39,7 @@ class TestFluidCollection:
                          'name': "fluid-test",
                          'topology': "undef",
                          'fluid_type': "undef",
-                         'fluid_feature': "undef",
+                         'feature': "undef",
                          'scenario': "undef",
                          'properties_names': [],
                          'properties_components': [],

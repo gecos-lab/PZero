@@ -26,7 +26,7 @@ Points not handled correctly."""
 # 'name': "undef"  ###
 # 'topology': "undef"  ###
 # 'geological_type': "undef"  ###
-# 'geological_feature': "undef"  ###
+# 'feature': "undef"  ###
 # 'scenario': "undef"
 # 'properties_names': []
 # 'properties_components': []
@@ -69,12 +69,12 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
                     curr_obj_dict["geological_type"] = gdf.loc[row, "geological_type"]
                 if "geo_type" in column_names:
                     curr_obj_dict["geological_type"] = gdf.loc[row, "geo_type"]
-                if "geological_feature" in column_names:
-                    curr_obj_dict["geological_feature"] = gdf.loc[
-                        row, "geological_feature"
+                if "feature" in column_names:
+                    curr_obj_dict["feature"] = gdf.loc[
+                        row, "feature"
                     ]
                 if "geo_feat" in column_names:
-                    curr_obj_dict["geological_feature"] = gdf.loc[row, "geo_feat"]
+                    curr_obj_dict["feature"] = gdf.loc[row, "geo_feat"]
                 if "scenario" in column_names:
                     curr_obj_dict["scenario"] = gdf.loc[row, "scenario"]
                 curr_obj_dict["topology"] = "PolyLine"
@@ -141,10 +141,10 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
                         curr_obj_dict["geological_type"] = pd_series(
                             gdf_index.loc[i, "geo_type"]
                         )[0]
-                    if "geological_feature" in column_names:
-                        curr_obj_dict["geological_feature"] = i
+                    if "feature" in column_names:
+                        curr_obj_dict["feature"] = i
                     if "geo_feat" in column_names:
-                        curr_obj_dict["geological_feature"] = i
+                        curr_obj_dict["feature"] = i
                     if "scenario" in column_names:
                         curr_obj_dict["scenario"] = pd_series(
                             gdf_index.loc[i, "scenario"]
@@ -219,7 +219,7 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
                         del curr_obj_dict
             else:
                 print(
-                    "Incomplete data. At least the geological_feature property must be present"
+                    "Incomplete data. At least the feature property must be present"
                 )
         else:
             print("Only Point and Line geometries can be imported - aborting.")
@@ -239,10 +239,10 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
                     curr_obj_dict["name"] = gdf.loc[row, "name"]
                 if "fluid_type" in column_names:
                     curr_obj_dict["fluid_type"] = gdf.loc[row, "fluid_type"]
-                if "fluid_feature" in column_names:
-                    curr_obj_dict["fluid_feature"] = gdf.loc[row, "fluid_feature"]
+                if "feature" in column_names:
+                    curr_obj_dict["feature"] = gdf.loc[row, "feature"]
                 if "fluid_feat" in column_names:
-                    curr_obj_dict["fluid_feature"] = gdf.loc[row, "fluid_feat"]
+                    curr_obj_dict["feature"] = gdf.loc[row, "fluid_feat"]
                 if "scenario" in column_names:
                     curr_obj_dict["scenario"] = gdf.loc[row, "scenario"]
                 curr_obj_dict["topology"] = "PolyLine"
@@ -305,10 +305,10 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
                         curr_obj_dict["fluid_type"] = pd_series(
                             gdf_index.loc[i, "fluid_type"]
                         )[0]
-                    if "fluid_feature" in column_names:
-                        curr_obj_dict["fluid_feature"] = i
+                    if "feature" in column_names:
+                        curr_obj_dict["feature"] = i
                     if "fluid_feat" in column_names:
-                        curr_obj_dict["fluid_feature"] = i
+                        curr_obj_dict["feature"] = i
                     if "scenario" in column_names:
                         curr_obj_dict["scenario"] = pd_series(
                             gdf_index.loc[i, "scenario"]
@@ -359,7 +359,7 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
                         del curr_obj_dict
             else:
                 print(
-                    "Incomplete data. At least the fluid_feature property must be present"
+                    "Incomplete data. At least the feature property must be present"
                 )
         else:
             print("Only Point and Line geometries can be imported - aborting.")
@@ -378,12 +378,12 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
                     curr_obj_dict["name"] = gdf.loc[row, "name"]
                 if "bkg_type" in column_names:
                     curr_obj_dict["background_type"] = gdf.loc[row, "bkg_type"]
-                if "background_feature" in column_names:
-                    curr_obj_dict["background_feature"] = gdf.loc[
-                        row, "background_feature"
+                if "feature" in column_names:
+                    curr_obj_dict["feature"] = gdf.loc[
+                        row, "feature"
                     ]
                 if "bkg_feat" in column_names:
-                    curr_obj_dict["background_feature"] = gdf.loc[row, "bkg_feat"]
+                    curr_obj_dict["feature"] = gdf.loc[row, "bkg_feat"]
 
                 curr_obj_dict["topology"] = "PolyLine"
                 curr_obj_dict["vtk_obj"] = PolyLine()
@@ -454,10 +454,10 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
                         curr_obj_dict["background_type"] = pd_series(
                             gdf_index.loc[i, "bkg_type"]
                         )[0]
-                    if "background_feature" in column_names:
-                        curr_obj_dict["background_feature"] = i
+                    if "feature" in column_names:
+                        curr_obj_dict["feature"] = i
                     if "bkg_feat" in column_names:
-                        curr_obj_dict["background_feature"] = i
+                        curr_obj_dict["feature"] = i
 
                     curr_obj_dict["topology"] = "VertexSet"
                     curr_obj_dict["vtk_obj"] = vtk_obj
