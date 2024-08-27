@@ -21,7 +21,7 @@ class Legend(QObject):
     Dictionaries used to define types of legend columns."""
 
     geol_legend_dict = {
-        "geological_type": "undef",
+        "type": "undef",
         "feature": "undef",
         "geological_time": 0.0,
         "geological_sequence": "strati_0",
@@ -34,7 +34,7 @@ class Legend(QObject):
         "opacity": int(100),
     }
     fluids_legend_dict = {
-        "fluid_type": "undef",
+        "type": "undef",
         "feature": "undef",
         "fluid_time": 0.0,
         "fluid_sequence": "fluid_0",
@@ -47,7 +47,7 @@ class Legend(QObject):
         "opacity": 100,
     }
     backgrounds_legend_dict = {
-        "background_type": "undef",
+        "type": "undef",
         "feature": "undef",
         "background_time": 0.0,
         "background_sequence": "back_0",
@@ -71,15 +71,15 @@ class Legend(QObject):
     }
 
     legend_type_dict = {
-        "geological_type": str,
+        "type": str,
         "feature": str,
         "geological_time": float,
         "geological_sequence": str,
-        "fluid_type": str,
+        "type": str,
         "feature": str,
         "fluid_time": float,
         "fluid_sequence": str,
-        "background_type": str,
+        "type": str,
         "feature": str,
         "background_time": float,
         "background_sequence": str,
@@ -210,13 +210,13 @@ class Legend(QObject):
                 lambda: self.change_other_feature_opacity(parent=parent)
             )
 
-        for geo_type in pd_unique(parent.geol_legend_df["geological_type"]):
+        for type in pd_unique(parent.geol_legend_df["type"]):
             llevel_1 = QTreeWidgetItem(
-                parent.LegendTreeWidget, [geo_type]
+                parent.LegendTreeWidget, [type]
             )  # self.GeologyTreeWidget as parent -> top level
             for feature in pd_unique(
                 parent.geol_legend_df.loc[
-                    parent.geol_legend_df["geological_type"] == geo_type,
+                    parent.geol_legend_df["type"] == type,
                     "feature",
                 ]
             ):
@@ -225,60 +225,60 @@ class Legend(QObject):
                 )  # llevel_1 as parent -> 2nd level
                 for scenario in pd_unique(
                     parent.geol_legend_df.loc[
-                        (parent.geol_legend_df["geological_type"] == geo_type)
+                        (parent.geol_legend_df["type"] == type)
                         & (parent.geol_legend_df["feature"] == feature),
                         "scenario",
                     ]
                 ):
                     color_R = parent.geol_legend_df.loc[
-                        (parent.geol_legend_df["geological_type"] == geo_type)
+                        (parent.geol_legend_df["type"] == type)
                         & (parent.geol_legend_df["feature"] == feature)
                         & (parent.geol_legend_df["scenario"] == scenario),
                         "color_R",
                     ].values[0]
                     color_G = parent.geol_legend_df.loc[
-                        (parent.geol_legend_df["geological_type"] == geo_type)
+                        (parent.geol_legend_df["type"] == type)
                         & (parent.geol_legend_df["feature"] == feature)
                         & (parent.geol_legend_df["scenario"] == scenario),
                         "color_G",
                     ].values[0]
                     color_B = parent.geol_legend_df.loc[
-                        (parent.geol_legend_df["geological_type"] == geo_type)
+                        (parent.geol_legend_df["type"] == type)
                         & (parent.geol_legend_df["feature"] == feature)
                         & (parent.geol_legend_df["scenario"] == scenario),
                         "color_B",
                     ].values[0]
                     line_thick = parent.geol_legend_df.loc[
-                        (parent.geol_legend_df["geological_type"] == geo_type)
+                        (parent.geol_legend_df["type"] == type)
                         & (parent.geol_legend_df["feature"] == feature)
                         & (parent.geol_legend_df["scenario"] == scenario),
                         "line_thick",
                     ].values[0]
                     point_size = parent.geol_legend_df.loc[
-                        (parent.geol_legend_df["geological_type"] == geo_type)
+                        (parent.geol_legend_df["type"] == type)
                         & (parent.geol_legend_df["feature"] == feature)
                         & (parent.geol_legend_df["scenario"] == scenario),
                         "point_size",
                     ].values[0]
                     opacity = parent.geol_legend_df.loc[
-                        (parent.geol_legend_df["geological_type"] == geo_type)
+                        (parent.geol_legend_df["type"] == type)
                         & (parent.geol_legend_df["feature"] == feature)
                         & (parent.geol_legend_df["scenario"] == scenario),
                         "opacity",
                     ].values[0]
                     geol_time_value = parent.geol_legend_df.loc[
-                        (parent.geol_legend_df["geological_type"] == geo_type)
+                        (parent.geol_legend_df["type"] == type)
                         & (parent.geol_legend_df["feature"] == feature)
                         & (parent.geol_legend_df["scenario"] == scenario),
                         "geological_time",
                     ].values[0]
-                    # geol_time_value = str(parent.geol_legend_df.loc[(parent.geol_legend_df['geological_type'] == geo_type) & (parent.geol_legend_df['feature'] == feature) & (parent.geol_legend_df['scenario'] == scenario), "geological_time"].values[0])
+                    # geol_time_value = str(parent.geol_legend_df.loc[(parent.geol_legend_df['type'] == type) & (parent.geol_legend_df['feature'] == feature) & (parent.geol_legend_df['scenario'] == scenario), "geological_time"].values[0])
                     # if np.isnan(geol_time_value):
                     #     print("geol_time_value: ", geol_time_value)
                     #     geol_time_value = 0.0
                     #     print("geol_time_value: ", geol_time_value)
                     geol_sequence_value = parent.geol_legend_df.loc[
-                        (parent.geol_legend_df["geological_type"] == geo_type)
+                        (parent.geol_legend_df["type"] == type)
                         & (parent.geol_legend_df["feature"] == feature)
                         & (parent.geol_legend_df["scenario"] == scenario),
                         "geological_sequence",
@@ -289,7 +289,7 @@ class Legend(QObject):
                     #     print("geol_sequence_value: ", geol_sequence_value)
                     "geol_color_dialog_btn > QPushButton used to select color"
                     geol_color_dialog_btn = QPushButton()
-                    geol_color_dialog_btn.geo_type = geo_type  # this is to pass these values to the update function below
+                    geol_color_dialog_btn.type = type  # this is to pass these values to the update function below
                     geol_color_dialog_btn.feature = feature
                     geol_color_dialog_btn.scenario = scenario
                     geol_color_dialog_btn.setStyleSheet(
@@ -299,13 +299,13 @@ class Legend(QObject):
                     )
                     "geol_line_thick_spn > QSpinBox used to select line thickness"
                     geol_line_thick_spn = QSpinBox()
-                    geol_line_thick_spn.geo_type = geo_type  # this is to pass these values to the update function below
+                    geol_line_thick_spn.type = type  # this is to pass these values to the update function below
                     geol_line_thick_spn.feature = feature
                     geol_line_thick_spn.scenario = scenario
                     geol_line_thick_spn.setValue(line_thick)
                     "geol_point_size_spn > QSpinBox used to select point size"
                     geol_point_size_spn = QSpinBox()
-                    geol_point_size_spn.geo_type = geo_type  # this is to pass these values to the update function below
+                    geol_point_size_spn.type = type  # this is to pass these values to the update function below
                     geol_point_size_spn.feature = feature
                     geol_point_size_spn.scenario = scenario
                     if isnan(point_size):
@@ -313,7 +313,7 @@ class Legend(QObject):
                     geol_point_size_spn.setValue(point_size)
                     "geol_line_opacity_spn > QSpinBox used to select opacity"
                     geol_opacity_spn = QSpinBox()
-                    geol_opacity_spn.geo_type = geo_type  # this is to pass these values to the update function below
+                    geol_opacity_spn.type = type  # this is to pass these values to the update function below
                     geol_opacity_spn.feature = feature
                     geol_opacity_spn.scenario = scenario
                     geol_opacity_spn.setMaximum(100)
@@ -323,14 +323,14 @@ class Legend(QObject):
                     "geol_time_spn > QDoubleSpinBox used to give relative geological time"
                     geol_time_spn = QDoubleSpinBox()
                     geol_time_spn.setMinimum(-999999.0)  # no negative relative ages
-                    geol_time_spn.geo_type = geo_type  # this is to pass these values to the update function below
+                    geol_time_spn.type = type  # this is to pass these values to the update function below
                     geol_time_spn.feature = feature
                     geol_time_spn.scenario = scenario
                     geol_time_spn.setValue(geol_time_value)
                     # "geol_time_combo > QComboBox used to define relative geological time"
                     # geol_time_combo = QComboBox()
                     # geol_time_combo.setEditable(True)
-                    # geol_time_combo.geo_type = geo_type  # this is to pass these values to the update function below
+                    # geol_time_combo.type = type  # this is to pass these values to the update function below
                     # geol_time_combo.feature = feature
                     # geol_time_combo.scenario = scenario
                     # geol_time_combo.addItems(parent.geol_legend_df['geological_time'].unique().astype(str))
@@ -338,7 +338,7 @@ class Legend(QObject):
                     "geol_sequence_combo > QComboBox used to define geological sequence"
                     geol_sequence_combo = QComboBox()
                     geol_sequence_combo.setEditable(True)
-                    geol_sequence_combo.geo_type = geo_type  # this is to pass these values to the update function below
+                    geol_sequence_combo.type = type  # this is to pass these values to the update function below
                     geol_sequence_combo.feature = feature
                     geol_sequence_combo.scenario = scenario
                     geol_sequence_combo.addItems(
@@ -454,13 +454,13 @@ class Legend(QObject):
             well_line_opacity_spn.valueChanged.connect(
                 lambda: self.change_well_line_opacity(parent=parent)
             )
-        for fluid_type in pd_unique(parent.fluids_legend_df["fluid_type"]):
+        for type in pd_unique(parent.fluids_legend_df["type"]):
             llevel_1 = QTreeWidgetItem(
-                parent.LegendTreeWidget, [fluid_type]
+                parent.LegendTreeWidget, [type]
             )  # self.GeologyTreeWidget as parent -> top level
             for feature in pd_unique(
                 parent.fluids_legend_df.loc[
-                    parent.fluids_legend_df["fluid_type"] == fluid_type, "feature"
+                    parent.fluids_legend_df["type"] == type, "feature"
                 ]
             ):
                 llevel_2 = QTreeWidgetItem(
@@ -468,67 +468,67 @@ class Legend(QObject):
                 )  # llevel_1 as parent -> 2nd level
                 for scenario in pd_unique(
                     parent.fluids_legend_df.loc[
-                        (parent.fluids_legend_df["fluid_type"] == fluid_type)
+                        (parent.fluids_legend_df["type"] == type)
                         & (parent.fluids_legend_df["feature"] == feature),
                         "scenario",
                     ]
                 ):
                     color_R = parent.fluids_legend_df.loc[
-                        (parent.fluids_legend_df["fluid_type"] == fluid_type)
+                        (parent.fluids_legend_df["type"] == type)
                         & (parent.fluids_legend_df["feature"] == feature)
                         & (parent.fluids_legend_df["scenario"] == scenario),
                         "color_R",
                     ].values[0]
                     color_G = parent.fluids_legend_df.loc[
-                        (parent.fluids_legend_df["fluid_type"] == fluid_type)
+                        (parent.fluids_legend_df["type"] == type)
                         & (parent.fluids_legend_df["feature"] == feature)
                         & (parent.fluids_legend_df["scenario"] == scenario),
                         "color_G",
                     ].values[0]
                     color_B = parent.fluids_legend_df.loc[
-                        (parent.fluids_legend_df["fluid_type"] == fluid_type)
+                        (parent.fluids_legend_df["type"] == type)
                         & (parent.fluids_legend_df["feature"] == feature)
                         & (parent.fluids_legend_df["scenario"] == scenario),
                         "color_B",
                     ].values[0]
                     line_thick = parent.fluids_legend_df.loc[
-                        (parent.fluids_legend_df["fluid_type"] == fluid_type)
+                        (parent.fluids_legend_df["type"] == type)
                         & (parent.fluids_legend_df["feature"] == feature)
                         & (parent.fluids_legend_df["scenario"] == scenario),
                         "line_thick",
                     ].values[0]
                     point_size = parent.fluids_legend_df.loc[
-                        (parent.fluids_legend_df["fluid_type"] == fluid_type)
+                        (parent.fluids_legend_df["type"] == type)
                         & (parent.fluids_legend_df["feature"] == feature)
                         & (parent.fluids_legend_df["scenario"] == scenario),
                         "point_size",
                     ].values[0]
                     opacity = parent.fluids_legend_df.loc[
-                        (parent.fluids_legend_df["fluid_type"] == fluid_type)
+                        (parent.fluids_legend_df["type"] == type)
                         & (parent.fluids_legend_df["feature"] == feature)
                         & (parent.fluids_legend_df["scenario"] == scenario),
                         "opacity",
                     ].values[0]
                     fluid_time_value = parent.fluids_legend_df.loc[
-                        (parent.fluids_legend_df["fluid_type"] == fluid_type)
+                        (parent.fluids_legend_df["type"] == type)
                         & (parent.fluids_legend_df["feature"] == feature)
                         & (parent.fluids_legend_df["scenario"] == scenario),
                         "fluid_time",
                     ].values[0]
 
-                    # geol_time_value = str(parent.geol_legend_df.loc[(parent.geol_legend_df['geological_type'] == geo_type) & (parent.geol_legend_df['feature'] == feature) & (parent.geol_legend_df['scenario'] == scenario), "geological_time"].values[0])
+                    # geol_time_value = str(parent.geol_legend_df.loc[(parent.geol_legend_df['type'] == type) & (parent.geol_legend_df['feature'] == feature) & (parent.geol_legend_df['scenario'] == scenario), "geological_time"].values[0])
                     # if np.isnan(geol_time_value):
                     #     print("geol_time_value: ", geol_time_value)
                     #     geol_time_value = 0.0
                     #     print("geol_time_value: ", geol_time_value)
-                    # fluid_sequence_value = parent.fluids_legend_df.loc[(parent.fluids_legend_df['fluid_type'] == fluid_type) & (parent.fluids_legend_df['feature'] == feature) & (parent.fluids_legend_df['scenario'] == scenario), "fluid_sequence"].values[0]
+                    # fluid_sequence_value = parent.fluids_legend_df.loc[(parent.fluids_legend_df['type'] == type) & (parent.fluids_legend_df['feature'] == feature) & (parent.fluids_legend_df['scenario'] == scenario), "fluid_sequence"].values[0]
                     # if not isinstance(geol_sequence_value, str):
                     #     print("geol_sequence_value: ", geol_sequence_value)
                     #     geol_sequence_value = "strati_0"
                     #     print("geol_sequence_value: ", geol_sequence_value)
                     "geol_color_dialog_btn > QPushButton used to select color"
                     fluid_color_dialog_btn = QPushButton()
-                    fluid_color_dialog_btn.fluid_type = fluid_type  # this is to pass these values to the update function below
+                    fluid_color_dialog_btn.type = type  # this is to pass these values to the update function below
                     fluid_color_dialog_btn.feature = feature
                     fluid_color_dialog_btn.scenario = scenario
                     fluid_color_dialog_btn.setStyleSheet(
@@ -538,19 +538,19 @@ class Legend(QObject):
                     )
                     "fluid_line_thick_spn > QSpinBox used to select line thickness"
                     fluid_line_thick_spn = QSpinBox()
-                    fluid_line_thick_spn.fluid_type = fluid_type  # this is to pass these values to the update function below
+                    fluid_line_thick_spn.type = type  # this is to pass these values to the update function below
                     fluid_line_thick_spn.feature = feature
                     fluid_line_thick_spn.scenario = scenario
                     fluid_line_thick_spn.setValue(line_thick)
                     "fluid_point_size_spn > QSpinBox used to select point size"
                     fluid_point_size_spn = QSpinBox()
-                    fluid_point_size_spn.fluid_type = fluid_type  # this is to pass these values to the update function below
+                    fluid_point_size_spn.type = type  # this is to pass these values to the update function below
                     fluid_point_size_spn.feature = feature
                     fluid_point_size_spn.scenario = scenario
                     fluid_point_size_spn.setValue(point_size)
                     "fluid_opacity_spn > QSpinBox used to select line thickness"
                     fluid_opacity_spn = QSpinBox()
-                    fluid_opacity_spn.fluid_type = fluid_type  # this is to pass these values to the update function below
+                    fluid_opacity_spn.type = type  # this is to pass these values to the update function below
                     fluid_opacity_spn.feature = feature
                     fluid_opacity_spn.scenario = scenario
                     fluid_opacity_spn.setMaximum(100)
@@ -558,14 +558,14 @@ class Legend(QObject):
                     "geol_time_spn > QDoubleSpinBox used to give relative geological time"
                     fluid_time_spn = QDoubleSpinBox()
                     fluid_time_spn.setMinimum(-999999.0)  # no negative relative ages
-                    fluid_time_spn.fluid_type = fluid_type  # this is to pass these values to the update function below
+                    fluid_time_spn.type = type  # this is to pass these values to the update function below
                     fluid_time_spn.feature = feature
                     fluid_time_spn.scenario = scenario
                     fluid_time_spn.setValue(fluid_time_value)
                     # "geol_time_combo > QComboBox used to define relative geological time"
                     # geol_time_combo = QComboBox()
                     # geol_time_combo.setEditable(True)
-                    # geol_time_combo.geo_type = geo_type  # this is to pass these values to the update function below
+                    # geol_time_combo.type = type  # this is to pass these values to the update function below
                     # geol_time_combo.feature = feature
                     # geol_time_combo.scenario = scenario
                     # geol_time_combo.addItems(parent.geol_legend_df['geological_time'].unique().astype(str))
@@ -573,7 +573,7 @@ class Legend(QObject):
                     "geol_sequence_combo > QComboBox used to define geological sequence"
                     # geol_sequence_combo = QComboBox()
                     # geol_sequence_combo.setEditable(True)
-                    # geol_sequence_combo.geo_type = geo_type  # this is to pass these values to the update function below
+                    # geol_sequence_combo.type = type  # this is to pass these values to the update function below
                     # geol_sequence_combo.feature = feature
                     # geol_sequence_combo.scenario = scenario
                     # geol_sequence_combo.addItems(parent.geol_legend_df['geological_sequence'].unique())
@@ -617,15 +617,15 @@ class Legend(QObject):
                     )
                     # geol_time_combo.currentTextChanged.connect(lambda: self.change_geological_time(parent=parent))
                     # fluid_sequence_combo.currentTextChanged.connect(lambda: self.change_fluid_sequence(parent=parent))
-        for background_type in pd_unique(
-            parent.backgrounds_legend_df["background_type"]
+        for type in pd_unique(
+            parent.backgrounds_legend_df["type"]
         ):
             llevel_1 = QTreeWidgetItem(
-                parent.LegendTreeWidget, [background_type]
+                parent.LegendTreeWidget, [type]
             )  # self.GeologyTreeWidget as parent -> top level
             for feature in pd_unique(
                 parent.backgrounds_legend_df.loc[
-                    parent.backgrounds_legend_df["background_type"] == background_type,
+                    parent.backgrounds_legend_df["type"] == type,
                     "feature",
                 ]
             ):
@@ -633,38 +633,38 @@ class Legend(QObject):
                     llevel_1, [feature]
                 )  # llevel_1 as parent -> 2nd level
                 color_R = parent.backgrounds_legend_df.loc[
-                    (parent.backgrounds_legend_df["background_type"] == background_type)
+                    (parent.backgrounds_legend_df["type"] == type)
                     & (parent.backgrounds_legend_df["feature"] == feature),
                     "color_R",
                 ].values[0]
                 color_G = parent.backgrounds_legend_df.loc[
-                    (parent.backgrounds_legend_df["background_type"] == background_type)
+                    (parent.backgrounds_legend_df["type"] == type)
                     & (parent.backgrounds_legend_df["feature"] == feature),
                     "color_G",
                 ].values[0]
                 color_B = parent.backgrounds_legend_df.loc[
-                    (parent.backgrounds_legend_df["background_type"] == background_type)
+                    (parent.backgrounds_legend_df["type"] == type)
                     & (parent.backgrounds_legend_df["feature"] == feature),
                     "color_B",
                 ].values[0]
                 line_thick = parent.backgrounds_legend_df.loc[
-                    (parent.backgrounds_legend_df["background_type"] == background_type)
+                    (parent.backgrounds_legend_df["type"] == type)
                     & (parent.backgrounds_legend_df["feature"] == feature),
                     "line_thick",
                 ].values[0]
                 point_size = parent.backgrounds_legend_df.loc[
-                    (parent.backgrounds_legend_df["background_type"] == background_type)
+                    (parent.backgrounds_legend_df["type"] == type)
                     & (parent.backgrounds_legend_df["feature"] == feature),
                     "point_size",
                 ].values[0]
                 opacity = parent.backgrounds_legend_df.loc[
-                    (parent.backgrounds_legend_df["background_type"] == background_type)
+                    (parent.backgrounds_legend_df["type"] == type)
                     & (parent.backgrounds_legend_df["feature"] == feature),
                     "opacity",
                 ].values[0]
                 "geol_color_dialog_btn > QPushButton used to select color"
                 backgrounds_color_dialog_btn = QPushButton()
-                backgrounds_color_dialog_btn.background_type = background_type  # this is to pass these values to the update function below
+                backgrounds_color_dialog_btn.type = type  # this is to pass these values to the update function below
                 backgrounds_color_dialog_btn.feature = feature
 
                 backgrounds_color_dialog_btn.setStyleSheet(
@@ -672,19 +672,19 @@ class Legend(QObject):
                 )
                 "background_line_thick_spn > QSpinBox used to select line thickness"
                 background_line_thick_spn = QSpinBox()
-                background_line_thick_spn.background_type = background_type  # this is to pass these values to the update function below
+                background_line_thick_spn.type = type  # this is to pass these values to the update function below
                 background_line_thick_spn.feature = feature
 
                 background_line_thick_spn.setValue(line_thick)
 
                 "background_point_size_spn > QSpinBox used to select line thickness"
                 background_point_size_spn = QSpinBox()
-                background_point_size_spn.background_type = background_type  # this is to pass these values to the update function below
+                background_point_size_spn.type = type  # this is to pass these values to the update function below
                 background_point_size_spn.feature = feature
                 background_point_size_spn.setValue(point_size)
                 "background_opacity_spn > QSpinBox used to select line thickness"
                 background_opacity_spn = QSpinBox()
-                background_opacity_spn.background_type = background_type  # this is to pass these values to the update function below
+                background_opacity_spn.type = type  # this is to pass these values to the update function below
                 background_opacity_spn.feature = feature
                 background_opacity_spn.setMaximum(100)
                 background_opacity_spn.setValue(opacity)
@@ -721,24 +721,24 @@ class Legend(QObject):
         parent.LegendTreeWidget.expandAll()
 
     def change_geology_feature_color(self, parent=None):
-        geo_type = self.sender().geo_type
+        type = self.sender().type
         feature = self.sender().feature
         scenario = self.sender().scenario
         """Here we use the same query as above to GET the color from the legend"""
         old_color_R = parent.geol_legend_df.loc[
-            (parent.geol_legend_df["geological_type"] == geo_type)
+            (parent.geol_legend_df["type"] == type)
             & (parent.geol_legend_df["feature"] == feature)
             & (parent.geol_legend_df["scenario"] == scenario),
             "color_R",
         ].values[0]
         old_color_G = parent.geol_legend_df.loc[
-            (parent.geol_legend_df["geological_type"] == geo_type)
+            (parent.geol_legend_df["type"] == type)
             & (parent.geol_legend_df["feature"] == feature)
             & (parent.geol_legend_df["scenario"] == scenario),
             "color_G",
         ].values[0]
         old_color_B = parent.geol_legend_df.loc[
-            (parent.geol_legend_df["geological_type"] == geo_type)
+            (parent.geol_legend_df["type"] == type)
             & (parent.geol_legend_df["feature"] == feature)
             & (parent.geol_legend_df["scenario"] == scenario),
             "color_B",
@@ -756,19 +756,19 @@ class Legend(QObject):
         new_color_B = color_out.blue()
         """Here the query is reversed and modified, dropping the values() method, to allow SETTING the color in the legend."""
         parent.geol_legend_df.loc[
-            (parent.geol_legend_df["geological_type"] == geo_type)
+            (parent.geol_legend_df["type"] == type)
             & (parent.geol_legend_df["feature"] == feature)
             & (parent.geol_legend_df["scenario"] == scenario),
             "color_R",
         ] = new_color_R
         parent.geol_legend_df.loc[
-            (parent.geol_legend_df["geological_type"] == geo_type)
+            (parent.geol_legend_df["type"] == type)
             & (parent.geol_legend_df["feature"] == feature)
             & (parent.geol_legend_df["scenario"] == scenario),
             "color_G",
         ] = new_color_G
         parent.geol_legend_df.loc[
-            (parent.geol_legend_df["geological_type"] == geo_type)
+            (parent.geol_legend_df["type"] == type)
             & (parent.geol_legend_df["feature"] == feature)
             & (parent.geol_legend_df["scenario"] == scenario),
             "color_B",
@@ -781,7 +781,7 @@ class Legend(QObject):
         )
         """Signal to update actors in windows. This is emitted only for the modified uid under the 'color' key."""
         updated_list = parent.geol_coll.df.loc[
-            (parent.geol_coll.df["geological_type"] == geo_type)
+            (parent.geol_coll.df["type"] == type)
             & (parent.geol_coll.df["feature"] == feature)
             & (parent.geol_coll.df["scenario"] == scenario),
             "uid",
@@ -790,20 +790,20 @@ class Legend(QObject):
         # self.change_well_feature_color(parent,feature) #Update the wells
 
     def change_geology_feature_line_thick(self, parent=None):
-        geo_type = self.sender().geo_type
+        type = self.sender().type
         feature = self.sender().feature
         scenario = self.sender().scenario
         line_thick = self.sender().value()
         "Here the query is reversed and modified, dropping the values() method, to allow SETTING the line thickness in the legend"
         parent.geol_legend_df.loc[
-            (parent.geol_legend_df["geological_type"] == geo_type)
+            (parent.geol_legend_df["type"] == type)
             & (parent.geol_legend_df["feature"] == feature)
             & (parent.geol_legend_df["scenario"] == scenario),
             "line_thick",
         ] = line_thick
         """Signal to update actors in windows. This is emitted only for the modified uid under the 'line_thick' key."""
         updated_list = parent.geol_coll.df.loc[
-            (parent.geol_coll.df["geological_type"] == geo_type)
+            (parent.geol_coll.df["type"] == type)
             & (parent.geol_coll.df["feature"] == feature)
             & (parent.geol_coll.df["scenario"] == scenario),
             "uid",
@@ -811,20 +811,20 @@ class Legend(QObject):
         parent.geology_legend_thick_modified_signal.emit(updated_list)
 
     def change_geology_feature_point_size(self, parent=None):
-        geo_type = self.sender().geo_type
+        type = self.sender().type
         feature = self.sender().feature
         scenario = self.sender().scenario
         point_size = self.sender().value()
         "Here the query is reversed and modified, dropping the values() method, to allow SETTING the line thickness in the legend"
         parent.geol_legend_df.loc[
-            (parent.geol_legend_df["geological_type"] == geo_type)
+            (parent.geol_legend_df["type"] == type)
             & (parent.geol_legend_df["feature"] == feature)
             & (parent.geol_legend_df["scenario"] == scenario),
             "point_size",
         ] = point_size
         """Signal to update actors in windows. This is emitted only for the modified uid under the 'line_thick' key."""
         updated_list = parent.geol_coll.df.loc[
-            (parent.geol_coll.df["geological_type"] == geo_type)
+            (parent.geol_coll.df["type"] == type)
             & (parent.geol_coll.df["feature"] == feature)
             & (parent.geol_coll.df["scenario"] == scenario),
             "uid",
@@ -832,20 +832,20 @@ class Legend(QObject):
         parent.geology_legend_point_size_modified_signal.emit(updated_list)
 
     def change_geology_feature_opacity(self, parent=None):
-        geo_type = self.sender().geo_type
+        type = self.sender().type
         feature = self.sender().feature
         scenario = self.sender().scenario
         opacity = self.sender().value()
         "Here the query is reversed and modified, dropping the values() method, to allow SETTING the line thickness in the legend"
         parent.geol_legend_df.loc[
-            (parent.geol_legend_df["geological_type"] == geo_type)
+            (parent.geol_legend_df["type"] == type)
             & (parent.geol_legend_df["feature"] == feature)
             & (parent.geol_legend_df["scenario"] == scenario),
             "opacity",
         ] = opacity
         """Signal to update actors in windows. This is emitted only for the modified uid under the 'opacity' key."""
         updated_list = parent.geol_coll.df.loc[
-            (parent.geol_coll.df["geological_type"] == geo_type)
+            (parent.geol_coll.df["type"] == type)
             & (parent.geol_coll.df["feature"] == feature)
             & (parent.geol_coll.df["scenario"] == scenario),
             "uid",
@@ -853,12 +853,12 @@ class Legend(QObject):
         parent.geology_legend_opacity_modified_signal.emit(updated_list)
 
     def change_geological_time(self, parent=None):
-        geo_type = self.sender().geo_type
+        type = self.sender().type
         feature = self.sender().feature
         scenario = self.sender().scenario
         geol_time = self.sender().value()
         parent.geol_legend_df.loc[
-            (parent.geol_legend_df["geological_type"] == geo_type)
+            (parent.geol_legend_df["type"] == type)
             & (parent.geol_legend_df["feature"] == feature)
             & (parent.geol_legend_df["scenario"] == scenario),
             "geological_time",
@@ -876,18 +876,18 @@ class Legend(QObject):
         #     geol_time = float(self.sender().currentText())
         # except:
         #     geol_time = float('nan')
-        #     parent.geol_legend_df.loc[(parent.geol_legend_df['geological_type'] == geo_type) & (parent.geol_legend_df['feature'] == feature) & (parent.geol_legend_df['scenario'] == scenario), "geological_time"] = geol_time
+        #     parent.geol_legend_df.loc[(parent.geol_legend_df['type'] == type) & (parent.geol_legend_df['feature'] == feature) & (parent.geol_legend_df['scenario'] == scenario), "geological_time"] = geol_time
         #     """Order geological legend entities with descending geological_time values"""
         #     parent.geol_legend_df.sort_values(by='geological_time', ascending=True, inplace=True)
         #     self.update_widget(parent=parent)
 
     def change_geological_sequence(self, parent=None):
-        geo_type = self.sender().geo_type
+        type = self.sender().type
         feature = self.sender().feature
         scenario = self.sender().scenario
         geol_seqn = self.sender().currentText()
         parent.geol_legend_df.loc[
-            (parent.geol_legend_df["geological_type"] == geo_type)
+            (parent.geol_legend_df["type"] == type)
             & (parent.geol_legend_df["feature"] == feature)
             & (parent.geol_legend_df["scenario"] == scenario),
             "geological_sequence",
@@ -1113,24 +1113,24 @@ class Legend(QObject):
         parent.well_legend_opacity_modified_signal.emit(updated_list)
 
     def change_fluid_feature_color(self, parent=None):
-        fluid_type = self.sender().fluid_type
+        type = self.sender().type
         feature = self.sender().feature
         scenario = self.sender().scenario
         """Here we use the same query as above to GET the color from the legend"""
         old_color_R = parent.fluids_legend_df.loc[
-            (parent.fluids_legend_df["fluid_type"] == fluid_type)
+            (parent.fluids_legend_df["type"] == type)
             & (parent.fluids_legend_df["feature"] == feature)
             & (parent.fluids_legend_df["scenario"] == scenario),
             "color_R",
         ].values[0]
         old_color_G = parent.fluids_legend_df.loc[
-            (parent.fluids_legend_df["fluid_type"] == fluid_type)
+            (parent.fluids_legend_df["type"] == type)
             & (parent.fluids_legend_df["feature"] == feature)
             & (parent.fluids_legend_df["scenario"] == scenario),
             "color_G",
         ].values[0]
         old_color_B = parent.fluids_legend_df.loc[
-            (parent.fluids_legend_df["fluid_type"] == fluid_type)
+            (parent.fluids_legend_df["type"] == type)
             & (parent.fluids_legend_df["feature"] == feature)
             & (parent.fluids_legend_df["scenario"] == scenario),
             "color_B",
@@ -1148,19 +1148,19 @@ class Legend(QObject):
         new_color_B = color_out.blue()
         """Here the query is reversed and modified, dropping the values() method, to allow SETTING the color in the legend."""
         parent.fluids_legend_df.loc[
-            (parent.fluids_legend_df["fluid_type"] == fluid_type)
+            (parent.fluids_legend_df["type"] == type)
             & (parent.fluids_legend_df["feature"] == feature)
             & (parent.fluids_legend_df["scenario"] == scenario),
             "color_R",
         ] = new_color_R
         parent.fluids_legend_df.loc[
-            (parent.fluids_legend_df["fluid_type"] == fluid_type)
+            (parent.fluids_legend_df["type"] == type)
             & (parent.fluids_legend_df["feature"] == feature)
             & (parent.fluids_legend_df["scenario"] == scenario),
             "color_G",
         ] = new_color_G
         parent.fluids_legend_df.loc[
-            (parent.fluids_legend_df["fluid_type"] == fluid_type)
+            (parent.fluids_legend_df["type"] == type)
             & (parent.fluids_legend_df["feature"] == feature)
             & (parent.fluids_legend_df["scenario"] == scenario),
             "color_B",
@@ -1173,7 +1173,7 @@ class Legend(QObject):
         )
         """Signal to update actors in windows. This is emitted only for the modified uid under the 'color' key."""
         updated_list = parent.fluids_coll.df.loc[
-            (parent.fluids_coll.df["fluid_type"] == fluid_type)
+            (parent.fluids_coll.df["type"] == type)
             & (parent.fluids_coll.df["feature"] == feature)
             & (parent.fluids_coll.df["scenario"] == scenario),
             "uid",
@@ -1182,20 +1182,20 @@ class Legend(QObject):
         # self.change_fluid_feature_color(parent) #Update the fluids
 
     def change_fluid_feature_line_thick(self, parent=None):
-        fluid_type = self.sender().fluid_type
+        type = self.sender().type
         feature = self.sender().feature
         scenario = self.sender().scenario
         line_thick = self.sender().value()
         "Here the query is reversed and modified, dropping the values() method, to allow SETTING the line thickness in the legend"
         parent.fluids_legend_df.loc[
-            (parent.fluids_legend_df["fluid_type"] == fluid_type)
+            (parent.fluids_legend_df["type"] == type)
             & (parent.fluids_legend_df["feature"] == feature)
             & (parent.fluids_legend_df["scenario"] == scenario),
             "line_thick",
         ] = line_thick
         """Signal to update actors in windows. This is emitted only for the modified uid under the 'line_thick' key."""
         updated_list = parent.fluids_coll.df.loc[
-            (parent.fluids_coll.df["fluid_type"] == fluid_type)
+            (parent.fluids_coll.df["type"] == type)
             & (parent.fluids_coll.df["feature"] == feature)
             & (parent.fluids_coll.df["scenario"] == scenario),
             "uid",
@@ -1203,20 +1203,20 @@ class Legend(QObject):
         parent.fluid_legend_thick_modified_signal.emit(updated_list)
 
     def change_fluid_feature_point_size(self, parent=None):
-        fluid_type = self.sender().fluid_type
+        type = self.sender().type
         feature = self.sender().feature
         scenario = self.sender().scenario
         point_size = self.sender().value()
         "Here the query is reversed and modified, dropping the values() method, to allow SETTING the line thickness in the legend"
         parent.fluids_legend_df.loc[
-            (parent.fluids_legend_df["fluid_type"] == fluid_type)
+            (parent.fluids_legend_df["type"] == type)
             & (parent.fluids_legend_df["feature"] == feature)
             & (parent.fluids_legend_df["scenario"] == scenario),
             "point_size",
         ] = point_size
         """Signal to update actors in windows. This is emitted only for the modified uid under the 'line_thick' key."""
         updated_list = parent.fluids_coll.df.loc[
-            (parent.fluids_coll.df["fluid_type"] == fluid_type)
+            (parent.fluids_coll.df["type"] == type)
             & (parent.fluids_coll.df["feature"] == feature)
             & (parent.fluids_coll.df["scenario"] == scenario),
             "uid",
@@ -1224,20 +1224,20 @@ class Legend(QObject):
         parent.fluid_legend_point_size_modified_signal.emit(updated_list)
 
     def change_fluid_feature_opacity(self, parent=None):
-        fluid_type = self.sender().fluid_type
+        type = self.sender().type
         feature = self.sender().feature
         scenario = self.sender().scenario
         opacity = self.sender().value()
         "Here the query is reversed and modified, dropping the values() method, to allow SETTING the line thickness in the legend"
         parent.fluids_legend_df.loc[
-            (parent.fluids_legend_df["fluid_type"] == fluid_type)
+            (parent.fluids_legend_df["type"] == type)
             & (parent.fluids_legend_df["feature"] == feature)
             & (parent.fluids_legend_df["scenario"] == scenario),
             "opacity",
         ] = opacity
         """Signal to update actors in windows. This is emitted only for the modified uid under the 'line_thick' key."""
         updated_list = parent.fluids_coll.df.loc[
-            (parent.fluids_coll.df["fluid_type"] == fluid_type)
+            (parent.fluids_coll.df["type"] == type)
             & (parent.fluids_coll.df["feature"] == feature)
             & (parent.fluids_coll.df["scenario"] == scenario),
             "uid",
@@ -1245,12 +1245,12 @@ class Legend(QObject):
         parent.fluid_legend_opacity_modified_signal.emit(updated_list)
 
     def change_fluid_time(self, parent=None):
-        fluid_type = self.sender().fluid_type
+        type = self.sender().type
         feature = self.sender().feature
         scenario = self.sender().scenario
         fluid_time = self.sender().value()
         parent.fluids_legend_df.loc[
-            (parent.fluids_legend_df["fluid_type"] == fluid_type)
+            (parent.fluids_legend_df["type"] == type)
             & (parent.fluids_legend_df["feature"] == feature)
             & (parent.fluids_legend_df["scenario"] == scenario),
             "fluid_time",
@@ -1268,27 +1268,27 @@ class Legend(QObject):
         #     geol_time = float(self.sender().currentText())
         # except:
         #     geol_time = float('nan')
-        #     parent.geol_legend_df.loc[(parent.geol_legend_df['geological_type'] == geo_type) & (parent.geol_legend_df['feature'] == feature) & (parent.geol_legend_df['scenario'] == scenario), "geological_time"] = geol_time
+        #     parent.geol_legend_df.loc[(parent.geol_legend_df['type'] == type) & (parent.geol_legend_df['feature'] == feature) & (parent.geol_legend_df['scenario'] == scenario), "geological_time"] = geol_time
         #     """Order geological legend entities with descending geological_time values"""
         #     parent.geol_legend_df.sort_values(by='geological_time', ascending=True, inplace=True)
         #     self.update_widget(parent=parent)
 
     def change_background_feature_color(self, parent=None):
-        background_type = self.sender().background_type
+        type = self.sender().type
         feature = self.sender().feature
         """Here we use the same query as above to GET the color from the legend"""
         old_color_R = parent.backgrounds_legend_df.loc[
-            (parent.backgrounds_legend_df["background_type"] == background_type)
+            (parent.backgrounds_legend_df["type"] == type)
             & (parent.backgrounds_legend_df["feature"] == feature),
             "color_R",
         ].values[0]
         old_color_G = parent.backgrounds_legend_df.loc[
-            (parent.backgrounds_legend_df["background_type"] == background_type)
+            (parent.backgrounds_legend_df["type"] == type)
             & (parent.backgrounds_legend_df["feature"] == feature),
             "color_G",
         ].values[0]
         old_color_B = parent.backgrounds_legend_df.loc[
-            (parent.backgrounds_legend_df["background_type"] == background_type)
+            (parent.backgrounds_legend_df["type"] == type)
             & (parent.backgrounds_legend_df["feature"] == feature),
             "color_B",
         ].values[0]
@@ -1305,17 +1305,17 @@ class Legend(QObject):
         new_color_B = color_out.blue()
         """Here the query is reversed and modified, dropping the values() method, to allow SETTING the color in the legend."""
         parent.backgrounds_legend_df.loc[
-            (parent.backgrounds_legend_df["background_type"] == background_type)
+            (parent.backgrounds_legend_df["type"] == type)
             & (parent.backgrounds_legend_df["feature"] == feature),
             "color_R",
         ] = new_color_R
         parent.backgrounds_legend_df.loc[
-            (parent.backgrounds_legend_df["background_type"] == background_type)
+            (parent.backgrounds_legend_df["type"] == type)
             & (parent.backgrounds_legend_df["feature"] == feature),
             "color_G",
         ] = new_color_G
         parent.backgrounds_legend_df.loc[
-            (parent.backgrounds_legend_df["background_type"] == background_type)
+            (parent.backgrounds_legend_df["type"] == type)
             & (parent.backgrounds_legend_df["feature"] == feature),
             "color_B",
         ] = new_color_B
@@ -1327,72 +1327,72 @@ class Legend(QObject):
         )
         """Signal to update actors in windows. This is emitted only for the modified uid under the 'color' key."""
         updated_list = parent.backgrounds_coll.df.loc[
-            (parent.backgrounds_coll.df["background_type"] == background_type)
+            (parent.backgrounds_coll.df["type"] == type)
             & (parent.backgrounds_coll.df["feature"] == feature),
             "uid",
         ].to_list()
         parent.background_legend_color_modified_signal.emit(updated_list)
 
     def change_background_feature_line_thick(self, parent=None):
-        background_type = self.sender().background_type
+        type = self.sender().type
         feature = self.sender().feature
         line_thick = self.sender().value()
         "Here the query is reversed and modified, dropping the values() method, to allow SETTING the line thickness in the legend"
         parent.backgrounds_legend_df.loc[
-            (parent.backgrounds_legend_df["background_type"] == background_type)
+            (parent.backgrounds_legend_df["type"] == type)
             & (parent.backgrounds_legend_df["feature"] == feature),
             "line_thick",
         ] = line_thick
         """Signal to update actors in windows. This is emitted only for the modified uid under the 'line_thick' key."""
         updated_list = parent.backgrounds_coll.df.loc[
-            (parent.backgrounds_coll.df["background_type"] == background_type)
+            (parent.backgrounds_coll.df["type"] == type)
             & (parent.backgrounds_coll.df["feature"] == feature),
             "uid",
         ].to_list()
         parent.background_legend_thick_modified_signal.emit(updated_list)
 
     def change_background_feature_point_size(self, parent=None):
-        background_type = self.sender().background_type
+        type = self.sender().type
         feature = self.sender().feature
         point_size = self.sender().value()
         "Here the query is reversed and modified, dropping the values() method, to allow SETTING the line thickness in the legend"
         parent.backgrounds_legend_df.loc[
-            (parent.backgrounds_legend_df["background_type"] == background_type)
+            (parent.backgrounds_legend_df["type"] == type)
             & (parent.backgrounds_legend_df["feature"] == feature),
             "point_size",
         ] = point_size
         """Signal to update actors in windows. This is emitted only for the modified uid under the 'line_thick' key."""
         updated_list = parent.backgrounds_coll.df.loc[
-            (parent.backgrounds_coll.df["background_type"] == background_type)
+            (parent.backgrounds_coll.df["type"] == type)
             & (parent.backgrounds_coll.df["feature"] == feature),
             "uid",
         ].to_list()
         parent.background_legend_point_size_modified_signal.emit(updated_list)
 
     def change_background_opacity(self, parent=None):
-        background_type = self.sender().background_type
+        type = self.sender().type
         feature = self.sender().feature
         opacity = self.sender().value()
         "Here the query is reversed and modified, dropping the values() method, to allow SETTING the opacity in the legend"
         parent.backgrounds_legend_df.loc[
-            (parent.backgrounds_legend_df["background_type"] == background_type)
+            (parent.backgrounds_legend_df["type"] == type)
             & (parent.backgrounds_legend_df["feature"] == feature),
             "opacity",
         ] = opacity
         """Signal to update actors in windows. This is emitted only for the modified uid under the 'line_thick' key."""
         updated_list = parent.backgrounds_coll.df.loc[
-            (parent.backgrounds_coll.df["background_type"] == background_type)
+            (parent.backgrounds_coll.df["type"] == type)
             & (parent.backgrounds_coll.df["feature"] == feature),
             "uid",
         ].to_list()
         parent.background_legend_opacity_modified_signal.emit(updated_list)
 
     # def change_geological_sequence(self, parent=None):
-    #     geo_type = self.sender().geo_type
+    #     type = self.sender().type
     #     feature = self.sender().feature
     #     scenario = self.sender().scenario
     #     geol_seqn = self.sender().currentText()
-    #     parent.geol_legend_df.loc[(parent.geol_legend_df['geological_type'] == geo_type) & (parent.geol_legend_df['feature'] == feature) & (parent.geol_legend_df['scenario'] == scenario), "geological_sequence"] = geol_seqn
+    #     parent.geol_legend_df.loc[(parent.geol_legend_df['type'] == type) & (parent.geol_legend_df['feature'] == feature) & (parent.geol_legend_df['scenario'] == scenario), "geological_sequence"] = geol_seqn
     #     """THE FOLLOWING MUST BE CHANGED IN A FOR LOOP OVER ALL ITEMS IN COLUMN 7
     #     parent.LegendTreeWidget.setItemWidget(llevel_3, 7, geol_sequence_combo)
     #     UPDATING THE VALUES AS IN

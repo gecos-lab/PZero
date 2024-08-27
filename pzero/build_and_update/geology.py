@@ -19,18 +19,18 @@ def create_geology_tree(self):
     # hide the uid column
     self.GeologyTreeWidget.hideColumn(1)
     self.GeologyTreeWidget.setItemsExpandable(True)
-    geo_types = pd_unique(self.parent.geol_coll.df.query(self.view_filter)["geological_type"])
-    for geo_type in geo_types:
+    geo_types = pd_unique(self.parent.geol_coll.df.query(self.view_filter)["type"])
+    for type in geo_types:
         # self.GeologyTreeWidget as parent -> top level
         glevel_1 = QTreeWidgetItem(
-            self.GeologyTreeWidget, [geo_type]
+            self.GeologyTreeWidget, [type]
         )
         glevel_1.setFlags(
             glevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
         )
         geo_features = pd_unique(
             self.parent.geol_coll.df.query(self.view_filter).loc[
-                self.parent.geol_coll.df.query(self.view_filter)["geological_type"] == geo_type,
+                self.parent.geol_coll.df.query(self.view_filter)["type"] == type,
                 "feature",
             ]
         )
@@ -44,7 +44,7 @@ def create_geology_tree(self):
             )
             geo_scenario = pd_unique(
                 self.parent.geol_coll.df.query(self.view_filter).loc[
-                    (self.parent.geol_coll.df.query(self.view_filter)["geological_type"] == geo_type)
+                    (self.parent.geol_coll.df.query(self.view_filter)["type"] == type)
                     & (
                             self.parent.geol_coll.df.query(self.view_filter)["feature"]
                             == feature
@@ -61,7 +61,7 @@ def create_geology_tree(self):
                     glevel_3.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
                 )
                 uids = self.parent.geol_coll.df.query(self.view_filter).loc[
-                    (self.parent.geol_coll.df.query(self.view_filter)["geological_type"] == geo_type)
+                    (self.parent.geol_coll.df.query(self.view_filter)["type"] == type)
                     & (
                             self.parent.geol_coll.df.query(self.view_filter)["feature"]
                             == feature

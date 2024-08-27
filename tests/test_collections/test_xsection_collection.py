@@ -27,7 +27,7 @@ class TestXSectionCollection:
     geological_entity_dict = {'uid': "0",
                               'name': "geoname",
                               'topology': "topol",
-                              'geological_type': "undef",
+                              'type': "undef",
                               'feature': "undef",
                               'scenario': "sc1",
                               'properties_names': [],

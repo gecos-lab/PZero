@@ -523,7 +523,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             input_dict = {
                 "name": ["New name: ", name_list],
                 "topology": ["Topological type", topo_type_list],
-                "geological_type": ["Geological type: ", geo_type_list],
+                "type": ["Geological type: ", geo_type_list],
                 "feature": ["Geological feature: ", feature_list],
                 "scenario": ["Scenario: ", scenario_list],
                 "x_section": ["XSection: ", xsect_list],
