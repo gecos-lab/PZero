@@ -2539,7 +2539,7 @@ class View3D(VTKView):
                 "name": ["Set name: ", "Set_0"],
                 "geological_type": [
                     "Geological type: ",
-                    GeologicalCollection.valid_geological_types,
+                    self.parent.geol_coll.valid_types,
                 ],
             }
             set_opt = multiple_input_dialog(

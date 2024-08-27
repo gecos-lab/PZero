@@ -99,7 +99,7 @@ def gocad2vtk(self=None, in_file_name=None, uid_from_name=None):
         parent=None,
         title="Geological type",
         label="Default geological type",
-        choice_list=GeologicalCollection.valid_geological_types,
+        choice_list=self.geol_coll.valid_types,
     )
     if not geological_type_default:
         geological_type_default = "undef"
@@ -128,7 +128,7 @@ def gocad2vtk(self=None, in_file_name=None, uid_from_name=None):
     """Open input file"""
     fin = open(in_file_name, "rt")
     """Number of entities before importing________________________________"""
-    n_entities_before = self.geol_coll.get_number_of_entities()
+    n_entities_before = self.geol_coll.get_number_of_entities
     """Initialize entity_counter"""
     entity_counter = 0
     """Parse fin file"""
@@ -142,7 +142,7 @@ def gocad2vtk(self=None, in_file_name=None, uid_from_name=None):
             """A new entity starts here in a GOCAD file, so here we create a new empty dictionary,
             then we will fill its components in the next lines. Use deepcopy otherwise the
             original dictionary would be altered."""
-            curr_obj_dict = deepcopy(GeologicalCollection.entity_dict)
+            curr_obj_dict = deepcopy(self.geol_coll.entity_dict)
             curr_obj_dict["scenario"] = scenario_default
 
             """Store uid of new entity."""
@@ -177,6 +177,11 @@ def gocad2vtk(self=None, in_file_name=None, uid_from_name=None):
             curr_obj_properties_collection = vtkDataArrayCollection()
             properties_number = 0
 
+            # Initialize color
+            curr_obj_color_r = None
+            curr_obj_color_g = None
+            curr_obj_color_b = None
+
         elif "*solid*color:" in clean_line[0]:
             curr_obj_color_r = float(round(float(clean_line[1]) * 255))
             curr_obj_color_g = float(round(float(clean_line[2]) * 255))
@@ -205,7 +210,7 @@ def gocad2vtk(self=None, in_file_name=None, uid_from_name=None):
             curr_obj_dict["geological_type"] = ("_".join(clean_line[1:])).lower()
             if (
                 curr_obj_dict["geological_type"]
-                not in GeologicalCollection.valid_geological_types
+                not in self.geol_coll.valid_types
             ):
                 if "Fault" in curr_obj_dict["geological_type"]:
                     curr_obj_dict["geological_type"] = "fault"
@@ -423,7 +428,7 @@ def gocad2vtk(self=None, in_file_name=None, uid_from_name=None):
                 else:
                     if curr_obj_dict["vtk_obj"].cells_number > 0:
                         self.geol_coll.add_entity_from_dict(entity_dict=curr_obj_dict)
-                if reset_legend:
+                if reset_legend and curr_obj_color_r:
                     self.geol_coll.set_uid_legend(
                         uid=curr_obj_dict["uid"],
                         color_R=curr_obj_color_r,
@@ -440,7 +445,7 @@ def gocad2vtk(self=None, in_file_name=None, uid_from_name=None):
                 "Object n. " + str(entity_counter) + " saved"
             )
 
-    n_entities_after = self.geol_coll.get_number_of_entities()
+    n_entities_after = self.geol_coll.get_number_of_entities
     self.TextTerminal.appendPlainText(
         "Entities before importing: " + str(n_entities_before)
     )
@@ -467,7 +472,7 @@ def gocad2vtk_section(self=None, in_file_name=None, uid_from_name=None, x_sectio
         parent=None,
         title="Geological type",
         label="Default geological type",
-        choice_list=GeologicalCollection.valid_geological_types,
+        choice_list=self.geol_coll.valid_types,
     )
     if not geological_type_default:
         geological_type_default = "undef"
@@ -485,7 +490,7 @@ def gocad2vtk_section(self=None, in_file_name=None, uid_from_name=None, x_sectio
     """Open input file"""
     fin = open(in_file_name, "rt")
     """Number of entities before importing________________________________"""
-    n_entities_before = self.geol_coll.get_number_of_entities()
+    n_entities_before = self.geol_coll.get_number_of_entities
     """Initialize entity_counter"""
     entity_counter = 0
     """Parse fin file"""
@@ -558,7 +563,7 @@ def gocad2vtk_section(self=None, in_file_name=None, uid_from_name=None, x_sectio
             curr_obj_dict["geological_type"] = ("_".join(clean_line[1:])).lower()
             if (
                 curr_obj_dict["geological_type"]
-                not in GeologicalCollection.valid_geological_types
+                not in self.geol_coll.valid_types
             ):
                 if "Fault" in curr_obj_dict["geological_type"]:
                     curr_obj_dict["geological_type"] = "fault"
@@ -742,7 +747,7 @@ def gocad2vtk_section(self=None, in_file_name=None, uid_from_name=None, x_sectio
                 "Object n. " + str(entity_counter) + " saved"
             )
 
-    n_entities_after = self.geol_coll.get_number_of_entities()
+    n_entities_after = self.geol_coll.get_number_of_entities
     self.TextTerminal.appendPlainText(
         "Entities before importing: " + str(n_entities_before)
     )
@@ -762,7 +767,7 @@ def gocad2vtk_boundary(self=None, in_file_name=None, uid_from_name=None):
     # scenario_default = input_text_dialog(parent=None, title="Scenario", label="Default scenario", default_text="undef")
     # if not scenario_default:
     #     scenario_default = "undef"
-    # geological_type_default = input_combo_dialog(parent=None, title="Geological type", label="Default geological type", choice_list=GeologicalCollection.valid_geological_types)
+    # geological_type_default = input_combo_dialog(parent=None, title="Geological type", label="Default geological type", choice_list=self.geol_coll.valid_types)
     # if not geological_type_default:
     #     geological_type_default = "undef"
     # feature_from_name = options_dialog(title="Feature from name", message="Get geological feature from object name if not defined in file", yes_role="Yes", no_role="No", reject_role=None)
@@ -773,7 +778,7 @@ def gocad2vtk_boundary(self=None, in_file_name=None, uid_from_name=None):
     """Open input file"""
     fin = open(in_file_name, "rt")
     """Number of entities before importing________________________________"""
-    n_entities_before = self.boundary_coll.get_number_of_entities()
+    n_entities_before = self.boundary_coll.get_number_of_entities
     """Initialize entity_counter"""
     entity_counter = 0
     """Parse fin file"""
@@ -843,7 +848,7 @@ def gocad2vtk_boundary(self=None, in_file_name=None, uid_from_name=None):
 
         # elif clean_line[0] == 'GEOLOGICAL_TYPE':
         #     curr_obj_dict['geological_type'] = ("_".join(clean_line[1:])).lower()
-        #     if curr_obj_dict['geological_type'] not in GeologicalCollection.valid_geological_types:
+        #     if curr_obj_dict['geological_type'] not in self.geol_coll.valid_types:
         #         if "Fault" in curr_obj_dict['geological_type']:
         #             curr_obj_dict['geological_type'] = "fault"
         #         elif "fault" in curr_obj_dict['geological_type']:
@@ -1021,7 +1026,7 @@ def gocad2vtk_boundary(self=None, in_file_name=None, uid_from_name=None):
                 "Object n. " + str(entity_counter) + " saved"
             )
 
-    n_entities_after = self.boundary_coll.get_number_of_entities()
+    n_entities_after = self.boundary_coll.get_number_of_entities
     self.TextTerminal.appendPlainText(
         "Entities before importing: " + str(n_entities_before)
     )

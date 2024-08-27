@@ -91,8 +91,8 @@ def interpolation_delaunay_2d(self):
         ],
         "geological_type": [
             "Geological type: ",
-            self.geol_coll.valid_types,
-            self.geol_coll.get_uid_type(input_uids[0]),
+            self.parent.geol_coll.valid_types,
+            self.parent.geol_coll.get_uid_type(input_uids[0]),
         ],
         "geological_feature": [
             "Geological feature: ",
@@ -195,7 +195,7 @@ def poisson_interpolation(self):
         ],
         "geological_type": [
             "Geological type: ",
-            self.geol_coll.valid_types,
+            self.parent.geol_coll.valid_types,
         ],
         "geological_feature": [
             "Geological feature: ",
@@ -700,7 +700,7 @@ def surface_smoothing(
             return
     # """Create deepcopy of the geological entity dictionary."""
     # surf_dict = deepcopy(self.geol_coll.geological_entity_dict)
-    # input_dict = {'name': ['TriSurf name: ', self.geol_coll.get_uid_name(input_uids[0]) + '_smooth'], 'geological_type': ['Geological type: ', GeologicalCollection.valid_geological_types], 'geological_feature': ['Geological feature: ', self.geol_coll.get_uid_feature(input_uids[0])], 'scenario': ['Scenario: ', self.geol_coll.get_uid_scenario(input_uids[0])]}
+    # input_dict = {'name': ['TriSurf name: ', self.geol_coll.get_uid_name(input_uids[0]) + '_smooth'], 'geological_type': ['Geological type: ', self.parent.geol_coll.valid_types], 'geological_feature': ['Geological feature: ', self.geol_coll.get_uid_feature(input_uids[0])], 'scenario': ['Scenario: ', self.geol_coll.get_uid_scenario(input_uids[0])]}
     # surf_dict_updt = multiple_input_dialog(title='Surface smoothing', input_dict=input_dict)
     # """Check if the output of the widget is empty or not. If the Cancel button was clicked, the tool quits"""
     # if surf_dict_updt is None:
@@ -778,7 +778,7 @@ def linear_extrusion(self):
         ],
         "geological_type": [
             "Geological type: ",
-            self.geol_coll.valid_types,
+            self.parent.geol_coll.valid_types,
         ],
         "geological_feature": [
             "Geological feature: ",
