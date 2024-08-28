@@ -28,13 +28,13 @@ def create_geology_tree(self):
         glevel_1.setFlags(
             glevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
         )
-        geo_features = pd_unique(
+        features = pd_unique(
             self.parent.geol_coll.df.query(self.view_filter).loc[
                 self.parent.geol_coll.df.query(self.view_filter)["role"] == role,
                 "feature",
             ]
         )
-        for feature in geo_features:
+        for feature in features:
             # glevel_1 as parent -> 1st middle level
             glevel_2 = QTreeWidgetItem(
                 glevel_1, [feature]

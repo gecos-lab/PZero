@@ -182,7 +182,7 @@ def vtk2dxf(self=None, out_dir_name=None):
 
         dxf_out.saveas(f"{out_dir_name}/dxf/{out_file_name}.dxf")
 
-    complete_list = pd_DataFrame({"uids": list_uids, "geological_features": list_names})
+    complete_list = pd_DataFrame({"uids": list_uids, "features": list_names})
     complete_list.to_csv(f"{out_dir_name}/exported_object_list.csv", index=False)
     """Save DXF file."""
     # out_file_name = (str(out_dir_name) + "/3dface_border.dxf")

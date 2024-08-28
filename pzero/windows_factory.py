@@ -4587,7 +4587,7 @@ class ViewStereoplot(MPLView):
             glevel_1.setFlags(
                 glevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
             )
-            filtered_geo_feat = self.parent.geol_coll.df.loc[
+            filtered_features = self.parent.geol_coll.df.loc[
                 (self.parent.geol_coll.df["role"] == role)
                 & (
                         (self.parent.geol_coll.df["topology"] == "VertexSet")
@@ -4595,9 +4595,9 @@ class ViewStereoplot(MPLView):
                 ),
                 "feature"
             ]
-            geo_features = pd_unique(filtered_geo_feat)
-            print("geo_features: ", geo_features)
-            for feature in geo_features:
+            features = pd_unique(filtered_features)
+            print("features: ", features)
+            for feature in features:
                 glevel_2 = QTreeWidgetItem(
                     glevel_1, [feature]
                 )  # glevel_1 as parent -> 1st middle level

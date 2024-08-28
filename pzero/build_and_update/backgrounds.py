@@ -24,14 +24,14 @@ def create_backgrounds_tree(self):
         flevel_1.setFlags(
             flevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
         )
-        background_features = pd_unique(
+        features = pd_unique(
             self.parent.backgrounds_coll.df.query(self.view_filter).loc[
                 self.parent.backgrounds_coll.df.query(self.view_filter)["role"]
                 == role,
                 "feature",
             ]
         )
-        for feature in background_features:
+        for feature in features:
             flevel_2 = QTreeWidgetItem(
                 flevel_1, [feature]
             )  # flevel_1 as parent -> 1st middle level
