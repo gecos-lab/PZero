@@ -522,7 +522,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             xsect_list = list(set(xsect_list))
             input_dict = {
                 "name": ["New name: ", name_list],
-                "topology": ["Topological type", topology_list],
+                "topology": ["Topology", topology_list],
                 "role": ["Role: ", role_list],
                 "feature": ["Feature: ", feature_list],
                 "scenario": ["Scenario: ", scenario_list],
@@ -544,7 +544,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             xsect_list = list(set(xsect_list))
             input_dict = {
                 "name": ["New name: ", name_list],
-                "dom_type": ["Topological type", topology_list],
+                "topology": ["Topology", topology_list],
                 "x_section": ["XSection: ", xsect_list],
             }
         else:
@@ -613,7 +613,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             return
         """Map Image selection dialog."""
         map_image_names = self.image_coll.df.loc[
-            self.image_coll.df["image_type"] == "MapImage", "name"
+            self.image_coll.df["topology"] == "MapImage", "name"
         ].to_list()
         map_image_name = input_combo_dialog(
             parent=None,
@@ -644,7 +644,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             return
         """Map Image selection dialog."""
         map_image_names = self.image_coll.df.loc[
-            self.image_coll.df["image_type"] == "MapImage", "name"
+            self.image_coll.df["topology"] == "MapImage", "name"
         ].to_list()
         map_image_name = input_combo_dialog(
             parent=None,
@@ -1254,7 +1254,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         )
         for uid in self.image_coll.df["uid"].to_list():
             if self.image_coll.df.loc[
-                self.image_coll.df["uid"] == uid, "image_type"
+                self.image_coll.df["uid"] == uid, "topology"
             ].values[0] in ["MapImage", "XsImage", "TSDomImage"]:
                 im_writer = vtkXMLImageDataWriter()
                 im_writer.SetFileName(out_dir_name + "/" + uid + ".vti")
@@ -1262,7 +1262,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 im_writer.Write()
                 prgs_bar.add_one()
             elif self.image_coll.df.loc[
-                self.image_coll.df["uid"] == uid, "image_type"
+                self.image_coll.df["uid"] == uid, "topology"
             ].values[0] in ["Seismics"]:
                 sg_writer = vtkXMLStructuredGridWriter()
                 sg_writer.SetFileName(out_dir_name + "/" + uid + ".vts")
@@ -1658,8 +1658,8 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 if not "scenario" in new_dom_coll_df:
                     new_dom_coll_df.insert(3, "scenario", "undef")
                 self.dom_coll.df = new_dom_coll_df
-            if 'dom_type' in self.dom_coll.df.columns:
-                self.dom_coll.df.rename(columns={'dom_type': 'topology'}, inplace=True)
+            if 'topology' in self.dom_coll.df.columns:
+                self.dom_coll.df.rename(columns={'topology': 'topology'}, inplace=True)
             prgs_bar = progress_dialog(
                 max_value=self.dom_coll.df.shape[0],
                 title_txt="Open DOM",
@@ -1742,7 +1742,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             )
             for uid in self.image_coll.df["uid"].to_list():
                 if self.image_coll.df.loc[
-                    self.image_coll.df["uid"] == uid, "image_type"
+                    self.image_coll.df["uid"] == uid, "topology"
                 ].values[0] in ["MapImage", "TSDomImage"]:
                     if not os.path.isfile((in_dir_name + "/" + uid + ".vti")):
                         print("error: missing image file")
@@ -1754,7 +1754,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     vtk_object.ShallowCopy(im_reader.GetOutput())
                     vtk_object.Modified()
                 elif self.image_coll.df.loc[
-                    self.image_coll.df["uid"] == uid, "image_type"
+                    self.image_coll.df["uid"] == uid, "topology"
                 ].values[0] in ["XsImage"]:
                     if not os.path.isfile((in_dir_name + "/" + uid + ".vti")):
                         print("error: missing image file")
@@ -1771,7 +1771,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     vtk_object.ShallowCopy(im_reader.GetOutput())
                     vtk_object.Modified()
                 elif self.image_coll.df.loc[
-                    self.image_coll.df["uid"] == uid, "image_type"
+                    self.image_coll.df["uid"] == uid, "topology"
                 ].values[0] in ["Seismics"]:
                     if not os.path.isfile((in_dir_name + "/" + uid + ".vts")):
                         print("error: missing VTK file")

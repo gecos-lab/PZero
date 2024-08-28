@@ -375,7 +375,7 @@ class BaseCollection(ABC):
     def get_legend(self):
         """Returns the currently active legend dictionary."""
         legend_dict = self.parent.others_legend_df.loc[
-            self.parent.others_legend_df["other_type"] == "DOM"
+            self.parent.others_legend_df["other_collection"] == "DOM"
         ].to_dict("records")
         return legend_dict[0]
 

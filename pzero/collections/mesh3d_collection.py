@@ -121,7 +121,7 @@ class Mesh3DCollection(BaseCollection):
     def get_uid_legend(self, uid: str = None) -> dict:
         """Get legend for a particular uid."""
         legend_dict = self.parent.others_legend_df.loc[
-            self.parent.others_legend_df["other_type"] == "Mesh3D"
+            self.parent.others_legend_df["other_collection"] == "Mesh3D"
             ].to_dict("records")
         return legend_dict[0]
 

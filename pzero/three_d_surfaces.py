@@ -1431,7 +1431,7 @@ def intersection_xs(self):
                     """Create new dict for the new DomXs"""
                     obj_dict = deepcopy(self.dom_coll.entity_dict)
                     obj_dict["name"] = f"{self.dom_coll.get_uid_name(uid)}{postfix}"
-                    obj_dict["dom_type"] = "DomXs"
+                    obj_dict["topology"] = "DomXs"
                     obj_dict[
                         "properties_names"
                     ] = self.dom_coll.get_uid_properties_names(uid)

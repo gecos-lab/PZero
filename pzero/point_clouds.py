@@ -116,11 +116,11 @@ def cut_pc(self, method="both"):
         if method == "both":
             entity_dict["name"] = self.parent.dom_coll.get_uid_name(uid) + "_cut_in"
             entity_dict["vtk_obj"] = clip_in
-            entity_dict["dom_type"] = "PCDom"
+            entity_dict["topology"] = "PCDom"
             entity_dict[
                 "properties_names"
             ] = self.parent.dom_coll.get_uid_properties_names(uid)
-            entity_dict["dom_type"] = "PCDom"
+            entity_dict["topology"] = "PCDom"
             entity_dict[
                 "properties_components"
             ] = self.parent.dom_coll.get_uid_properties_components(uid)
@@ -131,11 +131,11 @@ def cut_pc(self, method="both"):
             # print(entity_dict)
             entity_dict["name"] = self.parent.dom_coll.get_uid_name(uid) + "_cut_out"
             entity_dict["vtk_obj"] = clip_out
-            entity_dict["dom_type"] = "PCDom"
+            entity_dict["topology"] = "PCDom"
             entity_dict[
                 "properties_names"
             ] = self.parent.dom_coll.get_uid_properties_names(uid)
-            entity_dict["dom_type"] = "PCDom"
+            entity_dict["topology"] = "PCDom"
             entity_dict[
                 "properties_components"
             ] = self.parent.dom_coll.get_uid_properties_components(uid)
@@ -144,11 +144,11 @@ def cut_pc(self, method="both"):
         elif method == "inner":
             entity_dict["name"] = self.parent.dom_coll.get_uid_name(uid) + "_cut_in"
             entity_dict["vtk_obj"] = clip_in
-            entity_dict["dom_type"] = "PCDom"
+            entity_dict["topology"] = "PCDom"
             entity_dict[
                 "properties_names"
             ] = self.parent.dom_coll.get_uid_properties_names(uid)
-            entity_dict["dom_type"] = "PCDom"
+            entity_dict["topology"] = "PCDom"
             entity_dict[
                 "properties_components"
             ] = self.parent.dom_coll.get_uid_properties_components(uid)
@@ -159,11 +159,11 @@ def cut_pc(self, method="both"):
             # print(entity_dict)
             entity_dict["name"] = self.parent.dom_coll.get_uid_name(uid) + "_cut_out"
             entity_dict["vtk_obj"] = clip_out
-            entity_dict["dom_type"] = "PCDom"
+            entity_dict["topology"] = "PCDom"
             entity_dict[
                 "properties_names"
             ] = self.parent.dom_coll.get_uid_properties_names(uid)
-            entity_dict["dom_type"] = "PCDom"
+            entity_dict["topology"] = "PCDom"
             entity_dict[
                 "properties_components"
             ] = self.parent.dom_coll.get_uid_properties_components(uid)
@@ -317,7 +317,7 @@ def segment_pc(self):
         curr_obj_dict = deepcopy(DomCollection.entity_dict)
         curr_obj_dict["uid"] = str(uuid4())
         curr_obj_dict["name"] = f'pc_{dialog["name"]}'
-        curr_obj_dict["dom_type"] = "PCDom"
+        curr_obj_dict["topology"] = "PCDom"
         curr_obj_dict["properties_names"] = properties_name
         curr_obj_dict["properties_components"] = properties_components
         curr_obj_dict["vtk_obj"] = seg_pc
@@ -582,11 +582,11 @@ def thresh_filt(self):
             + str(dialog["u_t"])
         )
         entity_dict["vtk_obj"] = out
-        entity_dict["dom_type"] = "PCDom"
+        entity_dict["topology"] = "PCDom"
         entity_dict["properties_names"] = self.parent.dom_coll.get_uid_properties_names(
             uid
         )
-        entity_dict["dom_type"] = "PCDom"
+        entity_dict["topology"] = "PCDom"
         entity_dict[
             "properties_components"
         ] = self.parent.dom_coll.get_uid_properties_components(uid)

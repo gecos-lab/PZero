@@ -32,7 +32,7 @@ class TestXSectionCollection:
 
     image_entity_dict = {'uid': "22",
                          'name': "image-test",
-                         'image_type': "undef",
+                         'topology': "undef",
                          'properties_names': [],
                          'properties_components': [],
                          'properties_types': [],

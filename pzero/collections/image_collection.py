@@ -139,7 +139,7 @@ class ImageCollection(BaseCollection):
 
     def get_uid_legend(self, uid: str = None) -> dict:
         """Get legend for a particular uid."""
-        legend_dict = self.parent.others_legend_df.loc[self.parent.others_legend_df["other_type"] == "Image"].to_dict("records")
+        legend_dict = self.parent.others_legend_df.loc[self.parent.others_legend_df["other_collection"] == "Image"].to_dict("records")
         return legend_dict[0]
 
     def set_uid_legend(self, uid: str = None, color_R: float = None, color_G: float = None, color_B: float = None,

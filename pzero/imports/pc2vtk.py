@@ -188,7 +188,7 @@ def pc2vtk(
         curr_obj_attributes["uid"] = str(uuid4())
         point_cloud.Modified()
         curr_obj_attributes["name"] = basename
-        curr_obj_attributes["dom_type"] = "PCDom"
+        curr_obj_attributes["topology"] = "PCDom"
         curr_obj_attributes["texture_uids"] = []
         curr_obj_attributes["properties_names"] = properties_names
         curr_obj_attributes["properties_components"] = properties_components

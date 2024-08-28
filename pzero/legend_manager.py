@@ -93,7 +93,7 @@ class Legend(QObject):
     }
 
     others_legend_dict = {
-        "other_type": ["Boundary", "DOM", "Image", "Mesh3D", "XSection"],
+        "other_collection": ["Boundary", "DOM", "Image", "Mesh3D", "XSection"],
         "color_R": [255, 255, 255, 255, 255],
         "color_G": [255, 255, 255, 255, 255],
         "color_B": [255, 255, 255, 255, 255],
@@ -136,51 +136,51 @@ class Legend(QObject):
             ]
         )
         parent.LegendTreeWidget.setItemsExpandable(True)
-        for other_type in pd_unique(parent.others_legend_df["other_type"]):
+        for other_collection in pd_unique(parent.others_legend_df["other_collection"]):
             color_R = parent.others_legend_df.loc[
-                parent.others_legend_df["other_type"] == other_type, "color_R"
+                parent.others_legend_df["other_collection"] == other_collection, "color_R"
             ].values[0]
             color_G = parent.others_legend_df.loc[
-                parent.others_legend_df["other_type"] == other_type, "color_G"
+                parent.others_legend_df["other_collection"] == other_collection, "color_G"
             ].values[0]
             color_B = parent.others_legend_df.loc[
-                parent.others_legend_df["other_type"] == other_type, "color_B"
+                parent.others_legend_df["other_collection"] == other_collection, "color_B"
             ].values[0]
             line_thick = parent.others_legend_df.loc[
-                parent.others_legend_df["other_type"] == other_type, "line_thick"
+                parent.others_legend_df["other_collection"] == other_collection, "line_thick"
             ].values[0]
             point_size = parent.others_legend_df.loc[
-                parent.others_legend_df["other_type"] == other_type, "point_size"
+                parent.others_legend_df["other_collection"] == other_collection, "point_size"
             ].values[0]
             opacity = parent.others_legend_df.loc[
-                parent.others_legend_df["other_type"] == other_type, "opacity"
+                parent.others_legend_df["other_collection"] == other_collection, "opacity"
             ].values[0]
 
             "other_color_dialog_btn > QPushButton used to select color"
             other_color_dialog_btn = QPushButton()
-            other_color_dialog_btn.other_type = (
-                other_type  # this is to pass these values to the update function below
+            other_color_dialog_btn.other_collection = (
+                other_collection  # this is to pass these values to the update function below
             )
             other_color_dialog_btn.setStyleSheet(
                 "background-color:rgb({},{},{})".format(color_R, color_G, color_B)
             )
             "other_line_thick_spn > QSpinBox used to select line thickness"
             other_line_thick_spn = QSpinBox()
-            other_line_thick_spn.other_type = (
-                other_type  # this is to pass these values to the update function below
+            other_line_thick_spn.other_collection = (
+                other_collection  # this is to pass these values to the update function below
             )
             other_line_thick_spn.setValue(line_thick)
             "other_point_size_spn > QSpinBox used to select point size"
             other_point_size_spn = QSpinBox()
-            other_point_size_spn.other_type = (
-                other_type  # this is to pass these values to the update function below
+            other_point_size_spn.other_collection = (
+                other_collection  # this is to pass these values to the update function below
             )
             other_point_size_spn.setValue(point_size)
             "other_opacity_spn > QSpinBox used to select opacity"
             other_opacity_spn = QSpinBox()
             other_opacity_spn.setMaximum(100)
-            other_opacity_spn.other_type = (
-                other_type  # this is to pass these values to the update function below
+            other_opacity_spn.other_collection = (
+                other_collection  # this is to pass these values to the update function below
             )
             other_opacity_spn.setValue(opacity)
             "IN THE FUTURE add QComboBox() here to show/hide mesh edges___________"
@@ -188,11 +188,11 @@ class Legend(QObject):
             "Create items"
             llevel_1 = QTreeWidgetItem(
                 parent.LegendTreeWidget,
-                [other_type, str(color_R), str(color_G), str(color_B)],
+                [other_collection, str(color_R), str(color_G), str(color_B)],
             )  # self.GeologyTreeWidget as parent -> top level
             parent.LegendTreeWidget.setItemWidget(llevel_1, 4, other_color_dialog_btn)
             parent.LegendTreeWidget.setItemWidget(llevel_1, 5, other_line_thick_spn)
-            if other_type == "DOM":
+            if other_collection == "DOM":
                 parent.LegendTreeWidget.setItemWidget(llevel_1, 6, other_point_size_spn)
                 other_point_size_spn.valueChanged.connect(
                     lambda: self.change_other_feature_point_size(parent=parent)
@@ -898,16 +898,16 @@ class Legend(QObject):
         geol_sequence_combo.addItems(parent.geol_legend_df['geological_sequence'].unique())"""
 
     def change_other_feature_color(self, parent=None):
-        other_type = self.sender().other_type
+        other_collection = self.sender().other_collection
         """Here we use the same query as above to GET the color from the legend"""
         old_color_R = parent.others_legend_df.loc[
-            (parent.others_legend_df["other_type"] == other_type), "color_R"
+            (parent.others_legend_df["other_collection"] == other_collection), "color_R"
         ].values[0]
         old_color_G = parent.others_legend_df.loc[
-            (parent.others_legend_df["other_type"] == other_type), "color_G"
+            (parent.others_legend_df["other_collection"] == other_collection), "color_G"
         ].values[0]
         old_color_B = parent.others_legend_df.loc[
-            (parent.others_legend_df["other_type"] == other_type), "color_B"
+            (parent.others_legend_df["other_collection"] == other_collection), "color_B"
         ].values[0]
         color_in = QColor(
             old_color_R, old_color_G, old_color_B
@@ -922,13 +922,13 @@ class Legend(QObject):
         new_color_B = color_out.blue()
         """Here the query is reversed and modified, dropping the values() method, to allow SETTING the color in the legend."""
         parent.others_legend_df.loc[
-            (parent.others_legend_df["other_type"] == other_type), "color_R"
+            (parent.others_legend_df["other_collection"] == other_collection), "color_R"
         ] = new_color_R
         parent.others_legend_df.loc[
-            (parent.others_legend_df["other_type"] == other_type), "color_G"
+            (parent.others_legend_df["other_collection"] == other_collection), "color_G"
         ] = new_color_G
         parent.others_legend_df.loc[
-            (parent.others_legend_df["other_type"] == other_type), "color_B"
+            (parent.others_legend_df["other_collection"] == other_collection), "color_B"
         ] = new_color_B
         """Update button color."""
         self.sender().setStyleSheet(
@@ -937,92 +937,92 @@ class Legend(QObject):
             )
         )
         """Signals to update actors in windows. This is emitted only for the modified uid under the 'color' key."""
-        if other_type == "XSection":
+        if other_collection == "XSection":
             parent.xsect_legend_color_modified_signal.emit(
                 parent.xsect_coll.df["uid"].tolist()
             )
-        elif other_type == "DOM":
+        elif other_collection == "DOM":
             parent.dom_legend_color_modified_signal.emit(
                 parent.dom_coll.df["uid"].tolist()
             )
-        elif other_type == "Mesh3D":
+        elif other_collection == "Mesh3D":
             parent.mesh3d_legend_color_modified_signal.emit(
                 parent.dom_coll.df["uid"].tolist()
             )
-        elif other_type == "Boundary":
+        elif other_collection == "Boundary":
             parent.boundary_legend_color_modified_signal.emit(
                 parent.boundary_coll.df["uid"].tolist()
             )
 
     def change_other_feature_line_thick(self, parent=None):
-        other_type = self.sender().other_type
+        other_collection = self.sender().other_collection
         line_thick = self.sender().value()
         "Here the query is reversed and modified, dropping the values() method, to allow SETTING the line thickness in the legend"
         parent.others_legend_df.loc[
-            (parent.others_legend_df["other_type"] == other_type), "line_thick"
+            (parent.others_legend_df["other_collection"] == other_collection), "line_thick"
         ] = line_thick
         """Signals to update actors in windows. This is emitted only for the modified uid under the 'color' key."""
-        if other_type == "XSection":
+        if other_collection == "XSection":
             parent.xsect_legend_thick_modified_signal.emit(
                 parent.xsect_coll.df["uid"].tolist()
             )
-        elif other_type == "DOM":
+        elif other_collection == "DOM":
             parent.dom_legend_thick_modified_signal.emit(
                 parent.dom_coll.df["uid"].tolist()
             )
-        elif other_type == "Mesh3D":
+        elif other_collection == "Mesh3D":
             parent.mesh3d_legend_thick_modified_signal.emit(
                 parent.dom_coll.df["uid"].tolist()
             )
-        elif other_type == "Boundary":
+        elif other_collection == "Boundary":
             parent.boundary_legend_thick_modified_signal.emit(
                 parent.boundary_coll.df["uid"].tolist()
             )
 
     def change_other_feature_point_size(self, parent=None):
-        other_type = self.sender().other_type
+        other_collection = self.sender().other_collection
         point_size = self.sender().value()
         "Here the query is reversed and modified, dropping the values() method, to allow SETTING the line thickness in the legend"
         parent.others_legend_df.loc[
-            (parent.others_legend_df["other_type"] == other_type), "point_size"
+            (parent.others_legend_df["other_collection"] == other_collection), "point_size"
         ] = point_size
         """Signals to update actors in windows. This is emitted only for the modified uid under the 'color' key."""
-        # if other_type == "XSection":
+        # if other_collection == "XSection":
         #     parent.xsect_legend_point_size_modified_signal.emit(parent.xsect_coll.df['uid'].tolist())
-        if other_type == "DOM":
+        if other_collection == "DOM":
             parent.dom_legend_point_size_modified_signal.emit(
                 parent.dom_coll.df["uid"].tolist()
             )
-        # elif other_type == "Mesh3D":
+        # elif other_collection == "Mesh3D":
         #     parent.mesh3d_legend_point_size_modified_signal.emit(parent.dom_coll.df['uid'].tolist())
-        # elif other_type == "Boundary":
+        # elif other_collection == "Boundary":
         #     parent.boundary_legend_point_size_modified_signal.emit(parent.boundary_coll.df['uid'].tolist())
 
     def change_other_feature_opacity(self, parent=None):
-        other_type = self.sender().other_type
+        other_collection = self.sender().other_collection
         opacity = self.sender().value()
         "Here the query is reversed and modified, dropping the values() method, to allow SETTING the line thickness in the legend"
         parent.others_legend_df.loc[
-            (parent.others_legend_df["other_type"] == other_type), "opacity"
+            (parent.others_legend_df["other_collection"] == other_collection), "opacity"
         ] = opacity
         """Signals to update actors in windows. This is emitted only for the modified uid under the 'color' key."""
-        if other_type == "XSection":
+        if other_collection == "XSection":
             parent.xsect_legend_opacity_modified_signal.emit(
                 parent.xsect_coll.df["uid"].tolist()
             )
-        elif other_type == "DOM":
+        elif other_collection == "DOM":
             parent.dom_legend_opacity_modified_signal.emit(
                 parent.dom_coll.df["uid"].tolist()
             )
-        elif other_type == "Mesh3D":
+        elif other_collection == "Mesh3D":
             parent.mesh3d_legend_opacity_modified_signal.emit(
                 parent.dom_coll.df["uid"].tolist()
             )
-        elif other_type == "Boundary":
+        elif other_collection == "Boundary":
             parent.boundary_legend_opacity_modified_signal.emit(
                 parent.boundary_coll.df["uid"].tolist()
             )
-        elif other_type == "Image":
+        elif other_collection == "Image":
             parent.image_legend_opacity_modified_signal.emit(
                 parent.image_coll.df["uid"].tolist()
             )

@@ -30,7 +30,7 @@ def segy2vtk(self=None, in_file_name=None):
         curr_obj_attributes = deepcopy(ImageCollection.image_entity_type_dict)
         curr_obj_attributes["uid"] = str(uuid.uuid4())
         curr_obj_attributes["name"] = os.path.basename(in_file_name)
-        curr_obj_attributes["image_type"] = "Seismics"
+        curr_obj_attributes["topology"] = "Seismics"
         curr_obj_attributes["properties_names"] = curr_object.point_data_keys
         # curr_obj_attributes['properties_components'] = curr_object.point_data_components
         curr_obj_attributes["properties_types"] = curr_object.properties_types

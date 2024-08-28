@@ -71,7 +71,7 @@ def dem2vtk(self=None, in_file_name=None, collection=None):
         curr_obj_attributes = deepcopy(DomCollection.entity_dict)
         curr_obj_attributes["uid"] = str(uuid.uuid4())
         curr_obj_attributes["name"] = os.path.basename(in_file_name)
-        curr_obj_attributes["dom_type"] = "DEM"
+        curr_obj_attributes["topology"] = "DEM"
         curr_obj_attributes["texture_uids"] = []
         curr_obj_attributes["properties_names"] = ["elevation"]
         curr_obj_attributes["properties_components"] = [1]

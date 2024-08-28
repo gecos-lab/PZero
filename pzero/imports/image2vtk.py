@@ -98,7 +98,7 @@ def geo_image2vtk(self=None, in_file_name=None):
         curr_obj_dict = deepcopy(ImageCollection.image_entity_dict)
         curr_obj_dict["uid"] = str(uuid.uuid4())
         curr_obj_dict["name"] = os.path.basename(in_file_name)
-        curr_obj_dict["image_type"] = "MapImage"
+        curr_obj_dict["topology"] = "MapImage"
         if geo_image.count == 1:
             curr_obj_dict["properties_names"] = ["greyscale"]
         elif geo_image.count >= 3:
@@ -218,7 +218,7 @@ def xs_image2vtk(self=None, in_file_name=None, x_section_uid=None):
     curr_obj_dict = deepcopy(ImageCollection.image_entity_dict)
     curr_obj_dict["uid"] = str(uuid.uuid4())
     curr_obj_dict["name"] = os.path.basename(in_file_name)
-    curr_obj_dict["image_type"] = "XsImage"
+    curr_obj_dict["topology"] = "XsImage"
     if xs_image.count == 1:
         curr_obj_dict["properties_names"] = ["greyscale"]
     elif xs_image.count == 3:
