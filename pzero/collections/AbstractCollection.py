@@ -187,10 +187,10 @@ class BaseCollection(ABC):
         """Set the collection name."""
         self._collection_name = name
 
-    # @property
-    # def coll_type_name(self) -> str:
-    #     """Helper property to get the full collection type column name for the given collection."""
-    #     return f'{self.collection_name}_type'
+    @property
+    def coll_type_name(self) -> str:
+        """Helper property to get the full collection type column name for the given collection."""
+        return f'{self.collection_name}_type'
 
     # @property
     # def coll_feature_name(self) -> str:

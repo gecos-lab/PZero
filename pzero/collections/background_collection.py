@@ -35,7 +35,7 @@ class BackgroundCollection(BaseCollection):
                 "uid": "",
                 "name": "undef",
                 "topology": "undef",
-                "type": "undef",
+                "background_type": "undef",
                 "feature": "undef",
                 "scenario": "undef",
                 "properties_names": [],
@@ -49,7 +49,7 @@ class BackgroundCollection(BaseCollection):
             "uid": str,
             "name": str,
             "topology": str,
-            "type": str,
+            "background_type": str,
             "feature": str,
             "scenario": str,
             "properties_names": list,
@@ -69,7 +69,7 @@ class BackgroundCollection(BaseCollection):
             "XsPolyLine",
         ]
 
-        self.editable_columns_names = ["name", "type", "feature", "scenario"]
+        self.editable_columns_names = ["name", "background_type", "feature", "scenario"]
 
         self.collection_name = 'background'
 
@@ -90,11 +90,11 @@ class BackgroundCollection(BaseCollection):
         # Then add new type / feature / scenario to the legend if needed.
         # Note that for performance reasons this is done explicitly here, when adding an entity to the
         # collection, and not with a signal telling the legend to be updated by scanning the whole collection.
-        type = entity_dict["type"]
+        background_type = entity_dict["background_type"]
         feature = entity_dict["feature"]
         scenario = entity_dict["scenario"]
         if self.parent.backgrounds_legend_df.loc[
-            (self.parent.backgrounds_legend_df["type"] == type)
+            (self.parent.backgrounds_legend_df["background_type"] == background_type)
             & (self.parent.backgrounds_legend_df["feature"] == feature)
             & (self.parent.backgrounds_legend_df["scenario"] == scenario)
         ].empty:
@@ -105,7 +105,7 @@ class BackgroundCollection(BaseCollection):
             # Use default generic values for legend.
             self.parent.backgrounds_legend_df = (self.parent.backgrounds_legend_df.append(
                     {
-                        "type": type,
+                        "background_type": background_type,
                         "feature": feature,
                         "background_time": 0.0,
                         "background_sequence": "back_0",
@@ -165,7 +165,7 @@ class BackgroundCollection(BaseCollection):
         entity_dict = deepcopy(self.entity_dict)
         entity_dict["name"] = self.get_uid_name(uid)
         entity_dict["topology"] = self.get_uid_topology(uid)
-        entity_dict["type"] = self.get_uid_type(uid)
+        entity_dict["background_type"] = self.get_uid_type(uid)
         entity_dict["feature"] = self.get_uid_feature(uid)
         entity_dict["scenario"] = self.get_uid_scenario(uid)
         entity_dict["properties_names"] = self.get_uid_properties_names(uid)
@@ -197,12 +197,12 @@ class BackgroundCollection(BaseCollection):
 
     def attr_modified_update_legend_table(self):
         """Update legend table when attributes are changed."""
-        # First remove unused type / feature.
+        # First remove unused geo_type / feature.
         # legend_updated is used to record if the table is updated or not.
         legend_updated = self.remove_unused_from_legend()
-        # Then add new type / feature.
+        # Then add new geo_type / feature.
         for uid in self.parent.backgrounds_coll.df["uid"].to_list():
-            type = self.parent.backgrounds_coll.df.loc[
+            background_type = self.parent.backgrounds_coll.df.loc[
                 self.parent.backgrounds_coll.df["uid"] == uid, "type"
             ].values[0]
             feature = self.parent.backgrounds_coll.df.loc[
@@ -210,15 +210,15 @@ class BackgroundCollection(BaseCollection):
             ].values[0]
             if self.parent.backgrounds_legend_df.loc[
                 (
-                        self.parent.backgrounds_legend_df["type"]
-                        == type
+                        self.parent.backgrounds_legend_df["background_type"]
+                        == background_type
                 )
                 & (self.parent.backgrounds_legend_df["feature"] == feature)
             ].empty:
                 self.parent.backgrounds_legend_df = (
                     self.parent.backgrounds_legend_df.append(
                         {
-                            "type": type,
+                            "background_type": background_type,
                             "feature": feature,
                             "color_R": round(np.random.random() * 255),
                             "color_G": round(np.random.random() * 255),
@@ -239,35 +239,35 @@ class BackgroundCollection(BaseCollection):
         # legend_updated is used to record if the table is updated or not.
         legend_updated = False
         backgrounds_types_in_legend = pd.unique(
-            self.parent.backgrounds_legend_df["type"]
+            self.parent.backgrounds_legend_df["background_type"]
         )
         features_in_legend = pd.unique(
             self.parent.backgrounds_legend_df["feature"]
         )
-        for type in backgrounds_types_in_legend:
+        for background_type in backgrounds_types_in_legend:
             if self.parent.backgrounds_coll.df.loc[
-                self.parent.backgrounds_coll.df["type"] == type
+                self.parent.backgrounds_coll.df["background_type"] == background_type
             ].empty:
                 # Get index of row to be removed, then remove it in place with .drop().
                 idx_remove = self.parent.backgrounds_legend_df[
-                    self.parent.backgrounds_legend_df["type"]
-                    == type
+                    self.parent.backgrounds_legend_df["background_type"]
+                    == background_type
                     ].index
                 self.parent.backgrounds_legend_df.drop(idx_remove, inplace=True)
                 legend_updated = legend_updated or True
             for feature in features_in_legend:
                 if self.parent.backgrounds_coll.df.loc[
                     (
-                            self.parent.backgrounds_coll.df["type"]
-                            == type
+                            self.parent.backgrounds_coll.df["background_type"]
+                            == background_type
                     )
                     & (self.parent.backgrounds_coll.df["feature"] == feature)
                 ].empty:
                     # Get index of row to be removed, then remove it in place with .drop().
                     idx_remove = self.parent.backgrounds_legend_df[
                         (
-                                self.parent.backgrounds_legend_df["type"]
-                                == type
+                                self.parent.backgrounds_legend_df["background_type"]
+                                == background_type
                         )
                         & (
                                 self.parent.backgrounds_legend_df["feature"]
@@ -290,11 +290,11 @@ class BackgroundCollection(BaseCollection):
 
     def get_uid_legend(self, uid: str = None) -> dict:
         """Get legend for a particular uid."""
-        type = self.df.loc[self.df["uid"] == uid, "type"].values[0]
+        background_type = self.df.loc[self.df["uid"] == uid, "background_type"].values[0]
         feature = self.df.loc[self.df["uid"] == uid, "feature"].values[0]
         scenario = self.df.loc[self.df["uid"] == uid, "scenario"].values[0]
         legend_dict = self.parent.backgrounds_legend_df.loc[
-            (self.parent.backgrounds_legend_df["type"] == type)
+            (self.parent.backgrounds_legend_df["background_type"] == background_type)
             & (self.parent.backgrounds_legend_df["feature"] == feature)
             & (self.parent.backgrounds_legend_df["scenario"] == scenario)
             ].to_dict("records")
@@ -323,15 +323,15 @@ class BackgroundCollection(BaseCollection):
     def get_type_uids(self, coll_type: str = None) -> list:
         """Get list of uids of a given collection type."""
         # ====== in the future use the query method? ========================================
-        return self.df.loc[self.df['type'] == coll_type, "uid"].to_list()
+        return self.df.loc[self.df[self.coll_type_name] == coll_type, "uid"].to_list()
 
     def get_uid_type(self, uid: str = None):
         """Get collection type from uid."""
-        return self.df.loc[self.df["uid"] == uid, 'type'].values[0]
+        return self.df.loc[self.df["uid"] == uid, self.coll_type_name].values[0]
 
-    def set_uid_type(self, uid=None, type=None):
+    def set_uid_type(self, uid=None, background_type=None):
         """Set collection type from uid."""
-        self.df.loc[self.df["uid"] == uid, 'type'] = type
+        self.df.loc[self.df["uid"] == uid, self.coll_type_name] = background_type
 
     def get_feature_uids(self, coll_feature: str = None) -> list:
         """Get list of uids of a given collection feature."""

@@ -14,17 +14,17 @@ def create_fluids_tree(self):
     )
     self.FluidsTreeWidget.hideColumn(1)  # hide the uid column
     self.FluidsTreeWidget.setItemsExpandable(True)
-    fluid_types = pd_unique(self.parent.fluids_coll.df.query(self.view_filter)["type"])
-    for type in fluid_types:
+    fluid_types = pd_unique(self.parent.fluids_coll.df.query(self.view_filter)["fluid_type"])
+    for fluid_type in fluid_types:
         flevel_1 = QTreeWidgetItem(
-            self.FluidsTreeWidget, [type]
+            self.FluidsTreeWidget, [fluid_type]
         )  # self.FluidsTreeWidget as parent -> top level
         flevel_1.setFlags(
             flevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
         )
         fluid_features = pd_unique(
             self.parent.fluids_coll.df.query(self.view_filter).loc[
-                self.parent.fluids_coll.df.query(self.view_filter)["type"] == type,
+                self.parent.fluids_coll.df.query(self.view_filter)["fluid_type"] == fluid_type,
                 "feature",
             ]
         )
@@ -37,7 +37,7 @@ def create_fluids_tree(self):
             )
             fluid_scenario = pd_unique(
                 self.parent.fluids_coll.df.query(self.view_filter).loc[
-                    (self.parent.fluids_coll.df.query(self.view_filter)["type"] == type)
+                    (self.parent.fluids_coll.df.query(self.view_filter)["fluid_type"] == fluid_type)
                     & (self.parent.fluids_coll.df.query(self.view_filter)["feature"] == feature),
                     "scenario",
                 ]
@@ -50,7 +50,7 @@ def create_fluids_tree(self):
                     flevel_3.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
                 )
                 uids = self.parent.fluids_coll.df.query(self.view_filter).loc[
-                    (self.parent.fluids_coll.df.query(self.view_filter)["type"] == type)
+                    (self.parent.fluids_coll.df.query(self.view_filter)["fluid_type"] == fluid_type)
                     & (self.parent.fluids_coll.df.query(self.view_filter)["feature"] == feature)
                     & (self.parent.fluids_coll.df.query(self.view_filter)["scenario"] == scenario),
                     "uid",

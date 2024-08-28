@@ -8,7 +8,7 @@ from PyQt5.QtWidgets import QMainWindow
 background_entity_dict = {'uid': "53",
                           'name': "background-test",
                           'topology': "undef",
-                          'type': "undef",
+                          'background_type': "undef",
                           'feature': "undef",
                           'properties_names': [],
                           'properties_components': [],

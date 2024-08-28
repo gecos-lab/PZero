@@ -52,7 +52,7 @@ def draw_line(self):
     """One dictionary is set as input for a general widget of multiple-value-input"""
     line_dict_in = {
         "name": ["PolyLine name: ", "new_pline"],
-        "type": [
+        "geological_type": [
             "Geological type: ",
             self.parent.geol_coll.valid_types,
         ],
@@ -427,8 +427,8 @@ def split_line_line(self):
             new_line["topology"] = self.parent.geol_coll.df.loc[
                 self.parent.geol_coll.df["uid"] == current_uid_paper, "topology"
             ].values[0]
-            new_line["type"] = self.parent.geol_coll.df.loc[
-                self.parent.geol_coll.df["uid"] == current_uid_paper, "type"
+            new_line["geological_type"] = self.parent.geol_coll.df.loc[
+                self.parent.geol_coll.df["uid"] == current_uid_paper, "geological_type"
             ].values[0]
             new_line["feature"] = self.parent.geol_coll.df.loc[
                 self.parent.geol_coll.df["uid"] == current_uid_paper,
@@ -499,8 +499,8 @@ def split_line_existing_point(self):
         new_line_2["topology"] = self.parent.geol_coll.df.loc[
             self.parent.geol_coll.df["uid"] == uid, "topology"
         ].values[0]
-        new_line_2["type"] = self.parent.geol_coll.df.loc[
-            self.parent.geol_coll.df["uid"] == uid, "type"
+        new_line_2["geological_type"] = self.parent.geol_coll.df.loc[
+            self.parent.geol_coll.df["uid"] == uid, "geological_type"
         ].values[0]
         new_line_2["feature"] = self.parent.geol_coll.df.loc[
             self.parent.geol_coll.df["uid"] == uid, "feature"
@@ -1270,12 +1270,12 @@ def copy_parallel(
     ].values[0]
     out_line_name = in_line_name + "_para_" + "%d" % distance
 
-    """Create empty dictionary for the output line and set name and type.
+    """Create empty dictionary for the output line and set name and geological_type.
     IN THE FUTURE see if other metadata should be automatically set."""
     line_dict = deepcopy(self.parent.geol_coll.entity_dict)
     line_dict["name"] = out_line_name
-    line_dict["type"] = self.parent.geol_coll.df.loc[
-        self.parent.geol_coll.df["uid"] == input_uid, "type"
+    line_dict["geological_type"] = self.parent.geol_coll.df.loc[
+        self.parent.geol_coll.df["uid"] == input_uid, "geological_type"
     ].values[0]
     line_dict["feature"] = self.parent.geol_coll.get_uid_feature(
         self.selected_uids[0]
@@ -1389,12 +1389,12 @@ def copy_kink(
     ].values[0]
     out_line_name = in_line_name + "_kink_" + "%d" % distance
 
-    """Create empty dictionary for the output line and set name and type.
+    """Create empty dictionary for the output line and set name and geological_type.
     IN THE FUTURE see if other metadata should be automatically set."""
     line_dict = deepcopy(self.parent.geol_coll.entity_dict)
     line_dict["name"] = out_line_name
-    line_dict["type"] = self.parent.geol_coll.df.loc[
-        self.parent.geol_coll.df["uid"] == input_uid, "type"
+    line_dict["geological_type"] = self.parent.geol_coll.df.loc[
+        self.parent.geol_coll.df["uid"] == input_uid, "geological_type"
     ].values[0]
     line_dict["feature"] = self.parent.geol_coll.get_uid_feature(
         self.selected_uids[0]
@@ -1488,11 +1488,11 @@ def copy_similar(
     """If more than one line is selected, keep the first."""
     input_uid = self.selected_uids[0]
     """IN THE FUTURE add a test to check that the selected feature is a geological feature"""
-    """Create empty dictionary for the output line and set name and type.
+    """Create empty dictionary for the output line and set name and geological_type.
     IN THE FUTURE see if other metadata should be automatically set."""
     line_dict = deepcopy(self.parent.geol_coll.entity_dict)
-    line_dict["type"] = self.parent.geol_coll.df.loc[
-        self.parent.geol_coll.df["uid"] == input_uid, "type"
+    line_dict["geological_type"] = self.parent.geol_coll.df.loc[
+        self.parent.geol_coll.df["uid"] == input_uid, "geological_type"
     ].values[0]
     line_dict["feature"] = self.parent.geol_coll.get_uid_feature(
         self.selected_uids[0]

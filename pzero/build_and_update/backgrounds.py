@@ -15,19 +15,19 @@ def create_backgrounds_tree(self):
     self.BackgroundsTreeWidget.hideColumn(1)  # hide the uid column
     self.BackgroundsTreeWidget.setItemsExpandable(True)
     background_types = pd_unique(
-        self.parent.backgrounds_coll.df.query(self.view_filter)["type"]
+        self.parent.backgrounds_coll.df.query(self.view_filter)["background_type"]
     )
-    for type in background_types:
+    for background_type in background_types:
         flevel_1 = QTreeWidgetItem(
-            self.BackgroundsTreeWidget, [type]
+            self.BackgroundsTreeWidget, [background_type]
         )  # self.BackgroundsTreeWidget as parent -> top level
         flevel_1.setFlags(
             flevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
         )
         background_features = pd_unique(
             self.parent.backgrounds_coll.df.query(self.view_filter).loc[
-                self.parent.backgrounds_coll.df.query(self.view_filter)["type"]
-                == type,
+                self.parent.backgrounds_coll.df.query(self.view_filter)["background_type"]
+                == background_type,
                 "feature",
             ]
         )
@@ -40,8 +40,8 @@ def create_backgrounds_tree(self):
             )
             uids = self.parent.backgrounds_coll.df.query(self.view_filter).loc[
                 (
-                        self.parent.backgrounds_coll.df.query(self.view_filter)["type"]
-                        == type
+                        self.parent.backgrounds_coll.df.query(self.view_filter)["background_type"]
+                        == background_type
                 )
                 & (
                         self.parent.backgrounds_coll.df.query(self.view_filter)["feature"]
@@ -106,14 +106,14 @@ def create_backgrounds_topology_tree(self):
             tlevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
         )
 
-        for type in pd_unique(
+        for background_type in pd_unique(
                 self.parent.backgrounds_coll.df.query(self.view_filter).loc[
                     self.parent.backgrounds_coll.df.query(self.view_filter)["topology"] == topo_type,
-                    "type",
+                    "background_type",
                 ]
         ):
             tlevel_2 = QTreeWidgetItem(
-                tlevel_1, [type]
+                tlevel_1, [background_type]
             )  # tlevel_1 as parent -> middle level
             tlevel_2.setFlags(
                 tlevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
@@ -124,8 +124,8 @@ def create_backgrounds_topology_tree(self):
                         == topo_type
                 )
                 & (
-                        self.parent.backgrounds_coll.df.query(self.view_filter)["type"]
-                        == type
+                        self.parent.backgrounds_coll.df.query(self.view_filter)["background_type"]
+                        == background_type
                 ),
                 "uid",
             ].to_list()
