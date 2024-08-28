@@ -4577,10 +4577,10 @@ class ViewStereoplot(MPLView):
             | (self.parent.geol_coll.df["topology"] == "XsVertexSet"),
             "role"
         ]
-        geo_types = pd_unique(filtered_geo)
-        print("geo_types: ", geo_types)
+        roles = pd_unique(filtered_geo)
+        print("roles: ", roles)
 
-        for role in geo_types:
+        for role in roles:
             glevel_1 = QTreeWidgetItem(
                 self.GeologyTreeWidget, [role]
             )  # self.GeologyTreeWidget as parent -> top level

@@ -14,8 +14,8 @@ def create_fluids_tree(self):
     )
     self.FluidsTreeWidget.hideColumn(1)  # hide the uid column
     self.FluidsTreeWidget.setItemsExpandable(True)
-    fluid_types = pd_unique(self.parent.fluids_coll.df.query(self.view_filter)["role"])
-    for role in fluid_types:
+    roles = pd_unique(self.parent.fluids_coll.df.query(self.view_filter)["role"])
+    for role in roles:
         flevel_1 = QTreeWidgetItem(
             self.FluidsTreeWidget, [role]
         )  # self.FluidsTreeWidget as parent -> top level

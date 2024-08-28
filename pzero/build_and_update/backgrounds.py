@@ -14,10 +14,10 @@ def create_backgrounds_tree(self):
     )
     self.BackgroundsTreeWidget.hideColumn(1)  # hide the uid column
     self.BackgroundsTreeWidget.setItemsExpandable(True)
-    background_types = pd_unique(
+    roles = pd_unique(
         self.parent.backgrounds_coll.df.query(self.view_filter)["role"]
     )
-    for role in background_types:
+    for role in roles:
         flevel_1 = QTreeWidgetItem(
             self.BackgroundsTreeWidget, [role]
         )  # self.BackgroundsTreeWidget as parent -> top level

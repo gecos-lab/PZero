@@ -238,13 +238,13 @@ class BackgroundCollection(BaseCollection):
         # ====== TO BE UPDATED ACCORDING TO geological collection SINCE IT DOES NOT CONSIDER SCENARIO ===
         # legend_updated is used to record if the table is updated or not.
         legend_updated = False
-        backgrounds_types_in_legend = pd.unique(
+        roles_in_legend = pd.unique(
             self.parent.backgrounds_legend_df["role"]
         )
         features_in_legend = pd.unique(
             self.parent.backgrounds_legend_df["feature"]
         )
-        for role in backgrounds_types_in_legend:
+        for role in roles_in_legend:
             if self.parent.backgrounds_coll.df.loc[
                 self.parent.backgrounds_coll.df["role"] == role
             ].empty:

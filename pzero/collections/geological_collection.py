@@ -243,10 +243,10 @@ class GeologicalCollection(BaseCollection):
         """Remove unused types / features from a legend table."""
         # legend_updated is used to record if the table is updated or not.
         legend_updated = False
-        geo_types_in_legend = pd_unique(self.parent.geol_legend_df["role"])
+        roles_in_legend = pd_unique(self.parent.geol_legend_df["role"])
         features_in_legend = pd_unique(self.parent.geol_legend_df["feature"])
         scenarios_in_legend = pd_unique(self.parent.geol_legend_df["scenario"])
-        for role in geo_types_in_legend:
+        for role in roles_in_legend:
             if self.parent.geol_coll.df.loc[
                 self.parent.geol_coll.df["role"] == role
             ].empty:
