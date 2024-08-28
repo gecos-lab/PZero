@@ -244,7 +244,7 @@ def update_well_tree_removed(self, removed_list=None):
     success = 0
     for uid in removed_list:
         for well_locid in range(self.WellsTreeWidget.topLevelItemCount()):
-            """Iterate through every Geological Type top level"""
+            """Iterate through every Geological Role top level"""
             for child_geo_feat in range(
                     self.WellsTreeWidget.topLevelItem(well_locid).childCount()
             ):

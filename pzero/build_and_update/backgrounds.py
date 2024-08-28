@@ -10,24 +10,24 @@ def create_backgrounds_tree(self):
     self.BackgroundsTreeWidget.clear()
     self.BackgroundsTreeWidget.setColumnCount(3)
     self.BackgroundsTreeWidget.setHeaderLabels(
-        ["Type > Feature > Name", "uid", "property"]
+        ["Role > Feature > Name", "uid", "property"]
     )
     self.BackgroundsTreeWidget.hideColumn(1)  # hide the uid column
     self.BackgroundsTreeWidget.setItemsExpandable(True)
     background_types = pd_unique(
-        self.parent.backgrounds_coll.df.query(self.view_filter)["background_type"]
+        self.parent.backgrounds_coll.df.query(self.view_filter)["role"]
     )
-    for background_type in background_types:
+    for role in background_types:
         flevel_1 = QTreeWidgetItem(
-            self.BackgroundsTreeWidget, [background_type]
+            self.BackgroundsTreeWidget, [role]
         )  # self.BackgroundsTreeWidget as parent -> top level
         flevel_1.setFlags(
             flevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
         )
         background_features = pd_unique(
             self.parent.backgrounds_coll.df.query(self.view_filter).loc[
-                self.parent.backgrounds_coll.df.query(self.view_filter)["background_type"]
-                == background_type,
+                self.parent.backgrounds_coll.df.query(self.view_filter)["role"]
+                == role,
                 "feature",
             ]
         )
@@ -40,8 +40,8 @@ def create_backgrounds_tree(self):
             )
             uids = self.parent.backgrounds_coll.df.query(self.view_filter).loc[
                 (
-                        self.parent.backgrounds_coll.df.query(self.view_filter)["background_type"]
-                        == background_type
+                        self.parent.backgrounds_coll.df.query(self.view_filter)["role"]
+                        == role
                 )
                 & (
                         self.parent.backgrounds_coll.df.query(self.view_filter)["feature"]
@@ -93,7 +93,7 @@ def create_backgrounds_topology_tree(self):
     self.BackgroundsTopologyTreeWidget.clear()
     self.BackgroundsTopologyTreeWidget.setColumnCount(3)
     self.BackgroundsTreeWidget.setHeaderLabels(
-        ["Type > Feature > Name", "uid", "property"]
+        ["Role > Feature > Name", "uid", "property"]
     )
     self.BackgroundsTopologyTreeWidget.hideColumn(1)  # hide the uid column
     self.BackgroundsTopologyTreeWidget.setItemsExpandable(True)
@@ -106,14 +106,14 @@ def create_backgrounds_topology_tree(self):
             tlevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
         )
 
-        for background_type in pd_unique(
+        for role in pd_unique(
                 self.parent.backgrounds_coll.df.query(self.view_filter).loc[
                     self.parent.backgrounds_coll.df.query(self.view_filter)["topology"] == topo_type,
-                    "background_type",
+                    "role",
                 ]
         ):
             tlevel_2 = QTreeWidgetItem(
-                tlevel_1, [background_type]
+                tlevel_1, [role]
             )  # tlevel_1 as parent -> middle level
             tlevel_2.setFlags(
                 tlevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
@@ -124,8 +124,8 @@ def create_backgrounds_topology_tree(self):
                         == topo_type
                 )
                 & (
-                        self.parent.backgrounds_coll.df.query(self.view_filter)["background_type"]
-                        == background_type
+                        self.parent.backgrounds_coll.df.query(self.view_filter)["role"]
+                        == role
                 ),
                 "uid",
             ].to_list()
@@ -365,7 +365,7 @@ def update_backgrounds_tree_removed(self, removed_list=None):  # second attchild
         for top_background_type in range(
                 self.BackgroundsTreeWidget.topLevelItemCount()
         ):
-            """Iterate through every background Type top level"""
+            """Iterate through every background Role top level"""
 
             for child_background_feat in range(
                     self.BackgroundsTreeWidget.topLevelItem(
@@ -629,7 +629,7 @@ def update_backgrounds_topology_tree_removed(self, removed_list=None):
         for top_topo_type in range(
                 self.BackgroundsTopologyTreeWidget.topLevelItemCount()
         ):
-            """Iterate through every Topological Type top level"""
+            """Iterate through every Topological Role top level"""
             for child_scenario in range(
                     self.BackgroundsTopologyTreeWidget.topLevelItem(
                         top_topo_type

@@ -397,18 +397,18 @@ class BaseTableModel(QAbstractTableModel):
         """This is the instance of a subclass of BaseCollection used as data."""
         return self._collection
 
-    def data(self, index, role):
+    def data(self, index, qt_role):
         """Data is updated on the fly:
            .row() index points to an entity in the collection
            .column() index points to an element in the list created on the fly
            based on the column headers stored in the dictionary."""
-        if role == Qt.DisplayRole:
+        if qt_role == Qt.DisplayRole:
             value = self.collection.df.iloc[index.row(), index.column()]
             return str(value)
 
-    def headerData(self, section, orientation, role):
+    def headerData(self, section, orientation, qt_role):
         """Set header from pandas dataframe. "section" is a standard Qt variable."""
-        if role == Qt.DisplayRole:
+        if qt_role == Qt.DisplayRole:
             if orientation == Qt.Horizontal:
                 return str(self.collection.df.columns[section])
             if orientation == Qt.Vertical:
@@ -430,7 +430,7 @@ class BaseTableModel(QAbstractTableModel):
             )
         return Qt.ItemIsEnabled | Qt.ItemIsSelectable
 
-    def setData(self, index, value, role=Qt.EditRole):
+    def setData(self, index, value, qt_role=Qt.EditRole):
         """This is the method allowing to edit the table and the underlying dataframe.
         "self.parent" is used to point to parent, because the standard Qt setData
         method does not allow for extra variables to be passed into this method."""

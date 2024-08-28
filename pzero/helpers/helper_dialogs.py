@@ -566,23 +566,23 @@ class PCDataModel(QAbstractTableModel):
     ):  # [Gabriele] the n of rows is = to the number of rows of the input data set (.shape[0])
         return self.data.shape[0]
 
-    def data(self, index, role):
+    def data(self, index, qt_role):
         # print(index.column())
         if index.isValid():
-            if role == Qt.DisplayRole:
+            if qt_role == Qt.DisplayRole:
                 return str(
                     self.data.iloc[index.row(), index.column()]
-                )  # if role == Qt.BackgroundRole and index.column() in self.index_list:  # return QColor(Qt.green)
-            if role == Qt.BackgroundRole and index.column() in self.index_list:
+                )  # if qt_role == Qt.BackgroundRole and index.column() in self.index_list:  # return QColor(Qt.green)
+            if qt_role == Qt.BackgroundRole and index.column() in self.index_list:
                 return QColor(Qt.green)  # [Gabriele] Set the color
         return None
 
-    """[Gabriele] Set header and index If the "container" is horizontal (orientation index 1) and has a display role (index 0) (-> is the header of the table). If the "container" is vertical (orientation index 2) and has a display role (index 0) (-> is the index of the table)."""
+    """[Gabriele] Set header and index If the "container" is horizontal (orientation index 1) and has a display qt_role (index 0) (-> is the header of the table). If the "container" is vertical (orientation index 2) and has a display qt_role (index 0) (-> is the index of the table)."""
 
-    def headerData(self, col, orientation, role):
-        if orientation == Qt.Horizontal and role == Qt.DisplayRole:
+    def headerData(self, col, orientation, qt_role):
+        if orientation == Qt.Horizontal and qt_role == Qt.DisplayRole:
             return str(self.data.columns[col])  # [Gabriele] Set the header names
-        if orientation == Qt.Vertical and role == Qt.DisplayRole:
+        if orientation == Qt.Vertical and qt_role == Qt.DisplayRole:
             return self.data.index[col]  # [Gabriele] Set the indexes
         return None
 
@@ -597,7 +597,7 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
         + HeaderspinBox -> Row index with header dataset
         + StartRowspinBox -> Start import from row number
         + EndRowspinBox -> End import on row number
-        + Separator -> Type of separtor in the data set"""
+        + Separator -> Role of separtor in the data set"""
 
     import_options_dict = {
         "in_path": "",

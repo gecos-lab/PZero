@@ -97,7 +97,7 @@ def gocad2vtk(self=None, in_file_name=None, uid_from_name=None):
         scenario_default = "undef"
     type_default  = input_combo_dialog(
         parent=None,
-        title="Geological type",
+        title="Role",
         label="Default geological type",
         choice_list=self.geol_coll.valid_types,
     )
@@ -152,15 +152,15 @@ def gocad2vtk(self=None, in_file_name=None, uid_from_name=None):
             if clean_line[1] == "VSet":
                 curr_obj_dict["topology"] = "VertexSet"
                 curr_obj_dict["vtk_obj"] = VertexSet()
-                curr_obj_dict["geological_type"] = type_default 
+                curr_obj_dict["role"] = type_default 
             elif clean_line[1] == "PLine":
                 curr_obj_dict["topology"] = "PolyLine"
                 curr_obj_dict["vtk_obj"] = PolyLine()
-                curr_obj_dict["geological_type"] = type_default 
+                curr_obj_dict["role"] = type_default 
             elif clean_line[1] == "TSurf":
                 curr_obj_dict["topology"] = "TriSurf"
                 curr_obj_dict["vtk_obj"] = TriSurf()
-                curr_obj_dict["geological_type"] = type_default 
+                curr_obj_dict["role"] = type_default 
             else:
                 """Here topological types different from the allowed ones are handled.
                 At the moment THIS WILL CAUSE ERRORS - KEEP THIS MESSAGE JUST FOR DEBUGGING.
@@ -207,19 +207,19 @@ def gocad2vtk(self=None, in_file_name=None, uid_from_name=None):
                 curr_obj_dict["uid"] = curr_obj_dict["name"]
 
         elif clean_line[0] == "GEOLOGICAL_TYPE":
-            curr_obj_dict["geological_type"] = ("_".join(clean_line[1:])).lower()
+            curr_obj_dict["role"] = ("_".join(clean_line[1:])).lower()
             if (
-                curr_obj_dict["geological_type"]
+                curr_obj_dict["role"]
                 not in self.geol_coll.valid_types
             ):
-                if "Fault" in curr_obj_dict["geological_type"]:
-                    curr_obj_dict["geological_type"] = "fault"
-                elif "fault" in curr_obj_dict["geological_type"]:
-                    curr_obj_dict["geological_type"] = "fault"
-                elif "Horizon" in curr_obj_dict["geological_type"]:
-                    curr_obj_dict["geological_type"] = "top"
+                if "Fault" in curr_obj_dict["role"]:
+                    curr_obj_dict["role"] = "fault"
+                elif "fault" in curr_obj_dict["role"]:
+                    curr_obj_dict["role"] = "fault"
+                elif "Horizon" in curr_obj_dict["role"]:
+                    curr_obj_dict["role"] = "top"
                 else:
-                    curr_obj_dict["geological_type"] = "undef"
+                    curr_obj_dict["role"] = "undef"
 
         elif clean_line[0] == "GEOLOGICAL_FEATURE":
             curr_obj_dict["feature"] = "_".join(clean_line[1:])
@@ -470,7 +470,7 @@ def gocad2vtk_section(self=None, in_file_name=None, uid_from_name=None, x_sectio
         scenario_default = "undef"
     type_default  = input_combo_dialog(
         parent=None,
-        title="Geological type",
+        title="Role",
         label="Default geological type",
         choice_list=self.geol_coll.valid_types,
     )
@@ -517,13 +517,13 @@ def gocad2vtk_section(self=None, in_file_name=None, uid_from_name=None, x_sectio
                     x_section_uid=x_section, parent=self
                 )
                 curr_obj_dict["topology"] = "XsVertexSet"
-                curr_obj_dict["geological_type"] = type_default 
+                curr_obj_dict["role"] = type_default 
             elif clean_line[1] == "PLine":
                 curr_obj_dict["vtk_obj"] = XsPolyLine(
                     x_section_uid=x_section, parent=self
                 )
                 curr_obj_dict["topology"] = "XsPolyLine"
-                curr_obj_dict["geological_type"] = type_default 
+                curr_obj_dict["role"] = type_default 
             else:
                 """Here topological types different from the allowed ones are handled.
                 At the moment THIS WILL CAUSE ERRORS - KEEP THIS MESSAGE JUST FOR DEBUGGING.
@@ -560,19 +560,19 @@ def gocad2vtk_section(self=None, in_file_name=None, uid_from_name=None, x_sectio
                 curr_obj_dict["uid"] = curr_obj_dict["name"]
 
         elif clean_line[0] == "GEOLOGICAL_TYPE":
-            curr_obj_dict["geological_type"] = ("_".join(clean_line[1:])).lower()
+            curr_obj_dict["role"] = ("_".join(clean_line[1:])).lower()
             if (
-                curr_obj_dict["geological_type"]
+                curr_obj_dict["role"]
                 not in self.geol_coll.valid_types
             ):
-                if "Fault" in curr_obj_dict["geological_type"]:
-                    curr_obj_dict["geological_type"] = "fault"
-                elif "fault" in curr_obj_dict["geological_type"]:
-                    curr_obj_dict["geological_type"] = "fault"
-                elif "Horizon" in curr_obj_dict["geological_type"]:
-                    curr_obj_dict["geological_type"] = "top"
+                if "Fault" in curr_obj_dict["role"]:
+                    curr_obj_dict["role"] = "fault"
+                elif "fault" in curr_obj_dict["role"]:
+                    curr_obj_dict["role"] = "fault"
+                elif "Horizon" in curr_obj_dict["role"]:
+                    curr_obj_dict["role"] = "top"
                 else:
-                    curr_obj_dict["geological_type"] = "undef"
+                    curr_obj_dict["role"] = "undef"
 
         elif clean_line[0] == "GEOLOGICAL_FEATURE":
             curr_obj_dict["feature"] = "_".join(clean_line[1:])
@@ -767,7 +767,7 @@ def gocad2vtk_boundary(self=None, in_file_name=None, uid_from_name=None):
     # scenario_default = input_text_dialog(parent=None, title="Scenario", label="Default scenario", default_text="undef")
     # if not scenario_default:
     #     scenario_default = "undef"
-    # type_default  = input_combo_dialog(parent=None, title="Geological type", label="Default geological type", choice_list=self.geol_coll.valid_types)
+    # type_default  = input_combo_dialog(parent=None, title="Role", label="Default geological type", choice_list=self.geol_coll.valid_types)
     # if not type_default :
     #     type_default  = "undef"
     # feature_from_name = options_dialog(title="Feature from name", message="Get geological feature from object name if not defined in file", yes_role="Yes", no_role="No", reject_role=None)
@@ -802,15 +802,15 @@ def gocad2vtk_boundary(self=None, in_file_name=None, uid_from_name=None):
             # if clean_line[1] == 'VSet':
             #     curr_obj_dict['topology'] = 'VertexSet'
             #     curr_obj_dict['vtk_obj'] = VertexSet()
-            #     curr_obj_dict['geological_type'] = type_default 
+            #     curr_obj_dict['role'] = type_default 
             if clean_line[1] == "PLine":
                 curr_obj_dict["topology"] = "PolyLine"
                 curr_obj_dict["vtk_obj"] = PolyLine()
-                # curr_obj_dict['geological_type'] = type_default 
+                # curr_obj_dict['role'] = type_default 
             elif clean_line[1] == "TSurf":
                 curr_obj_dict["topology"] = "TriSurf"
                 curr_obj_dict["vtk_obj"] = TriSurf()
-                # curr_obj_dict['geological_type'] = type_default 
+                # curr_obj_dict['role'] = type_default 
             else:
                 """Here topological types different from the allowed ones are handled.
                 At the moment THIS WILL CAUSE ERRORS - KEEP THIS MESSAGE JUST FOR DEBUGGING.
@@ -847,16 +847,16 @@ def gocad2vtk_boundary(self=None, in_file_name=None, uid_from_name=None):
                 curr_obj_dict["uid"] = curr_obj_dict["name"]
 
         # elif clean_line[0] == 'GEOLOGICAL_TYPE':
-        #     curr_obj_dict['geological_type'] = ("_".join(clean_line[1:])).lower()
-        #     if curr_obj_dict['geological_type'] not in self.geol_coll.valid_types:
-        #         if "Fault" in curr_obj_dict['geological_type']:
-        #             curr_obj_dict['geological_type'] = "fault"
-        #         elif "fault" in curr_obj_dict['geological_type']:
-        #             curr_obj_dict['geological_type'] = "fault"
-        #         elif  "Horizon" in curr_obj_dict['geological_type']:
-        #             curr_obj_dict['geological_type'] = "top"
+        #     curr_obj_dict['role'] = ("_".join(clean_line[1:])).lower()
+        #     if curr_obj_dict['role'] not in self.geol_coll.valid_types:
+        #         if "Fault" in curr_obj_dict['role']:
+        #             curr_obj_dict['role'] = "fault"
+        #         elif "fault" in curr_obj_dict['role']:
+        #             curr_obj_dict['role'] = "fault"
+        #         elif  "Horizon" in curr_obj_dict['role']:
+        #             curr_obj_dict['role'] = "top"
         #         else:
-        #             curr_obj_dict['geological_type'] = "undef"
+        #             curr_obj_dict['role'] = "undef"
         #
         # elif clean_line[0] == 'GEOLOGICAL_FEATURE':
         #     curr_obj_dict['feature'] = ("_".join(clean_line[1:]))
@@ -1064,8 +1064,8 @@ def vtk2gocad(self=None, out_file_name=None):
             feature = self.geol_coll.df.loc[
                 self.geol_coll.df["uid"] == uid, "feature"
             ].values[0]
-            geological_type = self.geol_coll.df.loc[
-                self.geol_coll.df["uid"] == uid, "geological_type"
+            role = self.geol_coll.df.loc[
+                self.geol_coll.df["uid"] == uid, "role"
             ].values[0]
             geological_time = self.a_t_df.loc[
                 self.a_t_df["uid"] == uid, "geological_time"
@@ -1097,7 +1097,7 @@ def vtk2gocad(self=None, out_file_name=None):
             )  # IMPORTANT: 'name' is uid, not the 'name' shown as a text label that is not unique
             fout.write("}\n")
             fout.write("GEOLOGICAL_FEATURE " + feature + "\n")
-            fout.write("GEOLOGICAL_TYPE " + geological_type + "\n")
+            fout.write("GEOLOGICAL_TYPE " + role + "\n")
             fout.write("STRATIGRAPHIC_POSITION " + str(geological_time) + "\n")
             """Options for properties"""
             if properties_names:

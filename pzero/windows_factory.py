@@ -2537,8 +2537,8 @@ class View3D(VTKView):
         if self.tog_att == -1:
             input_dict = {
                 "name": ["Set name: ", "Set_0"],
-                "geological_type": [
-                    "Geological type: ",
+                "role": [
+                    "Role: ",
                     self.parent.geol_coll.valid_types,
                 ],
             }
@@ -2610,7 +2610,7 @@ class View3D(VTKView):
             curr_obj_dict = deepcopy(GeologicalCollection.entity_dict)
             curr_obj_dict["uid"] = str(uuid4())
             curr_obj_dict["name"] = set_opt["name"]
-            curr_obj_dict["geological_type"] = set_opt["geological_type"]
+            curr_obj_dict["role"] = set_opt["role"]
             curr_obj_dict["topology"] = "VertexSet"
             curr_obj_dict["feature"] = set_opt["name"]
             curr_obj_dict["properties_names"] = properties_name
@@ -4567,7 +4567,7 @@ class ViewStereoplot(MPLView):
         self.GeologyTreeWidget.clear()
         self.GeologyTreeWidget.setColumnCount(3)
         self.GeologyTreeWidget.setHeaderLabels(
-            ["Type > Feature > Scenario > Name", "uid", "property"]
+            ["Role > Feature > Scenario > Name", "uid", "property"]
         )
         self.GeologyTreeWidget.hideColumn(1)  # hide the uid column
         self.GeologyTreeWidget.setItemsExpandable(True)
@@ -4575,20 +4575,20 @@ class ViewStereoplot(MPLView):
         filtered_geo = self.parent.geol_coll.df.loc[
             (self.parent.geol_coll.df["topology"] == "VertexSet")
             | (self.parent.geol_coll.df["topology"] == "XsVertexSet"),
-            "geological_type"
+            "role"
         ]
         geo_types = pd_unique(filtered_geo)
         print("geo_types: ", geo_types)
 
-        for geo_type in geo_types:
+        for role in geo_types:
             glevel_1 = QTreeWidgetItem(
-                self.GeologyTreeWidget, [geo_type]
+                self.GeologyTreeWidget, [role]
             )  # self.GeologyTreeWidget as parent -> top level
             glevel_1.setFlags(
                 glevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
             )
             filtered_geo_feat = self.parent.geol_coll.df.loc[
-                (self.parent.geol_coll.df["geological_type"] == geo_type)
+                (self.parent.geol_coll.df["role"] == role)
                 & (
                         (self.parent.geol_coll.df["topology"] == "VertexSet")
                         | (self.parent.geol_coll.df["topology"] == "XsVertexSet")
@@ -4606,7 +4606,7 @@ class ViewStereoplot(MPLView):
                 )
                 geo_scenario = pd_unique(
                     self.parent.geol_coll.df.loc[
-                        (self.parent.geol_coll.df["geological_type"] == geo_type)
+                        (self.parent.geol_coll.df["role"] == role)
                         & (self.parent.geol_coll.df["feature"] == feature),
                         "scenario"
                     ]
@@ -4619,7 +4619,7 @@ class ViewStereoplot(MPLView):
                         glevel_3.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
                     )
                     uids = self.parent.geol_coll.df.loc[
-                        (self.parent.geol_coll.df["geological_type"] == geo_type)
+                        (self.parent.geol_coll.df["role"] == role)
                         & (self.parent.geol_coll.df["feature"] == feature)
                         & (self.parent.geol_coll.df["scenario"] == scenario)
                         & (
@@ -4666,7 +4666,7 @@ class ViewStereoplot(MPLView):
         self.TopologyTreeWidget.clear()
         self.TopologyTreeWidget.setColumnCount(3)
         self.TopologyTreeWidget.setHeaderLabels(
-            ["Type > Scenario > Name", "uid", "property"]
+            ["Role > Scenario > Name", "uid", "property"]
         )
         self.TopologyTreeWidget.hideColumn(1)  # hide the uid column
         self.TopologyTreeWidget.setItemsExpandable(True)

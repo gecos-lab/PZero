@@ -10,21 +10,21 @@ def create_fluids_tree(self):
     self.FluidsTreeWidget.clear()
     self.FluidsTreeWidget.setColumnCount(3)
     self.FluidsTreeWidget.setHeaderLabels(
-        ["Type > Feature > Scenario > Name", "uid", "property"]
+        ["Role > Feature > Scenario > Name", "uid", "property"]
     )
     self.FluidsTreeWidget.hideColumn(1)  # hide the uid column
     self.FluidsTreeWidget.setItemsExpandable(True)
-    fluid_types = pd_unique(self.parent.fluids_coll.df.query(self.view_filter)["fluid_type"])
-    for fluid_type in fluid_types:
+    fluid_types = pd_unique(self.parent.fluids_coll.df.query(self.view_filter)["role"])
+    for role in fluid_types:
         flevel_1 = QTreeWidgetItem(
-            self.FluidsTreeWidget, [fluid_type]
+            self.FluidsTreeWidget, [role]
         )  # self.FluidsTreeWidget as parent -> top level
         flevel_1.setFlags(
             flevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
         )
         fluid_features = pd_unique(
             self.parent.fluids_coll.df.query(self.view_filter).loc[
-                self.parent.fluids_coll.df.query(self.view_filter)["fluid_type"] == fluid_type,
+                self.parent.fluids_coll.df.query(self.view_filter)["role"] == role,
                 "feature",
             ]
         )
@@ -37,7 +37,7 @@ def create_fluids_tree(self):
             )
             fluid_scenario = pd_unique(
                 self.parent.fluids_coll.df.query(self.view_filter).loc[
-                    (self.parent.fluids_coll.df.query(self.view_filter)["fluid_type"] == fluid_type)
+                    (self.parent.fluids_coll.df.query(self.view_filter)["role"] == role)
                     & (self.parent.fluids_coll.df.query(self.view_filter)["feature"] == feature),
                     "scenario",
                 ]
@@ -50,7 +50,7 @@ def create_fluids_tree(self):
                     flevel_3.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
                 )
                 uids = self.parent.fluids_coll.df.query(self.view_filter).loc[
-                    (self.parent.fluids_coll.df.query(self.view_filter)["fluid_type"] == fluid_type)
+                    (self.parent.fluids_coll.df.query(self.view_filter)["role"] == role)
                     & (self.parent.fluids_coll.df.query(self.view_filter)["feature"] == feature)
                     & (self.parent.fluids_coll.df.query(self.view_filter)["scenario"] == scenario),
                     "uid",
@@ -98,7 +98,7 @@ def create_fluids_topology_tree(self):
     self.FluidsTopologyTreeWidget.clear()
     self.FluidsTopologyTreeWidget.setColumnCount(3)
     self.FluidsTopologyTreeWidget.setHeaderLabels(
-        ["Type > Scenario > Name", "uid", "property"]
+        ["Role > Scenario > Name", "uid", "property"]
     )
     self.FluidsTopologyTreeWidget.hideColumn(1)  # hide the uid column
     self.FluidsTopologyTreeWidget.setItemsExpandable(True)
@@ -471,7 +471,7 @@ def update_fluids_tree_removed(self, removed_list=None):  # second attchild_flui
     success = 0
     for uid in removed_list:
         for top_fluid_type in range(self.FluidsTreeWidget.topLevelItemCount()):
-            """Iterate through every fluid Type top level"""
+            """Iterate through every fluid Role top level"""
             for child_fluid_feat in range(
                     self.FluidsTreeWidget.topLevelItem(top_fluid_type).childCount()
             ):
@@ -749,7 +749,7 @@ def update_fluids_topology_tree_removed(self, removed_list=None):
         for top_topo_type in range(
                 self.FluidsTopologyTreeWidget.topLevelItemCount()
         ):
-            """Iterate through every Topological Type top level"""
+            """Iterate through every Topological Role top level"""
             for child_scenario in range(
                     self.FluidsTopologyTreeWidget.topLevelItem(
                         top_topo_type

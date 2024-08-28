@@ -25,7 +25,7 @@ Points not handled correctly."""
 
 # 'name': "undef"  ###
 # 'topology': "undef"  ###
-# 'geological_type': "undef"  ###
+# 'role': "undef"  ###
 # 'feature': "undef"  ###
 # 'scenario': "undef"
 # 'properties_names': []
@@ -65,10 +65,10 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
                 # try:
                 if "name" in column_names:
                     curr_obj_dict["name"] = gdf.loc[row, "name"]
-                if "geological_type" in column_names:
-                    curr_obj_dict["geological_type"] = gdf.loc[row, "geological_type"]
-                if "geo_type" in column_names:
-                    curr_obj_dict["geological_type"] = gdf.loc[row, "geo_type"]
+                if "role" in column_names:
+                    curr_obj_dict["role"] = gdf.loc[row, "role"]
+                if "role" in column_names:
+                    curr_obj_dict["role"] = gdf.loc[row, "role"]
                 if "feature" in column_names:
                     curr_obj_dict["feature"] = gdf.loc[
                         row, "feature"
@@ -133,13 +133,13 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
 
                     if "name" in column_names:
                         curr_obj_dict["name"] = pd_series(gdf_index.loc[i, "name"])[0]
-                    if "geological_type" in column_names:
-                        curr_obj_dict["geological_type"] = pd_series(
-                            gdf_index.loc[i, "geological_type"]
+                    if "role" in column_names:
+                        curr_obj_dict["role"] = pd_series(
+                            gdf_index.loc[i, "role"]
                         )[0]
-                    if "geo_type" in column_names:
-                        curr_obj_dict["geological_type"] = pd_series(
-                            gdf_index.loc[i, "geo_type"]
+                    if "role" in column_names:
+                        curr_obj_dict["role"] = pd_series(
+                            gdf_index.loc[i, "role"]
                         )[0]
                     if "feature" in column_names:
                         curr_obj_dict["feature"] = i
@@ -237,8 +237,8 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
                 # try:
                 if "name" in column_names:
                     curr_obj_dict["name"] = gdf.loc[row, "name"]
-                if "fluid_type" in column_names:
-                    curr_obj_dict["fluid_type"] = gdf.loc[row, "fluid_type"]
+                if "role" in column_names:
+                    curr_obj_dict["role"] = gdf.loc[row, "role"]
                 if "feature" in column_names:
                     curr_obj_dict["feature"] = gdf.loc[row, "feature"]
                 if "fluid_feat" in column_names:
@@ -297,13 +297,13 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
 
                     if "name" in column_names:
                         curr_obj_dict["name"] = pd_series(gdf_index.loc[i, "name"])[0]
-                    if "fluid_type" in column_names:
-                        curr_obj_dict["fluid_type"] = pd_series(
-                            gdf_index.loc[i, "fluid_type"]
+                    if "role" in column_names:
+                        curr_obj_dict["role"] = pd_series(
+                            gdf_index.loc[i, "role"]
                         )[0]
-                    if "fluid_type" in column_names:
-                        curr_obj_dict["fluid_type"] = pd_series(
-                            gdf_index.loc[i, "fluid_type"]
+                    if "role" in column_names:
+                        curr_obj_dict["role"] = pd_series(
+                            gdf_index.loc[i, "role"]
                         )[0]
                     if "feature" in column_names:
                         curr_obj_dict["feature"] = i
@@ -377,7 +377,7 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
                 if "name" in column_names:
                     curr_obj_dict["name"] = gdf.loc[row, "name"]
                 if "bkg_type" in column_names:
-                    curr_obj_dict["background_type"] = gdf.loc[row, "bkg_type"]
+                    curr_obj_dict["role"] = gdf.loc[row, "bkg_type"]
                 if "feature" in column_names:
                     curr_obj_dict["feature"] = gdf.loc[
                         row, "feature"
@@ -451,7 +451,7 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
                     if "name" in column_names:
                         curr_obj_dict["name"] = pd_series(gdf_index.loc[i, "name"])[0]
                     if "bkg_type" in column_names:
-                        curr_obj_dict["background_type"] = pd_series(
+                        curr_obj_dict["role"] = pd_series(
                             gdf_index.loc[i, "bkg_type"]
                         )[0]
                     if "feature" in column_names:

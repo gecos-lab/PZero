@@ -38,7 +38,7 @@ class TestFluidCollection:
     fluid_entity_dict = {'uid': "4",
                          'name': "fluid-test",
                          'topology': "undef",
-                         'fluid_type': "undef",
+                         'role': "undef",
                          'feature': "undef",
                          'scenario': "undef",
                          'properties_names': [],

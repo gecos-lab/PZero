@@ -415,7 +415,7 @@ def facets_pc(self):
     curr_obj_dict = deepcopy(GeologicalCollection.entity_dict)
     curr_obj_dict["uid"] = str(uuid4())
     curr_obj_dict["name"] = f"{name}facets"
-    curr_obj_dict["geological_type"] = "undef"
+    curr_obj_dict["role"] = "undef"
     curr_obj_dict["topology"] = "TriSurf"
     curr_obj_dict["feature"] = name
     curr_obj_dict["properties_names"] = properties_name
@@ -533,7 +533,7 @@ def auto_pick(self):
     curr_obj_dict = deepcopy(GeologicalCollection.entity_dict)
     curr_obj_dict["uid"] = str(uuid4())
     curr_obj_dict["name"] = f"{name}auto_pick"
-    curr_obj_dict["geological_type"] = "undef"
+    curr_obj_dict["role"] = "undef"
     curr_obj_dict["topology"] = "VertexSet"
     curr_obj_dict["feature"] = name
     curr_obj_dict["properties_names"] = properties_name

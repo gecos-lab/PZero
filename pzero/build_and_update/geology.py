@@ -14,23 +14,23 @@ def create_geology_tree(self):
     self.GeologyTreeWidget.clear()
     self.GeologyTreeWidget.setColumnCount(3)
     self.GeologyTreeWidget.setHeaderLabels(
-        ["Type > Feature > Scenario > Name", "uid", "property"]
+        ["Role > Feature > Scenario > Name", "uid", "property"]
     )
     # hide the uid column
     self.GeologyTreeWidget.hideColumn(1)
     self.GeologyTreeWidget.setItemsExpandable(True)
-    geo_types = pd_unique(self.parent.geol_coll.df.query(self.view_filter)["geological_type"])
-    for geo_type in geo_types:
+    geo_types = pd_unique(self.parent.geol_coll.df.query(self.view_filter)["role"])
+    for role in geo_types:
         # self.GeologyTreeWidget as parent -> top level
         glevel_1 = QTreeWidgetItem(
-            self.GeologyTreeWidget, [geo_type]
+            self.GeologyTreeWidget, [role]
         )
         glevel_1.setFlags(
             glevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
         )
         geo_features = pd_unique(
             self.parent.geol_coll.df.query(self.view_filter).loc[
-                self.parent.geol_coll.df.query(self.view_filter)["geological_type"] == geo_type,
+                self.parent.geol_coll.df.query(self.view_filter)["role"] == role,
                 "feature",
             ]
         )
@@ -44,7 +44,7 @@ def create_geology_tree(self):
             )
             geo_scenario = pd_unique(
                 self.parent.geol_coll.df.query(self.view_filter).loc[
-                    (self.parent.geol_coll.df.query(self.view_filter)["geological_type"] == geo_type)
+                    (self.parent.geol_coll.df.query(self.view_filter)["role"] == role)
                     & (
                             self.parent.geol_coll.df.query(self.view_filter)["feature"]
                             == feature
@@ -61,7 +61,7 @@ def create_geology_tree(self):
                     glevel_3.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
                 )
                 uids = self.parent.geol_coll.df.query(self.view_filter).loc[
-                    (self.parent.geol_coll.df.query(self.view_filter)["geological_type"] == geo_type)
+                    (self.parent.geol_coll.df.query(self.view_filter)["role"] == role)
                     & (
                             self.parent.geol_coll.df.query(self.view_filter)["feature"]
                             == feature
@@ -408,7 +408,7 @@ def update_geology_tree_removed(self, removed_list=None):
     success = 0
     for uid in removed_list:
         for top_geo_type in range(self.GeologyTreeWidget.topLevelItemCount()):
-            # Iterate through every Geological Type top level
+            # Iterate through every Geological Role top level
             for child_geo_feat in range(
                     self.GeologyTreeWidget.topLevelItem(top_geo_type).childCount()
             ):
@@ -510,7 +510,7 @@ def create_topology_tree(self):
     self.TopologyTreeWidget.clear()
     self.TopologyTreeWidget.setColumnCount(3)
     self.TopologyTreeWidget.setHeaderLabels(
-        ["Type > Scenario > Name", "uid", "property"]
+        ["Role > Scenario > Name", "uid", "property"]
     )
     # hide the uid column
     self.TopologyTreeWidget.hideColumn(1)
@@ -755,7 +755,7 @@ def update_topology_tree_removed(self, removed_list=None):
     success = 0
     for uid in removed_list:
         for top_topo_type in range(self.TopologyTreeWidget.topLevelItemCount()):
-            # Iterate through every Topological Type top level
+            # Iterate through every Topological Role top level
             for child_scenario in range(
                     self.TopologyTreeWidget.topLevelItem(top_topo_type).childCount()
             ):
