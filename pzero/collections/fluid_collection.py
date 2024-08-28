@@ -109,8 +109,8 @@ class FluidsCollection(BaseCollection):
                 {
                     "role": role,
                     "feature": feature,
-                    "fluid_time": 0.0,
-                    "fluid_sequence": "fluid_0",
+                    "time": 0.0,
+                    "sequence": "fluid_0",
                     "scenario": scenario,
                     "color_R": R,
                     "color_G": G,
@@ -220,8 +220,8 @@ class FluidsCollection(BaseCollection):
                     {
                         "role": role,
                         "feature": feature,
-                        "fluid_time": 0.0,
-                        "fluid_sequence": "strati_0",
+                        "time": 0.0,
+                        "sequence": "strati_0",
                         "scenario": scenario,
                         "color_R": round(np.random.random() * 255),
                         "color_G": round(np.random.random() * 255),

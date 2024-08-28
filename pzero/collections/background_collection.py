@@ -107,8 +107,8 @@ class BackgroundCollection(BaseCollection):
                     {
                         "role": role,
                         "feature": feature,
-                        "background_time": 0.0,
-                        "background_sequence": "back_0",
+                        "time": 0.0,
+                        "sequence": "back_0",
                         "scenario": scenario,
                         "color_R": R,
                         "color_G": G,

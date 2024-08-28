@@ -118,8 +118,8 @@ class GeologicalCollection(BaseCollection):
                 {
                     "role": role,
                     "feature": feature,
-                    "geological_time": 0.0,
-                    "geological_sequence": "strati_0",
+                    "time": 0.0,
+                    "sequence": "strati_0",
                     "scenario": scenario,
                     "color_R": R,
                     "color_G": G,
@@ -224,8 +224,8 @@ class GeologicalCollection(BaseCollection):
                     {
                         "role": role,
                         "feature": feature,
-                        "geological_time": 0.0,
-                        "geological_sequence": "strati_0",
+                        "time": 0.0,
+                        "sequence": "strati_0",
                         "scenario": scenario,
                         "color_R": round(np_random.random() * 255),
                         "color_G": round(np_random.random() * 255),

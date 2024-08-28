@@ -281,8 +281,8 @@ def implicit_model_loop_structural(self):
     X - x component of the cartesian coordinates
     Y - y component of the cartesian coordinates
     Z - z component of the cartesian coordinates
-    feature_name - unique name of the geological feature being modelled - this is not the feature generally defined in geological_collection.py, but the geological_sequence defined in legend_manager.py
-    val - value observations of the scalar field - this is the geological_time defined in legend_manager.py
+    feature_name - unique name of the geological feature being modelled - this is not the feature generally defined in geological_collection.py, but the sequence defined in legend_manager.py
+    val - value observations of the scalar field - this is the time defined in legend_manager.py
     interface - unique identifier for an interface containing similar scalar field values
     nx - x component of the gradient norm
     ny - y component of the gradient norm
@@ -360,7 +360,7 @@ def implicit_model_loop_structural(self):
                 == self.geol_coll.get_uid_feature(uid)
             )
             & (self.geol_legend_df["scenario"] == self.geol_coll.get_uid_scenario(uid)),
-            "geological_sequence",
+            "sequence",
         ].values[0]
         entity_input_data_df["feature_name"] = featname_single
         """val value"""
@@ -374,7 +374,7 @@ def implicit_model_loop_structural(self):
                 == self.geol_coll.get_uid_feature(uid)
             )
             & (self.geol_legend_df["scenario"] == self.geol_coll.get_uid_scenario(uid)),
-            "geological_time",
+            "time",
         ].values[0]
         if val_single == -999999.0:
             val_single = float("nan")
@@ -604,15 +604,15 @@ def implicit_model_loop_structural(self):
         value = float(value)
         voxet_dict["vtk_obj"].GetPointData().SetActiveScalars("strati_0")
         print("-> extract iso-surface at value = ", value)
-        """Get metadata of first geological feature of this geological_time"""
+        """Get metadata of first geological feature of this time"""
         role = self.geol_legend_df.loc[
-            self.geol_legend_df["geological_time"] == value, "role"
+            self.geol_legend_df["time"] == value, "role"
         ].values[0]
         feature = self.geol_legend_df.loc[
-            self.geol_legend_df["geological_time"] == value, "feature"
+            self.geol_legend_df["time"] == value, "feature"
         ].values[0]
         scenario = self.geol_legend_df.loc[
-            self.geol_legend_df["geological_time"] == value, "scenario"
+            self.geol_legend_df["time"] == value, "scenario"
         ].values[0]
         """Iso-surface algorithm"""
         iso_surface = vtk.vtkContourFilter()

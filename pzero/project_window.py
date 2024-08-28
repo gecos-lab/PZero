@@ -1474,7 +1474,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             for diff in diffs:
                 self.geol_legend_df[diff] = Legend.geol_legend_dict[diff]
             self.geol_legend_df.sort_values(
-                by="geological_time", ascending=True, inplace=True
+                by="time", ascending=True, inplace=True
             )
 
         # Read well legend tables.
@@ -1532,7 +1532,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             for diff in diffs:
                 self.fluids_legend_df[diff] = Legend.fluids_legend_dict[diff]
             self.fluids_legend_df.sort_values(
-                by="fluid_time", ascending=True, inplace=True
+                by="time", ascending=True, inplace=True
             )
 
         # Read Backgrounds legend tables.
