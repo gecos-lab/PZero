@@ -502,28 +502,28 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             """Create deepcopy of the geological entity dictionary."""
             new_dict = deepcopy(collection.entity_dict)
             name_list = []
-            topo_type_list = []
-            geo_type_list = []
+            topology_list = []
+            role_list = []
             feature_list = []
             scenario_list = []
             xsect_list = []
             for uid in self.selected_uids:
                 name_list.append(collection.get_uid_name(uid))
-                topo_type_list.append(collection.get_uid_topology(uid))
-                geo_type_list.append(collection.get_uid_type(uid))
+                topology_list.append(collection.get_uid_topology(uid))
+                role_list.append(collection.get_uid_type(uid))
                 feature_list.append(collection.get_uid_feature(uid))
                 scenario_list.append(collection.get_uid_scenario(uid))
                 xsect_list.append(collection.get_uid_scenario(uid))
             name_list = list(set(name_list))
-            topo_type_list = list(set(topo_type_list))
-            geo_type_list = list(set(geo_type_list))
+            topology_list = list(set(topology_list))
+            role_list = list(set(role_list))
             feature_list = list(set(feature_list))
             scenario_list = list(set(scenario_list))
             xsect_list = list(set(xsect_list))
             input_dict = {
                 "name": ["New name: ", name_list],
-                "topology": ["Topological type", topo_type_list],
-                "role": ["Role: ", geo_type_list],
+                "topology": ["Topological type", topology_list],
+                "role": ["Role: ", role_list],
                 "feature": ["Feature: ", feature_list],
                 "scenario": ["Scenario: ", scenario_list],
                 "x_section": ["XSection: ", xsect_list],
@@ -533,18 +533,18 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             """Create deepcopy of the geological entity dictionary."""
             new_dict = deepcopy(collection.entity_dict)
             name_list = []
-            dom_type_list = []
+            topology_list = []
             xsect_list = []
             for uid in self.selected_uids:
                 name_list.append(collection.get_uid_name(uid))
-                dom_type_list.append(collection.get_uid_topology(uid))
+                topology_list.append(collection.get_uid_topology(uid))
                 xsect_list.append(collection.get_uid_scenario(uid))
             name_list = list(set(name_list))
-            dom_type_list = list(set(dom_type_list))
+            topology_list = list(set(topology_list))
             xsect_list = list(set(xsect_list))
             input_dict = {
                 "name": ["New name: ", name_list],
-                "dom_type": ["Topological type", dom_type_list],
+                "dom_type": ["Topological type", topology_list],
                 "x_section": ["XSection: ", xsect_list],
             }
         else:

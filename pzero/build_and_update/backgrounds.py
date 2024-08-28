@@ -362,28 +362,28 @@ def update_backgrounds_tree_removed(self, removed_list=None):  # second attchild
     """When background entity is removed, update Geology Tree without building a new model"""
     success = 0
     for uid in removed_list:
-        for top_background_type in range(
+        for top_role in range(
                 self.BackgroundsTreeWidget.topLevelItemCount()
         ):
             """Iterate through every background Role top level"""
 
-            for child_background_feat in range(
+            for child_feature in range(
                     self.BackgroundsTreeWidget.topLevelItem(
-                        top_background_type
+                        top_role
                     ).childCount()
             ):
                 """Iterate through every background Feature child"""
 
                 for child_entity in range(
-                        self.BackgroundsTreeWidget.topLevelItem(top_background_type)
-                                .child(child_background_feat)
+                        self.BackgroundsTreeWidget.topLevelItem(top_role)
+                                .child(child_feature)
                                 .childCount()
                 ):
                     """Iterate through every Entity child"""
 
                     if (
-                            self.BackgroundsTreeWidget.topLevelItem(top_background_type)
-                                    .child(child_background_feat)
+                            self.BackgroundsTreeWidget.topLevelItem(top_role)
+                                    .child(child_feature)
                                     .child(child_entity)
                                     .text(1)
                             == uid
@@ -391,37 +391,37 @@ def update_backgrounds_tree_removed(self, removed_list=None):  # second attchild
                         """Complete check: entity found has the uid of the entity we need to remove. Delete child, then ensure no Child or Top Level remain empty"""
                         success = 1
                         self.BackgroundsTreeWidget.topLevelItem(
-                            top_background_type
-                        ).child(child_background_feat).removeChild(
+                            top_role
+                        ).child(child_feature).removeChild(
                             self.BackgroundsTreeWidget.topLevelItem(
-                                top_background_type
+                                top_role
                             )
-                            .child(child_background_feat)
+                            .child(child_feature)
                             .child(child_entity)
                         )
                         if (
                                 self.BackgroundsTreeWidget.topLevelItem(
-                                    top_background_type
+                                    top_role
                                 )
-                                        .child(child_background_feat)
+                                        .child(child_feature)
                                         .childCount()
                                 == 0
                         ):
                             self.BackgroundsTreeWidget.topLevelItem(
-                                top_background_type
-                            ).child(child_background_feat).removeChild(
+                                top_role
+                            ).child(child_feature).removeChild(
                                 self.BackgroundsTreeWidget.topLevelItem(
-                                    top_background_type
-                                ).child(child_background_feat)
+                                    top_role
+                                ).child(child_feature)
                             )
                             if (
                                     self.BackgroundsTreeWidget.topLevelItem(
-                                        top_background_type
+                                        top_role
                                     ).childCount()
                                     == 0
                             ):
                                 self.BackgroundsTreeWidget.takeTopLevelItem(
-                                    top_background_type
+                                    top_role
                                 )
                         break
                 if success == 1:

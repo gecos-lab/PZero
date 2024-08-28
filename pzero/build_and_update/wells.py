@@ -245,23 +245,23 @@ def update_well_tree_removed(self, removed_list=None):
     for uid in removed_list:
         for well_locid in range(self.WellsTreeWidget.topLevelItemCount()):
             """Iterate through every Geological Role top level"""
-            for child_geo_feat in range(
+            for child_feature in range(
                     self.WellsTreeWidget.topLevelItem(well_locid).childCount()
             ):
                 """Iterate through every Geological Feature child"""
                 if (
                         self.WellsTreeWidget.topLevelItem(well_locid)
-                                .child(child_geo_feat)
+                                .child(child_feature)
                                 .text(1)
                         == uid
                 ):
                     """Complete check: entity found has the uid of the entity we need to remove. Delete child, then ensure no Child or Top Level remain empty"""
                     success = 1
                     self.WellsTreeWidget.topLevelItem(well_locid).child(
-                        child_geo_feat
+                        child_feature
                     ).removeChild(
                         self.WellsTreeWidget.topLevelItem(well_locid).child(
-                            child_geo_feat
+                            child_feature
                         )
                     )
 

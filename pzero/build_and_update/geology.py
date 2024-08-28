@@ -407,28 +407,28 @@ def update_geology_tree_removed(self, removed_list=None):
     """When geological entity is removed, update Geology Tree without building a new model"""
     success = 0
     for uid in removed_list:
-        for top_geo_type in range(self.GeologyTreeWidget.topLevelItemCount()):
+        for top_role in range(self.GeologyTreeWidget.topLevelItemCount()):
             # Iterate through every Geological Role top level
-            for child_geo_feat in range(
-                    self.GeologyTreeWidget.topLevelItem(top_geo_type).childCount()
+            for child_feature in range(
+                    self.GeologyTreeWidget.topLevelItem(top_role).childCount()
             ):
                 # Iterate through every Geological Feature child
                 for child_scenario in range(
-                        self.GeologyTreeWidget.topLevelItem(top_geo_type)
-                                .child(child_geo_feat)
+                        self.GeologyTreeWidget.topLevelItem(top_role)
+                                .child(child_feature)
                                 .childCount()
                 ):
                     # Iterate through every Scenario child
                     for child_entity in range(
-                            self.GeologyTreeWidget.topLevelItem(top_geo_type)
-                                    .child(child_geo_feat)
+                            self.GeologyTreeWidget.topLevelItem(top_role)
+                                    .child(child_feature)
                                     .child(child_scenario)
                                     .childCount()
                     ):
                         # Iterate through every Entity child
                         if (
-                                self.GeologyTreeWidget.topLevelItem(top_geo_type)
-                                        .child(child_geo_feat)
+                                self.GeologyTreeWidget.topLevelItem(top_role)
+                                        .child(child_feature)
                                         .child(child_scenario)
                                         .child(child_entity)
                                         .text(1)
@@ -437,53 +437,53 @@ def update_geology_tree_removed(self, removed_list=None):
                             # Complete check: entity found has the uid of the entity we need to remove. Delete
                             # child, then ensure no Child or Top Level remain empty
                             success = 1
-                            self.GeologyTreeWidget.topLevelItem(top_geo_type).child(
-                                child_geo_feat
+                            self.GeologyTreeWidget.topLevelItem(top_role).child(
+                                child_feature
                             ).child(child_scenario).removeChild(
-                                self.GeologyTreeWidget.topLevelItem(top_geo_type)
-                                .child(child_geo_feat)
+                                self.GeologyTreeWidget.topLevelItem(top_role)
+                                .child(child_feature)
                                 .child(child_scenario)
                                 .child(child_entity)
                             )
                             if (
-                                    self.GeologyTreeWidget.topLevelItem(top_geo_type)
-                                            .child(child_geo_feat)
+                                    self.GeologyTreeWidget.topLevelItem(top_role)
+                                            .child(child_feature)
                                             .child(child_scenario)
                                             .childCount()
                                     == 0
                             ):
                                 self.GeologyTreeWidget.topLevelItem(
-                                    top_geo_type
-                                ).child(child_geo_feat).removeChild(
+                                    top_role
+                                ).child(child_feature).removeChild(
                                     self.GeologyTreeWidget.topLevelItem(
-                                        top_geo_type
+                                        top_role
                                     )
-                                    .child(child_geo_feat)
+                                    .child(child_feature)
                                     .child(child_scenario)
                                 )
                                 if (
                                         self.GeologyTreeWidget.topLevelItem(
-                                            top_geo_type
+                                            top_role
                                         )
-                                                .child(child_geo_feat)
+                                                .child(child_feature)
                                                 .childCount()
                                         == 0
                                 ):
                                     self.GeologyTreeWidget.topLevelItem(
-                                        top_geo_type
+                                        top_role
                                     ).removeChild(
                                         self.GeologyTreeWidget.topLevelItem(
-                                            top_geo_type
-                                        ).child(child_geo_feat)
+                                            top_role
+                                        ).child(child_feature)
                                     )
                                     if (
                                             self.GeologyTreeWidget.topLevelItem(
-                                                top_geo_type
+                                                top_role
                                             ).childCount()
                                             == 0
                                     ):
                                         self.GeologyTreeWidget.takeTopLevelItem(
-                                            top_geo_type
+                                            top_role
                                         )
                             break
                     if success == 1:

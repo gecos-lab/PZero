@@ -470,28 +470,28 @@ def update_fluids_tree_removed(self, removed_list=None):  # second attchild_flui
     """When fluid entity is removed, update Geology Tree without building a new model"""
     success = 0
     for uid in removed_list:
-        for top_fluid_type in range(self.FluidsTreeWidget.topLevelItemCount()):
+        for top_role in range(self.FluidsTreeWidget.topLevelItemCount()):
             """Iterate through every fluid Role top level"""
-            for child_fluid_feat in range(
-                    self.FluidsTreeWidget.topLevelItem(top_fluid_type).childCount()
+            for child_feature in range(
+                    self.FluidsTreeWidget.topLevelItem(top_role).childCount()
             ):
                 """Iterate through every fluid Feature child"""
                 for child_scenario in range(
-                        self.FluidsTreeWidget.topLevelItem(top_fluid_type)
-                                .child(child_fluid_feat)
+                        self.FluidsTreeWidget.topLevelItem(top_role)
+                                .child(child_feature)
                                 .childCount()
                 ):
                     """Iterate through every Scenario child"""
                     for child_entity in range(
-                            self.FluidsTreeWidget.topLevelItem(top_fluid_type)
-                                    .child(child_fluid_feat)
+                            self.FluidsTreeWidget.topLevelItem(top_role)
+                                    .child(child_feature)
                                     .child(child_scenario)
                                     .childCount()
                     ):
                         """Iterate through every Entity child"""
                         if (
-                                self.FluidsTreeWidget.topLevelItem(top_fluid_type)
-                                        .child(child_fluid_feat)
+                                self.FluidsTreeWidget.topLevelItem(top_role)
+                                        .child(child_feature)
                                         .child(child_scenario)
                                         .child(child_entity)
                                         .text(1)
@@ -500,54 +500,54 @@ def update_fluids_tree_removed(self, removed_list=None):  # second attchild_flui
                             """Complete check: entity found has the uid of the entity we need to remove. Delete child, then ensure no Child or Top Level remain empty"""
                             success = 1
                             self.FluidsTreeWidget.topLevelItem(
-                                top_fluid_type
-                            ).child(child_fluid_feat).child(
+                                top_role
+                            ).child(child_feature).child(
                                 child_scenario
                             ).removeChild(
-                                self.FluidsTreeWidget.topLevelItem(top_fluid_type)
-                                .child(child_fluid_feat)
+                                self.FluidsTreeWidget.topLevelItem(top_role)
+                                .child(child_feature)
                                 .child(child_scenario)
                                 .child(child_entity)
                             )
                             if (
-                                    self.FluidsTreeWidget.topLevelItem(top_fluid_type)
-                                            .child(child_fluid_feat)
+                                    self.FluidsTreeWidget.topLevelItem(top_role)
+                                            .child(child_feature)
                                             .child(child_scenario)
                                             .childCount()
                                     == 0
                             ):
                                 self.FluidsTreeWidget.topLevelItem(
-                                    top_fluid_type
-                                ).child(child_fluid_feat).removeChild(
+                                    top_role
+                                ).child(child_feature).removeChild(
                                     self.FluidsTreeWidget.topLevelItem(
-                                        top_fluid_type
+                                        top_role
                                     )
-                                    .child(child_fluid_feat)
+                                    .child(child_feature)
                                     .child(child_scenario)
                                 )
                                 if (
                                         self.FluidsTreeWidget.topLevelItem(
-                                            top_fluid_type
+                                            top_role
                                         )
-                                                .child(child_fluid_feat)
+                                                .child(child_feature)
                                                 .childCount()
                                         == 0
                                 ):
                                     self.FluidsTreeWidget.topLevelItem(
-                                        top_fluid_type
+                                        top_role
                                     ).removeChild(
                                         self.FluidsTreeWidget.topLevelItem(
-                                            top_fluid_type
-                                        ).child(child_fluid_feat)
+                                            top_role
+                                        ).child(child_feature)
                                     )
                                     if (
                                             self.FluidsTreeWidget.topLevelItem(
-                                                top_fluid_type
+                                                top_role
                                             ).childCount()
                                             == 0
                                     ):
                                         self.FluidsTreeWidget.takeTopLevelItem(
-                                            top_fluid_type
+                                            top_role
                                         )
                             break
                     if success == 1:
