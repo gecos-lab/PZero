@@ -566,7 +566,7 @@ def implicit_model_loop_structural(self):
         model_name = "Loop_model"
     print(model_name)
     voxet_dict["name"] = model_name
-    voxet_dict["mesh3d_type"] = "Voxet"
+    voxet_dict["topology"] = "Voxet"
     voxet_dict["properties_names"] = ["strati_0"]
     voxet_dict["properties_components"] = [1]
     """Create new instance of Voxet() class"""
@@ -1402,7 +1402,7 @@ def intersection_xs(self):
                         obj_dict[
                             "name"
                         ] = f"{self.mesh3d_coll.get_uid_name(uid)}{postfix}"
-                        obj_dict["mesh3d_type"] = "XsVoxet"
+                        obj_dict["topology"] = "XsVoxet"
                         obj_dict[
                             "properties_names"
                         ] = self.mesh3d_coll.get_uid_properties_names(uid)

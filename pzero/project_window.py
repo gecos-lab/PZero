@@ -1285,7 +1285,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         )
         for uid in self.mesh3d_coll.df["uid"].to_list():
             if self.mesh3d_coll.df.loc[
-                self.mesh3d_coll.df["uid"] == uid, "mesh3d_type"
+                self.mesh3d_coll.df["uid"] == uid, "topology"
             ].values[0] in ["Voxet", "XsVoxet"]:
                 im_writer = vtkXMLImageDataWriter()
                 im_writer.SetFileName(out_dir_name + "/" + uid + ".vti")
@@ -1817,7 +1817,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             )
             for uid in self.mesh3d_coll.df["uid"].to_list():
                 if self.mesh3d_coll.df.loc[
-                    self.mesh3d_coll.df["uid"] == uid, "mesh3d_type"
+                    self.mesh3d_coll.df["uid"] == uid, "topology"
                 ].values[0] in ["Voxet"]:
                     if not os.path.isfile((in_dir_name + "/" + uid + ".vti")):
                         print("error: missing .mesh3d file")
@@ -1829,7 +1829,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     vtk_object.ShallowCopy(im_reader.GetOutput())
                     vtk_object.Modified()
                 elif self.mesh3d_coll.df.loc[
-                    self.mesh3d_coll.df["uid"] == uid, "mesh3d_type"
+                    self.mesh3d_coll.df["uid"] == uid, "topology"
                 ].values[0] in ["XsVoxet"]:
                     if not os.path.isfile((in_dir_name + "/" + uid + ".vti")):
                         print("error: missing .mesh3d file")

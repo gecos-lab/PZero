@@ -30,7 +30,7 @@ class TestMesh3dCollection:
 
     mesh3d_entity_dict = {'uid': "0",
                           'name': "meshtest",
-                          'mesh3d_type': "undef",
+                          'topology': "undef",
                           'properties_names': [],
                           'properties_components': [],
                           'x_section': "",
