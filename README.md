@@ -14,10 +14,15 @@ The ***PZero*** project started in spring 2020 thanks to a research project fund
 
 The ***PZero*** developers are (or have been):
 * Andrea Bistacchi (since the beginning)
-* Gloria Arienti (since December 2020)
+* Gloria Arienti (December 2021 - January 2023)
 * Gabriele Benedetti (since January 2022)
+* Alessandro Frigeri (January 2022 - April 2022)
 * Tommaso Comelli (April 2023 - July 2023)
 * Luca Penasa (since April 2023)
+* Waqas Hussain (since November 2023)
+* Riccardo Monti (since November 2023)
+* Ivano Brunet (since March 2024)
+* Francesco Visentin (since March 2024)
 
 ***PZero*** © 2020 by Andrea Bistacchi, released under [GNU AGPLv3 license](LICENSE.txt).
 
@@ -30,36 +35,25 @@ The ***PZero*** developers are (or have been):
 
 The name of ***PZero*** was inspired by the zeroth element in Emile Argand's 3D model of the Pennine Alps nappe stack - possibly the first quantitative 3D geological model in the history of geological sciences (*Argand E., 1911. Les Nappes de recouvrement des Alpes pennines et leurs prolongements structuraux. Mat. Carte géol. Suisse, 31, 1-26*), and by Python.
 
-If you want to know more about the project or want to contribute, our [GitHub Wiki](https://github.com/andrea-bistacchi/PZero/wiki) can help!
+If you want to know more about the project or want to contribute, our [Wiki](https://github.com/gecos-lab/PZero/wiki) can help!
 
 ## Installing PZero executables ##
 
-***PZero*** runs on **Linux**, **macOS** and **Windows**. Executable files can be [downloaded from the releases section of this repository](https://github.com/andrea-bistacchi/PZero/releases).
+***PZero*** runs on **Linux**, **macOS** and **Windows**. Executable files can be [downloaded from the releases section of this repository](https://github.com/gecos-lab/PZero/releases).
 
-Alternatively, you can download the most recent source code and test it, provided that a suitable **Python** and **[required libraries](envs/std-environment.yml)** are available.
-
-### Installing PZero source code with Anaconda ###
-
-At the moment the easiest way to run and develop new code for ***PZero*** is to clone this repository locally as [discussed here](https://github.com/andrea-bistacchi/PZero/wiki/How-to-use-GIT-(for-beginners)), and install a suitable **[Anaconda](https://www.anaconda.com/)** environment as [explained here](https://github.com/andrea-bistacchi/PZero/wiki/How-to-install-and-manage-CONDA-environments-(for-beginners)). Alternatively PyPi could be used in macOS and Linux as [discussed here](https://github.com/andrea-bistacchi/PZero/wiki/Installation-on-macOS-and-Linux-with-PyPI-using-pip).
-
-Then you can start PZero from PyCharm, or from the terminal with:
-
-```
-python pzero.py
-```
+Alternatively, you can download the most recent source code and test it, provided that a suitable **Python** and **[required libraries](envs/std-environment.yml)** are installed as discussed in the [Wiki](https://github.com/gecos-lab/PZero/wiki).
 
 
----
 ## Test data ##
 
 We have uploaded some test project on public repositories:
 
-[PZero-test Simple-synthetic](https://github.com/andrea-bistacchi/PZero-test-Simple-synthetic)
+[PZero-test Simple-synthetic](https://github.com/gecos-lab/PZero-test-Simple-synthetic)
 
-[PZero-test Llyn-Padarn](https://github.com/andrea-bistacchi/PZero-test-Llyn-Padarn)
-\
-\
-\
-<img src='https://github.com/gecos-lab/PZero/images/pzero_QR.png' width='200'>
+[PZero-test Llyn-Padarn](https://github.com/gecos-lab/PZero-test-Llyn-Padarn)
 
+<br />
+<br />
+<br />
 
+<img src='https://github.com/gecos-lab/PZero/blob/master/images/pzero_QR.png' width='200'>
