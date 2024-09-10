@@ -45,9 +45,7 @@ from pzero.ui.preview_window_ui import Ui_PreviewWindow
 from .helper_functions import auto_sep
 
 
-def options_dialog(
-    title=None, message=None, yes_role=None, no_role=None, reject_role=None
-):
+def options_dialog(title=None, message=None, yes_role=None, no_role=None, reject_role=None):
     """Generic message box with title, message, and three buttons.
     Returns 0, 1, or 2 (int) for the 1st, 2nd and 3rd button.
     If reject_role is None, the third button is not visualized."""
@@ -115,6 +113,13 @@ def open_file_dialog(parent=None, caption=None, filter=None, multiple=False):
         )
         in_file_name = in_file_name[0]
     return in_file_name
+
+
+def open_files_dialog(parent=None, caption=None, filter=None):
+    """Open a dialog one or more files, that are returned as a list of file names.
+    If the dialog is closed without a valid file name, it returns None."""
+    in_file_name = QFileDialog.getOpenFileNames(parent=parent, caption=caption, filter=filter)
+    return in_file_name[0]
 
 
 def save_file_dialog(parent=None, caption=None, filter=None, directory=False):

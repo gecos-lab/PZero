@@ -17,6 +17,7 @@ from numpy import pi as np_pi
 from numpy import repeat as np_repeat
 from numpy import set_printoptions as np_set_printoptions
 from numpy import sin as np_sin
+from numpy import sqrt as np_sqrt
 from numpy.linalg import inv as np_linalg_inv
 from pandas import DataFrame
 from vtk import vtkPoints, vtkCellArray, vtkLine
@@ -489,6 +490,14 @@ class XSectionCollection(BaseCollection):
         """Set value(s) stored in dataframe (as pointer) from uid."""
         self.df.loc[self.df["uid"] == uid, "length"] = length
 
+    def get_uid_width(self, uid=None):
+        """Get value(s) stored in dataframe (as pointer) from uid."""
+        return self.df.loc[self.df["uid"] == uid, "width"].values[0]
+
+    def set_uid_width(self, uid=None, width=None):
+        """Set value(s) stored in dataframe (as pointer) from uid."""
+        self.df.loc[self.df["uid"] == uid, "width"] = width
+
     def get_uid_top(self, uid=None):
         """Get value(s) stored in dataframe (as pointer) from uid."""
         return self.df.loc[self.df["uid"] == uid, "top"].values[0]
@@ -658,3 +667,8 @@ class XSectionCollection(BaseCollection):
         self.df.loc[self.df["uid"] == uid, "vtk_plane"] = vtk_plane
         self.df.loc[self.df["uid"] == uid, "vtk_frame"] = vtk_frame
 
+    def set_length(self, uid=None):
+        self.df.loc[self.df["uid"] == uid, "length"] = np_sqrt((self.df.loc[self.df["uid"] == uid, "base_x"] - self.df.loc[self.df["uid"] == uid, "end_x"])**2 + (self.df.loc[self.df["uid"] == uid, "base_y"] - self.df.loc[self.df["uid"] == uid, "end_y"])**2)
+
+    def set_width(self, uid=None):
+        self.df.loc[self.df["uid"] == uid, "width"] = self.df.loc[self.df["uid"] == uid, "top"] - self.df.loc[self.df["uid"] == uid, "bottom"]

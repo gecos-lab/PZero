@@ -37,6 +37,7 @@ from pzero.helpers.helper_dialogs import (
     options_dialog,
     save_file_dialog,
     open_file_dialog,
+    open_files_dialog,
     input_combo_dialog,
     message_dialog,
     multiple_input_dialog,
@@ -44,6 +45,7 @@ from pzero.helpers.helper_dialogs import (
     progress_dialog,
     import_dialog,
     PreviewWidget,
+    input_text_dialog,
 )
 from pzero.imports.cesium2vtk import vtk2cesium
 from pzero.imports.dem2vtk import dem2vtk
@@ -236,7 +238,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
 
         """File>Import actions -> slots"""
         self.actionImportGocad.triggered.connect(self.import_gocad)
-        self.actionImportGocadXsection.triggered.connect(self.import_gocad_section)
+        self.actionImportGocadXsection.triggered.connect(self.import_gocad_sections)
         self.actionImportGocadBoundary.triggered.connect(self.import_gocad_boundary)
         self.actionImportSections.triggered.connect(self.import_sections)
         self.actionImportPyvista.triggered.connect(lambda: pyvista2vtk(self=self))
@@ -685,9 +687,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         )
         if self.shown_table == "tabGeology":
             for uid in self.selected_uids:
-                if not updt_dict[
-                    "property_name"
-                ] in self.geol_coll.get_uid_properties_names(uid):
+                if not updt_dict["property_name"] in self.geol_coll.get_uid_properties_names(uid):
                     self.geol_coll.append_uid_property(
                         uid=uid,
                         property_name=updt_dict["property_name"],
@@ -695,9 +695,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     )
         elif self.shown_table == "tabMeshes3D":
             for uid in self.selected_uids:
-                if not updt_dict[
-                    "property_name"
-                ] in self.mesh3d_coll.get_uid_properties_names(uid):
+                if not updt_dict["property_name"] in self.mesh3d_coll.get_uid_properties_names(uid):
                     self.mesh3d_coll.append_uid_property(
                         uid=uid,
                         property_name=updt_dict["property_name"],
@@ -705,9 +703,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     )
         elif self.shown_table == "tabDOMs":
             for uid in self.selected_uids:
-                if not updt_dict[
-                    "property_name"
-                ] in self.dom_coll.get_uid_properties_names(uid):
+                if not updt_dict["property_name"] in self.dom_coll.get_uid_properties_names(uid):
                     self.dom_coll.append_uid_property(
                         uid=uid,
                         property_name=updt_dict["property_name"],
@@ -2132,42 +2128,79 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             gocad2vtk(self=self, in_file_name=in_file_name, uid_from_name=False)
             self.prop_legend.update_widget(parent=self)
 
-    def import_gocad_section(self):
-        """Import Gocad ASCII file and update geological collection."""
+    def import_gocad_sections(self):
+        """Import cross-section saved as Gocad ASCII file and update geological collection."""
         self.TextTerminal.appendPlainText("Importing Gocad ASCII format")
         self.TextTerminal.appendPlainText(
             "Properties are discarded if they are not 1D, 2D, 3D, 4D, 6D or 9D (due to VTK limitations)"
         )
-        """Select and open input file"""
-        in_file_name = open_file_dialog(
+        # Select input files.
+        in_file_names = open_files_dialog(
             parent=self,
-            caption="Import entities from Gocad ASCII file",
+            caption="Import entities from Gocad ASCII files",
             filter="Gocad ASCII (*.*)",
         )
-        if in_file_name:
+        if not in_file_names:
+            return
+        # Define import options.
+        scenario_default = input_text_dialog(
+            parent=None, title="Scenario", label="Default scenario", default_text="undef"
+        )
+        if not scenario_default:
+            scenario_default = "undef"
+        role_default = input_combo_dialog(
+            parent=None,
+            title="Role",
+            label="Default role",
+            choice_list=self.geol_coll.valid_types,
+        )
+        if not role_default:
+            role_default = "undef"
+        feature_from_name = options_dialog(
+            title="Feature from name",
+            message="Get geological feature from object name if not defined in file",
+            yes_role="Yes",
+            no_role="No",
+            reject_role=None,
+        )
+        if feature_from_name == 0:
+            feature_from_name = True
+        else:
+            feature_from_name = False
+        append_opt = options_dialog(
+            title="Append option",
+            message=f"Append entities to XSections?\nSection will NOT be re-oriented.",
+            yes_role="Cancel",
+            no_role="OK",
+            reject_role=None)
+        # Process files.
+        for in_file_name in in_file_names:
             self.TextTerminal.appendPlainText("in_file_name: " + in_file_name)
-            """Select the Xsection"""
-            if self.xsect_coll.get_uids:
-                x_section_name = input_combo_dialog(
-                    parent=None,
-                    title="Xsection",
-                    label="Choose Xsection",
-                    choice_list=self.xsect_coll.get_names,
-                )
+            # Get x-section name from file.
+            x_section_name = os.path.splitext(os.path.basename(in_file_name))[0]
+            if x_section_name in self.xsect_coll.df["name"].to_list():
+                if append_opt == 0:
+                    return
+                else:
+                    x_section_uid = self.xsect_coll.df.loc[
+                        self.xsect_coll.df["name"] == x_section_name, "uid"
+                    ].values[0]
             else:
-                message_dialog(title="Xsection", message="No Xsection in project")
-                return
-            if x_section_name:
-                x_section_uid = self.xsect_coll.df.loc[
-                    self.xsect_coll.df["name"] == x_section_name, "uid"
-                ].values[0]
-                gocad2vtk_section(
-                    self=self,
-                    in_file_name=in_file_name,
-                    uid_from_name=False,
-                    x_section=x_section_uid,
-                )
-                self.prop_legend.update_widget(parent=self)
+                append_opt = 0
+                section_dict = deepcopy(self.xsect_coll.entity_dict)
+                section_dict["name"] = x_section_name
+                x_section_uid = self.xsect_coll.add_entity_from_dict(entity_dict=section_dict)
+            gocad2vtk_section(
+                self=self,
+                in_file_name=in_file_name,
+                uid_from_name=False,
+                x_section_uid=x_section_uid,
+                scenario_default=scenario_default,
+                role_default=role_default,
+                feature_from_name=feature_from_name,
+                append_opt=append_opt,
+            )
+            self.prop_legend.update_widget(parent=self)
 
     def import_gocad_boundary(self):
         """Import Gocad ASCII file and update boundary collection."""
@@ -2184,7 +2217,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         if in_file_name:
             self.TextTerminal.appendPlainText("in_file_name: " + in_file_name)
             gocad2vtk_boundary(
-                self=self, in_file_name=in_file_name, uid_from_name=False
+                self=self,
+                in_file_name=in_file_name,
+                uid_from_name=False,
             )
 
     def import_sections(self):
