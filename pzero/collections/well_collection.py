@@ -146,7 +146,7 @@ class WellCollection(BaseCollection):
             self.parent.legend.update_widget(self.parent)
 
     def remove_unused_from_legend(self):
-        """Remove unused types / features from a legend table."""
+        """Remove unused roles / features from a legend table."""
         legend_updated = False
         locid_in_legend = pd_unique(self.parent.well_legend_df["Loc ID"])
         features_in_legend = pd_unique(self.parent.well_legend_df["feature"])

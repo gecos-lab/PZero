@@ -493,7 +493,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
 
     def entities_merge(self):
         # ____________________________________________________ CHECK (1) HOW PROPERTIES AND TEXTURES ARE AFFECTED BY MERGING, (2) HOW IT WORKS FOR DOMs
-        """Merge entities of the same type - VertexSet, PolyLine, TriSurf, ..."""
+        """Merge entities of the same topology - VertexSet, PolyLine, TriSurf, ..."""
         if not self.selected_uids:
             return
         """Check if a suitable collection is selected."""
@@ -510,7 +510,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             for uid in self.selected_uids:
                 name_list.append(collection.get_uid_name(uid))
                 topology_list.append(collection.get_uid_topology(uid))
-                role_list.append(collection.get_uid_type(uid))
+                role_list.append(collection.get_uid_role(uid))
                 feature_list.append(collection.get_uid_feature(uid))
                 scenario_list.append(collection.get_uid_scenario(uid))
                 xsect_list.append(collection.get_uid_scenario(uid))
@@ -2150,7 +2150,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             parent=None,
             title="Role",
             label="Default role",
-            choice_list=self.geol_coll.valid_types,
+            choice_list=self.geol_coll.valid_roles,
         )
         if not role_default:
             role_default = "undef"

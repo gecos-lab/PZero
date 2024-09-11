@@ -2539,7 +2539,7 @@ class View3D(VTKView):
                 "name": ["Set name: ", "Set_0"],
                 "role": [
                     "Role: ",
-                    self.parent.geol_coll.valid_types,
+                    self.parent.geol_coll.valid_roles,
                 ],
             }
             set_opt = multiple_input_dialog(
@@ -4747,7 +4747,7 @@ class ViewStereoplot(MPLView):
         for uid in uid_list:
             if (
                     self.GeologyTreeWidget.findItems(
-                        self.parent.geol_coll.get_uid_type(uid),
+                        self.parent.geol_coll.get_uid_role(uid),
                         Qt.MatchExactly,
                         0,
                     )
@@ -4757,14 +4757,14 @@ class ViewStereoplot(MPLView):
                 counter_1 = 0
                 for child_1 in range(
                         self.GeologyTreeWidget.findItems(
-                            self.parent.geol_coll.get_uid_type(uid),
+                            self.parent.geol_coll.get_uid_role(uid),
                             Qt.MatchExactly,
                             0,
                         )[0].childCount()
                 ):
                     """for cycle that loops n times as the number of subItems in the specific geological type branch"""
                     if self.GeologyTreeWidget.findItems(
-                            self.parent.geol_coll.get_uid_type(uid),
+                            self.parent.geol_coll.get_uid_role(uid),
                             Qt.MatchExactly,
                             0,
                     )[0].child(child_1).text(
@@ -4776,13 +4776,13 @@ class ViewStereoplot(MPLView):
                 if counter_1 != 0:
                     for child_1 in range(
                             self.GeologyTreeWidget.findItems(
-                                self.parent.geol_coll.get_uid_type(uid),
+                                self.parent.geol_coll.get_uid_role(uid),
                                 Qt.MatchExactly,
                                 0,
                             )[0].childCount()
                     ):
                         if self.GeologyTreeWidget.findItems(
-                                self.parent.geol_coll.get_uid_type(uid),
+                                self.parent.geol_coll.get_uid_role(uid),
                                 Qt.MatchExactly,
                                 0,
                         )[0].child(child_1).text(
@@ -4795,7 +4795,7 @@ class ViewStereoplot(MPLView):
                             for child_2 in range(
                                     self.GeologyTreeWidget.itemBelow(
                                         self.GeologyTreeWidget.findItems(
-                                            self.parent.geol_coll.get_uid_type(
+                                            self.parent.geol_coll.get_uid_role(
                                                 uid
                                             ),
                                             Qt.MatchExactly,
@@ -4806,7 +4806,7 @@ class ViewStereoplot(MPLView):
                                 """for cycle that loops n times as the number of sub-subItems in the specific geological type and geological feature branch"""
                                 if self.GeologyTreeWidget.itemBelow(
                                         self.GeologyTreeWidget.findItems(
-                                            self.parent.geol_coll.get_uid_type(
+                                            self.parent.geol_coll.get_uid_role(
                                                 uid
                                             ),
                                             Qt.MatchExactly,
@@ -4822,7 +4822,7 @@ class ViewStereoplot(MPLView):
                                 for child_2 in range(
                                         self.GeologyTreeWidget.itemBelow(
                                             self.GeologyTreeWidget.findItems(
-                                                self.parent.geol_coll.get_uid_type(
+                                                self.parent.geol_coll.get_uid_role(
                                                     uid
                                                 ),
                                                 Qt.MatchExactly,
@@ -4832,7 +4832,7 @@ class ViewStereoplot(MPLView):
                                 ):
                                     if self.GeologyTreeWidget.itemBelow(
                                             self.GeologyTreeWidget.findItems(
-                                                self.parent.geol_coll.get_uid_type(
+                                                self.parent.geol_coll.get_uid_role(
                                                     uid
                                                 ),
                                                 Qt.MatchExactly,
@@ -4857,7 +4857,7 @@ class ViewStereoplot(MPLView):
                                         name = self.parent.geol_coll.get_uid_name(uid)
                                         glevel_4 = QTreeWidgetItem(
                                             self.GeologyTreeWidget.findItems(
-                                                self.parent.geol_coll.get_uid_type(
+                                                self.parent.geol_coll.get_uid_role(
                                                     uid
                                                 ),
                                                 Qt.MatchExactly,
@@ -4892,7 +4892,7 @@ class ViewStereoplot(MPLView):
                                 """Same geological type and geological feature, different scenario"""
                                 glevel_3 = QTreeWidgetItem(
                                     self.GeologyTreeWidget.findItems(
-                                        self.parent.geol_coll.get_uid_type(
+                                        self.parent.geol_coll.get_uid_role(
                                             uid
                                         ),
                                         Qt.MatchExactly,
@@ -4941,7 +4941,7 @@ class ViewStereoplot(MPLView):
                     """Same geological type, different geological feature and scenario"""
                     glevel_2 = QTreeWidgetItem(
                         self.GeologyTreeWidget.findItems(
-                            self.parent.geol_coll.get_uid_type(uid),
+                            self.parent.geol_coll.get_uid_role(uid),
                             Qt.MatchExactly,
                             0,
                         )[0],
@@ -4985,7 +4985,7 @@ class ViewStereoplot(MPLView):
                 """Different geological type, geological feature and scenario"""
                 glevel_1 = QTreeWidgetItem(
                     self.GeologyTreeWidget,
-                    [self.parent.geol_coll.get_uid_type(uid)],
+                    [self.parent.geol_coll.get_uid_role(uid)],
                 )
                 glevel_1.setFlags(
                     glevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable

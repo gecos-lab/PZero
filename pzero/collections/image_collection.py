@@ -132,7 +132,7 @@ class ImageCollection(BaseCollection):
         pass
 
     def remove_unused_from_legend(self):
-        """Remove unused types / features from a legend table."""
+        """Remove unused roles / features from a legend table."""
         # legend_updated is used to record if the table is updated or not.
         legend_updated: bool = False
         return legend_updated

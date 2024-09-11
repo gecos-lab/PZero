@@ -181,7 +181,7 @@ def update_fluids_tree_added(self, new_list=None, sec_uid=None):
     for uid in uid_list:
         if (
                 self.FluidsTreeWidget.findItems(
-                    self.parent.fluids_coll.get_uid_type(uid), Qt.MatchExactly, 0
+                    self.parent.fluids_coll.get_uid_role(uid), Qt.MatchExactly, 0
                 )
                 != []
         ):
@@ -189,14 +189,14 @@ def update_fluids_tree_added(self, new_list=None, sec_uid=None):
             counter_1 = 0
             for child_1 in range(
                     self.FluidsTreeWidget.findItems(
-                        self.parent.fluids_coll.get_uid_type(uid),
+                        self.parent.fluids_coll.get_uid_role(uid),
                         Qt.MatchExactly,
                         0,
                     )[0].childCount()
             ):
                 """for cycle that loops n times as the number of subItems in the specific fluid type branch"""
                 if self.FluidsTreeWidget.findItems(
-                        self.parent.fluids_coll.get_uid_type(uid),
+                        self.parent.fluids_coll.get_uid_role(uid),
                         Qt.MatchExactly,
                         0,
                 )[0].child(child_1).text(
@@ -208,13 +208,13 @@ def update_fluids_tree_added(self, new_list=None, sec_uid=None):
             if counter_1 != 0:
                 for child_1 in range(
                         self.FluidsTreeWidget.findItems(
-                            self.parent.fluids_coll.get_uid_type(uid),
+                            self.parent.fluids_coll.get_uid_role(uid),
                             Qt.MatchExactly,
                             0,
                         )[0].childCount()
                 ):
                     if self.FluidsTreeWidget.findItems(
-                            self.parent.fluids_coll.get_uid_type(uid),
+                            self.parent.fluids_coll.get_uid_role(uid),
                             Qt.MatchExactly,
                             0,
                     )[0].child(child_1).text(
@@ -227,7 +227,7 @@ def update_fluids_tree_added(self, new_list=None, sec_uid=None):
                         for child_2 in range(
                                 self.FluidsTreeWidget.itemBelow(
                                     self.FluidsTreeWidget.findItems(
-                                        self.parent.fluids_coll.get_uid_type(uid),
+                                        self.parent.fluids_coll.get_uid_role(uid),
                                         Qt.MatchExactly,
                                         0,
                                     )[0]
@@ -236,7 +236,7 @@ def update_fluids_tree_added(self, new_list=None, sec_uid=None):
                             """for cycle that loops n times as the number of sub-subItems in the specific fluid type and fluid feature branch"""
                             if self.FluidsTreeWidget.itemBelow(
                                     self.FluidsTreeWidget.findItems(
-                                        self.parent.fluids_coll.get_uid_type(uid),
+                                        self.parent.fluids_coll.get_uid_role(uid),
                                         Qt.MatchExactly,
                                         0,
                                     )[0]
@@ -250,7 +250,7 @@ def update_fluids_tree_added(self, new_list=None, sec_uid=None):
                             for child_2 in range(
                                     self.FluidsTreeWidget.itemBelow(
                                         self.FluidsTreeWidget.findItems(
-                                            self.parent.fluids_coll.get_uid_type(
+                                            self.parent.fluids_coll.get_uid_role(
                                                 uid
                                             ),
                                             Qt.MatchExactly,
@@ -260,7 +260,7 @@ def update_fluids_tree_added(self, new_list=None, sec_uid=None):
                             ):
                                 if self.FluidsTreeWidget.itemBelow(
                                         self.FluidsTreeWidget.findItems(
-                                            self.parent.fluids_coll.get_uid_type(
+                                            self.parent.fluids_coll.get_uid_role(
                                                 uid
                                             ),
                                             Qt.MatchExactly,
@@ -287,7 +287,7 @@ def update_fluids_tree_added(self, new_list=None, sec_uid=None):
                                     name = self.parent.fluids_coll.get_uid_name(uid)
                                     flevel_4 = QTreeWidgetItem(
                                         self.FluidsTreeWidget.findItems(
-                                            self.parent.fluids_coll.get_uid_type(
+                                            self.parent.fluids_coll.get_uid_role(
                                                 uid
                                             ),
                                             Qt.MatchExactly,
@@ -322,7 +322,7 @@ def update_fluids_tree_added(self, new_list=None, sec_uid=None):
                             """Same fluid type and fluid feature, different scenario"""
                             flevel_3 = QTreeWidgetItem(
                                 self.FluidsTreeWidget.findItems(
-                                    self.parent.fluids_coll.get_uid_type(uid),
+                                    self.parent.fluids_coll.get_uid_role(uid),
                                     Qt.MatchExactly,
                                     0,
                                 )[0].child(child_1),
@@ -371,7 +371,7 @@ def update_fluids_tree_added(self, new_list=None, sec_uid=None):
                 """Same fluid type, different fluid feature and scenario"""
                 flevel_2 = QTreeWidgetItem(
                     self.FluidsTreeWidget.findItems(
-                        self.parent.fluids_coll.get_uid_type(uid),
+                        self.parent.fluids_coll.get_uid_role(uid),
                         Qt.MatchExactly,
                         0,
                     )[0],
@@ -417,7 +417,7 @@ def update_fluids_tree_added(self, new_list=None, sec_uid=None):
             """Different fluid type, fluid feature and scenario"""
             flevel_1 = QTreeWidgetItem(
                 self.FluidsTreeWidget,
-                [self.parent.fluids_coll.get_uid_type(uid)],
+                [self.parent.fluids_coll.get_uid_role(uid)],
             )
             flevel_1.setFlags(
                 flevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable

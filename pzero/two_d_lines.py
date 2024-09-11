@@ -54,7 +54,7 @@ def draw_line(self):
         "name": ["PolyLine name: ", "new_pline"],
         "role": [
             "Role: ",
-            self.parent.geol_coll.valid_types,
+            self.parent.geol_coll.valid_roles,
         ],
         "feature": [
             "Feature: ",

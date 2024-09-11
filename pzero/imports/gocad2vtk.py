@@ -101,14 +101,14 @@ def gocad2vtk(self=None, in_file_name=None, uid_from_name=None):
     )
     if not scenario_default:
         scenario_default = "undef"
-    type_default  = input_combo_dialog(
+    role_default  = input_combo_dialog(
         parent=None,
         title="Role",
-        label="Default geological type",
-        choice_list=self.geol_coll.valid_types,
+        label="Default role",
+        choice_list=self.geol_coll.valid_roles,
     )
-    if not type_default :
-        type_default  = "undef"
+    if not role_default :
+        role_default  = "undef"
     feature_from_name = options_dialog(
         title="Feature from name",
         message="Get geological feature from object name if not defined in file",
@@ -158,17 +158,17 @@ def gocad2vtk(self=None, in_file_name=None, uid_from_name=None):
             if clean_line[1] == "VSet":
                 curr_obj_dict["topology"] = "VertexSet"
                 curr_obj_dict["vtk_obj"] = VertexSet()
-                curr_obj_dict["role"] = type_default 
+                curr_obj_dict["role"] = role_default 
             elif clean_line[1] == "PLine":
                 curr_obj_dict["topology"] = "PolyLine"
                 curr_obj_dict["vtk_obj"] = PolyLine()
-                curr_obj_dict["role"] = type_default 
+                curr_obj_dict["role"] = role_default 
             elif clean_line[1] == "TSurf":
                 curr_obj_dict["topology"] = "TriSurf"
                 curr_obj_dict["vtk_obj"] = TriSurf()
-                curr_obj_dict["role"] = type_default 
+                curr_obj_dict["role"] = role_default 
             else:
-                """Here topological types different from the allowed ones are handled.
+                """Here topology different from the allowed ones are handled.
                 At the moment THIS WILL CAUSE ERRORS - KEEP THIS MESSAGE JUST FOR DEBUGGING.
                 This must be reimplementende in sucha way that, is non-valid objects are found,
                 the file reader jumps to the next line starting with the 'GOCAD' keyword (if any).
@@ -216,7 +216,7 @@ def gocad2vtk(self=None, in_file_name=None, uid_from_name=None):
             curr_obj_dict["role"] = ("_".join(clean_line[1:])).lower()
             if (
                 curr_obj_dict["role"]
-                not in self.geol_coll.valid_types
+                not in self.geol_coll.valid_roles
             ):
                 if "Fault" in curr_obj_dict["role"]:
                     curr_obj_dict["role"] = "fault"
@@ -551,7 +551,7 @@ def gocad2vtk_section(self=None,
             curr_obj_dict["role"] = ("_".join(clean_line[1:])).lower()
             if (
                 curr_obj_dict["role"]
-                not in self.geol_coll.valid_types
+                not in self.geol_coll.valid_roles
             ):
                 if "Fault" in curr_obj_dict["role"]:
                     curr_obj_dict["role"] = "fault"
@@ -832,7 +832,7 @@ def gocad2vtk_boundary(self=None, in_file_name=None, uid_from_name=None):
     # scenario_default = input_text_dialog(parent=None, title="Scenario", label="Default scenario", default_text="undef")
     # if not scenario_default:
     #     scenario_default = "undef"
-    # role_default  = input_combo_dialog(parent=None, title="Role", label="Default geological type", choice_list=self.geol_coll.valid_types)
+    # role_default  = input_combo_dialog(parent=None, title="Role", label="Default geological type", choice_list=self.geol_coll.valid_roles)
     # if not role_default :
     #     role_default  = "undef"
     # feature_from_name = options_dialog(title="Feature from name", message="Get geological feature from object name if not defined in file", yes_role="Yes", no_role="No", reject_role=None)
@@ -867,15 +867,15 @@ def gocad2vtk_boundary(self=None, in_file_name=None, uid_from_name=None):
             # if clean_line[1] == 'VSet':
             #     curr_obj_dict['topology'] = 'VertexSet'
             #     curr_obj_dict['vtk_obj'] = VertexSet()
-            #     curr_obj_dict['role'] = type_default 
+            #     curr_obj_dict['role'] = role_default 
             if clean_line[1] == "PLine":
                 curr_obj_dict["topology"] = "PolyLine"
                 curr_obj_dict["vtk_obj"] = PolyLine()
-                # curr_obj_dict['role'] = type_default 
+                # curr_obj_dict['role'] = role_default 
             elif clean_line[1] == "TSurf":
                 curr_obj_dict["topology"] = "TriSurf"
                 curr_obj_dict["vtk_obj"] = TriSurf()
-                # curr_obj_dict['role'] = type_default 
+                # curr_obj_dict['role'] = role_default 
             else:
                 """Here topological types different from the allowed ones are handled.
                 At the moment THIS WILL CAUSE ERRORS - KEEP THIS MESSAGE JUST FOR DEBUGGING.
@@ -913,7 +913,7 @@ def gocad2vtk_boundary(self=None, in_file_name=None, uid_from_name=None):
 
         # elif clean_line[0] == 'GEOLOGICAL_TYPE':
         #     curr_obj_dict['role'] = ("_".join(clean_line[1:])).lower()
-        #     if curr_obj_dict['role'] not in self.geol_coll.valid_types:
+        #     if curr_obj_dict['role'] not in self.geol_coll.valid_roles:
         #         if "Fault" in curr_obj_dict['role']:
         #             curr_obj_dict['role'] = "fault"
         #         elif "fault" in curr_obj_dict['role']:

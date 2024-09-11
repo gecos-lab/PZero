@@ -111,7 +111,7 @@ def update_geology_tree_added(self, uid_list=None):
     for uid in uid_list:
         if (
                 self.GeologyTreeWidget.findItems(
-                    self.parent.geol_coll.get_uid_type(uid),
+                    self.parent.geol_coll.get_uid_role(uid),
                     Qt.MatchExactly,
                     0,
                 )
@@ -121,14 +121,14 @@ def update_geology_tree_added(self, uid_list=None):
             counter_1 = 0
             for child_1 in range(
                     self.GeologyTreeWidget.findItems(
-                        self.parent.geol_coll.get_uid_type(uid),
+                        self.parent.geol_coll.get_uid_role(uid),
                         Qt.MatchExactly,
                         0,
                     )[0].childCount()
             ):
                 # for cycle that loops n times as the number of subItems in the specific geological type branch
                 if self.GeologyTreeWidget.findItems(
-                        self.parent.geol_coll.get_uid_type(uid),
+                        self.parent.geol_coll.get_uid_role(uid),
                         Qt.MatchExactly,
                         0,
                 )[0].child(child_1).text(
@@ -140,13 +140,13 @@ def update_geology_tree_added(self, uid_list=None):
             if counter_1 != 0:
                 for child_1 in range(
                         self.GeologyTreeWidget.findItems(
-                            self.parent.geol_coll.get_uid_type(uid),
+                            self.parent.geol_coll.get_uid_role(uid),
                             Qt.MatchExactly,
                             0,
                         )[0].childCount()
                 ):
                     if self.GeologyTreeWidget.findItems(
-                            self.parent.geol_coll.get_uid_type(uid),
+                            self.parent.geol_coll.get_uid_role(uid),
                             Qt.MatchExactly,
                             0,
                     )[0].child(child_1).text(
@@ -159,7 +159,7 @@ def update_geology_tree_added(self, uid_list=None):
                         for child_2 in range(
                                 self.GeologyTreeWidget.itemBelow(
                                     self.GeologyTreeWidget.findItems(
-                                        self.parent.geol_coll.get_uid_type(
+                                        self.parent.geol_coll.get_uid_role(
                                             uid
                                         ),
                                         Qt.MatchExactly,
@@ -171,7 +171,7 @@ def update_geology_tree_added(self, uid_list=None):
                             # type and geological feature branch
                             if self.GeologyTreeWidget.itemBelow(
                                     self.GeologyTreeWidget.findItems(
-                                        self.parent.geol_coll.get_uid_type(
+                                        self.parent.geol_coll.get_uid_role(
                                             uid
                                         ),
                                         Qt.MatchExactly,
@@ -187,7 +187,7 @@ def update_geology_tree_added(self, uid_list=None):
                             for child_2 in range(
                                     self.GeologyTreeWidget.itemBelow(
                                         self.GeologyTreeWidget.findItems(
-                                            self.parent.geol_coll.get_uid_type(
+                                            self.parent.geol_coll.get_uid_role(
                                                 uid
                                             ),
                                             Qt.MatchExactly,
@@ -197,7 +197,7 @@ def update_geology_tree_added(self, uid_list=None):
                             ):
                                 if self.GeologyTreeWidget.itemBelow(
                                         self.GeologyTreeWidget.findItems(
-                                            self.parent.geol_coll.get_uid_type(
+                                            self.parent.geol_coll.get_uid_role(
                                                 uid
                                             ),
                                             Qt.MatchExactly,
@@ -224,7 +224,7 @@ def update_geology_tree_added(self, uid_list=None):
                                     name = self.parent.geol_coll.get_uid_name(uid)
                                     glevel_4 = QTreeWidgetItem(
                                         self.GeologyTreeWidget.findItems(
-                                            self.parent.geol_coll.get_uid_type(
+                                            self.parent.geol_coll.get_uid_role(
                                                 uid
                                             ),
                                             Qt.MatchExactly,
@@ -259,7 +259,7 @@ def update_geology_tree_added(self, uid_list=None):
                             # Same geological type and geological feature, different scenario
                             glevel_3 = QTreeWidgetItem(
                                 self.GeologyTreeWidget.findItems(
-                                    self.parent.geol_coll.get_uid_type(
+                                    self.parent.geol_coll.get_uid_role(
                                         uid
                                     ),
                                     Qt.MatchExactly,
@@ -310,7 +310,7 @@ def update_geology_tree_added(self, uid_list=None):
                 # Same geological type, different geological feature and scenario
                 glevel_2 = QTreeWidgetItem(
                     self.GeologyTreeWidget.findItems(
-                        self.parent.geol_coll.get_uid_type(uid),
+                        self.parent.geol_coll.get_uid_role(uid),
                         Qt.MatchExactly,
                         0,
                     )[0],
@@ -356,7 +356,7 @@ def update_geology_tree_added(self, uid_list=None):
             # Different geological type, geological feature and scenario
             glevel_1 = QTreeWidgetItem(
                 self.GeologyTreeWidget,
-                [self.parent.geol_coll.get_uid_type(uid)],
+                [self.parent.geol_coll.get_uid_role(uid)],
             )
             glevel_1.setFlags(
                 glevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable

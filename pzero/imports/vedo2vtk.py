@@ -34,13 +34,13 @@ def vedo2vtk(self):
         """Initialize"""
         cell_type = -1
 
-        """Read file with vd.load() function and detect type of curr_obj - ASSUMES ALL CELLS ARE OF THE SAME TYPE"""
+        """Read file with vd.load() function and detect cell type (topology) of curr_obj - ASSUMES ALL CELLS ARE OF THE SAME TYPE"""
         try:
             curr_obj = vd.load(
                 in_file_name
             )  # _____ this is the only difference with respect to pyvista2vtk
 
-            """ VTK cell types from documentation at https://vtk.org/doc/nightly/html/vtkCellType_8h.html
+            """ VTK cell types (topology) from documentation at https://vtk.org/doc/nightly/html/vtkCellType_8h.html
             VTK_EMPTY_CELL = 0, VTK_VERTEX = 1, VTK_POLY_VERTEX = 2, VTK_LINE = 3,
             VTK_POLY_LINE = 4, VTK_TRIANGLE = 5, VTK_TRIANGLE_STRIP = 6, VTK_POLYGON = 7,
             VTK_PIXEL = 8, VTK_QUAD = 9, VTK_TETRA = 10, VTK_VOXEL = 11,
@@ -59,15 +59,15 @@ def vedo2vtk(self):
             VTK_BEZIER_HEXAHEDRON = 79, VTK_BEZIER_WEDGE = 80, VTK_BEZIER_PYRAMID = 81, VTK_NUMBER_OF_CELL_TYPES
             """
 
-            """Get type of first cell in object - THEN ASSUMES ALL CELLS ARE OF THE SAME TYPE"""
+            """Get type (topology) of first cell in object - THEN ASSUMES ALL CELLS ARE OF THE SAME TYPE"""
             cell_type = curr_obj.GetCellType(0)
             print(cell_type)
         except:
             self.TextTerminal.appendPlainText(
-                "vedo2vtk - entity type not recognized ERROR."
+                "vedo2vtk - entity topology not recognized ERROR."
             )
 
-        """If curr_obj is a recognized type, assign to PZero class, and add to the collection."""
+        """If curr_obj is a recognized topology, assign to PZero class, and add to the collection."""
         if cell_type == 1:
             curr_obj.uid = str(uuid.uuid4())
             curr_obj.type = "VertexSet"

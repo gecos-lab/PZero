@@ -59,7 +59,7 @@ class BackgroundCollection(BaseCollection):
             "vtk_obj": object,
         }
 
-        self.valid_types = ["undef", "Annotations", "Imported"]
+        self.valid_roles = ["undef", "annotations", "imported"]
 
         self.valid_topologies = [
             "VertexSet",
@@ -87,7 +87,7 @@ class BackgroundCollection(BaseCollection):
         self.df = self.df.append(entity_dict, ignore_index=True)
         # Reset data model.
         self.modelReset.emit()
-        # Then add new type / feature / scenario to the legend if needed.
+        # Then add new role / feature / scenario to the legend if needed.
         # Note that for performance reasons this is done explicitly here, when adding an entity to the
         # collection, and not with a signal telling the legend to be updated by scanning the whole collection.
         role = entity_dict["role"]
@@ -141,7 +141,7 @@ class BackgroundCollection(BaseCollection):
             inplace=True,
         )
         self.modelReset.emit()  # is this really necessary?
-        # Then remove type / feature / scenario from legend if needed.
+        # Then remove role / feature / scenario from legend if needed.
         # legend_updated is used to record if the table is updated or not.
         # Note that for performance reasons this is done explicitly here, when adding an entity to the
         # collection, and not with a signal telling the legend to be updated by scanning the whole collection.
@@ -165,7 +165,7 @@ class BackgroundCollection(BaseCollection):
         entity_dict = deepcopy(self.entity_dict)
         entity_dict["name"] = self.get_uid_name(uid)
         entity_dict["topology"] = self.get_uid_topology(uid)
-        entity_dict["role"] = self.get_uid_type(uid)
+        entity_dict["role"] = self.get_uid_role(uid)
         entity_dict["feature"] = self.get_uid_feature(uid)
         entity_dict["scenario"] = self.get_uid_scenario(uid)
         entity_dict["properties_names"] = self.get_uid_properties_names(uid)
@@ -203,7 +203,7 @@ class BackgroundCollection(BaseCollection):
         # Then add new role / feature.
         for uid in self.parent.backgrounds_coll.df["uid"].to_list():
             role = self.parent.backgrounds_coll.df.loc[
-                self.parent.backgrounds_coll.df["uid"] == uid, "type"
+                self.parent.backgrounds_coll.df["uid"] == uid, "role"
             ].values[0]
             feature = self.parent.backgrounds_coll.df.loc[
                 self.parent.backgrounds_coll.df["uid"] == uid, "feature"
@@ -234,7 +234,7 @@ class BackgroundCollection(BaseCollection):
             self.parent.legend.update_widget(self.parent)
 
     def remove_unused_from_legend(self):
-        """Remove unused types / features from a legend table."""
+        """Remove unused roles / features from a legend table."""
         # ====== TO BE UPDATED ACCORDING TO geological collection SINCE IT DOES NOT CONSIDER SCENARIO ===
         # legend_updated is used to record if the table is updated or not.
         legend_updated = False
@@ -320,17 +320,17 @@ class BackgroundCollection(BaseCollection):
     # =================================== Additional methods ===========================================
     # ====== CAN BE UNIFIED AS COMMON METHOD OF THE ABSTRACT COLLECTION IF "GEOLOGICAL" METHODS WILL BE UNIFIED ====
 
-    def get_type_uids(self, coll_type: str = None) -> list:
-        """Get list of uids of a given collection type."""
+    def get_role_uids(self, role: str = None) -> list:
+        """Get list of uids with a given role in a given collection."""
         # ====== in the future use the query method? ========================================
-        return self.df.loc[self.df['role'] == coll_type, "uid"].to_list()
+        return self.df.loc[self.df['role'] == role, "uid"].to_list()
 
-    def get_uid_type(self, uid: str = None):
-        """Get collection type from uid."""
+    def get_uid_role(self, uid: str = None):
+        """Get role of a given uid."""
         return self.df.loc[self.df["uid"] == uid, 'role'].values[0]
 
-    def set_uid_type(self, uid=None, role=None):
-        """Set collection type from uid."""
+    def set_uid_role(self, uid=None, role=None):
+        """Set role of a given uid."""
         self.df.loc[self.df["uid"] == uid, 'role'] = role
 
     def get_feature_uids(self, coll_feature: str = None) -> list:

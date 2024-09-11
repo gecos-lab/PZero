@@ -27,7 +27,7 @@ class BaseCollection(ABC):
         self._entity_dict: dict = dict()
         self._entity_type_dict: dict = dict()
 
-        self._valid_types: list = list()
+        self._valid_roles: list = list()
         self._valid_topologies: list = list()
 
         self._df: DataFrame = DataFrame()
@@ -138,14 +138,14 @@ class BaseCollection(ABC):
         self._entity_type_dict = entity_type_dict
 
     @property
-    def valid_types(self) -> list:
+    def valid_roles(self) -> list:
         """Get the valid types list of the Collection."""
-        return self._valid_types
+        return self._valid_roles
 
-    @valid_types.setter
-    def valid_types(self, valid_types: list):
+    @valid_roles.setter
+    def valid_roles(self, valid_roles: list):
         """Set the valid types list of the Collection."""
-        self._valid_types = valid_types
+        self._valid_roles = valid_roles
 
     @property
     def valid_topologies(self) -> list:
@@ -187,10 +187,10 @@ class BaseCollection(ABC):
         """Set the collection name."""
         self._collection_name = name
 
-    @property
-    def coll_type_name(self) -> str:
-        """Helper property to get the full collection type column name for the given collection."""
-        return f'{self.collection_name}_type'
+    # @property
+    # def coll_type_name(self) -> str:
+    #     """Helper property to get the full collection type column name for the given collection."""
+    #     return f'{self.collection_name}_type'
 
     # @property
     # def coll_feature_name(self) -> str:

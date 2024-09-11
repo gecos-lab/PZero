@@ -57,17 +57,17 @@ def vtk2lxml(self, out_dir_name=None):
                 point_arr = np_zeros((n_cells, cell_shape[0], cell_shape[1]))
 
                 if cell_shape[0] == 3:
-                    surf_type = "TIN"
+                    topology = "TIN"
                 else:
-                    surf_type = "grid"
+                    topology = "grid"
 
                 surface = et.SubElement(
                     surfaces, "Surface", name=f"{uid}_part{i}"
                 )  # we can define the single surface
                 source_data = et.SubElement(surface, "SourceData")
                 definition = et.SubElement(
-                    surface, "Definition", surfType=surf_type
-                )  # for each surface we must define the type
+                    surface, "Definition", surfType=topology
+                )  # for each surface we must define the topology
                 pnts = et.SubElement(
                     definition, "Pnts"
                 )  # each surface is composed by a "points" (Pnts) element
