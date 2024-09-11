@@ -27,7 +27,7 @@ class TestBoundaryCollection:
     test_vtk_obj4 = TetraSolid()
 
 
-    boundary_entity_dict = {'uid': "9",
+    entity_dict = {'uid': "9",
                             'name': "boundary-test",
                             'topology': "test_topological_type",
                             'x_section': "[2, 0]",
@@ -51,7 +51,7 @@ class TestBoundaryCollection:
 
     def test_add_entity_from_dict(self):
         # add an entity
-        self.boundary_coll_istance.add_entity_from_dict(self.boundary_entity_dict)
+        self.boundary_coll_istance.add_entity_from_dict(self.entity_dict)
 
         # print check
         # print(self.boundary_coll_istance.df)
@@ -59,29 +59,29 @@ class TestBoundaryCollection:
         # check if the entities number is equal to the add_entity calls
         # and if the uid inserted is in the uids of the collection
         assert self.boundary_coll_istance.get_number_of_entities() == 1 \
-               and self.boundary_entity_dict['uid'] in self.boundary_coll_istance.get_uids()
+               and self.entity_dict['uid'] in self.boundary_coll_istance.get_uids()
 
     def test_remove_entity(self):
         # add an entity
-        self.boundary_coll_istance.add_entity_from_dict(self.boundary_entity_dict)
+        self.boundary_coll_istance.add_entity_from_dict(self.entity_dict)
 
         # remove an entity
-        self.boundary_coll_istance.remove_entity(self.boundary_entity_dict['uid'])
+        self.boundary_coll_istance.remove_entity(self.entity_dict['uid'])
 
         # check if the entities number is equal to the add_entity calls minus the remove_entity calls
         # and if the uid inserted and then removed is not in the uids of the collection
         assert self.boundary_coll_istance.get_number_of_entities() == 0 \
-               and self.boundary_entity_dict['uid'] not in self.boundary_coll_istance.get_uids()
+               and self.entity_dict['uid'] not in self.boundary_coll_istance.get_uids()
 
     def test_replace_vtk(self):
         # add an entity
-        self.boundary_coll_istance.add_entity_from_dict(self.boundary_entity_dict)
+        self.boundary_coll_istance.add_entity_from_dict(self.entity_dict)
 
         # remove an entity
         self.boundary_coll_istance.replace_vtk(uid="9", vtk_object=self.test_vtk_obj2)
 
         assert self.boundary_coll_istance.get_number_of_entities() == 1 \
-            and self.boundary_coll_istance.get_uid_vtk_obj(self.boundary_entity_dict['uid']) == self.test_vtk_obj2
+            and self.boundary_coll_istance.get_uid_vtk_obj(self.entity_dict['uid']) == self.test_vtk_obj2
 
 
     def test_get_entities(self):
@@ -89,7 +89,7 @@ class TestBoundaryCollection:
         assert self.boundary_coll_istance2.get_number_of_entities() == 0
 
         # add three entities
-        self.boundary_coll_istance2.add_entity_from_dict(self.boundary_entity_dict)
+        self.boundary_coll_istance2.add_entity_from_dict(self.entity_dict)
         self.boundary_coll_istance2.add_entity_from_dict(self.boundary_entity_dict2)
         self.boundary_coll_istance2.add_entity_from_dict(self.boundary_entity_dict3)
         
@@ -99,12 +99,12 @@ class TestBoundaryCollection:
         boundary_coll_istance = BoundaryCollection(parent=FakeWindow)
 
         # add three entities
-        boundary_coll_istance.add_entity_from_dict(self.boundary_entity_dict)
+        boundary_coll_istance.add_entity_from_dict(self.entity_dict)
         boundary_coll_istance.add_entity_from_dict(self.boundary_entity_dict2)
         boundary_coll_istance.add_entity_from_dict(self.boundary_entity_dict3)
 
         assert len(boundary_coll_istance.get_uids()) == 3
-        assert self.boundary_entity_dict['uid'] in boundary_coll_istance.get_uids()
+        assert self.entity_dict['uid'] in boundary_coll_istance.get_uids()
         assert self.boundary_entity_dict2['uid'] in boundary_coll_istance.get_uids()
         assert self.boundary_entity_dict3['uid'] in boundary_coll_istance.get_uids()
 
@@ -112,11 +112,11 @@ class TestBoundaryCollection:
         boundary_coll_istance = BoundaryCollection(parent=FakeWindow)
 
         # add three entities
-        boundary_coll_istance.add_entity_from_dict(self.boundary_entity_dict)
+        boundary_coll_istance.add_entity_from_dict(self.entity_dict)
         boundary_coll_istance.add_entity_from_dict(self.boundary_entity_dict2)
         boundary_coll_istance.add_entity_from_dict(self.boundary_entity_dict3)
 
-        assert self.boundary_entity_dict['name'] in boundary_coll_istance.get_names()
+        assert self.entity_dict['name'] in boundary_coll_istance.get_names()
         assert self.boundary_entity_dict2['name'] in boundary_coll_istance.get_names()
         assert self.boundary_entity_dict3['name'] in boundary_coll_istance.get_names()
 
@@ -124,11 +124,11 @@ class TestBoundaryCollection:
         boundary_coll_istance = BoundaryCollection(parent=FakeWindow)
 
         # add three entities
-        boundary_coll_istance.add_entity_from_dict(self.boundary_entity_dict)
+        boundary_coll_istance.add_entity_from_dict(self.entity_dict)
         boundary_coll_istance.add_entity_from_dict(self.boundary_entity_dict2)
         boundary_coll_istance.add_entity_from_dict(self.boundary_entity_dict3)
 
-        assert [self.boundary_entity_dict['uid']] == boundary_coll_istance.get_topology_uids(self.boundary_entity_dict['topology'])
+        assert [self.entity_dict['uid']] == boundary_coll_istance.get_topology_uids(self.entity_dict['topology'])
         assert [self.boundary_entity_dict2['uid']] == boundary_coll_istance.get_topology_uids(self.boundary_entity_dict2['topology'])
         assert [self.boundary_entity_dict3['uid']] == boundary_coll_istance.get_topology_uids(self.boundary_entity_dict3['topology'])
     
@@ -136,7 +136,7 @@ class TestBoundaryCollection:
         boundary_coll_istance = BoundaryCollection(parent=FakeWindow)
 
         # add three entities
-        boundary_coll_istance.add_entity_from_dict(self.boundary_entity_dict)
+        boundary_coll_istance.add_entity_from_dict(self.entity_dict)
         boundary_coll_istance.add_entity_from_dict(self.boundary_entity_dict2)
         boundary_coll_istance.add_entity_from_dict(self.boundary_entity_dict3)
         boundary_coll_istance.add_entity_from_dict(self.boundary_entity_dict4)
@@ -148,11 +148,11 @@ class TestBoundaryCollection:
         boundary_coll_istance = BoundaryCollection(parent=FakeWindow)
 
         # add three entities
-        boundary_coll_istance.add_entity_from_dict(self.boundary_entity_dict)
+        boundary_coll_istance.add_entity_from_dict(self.entity_dict)
         boundary_coll_istance.add_entity_from_dict(self.boundary_entity_dict2)
         boundary_coll_istance.add_entity_from_dict(self.boundary_entity_dict3)
 
-        assert self.boundary_entity_dict['name'] == boundary_coll_istance.get_uid_name(self.boundary_entity_dict['uid'])
+        assert self.entity_dict['name'] == boundary_coll_istance.get_uid_name(self.entity_dict['uid'])
         assert self.boundary_entity_dict2['name'] == boundary_coll_istance.get_uid_name(self.boundary_entity_dict2['uid'])
         assert self.boundary_entity_dict3['name'] == boundary_coll_istance.get_uid_name(self.boundary_entity_dict3['uid'])
     
@@ -164,17 +164,17 @@ class TestBoundaryCollection:
 
 
         # add three entities
-        boundary_coll_istance.add_entity_from_dict(self.boundary_entity_dict)
+        boundary_coll_istance.add_entity_from_dict(self.entity_dict)
         boundary_coll_istance.add_entity_from_dict(self.boundary_entity_dict2)
         boundary_coll_istance.add_entity_from_dict(self.boundary_entity_dict3)
 
         # set the new names
-        boundary_coll_istance.set_uid_name(self.boundary_entity_dict['uid'], new_name)
+        boundary_coll_istance.set_uid_name(self.entity_dict['uid'], new_name)
         boundary_coll_istance.set_uid_name(self.boundary_entity_dict2['uid'], new_name2)
         boundary_coll_istance.set_uid_name(self.boundary_entity_dict3['uid'], new_name3)
 
 
-        assert new_name == boundary_coll_istance.get_uid_name(self.boundary_entity_dict['uid'])
+        assert new_name == boundary_coll_istance.get_uid_name(self.entity_dict['uid'])
         assert new_name2 == boundary_coll_istance.get_uid_name(self.boundary_entity_dict2['uid'])
         assert new_name3 == boundary_coll_istance.get_uid_name(self.boundary_entity_dict3['uid'])
     
@@ -182,11 +182,11 @@ class TestBoundaryCollection:
         boundary_coll_istance = BoundaryCollection(parent=FakeWindow)
 
         # add three entities
-        boundary_coll_istance.add_entity_from_dict(self.boundary_entity_dict)
+        boundary_coll_istance.add_entity_from_dict(self.entity_dict)
         boundary_coll_istance.add_entity_from_dict(self.boundary_entity_dict2)
         boundary_coll_istance.add_entity_from_dict(self.boundary_entity_dict3)
 
-        assert self.boundary_entity_dict['topology'] == boundary_coll_istance.get_uid_topology(self.boundary_entity_dict['uid'])
+        assert self.entity_dict['topology'] == boundary_coll_istance.get_uid_topology(self.entity_dict['uid'])
         assert self.boundary_entity_dict2['topology'] == boundary_coll_istance.get_uid_topology(self.boundary_entity_dict2['uid'])
         assert self.boundary_entity_dict3['topology'] == boundary_coll_istance.get_uid_topology(self.boundary_entity_dict3['uid'])
 
@@ -198,16 +198,16 @@ class TestBoundaryCollection:
         new_top_type3 = "DEM"
 
         # add three entities
-        boundary_coll_istance.add_entity_from_dict(self.boundary_entity_dict)
+        boundary_coll_istance.add_entity_from_dict(self.entity_dict)
         boundary_coll_istance.add_entity_from_dict(self.boundary_entity_dict2)
         boundary_coll_istance.add_entity_from_dict(self.boundary_entity_dict3)
 
         # set the new topological types
-        boundary_coll_istance.set_uid_topology(self.boundary_entity_dict['uid'], new_top_type)
+        boundary_coll_istance.set_uid_topology(self.entity_dict['uid'], new_top_type)
         boundary_coll_istance.set_uid_topology(self.boundary_entity_dict2['uid'], new_top_type2)
         boundary_coll_istance.set_uid_topology(self.boundary_entity_dict3['uid'], new_top_type3)
 
-        assert new_top_type == boundary_coll_istance.get_uid_topology(self.boundary_entity_dict['uid'])
+        assert new_top_type == boundary_coll_istance.get_uid_topology(self.entity_dict['uid'])
         assert new_top_type2 == boundary_coll_istance.get_uid_topology(self.boundary_entity_dict2['uid'])
         assert new_top_type3 == boundary_coll_istance.get_uid_topology(self.boundary_entity_dict3['uid'])
 
@@ -215,11 +215,11 @@ class TestBoundaryCollection:
         boundary_coll_istance = BoundaryCollection(parent=FakeWindow)
 
         # add three entities
-        boundary_coll_istance.add_entity_from_dict(self.boundary_entity_dict)
+        boundary_coll_istance.add_entity_from_dict(self.entity_dict)
         boundary_coll_istance.add_entity_from_dict(self.boundary_entity_dict2)
         boundary_coll_istance.add_entity_from_dict(self.boundary_entity_dict3)
 
-        assert self.boundary_entity_dict['x_section'] == boundary_coll_istance.get_uid_x_section(self.boundary_entity_dict['uid'])
+        assert self.entity_dict['x_section'] == boundary_coll_istance.get_uid_x_section(self.entity_dict['uid'])
         assert self.boundary_entity_dict2['x_section'] == boundary_coll_istance.get_uid_x_section(self.boundary_entity_dict2['uid'])
         assert self.boundary_entity_dict3['x_section'] == boundary_coll_istance.get_uid_x_section(self.boundary_entity_dict3['uid'])
 
@@ -231,16 +231,16 @@ class TestBoundaryCollection:
         new_x_sect3 = "[4, 6]"
 
         # add three entities
-        boundary_coll_istance.add_entity_from_dict(self.boundary_entity_dict)
+        boundary_coll_istance.add_entity_from_dict(self.entity_dict)
         boundary_coll_istance.add_entity_from_dict(self.boundary_entity_dict2)
         boundary_coll_istance.add_entity_from_dict(self.boundary_entity_dict3)
 
         # set the new x section types
-        boundary_coll_istance.set_uid_x_section(self.boundary_entity_dict['uid'], new_x_sect)
+        boundary_coll_istance.set_uid_x_section(self.entity_dict['uid'], new_x_sect)
         boundary_coll_istance.set_uid_x_section(self.boundary_entity_dict2['uid'], new_x_sect2)
         boundary_coll_istance.set_uid_x_section(self.boundary_entity_dict3['uid'], new_x_sect3)
 
-        assert new_x_sect== boundary_coll_istance.get_uid_x_section(self.boundary_entity_dict['uid'])
+        assert new_x_sect== boundary_coll_istance.get_uid_x_section(self.entity_dict['uid'])
         assert new_x_sect2 == boundary_coll_istance.get_uid_x_section(self.boundary_entity_dict2['uid'])
         assert new_x_sect3 == boundary_coll_istance.get_uid_x_section(self.boundary_entity_dict3['uid'])
 
@@ -248,11 +248,11 @@ class TestBoundaryCollection:
         boundary_coll_istance = BoundaryCollection(parent=FakeWindow)
 
         # add three entities
-        boundary_coll_istance.add_entity_from_dict(self.boundary_entity_dict)
+        boundary_coll_istance.add_entity_from_dict(self.entity_dict)
         boundary_coll_istance.add_entity_from_dict(self.boundary_entity_dict2)
         boundary_coll_istance.add_entity_from_dict(self.boundary_entity_dict3)
 
-        assert self.boundary_entity_dict['vtk_obj'] == boundary_coll_istance.get_uid_vtk_obj(self.boundary_entity_dict['uid'])
+        assert self.entity_dict['vtk_obj'] == boundary_coll_istance.get_uid_vtk_obj(self.entity_dict['uid'])
         assert self.boundary_entity_dict2['vtk_obj'] == boundary_coll_istance.get_uid_vtk_obj(self.boundary_entity_dict2['uid'])
         assert self.boundary_entity_dict3['vtk_obj'] == boundary_coll_istance.get_uid_vtk_obj(self.boundary_entity_dict3['uid'])
 
@@ -264,16 +264,16 @@ class TestBoundaryCollection:
             new_vtk_obj3 = DEM()
 
             # add three entities
-            boundary_coll_istance.add_entity_from_dict(self.boundary_entity_dict)
+            boundary_coll_istance.add_entity_from_dict(self.entity_dict)
             boundary_coll_istance.add_entity_from_dict(self.boundary_entity_dict2)
             boundary_coll_istance.add_entity_from_dict(self.boundary_entity_dict3)
 
             # set the new vtk object
-            boundary_coll_istance.set_uid_vtk_obj(self.boundary_entity_dict['uid'], new_vtk_obj)
+            boundary_coll_istance.set_uid_vtk_obj(self.entity_dict['uid'], new_vtk_obj)
             boundary_coll_istance.set_uid_vtk_obj(self.boundary_entity_dict2['uid'], new_vtk_obj2)
             boundary_coll_istance.set_uid_vtk_obj(self.boundary_entity_dict3['uid'], new_vtk_obj3)
 
-            assert new_vtk_obj == boundary_coll_istance.get_uid_vtk_obj(self.boundary_entity_dict['uid'])
+            assert new_vtk_obj == boundary_coll_istance.get_uid_vtk_obj(self.entity_dict['uid'])
             assert new_vtk_obj2 == boundary_coll_istance.get_uid_vtk_obj(self.boundary_entity_dict2['uid'])
             assert new_vtk_obj3 == boundary_coll_istance.get_uid_vtk_obj(self.boundary_entity_dict3['uid'])
 

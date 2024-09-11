@@ -699,7 +699,7 @@ def surface_smoothing(
             print(" -- Error input type: only TriSurf type -- ")
             return
     # """Create deepcopy of the geological entity dictionary."""
-    # surf_dict = deepcopy(self.geol_coll.geological_entity_dict)
+    # surf_dict = deepcopy(self.geol_coll.entity_dict)
     # input_dict = {'name': ['TriSurf name: ', self.geol_coll.get_uid_name(input_uids[0]) + '_smooth'], 'role': ['Role: ', self.parent.geol_coll.valid_roles], 'feature': ['Feature: ', self.geol_coll.get_uid_feature(input_uids[0])], 'scenario': ['Scenario: ', self.geol_coll.get_uid_scenario(input_uids[0])]}
     # surf_dict_updt = multiple_input_dialog(title='Surface smoothing', input_dict=input_dict)
     # """Check if the output of the widget is empty or not. If the Cancel button was clicked, the tool quits"""

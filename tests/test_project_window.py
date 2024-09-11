@@ -15,7 +15,7 @@ class TestProjectWindow:
     test_vtk_obj = VertexSet()
     test_vtk_obj2 = VertexSet()
 
-    geological_entity_dict = {'uid': "0",
+    entity_dict = {'uid': "0",
                               'name': "geoname",
                               'topology': "VertexSet",
                               'role': "undef",
@@ -93,7 +93,7 @@ class TestProjectWindow:
         project_window = ProjectWindow()
 
         # add an entity and then select all the entities on the geology View
-        project_window.geol_coll.add_entity_from_dict(self.geological_entity_dict)
+        project_window.geol_coll.add_entity_from_dict(self.entity_dict)
         project_window.GeologyTableView.selectAll()
 
         # check that the length of the selected uids is equal to the added entity inside the geol coll
@@ -112,7 +112,7 @@ class TestProjectWindow:
         project_window = ProjectWindow()
 
         # add an entity and then select all the entities on the geology View
-        project_window.geol_coll.add_entity_from_dict(self.geological_entity_dict)
+        project_window.geol_coll.add_entity_from_dict(self.entity_dict)
         project_window.GeologyTableView.selectAll()
 
         # remove the entity through the mock function 'entity_remove'
@@ -133,7 +133,7 @@ class TestProjectWindow:
         project_window = ProjectWindow()
 
         # add an entity and then select all the entities on the geology View
-        project_window.geol_coll.add_entity_from_dict(self.geological_entity_dict)
+        project_window.geol_coll.add_entity_from_dict(self.entity_dict)
         project_window.geol_coll.add_entity_from_dict(self.geological_entity_dict2)
 
         # select all the entities (which are two in this case) on the geology table and merge them
@@ -150,12 +150,12 @@ class TestProjectWindow:
     def test_getting_entitites(self, qtbot):
         project_window = ProjectWindow()
 
-        project_window.geol_coll.add_entity_from_dict(self.geological_entity_dict)
+        project_window.geol_coll.add_entity_from_dict(self.entity_dict)
         project_window.geol_coll.add_entity_from_dict(self.geological_entity_dict2)
 
         project_window.GeologyTableView.selectAll()
 
-        assert self.geological_entity_dict['uid'] in project_window.selected_uids
+        assert self.entity_dict['uid'] in project_window.selected_uids
         assert self.geological_entity_dict2['uid'] in project_window.selected_uids
 
     # @pytest.fixture
@@ -165,7 +165,7 @@ class TestProjectWindow:
     def test_property_add(self, qtbot):
         project_window = ProjectWindow()
 
-        project_window.geol_coll.add_entity_from_dict(self.geological_entity_dict)
+        project_window.geol_coll.add_entity_from_dict(self.entity_dict)
         project_window.GeologyTableView.selectAll()
 
         project_window.property_add()
@@ -179,7 +179,7 @@ class TestProjectWindow:
     def test_property_remove(self, qtbot):
         project_window = ProjectWindow()
 
-        project_window.geol_coll.add_entity_from_dict(self.geological_entity_dict)
+        project_window.geol_coll.add_entity_from_dict(self.entity_dict)
         project_window.GeologyTableView.selectAll()
 
         project_window.property_add()
@@ -199,7 +199,7 @@ class TestProjectWindow:
         project_window = ProjectWindow()
 
         # Add to the empty project two entities and selecting them
-        project_window.geol_coll.add_entity_from_dict(self.geological_entity_dict)
+        project_window.geol_coll.add_entity_from_dict(self.entity_dict)
         project_window.geol_coll.add_entity_from_dict(self.geological_entity_dict2)
         project_window.GeologyTableView.selectAll()
 
@@ -215,7 +215,7 @@ class TestProjectWindow:
         project_window = ProjectWindow()
 
         # Add to the empty project two entities and selecting them
-        project_window.geol_coll.add_entity_from_dict(self.geological_entity_dict)
+        project_window.geol_coll.add_entity_from_dict(self.entity_dict)
         project_window.geol_coll.add_entity_from_dict(self.geological_entity_dict2)
         project_window.GeologyTableView.selectAll()
 

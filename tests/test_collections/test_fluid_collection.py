@@ -35,7 +35,7 @@ class TestFluidCollection:
     fluid_coll_istance = FluidsCollection(FakeWindow)
     test_vtk_obj = DEM()
     test_vtk_obj2 = DEM()
-    fluid_entity_dict = {'uid': "4",
+    entity_dict = {'uid': "4",
                          'name': "fluid-test",
                          'topology': "undef",
                          'role': "undef",
@@ -48,10 +48,10 @@ class TestFluidCollection:
 
     def test_add_entity_from_dict(self):
         # add an entity
-        self.fluid_coll_istance.add_entity_from_dict(self.fluid_entity_dict)
+        self.fluid_coll_istance.add_entity_from_dict(self.entity_dict)
 
         # check if the entities number is equal to the add_entity calls
         # and if the uid inserted is in the uids of the collection
         assert self.fluid_coll_istance.get_number_of_entities() == 1 \
-               and self.fluid_entity_dict['uid'] in self.fluid_coll_istance.get_uids()
+               and self.entity_dict['uid'] in self.fluid_coll_istance.get_uids()
 

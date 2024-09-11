@@ -35,7 +35,7 @@ class FakeWindow(QMainWindow):
 class TestDomCollection:
     test_vtk_obj = DEM()
     test_vtk_obj2 = DEM()
-    geological_entity_dict = {'uid': "0",
+    entity_dict = {'uid': "0",
                               'name': "geoname",
                               'topology': "topol",
                               'role': "undef",
@@ -50,34 +50,34 @@ class TestDomCollection:
 
     def test_add_entity_from_dict(self):
         # add an entity
-        self.dom_istance.add_entity_from_dict(self.geological_entity_dict)
+        self.dom_istance.add_entity_from_dict(self.entity_dict)
 
         # check if the entities number is equal to the add_entity calls
         # and if the uid inserted is in the uids of the collection
         assert self.dom_istance.get_number_of_entities() == 1 \
-               and self.geological_entity_dict['uid'] in self.dom_istance.get_uids()
+               and self.entity_dict['uid'] in self.dom_istance.get_uids()
 
     def test_remove_entity(self):
         # add an entity
-        self.dom_istance.add_entity_from_dict(self.geological_entity_dict)
+        self.dom_istance.add_entity_from_dict(self.entity_dict)
 
         # remove an entity
-        self.dom_istance.remove_entity(self.geological_entity_dict['uid'])
+        self.dom_istance.remove_entity(self.entity_dict['uid'])
 
 
         # check if the entities number is equal to the add_entity calls minus the remove_entity calls
         # and if the uid inserted and then removed is not in the uids of the collection
         assert self.dom_istance.get_number_of_entities() == 0 \
-            and self.geological_entity_dict['uid'] not in self.dom_istance.get_uids()
+            and self.entity_dict['uid'] not in self.dom_istance.get_uids()
 
     def test_replace_vtk(self):
         # add an entity
-        self.dom_istance.add_entity_from_dict(self.geological_entity_dict)
+        self.dom_istance.add_entity_from_dict(self.entity_dict)
 
         # replace the vtk obj of the entity added
-        self.dom_istance.replace_vtk(uid=self.geological_entity_dict['uid'], vtk_object=self.test_vtk_obj2)
+        self.dom_istance.replace_vtk(uid=self.entity_dict['uid'], vtk_object=self.test_vtk_obj2)
 
         # check if the entities number is equal to the add_entity calls
         # and if the vtk obj inserted is in the uids of the collection
         assert self.dom_istance.get_number_of_entities() == 1 \
-            and self.dom_istance.get_uid_vtk_obj(self.geological_entity_dict['uid']) == self.test_vtk_obj2
+            and self.dom_istance.get_uid_vtk_obj(self.entity_dict['uid']) == self.test_vtk_obj2

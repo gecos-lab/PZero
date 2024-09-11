@@ -5,7 +5,7 @@ from pandas import DataFrame as pd_DataFrame
 from PyQt5.QtWidgets import QMainWindow
 
 # Global Variable
-background_entity_dict = {'uid': "53",
+entity_dict = {'uid': "53",
                           'name': "background-test",
                           'topology': "undef",
                           'role': "undef",
@@ -31,7 +31,7 @@ class FakeLegend:
 
 # Class used as a substitute of BackgroundCollection
 class FakeBGCollection:
-    df = pd_DataFrame(columns=list(background_entity_dict.keys()))
+    df = pd_DataFrame(columns=list(entity_dict.keys()))
 
 
 # Class used for test the main window (project_window) as a parent
@@ -54,10 +54,10 @@ class TestBackgroundCollection:
 
     def test_add_entity_from_dict(self):
         # add an entity
-        self.background_coll_istance.add_entity_from_dict(background_entity_dict)
+        self.background_coll_istance.add_entity_from_dict(entity_dict)
 
         # check if the entities number is equal to the add_entity calls
         # and if the uid inserted is in the uids of the collection
         assert self.background_coll_istance.get_number_of_entities() == 1 \
-               and background_entity_dict['uid'] in self.background_coll_istance.get_uids()
+               and entity_dict['uid'] in self.background_coll_istance.get_uids()
 

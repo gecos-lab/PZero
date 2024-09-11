@@ -61,7 +61,7 @@ class TestGeologicalCollection:
         self.geo_coll_istance.add_entity_from_dict(entity_dict=self.geological_entity_dict1)
         self.geo_coll_istance.add_entity_from_dict(entity_dict=self.geological_entity_dict2)
 
-        # This print should be the same as the geological_entity_dict
+        # This print should be the same as the entity_dict
         # print(geo_coll_istance.df)
 
         assert self.geo_coll_istance.get_number_of_entities() == 2 \

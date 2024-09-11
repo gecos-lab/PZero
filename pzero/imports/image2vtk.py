@@ -95,7 +95,7 @@ def geo_image2vtk(self=None, in_file_name=None):
             vtk_image.GetPointData().SetActiveScalars("RGB")
 
         """Create dictionary."""
-        curr_obj_dict = deepcopy(ImageCollection.image_entity_dict)
+        curr_obj_dict = deepcopy(ImageCollection.entity_dict)
         curr_obj_dict["uid"] = str(uuid.uuid4())
         curr_obj_dict["name"] = os.path.basename(in_file_name)
         curr_obj_dict["topology"] = "MapImage"
@@ -215,7 +215,7 @@ def xs_image2vtk(self=None, in_file_name=None, x_section_uid=None):
         vtk_image.GetPointData().SetActiveScalars("RGB")
     print("vtk_image:\n", vtk_image)
     """Create dictionary."""
-    curr_obj_dict = deepcopy(ImageCollection.image_entity_dict)
+    curr_obj_dict = deepcopy(ImageCollection.entity_dict)
     curr_obj_dict["uid"] = str(uuid.uuid4())
     curr_obj_dict["name"] = os.path.basename(in_file_name)
     curr_obj_dict["topology"] = "XsImage"

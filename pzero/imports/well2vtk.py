@@ -97,7 +97,7 @@ def well2vtk(self, path=None):
                             marker_obj.auto_cells()
 
                             marker_obj_dict = deepcopy(
-                                GeologicalCollection.geological_entity_dict
+                                GeologicalCollection.entity_dict
                             )
                             marker_obj_dict["topology"] = "VertexSet"
                             marker_obj_dict["uid"] = str(uuid4())
@@ -180,7 +180,7 @@ def well2vtk(self, path=None):
         components.append(well_obj.trace.get_field_data_shape(key)[1])
         types.append(well_obj.trace.get_field_data_type(key))
 
-    bore_obj_attributes = deepcopy(WellCollection.well_entity_dict)
+    bore_obj_attributes = deepcopy(WellCollection.entity_dict)
     bore_obj_attributes["uid"] = well_uid
     bore_obj_attributes["Loc ID"] = well_obj.ID
     bore_obj_attributes["properties_names"] = trace_keys
@@ -313,7 +313,7 @@ def well2vtk(self, path=None):
 
     #     # geo_code = data.loc[i,"GeologyCode"]
 
-    #     # curr_obj_attributes = deepcopy(WellCollection.well_entity_dict)
+    #     # curr_obj_attributes = deepcopy(WellCollection.entity_dict)
     #     # curr_obj_attributes['uid'] = str(uuid4())
     #     # curr_obj_attributes['Loc ID'] = f'{unique_id[0]}'
     #     # curr_obj_attributes['feature'] = f'{geo_code}'
@@ -322,7 +322,7 @@ def well2vtk(self, path=None):
     #     # curr_obj_attributes['properties_types'] = []
     #     # curr_obj_attributes['vtk_obj'] = well_line
 
-    #     # marker_obj_attributes = deepcopy(GeologicalCollection.geological_entity_dict)
+    #     # marker_obj_attributes = deepcopy(GeologicalCollection.entity_dict)
     #     # marker_obj_attributes['uid'] = str(uuid4())
     #     # marker_obj_attributes['name'] = f'{data.loc[i,"GeologyCode"]}_marker'
     #     # marker_obj_attributes["topology"] = "VertexSet"
