@@ -2,14 +2,18 @@
 PZero© Andrea Bistacchi"""
 
 import os
-import uuid
+
+from uuid import uuid4
+
 from copy import deepcopy
 
-import xarray as xr
+from xarray import open_rasterio as xr_open_rasterio
+
 from numpy import any as np_any
 from numpy import asarray as np_asarray
 from numpy import meshgrid as np_meshgrid
 from numpy import nan as np_nan
+
 from pyvista import StructuredGrid as pv_StructuredGrid
 
 from pzero.collections.dom_collection import DomCollection
@@ -28,7 +32,7 @@ from pzero.entities_factory import DEM
 #         """Read raster file format (geotiff) with xarray and rasterio and create DEM structured grid.
 #             Helpful: http://xarray.pydata.org/en/stable/auto_gallery/plot_rasterio.html
 #             https://github.com/pyvista/pyvista-support/issues/205, thanks to Bane Sullivan"""
-#         data = xr.open_rasterio(self.input_file)
+#         data = xr_open_rasterio(self.input_file)
 #         values = np_asarray(data)
 #         nans = values == data.nodatavals
 #         if np_any(nans):
@@ -53,7 +57,7 @@ def dem2vtk(self=None, in_file_name=None, collection=None):
     """Read raster file format (geotiff) with xarray and rasterio and create DEM structured grid.
     Helpful: http://xarray.pydata.org/en/stable/auto_gallery/plot_rasterio.html
     https://github.com/pyvista/pyvista-support/issues/205, thanks to Bane Sullivan"""
-    data = xr.open_rasterio(in_file_name)
+    data = xr_open_rasterio(in_file_name)
     values = np_asarray(data)
     nans = values == data.nodatavals
     if np_any(nans):
@@ -69,7 +73,7 @@ def dem2vtk(self=None, in_file_name=None, collection=None):
     """Create dictionary."""
     if collection == "DEMs and DOMs":
         curr_obj_attributes = deepcopy(DomCollection.entity_dict)
-        curr_obj_attributes["uid"] = str(uuid.uuid4())
+        curr_obj_attributes["uid"] = str(uuid4())
         curr_obj_attributes["name"] = os.path.basename(in_file_name)
         curr_obj_attributes["topology"] = "DEM"
         curr_obj_attributes["texture_uids"] = []
@@ -80,7 +84,7 @@ def dem2vtk(self=None, in_file_name=None, collection=None):
         self.dom_coll.add_entity_from_dict(entity_dict=curr_obj_attributes)
     elif collection == "Fluid contacts":
         curr_obj_attributes = deepcopy(FluidsCollection.entity_dict)
-        curr_obj_attributes["uid"] = str(uuid.uuid4())
+        curr_obj_attributes["uid"] = str(uuid4())
         curr_obj_attributes["name"] = os.path.basename(in_file_name)
         curr_obj_attributes["role"] = "raster"
         curr_obj_attributes["texture_uids"] = []

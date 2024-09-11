@@ -1,14 +1,19 @@
 """fluids_collection.py
 PZero© Andrea Bistacchi"""
 
-import uuid
+from uuid import uuid4
+
 from copy import deepcopy
 
-import numpy as np
-import pandas as pd
-from PyQt5.QtCore import QAbstractTableModel, Qt, QVariant
-from numpy import ndarray
-from pandas import DataFrame
+from numpy import ndarray as np_ndarray
+from numpy import set_printoptions as np_set_printoptions
+from numpy import round as np_round
+from numpy import random as np_random
+
+from pandas import DataFrame as pd_DataFrame
+from pandas import set_option as pd_set_option
+from pandas import unique as pd_unique
+
 from vtkmodules.vtkCommonDataModel import vtkDataObject
 
 from .AbstractCollection import BaseCollection
@@ -18,11 +23,11 @@ pd_desired_width = 800
 pd_max_columns = 20
 pd_show_precision = 4
 pd_max_colwidth = 80
-pd.set_option("display.width", pd_desired_width)
-np.set_printoptions(linewidth=pd_desired_width)
-pd.set_option("display.max_columns", pd_max_columns)
-pd.set_option("display.precision", pd_show_precision)
-pd.set_option("display.max_colwidth", pd_max_colwidth)
+pd_set_option("display.width", pd_desired_width)
+np_set_printoptions(linewidth=pd_desired_width)
+pd_set_option("display.max_columns", pd_max_columns)
+pd_set_option("display.precision", pd_show_precision)
+pd_set_option("display.max_colwidth", pd_max_colwidth)
 
 
 class FluidsCollection(BaseCollection):
@@ -79,11 +84,11 @@ class FluidsCollection(BaseCollection):
 
         self.initialize_df()
 
-    def add_entity_from_dict(self, entity_dict: DataFrame = None, color: ndarray = None):
+    def add_entity_from_dict(self, entity_dict: pd_DataFrame = None, color: np_ndarray = None):
         """Add a entity from a dictionary shaped as self.entity_dict."""
         # Create a new uid if it is not included in the dictionary.
         if not entity_dict["uid"]:
-            entity_dict["uid"] = str(uuid.uuid4())
+            entity_dict["uid"] = str(uuid4())
         # Append new row to dataframe. Note that the 'append()' method for Pandas dataframes DOES NOT
         # work in place, hence a NEW dataframe is created every time and then substituted to the old one.
         self.df = self.df.append(entity_dict, ignore_index=True)
@@ -103,7 +108,7 @@ class FluidsCollection(BaseCollection):
             if color:
                 R, G, B = color
             else:
-                R, G, B = np.round(np.random.random(3) * 255)
+                R, G, B = np_round(np_random.random(3) * 255)
             # Use default generic values for legend.
             self.parent.fluids_legend_df = self.parent.fluids_legend_df.append(
                 {
@@ -223,9 +228,9 @@ class FluidsCollection(BaseCollection):
                         "time": 0.0,
                         "sequence": "strati_0",
                         "scenario": scenario,
-                        "color_R": round(np.random.random() * 255),
-                        "color_G": round(np.random.random() * 255),
-                        "color_B": round(np.random.random() * 255),
+                        "color_R": round(np_random.random() * 255),
+                        "color_G": round(np_random.random() * 255),
+                        "color_B": round(np_random.random() * 255),
                         "line_thick": 2.0,
                     },
                     ignore_index=True,
@@ -239,9 +244,9 @@ class FluidsCollection(BaseCollection):
         """Remove unused roles / features from a legend table."""
         # legend_updated is used to record if the table is updated or not.
         legend_updated = False
-        roles_in_legend = pd.unique(self.parent.fluids_legend_df["role"])
-        features_in_legend = pd.unique(self.parent.fluids_legend_df["feature"])
-        scenarios_in_legend = pd.unique(self.parent.fluids_legend_df["scenario"])
+        roles_in_legend = pd_unique(self.parent.fluids_legend_df["role"])
+        features_in_legend = pd_unique(self.parent.fluids_legend_df["feature"])
+        scenarios_in_legend = pd_unique(self.parent.fluids_legend_df["scenario"])
         for role in roles_in_legend:
             if self.parent.fluids_coll.df.loc[
                 self.parent.fluids_coll.df["role"] == role

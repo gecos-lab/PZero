@@ -1,13 +1,14 @@
 """mesh3d_collection.py
 PZero© Andrea Bistacchi"""
 
-import uuid
-from copy import deepcopy
+from uuid import uuid4
 
-from PyQt5.QtCore import QAbstractTableModel, Qt, QVariant
-from numpy import set_printoptions as np_set_set_printoptions, ndarray
-from pandas import DataFrame as pd_DataFrame, DataFrame
+from numpy import set_printoptions as np_set_set_printoptions
+from numpy import ndarray as np_ndarray
+
+from pandas import DataFrame as pd_DataFrame
 from pandas import set_option as pd_set_option
+
 from vtkmodules.vtkCommonDataModel import vtkDataObject
 
 from .AbstractCollection import BaseCollection
@@ -61,11 +62,11 @@ class Mesh3DCollection(BaseCollection):
 
     # =================================== Obligatory methods ===========================================
 
-    def add_entity_from_dict(self, entity_dict: DataFrame = None, color: ndarray = None):
+    def add_entity_from_dict(self, entity_dict: pd_DataFrame = None, color: np_ndarray = None):
         """Add an entity from a dictionary shaped as self.entity_dict."""
         # Create a new uid if it is not included in the dictionary.
         if not entity_dict["uid"]:
-            entity_dict["uid"] = str(uuid.uuid4())
+            entity_dict["uid"] = str(uuid4())
         # Append new row to dataframe. Note that the 'append()' method for Pandas dataframes DOES NOT
         # work in place, hence a NEW dataframe is created every time and then substituted to the old one.
         self.df = self.df.append(entity_dict, ignore_index=True)

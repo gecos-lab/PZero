@@ -1,9 +1,16 @@
+"""helper_functions.py
+PZero© Andrea Bistacchi"""
+
 import datetime
+
 import os
+
 from csv import Sniffer
 
-import pandas as pd
+from pandas import DataFrame as pd_DataFrame
+
 from PIL import Image
+
 from numpy import array as np_array
 from numpy import corrcoef as np_corrcoef
 from numpy import cos as np_cos
@@ -63,7 +70,7 @@ def profiler(path, iter):
                 diff = (end - start).total_seconds()
                 diff_list.append(diff)
                 print(f"cycle {i + 1} completed. It took {diff} seconds")
-            raw_time_diff = pd.DataFrame(diff_list, columns=["time diff [s]"])
+            raw_time_diff = pd_DataFrame(diff_list, columns=["time diff [s]"])
             raw_time_diff.to_csv(
                 os.path.join(
                     root, f'{title}_raw{date.strftime("%d_%m_%Y-%H%M%S")}.csv'

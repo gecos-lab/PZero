@@ -1,13 +1,11 @@
 """helper_dialogs.py
 PZero© Andrea Bistacchi"""
 
-# from .pc2vtk import pc2vtk
 from difflib import SequenceMatcher
+
 from os import path as os_path
 
 from PyQt5.QtCore import QEventLoop, Qt, QAbstractTableModel
-
-# from PyQt5.QtWidgets import QSpinBox, QDoubleSpinBox
 from PyQt5.QtGui import QColor
 from PyQt5.QtWidgets import (
     QMessageBox,
@@ -27,16 +25,14 @@ from PyQt5.QtWidgets import (
     QApplication,
     QFormLayout,
 )
+
 from laspy import open as lp_open
 
-# from numpy import inf as np_inf
 from numpy import c_ as np_c_
-from pandas import DataFrame as pd_DataFrame
 
-# from .assign_ui import Ui_AssignWindow
-# from .helper_functions import profiler
-# from .entities_factory import PolyData
+from pandas import DataFrame as pd_DataFrame
 from pandas import read_csv as pd_read_csv
+
 from pyvistaqt import QtInteractor as pvQtInteractor
 
 from pzero.ui.import_window_ui import Ui_ImportOptionsWindow

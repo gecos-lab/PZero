@@ -1,14 +1,16 @@
+"""helper_widgets.py
+PZero© Andrea Bistacchi"""
+
 from math import degrees, atan2, sqrt, asin
 
 from numpy import array as np_array
 from numpy import flip as np_flip
+
 from pyvista import lines_from_points as pv_line_from_points
 from pyvista import wrap as pv_wrap
+
 from vtkmodules.vtkCommonCore import vtkCommand
-from vtkmodules.vtkInteractionWidgets import (
-    vtkContourWidget,
-    vtkLinearContourLineInterpolator,
-)
+from vtkmodules.vtkInteractionWidgets import vtkContourWidget, vtkLinearContourLineInterpolator
 
 
 class Tracer(vtkContourWidget):

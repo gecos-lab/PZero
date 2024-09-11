@@ -1,15 +1,16 @@
 """gocad2vtk.py
 PZero© Andrea Bistacchi"""
 
-import uuid
+from uuid import uuid4
+
 from copy import deepcopy
 
 from numpy import column_stack as np_column_stack
 from numpy import shape as np_shape
-from numpy import sign as np_sign
 from numpy import rad2deg as np_rad2deg
 from numpy import arctan2 as np_arctan2
 from numpy import sqrt as np_sqrt
+
 from vtk import (
     vtkPoints,
     vtkCellArray,
@@ -152,7 +153,7 @@ def gocad2vtk(self=None, in_file_name=None, uid_from_name=None):
             curr_obj_dict["scenario"] = scenario_default
 
             """Store uid of new entity."""
-            curr_obj_dict["uid"] = str(uuid.uuid4())
+            curr_obj_dict["uid"] = str(uuid4())
 
             """Create the empty vtk object with class = topology."""
             if clean_line[1] == "VSet":
@@ -498,7 +499,7 @@ def gocad2vtk_section(self=None,
             curr_obj_dict["x_section"] = x_section_uid
             curr_obj_dict["scenario"] = scenario_default
             # Store uid and topological type of new entity.
-            curr_obj_dict["uid"] = str(uuid.uuid4())
+            curr_obj_dict["uid"] = str(uuid4())
             input_uids.append(curr_obj_dict["uid"])
             # Create the empty vtk object with class = topological_type.
             if clean_line[1] == "VSet":
@@ -861,7 +862,7 @@ def gocad2vtk_boundary(self=None, in_file_name=None, uid_from_name=None):
             # curr_obj_dict['scenario'] = scenario_default
 
             """Store uid and topological type of new entity."""
-            curr_obj_dict["uid"] = str(uuid.uuid4())
+            curr_obj_dict["uid"] = str(uuid4())
 
             """Create the empty vtk object with class = topology."""
             # if clean_line[1] == 'VSet':

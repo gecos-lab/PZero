@@ -1,8 +1,10 @@
 """gocad2vtk.py
 PZero© Andrea Bistacchi"""
 
-import ezdxf
+from ezdxf import new as ezdxf_new
+
 from pandas import DataFrame as pd_DataFrame
+
 from vtkmodules.util import numpy_support
 
 from pzero.entities_factory import TriSurf
@@ -23,7 +25,7 @@ def vtk2dxf(self=None, out_dir_name=None):
             parts = self.geol_coll.get_uid_vtk_obj(uid).split_parts()
             # print(len(parts))
             for i, part in enumerate(parts):
-                dxf_out = ezdxf.new()
+                dxf_out = ezdxf_new()
                 dxf_model = dxf_out.modelspace()
                 # print(part)
                 df = pd_DataFrame()
@@ -100,7 +102,7 @@ def vtk2dxf(self=None, out_dir_name=None):
 
             # """Exports a triangulated surface to a DXF polyface (a subclass of POLYLINE that on get_mode() returns 'AcDbPolyFaceMesh'."""
             # if isinstance(self.geol_coll.get_uid_vtk_obj(uid), TriSurf):
-            #     dxf_out = ezdxf.new('R2000')  # MESH requires DXF R2000 or later
+            #     dxf_out = ezdxf_new('R2000')  # MESH requires DXF R2000 or later
             #     dxf_model = dxf_out.modelspace()
             #     vtk_entity = self.geol_coll.get_uid_vtk_obj(uid)
             #     """polyface"""
@@ -113,7 +115,7 @@ def vtk2dxf(self=None, out_dir_name=None):
 
             # """Exports a polyline to a DXF POLYLINE object."""
             # if isinstance(self.geol_coll.get_uid_vtk_obj(uid), PolyLine):
-            #     dxf_out = ezdxf.new()
+            #     dxf_out = ezdxf_new()
             #     dxf_model = dxf_out.modelspace()
             #     vtk_entity = self.geol_coll.get_uid_vtk_obj(uid)
             #     for i in range(vtk_entity.GetNumberOfCells()):
@@ -147,7 +149,7 @@ def vtk2dxf(self=None, out_dir_name=None):
         R = legend["color_R"]
         G = legend["color_G"]
         B = legend["color_B"]
-        dxf_out = ezdxf.new()
+        dxf_out = ezdxf_new()
         dxf_model = dxf_out.modelspace()
         # print(part)
         df = pd_DataFrame()

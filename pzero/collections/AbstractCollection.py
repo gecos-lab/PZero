@@ -1,10 +1,13 @@
 from PyQt5.QtCore import QAbstractTableModel, Qt, QVariant, QSortFilterProxyModel
+
 from abc import abstractmethod, ABC
 
-from pandas import DataFrame
+from pandas import DataFrame as pd_DataFrame
+
 import numpy.typing as npt
-from numpy import ndarray
-import numpy as np
+from numpy import ndarray as np_ndarray
+from numpy import intp as np_intp
+
 from vtkmodules.vtkCommonDataModel import vtkDataObject
 
 
@@ -30,7 +33,7 @@ class BaseCollection(ABC):
         self._valid_roles: list = list()
         self._valid_topologies: list = list()
 
-        self._df: DataFrame = DataFrame()
+        self._df: pd_DataFrame = pd_DataFrame()
         self._editable_columns_names: list = list()
 
         self._table_model = BaseTableModel(self.parent, self)
@@ -38,7 +41,7 @@ class BaseCollection(ABC):
     # =========================== Abstract (obligatory) methods ================================
 
     @abstractmethod
-    def add_entity_from_dict(self, entity_dict: DataFrame = None, color: ndarray = None):
+    def add_entity_from_dict(self, entity_dict: pd_DataFrame = None, color: np_ndarray = None):
         """Add entity to collection from dictionary."""
         pass
 
@@ -168,12 +171,12 @@ class BaseCollection(ABC):
         self._editable_columns_names = editable_columns_names
 
     @property
-    def df(self) -> DataFrame:
+    def df(self) -> pd_DataFrame:
         """Get the dataframe of the Collection."""
         return self._df
 
     @df.setter
-    def df(self, df: DataFrame):
+    def df(self, df: pd_DataFrame):
         """Set the dataframe of the Collection."""
         self._df = df
 
@@ -203,7 +206,7 @@ class BaseCollection(ABC):
         return list(self.entity_dict.keys())
 
     @property
-    def editable_columns(self) -> npt.NDArray[np.intp]:
+    def editable_columns(self) -> npt.NDArray[np_intp]:
         """Here we use .columns.get_indexer to get indexes of the columns
         that we would like to be editable in the QTableView."""
         return self.df.columns.get_indexer(self.editable_columns_names)
@@ -249,7 +252,7 @@ class BaseCollection(ABC):
 
     def initialize_df(self):
         """Initialize Pandas dataframe."""
-        self.df = DataFrame(columns=self.entity_dict_keys)
+        self.df = pd_DataFrame(columns=self.entity_dict_keys)
 
     def get_topology_uids(self, topology: str = None) -> list:
         """Get list of uids of a given topology."""
@@ -368,7 +371,7 @@ class BaseCollection(ABC):
         """Returns the shape of the property data array."""
         return self.get_uid_vtk_obj(uid).get_point_data_shape(property_name)
 
-    def get_uid_property(self, uid: str = None, property_name: str = None) -> ndarray:
+    def get_uid_property(self, uid: str = None, property_name: str = None) -> np_ndarray:
         """Returns an array with property data."""
         return self.get_uid_vtk_obj(uid).get_point_data(property_name)
 

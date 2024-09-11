@@ -1,8 +1,13 @@
+"""lxml2vtk.py
+PZero© Andrea Bistacchi"""
+
 from datetime import datetime
 
-import lxml.etree as et
+import lxml.etree as lxml_et
+
 from numpy import shape as np_shape
 from numpy import zeros as np_zeros
+
 from vtkmodules.util import numpy_support
 
 from pzero.entities_factory import TriSurf
@@ -13,7 +18,7 @@ def vtk2lxml(self, out_dir_name=None):
 
     date = datetime.now()
 
-    landxml = et.Element(
+    landxml = lxml_et.Element(
         "LandXML",
         xmlns="http://www.landxml.org/schema/LandXML-1.2",
         nsmap=namespace,
@@ -23,9 +28,9 @@ def vtk2lxml(self, out_dir_name=None):
         date=date.strftime("%Y-%m-%d"),
         version="1.2",
     )
-    units = et.SubElement(landxml, "Units")
+    units = lxml_et.SubElement(landxml, "Units")
 
-    metric = et.SubElement(
+    metric = lxml_et.SubElement(
         units,
         "Metric",
         areaUnit="squareMeter",
@@ -35,7 +40,7 @@ def vtk2lxml(self, out_dir_name=None):
         pressureUnit="milliBars",
     )
 
-    surfaces = et.SubElement(
+    surfaces = lxml_et.SubElement(
         landxml, "Surfaces"
     )  # all of the different surfaces are grouped here
 
@@ -61,17 +66,17 @@ def vtk2lxml(self, out_dir_name=None):
                 else:
                     topology = "grid"
 
-                surface = et.SubElement(
+                surface = lxml_et.SubElement(
                     surfaces, "Surface", name=f"{uid}_part{i}"
                 )  # we can define the single surface
-                source_data = et.SubElement(surface, "SourceData")
-                definition = et.SubElement(
+                source_data = lxml_et.SubElement(surface, "SourceData")
+                definition = lxml_et.SubElement(
                     surface, "Definition", surfType=topology
                 )  # for each surface we must define the topology
-                pnts = et.SubElement(
+                pnts = lxml_et.SubElement(
                     definition, "Pnts"
                 )  # each surface is composed by a "points" (Pnts) element
-                faces = et.SubElement(definition, "Faces")  # and faces
+                faces = lxml_et.SubElement(definition, "Faces")  # and faces
                 for c_id in range(n_cells):
                     p_data = numpy_support.vtk_to_numpy(
                         part.GetCell(c_id).GetPoints().GetData()
@@ -101,18 +106,18 @@ def vtk2lxml(self, out_dir_name=None):
                             # yxz = f'{np.around(p[0],decimals=6)+np.random.randn()/100} {np.around(p[1],decimals=6)+np.random.randn()/100} {p[2]}'
 
                             xyz = f"{p[0]} {p[1]} {p[2]}"
-                            pnt = et.SubElement(pnts, "P", id=str(id))
+                            pnt = lxml_et.SubElement(pnts, "P", id=str(id))
                             pnt.text = xyz
                             id += 1
 
                     # conn_list.append(point_id_list)
 
-                    face = et.SubElement(faces, "F")
+                    face = lxml_et.SubElement(faces, "F")
                     face.text = (
                         f"{point_id_list[0]} {point_id_list[1]} {point_id_list[2]}"
                     )
 
-    tree = et.ElementTree(landxml)
+    tree = lxml_et.ElementTree(landxml)
 
     tree.write(
         f"{out_dir_name}/out.xml",

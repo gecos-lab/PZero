@@ -3,15 +3,16 @@ PZero© Andrea Bistacchi"""
 
 from vtkmodules.vtkCommonDataModel import vtkDataObject
 
-# Import as much as possible as from <module> import <class> or <class as ...>
 from copy import deepcopy
 from uuid import uuid4 as uuid_uuid4
 
-from PyQt5.QtCore import QAbstractTableModel, Qt, QVariant
-from numpy import array as np_array, ndarray
+from numpy import array as np_array
+from numpy import ndarray as np_ndarray
 from numpy import set_printoptions as np_set_printoptions
-from pandas import DataFrame as pd_DataFrame, DataFrame
+
+from pandas import DataFrame as pd_DataFrame
 from pandas import set_option as pd_set_option
+
 from vtk import vtkPoints
 
 from pzero.entities_factory import PolyLine, TriSurf
@@ -195,7 +196,7 @@ class BoundaryCollection(BaseCollection):
 
     # =================================== Obligatory methods ===========================================
 
-    def add_entity_from_dict(self, entity_dict: DataFrame = None, color: ndarray = None):
+    def add_entity_from_dict(self, entity_dict: pd_DataFrame = None, color: np_ndarray = None):
         """Add an entity from a dictionary shaped as self.entity_dict."""
         # Create a new uid if it is not included in the dictionary.
         if not entity_dict["uid"]:

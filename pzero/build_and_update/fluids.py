@@ -1,6 +1,7 @@
 from PyQt5.QtWidgets import QTreeWidgetItem, QComboBox
-from pandas import unique as pd_unique
 from PyQt5.QtCore import Qt
+
+from pandas import unique as pd_unique
 
 
 # Methods used to build and update the FLUID and FLUID TOPOLOGY trees __________________???

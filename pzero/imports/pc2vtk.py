@@ -20,7 +20,7 @@ from numpy import uint8 as np_uint8
 from numpy import where as np_where
 
 # import pyvista as pv
-from pandas import DataFrame as pd_df
+from pandas import DataFrame as pd_DataFrame
 from pandas import read_csv as pd_read_csv
 from pandas import to_numeric as pd_to_numeric
 from vtk import vtkPoints
@@ -83,9 +83,9 @@ def pc2vtk(
             else:
                 prop_dict[dim] = np_c_[las_data[dim]].flatten()
         if row_range:
-            input_df = pd_df.from_dict(prop_dict).iloc[row_range, usecols]
+            input_df = pd_DataFrame.from_dict(prop_dict).iloc[row_range, usecols]
         else:
-            input_df = pd_df.from_dict(prop_dict).iloc[:, usecols]
+            input_df = pd_DataFrame.from_dict(prop_dict).iloc[:, usecols]
         input_df.columns = col_names
 
     else:

@@ -2,16 +2,20 @@
 PZero© Andrea Bistacchi"""
 
 import os
-import uuid
+
+from uuid import uuid4
+
 from copy import deepcopy
 
-import rasterio as rio
+from rasterio import open as rio_open
 import rasterio.plot as rio_plt
+
 from numpy import abs as np_abs
 from numpy import cos as np_cos
 from numpy import dstack as np_dstack
 from numpy import pi as np_pi
 from numpy import sin as np_sin
+
 from vtkmodules.util import numpy_support
 
 from pzero.collections.image_collection import ImageCollection
@@ -27,7 +31,7 @@ def geo_image2vtk(self=None, in_file_name=None):
         The image is not read here but will be read afterwards with geo_image.read()
         http://xarray.pydata.org/en/stable/io.html#rasterio
         http://www-2.unipv.it/compmech/seminars/group/VTK-VMTK.pdf"""
-        geo_image = rio.open(in_file_name)
+        geo_image = rio_open(in_file_name)
         """Georeferencing variables as read by rasterio."""
         img_width_px = geo_image.width
         img_height_px = geo_image.height
@@ -96,7 +100,7 @@ def geo_image2vtk(self=None, in_file_name=None):
 
         """Create dictionary."""
         curr_obj_dict = deepcopy(ImageCollection.entity_dict)
-        curr_obj_dict["uid"] = str(uuid.uuid4())
+        curr_obj_dict["uid"] = str(uuid4())
         curr_obj_dict["name"] = os.path.basename(in_file_name)
         curr_obj_dict["topology"] = "MapImage"
         if geo_image.count == 1:
@@ -123,7 +127,7 @@ def xs_image2vtk(self=None, in_file_name=None, x_section_uid=None):
     The image is not read here but will be read afterwards with xs_image.read()
     http://xarray.pydata.org/en/stable/io.html#rasterio
     http://www-2.unipv.it/compmech/seminars/group/VTK-VMTK.pdf"""
-    xs_image = rio.open(in_file_name)
+    xs_image = rio_open(in_file_name)
     """Image size as read by rasterio."""
     dim_W = xs_image.width
     dim_Z = xs_image.height
@@ -216,7 +220,7 @@ def xs_image2vtk(self=None, in_file_name=None, x_section_uid=None):
     print("vtk_image:\n", vtk_image)
     """Create dictionary."""
     curr_obj_dict = deepcopy(ImageCollection.entity_dict)
-    curr_obj_dict["uid"] = str(uuid.uuid4())
+    curr_obj_dict["uid"] = str(uuid4())
     curr_obj_dict["name"] = os.path.basename(in_file_name)
     curr_obj_dict["topology"] = "XsImage"
     if xs_image.count == 1:

@@ -1,6 +1,8 @@
 from PyQt5.QtWidgets import QTreeWidgetItem, QComboBox
-from pandas import unique as pd_unique
 from PyQt5.QtCore import Qt
+
+from pandas import unique as pd_unique
+
 
 # ================================  build and update trees and tables ================================
 

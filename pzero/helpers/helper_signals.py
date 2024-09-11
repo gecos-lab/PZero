@@ -1,7 +1,10 @@
-# This function disconnect all the signals of a QObject
-def disconnect_all_signals(signals):
-    # for each signal inside the list, disconnect it
-    for signal in signals:
-        signal.disconnect()
+"""helper_signals.py
+PZero© Andrea Bistacchi"""
 
+
+def disconnect_all_signals(signals):
+    """This function disconnects all signals of a QObject"""
+    for signal in signals:
+        # for each signal inside the list, disconnect it
+        signal.disconnect()
     return

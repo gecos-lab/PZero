@@ -1,14 +1,12 @@
 """xsection_collection.py
 PZero© Andrea Bistacchi"""
+
 import uuid
 
-# import numpy_interface.dataset_adapter as dsa
-# import numpy_interface.algorithms as algs
 from copy import deepcopy
 
-import pandas as pd
-from PyQt5.QtCore import QAbstractTableModel, Qt, QVariant
-from numpy import array as np_array, ndarray
+from numpy import array as np_array
+from numpy import ndarray as np_ndarray
 from numpy import cos as np_cos
 from numpy import deg2rad as np_deg2rad
 from numpy import dot as np_dot
@@ -19,11 +17,15 @@ from numpy import set_printoptions as np_set_printoptions
 from numpy import sin as np_sin
 from numpy import sqrt as np_sqrt
 from numpy.linalg import inv as np_linalg_inv
-from pandas import DataFrame
+
+from pandas import DataFrame as pd_DataFrame
+from pandas import set_option as pd_set_option
+from pandas import read_csv as pd_read_csv
+from pandas import unique as pd_unique
+
 from vtk import vtkPoints, vtkCellArray, vtkLine
 from vtkmodules.vtkCommonDataModel import vtkDataObject
 
-# from PyQt5.QtGui import QStandardItem, QImage
 from pzero.entities_factory import Plane, XsPolyLine
 from pzero.helpers.helper_dialogs import general_input_dialog, open_file_dialog
 from pzero.helpers.helper_functions import auto_sep
@@ -37,11 +39,11 @@ pd_desired_width = 800
 pd_max_columns = 20
 pd_show_precision = 4
 pd_max_colwidth = 80
-pd.set_option("display.width", pd_desired_width)
+pd_set_option("display.width", pd_desired_width)
 np_set_printoptions(linewidth=pd_desired_width)
-pd.set_option("display.max_columns", pd_max_columns)
-pd.set_option("display.precision", pd_show_precision)
-pd.set_option("display.max_colwidth", pd_max_colwidth)
+pd_set_option("display.max_columns", pd_max_columns)
+pd_set_option("display.precision", pd_show_precision)
+pd_set_option("display.max_colwidth", pd_max_colwidth)
 
 # =================================== Methods used to create cross sections ===========================================
 
@@ -158,7 +160,7 @@ def sections_from_file(self):
     # Read GOCAD ASCII (.pl) or ASCII files (.dat) to extract the data necessary to create a section (or
     # multiple sections). The necessary keys are defined in the section_dict_updt dict.
     # For GOCAD ASCII the file is parsed for every line searching for key words that define the line containing the data.
-    # For normal ASCII files exported from MOVE the data is registered as a csv and so the pd.read_csv function can be
+    # For normal ASCII files exported from MOVE the data is registered as a csv and so the pd_read_csv function can be
     # used. The separator is automatically extracted using csv.Sniffer() (auto_sep helper function).
     # For both importing methods the user must define the top and bottom values of the section.
 
@@ -233,8 +235,8 @@ def sections_from_file(self):
                 title="XSection from files", input_dict=section_dict_in
             )
             sep = auto_sep(file)
-            pd_df = pd.read_csv(file, sep=sep)
-            unique_traces = pd.unique(pd_df["Name"])
+            pd_df = pd_read_csv(file, sep=sep)
+            unique_traces = pd_unique(pd_df["Name"])
             for trace in unique_traces:
                 section_dict["name"] = trace
                 section_dict["base_x"] = pd_df.loc[
@@ -261,7 +263,7 @@ def sections_from_file(self):
 
         elif extension == ".csv":
             sep = auto_sep(file)
-            pd_df = pd.read_csv(file, sep=sep)
+            pd_df = pd_read_csv(file, sep=sep)
             for index, sec in pd_df.iterrows():
                 section_dict["name"] = sec["name"]
                 section_dict["base_x"] = sec["base_x"]
@@ -331,7 +333,7 @@ class XSectionCollection(BaseCollection):
         self.collection_name = 'xsection'
         self.initialize_df()
 
-    def add_entity_from_dict(self, entity_dict: DataFrame = None, color: ndarray = None):
+    def add_entity_from_dict(self, entity_dict: pd_DataFrame = None, color: np_ndarray = None):
         """Add new cross-section from a suitable dictionary shaped like self.entity_dict."""
         # Create a new uid if it is not included in the dictionary.
         if not entity_dict["uid"]:

@@ -2617,7 +2617,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 if self.shown_table == "tabGeology":
                     entity = self.geol_coll.get_uid_vtk_obj(uid)
 
-                    df = pd.DataFrame()
+                    df = pd_DataFrame()
                     if isinstance(entity, TriSurf):
                         for key in entity.get_field_data_keys():
                             if key == "Normals" or key == "Centers":
