@@ -1446,7 +1446,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 new_geol_legend_df = pd_read_json(
                     in_dir_name + "/geol_legend_table.json",
                     orient="index",
-                    dtype=Legend.legend_type_dict,
+                    dtype=Legend.legend_dict_types,
                 )
                 # in the branch called "Riccardo", a control to set opacity to 100 in
                 # case it was null was added here, but it is most problably useless
@@ -1454,7 +1454,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 new_geol_legend_df = pd_read_csv(
                     in_dir_name + "/geol_legend_table.csv",
                     encoding="utf-8",
-                    dtype=Legend.legend_type_dict,
+                    dtype=Legend.legend_dict_types,
                     keep_default_na=False,
                 )
             if not new_geol_legend_df.empty:
@@ -1479,13 +1479,13 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 new_well_legend_df = pd_read_json(
                     in_dir_name + "/well_legend_table.json",
                     orient="index",
-                    dtype=Legend.legend_type_dict,
+                    dtype=Legend.legend_dict_types,
                 )
             else:
                 new_well_legend_df = pd_read_csv(
                     in_dir_name + "/well_legend_table.csv",
                     encoding="utf-8",
-                    dtype=Legend.legend_type_dict,
+                    dtype=Legend.legend_dict_types,
                     keep_default_na=False,
                 )
             if not new_well_legend_df.empty:
@@ -1507,13 +1507,13 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 new_fluids_legend_df = pd_read_json(
                     in_dir_name + "/fluids_legend_table.json",
                     orient="index",
-                    dtype=Legend.legend_type_dict,
+                    dtype=Legend.legend_dict_types,
                 )
             else:
                 new_fluids_legend_df = pd_read_csv(
                     in_dir_name + "/fluids_legend_table.csv",
                     encoding="utf-8",
-                    dtype=Legend.legend_type_dict,
+                    dtype=Legend.legend_dict_types,
                     keep_default_na=False,
                 )
             if not new_fluids_legend_df.empty:
@@ -1537,13 +1537,13 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 new_backgrounds_legend_df = pd_read_json(
                     in_dir_name + "/backgrounds_legend_table.json",
                     orient="index",
-                    dtype=Legend.legend_type_dict,
+                    dtype=Legend.legend_dict_types,
                 )
             else:
                 new_backgrounds_legend_df = pd_read_csv(
                     in_dir_name + "/backgrounds_legend_table.csv",
                     encoding="utf-8",
-                    dtype=Legend.legend_type_dict,
+                    dtype=Legend.legend_dict_types,
                     keep_default_na=False,
                 )
             if not new_backgrounds_legend_df.empty:
@@ -1564,13 +1564,13 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 new_others_legend_df = pd_read_json(
                     in_dir_name + "/others_legend_table.json",
                     orient="index",
-                    dtype=Legend.legend_type_dict,
+                    dtype=Legend.legend_dict_types,
                 )
             else:
                 new_others_legend_df = pd_read_csv(
                     in_dir_name + "/others_legend_table.csv",
                     encoding="utf-8",
-                    dtype=Legend.legend_type_dict,
+                    dtype=Legend.legend_dict_types,
                     keep_default_na=False,
                 )
             in_keys = set(self.others_legend_df.keys())
@@ -1588,7 +1588,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 new_prop_legend_df = pd_read_json(
                     in_dir_name + "/prop_legend_df.json",
                     orient="index",
-                    dtype=PropertiesCMaps.prop_cmap_type_dict,
+                    dtype=PropertiesCMaps.prop_cmap_dict_types,
                 )
                 if not new_prop_legend_df.empty:
                     self.prop_legend_df = new_prop_legend_df

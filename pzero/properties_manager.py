@@ -43,7 +43,7 @@ class PropertiesCMaps(QObject):
         "colormap": ["rainbow", "rainbow", "terrain"],
     }
 
-    prop_cmap_type_dict = {"property_name": str, "colormap": str}
+    prop_cmap_dict_types = {"property_name": str, "colormap": str}
 
     # List of all  matplotlib, colorcet, or cmocean colormaps used by PyVista
     # https://docs.pyvista.org/examples/02-plot/cmap.html

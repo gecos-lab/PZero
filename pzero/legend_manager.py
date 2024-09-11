@@ -70,7 +70,7 @@ class Legend(QObject):
         "opacity": 100,
     }
 
-    legend_type_dict = {
+    legend_dict_types = {
         "role": str,
         "feature": str,
         "time": float,
