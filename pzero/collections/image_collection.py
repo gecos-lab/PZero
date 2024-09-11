@@ -44,7 +44,7 @@ class ImageCollection(BaseCollection):
             "vtk_obj": None,
         }
 
-        self.entity_type_dict = {
+        self.entity_dict_types = {
             "uid": str,
             "name": str,
             "topology": str,

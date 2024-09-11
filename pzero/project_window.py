@@ -1609,13 +1609,13 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 new_xsect_coll_df = pd_read_json(
                     in_dir_name + "/xsection_table.json",
                     orient="index",
-                    dtype=XSectionCollection.entity_type_dict,
+                    dtype=XSectionCollection.entity_dict_types,
                 )
             else:
                 new_xsect_coll_df = pd_read_csv(
                     in_dir_name + "/xsection_table.csv",
                     encoding="utf-8",
-                    dtype=XSectionCollection.entity_type_dict,
+                    dtype=XSectionCollection.entity_dict_types,
                     keep_default_na=False,
                 )
             if not new_xsect_coll_df.empty:
@@ -1639,13 +1639,13 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 new_dom_coll_df = pd_read_json(
                     in_dir_name + "/dom_table.json",
                     orient="index",
-                    dtype=DomCollection.entity_type_dict,
+                    dtype=DomCollection.entity_dict_types,
                 )
             else:
                 new_dom_coll_df = pd_read_csv(
                     in_dir_name + "/dom_table.csv",
                     encoding="utf-8",
-                    dtype=DomCollection.entity_type_dict,
+                    dtype=DomCollection.entity_dict_types,
                     keep_default_na=False,
                 )
             if not new_dom_coll_df.empty:
@@ -1714,13 +1714,13 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 new_image_coll_df = pd_read_json(
                     in_dir_name + "/image_table.json",
                     orient="index",
-                    dtype=ImageCollection.entity_type_dict,
+                    dtype=ImageCollection.entity_dict_types,
                 )
             else:
                 new_image_coll_df = pd_read_csv(
                     in_dir_name + "/image_table.csv",
                     encoding="utf-8",
-                    dtype=ImageCollection.entity_type_dict,
+                    dtype=ImageCollection.entity_dict_types,
                     keep_default_na=False,
                 )
             if not new_image_coll_df.empty:
@@ -1789,13 +1789,13 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 new_mesh3d_coll_df = pd_read_json(
                     in_dir_name + "/mesh3d_table.json",
                     orient="index",
-                    dtype=Mesh3DCollection.entity_type_dict,
+                    dtype=Mesh3DCollection.entity_dict_types,
                 )
             else:
                 new_mesh3d_coll_df = pd_read_csv(
                     in_dir_name + "/mesh3d_table.csv",
                     encoding="utf-8",
-                    dtype=Mesh3DCollection.entity_type_dict,
+                    dtype=Mesh3DCollection.entity_dict_types,
                     keep_default_na=False,
                 )
             if not new_mesh3d_coll_df.empty:
@@ -1852,13 +1852,13 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 new_boundary_coll_df = pd_read_json(
                     in_dir_name + "/boundary_table.json",
                     orient="index",
-                    dtype=BoundaryCollection.entity_type_dict,
+                    dtype=BoundaryCollection.entity_dict_types,
                 )
             else:
                 new_boundary_coll_df = pd_read_csv(
                     in_dir_name + "/boundary_table.csv",
                     encoding="utf-8",
-                    dtype=BoundaryCollection.entity_type_dict,
+                    dtype=BoundaryCollection.entity_dict_types,
                     keep_default_na=False,
                 )
             if not new_boundary_coll_df.empty:
@@ -1898,13 +1898,13 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 new_well_coll_df = pd_read_json(
                     in_dir_name + "/well_table.json",
                     orient="index",
-                    dtype=WellCollection.entity_type_dict,
+                    dtype=WellCollection.entity_dict_types,
                 )
             else:
                 new_well_coll_df = pd_read_csv(
                     in_dir_name + "/well_table.csv",
                     encoding="utf-8",
-                    dtype=WellCollection.entity_type_dict,
+                    dtype=WellCollection.entity_dict_types,
                     keep_default_na=False,
                 )
             if not new_well_coll_df.empty:
@@ -1946,13 +1946,13 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 new_geol_coll_df = pd_read_json(
                     in_dir_name + "/geological_table.json",
                     orient="index",
-                    dtype=GeologicalCollection.entity_type_dict,
+                    dtype=GeologicalCollection.entity_dict_types,
                 )
             else:
                 new_geol_coll_df = pd_read_csv(
                     in_dir_name + "/geological_table.csv",
                     encoding="utf-8",
-                    dtype=GeologicalCollection.entity_type_dict,
+                    dtype=GeologicalCollection.entity_dict_types,
                     keep_default_na=False,
                 )
             if not new_geol_coll_df.empty:
@@ -2006,13 +2006,13 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 new_fluids_coll_df = pd_read_json(
                     in_dir_name + "/fluids_table.json",
                     orient="index",
-                    dtype=FluidsCollection.entity_type_dict,
+                    dtype=FluidsCollection.entity_dict_types,
                 )
             else:
                 new_fluids_coll_df = pd_read_csv(
                     in_dir_name + "/fluids_table.csv",
                     encoding="utf-8",
-                    dtype=FluidsCollection.entity_type_dict,
+                    dtype=FluidsCollection.entity_dict_types,
                     keep_default_na=False,
                 )
             if not new_fluids_coll_df.empty:
@@ -2062,13 +2062,13 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 new_backgrounds_coll_df = pd_read_json(
                     in_dir_name + "/backgrounds_table.json",
                     orient="index",
-                    dtype=FluidsCollection.entity_type_dict,
+                    dtype=FluidsCollection.entity_dict_types,
                 )
             else:
                 new_backgrounds_coll_df = pd_read_csv(
                     in_dir_name + "/backgrounds_table.csv",
                     encoding="utf-8",
-                    dtype=FluidsCollection.entity_type_dict,
+                    dtype=FluidsCollection.entity_dict_types,
                     keep_default_na=False,
                 )
             if not new_backgrounds_coll_df.empty:

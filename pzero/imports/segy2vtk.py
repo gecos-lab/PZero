@@ -27,7 +27,7 @@ def segy2vtk(self=None, in_file_name=None):
         curr_object.ShallowCopy(segy_reader.GetOutput())
         curr_object.Modified()
         """Create dictionary."""
-        curr_obj_attributes = deepcopy(ImageCollection.image_entity_type_dict)
+        curr_obj_attributes = deepcopy(ImageCollection.image_entity_dict_types)
         curr_obj_attributes["uid"] = str(uuid.uuid4())
         curr_obj_attributes["name"] = os.path.basename(in_file_name)
         curr_obj_attributes["topology"] = "Seismics"

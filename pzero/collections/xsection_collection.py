@@ -304,7 +304,7 @@ class XSectionCollection(BaseCollection):
             "vtk_plane": None,  # None to avoid errors with deepcopy
             "vtk_frame": None,  # None to avoid errors with deepcopy
         }
-        self.entity_type_dict = {
+        self.entity_dict_types = {
             "uid": str,
             "name": str,
             "scenario": "undef",

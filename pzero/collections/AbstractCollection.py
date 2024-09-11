@@ -25,7 +25,7 @@ class BaseCollection(ABC):
         self._collection_name: str = ''
 
         self._entity_dict: dict = dict()
-        self._entity_type_dict: dict = dict()
+        self._entity_dict_types: dict = dict()
 
         self._valid_roles: list = list()
         self._valid_topologies: list = list()
@@ -128,14 +128,14 @@ class BaseCollection(ABC):
         self._entity_dict = entity_dict
 
     @property
-    def entity_type_dict(self) -> dict:
+    def entity_dict_types(self) -> dict:
         """Get the entity type dict of the Collection."""
-        return self._entity_type_dict
+        return self._entity_dict_types
 
-    @entity_type_dict.setter
-    def entity_type_dict(self, entity_type_dict: dict):
+    @entity_dict_types.setter
+    def entity_dict_types(self, entity_dict_types: dict):
         """Set the entity type dict of the Collection."""
-        self._entity_type_dict = entity_type_dict
+        self._entity_dict_types = entity_dict_types
 
     @property
     def valid_roles(self) -> list:
