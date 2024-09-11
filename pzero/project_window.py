@@ -32,7 +32,6 @@ from pzero.collections.image_collection import ImageCollection
 from pzero.collections.mesh3d_collection import Mesh3DCollection
 from pzero.collections.well_collection import WellCollection
 from pzero.collections.xsection_collection import XSectionCollection
-from pzero.collections.xsection_collection import sections_from_file
 from pzero.helpers.helper_dialogs import (
     options_dialog,
     save_file_dialog,
@@ -240,7 +239,6 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.actionImportGocad.triggered.connect(self.import_gocad)
         self.actionImportGocadXsection.triggered.connect(self.import_gocad_sections)
         self.actionImportGocadBoundary.triggered.connect(self.import_gocad_boundary)
-        self.actionImportSections.triggered.connect(self.import_sections)
         self.actionImportPyvista.triggered.connect(lambda: pyvista2vtk(self=self))
         self.actionImportPC.triggered.connect(self.import_PC)
         self.actionImportVedo.triggered.connect(lambda: vedo2vtk(self=self))
