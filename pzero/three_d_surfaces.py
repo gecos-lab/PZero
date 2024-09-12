@@ -2,10 +2,11 @@
 PZero© Andrea Bistacchi"""
 
 from copy import deepcopy
+
 from uuid import uuid4
 
-import pyvista as pv
-import vtk
+from pyvista import PolyData as pv_PolyData
+
 from numpy import abs as np_abs
 from numpy import around as np_around
 from numpy import cbrt as np_cbrt
@@ -18,12 +19,43 @@ from numpy import pi as np_pi
 from numpy import sin as np_sin
 from numpy import sqrt as np_sqrt
 from numpy import zeros as np_zeros
+
 from pandas import DataFrame as pd_DataFrame
-from scipy.interpolate import griddata
+
+from scipy.interpolate import griddata as sp_griddata
+
+from vtk import (vtkAppendPolyData,
+                 vtkDelaunay2D,
+                 vtkSurfaceReconstructionFilter,
+                 vtkPoints,
+                 vtkPolyData,
+                 vtkContourFilter,
+                 vtkSmoothPolyDataFilter,
+                 vtkLinearExtrusionFilter,
+                 vtkTransform,
+                 vtkTransformPolyDataFilter,
+                 vtkDecimatePro,
+                 vtkQuadricDecimation,
+                 vtkLinearSubdivisionFilter,
+                 vtkButterflySubdivisionFilter,
+                 vtkLoopSubdivisionFilter,
+                 vtkStripper,
+                 vtkCleanPolyData,
+                 vtkTriangleFilter,
+                 vtkImageData,
+                 vtkCutter,
+                 vtkPointInterpolator2D,
+                 vtkVoronoiKernel,
+                 vtkThresholdPoints,
+                 vtkDataObject,
+                 vtkPolyDataConnectivityFilter,
+                 vtkClipPolyData,
+                 )
 from vtkmodules.util import numpy_support
 from vtkmodules.vtkCommonDataModel import vtkBoundingBox
 
-from pzero.collections.geological_collection import GeologicalCollection
+from LoopStructural import GeologicalModel
+
 from pzero.helpers.helper_dialogs import (
     multiple_input_dialog,
     input_one_value_dialog,
@@ -46,13 +78,8 @@ from .entities_factory import (
     Attitude,
 )
 
-"""LoopStructural import(s)"""
-from LoopStructural import GeologicalModel
-
 
 def interpolation_delaunay_2d(self):
-
-
     """The vtkDelaunay2D object takes vtkPointSet (or any of its subclasses) as input and
     generates a vtkPolyData on output - typically a triangle mesh if Alpha value is not defined.
     Select the whole line of two or more vtkPointSet entities and start the algorithm.
@@ -131,7 +158,7 @@ def interpolation_delaunay_2d(self):
     surf_dict["vtk_obj"] = TriSurf()
     """Create a vtkAppendPolyData filter to merge all input vtk objects. Else, it does not seem possible to
     input multiple objects into vtkDelaunay2D"""
-    vtkappend = vtk.vtkAppendPolyData()
+    vtkappend = vtkAppendPolyData()
     for uid in input_uids:
         vtkappend.AddInputData(self.geol_coll.get_uid_vtk_obj(uid))
     vtkappend.Update()
@@ -141,7 +168,7 @@ def interpolation_delaunay_2d(self):
     diagonal = bounding_box.GetDiagonalLength()
     tolerance_value_bounding = tolerance_value / diagonal
     """Create a new instance of the interpolation class"""
-    delaunay_2d = vtk.vtkDelaunay2D()
+    delaunay_2d = vtkDelaunay2D()
     delaunay_2d.SetInputDataObject(vtkappend.GetOutput())
     delaunay_2d.SetProjectionPlaneMode(1)
     trans = delaunay_2d.ComputeBestFittingPlane(vtkappend.GetOutput())
@@ -215,7 +242,7 @@ def poisson_interpolation(self):
     surf_dict["topology"] = "TriSurf"
     surf_dict["vtk_obj"] = TriSurf()
     """Create a new instance of the interpolation class"""
-    surf_from_points = vtk.vtkSurfaceReconstructionFilter()
+    surf_from_points = vtkSurfaceReconstructionFilter()
     sample_spacing = input_one_value_dialog(
         title="Surface interpolation from point cloud",
         label="Sample Spacing",
@@ -235,7 +262,7 @@ def poisson_interpolation(self):
     else:
         surf_from_points.SetNeighborhoodSize(int(neighborhood_size))
     """Create a vtkAppendPolyData filter to merge all input vtk objects."""
-    vtkappend = vtk.vtkAppendPolyData()
+    vtkappend = vtkAppendPolyData()
     for uid in input_uids:
         if (
             self.geol_coll.get_uid_topology(input_uids[0]) == "XsPolyLine"
@@ -244,14 +271,14 @@ def poisson_interpolation(self):
         ):
             """Extract points from vtkpolydata"""
             point_coord = self.geol_coll.get_uid_vtk_obj(uid).points
-            points = vtk.vtkPoints()
+            points = vtkPoints()
             x = 0
             for row in point_coord:
                 points.InsertPoint(
                     x, point_coord[x, 0], point_coord[x, 1], point_coord[x, 2]
                 )
                 x += 1
-            polydata = vtk.vtkPolyData()
+            polydata = vtkPolyData()
             polydata.SetPoints(points)
             vtkappend.AddInputData(polydata)
         elif self.geol_coll.get_uid_topology(input_uids[0]) == "VertexSet":
@@ -261,7 +288,7 @@ def poisson_interpolation(self):
     surf_from_points.SetInputDataObject(vtkappend.GetOutput())
     surf_from_points.Update()  # executes the interpolation. Output is vtkImageData
     """Contour the grid at zero to extract the surface"""
-    contour_surface = vtk.vtkContourFilter()
+    contour_surface = vtkContourFilter()
     contour_surface.SetInputData(surf_from_points.GetOutput())
     contour_surface.SetValue(0, 0.0)
     contour_surface.Update()
@@ -615,9 +642,9 @@ def implicit_model_loop_structural(self):
             self.geol_legend_df["time"] == value, "scenario"
         ].values[0]
         """Iso-surface algorithm"""
-        iso_surface = vtk.vtkContourFilter()
-        # iso_surface = vtk.vtkFlyingEdges3D()
-        # iso_surface = vtk.vtkMarchingCubes()
+        iso_surface = vtkContourFilter()
+        # iso_surface = vtkFlyingEdges3D()
+        # iso_surface = vtkMarchingCubes()
         iso_surface.SetInputData(voxet_dict["vtk_obj"])
         iso_surface.ComputeScalarsOn()
         iso_surface.ComputeGradientsOn()
@@ -664,7 +691,7 @@ def surface_smoothing(
         input_uids = deepcopy(self.selected_uids)
     for uid in input_uids:
         if isinstance(self.geol_coll.get_uid_vtk_obj(uid), TriSurf):
-            smoother = vtk.vtkSmoothPolyDataFilter()
+            smoother = vtkSmoothPolyDataFilter()
             smoother.SetInputData(self.geol_coll.get_uid_vtk_obj(uid))
             if convergence_value is None:
                 convergence_value = 1
@@ -711,7 +738,7 @@ def surface_smoothing(
     # surf_dict['topology'] = 'TriSurf'
     # surf_dict['vtk_obj'] = TriSurf()
     # """Create a new instance of the interpolation class"""
-    # smoother = vtk.vtkSmoothPolyDataFilter()
+    # smoother = vtkSmoothPolyDataFilter()
     # smoother.SetInputData(self.geol_coll.get_uid_vtk_obj(input_uids[0]))
     # """Ask for the Convergence value (smaller numbers result in more smoothing iterations)."""
     # convergence_value = input_one_value_dialog(title='Surface smoothing parameters', label='Convergence Value (small values result in more smoothing)', default_value=1)
@@ -821,7 +848,7 @@ def linear_extrusion(self):
         return
 
     total_extrusion = vertical_extrusion["top"] + np_abs(vertical_extrusion["bottom"])
-    linear_extrusion = vtk.vtkLinearExtrusionFilter()
+    linear_extrusion = vtkLinearExtrusionFilter()
     linear_extrusion.CappingOn()  # yes or no?
     linear_extrusion.SetExtrusionTypeToVectorExtrusion()
     """Direction cosines"""
@@ -835,20 +862,20 @@ def linear_extrusion(self):
     linear_extrusion.SetInputData(self.geol_coll.get_uid_vtk_obj(input_uids[0]))
     linear_extrusion.Update()
 
-    # [Gabriele] The output of vtk.vtkLinearExtrusionFilter() are triangle strips we convert them to triangles with vtkTriangleFilter
-    triangle_filt = vtk.vtkTriangleFilter()
+    # [Gabriele] The output of vtkLinearExtrusionFilter() are triangle strips we convert them to triangles with vtkTriangleFilter
+    triangle_filt = vtkTriangleFilter()
     triangle_filt.SetInputConnection(linear_extrusion.GetOutputPort())
     triangle_filt.Update()
 
     # [Gabriele] translate the plane using the xyz vector with intensity = negative extrusion value.
-    translate = vtk.vtkTransform()
+    translate = vtkTransform()
     translate.Translate(
         x_vector * vertical_extrusion["bottom"],
         y_vector * vertical_extrusion["bottom"],
         z_vector * vertical_extrusion["bottom"],
     )
 
-    transform_filter = vtk.vtkTransformPolyDataFilter()
+    transform_filter = vtkTransformPolyDataFilter()
     transform_filter.SetTransform(translate)
     transform_filter.SetInputConnection(triangle_filt.GetOutputPort())
     transform_filter.Update()
@@ -897,7 +924,7 @@ def decimation_pro_resampling(self):
     surf_dict["topology"] = "TriSurf"
     surf_dict["vtk_obj"] = TriSurf()
     """Create a new instance of the decimation class"""
-    deci = vtk.vtkDecimatePro()
+    deci = vtkDecimatePro()
     deci.SetInputData(self.geol_coll.get_uid_vtk_obj(input_uids[0]))
     """Target Reduction value. Specify the desired reduction in the total number of polygons (e.g., when
     Target Reduction is set to 0.9, this filter will try to reduce the data set to 10% of its original size)."""
@@ -990,7 +1017,7 @@ def decimation_quadric_resampling(self):
     surf_dict["topology"] = "TriSurf"
     surf_dict["vtk_obj"] = TriSurf()
     """Create a new instance of the decimation class"""
-    deci = vtk.vtkQuadricDecimation()
+    deci = vtkQuadricDecimation()
     deci.SetInputData(self.geol_coll.get_uid_vtk_obj(input_uids[0]))
     """Target Reduction value. Specify the desired reduction in the total number of polygons (e.g., when
     Target Reduction is set to 0.9, this filter will try to reduce the data set to 10% of its original size)."""
@@ -1036,11 +1063,11 @@ def subdivision_resampling(self, mode=0, type="linear", n_subd=2):
     for uid in input_uids:
         if isinstance(self.geol_coll.get_uid_vtk_obj(uid), TriSurf):
             if type == "linear":
-                subdiv_filter = vtk.vtkLinearSubdivisionFilter()
+                subdiv_filter = vtkLinearSubdivisionFilter()
             elif type == "butterfly":
-                subdiv_filter = vtk.vtkButterflySubdivisionFilter()
+                subdiv_filter = vtkButterflySubdivisionFilter()
             elif type == "loop":
-                subdiv_filter = vtk.vtkLoopSubdivisionFilter()
+                subdiv_filter = vtkLoopSubdivisionFilter()
             """Create a new instance of the decimation class"""
 
             subdiv_filter.SetInputData(self.geol_coll.get_uid_vtk_obj(uid))
@@ -1117,7 +1144,7 @@ def intersection_xs(self):
                     """Intersection for PolyLine and XsPolyLine."""
                     if self.geol_coll.get_uid_x_section(uid) != xsect_uid:
                         """cutter"""
-                        cutter = vtk.vtkCutter()
+                        cutter = vtkCutter()
                         cutter.SetCutFunction(
                             self.xsect_coll.get_uid_vtk_plane(xsect_uid)
                         )
@@ -1161,12 +1188,12 @@ def intersection_xs(self):
                         )
                 elif self.geol_coll.get_uid_topology(uid) == "TriSurf":
                     """cutter"""
-                    cutter = vtk.vtkCutter()
+                    cutter = vtkCutter()
                     cutter.SetCutFunction(self.xsect_coll.get_uid_vtk_plane(xsect_uid))
                     cutter.SetInputData(self.geol_coll.get_uid_vtk_obj(uid))
                     cutter.Update()
                     """cutter_clean"""
-                    cutter_clean = vtk.vtkCleanPolyData()
+                    cutter_clean = vtkCleanPolyData()
                     cutter_clean.ConvertLinesToPointsOff()
                     cutter_clean.ConvertPolysToLinesOff()
                     cutter_clean.ConvertStripsToPolysOff()
@@ -1174,12 +1201,12 @@ def intersection_xs(self):
                     cutter_clean.SetInputConnection(cutter.GetOutputPort())
                     cutter_clean.Update()
                     """cutter_clean_strips"""
-                    cutter_clean_strips = vtk.vtkStripper()
+                    cutter_clean_strips = vtkStripper()
                     cutter_clean_strips.JoinContiguousSegmentsOn()
                     cutter_clean_strips.SetInputConnection(cutter_clean.GetOutputPort())
                     cutter_clean_strips.Update()
                     """cutter_clean_strips_clean, needed to sort the nodes and cells in the right order"""
-                    cutter_clean_strips_clean = vtk.vtkCleanPolyData()
+                    cutter_clean_strips_clean = vtkCleanPolyData()
                     cutter_clean_strips_clean.ConvertLinesToPointsOff()
                     cutter_clean_strips_clean.ConvertPolysToLinesOff()
                     cutter_clean_strips_clean.ConvertStripsToPolysOff()
@@ -1189,7 +1216,7 @@ def intersection_xs(self):
                     )
                     cutter_clean_strips_clean.Update()
                     """cutter_clean_strips_clean_triangle, used to convert polyline cells back to lines"""
-                    cutter_clean_strips_clean_triangle = vtk.vtkTriangleFilter()
+                    cutter_clean_strips_clean_triangle = vtkTriangleFilter()
                     cutter_clean_strips_clean_triangle.SetInputConnection(
                         cutter_clean_strips_clean.GetOutputPort()
                     )
@@ -1201,7 +1228,7 @@ def intersection_xs(self):
                         cutter_clean_strips_clean_triangle.GetOutput().GetNumberOfPoints()
                         > 0
                     ):
-                        connectivity = vtk.vtkPolyDataConnectivityFilter()
+                        connectivity = vtkPolyDataConnectivityFilter()
                         connectivity.SetInputConnection(
                             cutter_clean_strips_clean_triangle.GetOutputPort()
                         )
@@ -1215,7 +1242,7 @@ def intersection_xs(self):
                             connectivity.AddSpecifiedRegion(region)
                             connectivity.Update()
                             """connectivity_clean, used to remove orphan points left behind by connectivity"""
-                            connectivity_clean = vtk.vtkCleanPolyData()
+                            connectivity_clean = vtkCleanPolyData()
                             connectivity_clean.SetInputConnection(
                                 connectivity.GetOutputPort()
                             )
@@ -1266,7 +1293,7 @@ def intersection_xs(self):
             for uid in input_uids:
                 if self.mesh3d_coll.get_uid_mesh3d_type(uid) == "Voxet":
                     """Get cutter - a polydata slice cut across the voxet."""
-                    cutter = vtk.vtkCutter()
+                    cutter = vtkCutter()
                     cutter.SetCutFunction(self.xsect_coll.get_uid_vtk_plane(xsect_uid))
                     cutter.SetInputData(self.mesh3d_coll.get_uid_vtk_obj(uid))
                     cutter.Update()
@@ -1365,7 +1392,7 @@ def intersection_xs(self):
                                 0,
                             ]
                         """Create vtkImageData with the geometry to fit data from cutter"""
-                        probe_image = vtk.vtkImageData()
+                        probe_image = vtkImageData()
                         probe_image.SetOrigin(origin)
                         probe_image.SetSpacing([spacing_W, spacing_Z, 0.0])
                         probe_image.SetDimensions([dim_W, dim_Z, 1])
@@ -1382,14 +1409,14 @@ def intersection_xs(self):
                         XYZ_probe = np_zeros((probe_n_points, 3))
                         for point in range(probe_n_points):
                             XYZ_probe[point, :] = probe_image.GetPoint(point)
-                        regular_values = griddata(
+                        regular_values = sp_griddata(
                             points=XYZ_cutter,
                             values=values,
                             xi=XYZ_probe,
                             method="nearest",
                         )
-                        # regular_values = griddata(points=XYZ_cutter, values=values, xi=XYZ_probe, method='linear')
-                        # regular_values = griddata(points=XYZ_cutter, values=values, xi=XYZ_probe, method='linear', rescale=True)
+                        # regular_values = sp_griddata(points=XYZ_cutter, values=values, xi=XYZ_probe, method='linear')
+                        # regular_values = sp_griddata(points=XYZ_cutter, values=values, xi=XYZ_probe, method='linear', rescale=True)
                         """Pass values from griddata interpolation to probe_image"""
                         probe_image.GetPointData().AddArray(
                             numpy_support.numpy_to_vtk(regular_values)
@@ -1424,7 +1451,7 @@ def intersection_xs(self):
             for uid in input_uids:
                 if self.dom_coll.get_uid_topology(uid) == "DEM":
                     """Create cutter"""
-                    cutter = vtk.vtkCutter()
+                    cutter = vtkCutter()
                     cutter.SetCutFunction(self.xsect_coll.get_uid_vtk_plane(xsect_uid))
                     cutter.SetInputData(self.dom_coll.get_uid_vtk_obj(uid))
                     cutter.Update()
@@ -1511,7 +1538,7 @@ def project_2_dem(self):
     ]
     #     print("dom_uid ", dom_uid)
     #     """Convert DEM (vtkStructuredGrid) in vtkImageData to perform the projection with vtkProjectedTerrainPath"""
-    #     dem_to_image = vtk.vtkDEMReader()
+    #     dem_to_image = vtkDEMReader()
     #     dem_to_image.SetInputData(self.dom_coll.get_uid_vtk_obj(dom_uid))
     #     dem_to_image.Update()
     #     print("dem_to_image ", dem_to_image)
@@ -1536,10 +1563,10 @@ def project_2_dem(self):
 
     for uid in input_uids:
         """Create a new instance of vtkProjectedTerrainPath"""
-        projection = vtk.vtkPointInterpolator2D()
+        projection = vtkPointInterpolator2D()
         projection.SetInputData(self.geol_coll.get_uid_vtk_obj(uid))
         projection.SetSourceData(self.dom_coll.get_uid_vtk_obj(dom_uid))
-        projection.SetKernel(vtk.vtkVoronoiKernel())
+        projection.SetKernel(vtkVoronoiKernel())
         projection.SetNullPointsStrategyToClosestPoint()
         projection.SetZArrayName("elevation")
         projection.Update()
@@ -1714,11 +1741,11 @@ def project_2_xs(self):
                 entity_dict["vtk_obj"] = out_vtk
                 self.geol_coll.add_entity_from_dict(entity_dict=entity_dict)
             else:
-                thresh = vtk.vtkThresholdPoints()
+                thresh = vtkThresholdPoints()
                 thresh.SetInputData(out_vtk)
                 thresh.ThresholdByLower(xs_dist)
                 thresh.SetInputArrayToProcess(
-                    0, 0, 0, vtk.vtkDataObject().FIELD_ASSOCIATION_POINTS, "distance"
+                    0, 0, 0, vtkDataObject().FIELD_ASSOCIATION_POINTS, "distance"
                 )
                 thresh.Update()
 
@@ -1737,7 +1764,7 @@ def project_2_xs(self):
 
         elif entity_dict["topology"] == "XsPolyLine":
             """Output, checking for multipart for polylines."""
-            connectivity = vtk.vtkPolyDataConnectivityFilter()
+            connectivity = vtkPolyDataConnectivityFilter()
             connectivity.SetInputData(out_vtk)
             connectivity.SetExtractionModeToAllRegions()
             connectivity.Update()
@@ -1750,21 +1777,21 @@ def project_2_xs(self):
                 connectivity.AddSpecifiedRegion(region)
                 connectivity.Update()
                 """connectivity_clean, used to remove orphan points left behind by connectivity"""
-                connectivity_clean = vtk.vtkCleanPolyData()
+                connectivity_clean = vtkCleanPolyData()
                 connectivity_clean.SetInputConnection(connectivity.GetOutputPort())
                 connectivity_clean.Update()
                 """Check if polyline really exists then create entity"""
                 if xs_dist <= 0:
                     out_vtk = connectivity_clean.GetOutput()
                 else:
-                    thresh = vtk.vtkThresholdPoints()
+                    thresh = vtkThresholdPoints()
                     thresh.SetInputConnection(connectivity_clean.GetOutputPort())
                     thresh.ThresholdByLower(xs_dist)
                     thresh.SetInputArrayToProcess(
                         0,
                         0,
                         0,
-                        vtk.vtkDataObject().FIELD_ASSOCIATION_POINTS,
+                        vtkDataObject().FIELD_ASSOCIATION_POINTS,
                         "distance",
                     )
                     thresh.Update()
@@ -1801,7 +1828,7 @@ def split_surf(self):
         # 0. Define the reference surface and target surfaces
         # if input_uids[0] not in self.geol_coll.get_uids():
         #     ref_surf = self.dom_coll.get_uid_vtk_obj(input_uids[0])
-        #     pld = pv.PolyData(ref_surf.points)
+        #     pld = pv_PolyData(ref_surf.points)
         #     pld.delaunay_2d(inplace=True)
         # else:
         scissor_surf = self.geol_coll.get_uid_vtk_obj(self.selected_uids[-1])
@@ -1813,7 +1840,7 @@ def split_surf(self):
             # cutter.SetInputDataObject(0, paper_surf)
             # cutter.SetInputDataObject(1, scissor_surf)
 
-            temp_surf = pv.PolyData()
+            temp_surf = pv_PolyData()
             temp_surf.ShallowCopy(paper_surf)
             line_intersection = PolyLine()
             intersection, intersect, _ = temp_surf.intersection(
@@ -1825,13 +1852,13 @@ def split_surf(self):
             # print(temp_surf.array_names)
             implicit_dist = temp_surf.compute_implicit_distance(scissor_surf)
             implicit_dist.set_active_scalars("implicit_distance")
-            intersect = vtk.vtkClipPolyData()
+            intersect = vtkClipPolyData()
             intersect.SetInputData(implicit_dist)
             intersect.GenerateClippedOutputOn()
 
             intersect.Update()
 
-            appender = vtk.vtkAppendPolyData()
+            appender = vtkAppendPolyData()
 
             """ The parts are always 2 even if the surf is crossed more than once
             (the implicit distance is calculated orthogonal to the ref. surface).
@@ -1945,14 +1972,14 @@ def retopo(self, mode=0, dec_int=0.2, n_iter=40, rel_fac=0.1):
         for uid in input_uids:
             if isinstance(self.geol_coll.get_uid_vtk_obj(uid), TriSurf):
                 mesh = self.geol_coll.get_uid_vtk_obj(uid)
-                dec = vtk.vtkQuadricDecimation()
+                dec = vtkQuadricDecimation()
                 dec.SetInputData(mesh)
                 # tr.SetSourceData(bord)
                 dec.SetTargetReduction(float(dec_int))
                 dec.VolumePreservationOn()
                 dec.Update()
 
-                smooth = vtk.vtkSmoothPolyDataFilter()
+                smooth = vtkSmoothPolyDataFilter()
                 smooth.SetInputConnection(dec.GetOutputPort())
 
                 # smooth.SetInputData(surf)
@@ -1962,7 +1989,7 @@ def retopo(self, mode=0, dec_int=0.2, n_iter=40, rel_fac=0.1):
                 smooth.FeatureEdgeSmoothingOn()
                 smooth.Update()
 
-                clean = vtk.vtkCleanPolyData()
+                clean = vtkCleanPolyData()
                 clean.SetInputConnection(smooth.GetOutputPort())
                 clean.Update()
 

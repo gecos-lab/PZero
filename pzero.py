@@ -1,4 +1,8 @@
+"""pzero.py
+PZero© Andrea Bistacchi"""
+
 from sys import argv, exit
+
 from PyQt5.QtWidgets import QApplication
 
 from pzero.project_window import ProjectWindow

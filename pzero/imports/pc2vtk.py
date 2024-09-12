@@ -1,11 +1,5 @@
 """pc2vtk.py by Gabriele Benedetti
-PZero© Andrea Bistacchi
---------
-
-Convert point cloud data (txt, csv, xyz, las ...) in vtk objects.
-
-
-"""
+PZero© Andrea Bistacchi"""
 
 import os
 

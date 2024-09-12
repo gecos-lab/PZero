@@ -12,7 +12,6 @@ from numpy import ndarray as np_ndarray
 from numpy import number as np_number
 from numpy import sin as np_sin
 from numpy import squeeze as np_squeeze
-from numpy import where as np_where
 
 from pzero.helpers.helper_dialogs import multiple_input_dialog
 

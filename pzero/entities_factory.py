@@ -1,5 +1,6 @@
 """entities_factory.py
 PZero© Andrea Bistacchi"""
+
 from numpy import NaN as np_NaN
 from numpy import append as np_append
 from numpy import arcsin as np_arcsin
@@ -24,13 +25,15 @@ from numpy import tan as np_tan
 from numpy import where as np_where
 from numpy import zeros as np_zeros
 from numpy.linalg import norm as np_linalg_norm
-from pyvista import Plotter  # this should be removed
-from pyvista import PolyData as pv_PolyData  # this should be removed
-from pyvista import Spline  # this should be removed
-from pyvista import convert_array as pv_convert_array  # very useful. Can be used when dsa fails
+
+from pyvista import Plotter as pv_plotter  # used to preview wells - this should be removed
+from pyvista import PolyData as pv_PolyData  # used for Voxet, Seismics and Image3D - this should be converted to VTK
+from pyvista import Spline as pv_spline  # used for Well and WellTrace - this should be converted to VTK
+from pyvista import convert_array as pv_convert_array  # very useful - can be used when dsa fails
 from pyvista import image_to_texture as pv_image_to_texture
 from pyvista import wrap as pv_wrap
-from pyvista.core.filters import _update_alg
+from pyvista.core.filters import _update_alg as pv_update_alg  # used in the detection of connected parts of PCDOM, which in theory should not be connected...
+
 from vtk import (
     vtkPolyData,
     vtkPoints,
@@ -2081,6 +2084,7 @@ class PCDom(PolyData):
         Also returns the number of connected regions.
         Returns None in case it is called for a VertexSet, so it works for PolyLine and TriSurf only.
         """
+        #  this is a bit strange - PCDom should always be a VertexSet... ___________________________________________
         temp = vtkPolyData()
         temp.ShallowCopy(self)
         connectivity_filter = vtkEuclideanClusterExtraction()
@@ -2090,7 +2094,7 @@ class PCDom(PolyData):
         connectivity_filter.ColorClustersOn()
         # print(connectivity_filterconnectivity_filter.GetLocator())
         # connectivity_filter.AlignedNormalsOn()
-        _update_alg(connectivity_filter, True, "test")
+        pv_update_alg(connectivity_filter, True, "test")
         # connectivity_filter.Update()
         # num_regions = connectivity_filter.GetNumberOfExtractedRegions()
         # print(connectivity_filter.GetOutput().GetPointData().GetArray('RegionId'))
@@ -2527,7 +2531,7 @@ class Well:
         return well_copy
 
     def preview(self):
-        p = Plotter()
+        p = pv_plotter()
         p.add_mesh(self.trace)
         p.add_mesh(self.head, render_points_as_spheres=True)
         p.show()
@@ -2616,7 +2620,7 @@ class Well:
     #     return self.head
 
     # def set_trace(self,trace):
-    #     spline = Spline(trace)
+    #     spline = pv_spline(trace)
     #     self.trace.ShallowCopy(spline)
     #     self.trace.name = f'trace_{self.ID}'
 
@@ -2635,7 +2639,7 @@ class WellTrace(PolyLine):
 
     def create_trace(self, xyz_trace, name=None):
         # lines = pv_helpers.lines_from_points(xyz_trace)
-        lines = Spline(xyz_trace)
+        lines = pv_spline(xyz_trace)
         lines.rename_array("arc_length", "MD")
         # lines = lines.compute_arc_length()
         lines.field_data["pname"] = [name]
@@ -2651,7 +2655,7 @@ class WellTrace(PolyLine):
         prop_data = self.get_field_data(prop)
 
         # temp = pv_helpers.lines_from_points(prop_trace)
-        temp = Spline(prop_trace)
+        temp = pv_spline(prop_trace)
         temp[prop] = prop_data
 
         # temp.plot()
@@ -2692,7 +2696,7 @@ class WellTrace(PolyLine):
             prop_data = self.get_field_data(prop).reshape(-1, 3)
 
             # temp = pv_helpers.lines_from_points(prop_trace)
-            temp = Spline(prop_trace)
+            temp = pv_spline(prop_trace)
             temp[prop] = prop_data
 
             filter = vtkTubeFilter()

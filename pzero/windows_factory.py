@@ -1,14 +1,23 @@
 """windows_factory.py
 PZero© Andrea Bistacchi"""
+
 from vtkmodules.vtkRenderingCore import vtkPropPicker
 
-"""QT imports"""
-from PyQt5.QtWidgets import *
+from PyQt5.QtWidgets import QMainWindow, QAction, QMenu, QAbstractItemView
 from PyQt5.QtCore import Qt, pyqtSignal
-from PyQt5 import QtCore
 
-"""PZero imports"""
 from pzero.ui.base_view_window_ui import Ui_BaseViewWindow
+from pzero.helpers.helper_dialogs import (
+    input_one_value_dialog,
+    input_combo_dialog,
+    message_dialog,
+    multiple_input_dialog,
+    progress_dialog,
+    save_file_dialog,
+)
+from pzero.collections.geological_collection import GeologicalCollection
+from pzero.helpers.helper_functions import best_fitting_plane, gen_frame
+from pzero.helpers.helper_widgets import Vector
 from .entities_factory import (
     VertexSet,
     PolyLine,
@@ -28,19 +37,7 @@ from .entities_factory import (
     WellTrace,
     Attitude,
 )
-from pzero.helpers.helper_dialogs import (
-    input_one_value_dialog,
-    input_combo_dialog,
-    message_dialog,
-    multiple_input_dialog,
-    progress_dialog,
-    save_file_dialog,
-    NavigatorWidget,
-)
-from pzero.collections.geological_collection import GeologicalCollection
 from .orientation_analysis import get_dip_dir_vectors
-from pzero.helpers.helper_functions import best_fitting_plane, gen_frame
-from pzero.helpers.helper_widgets import Vector
 
 """Maths imports"""
 # from math import degrees, sqrt, atan2
@@ -1189,7 +1186,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
 
     def change_actor_point_size(self, uid=None, collection=None):
         """Dummy method to update point size for actor uid. Must be implemented in subclasses."""
-        returnself.add_all_entities()
+        return self.add_all_entities()
 
     def set_actor_visible(self, uid=None, visible=None, name=None):
         """Dummy method to Set actor uid visible or invisible (visible = True or False).

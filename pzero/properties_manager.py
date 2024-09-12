@@ -2,13 +2,19 @@
 PZero© Andrea Bistacchi"""
 
 import cmocean as cmo
+
 import colorcet as cc
-import matplotlib.pyplot as plt
+
+from matplotlib.pyplot import colormaps as plt_colormaps
+
 from PyQt5.QtCore import QObject
 from PyQt5.QtGui import QColor, QImage, QPixmap
 from PyQt5.QtWidgets import QTableWidgetItem, QLabel, QComboBox
+
 from numpy import linspace as np_linspace
+
 from pandas.core.common import flatten as pd_flatten
+
 from pyvista import get_cmap_safe as pv_get_cmap_safe
 
 
@@ -48,7 +54,7 @@ class PropertiesCMaps(QObject):
     # List of all  matplotlib, colorcet, or cmocean colormaps used by PyVista
     # https://docs.pyvista.org/examples/02-plot/cmap.html
     colormaps_list = (
-        plt.colormaps()
+        plt_colormaps()
         + ["cet_" + cmap for cmap in list(cc.cm.keys())]
         + cmo.cm.cmapnames
     )

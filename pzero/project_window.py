@@ -2,15 +2,18 @@
 PZero© Andrea Bistacchi"""
 
 import os
+
 from copy import deepcopy
+
 from datetime import datetime
 
-import pandas as pd
-from PyQt5.QtCore import Qt, QSortFilterProxyModel, pyqtSignal, QObject
+from PyQt5.QtCore import pyqtSignal
 from PyQt5.QtWidgets import QMainWindow, QMessageBox
+
 from pandas import DataFrame as pd_DataFrame
 from pandas import read_csv as pd_read_csv
 from pandas import read_json as pd_read_json
+
 from vtk import (
     vtkPolyData,
     vtkAppendPolyData,

@@ -1,9 +1,15 @@
+"""pc2vtk.py by Gabriele Benedetti
+PZero© Andrea Bistacchi"""
+
 from copy import deepcopy
+
 from uuid import uuid4
 
-import matplotlib.pyplot as plt
-import matplotlib.style as mplstyle
-import seaborn as sns
+from matplotlib.pyplot import subplots as plt_subplot  # used for hisotgram in calibration PC
+from matplotlib.style import context as mplstyle_context  # used for hisotgram in calibration PC
+
+import seaborn as sns  # used for hisotgram in calibration PC - should be converted to standard mpl histogram
+
 from numpy import arcsin as np_arcsin
 from numpy import arctan2 as np_arctan2
 from numpy import max as np_max
@@ -14,7 +20,9 @@ from numpy import random as np_random
 from numpy import std as np_std
 from numpy import zeros as np_zeros
 from numpy import zeros_like as np_zeros_like
-from pyvista.core.filters import _update_alg
+
+from pyvista.core.filters import _update_alg as pv_update_alg
+
 from vtkmodules.util import numpy_support
 from vtkmodules.vtkCommonCore import vtkIdTypeArray
 from vtkmodules.vtkCommonDataModel import (
@@ -260,7 +268,7 @@ def segment_pc(self):
         connectivity_filter_dd.SetExtractionModeToAllClusters()
         connectivity_filter_dd.ScalarConnectivityOn()
         connectivity_filter_dd.SetScalarRange(dialog["dd1"], dialog["dd2"])
-        _update_alg(connectivity_filter_dd, True, "Segmenting on dip directions")
+        pv_update_alg(connectivity_filter_dd, True, "Segmenting on dip directions")
         f1 = connectivity_filter_dd.GetOutput()
         # print(f1)
         f1.GetPointData().SetActiveScalars("dip")
@@ -461,9 +469,8 @@ def calibration_pc(self):
     print(np_mean(n_points), np_std(n_points))
     print(np_mean(normals_var), np_std(normals_var))
 
-    with mplstyle.context(("default")):
-        fig, (ax1, ax2) = plt.subplots(2, 1)
-        # plt.tick_params(bottom=False)
+    with mplstyle_context(("default")):
+        fig, (ax1, ax2) = plt_subplot(2, 1)
 
     sns.set_style("darkgrid")
 
@@ -475,7 +482,7 @@ def calibration_pc(self):
     # ax2.hist(normals_var)
     # ax2.set_xticklabels([])
     # ax2.autoscale(enable=True, axis="y", tight=True)
-    plt.show()
+    fig.show()
 
     # Calculate distance from fitted plane -> estimate of curvature
     # Calculate mean distance from fitted plane
