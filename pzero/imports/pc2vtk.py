@@ -8,7 +8,9 @@ Convert point cloud data (txt, csv, xyz, las ...) in vtk objects.
 """
 
 import os
+
 from copy import deepcopy
+
 from uuid import uuid4
 
 from laspy import read as lp_read
@@ -19,18 +21,15 @@ from numpy import shape as np_shape
 from numpy import uint8 as np_uint8
 from numpy import where as np_where
 
-# import pyvista as pv
 from pandas import DataFrame as pd_DataFrame
 from pandas import read_csv as pd_read_csv
 from pandas import to_numeric as pd_to_numeric
+
 from vtk import vtkPoints
 from vtkmodules.util.numpy_support import numpy_to_vtk
 
 from pzero.collections.dom_collection import DomCollection
 from pzero.entities_factory import PCDom
-
-
-# from .helper_functions import profiler
 
 
 def pc2vtk(

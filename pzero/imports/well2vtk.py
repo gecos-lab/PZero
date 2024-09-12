@@ -6,9 +6,14 @@ Convert well data (csv, ags ...) in vtk objects.
 """
 
 from copy import deepcopy
+
 from uuid import uuid4
 
-import pandas as pd
+from pandas import read_excel as pd_read_excel
+from pandas import unique as pd_unique
+# from pandas import read_csv as pd_read_csv
+# from pandas import isna as pd_isna
+
 from numpy import abs as np_abs
 from numpy import append as np_append
 from numpy import argmin as np_argmin
@@ -25,14 +30,8 @@ from pzero.collections.well_collection import WellCollection
 from pzero.entities_factory import Well, VertexSet
 
 
-# from .entities_factory import WellData
-
-
-# import lasio as ls
-
-
 def well2vtk(self, path=None):
-    data = pd.read_excel(path, sheet_name=None)
+    data = pd_read_excel(path, sheet_name=None)
     well_data = data["INFO"]
     well_id = well_data["WELL"].values[0]
 
@@ -78,7 +77,7 @@ def well2vtk(self, path=None):
                 tr_data = np_full(shape=(points, 3), fill_value=np_nan)
 
                 try:
-                    color_dict = {k: np_random.rand(3) for k in pd.unique(prop[key])}
+                    color_dict = {k: np_random.rand(3) for k in pd_unique(prop[key])}
                 except:
                     print("No key found")
                 else:
@@ -220,12 +219,12 @@ def well2vtk(self, path=None):
 
     # data_paths = paths[1]
     # #Read the Well location data file
-    # loc = pd.read_csv(paths[0],sep=delimiter[0],usecols=usecols[0],names=col_names[0],header=header_row)
+    # loc = pd_read_csv(paths[0],sep=delimiter[0],usecols=usecols[0],names=col_names[0],header=header_row)
 
     # #Read the well data file(s)
     # for path in data_paths:
 
-    #     data = pd.read_csv(path,sep=delimiter[1],usecols=usecols[1],names=col_names[1],header=header_row)
+    #     data = pd_read_csv(path,sep=delimiter[1],usecols=usecols[1],names=col_names[1],header=header_row)
 
     #     if 'DepthPoint' in col_names[1]:
     #         punt_data_idx = data.columns.loc('DepthPoint')
@@ -241,12 +240,12 @@ def well2vtk(self, path=None):
 
     #     print(cont_data)
 
-    #     unique_id = pd.unique(data['LocationID'])
+    #     unique_id = pd_unique(data['LocationID'])
     #     location = loc.loc[loc['LocationID'].values==unique_id[0],['LocationID','Easting','Northing','GroundLevel']]
 
     #     top = np_array(location[['Easting','Northing','GroundLevel']].values[0])
 
-    #     if ('Trend' or 'Plunge') not in list(loc.keys()) or (pd.isna(loc.loc[loc['LocationID'].values==unique_id[0],'Trend'].values) or pd.isna(loc.loc[loc['LocationID'].values==unique_id[0],'Plunge'].values)) :
+    #     if ('Trend' or 'Plunge') not in list(loc.keys()) or (pd_isna(loc.loc[loc['LocationID'].values==unique_id[0],'Trend'].values) or pd_isna(loc.loc[loc['LocationID'].values==unique_id[0],'Plunge'].values)) :
     #         print('Trend or plunge value not specified. Assuming vertical borehole')
     #         trend = 0
     #         plunge = np_deg2rad(90)
@@ -346,7 +345,7 @@ def well2vtk(self, path=None):
     # # _,ext = os.path.splitext(basename)
     # # if ext == '.csv':
     # #     sep = auto_sep(in_file_name)
-    # #     data = pd.read_csv(in_file_name,sep=delimiter,usecols=usecols,names=col_names)
+    # #     data = pd_read_csv(in_file_name,sep=delimiter,usecols=usecols,names=col_names)
     # # elif ext == '.ags':
     # #     print('ags format not supported')
     # #

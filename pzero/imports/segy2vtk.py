@@ -2,7 +2,9 @@
 PZero© Andrea Bistacchi"""
 
 import os
-import uuid
+
+from uuid import uuid4
+
 from copy import deepcopy
 
 from vtk import vtkSegYReader
@@ -28,7 +30,7 @@ def segy2vtk(self=None, in_file_name=None):
         curr_object.Modified()
         """Create dictionary."""
         curr_obj_attributes = deepcopy(ImageCollection.image_entity_dict_types)
-        curr_obj_attributes["uid"] = str(uuid.uuid4())
+        curr_obj_attributes["uid"] = str(uuid4())
         curr_obj_attributes["name"] = os.path.basename(in_file_name)
         curr_obj_attributes["topology"] = "Seismics"
         curr_obj_attributes["properties_names"] = curr_object.point_data_keys

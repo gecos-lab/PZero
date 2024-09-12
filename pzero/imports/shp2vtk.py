@@ -4,12 +4,15 @@ PZero© Andrea Bistacchi"""
 from copy import deepcopy
 
 from geopandas import read_file as gpd_read_file
+
 from numpy import array as np_array
 from numpy import asarray as np_asarray
 from numpy import column_stack as np_column_stack
 from numpy import shape as np_shape
 from numpy import zeros as np_zeros
+
 from pandas import Series as pd_series
+
 from vtk import vtkAppendPolyData
 
 from pzero.collections.background_collection import BackgroundCollection

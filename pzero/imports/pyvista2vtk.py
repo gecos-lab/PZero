@@ -1,9 +1,10 @@
 """pyvista2vtk.py
 PZero© Andrea Bistacchi"""
 
-import uuid
+from uuid import uuid4
 
-import pyvista as pv
+from pyvista import read as pv_read
+
 from PyQt5.QtWidgets import QFileDialog
 
 from pzero.entities_factory import VertexSet, PolyLine, TriSurf, TetraSolid
@@ -32,9 +33,9 @@ def pyvista2vtk(self):
         """Initialize"""
         cell_type = -1
 
-        """Read file with pv.read() function and detect topology of curr_obj - ASSUMES ALL CELLS ARE OF THE SAME TYPE"""
+        """Read file with pv_read() function and detect topology of curr_obj - ASSUMES ALL CELLS ARE OF THE SAME TYPE"""
         try:
-            curr_obj = pv.read(in_file_name)
+            curr_obj = pv_read(in_file_name)
 
             """ VTK cell topology from documentation at https://vtk.org/doc/nightly/html/vtkCellType_8h.html
             VTK_EMPTY_CELL = 0, VTK_VERTEX = 1, VTK_POLY_VERTEX = 2, VTK_LINE = 3,
@@ -64,19 +65,19 @@ def pyvista2vtk(self):
 
         """If curr_obj is a recognized topology, assign to PZero class, and add to a collection"""
         if cell_type == 1:
-            curr_obj.uid = str(uuid.uuid4())
+            curr_obj.uid = str(uuid4())
             curr_obj.type = "VertexSet"
             curr_obj.__class__ = VertexSet
         elif cell_type == 3:
-            curr_obj.uid = str(uuid.uuid4())
+            curr_obj.uid = str(uuid4())
             curr_obj.type = "PolyLine"
             curr_obj.__class__ = PolyLine
         elif cell_type == 5:
-            curr_obj.uid = str(uuid.uuid4())
+            curr_obj.uid = str(uuid4())
             curr_obj.type = "TriSurf"
             curr_obj.__class__ = TriSurf
         elif cell_type == 10:
-            curr_obj.uid = str(uuid.uuid4())
+            curr_obj.uid = str(uuid4())
             curr_obj.type = "TetraSolid"
             curr_obj.__class__ = TetraSolid
         self.e_c.add_entity_from_dict(

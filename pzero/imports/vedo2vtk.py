@@ -1,9 +1,10 @@
 """vedo2vtk.py
 PZero© Andrea Bistacchi"""
 
-import uuid
+from uuid import uuid4
 
-import vedo as vd
+from vedo import load as vd_load
+
 from PyQt5.QtWidgets import QFileDialog
 
 from pzero.collections.geological_collection import GeologicalCollection
@@ -34,9 +35,9 @@ def vedo2vtk(self):
         """Initialize"""
         cell_type = -1
 
-        """Read file with vd.load() function and detect cell type (topology) of curr_obj - ASSUMES ALL CELLS ARE OF THE SAME TYPE"""
+        """Read file with vd_load() function and detect cell type (topology) of curr_obj - ASSUMES ALL CELLS ARE OF THE SAME TYPE"""
         try:
-            curr_obj = vd.load(
+            curr_obj = vd_load(
                 in_file_name
             )  # _____ this is the only difference with respect to pyvista2vtk
 
@@ -69,19 +70,19 @@ def vedo2vtk(self):
 
         """If curr_obj is a recognized topology, assign to PZero class, and add to the collection."""
         if cell_type == 1:
-            curr_obj.uid = str(uuid.uuid4())
+            curr_obj.uid = str(uuid4())
             curr_obj.type = "VertexSet"
             curr_obj.__class__ = VertexSet
         elif cell_type == 3:
-            curr_obj.uid = str(uuid.uuid4())
+            curr_obj.uid = str(uuid4())
             curr_obj.type = "PolyLine"
             curr_obj.__class__ = PolyLine
         elif cell_type == 5:
-            curr_obj.uid = str(uuid.uuid4())
+            curr_obj.uid = str(uuid4())
             curr_obj.type = "TriSurf"
             curr_obj.__class__ = TriSurf
         elif cell_type == 10:
-            curr_obj.uid = str(uuid.uuid4())
+            curr_obj.uid = str(uuid4())
             curr_obj.type = "TetraSolid"
             curr_obj.__class__ = TetraSolid
         self.e_c.add_entity_from_dict(
