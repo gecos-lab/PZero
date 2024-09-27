@@ -3,7 +3,7 @@ PZero© Andrea Bistacchi"""
 
 from uuid import uuid4
 
-from numpy import set_printoptions as np_set_print_options
+from numpy import set_printoptions as np_set_printoptions
 from numpy import ndarray as np_ndarray
 
 from pandas import DataFrame as pd_DataFrame
@@ -19,7 +19,7 @@ pd_max_columns = 20
 pd_show_precision = 4
 pd_max_colwidth = 80
 pd_set_option("display.width", pd_desired_width)
-np_set_print_options(linewidth=pd_desired_width)
+np_set_printoptions(linewidth=pd_desired_width)
 pd_set_option("display.max_columns", pd_max_columns)
 pd_set_option("display.precision", pd_show_precision)
 pd_set_option("display.max_colwidth", pd_max_colwidth)
@@ -35,25 +35,24 @@ class DomCollection(BaseCollection):
             "name": "undef",
             "topology": "undef",
             "scenario": "undef",
-            "texture_uids": [],
-            # this refers to the uids of image data for which the texture coordinates have been calculated
             "properties_names": [],
             "properties_components": [],
             "properties_types": [],
             "x_section": "", # this is the uid of the cross section for "XsVertexSet", "XsPolyLine", and "XsImage", empty for all others
+            "texture_uids": [],  # this refers to the uids of image data for which the texture coordinates have been calculated
             "vtk_obj": None,
         }
 
         self.entity_dict_types = {
             "uid": str,
             "name": str,
-            "scenario": str,
             "topology": str,
-            "texture_uids": list,
+            "scenario": str,
             "properties_names": list,
             "properties_components": list,
             "properties_types": list,
             "x_section": str,
+            "texture_uids": list,
             "vtk_obj": object,
         }
 

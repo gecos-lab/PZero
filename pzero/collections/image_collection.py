@@ -3,16 +3,13 @@ PZero© Andrea Bistacchi"""
 
 from uuid import uuid4
 
-import numpy as np
-
+from numpy import set_printoptions as np_set_printoptions
 from numpy import ndarray as np_ndarray
 
 from pandas import DataFrame as pd_DataFrame
 from pandas import set_option as pd_set_option
 
 from vtkmodules.vtkCommonDataModel import vtkDataObject
-
-from pzero.entities_factory import MapImage, XsImage, Seismics, Image3D
 
 from .AbstractCollection import BaseCollection
 
@@ -22,7 +19,7 @@ pd_max_columns = 20
 pd_show_precision = 4
 pd_max_colwidth = 80
 pd_set_option("display.width", pd_desired_width)
-np.set_printoptions(linewidth=pd_desired_width)
+np_set_printoptions(linewidth=pd_desired_width)
 pd_set_option("display.max_columns", pd_max_columns)
 pd_set_option("display.precision", pd_show_precision)
 pd_set_option("display.max_colwidth", pd_max_colwidth)
@@ -41,7 +38,7 @@ class ImageCollection(BaseCollection):
             "properties_names": [],
             "properties_components": [],
             "properties_types": [],
-            "x_section": "",  # this is the uid of the cross section for "XsVertexSet", "XsPolyLine", and "XsImage", empty for all others
+            "x_section": "", # this is the uid of the cross section for "XsVertexSet", "XsPolyLine", and "XsImage", empty for all others
             "vtk_obj": None,
         }
 

@@ -63,11 +63,9 @@ class FluidsCollection(BaseCollection):
 
         self.valid_roles = [
             "undef",
-            "water table",
-            "idrography",
-            "piezometry",
-            "oil",
-            "other",
+            "top",
+            "base",
+            "seal",
         ]
 
         self.valid_topologies = [
@@ -84,8 +82,10 @@ class FluidsCollection(BaseCollection):
 
         self.initialize_df()
 
+    # =================================== Obligatory methods ===========================================
+
     def add_entity_from_dict(self, entity_dict: pd_DataFrame = None, color: np_ndarray = None):
-        """Add a entity from a dictionary shaped as self.entity_dict."""
+        """Add an entity from a dictionary shaped as self.entity_dict."""
         # Create a new uid if it is not included in the dictionary.
         if not entity_dict["uid"]:
             entity_dict["uid"] = str(uuid4())
@@ -140,10 +140,7 @@ class FluidsCollection(BaseCollection):
         # Remove row from dataframe and reset data model.
         if uid not in self.get_uids:
             return
-        self.df.drop(
-            self.parent.fluids_coll.df[self.parent.fluids_coll.df["uid"] == uid].index,
-            inplace=True,
-        )
+        self.df.drop(self.df[self.df["uid"] == uid].index,inplace=True)
         self.modelReset.emit()  # is this really necessary?
         # Then remove role / feature / scenario from legend if needed.
         # legend_updated is used to record if the table is updated or not.
@@ -154,10 +151,8 @@ class FluidsCollection(BaseCollection):
         if legend_updated:
             self.parent.legend.update_widget(self.parent)
             self.parent.prop_legend.update_widget(self.parent)
-        # a list of uids is emitted, even if the entity is just one
-        self.parent.fluid_removed_signal.emit(
-            [uid]
-        )
+        # A list of uids is emitted, even if the entity is just one
+        self.parent.fluid_removed_signal.emit([uid])
         return uid
 
     def clone_entity(self, uid: str = None) -> str:
@@ -206,16 +201,10 @@ class FluidsCollection(BaseCollection):
         # legend_updated is used to record if the table is updated or not.
         legend_updated = self.remove_unused_from_legend()
         # Then add new role / feature.
-        for uid in self.parent.fluids_coll.df["uid"].to_list():
-            role = self.parent.fluids_coll.df.loc[
-                self.parent.fluids_coll.df["uid"] == uid, "role"
-            ].values[0]
-            feature = self.parent.fluids_coll.df.loc[
-                self.parent.fluids_coll.df["uid"] == uid, "feature"
-            ].values[0]
-            scenario = self.parent.fluids_coll.df.loc[
-                self.parent.fluids_coll.df["uid"] == uid, "scenario"
-            ].values[0]
+        for uid in self.df["uid"].to_list():
+            role = self.df.loc[self.df["uid"] == uid, "role"].values[0]
+            feature = self.df.loc[self.df["uid"] == uid, "feature"].values[0]
+            scenario = self.df.loc[self.df["uid"] == uid, "scenario"].values[0]
             if self.parent.fluids_legend_df.loc[
                 (self.parent.fluids_legend_df["role"] == role)
                 & (self.parent.fluids_legend_df["feature"] == feature)
@@ -226,7 +215,7 @@ class FluidsCollection(BaseCollection):
                         "role": role,
                         "feature": feature,
                         "time": 0.0,
-                        "sequence": "strati_0",
+                        "sequence": "fluid_0",
                         "scenario": scenario,
                         "color_R": round(np_random.random() * 255),
                         "color_G": round(np_random.random() * 255),
@@ -236,7 +225,7 @@ class FluidsCollection(BaseCollection):
                     ignore_index=True,
                 )
                 legend_updated = legend_updated or True
-        # When done, if the table was updated update the widget. No signal is sent here to the views.
+        # When done, if the table was updated, update the widget. No signal is sent here to the views.
         if legend_updated:
             self.parent.legend.update_widget(self.parent)
 
@@ -248,9 +237,7 @@ class FluidsCollection(BaseCollection):
         features_in_legend = pd_unique(self.parent.fluids_legend_df["feature"])
         scenarios_in_legend = pd_unique(self.parent.fluids_legend_df["scenario"])
         for role in roles_in_legend:
-            if self.parent.fluids_coll.df.loc[
-                self.parent.fluids_coll.df["role"] == role
-            ].empty:
+            if self.df.loc[self.df["role"] == role].empty:
                 # Get index of row to be removed, then remove it in place with .drop().
                 idx_remove = self.parent.fluids_legend_df[
                     self.parent.fluids_legend_df["role"] == role
@@ -258,9 +245,9 @@ class FluidsCollection(BaseCollection):
                 self.parent.fluids_legend_df.drop(idx_remove, inplace=True)
                 legend_updated = legend_updated or True
             for feature in features_in_legend:
-                if self.parent.fluids_coll.df.loc[
-                    (self.parent.fluids_coll.df["role"] == role)
-                    & (self.parent.fluids_coll.df["feature"] == feature)
+                if self.df.loc[
+                    (self.df["role"] == role)
+                    & (self.df["feature"] == feature)
                 ].empty:
                     # Get index of row to be removed, then remove it in place with .drop().
                     idx_remove = self.parent.fluids_legend_df[
@@ -270,10 +257,10 @@ class FluidsCollection(BaseCollection):
                     self.parent.fluids_legend_df.drop(idx_remove, inplace=True)
                     legend_updated = legend_updated or True
                 for scenario in scenarios_in_legend:
-                    if self.parent.fluids_coll.df.loc[
-                        (self.parent.fluids_coll.df["role"] == role)
-                        & (self.parent.fluids_coll.df["feature"] == feature)
-                        & (self.parent.fluids_coll.df["scenario"] == scenario)
+                    if self.df.loc[
+                        (self.df["role"] == role)
+                        & (self.df["feature"] == feature)
+                        & (self.df["scenario"] == scenario)
                     ].empty:
                         # Get index of row to be removed, then remove it in place with .drop().
                         idx_remove = self.parent.fluids_legend_df[
@@ -284,9 +271,7 @@ class FluidsCollection(BaseCollection):
                         self.parent.fluids_legend_df.drop(idx_remove, inplace=True)
                         legend_updated = legend_updated or True
         for feature in features_in_legend:
-            if self.parent.fluids_coll.df.loc[
-                self.parent.fluids_coll.df["feature"] == feature
-            ].empty:
+            if self.df.loc[self.df["feature"] == feature].empty:
                 # Get index of row to be removed, then remove it in place with .drop().
                 idx_remove = self.parent.fluids_legend_df[
                     self.parent.fluids_legend_df["feature"] == feature
@@ -294,9 +279,9 @@ class FluidsCollection(BaseCollection):
                 self.parent.fluids_legend_df.drop(idx_remove, inplace=True)
                 legend_updated = legend_updated or True
             for scenario in scenarios_in_legend:
-                if self.parent.fluids_coll.df.loc[
-                    (self.parent.fluids_coll.df["feature"] == feature)
-                    & (self.parent.fluids_coll.df["scenario"] == scenario)
+                if self.df.loc[
+                    (self.df["feature"] == feature)
+                    & (self.df["scenario"] == scenario)
                 ].empty:
                     # Get index of row to be removed, then remove it in place with .drop().
                     idx_remove = self.parent.fluids_legend_df[
@@ -306,9 +291,7 @@ class FluidsCollection(BaseCollection):
                     self.parent.fluids_legend_df.drop(idx_remove, inplace=True)
                     legend_updated = legend_updated or True
         for scenario in scenarios_in_legend:
-            if self.parent.fluids_coll.df.loc[
-                self.parent.fluids_coll.df["scenario"] == scenario
-            ].empty:
+            if self.df.loc[self.df["scenario"] == scenario].empty:
                 # Get index of row to be removed, then remove it in place with .drop().
                 idx_remove = self.parent.fluids_legend_df[
                     self.parent.fluids_legend_df["scenario"] == scenario

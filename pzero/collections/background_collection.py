@@ -18,7 +18,6 @@ from vtkmodules.vtkCommonDataModel import vtkDataObject
 
 from .AbstractCollection import BaseCollection
 
-
 # Options to print Pandas dataframes in console when testing.
 pd_desired_width = 800
 pd_max_columns = 20
@@ -34,22 +33,20 @@ pd_set_option("display.max_colwidth", pd_max_colwidth)
 class BackgroundCollection(BaseCollection):
     """Collection for all background entities and their metadata."""
     def __init__(self, parent=None, *args, **kwargs):
-
         super(BackgroundCollection, self).__init__(parent, *args, **kwargs)
         # Initialize properties required by the abstract superclass.
         self.entity_dict = {
-                "uid": "",
-                "name": "undef",
-                "topology": "undef",
-                "role": "undef",
-                "feature": "undef",
-                "scenario": "undef",
-                "properties_names": [],
-                "properties_components": [],
-                "x_section": "",  # this is the uid of the cross section for "XsVertexSet", "XsPolyLine", and "XsImage", empty for all others
-                "borehole": "",
-                "vtk_obj": None,
-            }
+            "uid": "",
+            "name": "undef",
+            "topology": "undef",
+            "role": "undef",
+            "feature": "undef",
+            "scenario": "undef",
+            "properties_names": [],
+            "properties_components": [],
+            "x_section": "",  # this is the uid of the cross section for "XsVertexSet", "XsPolyLine", and "XsImage", empty for all others
+            "vtk_obj": None,
+        }
 
         self.entity_dict_types = {
             "uid": str,
@@ -61,11 +58,14 @@ class BackgroundCollection(BaseCollection):
             "properties_names": list,
             "properties_components": list,
             "x_section": str,  # this is the uid of the cross section for "XsVertexSet", "XsPolyLine", and "XsImage", empty for all others
-            "borehole": str,
             "vtk_obj": object,
         }
 
-        self.valid_roles = ["undef", "annotations", "imported"]
+        self.valid_roles = [
+            "undef",
+            "annotations",
+            "imported"
+        ]
 
         self.valid_topologies = [
             "VertexSet",
@@ -84,7 +84,7 @@ class BackgroundCollection(BaseCollection):
     # =================================== Obligatory methods ===========================================
 
     def add_entity_from_dict(self, entity_dict: pd_DataFrame = None, color: np_ndarray = None):
-        """Add a entity from a dictionary shaped as self.entity_dict."""
+        """Add an entity from a dictionary shaped as self.entity_dict."""
         # Create a new uid if it is not included in the dictionary.
         if not entity_dict["uid"]:
             entity_dict["uid"] = str(uuid4())
@@ -140,12 +140,7 @@ class BackgroundCollection(BaseCollection):
         # Remove row from dataframe and reset data model.
         if uid not in self.get_uids:
             return
-        self.df.drop(
-            self.parent.backgrounds_coll.df[
-                self.parent.backgrounds_coll.df["uid"] == uid
-                ].index,
-            inplace=True,
-        )
+        self.df.drop(self.df[self.df["uid"] == uid].index,inplace=True)
         self.modelReset.emit()  # is this really necessary?
         # Then remove role / feature / scenario from legend if needed.
         # legend_updated is used to record if the table is updated or not.
@@ -165,7 +160,7 @@ class BackgroundCollection(BaseCollection):
         # Take care since add_entity_from_dict sends signals immediately.
         # First check whether the uid to be cloned exists.
         if uid not in self.get_uids:
-            return ''
+            return
         # Ten deep-copy the base disctionary, copy parameters and the VTK object, and create new entity.
         # ====== CAN BE UNIFIED AS COMMON METHOD OF THE ABSTRACT COLLECTION IF "GEOLOGICAL" METHODS WILL BE UNIFIED ====
         entity_dict = deepcopy(self.entity_dict)
@@ -177,7 +172,6 @@ class BackgroundCollection(BaseCollection):
         entity_dict["properties_names"] = self.get_uid_properties_names(uid)
         entity_dict["properties_components"] = self.get_uid_properties_components(uid)
         entity_dict["x_section"] = self.get_uid_x_section(uid)
-        entity_dict["borehole"] = self.get_uid_borehole(uid)
         entity_dict["vtk_obj"] = self.get_uid_vtk_obj(uid).deep_copy()
         out_uid = self.add_entity_from_dict(entity_dict=entity_dict)
         return out_uid
@@ -207,32 +201,28 @@ class BackgroundCollection(BaseCollection):
         # legend_updated is used to record if the table is updated or not.
         legend_updated = self.remove_unused_from_legend()
         # Then add new role / feature.
-        for uid in self.parent.backgrounds_coll.df["uid"].to_list():
-            role = self.parent.backgrounds_coll.df.loc[
-                self.parent.backgrounds_coll.df["uid"] == uid, "role"
-            ].values[0]
-            feature = self.parent.backgrounds_coll.df.loc[
-                self.parent.backgrounds_coll.df["uid"] == uid, "feature"
-            ].values[0]
+        for uid in self.df["uid"].to_list():
+            role = self.df.loc[self.df["uid"] == uid, "role"].values[0]
+            feature = self.df.loc[self.df["uid"] == uid, "feature"].values[0]
+            scenario = self.df.loc[self.df["uid"] == uid, "scenario"].values[0]
             if self.parent.backgrounds_legend_df.loc[
-                (
-                        self.parent.backgrounds_legend_df["role"]
-                        == role
-                )
+                (self.parent.backgrounds_legend_df["role"] == role)
                 & (self.parent.backgrounds_legend_df["feature"] == feature)
+                & (self.parent.backgrounds_legend_df["scenario"] == scenario)
             ].empty:
-                self.parent.backgrounds_legend_df = (
-                    self.parent.backgrounds_legend_df.append(
+                self.parent.backgrounds_legend_df = self.parent.backgrounds_legend_df.append(
                         {
                             "role": role,
                             "feature": feature,
+                            "time": 0.0,
+                            "sequence": "back_0",
+                            "scenario": scenario,
                             "color_R": round(np_random.random() * 255),
                             "color_G": round(np_random.random() * 255),
                             "color_B": round(np_random.random() * 255),
                             "line_thick": 2.0,
                         },
                         ignore_index=True,
-                    )
                 )
                 legend_updated = legend_updated or True
         # When done, if the table was updated, update the widget. No signal is sent here to the views.
@@ -241,54 +231,70 @@ class BackgroundCollection(BaseCollection):
 
     def remove_unused_from_legend(self):
         """Remove unused roles / features from a legend table."""
-        # ====== TO BE UPDATED ACCORDING TO geological collection SINCE IT DOES NOT CONSIDER SCENARIO ===
         # legend_updated is used to record if the table is updated or not.
         legend_updated = False
-        roles_in_legend = pd_unique(
-            self.parent.backgrounds_legend_df["role"]
-        )
-        features_in_legend = pd_unique(
-            self.parent.backgrounds_legend_df["feature"]
-        )
+        roles_in_legend = pd_unique(self.parent.backgrounds_legend_df["role"])
+        features_in_legend = pd_unique(self.parent.backgrounds_legend_df["feature"])
+        scenarios_in_legend = pd_unique(self.parent.backgrounds_legend_df["scenario"])
         for role in roles_in_legend:
-            if self.parent.backgrounds_coll.df.loc[
-                self.parent.backgrounds_coll.df["role"] == role
-            ].empty:
+            if self.df.loc[self.df["role"] == role].empty:
                 # Get index of row to be removed, then remove it in place with .drop().
                 idx_remove = self.parent.backgrounds_legend_df[
-                    self.parent.backgrounds_legend_df["role"]
-                    == role
+                    self.parent.backgrounds_legend_df["role"] == role
                     ].index
                 self.parent.backgrounds_legend_df.drop(idx_remove, inplace=True)
                 legend_updated = legend_updated or True
             for feature in features_in_legend:
-                if self.parent.backgrounds_coll.df.loc[
-                    (
-                            self.parent.backgrounds_coll.df["role"]
-                            == role
-                    )
-                    & (self.parent.backgrounds_coll.df["feature"] == feature)
+                if self.df.loc[
+                    (self.df["role"] == role)
+                    & (self.df["feature"] == feature)
                 ].empty:
                     # Get index of row to be removed, then remove it in place with .drop().
                     idx_remove = self.parent.backgrounds_legend_df[
-                        (
-                                self.parent.backgrounds_legend_df["role"]
-                                == role
-                        )
-                        & (
-                                self.parent.backgrounds_legend_df["feature"]
-                                == feature
-                        )
+                        (self.parent.backgrounds_legend_df["role"] == role)
+                        & (self.parent.backgrounds_legend_df["feature"] == feature)
                         ].index
                     self.parent.backgrounds_legend_df.drop(idx_remove, inplace=True)
                     legend_updated = legend_updated or True
+                for scenario in scenarios_in_legend:
+                    if self.df.loc[
+                        (self.df["role"] == role)
+                        & (self.df["feature"] == feature)
+                        & (self.df["scenario"] == scenario)
+                    ].empty:
+                        # Get index of row to be removed, then remove it in place with .drop().
+                        idx_remove = self.parent.backgrounds_legend_df[
+                            (self.parent.backgrounds_legend_df["role"] == role)
+                            & (self.parent.backgrounds_legend_df["feature"] == feature)
+                            & (self.parent.backgrounds_legend_df["scenario"] == scenario)
+                            ].index
+                        self.parent.backgrounds_legend_df.drop(idx_remove, inplace=True)
+                        legend_updated = legend_updated or True
         for feature in features_in_legend:
-            if self.parent.backgrounds_coll.df.loc[
-                self.parent.backgrounds_coll.df["feature"] == feature
-            ].empty:
+            if self.df.loc[self.df["feature"] == feature].empty:
                 # Get index of row to be removed, then remove it in place with .drop().
                 idx_remove = self.parent.backgrounds_legend_df[
                     self.parent.backgrounds_legend_df["feature"] == feature
+                    ].index
+                self.parent.backgrounds_legend_df.drop(idx_remove, inplace=True)
+                legend_updated = legend_updated or True
+            for scenario in scenarios_in_legend:
+                if self.df.loc[
+                    (self.df["feature"] == feature)
+                    & (self.df["scenario"] == scenario)
+                ].empty:
+                    # Get index of row to be removed, then remove it in place with .drop().
+                    idx_remove = self.parent.backgrounds_legend_df[
+                        (self.parent.backgrounds_legend_df["feature"] == feature)
+                        & (self.parent.backgrounds_legend_df["scenario"] == scenario)
+                        ].index
+                    self.parent.backgrounds_legend_df.drop(idx_remove, inplace=True)
+                    legend_updated = legend_updated or True
+        for scenario in scenarios_in_legend:
+            if self.df.loc[self.df["scenario"] == scenario].empty:
+                # Get index of row to be removed, then remove it in place with .drop().
+                idx_remove = self.parent.backgrounds_legend_df[
+                    self.parent.backgrounds_legend_df["scenario"] == scenario
                     ].index
                 self.parent.backgrounds_legend_df.drop(idx_remove, inplace=True)
                 legend_updated = legend_updated or True
@@ -304,9 +310,7 @@ class BackgroundCollection(BaseCollection):
             & (self.parent.backgrounds_legend_df["feature"] == feature)
             & (self.parent.backgrounds_legend_df["scenario"] == scenario)
             ].to_dict("records")
-        return legend_dict[
-            0
-        ]  # the '[0]' is needed since .to_dict('records') returns a list of dictionaries (with just one element in this case)
+        return legend_dict[0]  # the '[0]' is needed since .to_dict('records') returns a list of dictionaries (with just one element in this case)
 
     def set_uid_legend(self, uid: str = None, color_R: float = None, color_G: float = None, color_B: float = None,
                        line_thick: float = None, point_size: float = None, opacity: float = None):

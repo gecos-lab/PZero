@@ -5,10 +5,10 @@ from uuid import uuid4
 
 from copy import deepcopy
 
-from numpy import random as np_random
 from numpy import ndarray as np_ndarray
+from numpy import set_printoptions as np_set_printoptions
 from numpy import round as np_round
-from numpy import set_printoptions as np_set_set_printoptions
+from numpy import random as np_random
 
 from pandas import DataFrame as pd_DataFrame
 from pandas import set_option as pd_set_option
@@ -24,7 +24,7 @@ pd_max_columns = 20
 pd_show_precision = 4
 pd_max_colwidth = 80
 pd_set_option("display.width", pd_desired_width)
-np_set_set_printoptions(linewidth=pd_desired_width)
+np_set_printoptions(linewidth=pd_desired_width)
 pd_set_option("display.max_columns", pd_max_columns)
 pd_set_option("display.precision", pd_show_precision)
 pd_set_option("display.max_colwidth", pd_max_colwidth)
@@ -44,7 +44,7 @@ class GeologicalCollection(BaseCollection):
             "scenario": "undef",
             "properties_names": [],
             "properties_components": [],
-            "x_section": "",  # this is the uid of the cross-section for "XsVertexSet", "XsPolyLine", and "XsImage", empty for all others
+            "x_section": "",  # this is the uid of the cross section for "XsVertexSet", "XsPolyLine", and "XsImage", empty for all others
             "vtk_obj": None,
         }
 
@@ -57,7 +57,7 @@ class GeologicalCollection(BaseCollection):
             "scenario": str,
             "properties_names": list,
             "properties_components": list,
-            "x_section": str,
+            "x_section": str,  # this is the uid of the cross section for "XsVertexSet", "XsPolyLine", and "XsImage", empty for all others
             "vtk_obj": object,
         }
 
@@ -68,6 +68,7 @@ class GeologicalCollection(BaseCollection):
             "intrusive",
             "unconformity",
             "top",
+            "base",
             "bedding",
             "foliation",
             "lineation",
@@ -147,9 +148,9 @@ class GeologicalCollection(BaseCollection):
         # Remove row from dataframe and reset data model.
         if uid not in self.get_uids:
             return
-        self.df.drop(self.parent.geol_coll.df[self.parent.geol_coll.df["uid"] == uid].index, inplace=True)
+        self.df.drop(self.df[self.df["uid"] == uid].index,inplace=True)
         self.modelReset.emit()  # is this really necessary?
-        # Then remove type / feature / scenario from legend if needed.
+        # Then remove role / feature / scenario from legend if needed.
         # legend_updated is used to record if the table is updated or not.
         # Note that for performance reasons this is done explicitly here, when adding an entity to the
         # collection, and not with a signal telling the legend to be updated by scanning the whole collection.
@@ -208,16 +209,10 @@ class GeologicalCollection(BaseCollection):
         # legend_updated is used to record if the table is updated or not.
         legend_updated = self.remove_unused_from_legend()
         # Then add new role / feature.
-        for uid in self.parent.geol_coll.df["uid"].to_list():
-            role = self.parent.geol_coll.df.loc[
-                self.parent.geol_coll.df["uid"] == uid, "role"
-            ].values[0]
-            feature = self.parent.geol_coll.df.loc[
-                self.parent.geol_coll.df["uid"] == uid, "feature"
-            ].values[0]
-            scenario = self.parent.geol_coll.df.loc[
-                self.parent.geol_coll.df["uid"] == uid, "scenario"
-            ].values[0]
+        for uid in self.df["uid"].to_list():
+            role = self.df.loc[self.df["uid"] == uid, "role"].values[0]
+            feature = self.df.loc[self.df["uid"] == uid, "feature"].values[0]
+            scenario = self.df.loc[self.df["uid"] == uid, "scenario"].values[0]
             if self.parent.geol_legend_df.loc[
                 (self.parent.geol_legend_df["role"] == role)
                 & (self.parent.geol_legend_df["feature"] == feature)
@@ -237,22 +232,20 @@ class GeologicalCollection(BaseCollection):
                     },
                     ignore_index=True,
                 )
-                legend_updated = True
+                legend_updated = legend_updated or True
         # When done, if the table was updated, update the widget. No signal is sent here to the views.
         if legend_updated:
             self.parent.legend.update_widget(self.parent)
 
     def remove_unused_from_legend(self):
-        """Remove unused types / features from a legend table."""
+        """Remove unused roles / features from a legend table."""
         # legend_updated is used to record if the table is updated or not.
         legend_updated = False
         roles_in_legend = pd_unique(self.parent.geol_legend_df["role"])
         features_in_legend = pd_unique(self.parent.geol_legend_df["feature"])
         scenarios_in_legend = pd_unique(self.parent.geol_legend_df["scenario"])
         for role in roles_in_legend:
-            if self.parent.geol_coll.df.loc[
-                self.parent.geol_coll.df["role"] == role
-            ].empty:
+            if self.df.loc[self.df["role"] == role].empty:
                 # Get index of row to be removed, then remove it in place with .drop().
                 idx_remove = self.parent.geol_legend_df[
                     self.parent.geol_legend_df["role"] == role
@@ -260,9 +253,9 @@ class GeologicalCollection(BaseCollection):
                 self.parent.geol_legend_df.drop(idx_remove, inplace=True)
                 legend_updated = legend_updated or True
             for feature in features_in_legend:
-                if self.parent.geol_coll.df.loc[
-                    (self.parent.geol_coll.df["role"] == role)
-                    & (self.parent.geol_coll.df["feature"] == feature)
+                if self.df.loc[
+                    (self.df["role"] == role)
+                    & (self.df["feature"] == feature)
                 ].empty:
                     # Get index of row to be removed, then remove it in place with .drop().
                     idx_remove = self.parent.geol_legend_df[
@@ -272,26 +265,21 @@ class GeologicalCollection(BaseCollection):
                     self.parent.geol_legend_df.drop(idx_remove, inplace=True)
                     legend_updated = legend_updated or True
                 for scenario in scenarios_in_legend:
-                    if self.parent.geol_coll.df.loc[
-                        (self.parent.geol_coll.df["role"] == role)
-                        & (self.parent.geol_coll.df["feature"] == feature)
-                        & (self.parent.geol_coll.df["scenario"] == scenario)
+                    if self.df.loc[
+                        (self.df["role"] == role)
+                        & (self.df["feature"] == feature)
+                        & (self.df["scenario"] == scenario)
                     ].empty:
                         # Get index of row to be removed, then remove it in place with .drop().
                         idx_remove = self.parent.geol_legend_df[
                             (self.parent.geol_legend_df["role"] == role)
-                            & (
-                                    self.parent.geol_legend_df["feature"]
-                                    == feature
-                            )
+                            & (self.parent.geol_legend_df["feature"] == feature)
                             & (self.parent.geol_legend_df["scenario"] == scenario)
                             ].index
                         self.parent.geol_legend_df.drop(idx_remove, inplace=True)
                         legend_updated = legend_updated or True
         for feature in features_in_legend:
-            if self.parent.geol_coll.df.loc[
-                self.parent.geol_coll.df["feature"] == feature
-            ].empty:
+            if self.df.loc[self.df["feature"] == feature].empty:
                 # Get index of row to be removed, then remove it in place with .drop().
                 idx_remove = self.parent.geol_legend_df[
                     self.parent.geol_legend_df["feature"] == feature
@@ -299,9 +287,9 @@ class GeologicalCollection(BaseCollection):
                 self.parent.geol_legend_df.drop(idx_remove, inplace=True)
                 legend_updated = legend_updated or True
             for scenario in scenarios_in_legend:
-                if self.parent.geol_coll.df.loc[
-                    (self.parent.geol_coll.df["feature"] == feature)
-                    & (self.parent.geol_coll.df["scenario"] == scenario)
+                if self.df.loc[
+                    (self.df["feature"] == feature)
+                    & (self.df["scenario"] == scenario)
                 ].empty:
                     # Get index of row to be removed, then remove it in place with .drop().
                     idx_remove = self.parent.geol_legend_df[
@@ -311,9 +299,7 @@ class GeologicalCollection(BaseCollection):
                     self.parent.geol_legend_df.drop(idx_remove, inplace=True)
                     legend_updated = legend_updated or True
         for scenario in scenarios_in_legend:
-            if self.parent.geol_coll.df.loc[
-                self.parent.geol_coll.df["scenario"] == scenario
-            ].empty:
+            if self.df.loc[self.df["scenario"] == scenario].empty:
                 # Get index of row to be removed, then remove it in place with .drop().
                 idx_remove = self.parent.geol_legend_df[
                     self.parent.geol_legend_df["scenario"] == scenario
@@ -410,7 +396,7 @@ class GeologicalCollection(BaseCollection):
         return self.df.loc[self.df["uid"] == uid, 'role'].values[0]
 
     def set_uid_role(self, uid=None, role=None):
-        """Set collection type from uid."""
+        """Set role of a given uid."""
         self.df.loc[self.df["uid"] == uid, 'role'] = role
 
     def get_feature_uids(self, coll_feature: str = None) -> list:
