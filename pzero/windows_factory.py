@@ -220,15 +220,15 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         # Connect signals to update functions. Use lambda functions where we need to pass additional
         # arguments such as parent in addition to the signal itself, e.g. the updated_list
         # Note that it could be possible to connect the (lambda) functions directly, without naming them, as in:
-        # self.parent.geology_added_signal.connect(lambda updated_list: self.geology_added_update_views(
+        # self.parent.geol_coll.signals.added.connect(lambda updated_list: self.geology_added_update_views(
         #             updated_list=updated_list
         #         ))
         # but in this way it will be impossible to disconnect them selectively when closing this window, so we use:
         # self.upd_list_geo_add = lambda updated_list: self.geology_added_update_views(
         #             updated_list=updated_list
         #         )
-        # self.parent.geology_added_signal.connect(self.upd_list_geo_add)
-        # self.parent.geology_added_signal.disconnect(self.upd_list_geo_add)
+        # self.parent.geol_coll.signals.added.connect(self.upd_list_geo_add)
+        # self.parent.geol_coll.signals.added.disconnect(self.upd_list_geo_add)
 
         # Define GEOLOGY lamda functions and signals
 
@@ -277,7 +277,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
 
         # Connect GEOLOGY lamda functions and signals
 
-        self.parent.geology_added_signal.connect(
+        self.parent.geol_coll.signals.added.connect(
             self.upd_list_geo_add
         )  # this is emitted from the collection
         self.parent.geology_removed_signal.connect(
@@ -767,7 +767,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
 
         # Disconnect GEOLOGY signals
 
-        self.parent.geology_added_signal.disconnect(self.upd_list_geo_add)
+        self.parent.geol_coll.signals.added.disconnect(self.upd_list_geo_add)
         self.parent.geology_removed_signal.disconnect(self.upd_list_geo_rm)
         self.parent.geology_geom_modified_signal.disconnect(self.upd_list_geo_mod)
         self.parent.geology_data_keys_modified_signal.disconnect(

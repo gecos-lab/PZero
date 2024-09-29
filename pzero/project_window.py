@@ -117,7 +117,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         pyqtSignal()
     )  # this is used to delete open windows when the current project is closed (and a new one is opened)
 
-    geology_added_signal = pyqtSignal(list)
+    # geology_added_signal = pyqtSignal(list)
     geology_removed_signal = pyqtSignal(list)
     geology_geom_modified_signal = pyqtSignal(list)  # this includes topology modified
     geology_data_keys_modified_signal = pyqtSignal(list)

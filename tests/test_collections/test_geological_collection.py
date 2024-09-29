@@ -25,7 +25,7 @@ class FakeWindow(QMainWindow):
     geol_coll.legend_df = pd_DataFrame(columns=list(Legend.geol_legend_dict.keys()))
     legend = FakeLegend()
     prop_legend = FakeLegend()
-    geology_added_signal = FakeSignal()
+    geol_coll.signals.added = FakeSignal()
     geology_removed_signal = FakeSignal()
 
 

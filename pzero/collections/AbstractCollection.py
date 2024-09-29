@@ -1,4 +1,4 @@
-from PyQt5.QtCore import QAbstractTableModel, Qt, QVariant, QSortFilterProxyModel
+from PyQt5.QtCore import QAbstractTableModel, Qt, QVariant, QSortFilterProxyModel, QObject, pyqtSignal
 
 from abc import abstractmethod, ABC
 
@@ -9,6 +9,31 @@ from numpy import ndarray as np_ndarray
 from numpy import intp as np_intp
 
 from vtkmodules.vtkCommonDataModel import vtkDataObject
+
+
+class CollectionSignals(QObject):
+    """
+    This class is necessary since non-Qt classes cannot emit Qt signals. Therefore, we create a generic
+    CollSignal() Qt object, that will include all signals used by collections. These will be used according
+    to the following pattern:
+
+    self.signals = CollectionSignals()
+
+    self.signals.specific_signal.emit(some_message)
+
+    etc.
+    """
+
+    added = pyqtSignal(list)
+    removed = pyqtSignal(list)
+    geom_modified = pyqtSignal(list)  # this includes topology modified
+    data_keys_modified = pyqtSignal(list)
+    data_val_modified = pyqtSignal(list)
+    metadata_modified = pyqtSignal(list)
+    legend_color_modified = pyqtSignal(list)
+    legend_thick_modified = pyqtSignal(list)
+    legend_point_size_modified = pyqtSignal(list)
+    legend_opacity_modified = pyqtSignal(list)
 
 
 class BaseCollection(ABC):
@@ -37,6 +62,8 @@ class BaseCollection(ABC):
         self._editable_columns_names: list = list()
 
         self._table_model = BaseTableModel(self.parent, self)
+
+        self._signals = CollectionSignals()
 
     # =========================== Abstract (obligatory) methods ================================
 
@@ -109,6 +136,10 @@ class BaseCollection(ABC):
     #     pass
 
     # =================================== Common properties ================================================
+
+    @property
+    def signals(self):
+        return self._signals
 
     @property
     def parent(self):

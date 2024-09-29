@@ -138,7 +138,7 @@ class GeologicalCollection(BaseCollection):
             self.parent.prop_legend.update_widget(self.parent)
         # Then emit signal to update the views. A list of uids is emitted, even if the
         # entity is just one, for future compatibility
-        self.parent.geology_added_signal.emit(
+        self.signals.added.emit(
             [entity_dict["uid"]]
         )
         return entity_dict["uid"]
