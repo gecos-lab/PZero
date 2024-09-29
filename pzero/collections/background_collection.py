@@ -130,7 +130,7 @@ class BackgroundCollection(BaseCollection):
             self.parent.prop_legend.update_widget(self.parent)
         # Then emit signal to update the views. A list of uids is emitted, even if the
         # entity is just one, for future compatibility
-        self.parent.background_added_signal.emit(
+        self.parent.backgrnd_coll.signals.added.emit(
             [entity_dict["uid"]]
         )
         return entity_dict["uid"]
@@ -152,7 +152,7 @@ class BackgroundCollection(BaseCollection):
             self.parent.legend.update_widget(self.parent)
             self.parent.prop_legend.update_widget(self.parent)
         # A list of uids is emitted, even if the entity is just one
-        self.parent.background_removed_signal.emit([uid])
+        self.parent.backgrnd_coll.signals.removed.emit([uid])
         return uid
 
     def clone_entity(self, uid: str = None) -> str:
@@ -190,8 +190,8 @@ class BackgroundCollection(BaseCollection):
                 self.df.loc[self.df["uid"] == uid, "properties_components"].append(components)
             self.df.loc[self.df["uid"] == uid, "vtk_obj"] = vtk_object
             self.parent.prop_legend.update_widget(self.parent)
-            self.parent.background_data_keys_modified_signal.emit([uid])
-            self.parent.background_geom_modified_signal.emit([uid])
+            self.parent.backgrnd_coll.signals.data_keys_modified.emit([uid])
+            self.parent.backgrnd_coll.signals.geom_modified.emit([uid])
         else:
             print("ERROR - replace_vtk with vtk of a different type not allowed.")
 
@@ -319,13 +319,13 @@ class BackgroundCollection(BaseCollection):
         # ==== IN THE FUTURE SEE IF IT IS POSSIBLE TO USE THIS IN add_entity_from_dict ============================
         pass
 
-    def metadata_modified_signal(self, updated_list: list = None):
-        """Signal emitted when metadata change."""
-        self.parent.background_metadata_modified_signal.emit(updated_list)
+    # def metadata_modified_signal(self, updated_list: list = None):
+    #     """Signal emitted when metadata change."""
+    #     self.parent.backgrnd_coll.signals.metadata_modified.emit(updated_list)
 
-    def data_keys_modified_signal(self, updated_list: list = None):
-        """Signal emitted when point data keys change."""
-        self.parent.background_data_keys_modified_signal.emit(updated_list)
+    # def data_keys_modified_signal(self, updated_list: list = None):
+    #     """Signal emitted when point data keys change."""
+    #     self.parent.backgrnd_coll.signals.data_keys_modified.emit(updated_list)
 
     # =================================== Additional methods ===========================================
     # ====== CAN BE UNIFIED AS COMMON METHOD OF THE ABSTRACT COLLECTION IF "GEOLOGICAL" METHODS WILL BE UNIFIED ====

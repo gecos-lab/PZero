@@ -24,11 +24,11 @@ class FakeWindow(QMainWindow):
     def __init__(self):
         super(FakeWindow, self).__init__()
 
-    backgrounds_coll.legend_df = pd_DataFrame(columns=list(Legend.backgrounds_legend_dict.keys()))
+    backgrnd_coll.legend_df = pd_DataFrame(columns=list(Legend.backgrounds_legend_dict.keys()))
     legend = FakeLegend()
     prop_legend = FakeLegend()
-    dom_added_signal = FakeSignal()
-    dom_removed_signal = FakeSignal()
+    dom_coll.signals.added = FakeSignal()
+    dom_coll.signals.removed = FakeSignal()
 
 
 # Class for testing the dom_collection

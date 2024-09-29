@@ -150,7 +150,7 @@ def sort_line_nodes(self):
             current_uid
         ).sort_nodes()  # this could be probably done per-part__________________________
         """Deselect input line."""
-        self.parent.geology_geom_modified_signal.emit(
+        self.parent.geol_coll.signals.geom_modified.emit(
             [current_uid]
         )  # emit uid as list to force redraw()
         # """Un-Freeze QT interface"""
@@ -197,7 +197,7 @@ def move_line(self, vector):
         self.parent.geol_coll.get_uid_vtk_obj(current_uid).points = points
         left_right(current_uid)
         """Deselect input line."""
-        self.parent.geology_geom_modified_signal.emit(
+        self.parent.geol_coll.signals.geom_modified.emit(
             [current_uid]
         )  # emit uid as list to force redraw()
         """Un-Freeze QT interface"""
@@ -267,7 +267,7 @@ def rotate_line(self):
         outXYZ = np_column_stack((outX, outY, outZ))
         self.parent.geol_coll.get_uid_vtk_obj(current_uid).points = outXYZ
         left_right(current_uid)
-        self.parent.geology_geom_modified_signal.emit(
+        self.parent.geol_coll.signals.geom_modified.emit(
             [current_uid]
         )  # emit uid as list to force redraw()
     """Deselect input line."""
@@ -464,7 +464,7 @@ def split_line_line(self):
                 """Replace VTK object"""
                 if replace == 1:
                     self.parent.geol_coll.replace_vtk(uid=current_uid_paper, vtk_object=new_line["vtk_obj"])
-                    self.parent.geology_geom_modified_signal.emit(
+                    self.parent.geol_coll.signals.geom_modified.emit(
                         [current_uid_paper]
                     )  # emit uid as list to force redraw()
                     replace = 0
@@ -478,7 +478,7 @@ def split_line_line(self):
                 print("Empty object")
         """Deselect input line and force redraw"""
 
-        # self.parent.geology_geom_modified_signal.emit(uids)  # emit uid as list to force redraw()
+        # self.parent.geol_coll.signals.geom_modified.emit(uids)  # emit uid as list to force redraw()
     self.clear_selection()
     """Un-Freeze QT interface"""
     self.enable_actions()
@@ -765,7 +765,7 @@ def merge_lines(self):
     self.clear_selection()
     self.parent.update_actors = False
     self.parent.geol_coll.remove_entity(current_uid_two)
-    # self.parent.geology_geom_modified_signal.emit([current_uid_one])  # emit uid as list to force redraw()
+    # self.parent.geol_coll.signals.geom_modified.emit([current_uid_one])  # emit uid as list to force redraw()
     """Un-Freeze QT interface"""
     self.enable_actions()
 
@@ -1016,7 +1016,7 @@ def resample_line_distance(
         else:
             print("Empty object")
         """Deselect input line."""
-        self.parent.geology_geom_modified_signal.emit(
+        self.parent.geol_coll.signals.geom_modified.emit(
             [current_uid]
         )  # emit uid as list to force redraw()
         """Un-Freeze QT interface"""
@@ -1118,7 +1118,7 @@ def resample_line_number_points(
         else:
             print("Empty object")
 
-        self.parent.geology_geom_modified_signal.emit(
+        self.parent.geol_coll.signals.geom_modified.emit(
             [current_uid]
         )  # emit uid as list to force redraw()
     """Deselect input line."""
@@ -1219,7 +1219,7 @@ def simplify_line(
         else:
             print("Empty object")
 
-        self.parent.geology_geom_modified_signal.emit(
+        self.parent.geol_coll.signals.geom_modified.emit(
             [current_uid]
         )  # emit uid as list to force redraw()
     """Deselect input line."""
@@ -1302,7 +1302,7 @@ def copy_parallel(
     inUV = np_column_stack((inU, inV))
     """Deselect input line."""
     self.clear_selection()
-    # self.parent.geology_geom_modified_signal.emit([input_uid])  # emit uid as list to force redraw()
+    # self.parent.geol_coll.signals.geom_modified.emit([input_uid])  # emit uid as list to force redraw()
     """Run the Shapely function."""
     shp_line_in = shp_linestring(inUV)
     # print(shp_line_in)
@@ -1421,7 +1421,7 @@ def copy_kink(
     inUV = np_column_stack((inU, inV))
     """Deselect input line."""
     self.clear_selection()
-    self.parent.geology_geom_modified_signal.emit(
+    self.parent.geol_coll.signals.geom_modified.emit(
         [input_uid]
     )  # emit uid as list to force redraw()
     """Run the Shapely function."""
@@ -1541,7 +1541,7 @@ def copy_similar(
     """Deselect input line."""
     if line_dict["vtk_obj"].points_number > 0:
         self.clear_selection()
-        # self.parent.geology_geom_modified_signal.emit([input_uid])  # emit uid as list to force redraw()
+        # self.parent.geol_coll.signals.geom_modified.emit([input_uid])  # emit uid as list to force redraw()
     else:
         print("Empty object")
     """Un-Freeze QT interface"""

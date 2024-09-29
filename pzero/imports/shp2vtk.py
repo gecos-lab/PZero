@@ -223,7 +223,7 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
                     curr_obj_dict["vtk_obj"].ShallowCopy(vtkappend.GetOutput())
                 """Create entity from the dictionary and run left_right."""
                 if curr_obj_dict["vtk_obj"].points_number > 0:
-                    output_uid = self.fluids_coll.add_entity_from_dict(curr_obj_dict)
+                    output_uid = self.fluid_coll.add_entity_from_dict(curr_obj_dict)
                 else:
                     print("Empty object")
                 # else:
@@ -271,7 +271,7 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
                         ]
                         curr_obj_dict["properties_names"] = properties_names
                         curr_obj_dict["properties_components"] = properties_components
-                        self.fluids_coll.add_entity_from_dict(curr_obj_dict)
+                        self.fluid_coll.add_entity_from_dict(curr_obj_dict)
                         del curr_obj_dict
                     elif curr_obj_dict["vtk_obj"].points_number > 0:
                         curr_obj_dict["vtk_obj"].auto_cells()
@@ -283,7 +283,7 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
                         ]
                         curr_obj_dict["properties_names"] = properties_names
                         curr_obj_dict["properties_components"] = properties_components
-                        self.fluids_coll.add_entity_from_dict(curr_obj_dict)
+                        self.fluid_coll.add_entity_from_dict(curr_obj_dict)
                         del curr_obj_dict
             else:
                 print(
@@ -344,7 +344,7 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
                         curr_obj_dict["vtk_obj"].ShallowCopy(vtkappend.GetOutput())
                 """Create entity from the dictionary and run left_right."""
                 if curr_obj_dict["vtk_obj"].points_number > 0:
-                    self.backgrounds_coll.add_entity_from_dict(curr_obj_dict)
+                    self.backgrnd_coll.add_entity_from_dict(curr_obj_dict)
                 else:
                     print("Empty object")
                 # else:
@@ -393,7 +393,7 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
                         ]
                         curr_obj_dict["properties_names"] = properties_names
                         curr_obj_dict["properties_components"] = properties_components
-                        self.backgrounds_coll.add_entity_from_dict(curr_obj_dict)
+                        self.backgrnd_coll.add_entity_from_dict(curr_obj_dict)
                         del curr_obj_dict
                     elif curr_obj_dict["vtk_obj"].points_number > 0:
                         # curr_obj_dict["vtk_obj"].auto_cells()
@@ -405,7 +405,7 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
                         ]
                         curr_obj_dict["properties_names"] = properties_names
                         curr_obj_dict["properties_components"] = properties_components
-                        self.backgrounds_coll.add_entity_from_dict(curr_obj_dict)
+                        self.backgrnd_coll.add_entity_from_dict(curr_obj_dict)
                         del curr_obj_dict
             else:
                 print(

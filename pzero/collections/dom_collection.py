@@ -78,7 +78,7 @@ class DomCollection(BaseCollection):
         self.modelReset.emit()
         self.parent.prop_legend.update_widget(self.parent)
         # Then emit signal to update the views. A list of uids is emitted, even if the entity is just one.
-        self.parent.dom_added_signal.emit([entity_dict["uid"]])
+        self.parent.dom_coll.signals.added.emit([entity_dict["uid"]])
         return entity_dict["uid"]
 
     def remove_entity(self, uid: str = None) -> str:
@@ -88,7 +88,7 @@ class DomCollection(BaseCollection):
         self.modelReset.emit()  # is this really necessary?
         self.parent.prop_legend.update_widget(self.parent)
         # When done, send a signal over to the views. A list of uids is emitted, even if the entity is just one.
-        self.parent.dom_removed_signal.emit([uid])
+        self.parent.dom_coll.signals.removed.emit([uid])
         return uid
 
     def clone_entity(self, uid: str = None) -> str:
@@ -124,13 +124,13 @@ class DomCollection(BaseCollection):
         # Not implemented for this collection, but required by the abstract superclass.
         pass
 
-    def metadata_modified_signal(self, updated_list: list = None):
-        """Signal emitted when metadata change."""
-        self.parent.dom_metadata_modified_signal.emit(updated_list)
+    # def metadata_modified_signal(self, updated_list: list = None):
+    #     """Signal emitted when metadata change."""
+    #     self.parent.dom_coll.signals.metadata_modified.emit(updated_list)
 
-    def data_keys_modified_signal(self, updated_list: list = None):
-        """Signal emitted when point data keys change."""
-        self.parent.dom_data_keys_modified_signal.emit(updated_list)
+    # def data_keys_modified_signal(self, updated_list: list = None):
+    #     """Signal emitted when point data keys change."""
+    #     self.parent.dom_coll.signals.data_keys_modified.emit(updated_list)
 
     # =================================== Additional methods ===========================================
 
@@ -151,7 +151,7 @@ class DomCollection(BaseCollection):
                 map_image_uid=map_image_uid,
             )
             self.df.at[row, "texture_uids"].append(map_image_uid)
-            self.parent.dom_metadata_modified_signal.emit([dom_uid])
+            self.parent.dom_coll.signals.metadata_modified.emit([dom_uid])
 
     def remove_map_texture_from_dom(self, dom_uid=None, map_image_uid=None):
         """Remove a map texture from a DOM."""
@@ -159,8 +159,8 @@ class DomCollection(BaseCollection):
         if map_image_uid in self.df.at[row, "texture_uids"]:
             self.get_uid_vtk_obj(dom_uid).remove_texture(map_image_uid=map_image_uid)
             self.df.at[row, "texture_uids"].remove(map_image_uid)
-            self.parent.dom_data_keys_modified_signal.emit([dom_uid])
-            # self.parent.dom_metadata_modified_signal.emit([dom_uid])
+            self.parent.dom_coll.signals.data_keys_modified.emit([dom_uid])
+            # self.parent.dom_coll.signals.metadata_modified.emit([dom_uid])
 
     def set_active_texture_on_dom(self, dom_uid=None, map_image_uid=None):
         """Set active texture on a DOM."""

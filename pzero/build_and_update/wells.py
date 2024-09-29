@@ -97,8 +97,8 @@ def create_well_tree(self):
     # property_combo.uid = uid
     # property_combo.name = 'Annotations'
     # property_combo.addItem("none")
-    # for annotation_uid in self.parent.backgrounds_coll.get_buid_uid(uid):
-    #     name = self.parent.backgrounds_coll.get_uid_name(annotation_uid)
+    # for annotation_uid in self.parent.backgrnd_coll.get_buid_uid(uid):
+    #     name = self.parent.backgrnd_coll.get_uid_name(annotation_uid)
     #     property_combo.addItem(name)
 
     # self.WellsTreeWidget.setItemWidget(tlevel_2_mark, 2, property_combo)

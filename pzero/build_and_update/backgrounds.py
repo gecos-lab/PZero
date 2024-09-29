@@ -16,7 +16,7 @@ def create_backgrounds_tree(self):
     self.BackgroundsTreeWidget.hideColumn(1)  # hide the uid column
     self.BackgroundsTreeWidget.setItemsExpandable(True)
     roles = pd_unique(
-        self.parent.backgrounds_coll.df.query(self.view_filter)["role"]
+        self.parent.backgrnd_coll.df.query(self.view_filter)["role"]
     )
     for role in roles:
         flevel_1 = QTreeWidgetItem(
@@ -26,8 +26,8 @@ def create_backgrounds_tree(self):
             flevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
         )
         features = pd_unique(
-            self.parent.backgrounds_coll.df.query(self.view_filter).loc[
-                self.parent.backgrounds_coll.df.query(self.view_filter)["role"]
+            self.parent.backgrnd_coll.df.query(self.view_filter).loc[
+                self.parent.backgrnd_coll.df.query(self.view_filter)["role"]
                 == role,
                 "feature",
             ]
@@ -39,13 +39,13 @@ def create_backgrounds_tree(self):
             flevel_2.setFlags(
                 flevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
             )
-            uids = self.parent.backgrounds_coll.df.query(self.view_filter).loc[
+            uids = self.parent.backgrnd_coll.df.query(self.view_filter).loc[
                 (
-                        self.parent.backgrounds_coll.df.query(self.view_filter)["role"]
+                        self.parent.backgrnd_coll.df.query(self.view_filter)["role"]
                         == role
                 )
                 & (
-                        self.parent.backgrounds_coll.df.query(self.view_filter)["feature"]
+                        self.parent.backgrnd_coll.df.query(self.view_filter)["feature"]
                         == feature
                 ),
                 "uid",
@@ -56,12 +56,12 @@ def create_backgrounds_tree(self):
                 property_combo.name = "Annotations"
                 property_combo.addItem("none")
                 property_combo.addItem("name")
-                for prop in self.parent.backgrounds_coll.get_uid_properties_names(
+                for prop in self.parent.backgrnd_coll.get_uid_properties_names(
                         uid
                 ):
                     property_combo.addItem(prop)
-                name = self.parent.backgrounds_coll.df.loc[
-                    (self.parent.backgrounds_coll.df["uid"] == uid), "name"
+                name = self.parent.backgrnd_coll.df.loc[
+                    (self.parent.backgrnd_coll.df["uid"] == uid), "name"
                 ].values[0]
                 flevel_3 = QTreeWidgetItem(
                     flevel_2, [name, uid]
@@ -98,7 +98,7 @@ def create_backgrounds_topology_tree(self):
     )
     self.BackgroundsTopologyTreeWidget.hideColumn(1)  # hide the uid column
     self.BackgroundsTopologyTreeWidget.setItemsExpandable(True)
-    topo_types = pd_unique(self.parent.backgrounds_coll.df.query(self.view_filter)["topology"])
+    topo_types = pd_unique(self.parent.backgrnd_coll.df.query(self.view_filter)["topology"])
     for topo_type in topo_types:
         tlevel_1 = QTreeWidgetItem(
             self.BackgroundsTopologyTreeWidget, [topo_type]
@@ -108,8 +108,8 @@ def create_backgrounds_topology_tree(self):
         )
 
         for role in pd_unique(
-                self.parent.backgrounds_coll.df.query(self.view_filter).loc[
-                    self.parent.backgrounds_coll.df.query(self.view_filter)["topology"] == topo_type,
+                self.parent.backgrnd_coll.df.query(self.view_filter).loc[
+                    self.parent.backgrnd_coll.df.query(self.view_filter)["topology"] == topo_type,
                     "role",
                 ]
         ):
@@ -119,13 +119,13 @@ def create_backgrounds_topology_tree(self):
             tlevel_2.setFlags(
                 tlevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
             )
-            uids = self.parent.backgrounds_coll.df.query(self.view_filter).loc[
+            uids = self.parent.backgrnd_coll.df.query(self.view_filter).loc[
                 (
-                        self.parent.backgrounds_coll.df.query(self.view_filter)["topology"]
+                        self.parent.backgrnd_coll.df.query(self.view_filter)["topology"]
                         == topo_type
                 )
                 & (
-                        self.parent.backgrounds_coll.df.query(self.view_filter)["role"]
+                        self.parent.backgrnd_coll.df.query(self.view_filter)["role"]
                         == role
                 ),
                 "uid",
@@ -136,12 +136,12 @@ def create_backgrounds_topology_tree(self):
                 property_combo.name = "Annotations"
                 property_combo.addItem("none")
                 property_combo.addItem("name")
-                for prop in self.parent.backgrounds_coll.get_uid_properties_names(
+                for prop in self.parent.backgrnd_coll.get_uid_properties_names(
                         uid
                 ):
                     property_combo.addItem(prop)
-                name = self.parent.backgrounds_coll.df.loc[
-                    self.parent.backgrounds_coll.df["uid"] == uid, "name"
+                name = self.parent.backgrnd_coll.df.loc[
+                    self.parent.backgrnd_coll.df["uid"] == uid, "name"
                 ].values[0]
                 tlevel_3 = QTreeWidgetItem(
                     tlevel_2, [name, uid]
@@ -177,15 +177,15 @@ def update_backgrounds_tree_added(self, new_list=None, sec_uid=None):
         for i, uid in enumerate(new_list["uid"]):
             if (
                     sec_uid
-                    != self.parent.backgrounds_coll.df.loc[
-                self.parent.backgrounds_coll.df["uid"] == uid, "x_section"
+                    != self.parent.backgrnd_coll.df.loc[
+                self.parent.backgrnd_coll.df["uid"] == uid, "x_section"
             ].values[0]
             ):
                 del uid_list[i]
     for uid in uid_list:
         if (
                 self.BackgroundsTreeWidget.findItems(
-                    self.parent.backgrounds_coll.get_uid_role(uid),
+                    self.parent.backgrnd_coll.get_uid_role(uid),
                     Qt.MatchExactly,
                     0,
                 )
@@ -195,37 +195,37 @@ def update_backgrounds_tree_added(self, new_list=None, sec_uid=None):
             counter_1 = 0
             for child_1 in range(
                     self.BackgroundsTreeWidget.findItems(
-                        self.parent.backgrounds_coll.get_uid_role(uid),
+                        self.parent.backgrnd_coll.get_uid_role(uid),
                         Qt.MatchExactly,
                         0,
                     )[0].childCount()
             ):
                 """for cycle that loops n times as the number of subItems in the specific background type branch"""
                 if self.BackgroundsTreeWidget.findItems(
-                        self.parent.backgrounds_coll.get_uid_role(uid),
+                        self.parent.backgrnd_coll.get_uid_role(uid),
                         Qt.MatchExactly,
                         0,
                 )[0].child(child_1).text(
                     0
-                ) == self.parent.backgrounds_coll.get_uid_feature(
+                ) == self.parent.backgrnd_coll.get_uid_feature(
                     uid
                 ):
                     counter_1 += 1
             if counter_1 != 0:
                 for child_1 in range(
                         self.BackgroundsTreeWidget.findItems(
-                            self.parent.backgrounds_coll.get_uid_role(uid),
+                            self.parent.backgrnd_coll.get_uid_role(uid),
                             Qt.MatchExactly,
                             0,
                         )[0].childCount()
                 ):
                     if self.BackgroundsTreeWidget.findItems(
-                            self.parent.backgrounds_coll.get_uid_role(uid),
+                            self.parent.backgrnd_coll.get_uid_role(uid),
                             Qt.MatchExactly,
                             0,
                     )[0].child(child_1).text(
                         0
-                    ) == self.parent.backgrounds_coll.get_uid_feature(
+                    ) == self.parent.backgrnd_coll.get_uid_feature(
                         uid
                     ):
                         """Already exists a TreeItem (2 level) for the background feature"""
@@ -238,14 +238,14 @@ def update_backgrounds_tree_added(self, new_list=None, sec_uid=None):
                         property_combo.addItem("name")
                         for (
                                 prop
-                        ) in self.parent.backgrounds_coll.get_uid_properties_names(
+                        ) in self.parent.backgrnd_coll.get_uid_properties_names(
                             uid
                         ):
                             property_combo.addItem(prop)
-                        name = self.parent.backgrounds_coll.get_uid_name(uid)
+                        name = self.parent.backgrnd_coll.get_uid_name(uid)
                         flevel_3 = QTreeWidgetItem(
                             self.BackgroundsTreeWidget.findItems(
-                                self.parent.backgrounds_coll.get_uid_role(
+                                self.parent.backgrnd_coll.get_uid_role(
                                     uid
                                 ),
                                 Qt.MatchExactly,
@@ -274,11 +274,11 @@ def update_backgrounds_tree_added(self, new_list=None, sec_uid=None):
                 """Same background type, different background feature"""
                 flevel_2 = QTreeWidgetItem(
                     self.BackgroundsTreeWidget.findItems(
-                        self.parent.backgrounds_coll.get_uid_role(uid),
+                        self.parent.backgrnd_coll.get_uid_role(uid),
                         Qt.MatchExactly,
                         0,
                     )[0],
-                    [self.parent.backgrounds_coll.get_uid_feature(uid)],
+                    [self.parent.backgrnd_coll.get_uid_feature(uid)],
                 )
                 flevel_2.setFlags(
                     flevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
@@ -289,11 +289,11 @@ def update_backgrounds_tree_added(self, new_list=None, sec_uid=None):
                 property_combo.name = "Annotations"
                 property_combo.addItem("none")
                 property_combo.addItem("name")
-                for prop in self.parent.backgrounds_coll.get_uid_properties_names(
+                for prop in self.parent.backgrnd_coll.get_uid_properties_names(
                         uid
                 ):
                     property_combo.addItem(prop)
-                name = self.parent.backgrounds_coll.get_uid_name(uid)
+                name = self.parent.backgrnd_coll.get_uid_name(uid)
 
                 flevel_3 = QTreeWidgetItem(flevel_2, [name, uid])
                 self.BackgroundsTreeWidget.setItemWidget(
@@ -317,7 +317,7 @@ def update_backgrounds_tree_added(self, new_list=None, sec_uid=None):
             """Different background type and background feature"""
             flevel_1 = QTreeWidgetItem(
                 self.BackgroundsTreeWidget,
-                [self.parent.backgrounds_coll.get_uid_role(uid)],
+                [self.parent.backgrnd_coll.get_uid_role(uid)],
             )
             flevel_1.setFlags(
                 flevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
@@ -325,7 +325,7 @@ def update_backgrounds_tree_added(self, new_list=None, sec_uid=None):
             self.BackgroundsTreeWidget.insertTopLevelItem(0, flevel_1)
             flevel_2 = QTreeWidgetItem(
                 flevel_1,
-                [self.parent.backgrounds_coll.get_uid_feature(uid)],
+                [self.parent.backgrnd_coll.get_uid_feature(uid)],
             )
             flevel_2.setFlags(
                 flevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
@@ -336,9 +336,9 @@ def update_backgrounds_tree_added(self, new_list=None, sec_uid=None):
             property_combo.name = "Annotations"
             property_combo.addItem("none")
             property_combo.addItem("name")
-            for prop in self.parent.backgrounds_coll.get_uid_properties_names(uid):
+            for prop in self.parent.backgrnd_coll.get_uid_properties_names(uid):
                 property_combo.addItem(prop)
-            name = self.parent.backgrounds_coll.get_uid_name(uid)
+            name = self.parent.backgrnd_coll.get_uid_name(uid)
             flevel_3 = QTreeWidgetItem(flevel_2, [name, uid])
             self.BackgroundsTreeWidget.setItemWidget(flevel_3, 2, property_combo)
             property_combo.currentIndexChanged.connect(
@@ -440,15 +440,15 @@ def update_backgrounds_topology_tree_added(self, new_list=None, sec_uid=None):
         for i, uid in enumerate(new_list["uid"]):
             if (
                     sec_uid
-                    != self.parent.backgrounds_coll.df.loc[
-                self.parent.backgrounds_coll.df["uid"] == uid, "x_section"
+                    != self.parent.backgrnd_coll.df.loc[
+                self.parent.backgrnd_coll.df["uid"] == uid, "x_section"
             ].values[0]
             ):
                 del uid_list[i]
     for uid in uid_list:
         if (
                 self.BackgroundsTopologyTreeWidget.findItems(
-                    self.parent.backgrounds_coll.get_uid_topology(uid),
+                    self.parent.backgrnd_coll.get_uid_topology(uid),
                     Qt.MatchExactly,
                     0,
                 )
@@ -458,37 +458,37 @@ def update_backgrounds_topology_tree_added(self, new_list=None, sec_uid=None):
             counter_1 = 0
             for child_1 in range(
                     self.BackgroundsTopologyTreeWidget.findItems(
-                        self.parent.backgrounds_coll.get_uid_topology(uid),
+                        self.parent.backgrnd_coll.get_uid_topology(uid),
                         Qt.MatchExactly,
                         0,
                     )[0].childCount()
             ):
                 """for cycle that loops n times as the number of subItems in the specific topological type branch"""
                 if self.BackgroundsTopologyTreeWidget.findItems(
-                        self.parent.backgrounds_coll.get_uid_topology(uid),
+                        self.parent.backgrnd_coll.get_uid_topology(uid),
                         Qt.MatchExactly,
                         0,
                 )[0].child(child_1).text(
                     0
-                ) == self.parent.backgrounds_coll.get_uid_feature(
+                ) == self.parent.backgrnd_coll.get_uid_feature(
                     uid
                 ):
                     counter_1 += 1
             if counter_1 != 0:
                 for child_1 in range(
                         self.BackgroundsTopologyTreeWidget.findItems(
-                            self.parent.backgrounds_coll.get_uid_topology(uid),
+                            self.parent.backgrnd_coll.get_uid_topology(uid),
                             Qt.MatchExactly,
                             0,
                         )[0].childCount()
                 ):
                     if self.BackgroundsTopologyTreeWidget.findItems(
-                            self.parent.backgrounds_coll.get_uid_topology(uid),
+                            self.parent.backgrnd_coll.get_uid_topology(uid),
                             Qt.MatchExactly,
                             0,
                     )[0].child(child_1).text(
                         0
-                    ) == self.parent.backgrounds_coll.get_uid_feature(
+                    ) == self.parent.backgrnd_coll.get_uid_feature(
                         uid
                     ):
                         """Same topological type and feature"""
@@ -499,14 +499,14 @@ def update_backgrounds_topology_tree_added(self, new_list=None, sec_uid=None):
                         property_combo.addItem("name")
                         for (
                                 prop
-                        ) in self.parent.backgrounds_coll.get_uid_properties_names(
+                        ) in self.parent.backgrnd_coll.get_uid_properties_names(
                             uid
                         ):
                             property_combo.addItem(prop)
-                        name = self.parent.backgrounds_coll.get_uid_name(uid)
+                        name = self.parent.backgrnd_coll.get_uid_name(uid)
                         tlevel_3 = QTreeWidgetItem(
                             self.BackgroundsTopologyTreeWidget.findItems(
-                                self.parent.backgrounds_coll.get_uid_topology(
+                                self.parent.backgrnd_coll.get_uid_topology(
                                     uid
                                 ),
                                 Qt.MatchExactly,
@@ -537,11 +537,11 @@ def update_backgrounds_topology_tree_added(self, new_list=None, sec_uid=None):
                 """Same topological type, different feature"""
                 tlevel_2 = QTreeWidgetItem(
                     self.BackgroundsTopologyTreeWidget.findItems(
-                        self.parent.backgrounds_coll.get_uid_topology(uid),
+                        self.parent.backgrnd_coll.get_uid_topology(uid),
                         Qt.MatchExactly,
                         0,
                     )[0],
-                    [self.parent.backgrounds_coll.get_uid_feature(uid)],
+                    [self.parent.backgrnd_coll.get_uid_feature(uid)],
                 )
                 tlevel_2.setFlags(
                     tlevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
@@ -552,11 +552,11 @@ def update_backgrounds_topology_tree_added(self, new_list=None, sec_uid=None):
                 property_combo.name = "Annotations"
                 property_combo.addItem("none")
                 property_combo.addItem("name")
-                for prop in self.parent.backgrounds_coll.get_uid_properties_names(
+                for prop in self.parent.backgrnd_coll.get_uid_properties_names(
                         uid
                 ):
                     property_combo.addItem(prop)
-                name = self.parent.backgrounds_coll.get_uid_name(uid)
+                name = self.parent.backgrnd_coll.get_uid_name(uid)
                 tlevel_3 = QTreeWidgetItem(tlevel_2, [name, uid])
                 self.BackgroundsTopologyTreeWidget.setItemWidget(
                     tlevel_3, 2, property_combo
@@ -579,7 +579,7 @@ def update_backgrounds_topology_tree_added(self, new_list=None, sec_uid=None):
             """Different topological type and feature"""
             tlevel_1 = QTreeWidgetItem(
                 self.BackgroundsTopologyTreeWidget,
-                [self.parent.backgrounds_coll.get_uid_topology(uid)],
+                [self.parent.backgrnd_coll.get_uid_topology(uid)],
             )
             tlevel_1.setFlags(
                 tlevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
@@ -587,7 +587,7 @@ def update_backgrounds_topology_tree_added(self, new_list=None, sec_uid=None):
             self.BackgroundsTopologyTreeWidget.insertTopLevelItem(0, tlevel_1)
             tlevel_2 = QTreeWidgetItem(
                 tlevel_1,
-                [self.parent.backgrounds_coll.get_uid_feature(uid)],
+                [self.parent.backgrnd_coll.get_uid_feature(uid)],
             )
             tlevel_2.setFlags(
                 tlevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
@@ -598,9 +598,9 @@ def update_backgrounds_topology_tree_added(self, new_list=None, sec_uid=None):
             property_combo.name = "Annotations"
             property_combo.addItem("none")
             property_combo.addItem("name")
-            for prop in self.parent.backgrounds_coll.get_uid_properties_names(uid):
+            for prop in self.parent.backgrnd_coll.get_uid_properties_names(uid):
                 property_combo.addItem(prop)
-            name = self.parent.backgrounds_coll.get_uid_name(uid)
+            name = self.parent.backgrnd_coll.get_uid_name(uid)
             tlevel_3 = QTreeWidgetItem(tlevel_2, [name, uid])
             self.BackgroundsTopologyTreeWidget.setItemWidget(
                 tlevel_3, 2, property_combo

@@ -19,8 +19,8 @@ class FakeWindow(QMainWindow):
     def __init__(self):
         super(FakeWindow, self).__init__()
 
-    xsect_added_signal = FakeSignal()
-    xsect_removed_signal = FakeSignal()
+    xsect_coll.signals.added = FakeSignal()
+    xsect_coll.signals.removed = FakeSignal()
 
 
 class TestXSectionCollection:

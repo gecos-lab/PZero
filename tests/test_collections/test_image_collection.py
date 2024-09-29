@@ -21,8 +21,8 @@ class FakeWindow(QMainWindow):
     def __init__(self):
         super(FakeWindow, self).__init__()
 
-    image_added_signal = FakeSignal()
-    image_removed_signal = FakeSignal()
+    image_coll.signals.added = FakeSignal()
+    image_coll.signals.removed = FakeSignal()
     dom_coll = DomCollection()
     prop_legend = FakeLegend()
 

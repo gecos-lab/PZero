@@ -113,93 +113,91 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
 
     # Signals defined here are meant to be broadcast TO ALL views. This is why we use signals
     # instead of functions that will act within a single view only. They all pass a list of uid's.
-    project_close_signal = (
-        pyqtSignal()
-    )  # this is used to delete open windows when the current project is closed (and a new one is opened)
+
+    # this is used to delete open windows when the current project is closed (and a new one is opened)
+    project_close_signal = (pyqtSignal())
 
     # geology_added_signal = pyqtSignal(list)
-    geology_removed_signal = pyqtSignal(list)
-    geology_geom_modified_signal = pyqtSignal(list)  # this includes topology modified
-    geology_data_keys_modified_signal = pyqtSignal(list)
-    geology_data_val_modified_signal = pyqtSignal(list)
-    geology_metadata_modified_signal = pyqtSignal(list)
-    geology_legend_color_modified_signal = pyqtSignal(list)
-    geology_legend_thick_modified_signal = pyqtSignal(list)
-    geology_legend_point_size_modified_signal = pyqtSignal(list)
-    geology_legend_opacity_modified_signal = pyqtSignal(list)
-
-    xsect_added_signal = pyqtSignal(list)
-    xsect_removed_signal = pyqtSignal(list)
-    xsect_geom_modified_signal = pyqtSignal(list)  # this includes topology modified
-    xsect_metadata_modified_signal = pyqtSignal(list)
-    xsect_legend_color_modified_signal = pyqtSignal(list)
-    xsect_legend_thick_modified_signal = pyqtSignal(list)
-    xsect_legend_opacity_modified_signal = pyqtSignal(list)
-
-    boundary_added_signal = pyqtSignal(list)
-    boundary_removed_signal = pyqtSignal(list)
-    boundary_geom_modified_signal = pyqtSignal(list)  # this includes topology modified
-    boundary_metadata_modified_signal = pyqtSignal(list)
-    boundary_legend_color_modified_signal = pyqtSignal(list)
-    boundary_legend_thick_modified_signal = pyqtSignal(list)
-    boundary_legend_opacity_modified_signal = pyqtSignal(list)
-
-    mesh3d_added_signal = pyqtSignal(list)
-    mesh3d_removed_signal = pyqtSignal(list)
-    mesh3d_data_keys_modified_signal = pyqtSignal(list)
-    mesh3d_data_val_modified_signal = pyqtSignal(list)
-    mesh3d_metadata_modified_signal = pyqtSignal(list)
-    mesh3d_legend_color_modified_signal = pyqtSignal(list)
-    mesh3d_legend_thick_modified_signal = pyqtSignal(list)
-    mesh3d_legend_opacity_modified_signal = pyqtSignal(list)
-
-    dom_added_signal = pyqtSignal(list)
-    dom_removed_signal = pyqtSignal(list)
-    dom_data_keys_modified_signal = pyqtSignal(list)
-    dom_data_val_modified_signal = pyqtSignal(list)
-    dom_metadata_modified_signal = pyqtSignal(list)
-    dom_legend_color_modified_signal = pyqtSignal(list)
-    dom_legend_thick_modified_signal = pyqtSignal(list)
-    dom_legend_point_size_modified_signal = pyqtSignal(list)
-    dom_legend_opacity_modified_signal = pyqtSignal(list)
-
-    image_added_signal = pyqtSignal(list)
-    image_removed_signal = pyqtSignal(list)
-    image_metadata_modified_signal = pyqtSignal(list)
-    image_legend_opacity_modified_signal = pyqtSignal(list)
-
-    well_added_signal = pyqtSignal(list)
-    well_removed_signal = pyqtSignal(list)
-    well_data_keys_modified_signal = pyqtSignal(list)
-    well_data_val_modified_signal = pyqtSignal(list)
-    well_metadata_modified_signal = pyqtSignal(list)
-    well_legend_color_modified_signal = pyqtSignal(list)
-    well_legend_thick_modified_signal = pyqtSignal(list)
-    well_legend_opacity_modified_signal = pyqtSignal(list)
-
-    fluid_added_signal = pyqtSignal(list)
-    fluid_removed_signal = pyqtSignal(list)
-    fluid_geom_modified_signal = pyqtSignal(list)  # this includes topology modified
-    fluid_data_keys_modified_signal = pyqtSignal(list)
-    fluid_data_val_modified_signal = pyqtSignal(list)
-    fluid_metadata_modified_signal = pyqtSignal(list)
-    fluid_legend_color_modified_signal = pyqtSignal(list)
-    fluid_legend_thick_modified_signal = pyqtSignal(list)
-    fluid_legend_point_size_modified_signal = pyqtSignal(list)
-    fluid_legend_opacity_modified_signal = pyqtSignal(list)
-
-    background_added_signal = pyqtSignal(list)
-    background_removed_signal = pyqtSignal(list)
-    background_geom_modified_signal = pyqtSignal(
-        list
-    )  # this includes topology modified
-    background_data_keys_modified_signal = pyqtSignal(list)
-    background_data_val_modified_signal = pyqtSignal(list)
-    background_metadata_modified_signal = pyqtSignal(list)
-    background_legend_color_modified_signal = pyqtSignal(list)
-    background_legend_thick_modified_signal = pyqtSignal(list)
-    background_legend_point_size_modified_signal = pyqtSignal(list)
-    background_legend_opacity_modified_signal = pyqtSignal(list)
+    # geology_removed_signal = pyqtSignal(list)
+    # geology_geom_modified_signal = pyqtSignal(list)  # this includes topology modified
+    # geology_data_keys_modified_signal = pyqtSignal(list)
+    # geology_data_val_modified_signal = pyqtSignal(list)
+    # geology_metadata_modified_signal = pyqtSignal(list)
+    # geology_legend_color_modified_signal = pyqtSignal(list)
+    # geology_legend_thick_modified_signal = pyqtSignal(list)
+    # geology_legend_point_size_modified_signal = pyqtSignal(list)
+    # geology_legend_opacity_modified_signal = pyqtSignal(list)
+    #
+    # xsect_added_signal = pyqtSignal(list)
+    # xsect_removed_signal = pyqtSignal(list)
+    # xsect_geom_modified_signal = pyqtSignal(list)  # this includes topology modified
+    # xsect_metadata_modified_signal = pyqtSignal(list)
+    # xsect_legend_color_modified_signal = pyqtSignal(list)
+    # xsect_legend_thick_modified_signal = pyqtSignal(list)
+    # xsect_legend_opacity_modified_signal = pyqtSignal(list)
+    #
+    # boundary_added_signal = pyqtSignal(list)
+    # boundary_removed_signal = pyqtSignal(list)
+    # boundary_geom_modified_signal = pyqtSignal(list)  # this includes topology modified
+    # boundary_metadata_modified_signal = pyqtSignal(list)
+    # boundary_legend_color_modified_signal = pyqtSignal(list)
+    # boundary_legend_thick_modified_signal = pyqtSignal(list)
+    # boundary_legend_opacity_modified_signal = pyqtSignal(list)
+    #
+    # mesh3d_added_signal = pyqtSignal(list)
+    # mesh3d_removed_signal = pyqtSignal(list)
+    # mesh3d_data_keys_modified_signal = pyqtSignal(list)
+    # mesh3d_data_val_modified_signal = pyqtSignal(list)
+    # mesh3d_metadata_modified_signal = pyqtSignal(list)
+    # mesh3d_legend_color_modified_signal = pyqtSignal(list)
+    # mesh3d_legend_thick_modified_signal = pyqtSignal(list)
+    # mesh3d_legend_opacity_modified_signal = pyqtSignal(list)
+    #
+    # dom_added_signal = pyqtSignal(list)
+    # dom_removed_signal = pyqtSignal(list)
+    # dom_data_keys_modified_signal = pyqtSignal(list)
+    # dom_data_val_modified_signal = pyqtSignal(list)
+    # dom_metadata_modified_signal = pyqtSignal(list)
+    # dom_legend_color_modified_signal = pyqtSignal(list)
+    # dom_legend_thick_modified_signal = pyqtSignal(list)
+    # dom_legend_point_size_modified_signal = pyqtSignal(list)
+    # dom_legend_opacity_modified_signal = pyqtSignal(list)
+    #
+    # image_added_signal = pyqtSignal(list)
+    # image_removed_signal = pyqtSignal(list)
+    # image_metadata_modified_signal = pyqtSignal(list)
+    # image_legend_opacity_modified_signal = pyqtSignal(list)
+    #
+    # well_added_signal = pyqtSignal(list)
+    # well_removed_signal = pyqtSignal(list)
+    # well_data_keys_modified_signal = pyqtSignal(list)
+    # well_data_val_modified_signal = pyqtSignal(list)
+    # well_metadata_modified_signal = pyqtSignal(list)
+    # well_legend_color_modified_signal = pyqtSignal(list)
+    # well_legend_thick_modified_signal = pyqtSignal(list)
+    # well_legend_opacity_modified_signal = pyqtSignal(list)
+    #
+    # fluid_added_signal = pyqtSignal(list)
+    # fluid_removed_signal = pyqtSignal(list)
+    # fluid_geom_modified_signal = pyqtSignal(list)  # this includes topology modified
+    # fluid_data_keys_modified_signal = pyqtSignal(list)
+    # fluid_data_val_modified_signal = pyqtSignal(list)
+    # fluid_metadata_modified_signal = pyqtSignal(list)
+    # fluid_legend_color_modified_signal = pyqtSignal(list)
+    # fluid_legend_thick_modified_signal = pyqtSignal(list)
+    # fluid_legend_point_size_modified_signal = pyqtSignal(list)
+    # fluid_legend_opacity_modified_signal = pyqtSignal(list)
+    #
+    # background_added_signal = pyqtSignal(list)
+    # background_removed_signal = pyqtSignal(list)
+    # background_coll_geom_modified_signal = pyqtSignal(list)  # this includes topology modified
+    # background_data_keys_modified_signal = pyqtSignal(list)
+    # background_data_val_modified_signal = pyqtSignal(list)
+    # background_metadata_modified_signal = pyqtSignal(list)
+    # background_legend_color_modified_signal = pyqtSignal(list)
+    # background_legend_thick_modified_signal = pyqtSignal(list)
+    # background_legend_point_size_modified_signal = pyqtSignal(list)
+    # background_legend_opacity_modified_signal = pyqtSignal(list)
 
     prop_legend_cmap_modified_signal = pyqtSignal(str)
 
@@ -444,13 +442,13 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
     #             for idx_proxy in selected_idxs_proxy:
     #                 selected_idxs.append(self.proxy_well_coll.mapToSource(idx_proxy))
     #             for idx in selected_idxs:
-    #                 selected_uids_all.append(self.fluids_coll.data(index=idx, qt_role=Qt.DisplayRole))
+    #                 selected_uids_all.append(self.fluid_coll.data(index=idx, qt_role=Qt.DisplayRole))
     #         elif tab == "tabBackgrounds":
     #             selected_idxs_proxy = self.BackgroundsTableView.selectionModel().selectedRows()
     #             for idx_proxy in selected_idxs_proxy:
     #                 selected_idxs.append(self.proxy_well_coll.mapToSource(idx_proxy))
     #             for idx in selected_idxs:
-    #                 selected_uids_all.append(self.backgrounds_coll.data(index=idx, qt_role=Qt.DisplayRole))
+    #                 selected_uids_all.append(self.backgrnd_coll.data(index=idx, qt_role=Qt.DisplayRole))
     #     return selected_uids_all
 
     def entity_remove(self):
@@ -489,9 +487,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             elif self.shown_table == "tabWells":
                 self.well_coll.remove_entity(uid=uid)
             elif self.shown_table == "tabFluids":
-                self.fluids_coll.remove_entity(uid=uid)
+                self.fluid_coll.remove_entity(uid=uid)
             elif self.shown_table == "tabBackgrounds":
-                self.backgrounds_coll.remove_entity(uid=uid)
+                self.backgrnd_coll.remove_entity(uid=uid)
         self.update_actors = True
 
     def entities_merge(self):
@@ -1055,27 +1053,27 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.well_coll = WellCollection(parent=self)
         self.WellsTableView.setModel(self.well_coll.proxy_table_model)
 
-        """[Gabriele]  Create the fluids_coll FluidsCollection (a Qt QAbstractTableModel with a Pandas dataframe as attribute)
+        """[Gabriele]  Create the fluid_coll FluidsCollection (a Qt QAbstractTableModel with a Pandas dataframe as attribute)
         and connect the model to FluidTableView (a Qt QTableView created with QTDesigner and provided by
         Ui_ProjectWindow). Setting the model also updates the view."""
-        self.fluids_coll = FluidsCollection(parent=self)
-        self.FluidsTableView.setModel(self.fluids_coll.proxy_table_model)
+        self.fluid_coll = FluidsCollection(parent=self)
+        self.FluidsTableView.setModel(self.fluid_coll.proxy_table_model)
 
-        """[Gabriele]  Create the backgrounds_coll BackgroundCollection (a Qt QAbstractTableModel with a Pandas dataframe as attribute)
+        """[Gabriele]  Create the backgrnd_coll BackgroundCollection (a Qt QAbstractTableModel with a Pandas dataframe as attribute)
         and connect the model to FluidTableView (a Qt QTableView created with QTDesigner and provided by
         Ui_ProjectWindow). Setting the model also updates the view."""
-        self.backgrounds_coll = BackgroundCollection(parent=self)
-        self.BackgroundsTableView.setModel(self.backgrounds_coll.proxy_table_model)
+        self.backgrnd_coll = BackgroundCollection(parent=self)
+        self.BackgroundsTableView.setModel(self.backgrnd_coll.proxy_table_model)
 
         """Create the geol_coll.legend_df legend table (a Pandas dataframe), create the corresponding QT
         Legend self.legend (a Qt QTreeWidget that is internally connected to its data source),
         and update the widget."""
         self.geol_coll.legend_df = pd_DataFrame(columns=list(Legend.geol_legend_dict.keys()))
         self.well_legend_df = pd_DataFrame(columns=list(Legend.well_legend_dict.keys()))
-        self.fluids_coll.legend_df = pd_DataFrame(
+        self.fluid_coll.legend_df = pd_DataFrame(
             columns=list(Legend.fluids_legend_dict.keys())
         )
-        self.backgrounds_coll.legend_df = pd_DataFrame(
+        self.backgrnd_coll.legend_df = pd_DataFrame(
             columns=list(Legend.backgrounds_legend_dict.keys())
         )
 
@@ -1145,11 +1143,11 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             out_dir_name + "/well_legend_table.json", orient="index"
         )
 
-        self.fluids_coll.legend_df.to_json(
+        self.fluid_coll.legend_df.to_json(
             out_dir_name + "/fluids_legend_table.json", orient="index"
         )
 
-        self.backgrounds_coll.legend_df.to_json(
+        self.backgrnd_coll.legend_df.to_json(
             out_dir_name + "/backgrounds_legend_table.json", orient="index"
         )
 
@@ -1334,44 +1332,44 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             prgs_bar.add_one()
 
         """Save fluids collection table to JSON file and entities as VTK."""
-        out_cols = list(self.fluids_coll.df.columns)
+        out_cols = list(self.fluid_coll.df.columns)
         out_cols.remove("vtk_obj")
-        self.fluids_coll.df[out_cols].to_json(
+        self.fluid_coll.df[out_cols].to_json(
             out_dir_name + "/fluids_table.json", orient="index"
         )
         # self.geol_coll.df[out_cols].to_csv(out_dir_name + '/geological_table.csv', encoding='utf-8', index=False)
         prgs_bar = progress_dialog(
-            max_value=self.fluids_coll.df.shape[0],
+            max_value=self.fluid_coll.df.shape[0],
             title_txt="Save fluids",
             label_txt="Saving fluid objects...",
             cancel_txt=None,
             parent=self,
         )
-        for uid in self.fluids_coll.df["uid"].to_list():
+        for uid in self.fluid_coll.df["uid"].to_list():
             pd_writer = vtkXMLPolyDataWriter()
             pd_writer.SetFileName(out_dir_name + "/" + uid + ".vtp")
-            pd_writer.SetInputData(self.fluids_coll.get_uid_vtk_obj(uid))
+            pd_writer.SetInputData(self.fluid_coll.get_uid_vtk_obj(uid))
             pd_writer.Write()
             prgs_bar.add_one()
 
         """Save Backgrounds collection table to JSON file and entities as VTK."""
-        out_cols = list(self.backgrounds_coll.df.columns)
+        out_cols = list(self.backgrnd_coll.df.columns)
         out_cols.remove("vtk_obj")
-        self.backgrounds_coll.df[out_cols].to_json(
+        self.backgrnd_coll.df[out_cols].to_json(
             out_dir_name + "/backgrounds_table.json", orient="index"
         )
         # self.geol_coll.df[out_cols].to_csv(out_dir_name + '/geological_table.csv', encoding='utf-8', index=False)
         prgs_bar = progress_dialog(
-            max_value=self.backgrounds_coll.df.shape[0],
+            max_value=self.backgrnd_coll.df.shape[0],
             title_txt="Save Backgrounds",
             label_txt="Saving Backgrounds objects...",
             cancel_txt=None,
             parent=self,
         )
-        for uid in self.backgrounds_coll.df["uid"].to_list():
+        for uid in self.backgrnd_coll.df["uid"].to_list():
             pd_writer = vtkXMLPolyDataWriter()
             pd_writer.SetFileName(out_dir_name + "/" + uid + ".vtp")
-            pd_writer.SetInputData(self.backgrounds_coll.get_uid_vtk_obj(uid))
+            pd_writer.SetInputData(self.backgrnd_coll.get_uid_vtk_obj(uid))
             pd_writer.Write()
             prgs_bar.add_one()
 
@@ -1520,15 +1518,15 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     keep_default_na=False,
                 )
             if not new_fluids_legend_df.empty:
-                self.fluids_coll.legend_df = new_fluids_legend_df
-            in_keys = set(self.fluids_coll.legend_df.keys())
+                self.fluid_coll.legend_df = new_fluids_legend_df
+            in_keys = set(self.fluid_coll.legend_df.keys())
             def_keys = set(Legend.fluids_legend_dict.keys())
 
             diffs = def_keys.difference(in_keys)
 
             for diff in diffs:
-                self.fluids_coll.legend_df[diff] = Legend.fluids_legend_dict[diff]
-            self.fluids_coll.legend_df.sort_values(
+                self.fluid_coll.legend_df[diff] = Legend.fluids_legend_dict[diff]
+            self.fluid_coll.legend_df.sort_values(
                 by="time", ascending=True, inplace=True
             )
 
@@ -1550,14 +1548,14 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     keep_default_na=False,
                 )
             if not new_backgrounds_legend_df.empty:
-                self.backgrounds_coll.legend_df = new_backgrounds_legend_df
-            in_keys = set(self.backgrounds_coll.legend_df.keys())
+                self.backgrnd_coll.legend_df = new_backgrounds_legend_df
+            in_keys = set(self.backgrnd_coll.legend_df.keys())
             def_keys = set(Legend.backgrounds_legend_dict.keys())
 
             diffs = def_keys.difference(in_keys)
 
             for diff in diffs:
-                self.backgrounds_coll.legend_df[diff] = Legend.backgrounds_legend_dict[diff]
+                self.backgrnd_coll.legend_df[diff] = Legend.backgrounds_legend_dict[diff]
 
         # Read other legend tables.
         if os.path.isfile((in_dir_name + "/others_legend_table.csv")) or os.path.isfile(
@@ -2004,7 +2002,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         if os.path.isfile((in_dir_name + "/fluids_table.csv")) or os.path.isfile(
             (in_dir_name + "/fluids_table.json")
         ):
-            self.fluids_coll.table_model.beginResetModel()
+            self.fluid_coll.table_model.beginResetModel()
             if os.path.isfile((in_dir_name + "/fluids_table.json")):
                 new_fluids_coll_df = pd_read_json(
                     in_dir_name + "/fluids_table.json",
@@ -2019,40 +2017,40 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     keep_default_na=False,
                 )
             if not new_fluids_coll_df.empty:
-                self.fluids_coll.df = new_fluids_coll_df
+                self.fluid_coll.df = new_fluids_coll_df
             prgs_bar = progress_dialog(
-                max_value=self.fluids_coll.df.shape[0],
+                max_value=self.fluid_coll.df.shape[0],
                 title_txt="Open fluids",
                 label_txt="Opening fluid objects...",
                 cancel_txt=None,
                 parent=self,
             )
-            for uid in self.fluids_coll.df["uid"].to_list():
+            for uid in self.fluid_coll.df["uid"].to_list():
                 if not os.path.isfile((in_dir_name + "/" + uid + ".vtp")):
                     print("error: missing VTK file")
                     return
-                if self.fluids_coll.get_uid_topology(uid) == "VertexSet":
+                if self.fluid_coll.get_uid_topology(uid) == "VertexSet":
                     vtk_object = VertexSet()
-                elif self.fluids_coll.get_uid_topology(uid) == "PolyLine":
+                elif self.fluid_coll.get_uid_topology(uid) == "PolyLine":
                     vtk_object = PolyLine()
-                elif self.fluids_coll.get_uid_topology(uid) == "TriSurf":
+                elif self.fluid_coll.get_uid_topology(uid) == "TriSurf":
                     vtk_object = TriSurf()
-                elif self.fluids_coll.get_uid_topology(uid) == "XsVertexSet":
+                elif self.fluid_coll.get_uid_topology(uid) == "XsVertexSet":
                     vtk_object = XsVertexSet(
-                        self.fluids_coll.get_uid_x_section(uid), parent=self
+                        self.fluid_coll.get_uid_x_section(uid), parent=self
                     )
-                elif self.fluids_coll.get_uid_topology(uid) == "XsPolyLine":
+                elif self.fluid_coll.get_uid_topology(uid) == "XsPolyLine":
                     vtk_object = XsPolyLine(
-                        self.fluids_coll.get_uid_x_section(uid), parent=self
+                        self.fluid_coll.get_uid_x_section(uid), parent=self
                     )
                 pd_reader = vtkXMLPolyDataReader()
                 pd_reader.SetFileName(in_dir_name + "/" + uid + ".vtp")
                 pd_reader.Update()
                 vtk_object.ShallowCopy(pd_reader.GetOutput())
                 vtk_object.Modified()
-                self.fluids_coll.set_uid_vtk_obj(uid=uid, vtk_obj=vtk_object)
+                self.fluid_coll.set_uid_vtk_obj(uid=uid, vtk_obj=vtk_object)
                 prgs_bar.add_one()
-            self.fluids_coll.table_model.endResetModel()
+            self.fluid_coll.table_model.endResetModel()
         # Update legend.
         self.prop_legend.update_widget(parent=self)
 
@@ -2060,7 +2058,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         if os.path.isfile((in_dir_name + "/backgrounds_table.csv")) or os.path.isfile(
             (in_dir_name + "/backgrounds_table.json")
         ):
-            self.backgrounds_coll.table_model.beginResetModel()
+            self.backgrnd_coll.table_model.beginResetModel()
             if os.path.isfile((in_dir_name + "/backgrounds_table.json")):
                 new_backgrounds_coll_df = pd_read_json(
                     in_dir_name + "/backgrounds_table.json",
@@ -2077,36 +2075,36 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             if not new_backgrounds_coll_df.empty:
                 if not "scenario" in new_backgrounds_coll_df:
                     new_backgrounds_coll_df.insert(5, "scenario", "undef")
-                self.backgrounds_coll.df = new_backgrounds_coll_df
+                self.backgrnd_coll.df = new_backgrounds_coll_df
             prgs_bar = progress_dialog(
-                max_value=self.backgrounds_coll.df.shape[0],
+                max_value=self.backgrnd_coll.df.shape[0],
                 title_txt="Open fluids",
                 label_txt="Opening fluid objects...",
                 cancel_txt=None,
                 parent=self,
             )
-            for uid in self.backgrounds_coll.df["uid"].to_list():
+            for uid in self.backgrnd_coll.df["uid"].to_list():
                 if not os.path.isfile((in_dir_name + "/" + uid + ".vtp")):
                     print("error: missing VTK file")
                     return
-                if self.backgrounds_coll.get_uid_topology(uid) == "VertexSet":
+                if self.backgrnd_coll.get_uid_topology(uid) == "VertexSet":
                     vtk_object = VertexSet()
-                elif self.backgrounds_coll.get_uid_topology(uid) == "PolyLine":
+                elif self.backgrnd_coll.get_uid_topology(uid) == "PolyLine":
                     vtk_object = PolyLine()
-                # elif self.backgrounds_coll.get_uid_topology(uid) == 'TriSurf':
+                # elif self.backgrnd_coll.get_uid_topology(uid) == 'TriSurf':
                 #     vtk_object = TriSurf()
-                # elif self.backgrounds_coll.get_uid_topology(uid) == 'XsVertexSet':
-                #     vtk_object = XsVertexSet(self.backgrounds_coll.get_uid_x_section(uid), parent=self)
-                # elif self.backgrounds_coll.get_uid_topology(uid) == 'XsPolyLine':
-                #     vtk_object = XsPolyLine(self.backgrounds_coll.get_uid_x_section(uid), parent=self)
+                # elif self.backgrnd_coll.get_uid_topology(uid) == 'XsVertexSet':
+                #     vtk_object = XsVertexSet(self.backgrnd_coll.get_uid_x_section(uid), parent=self)
+                # elif self.backgrnd_coll.get_uid_topology(uid) == 'XsPolyLine':
+                #     vtk_object = XsPolyLine(self.backgrnd_coll.get_uid_x_section(uid), parent=self)
                 pd_reader = vtkXMLPolyDataReader()
                 pd_reader.SetFileName(in_dir_name + "/" + uid + ".vtp")
                 pd_reader.Update()
                 vtk_object.ShallowCopy(pd_reader.GetOutput())
                 vtk_object.Modified()
-                self.backgrounds_coll.set_uid_vtk_obj(uid=uid, vtk_obj=vtk_object)
+                self.backgrnd_coll.set_uid_vtk_obj(uid=uid, vtk_obj=vtk_object)
                 prgs_bar.add_one()
-            self.backgrounds_coll.table_model.endResetModel()
+            self.backgrnd_coll.table_model.endResetModel()
         # Update legend.
         self.prop_legend.update_widget(parent=self)
 

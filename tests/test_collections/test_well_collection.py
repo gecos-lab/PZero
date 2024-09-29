@@ -28,8 +28,8 @@ class FakeWindow(QMainWindow):
     legend = FakeLegend()
     prop_legend = FakeLegend()
     well_legend_df = pd_DataFrame(columns=list(Legend.well_legend_dict.keys()))
-    well_added_signal = FakeSignal()
-    well_removed_signal = FakeSignal()
+    well_coll.signals.added = FakeSignal()
+    well_coll.signals.removed = FakeSignal()
 
 
 class TestWellConnection:

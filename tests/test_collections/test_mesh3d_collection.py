@@ -20,8 +20,8 @@ class FakeWindow(QMainWindow):
     def __init__(self):
         super(FakeWindow, self).__init__()
 
-    mesh3d_added_signal = FakeSignal()
-    mesh3d_removed_signal = FakeSignal()
+    mesh3d_coll.signals.added = FakeSignal()
+    mesh3d_coll.signals.removed = FakeSignal()
     prop_legend = FakeLegend()
 
 

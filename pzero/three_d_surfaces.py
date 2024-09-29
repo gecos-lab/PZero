@@ -1606,10 +1606,10 @@ def project_2_dem(self):
         else:
             self.geol_coll.replace_vtk(uid=uid, vtk_object=obj_dict["vtk_obj"])
             self.geol_coll.set_uid_name(uid=uid, name=obj_dict["name"])
-            self.geology_geom_modified_signal.emit(
+            self.geol_coll.signals.geom_modified.emit(
                 [uid]
             )  # emit uid as list to force redraw
-        self.geology_metadata_modified_signal.emit([uid])
+        self.geol_coll.signals.metadata_modified.emit([uid])
         prgs_bar.add_one()
 
 

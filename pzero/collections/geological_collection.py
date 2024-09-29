@@ -160,7 +160,7 @@ class GeologicalCollection(BaseCollection):
             self.parent.legend.update_widget(self.parent)
             self.parent.prop_legend.update_widget(self.parent)
         # A list of uids is emitted, even if the entity is just one
-        self.parent.geology_removed_signal.emit([uid])
+        self.parent.geol_coll.signals.removed.emit([uid])
         return uid
 
     def clone_entity(self, uid: str = None) -> str:
@@ -198,8 +198,8 @@ class GeologicalCollection(BaseCollection):
                 self.df.loc[self.df["uid"] == uid, "properties_components"].append(components)
             self.df.loc[self.df["uid"] == uid, "vtk_obj"] = vtk_object
             self.parent.prop_legend.update_widget(self.parent)
-            self.parent.geology_data_keys_modified_signal.emit([uid])
-            self.parent.geology_geom_modified_signal.emit([uid])
+            self.parent.geol_coll.signals.data_keys_modified.emit([uid])
+            self.parent.geol_coll.signals.geom_modified.emit([uid])
         else:
             print("ERROR - replace_vtk with vtk of a different type not allowed.")
 
@@ -375,13 +375,13 @@ class GeologicalCollection(BaseCollection):
                     "opacity",
                 ] = opacity
 
-    def metadata_modified_signal(self, updated_list: list = None):
-        """Signal emitted when metadata change."""
-        self.parent.geology_metadata_modified_signal.emit(updated_list)
+    # def metadata_modified_signal(self, updated_list: list = None):
+    #     """Signal emitted when metadata change."""
+    #     self.parent.geol_coll.signals.metadata_modified.emit(updated_list)
 
-    def data_keys_modified_signal(self, updated_list: list = None):
-        """Signal emitted when point data keys change."""
-        self.parent.geology_data_keys_modified_signal.emit(updated_list)
+    # def data_keys_modified_signal(self, updated_list: list = None):
+    #     """Signal emitted when point data keys change."""
+    #     self.parent.geol_coll.signals.data_keys_modified.emit(updated_list)
 
     # =================================== Additional methods ===========================================
     # ====== CAN BE UNIFIED AS COMMON METHOD OF THE ABSTRACT COLLECTION IF "GEOLOGICAL" METHODS WILL BE UNIFIED ====

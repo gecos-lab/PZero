@@ -212,7 +212,7 @@ def well2vtk(self, path=None):
         annotation_obj_attributes["borehole"] = bore_obj_attributes["uid"]
 
         annotation_obj_attributes["vtk_obj"] = annotation
-        self.backgrounds_coll.add_entity_from_dict(
+        self.backgrnd_coll.add_entity_from_dict(
             entity_dict=annotation_obj_attributes
         )
     # paths = in_file_name

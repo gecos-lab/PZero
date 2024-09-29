@@ -26,7 +26,7 @@ class FakeWindow(QMainWindow):
     legend = FakeLegend()
     prop_legend = FakeLegend()
     geol_coll.signals.added = FakeSignal()
-    geology_removed_signal = FakeSignal()
+    geol_coll.signals.removed = FakeSignal()
 
 
 # Class for testing geological_collection.py

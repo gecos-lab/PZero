@@ -92,7 +92,7 @@ def dem2vtk(self=None, in_file_name=None, collection=None):
         curr_obj_attributes["properties_components"] = [1]
         curr_obj_attributes["vtk_obj"] = curr_obj
         """Add to entity collection."""
-        self.fluids_coll.add_entity_from_dict(entity_dict=curr_obj_attributes)
+        self.fluid_coll.add_entity_from_dict(entity_dict=curr_obj_attributes)
     """Cleaning."""
     del curr_obj
     del curr_obj_attributes

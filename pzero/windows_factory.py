@@ -280,31 +280,31 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.parent.geol_coll.signals.added.connect(
             self.upd_list_geo_add
         )  # this is emitted from the collection
-        self.parent.geology_removed_signal.connect(
+        self.parent.geol_coll.signals.removed.connect(
             self.upd_list_geo_rm
         )  # this is emitted from the collection
-        self.parent.geology_data_keys_modified_signal.connect(
+        self.parent.geol_coll.signals.data_keys_modified.connect(
             self.upd_list_geo_datakeys_mod
         )  # this is emitted from collection
-        self.parent.geology_metadata_modified_signal.connect(
+        self.parent.geol_coll.signals.metadata_modified.connect(
             self.upd_list_geo_metadata_mod
         )  # this is emitted from collection and three_d_surfaces
-        self.parent.geology_geom_modified_signal.connect(
+        self.parent.geol_coll.signals.geom_modified.connect(
             self.upd_list_geo_mod
         )  # this is emitted from two_d_lines and three_d_surfaces
-        self.parent.geology_data_val_modified_signal.connect(
+        self.parent.geol_coll.signals.data_keys_modified.connect(
             self.upd_list_geo_dataval_mod
         )  # this is emitted from nowhere (?)
-        self.parent.geology_legend_color_modified_signal.connect(
+        self.parent.geol_coll.signals.legend_color_modified.connect(
             self.upd_list_geo_leg_col_mod
         )  # this is emitted from legend manager
-        self.parent.geology_legend_thick_modified_signal.connect(
+        self.parent.geol_coll.signals.legend_thick_modified.connect(
             self.upd_list_geo_leg_thick_mod
         )  # this is emitted from legend manager
-        self.parent.geology_legend_point_size_modified_signal.connect(
+        self.parent.geol_coll.signals.legend_point_size_modified.connect(
             self.upd_list_geo_leg_point_mod
         )  # this is emitted from legend manager
-        self.parent.geology_legend_opacity_modified_signal.connect(
+        self.parent.geol_coll.signals.legend_opacity_modified.connect(
             self.upd_list_geo_leg_op_mod
         )  # this is emitted from legend manager
 
@@ -334,27 +334,27 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
 
         # Connect X SECTION lamda functions and signals
 
-        self.parent.xsect_added_signal.connect(
+        self.parent.xsect_coll.signals.added.connect(
             self.upd_list_x_add
         )  # this is emitted from the collection
-        self.parent.xsect_removed_signal.connect(
+        self.parent.xsect_coll.signals.removed.connect(
             self.upd_list_x_rm
         )  # this is emitted from the collection
-        self.parent.xsect_metadata_modified_signal.connect(
+        self.parent.xsect_coll.signals.metadata_modified.connect(
             self.upd_list_x_metadata_mod
         )  # this is emitted from the collection
 
-        self.parent.xsect_geom_modified_signal.connect(
+        self.parent.xsect_coll.signals.geom_modified.connect(
             self.upd_list_x_mod
         )  # this is emitted from nowhere (?)
 
-        self.parent.xsect_legend_color_modified_signal.connect(
+        self.parent.xsect_coll.signals.legend_color_modified.connect(
             self.upd_list_x_leg_col_mod
         )  # this is emitted from the legend manager
-        self.parent.xsect_legend_thick_modified_signal.connect(
+        self.parent.xsect_coll.signals.legend_thick_modified.connect(
             self.upd_list_x_leg_thick_mod
         )  # this is emitted from the legend manager
-        self.parent.xsect_legend_opacity_modified_signal.connect(
+        self.parent.xsect_coll.signals.legend_opacity_modified.connect(
             self.upd_list_x_leg_op_mod
         )  # this is emitted from the legend manager
 
@@ -384,27 +384,27 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
 
         # Connect BOUNDARY lamda functions and signals
 
-        self.parent.boundary_added_signal.connect(
+        self.parent.boundary_coll.signals.added.connect(
             self.upd_list_bound_add
         )  # this is emitted from the collection
-        self.parent.boundary_removed_signal.connect(
+        self.parent.boundary_coll.signals.removed.connect(
             self.upd_list_bound_rm
         )  # this is emitted from the collection
-        self.parent.boundary_metadata_modified_signal.connect(
+        self.parent.boundary_coll.signals.metadata_modified.connect(
             self.upd_list_bound_metadata_mod
         )  # this is emitted from the collection
 
-        self.parent.boundary_geom_modified_signal.connect(
+        self.parent.boundary_coll.signals.geom_modified.connect(
             self.upd_list_bound_geo_mod
         )  # this is emitted from nowhere(?)
 
-        self.parent.boundary_legend_color_modified_signal.connect(
+        self.parent.boundary_coll.signals.legend_color_modified.connect(
             self.upd_list_bound_leg_col_mod
         )  # this is emitted from the legend manager
-        self.parent.boundary_legend_thick_modified_signal.connect(
+        self.parent.boundary_coll.signals.legend_thick_modified.connect(
             self.upd_list_bound_leg_thick_mod
         )  # this is emitted from the legend manager
-        self.parent.boundary_legend_opacity_modified_signal.connect(
+        self.parent.boundary_coll.signals.legend_opacity_modified.connect(
             self.upd_list_bound_leg_op_mod
         )  # this is emitted from the legend manager
 
@@ -437,30 +437,30 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
 
         # Connect MESH 3D lamda functions and signals
 
-        self.parent.mesh3d_added_signal.connect(
+        self.parent.mesh3d_coll.signals.added.connect(
             self.upd_list_mesh3d_add
         )  # this is emitted from the collection
-        self.parent.mesh3d_removed_signal.connect(
+        self.parent.mesh3d_coll.signals.removed.connect(
             self.upd_list_mesh3d_rm
         )  # this is emitted from the collection
-        self.parent.mesh3d_data_keys_modified_signal.connect(
+        self.parent.mesh3d_coll.signals.data_keys_modified.connect(
             self.upd_list_mesh3d_data_keys_mod
         )  # this is emitted from the collection
-        self.parent.mesh3d_metadata_modified_signal.connect(
+        self.parent.mesh3d_coll.signals.metadata_modified.connect(
             self.upd_list_mesh3d_metadata_mod
         )  # this is emitted from the collection
 
-        self.parent.mesh3d_data_val_modified_signal.connect(
+        self.parent.mesh3d_coll.signals.data_val_modified.connect(
             self.upd_list_mesh3d_data_val_mod
         )  # this is emitted from nowhere (?)
 
-        self.parent.mesh3d_legend_color_modified_signal.connect(
+        self.parent.mesh3d_coll.signals.legend_color_modified.connect(
             self.upd_list_mesh3d_leg_col_mod
         )  # this is emitted from the legend manager
-        self.parent.mesh3d_legend_thick_modified_signal.connect(
+        self.parent.mesh3d_coll.signals.legend_thick_modified.connect(
             self.upd_list_mesh3d_leg_thick_mod
         )  # this is emitted from the legend manager
-        self.parent.mesh3d_legend_opacity_modified_signal.connect(
+        self.parent.mesh3d_coll.signals.legend_opacity_modified.connect(
             self.upd_list_mesh3d_leg_op_mod
         )  # this is emitted from the legend manager
 
@@ -496,33 +496,33 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
 
         # Collect DOM lamda functions and signals
 
-        self.parent.dom_added_signal.connect(
+        self.parent.dom_coll.signals.added.connect(
             self.upd_list_dom_add
         )  # this is emitted from the collection
-        self.parent.dom_removed_signal.connect(
+        self.parent.dom_coll.signals.removed.connect(
             self.upd_list_dom_rm
         )  # this is emitted from the collection
-        self.parent.dom_data_keys_modified_signal.connect(
+        self.parent.dom_coll.signals.data_keys_modified.connect(
             self.upd_list_dom_data_keys_mod
         )  # this is emitted from the collection
-        self.parent.dom_metadata_modified_signal.connect(
+        self.parent.dom_coll.signals.metadata_modified.connect(
             self.upd_list_dom_metadata_mod
         )  # this is emitted from the collection
 
-        self.parent.dom_data_val_modified_signal.connect(
+        self.parent.dom_coll.signals.data_val_modified.connect(
             self.upd_list_dom_data_val_mod
         )  # this is emitted from nowhere(?)
 
-        self.parent.dom_legend_color_modified_signal.connect(
+        self.parent.dom_coll.signals.legend_color_modified.connect(
             self.upd_list_dom_leg_col_mod
         )  # this is emitted from the legend manager
-        self.parent.dom_legend_thick_modified_signal.connect(
+        self.parent.dom_coll.signals.legend_thick_modified.connect(
             self.upd_list_dom_leg_thick_mod
         )  # this is emitted from the legend manager
-        self.parent.dom_legend_point_size_modified_signal.connect(
+        self.parent.dom_coll.signals.legend_point_size_modified.connect(
             self.upd_list_dom_leg_point_mod
         )  # this is emitted from the legend manager
-        self.parent.dom_legend_opacity_modified_signal.connect(
+        self.parent.dom_coll.signals.legend_opacity_modified.connect(
             self.upd_list_dom_leg_op_mod
         )  # this is emitted from the legend manager
 
@@ -543,17 +543,17 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
 
         # Connect IMAGE lamda functions and signals
 
-        self.parent.image_added_signal.connect(
+        self.parent.image_coll.signals.added.connect(
             self.upd_list_img_add
         )  # this is emitted from the collection
-        self.parent.image_removed_signal.connect(
+        self.parent.image_coll.signals.removed.connect(
             self.upd_list_img_rm
         )  # this is emitted from the collection
-        self.parent.image_metadata_modified_signal.connect(
+        self.parent.image_coll.signals.metadata_modified.connect(
             self.upd_list_metadata_mod
         )  # this is emitted from the collection
 
-        self.parent.image_legend_opacity_modified_signal.connect(
+        self.parent.image_coll.signals.legend_opacity_modified.connect(
             self.upd_list_img_leg_op_mod
         )  # this is emitted from the legend manager
 
@@ -586,30 +586,30 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
 
         # Connect WELL lamda functions and signals
 
-        self.parent.well_added_signal.connect(
+        self.parent.well_coll.signals.added.connect(
             self.upd_list_well_add
         )  # this is emitted from the collection
-        self.parent.well_removed_signal.connect(
+        self.parent.well_coll.signals.removed.connect(
             self.upd_list_well_rm
         )  # this is emitted from the collection
-        self.parent.well_data_keys_modified_signal.connect(
+        self.parent.well_coll.signals.data_keys_modified.connect(
             self.upd_list_well_data_keys_mod
         )  # this is emitted from the collection
-        self.parent.well_metadata_modified_signal.connect(
+        self.parent.well_coll.signals.metadata_modified.connect(
             self.upd_list_well_metadata_mod
         )  # this is emitted from the collection
 
-        self.parent.well_data_val_modified_signal.connect(
+        self.parent.well_coll.signals.data_val_modified.connect(
             self.upd_list_well_data_val_mod
         )  # this is emitted from nowhere(?)
 
-        self.parent.well_legend_color_modified_signal.connect(
+        self.parent.well_coll.signals.legend_color_modified.connect(
             self.upd_list_well_leg_col_mod
         )  # this is emitted from the legend manager
-        self.parent.well_legend_thick_modified_signal.connect(
+        self.parent.well_coll.signals.legend_thick_modified.connect(
             self.upd_list_well_leg_thick_mod
         )  # this is emitted from the legend manager
-        self.parent.well_legend_opacity_modified_signal.connect(
+        self.parent.well_coll.signals.legend_opacity_modified.connect(
             self.upd_list_well_leg_op_mod
         )  # this is emitted from the legend manager
 
@@ -648,37 +648,37 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
 
         # Connect FLUID lamda functions and signals
 
-        self.parent.fluid_added_signal.connect(
+        self.parent.fluid_coll.signals.added.connect(
             self.upd_list_fluid_add
         )  # this is emitted from the collection
-        self.parent.fluid_removed_signal.connect(
+        self.parent.fluid_coll.signals.removed.connect(
             self.upd_list_fluid_rm
         )  # this is emitted from the collection
-        self.parent.fluid_data_keys_modified_signal.connect(
+        self.parent.fluid_coll.signals.data_keys_modified.connect(
             self.upd_list_fluid_data_keys_mod
         )  # this is emitted from the collection
-        self.parent.fluid_metadata_modified_signal.connect(
+        self.parent.fluid_coll.signals.metadata_modified.connect(
             self.upd_list_fluid_metadata_mod
         )  # this is emitted from the collection
 
-        self.parent.fluid_geom_modified_signal.connect(
+        self.parent.fluid_coll.signals.geom_modified.connect(
             self.upd_list_fluid_geo_mod
         )  # this is emitted from nowhere(?)
 
-        self.parent.fluid_data_val_modified_signal.connect(
+        self.parent.fluid_coll.signals.data_val_modified.connect(
             self.upd_list_fluid_data_val_mod
         )  # this is emitted from nowhere(?)
 
-        self.parent.fluid_legend_color_modified_signal.connect(
+        self.parent.fluid_coll.signals.legend_color_modified.connect(
             self.upd_list_fluid_leg_col_mod
         )  # this is emitted from the legend manager
-        self.parent.fluid_legend_thick_modified_signal.connect(
+        self.parent.fluid_coll.signals.legend_thick_modified.connect(
             self.upd_list_fluid_leg_thick_mod
         )  # this is emitted from the legend manager
-        self.parent.fluid_legend_point_size_modified_signal.connect(
+        self.parent.fluid_coll.signals.legend_point_size_modified.connect(
             self.upd_list_fluid_leg_point_mod
         )  # this is emitted from the legend manager
-        self.parent.fluid_legend_opacity_modified_signal.connect(
+        self.parent.fluid_coll.signals.legend_opacity_modified.connect(
             self.upd_list_fluid_leg_op_mod
         )  # this is emitted from the legend manager
 
@@ -717,36 +717,36 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
 
         # Connect BACKGROUND lamda functions and signals
 
-        self.parent.background_added_signal.connect(
+        self.parent.backgrnd_coll.signals.added.connect(
             self.upd_list_background_add
         )  # this is emitted from the collection
-        self.parent.background_removed_signal.connect(
+        self.parent.backgrnd_coll.signals.removed.connect(
             self.upd_list_background_rm
         )  # this is emitted from the collection
-        self.parent.background_data_keys_modified_signal.connect(
+        self.parent.backgrnd_coll.signals.data_keys_modified.connect(
             self.upd_list_background_data_keys
         )  # this is emitted from the collection
-        self.parent.background_metadata_modified_signal.connect(
+        self.parent.backgrnd_coll.signals.metadata_modified.connect(
             self.upd_list_background_metadata
         )  # this is emitted from the collection
 
-        self.parent.background_geom_modified_signal.connect(
+        self.parent.backgrnd_coll.signals.geom_modified.connect(
             self.upd_list_background_geo_mod
         )  # this is emitted from nowhere(?)
-        self.parent.background_data_val_modified_signal.connect(
+        self.parent.backgrnd_coll.signals.data_val_modified.connect(
             self.upd_list_background_data_val
         )  # this is emitted from nowhere(?)
 
-        self.parent.background_legend_color_modified_signal.connect(
+        self.parent.backgrnd_coll.signals.legend_color_modified.connect(
             self.upd_list_background_leg_col
         )  # this is emitted from the legend manager
-        self.parent.background_legend_thick_modified_signal.connect(
+        self.parent.backgrnd_coll.signals.legend_thick_modified.connect(
             self.upd_list_background_leg_thick
         )  # this is emitted from the legend manager
-        self.parent.background_legend_point_size_modified_signal.connect(
+        self.parent.backgrnd_coll.signals.legend_point_size_modified.connect(
             self.upd_list_background_leg_point
         )  # this is emitted from the legend manager
-        self.parent.background_legend_opacity_modified_signal.connect(
+        self.parent.backgrnd_coll.signals.legend_opacity_modified.connect(
             self.upd_list_background_leg_op
         )  # this is emitted from the legend manager
 
@@ -768,204 +768,204 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         # Disconnect GEOLOGY signals
 
         self.parent.geol_coll.signals.added.disconnect(self.upd_list_geo_add)
-        self.parent.geology_removed_signal.disconnect(self.upd_list_geo_rm)
-        self.parent.geology_geom_modified_signal.disconnect(self.upd_list_geo_mod)
-        self.parent.geology_data_keys_modified_signal.disconnect(
+        self.parent.geol_coll.signals.removed.disconnect(self.upd_list_geo_rm)
+        self.parent.geol_coll.signals.geom_modified.disconnect(self.upd_list_geo_mod)
+        self.parent.geol_coll.signals.data_keys_modified.disconnect(
             self.upd_list_geo_datakeys_mod
         )
-        self.parent.geology_data_val_modified_signal.disconnect(
+        self.parent.geol_coll.signals.data_keys_modified.disconnect(
             self.upd_list_geo_dataval_mod
         )
-        self.parent.geology_metadata_modified_signal.disconnect(
+        self.parent.geol_coll.signals.metadata_modified.disconnect(
             self.upd_list_geo_metadata_mod
         )
-        self.parent.geology_legend_color_modified_signal.disconnect(
+        self.parent.geol_coll.signals.legend_color_modified.disconnect(
             self.upd_list_geo_leg_col_mod
         )
-        self.parent.geology_legend_thick_modified_signal.disconnect(
+        self.parent.geol_coll.signals.legend_thick_modified.disconnect(
             self.upd_list_geo_leg_thick_mod
         )
-        self.parent.geology_legend_point_size_modified_signal.disconnect(
+        self.parent.geol_coll.signals.legend_point_size_modified.disconnect(
             self.upd_list_geo_leg_point_mod
         )
-        self.parent.geology_legend_opacity_modified_signal.disconnect(
+        self.parent.geol_coll.signals.legend_opacity_modified.disconnect(
             self.upd_list_geo_leg_op_mod
         )
 
         # Disconnect X-SECTION signals
 
-        self.parent.xsect_added_signal.disconnect(self.upd_list_x_add)
-        self.parent.xsect_removed_signal.disconnect(self.upd_list_x_rm)
-        self.parent.xsect_geom_modified_signal.disconnect(self.upd_list_x_mod)
-        self.parent.xsect_metadata_modified_signal.disconnect(
+        self.parent.xsect_coll.signals.added.disconnect(self.upd_list_x_add)
+        self.parent.xsect_coll.signals.removed.disconnect(self.upd_list_x_rm)
+        self.parent.xsect_coll.signals.geom_modified.disconnect(self.upd_list_x_mod)
+        self.parent.xsect_coll.signals.metadata_modified.disconnect(
             self.upd_list_x_metadata_mod
         )
-        self.parent.xsect_legend_color_modified_signal.disconnect(
+        self.parent.xsect_coll.signals.legend_color_modified.disconnect(
             self.upd_list_x_leg_col_mod
         )
-        self.parent.xsect_legend_thick_modified_signal.disconnect(
+        self.parent.xsect_coll.signals.legend_thick_modified.disconnect(
             self.upd_list_x_leg_thick_mod
         )
-        self.parent.xsect_legend_opacity_modified_signal.disconnect(
+        self.parent.xsect_coll.signals.legend_opacity_modified.disconnect(
             self.upd_list_x_leg_op_mod
         )
 
         # Disconnect BOUNDARY signals
 
-        self.parent.boundary_added_signal.disconnect(self.upd_list_bound_add)
-        self.parent.boundary_removed_signal.disconnect(self.upd_list_bound_rm)
-        self.parent.boundary_geom_modified_signal.disconnect(
+        self.parent.boundary_coll.signals.added.disconnect(self.upd_list_bound_add)
+        self.parent.boundary_coll.signals.removed.disconnect(self.upd_list_bound_rm)
+        self.parent.boundary_coll.signals.geom_modified.disconnect(
             self.upd_list_bound_geo_mod
         )
-        self.parent.boundary_metadata_modified_signal.disconnect(
+        self.parent.boundary_coll.signals.metadata_modified.disconnect(
             self.upd_list_bound_metadata_mod
         )
-        self.parent.boundary_legend_color_modified_signal.disconnect(
+        self.parent.boundary_coll.signals.legend_color_modified.disconnect(
             self.upd_list_bound_leg_col_mod
         )
-        self.parent.boundary_legend_thick_modified_signal.disconnect(
+        self.parent.boundary_coll.signals.legend_thick_modified.disconnect(
             self.upd_list_bound_leg_thick_mod
         )
-        self.parent.boundary_legend_opacity_modified_signal.disconnect(
+        self.parent.boundary_coll.signals.legend_opacity_modified.disconnect(
             self.upd_list_bound_leg_op_mod
         )
 
         # Disconnect MESH3D signals
 
-        self.parent.mesh3d_added_signal.disconnect(self.upd_list_mesh3d_add)
-        self.parent.mesh3d_removed_signal.disconnect(self.upd_list_mesh3d_rm)
-        self.parent.mesh3d_data_keys_modified_signal.disconnect(
+        self.parent.mesh3d_coll.signals.added.disconnect(self.upd_list_mesh3d_add)
+        self.parent.mesh3d_coll.signals.removed.disconnect(self.upd_list_mesh3d_rm)
+        self.parent.mesh3d_coll.signals.data_keys_modified.disconnect(
             self.upd_list_mesh3d_data_keys_mod
         )
-        self.parent.mesh3d_data_val_modified_signal.disconnect(
+        self.parent.mesh3d_coll.signals.data_val_modified.disconnect(
             self.upd_list_mesh3d_data_val_mod
         )
-        self.parent.mesh3d_metadata_modified_signal.disconnect(
+        self.parent.mesh3d_coll.signals.metadata_modified.disconnect(
             self.upd_list_mesh3d_metadata_mod
         )
-        self.parent.mesh3d_legend_color_modified_signal.disconnect(
+        self.parent.mesh3d_coll.signals.legend_color_modified.disconnect(
             self.upd_list_mesh3d_leg_col_mod
         )
-        self.parent.mesh3d_legend_thick_modified_signal.disconnect(
+        self.parent.mesh3d_coll.signals.legend_thick_modified.disconnect(
             self.upd_list_mesh3d_leg_thick_mod
         )
-        self.parent.mesh3d_legend_opacity_modified_signal.disconnect(
+        self.parent.mesh3d_coll.signals.legend_opacity_modified.disconnect(
             self.upd_list_mesh3d_leg_op_mod
         )
 
         # Disconnect DOM signals
 
-        self.parent.dom_added_signal.disconnect(self.upd_list_dom_add)
-        self.parent.dom_removed_signal.disconnect(self.upd_list_dom_rm)
-        self.parent.dom_data_keys_modified_signal.disconnect(
+        self.parent.dom_coll.signals.added.disconnect(self.upd_list_dom_add)
+        self.parent.dom_coll.signals.removed.disconnect(self.upd_list_dom_rm)
+        self.parent.dom_coll.signals.data_keys_modified.disconnect(
             self.upd_list_dom_data_keys_mod
         )
-        self.parent.dom_data_val_modified_signal.disconnect(
+        self.parent.dom_coll.signals.data_val_modified.disconnect(
             self.upd_list_dom_data_val_mod
         )
-        self.parent.dom_metadata_modified_signal.disconnect(
+        self.parent.dom_coll.signals.metadata_modified.disconnect(
             self.upd_list_dom_metadata_mod
         )
-        self.parent.dom_legend_color_modified_signal.disconnect(
+        self.parent.dom_coll.signals.legend_color_modified.disconnect(
             self.upd_list_dom_leg_col_mod
         )
-        self.parent.dom_legend_thick_modified_signal.disconnect(
+        self.parent.dom_coll.signals.legend_thick_modified.disconnect(
             self.upd_list_dom_leg_thick_mod
         )
-        self.parent.dom_legend_point_size_modified_signal.disconnect(
+        self.parent.dom_coll.signals.legend_point_size_modified.disconnect(
             self.upd_list_dom_leg_point_mod
         )
-        self.parent.dom_legend_opacity_modified_signal.disconnect(
+        self.parent.dom_coll.signals.legend_opacity_modified.disconnect(
             self.upd_list_dom_leg_op_mod
         )
 
         # Disconnect IMAGE signals
 
-        self.parent.image_added_signal.disconnect(self.upd_list_img_add)
-        self.parent.image_removed_signal.disconnect(self.upd_list_img_rm)
-        self.parent.image_metadata_modified_signal.disconnect(
+        self.parent.image_coll.signals.added.disconnect(self.upd_list_img_add)
+        self.parent.image_coll.signals.removed.disconnect(self.upd_list_img_rm)
+        self.parent.image_coll.signals.metadata_modified.disconnect(
             self.upd_list_metadata_mod
         )
-        self.parent.image_legend_opacity_modified_signal.disconnect(
+        self.parent.image_coll.signals.legend_opacity_modified.disconnect(
             self.upd_list_img_leg_op_mod
         )
 
         # Disconnect WELL signals
 
-        self.parent.well_added_signal.disconnect(self.upd_list_well_add)
-        self.parent.well_removed_signal.disconnect(self.upd_list_well_rm)
-        self.parent.well_data_keys_modified_signal.disconnect(
+        self.parent.well_coll.signals.added.disconnect(self.upd_list_well_add)
+        self.parent.well_coll.signals.removed.disconnect(self.upd_list_well_rm)
+        self.parent.well_coll.signals.data_keys_modified.disconnect(
             self.upd_list_well_data_keys_mod
         )
-        self.parent.well_data_val_modified_signal.disconnect(
+        self.parent.well_coll.signals.data_val_modified.disconnect(
             self.upd_list_well_data_val_mod
         )
-        self.parent.well_metadata_modified_signal.disconnect(
+        self.parent.well_coll.signals.metadata_modified.disconnect(
             self.upd_list_well_metadata_mod
         )
-        self.parent.well_legend_color_modified_signal.disconnect(
+        self.parent.well_coll.signals.legend_color_modified.disconnect(
             self.upd_list_well_leg_col_mod
         )
-        self.parent.well_legend_thick_modified_signal.disconnect(
+        self.parent.well_coll.signals.legend_thick_modified.disconnect(
             self.upd_list_well_leg_thick_mod
         )
-        self.parent.well_legend_opacity_modified_signal.disconnect(
+        self.parent.well_coll.signals.legend_opacity_modified.disconnect(
             self.upd_list_well_leg_op_mod
         )
 
         # Disconnect FLUID signals
 
-        self.parent.fluid_added_signal.disconnect(self.upd_list_fluid_add)
-        self.parent.fluid_removed_signal.disconnect(self.upd_list_fluid_rm)
-        self.parent.fluid_geom_modified_signal.disconnect(self.upd_list_fluid_geo_mod)
-        self.parent.fluid_data_keys_modified_signal.disconnect(
+        self.parent.fluid_coll.signals.added.disconnect(self.upd_list_fluid_add)
+        self.parent.fluid_coll.signals.removed.disconnect(self.upd_list_fluid_rm)
+        self.parent.fluid_coll.signals.geom_modified.disconnect(self.upd_list_fluid_geo_mod)
+        self.parent.fluid_coll.signals.data_keys_modified.disconnect(
             self.upd_list_fluid_data_keys_mod
         )
-        self.parent.fluid_data_val_modified_signal.disconnect(
+        self.parent.fluid_coll.signals.data_val_modified.disconnect(
             self.upd_list_fluid_data_val_mod
         )
-        self.parent.fluid_metadata_modified_signal.disconnect(
+        self.parent.fluid_coll.signals.metadata_modified.disconnect(
             self.upd_list_fluid_metadata_mod
         )
-        self.parent.fluid_legend_color_modified_signal.disconnect(
+        self.parent.fluid_coll.signals.legend_color_modified.disconnect(
             self.upd_list_fluid_leg_col_mod
         )
-        self.parent.fluid_legend_thick_modified_signal.disconnect(
+        self.parent.fluid_coll.signals.legend_thick_modified.disconnect(
             self.upd_list_fluid_leg_thick_mod
         )
-        self.parent.fluid_legend_point_size_modified_signal.disconnect(
+        self.parent.fluid_coll.signals.legend_point_size_modified.disconnect(
             self.upd_list_fluid_leg_point_mod
         )
-        self.parent.fluid_legend_opacity_modified_signal.disconnect(
+        self.parent.fluid_coll.signals.legend_opacity_modified.disconnect(
             self.upd_list_fluid_leg_op_mod
         )
 
         # Disconnect BACKGROUND signals
 
-        self.parent.background_added_signal.disconnect(self.upd_list_background_add)
-        self.parent.background_removed_signal.disconnect(self.upd_list_background_rm)
-        self.parent.background_geom_modified_signal.disconnect(
+        self.parent.backgrnd_coll.signals.added.disconnect(self.upd_list_background_add)
+        self.parent.backgrnd_coll.signals.removed.disconnect(self.upd_list_background_rm)
+        self.parent.backgrnd_coll.signals.geom_modified.disconnect(
             self.upd_list_background_geo_mod
         )
-        self.parent.background_data_keys_modified_signal.disconnect(
+        self.parent.backgrnd_coll.signals.data_keys_modified.disconnect(
             self.upd_list_background_data_keys
         )
-        self.parent.background_data_val_modified_signal.disconnect(
+        self.parent.backgrnd_coll.signals.data_val_modified.disconnect(
             self.upd_list_background_data_val
         )
-        self.parent.background_metadata_modified_signal.disconnect(
+        self.parent.backgrnd_coll.signals.metadata_modified.disconnect(
             self.upd_list_background_metadata
         )
-        self.parent.background_legend_color_modified_signal.disconnect(
+        self.parent.backgrnd_coll.signals.legend_color_modified.disconnect(
             self.upd_list_background_leg_col
         )
-        self.parent.background_legend_thick_modified_signal.disconnect(
+        self.parent.backgrnd_coll.signals.legend_thick_modified.disconnect(
             self.upd_list_background_leg_thick
         )
-        self.parent.background_legend_point_size_modified_signal.disconnect(
+        self.parent.backgrnd_coll.signals.legend_point_size_modified.disconnect(
             self.upd_list_background_leg_point
         )
-        self.parent.background_legend_opacity_modified_signal.disconnect(
+        self.parent.backgrnd_coll.signals.legend_opacity_modified.disconnect(
             self.upd_list_background_leg_op
         )
 
@@ -1125,24 +1125,24 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                 },
                 ignore_index=True,
             )
-        for uid in self.parent.fluids_coll.df.query(self.view_filter)["uid"].tolist():
+        for uid in self.parent.fluid_coll.df.query(self.view_filter)["uid"].tolist():
             this_actor = self.show_actor_with_property(
-                uid=uid, collection="fluids_coll", show_property=None, visible=False
+                uid=uid, collection="fluid_coll", show_property=None, visible=False
             )
             self.actors_df = self.actors_df.append(
                 {
                     "uid": uid,
                     "actor": this_actor,
                     "show": False,
-                    "collection": "fluids_coll",
+                    "collection": "fluid_coll",
                     "show_property": None,
                 },
                 ignore_index=True,
             )
-        for uid in self.parent.backgrounds_coll.df.query(self.view_filter)["uid"].tolist():
+        for uid in self.parent.backgrnd_coll.df.query(self.view_filter)["uid"].tolist():
             this_actor = self.show_actor_with_property(
                 uid=uid,
-                collection="backgrounds_coll",
+                collection="backgrnd_coll",
                 show_property=None,
                 visible=False,
             )
@@ -1151,7 +1151,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                     "uid": uid,
                     "actor": this_actor,
                     "show": False,
-                    "collection": "backgrounds_coll",
+                    "collection": "backgrnd_coll",
                     "show_property": None,
                 },
                 ignore_index=True,
@@ -1272,14 +1272,14 @@ class VTKView(BaseView):
                 color_R = self.parent.well_coll.get_uid_legend(uid=uid)["color_R"]
                 color_G = self.parent.well_coll.get_uid_legend(uid=uid)["color_G"]
                 color_B = self.parent.well_coll.get_uid_legend(uid=uid)["color_B"]
-            elif collection == "fluids_coll":
-                color_R = self.parent.fluids_coll.get_uid_legend(uid=uid)["color_R"]
-                color_G = self.parent.fluids_coll.get_uid_legend(uid=uid)["color_G"]
-                color_B = self.parent.fluids_coll.get_uid_legend(uid=uid)["color_B"]
-            elif collection == "backgrounds_coll":
-                color_R = self.parent.backgrounds_coll.get_uid_legend(uid=uid)["color_R"]
-                color_G = self.parent.backgrounds_coll.get_uid_legend(uid=uid)["color_G"]
-                color_B = self.parent.backgrounds_coll.get_uid_legend(uid=uid)["color_B"]
+            elif collection == "fluid_coll":
+                color_R = self.parent.fluid_coll.get_uid_legend(uid=uid)["color_R"]
+                color_G = self.parent.fluid_coll.get_uid_legend(uid=uid)["color_G"]
+                color_B = self.parent.fluid_coll.get_uid_legend(uid=uid)["color_B"]
+            elif collection == "backgrnd_coll":
+                color_R = self.parent.backgrnd_coll.get_uid_legend(uid=uid)["color_R"]
+                color_G = self.parent.backgrnd_coll.get_uid_legend(uid=uid)["color_G"]
+                color_B = self.parent.backgrnd_coll.get_uid_legend(uid=uid)["color_B"]
             # No color for image
             # Now update color for actor uid
             color_RGB = [color_R / 255, color_G / 255, color_B / 255]
@@ -1307,11 +1307,11 @@ class VTKView(BaseView):
                 opacity = self.parent.dom_coll.get_legend()["opacity"] / 100
             elif collection == "well_coll":
                 opacity = self.parent.well_coll.get_uid_legend(uid=uid)["opacity"] / 100
-            elif collection == "fluids_coll":
-                opacity = self.parent.fluids_coll.get_uid_legend(uid=uid)["opacity"] / 100
-            elif collection == "backgrounds_coll":
+            elif collection == "fluid_coll":
+                opacity = self.parent.fluid_coll.get_uid_legend(uid=uid)["opacity"] / 100
+            elif collection == "backgrnd_coll":
                 opacity = (
-                        self.parent.backgrounds_coll.get_uid_legend(uid=uid)["opacity"] / 100
+                        self.parent.backgrnd_coll.get_uid_legend(uid=uid)["opacity"] / 100
                 )
             elif collection == "image_coll":
                 opacity = self.parent.image_coll.get_legend()["opacity"] / 100
@@ -1340,10 +1340,10 @@ class VTKView(BaseView):
                 line_thick = self.parent.dom_coll.get_legend()["line_thick"]
             elif collection == "well_coll":
                 line_thick = self.parent.well_coll.get_uid_legend(uid=uid)["line_thick"]
-            elif collection == "fluids_coll":
-                line_thick = self.parent.fluids_coll.get_uid_legend(uid=uid)["line_thick"]
-            elif collection == "backgrounds_coll":
-                line_thick = self.parent.backgrounds_coll.get_uid_legend(uid=uid)[
+            elif collection == "fluid_coll":
+                line_thick = self.parent.fluid_coll.get_uid_legend(uid=uid)["line_thick"]
+            elif collection == "backgrnd_coll":
+                line_thick = self.parent.backgrnd_coll.get_uid_legend(uid=uid)[
                     "line_thick"
                 ]
             # No thickness for image
@@ -1373,10 +1373,10 @@ class VTKView(BaseView):
                 """Note: no legend for image."""
             elif collection == "well_coll":
                 point_size = self.parent.well_coll.get_uid_legend(uid=uid)["point_size"]
-            elif collection == "fluids_coll":
-                point_size = self.parent.fluids_coll.get_uid_legend(uid=uid)["point_size"]
-            elif collection == "backgrounds_coll":
-                point_size = self.parent.backgrounds_coll.get_uid_legend(uid=uid)[
+            elif collection == "fluid_coll":
+                point_size = self.parent.fluid_coll.get_uid_legend(uid=uid)["point_size"]
+            elif collection == "backgrnd_coll":
+                point_size = self.parent.backgrnd_coll.get_uid_legend(uid=uid)[
                     "point_size"
                 ]
             # No thickness for image
@@ -1414,7 +1414,7 @@ class VTKView(BaseView):
                     marker_actor_points = actors[f"{uid}_marker-points"]
                     marker_actor_labels.SetVisibility(visible)
                     marker_actor_points.SetVisibility(visible)
-        elif collection == "backgrounds_coll":
+        elif collection == "backgrnd_coll":
             # case for BACKGROUNDS
             if f"{uid}_name-labels" in actors.keys():
                 marker_actor_labels = actors[f"{uid}_name-labels"]
@@ -1511,24 +1511,24 @@ class VTKView(BaseView):
             point_size = 0
             opacity = self.parent.well_coll.get_uid_legend(uid=uid)["opacity"] / 100
             plot_entity = self.parent.well_coll.get_uid_vtk_obj(uid)
-        elif collection == "fluids_coll":
-            color_R = self.parent.fluids_coll.get_uid_legend(uid=uid)["color_R"]
-            color_G = self.parent.fluids_coll.get_uid_legend(uid=uid)["color_G"]
-            color_B = self.parent.fluids_coll.get_uid_legend(uid=uid)["color_B"]
+        elif collection == "fluid_coll":
+            color_R = self.parent.fluid_coll.get_uid_legend(uid=uid)["color_R"]
+            color_G = self.parent.fluid_coll.get_uid_legend(uid=uid)["color_G"]
+            color_B = self.parent.fluid_coll.get_uid_legend(uid=uid)["color_B"]
             color_RGB = [color_R / 255, color_G / 255, color_B / 255]
-            line_thick = self.parent.fluids_coll.get_uid_legend(uid=uid)["line_thick"]
-            point_size = self.parent.fluids_coll.get_uid_legend(uid=uid)["point_size"]
-            opacity = self.parent.fluids_coll.get_uid_legend(uid=uid)["opacity"] / 100
-            plot_entity = self.parent.fluids_coll.get_uid_vtk_obj(uid)
-        elif collection == "backgrounds_coll":
-            color_R = self.parent.backgrounds_coll.get_uid_legend(uid=uid)["color_R"]
-            color_G = self.parent.backgrounds_coll.get_uid_legend(uid=uid)["color_G"]
-            color_B = self.parent.backgrounds_coll.get_uid_legend(uid=uid)["color_B"]
+            line_thick = self.parent.fluid_coll.get_uid_legend(uid=uid)["line_thick"]
+            point_size = self.parent.fluid_coll.get_uid_legend(uid=uid)["point_size"]
+            opacity = self.parent.fluid_coll.get_uid_legend(uid=uid)["opacity"] / 100
+            plot_entity = self.parent.fluid_coll.get_uid_vtk_obj(uid)
+        elif collection == "backgrnd_coll":
+            color_R = self.parent.backgrnd_coll.get_uid_legend(uid=uid)["color_R"]
+            color_G = self.parent.backgrnd_coll.get_uid_legend(uid=uid)["color_G"]
+            color_B = self.parent.backgrnd_coll.get_uid_legend(uid=uid)["color_B"]
             color_RGB = [color_R / 255, color_G / 255, color_B / 255]
-            line_thick = self.parent.backgrounds_coll.get_uid_legend(uid=uid)["line_thick"]
-            point_size = self.parent.backgrounds_coll.get_uid_legend(uid=uid)["point_size"]
-            opacity = self.parent.backgrounds_coll.get_uid_legend(uid=uid)["opacity"] / 100
-            plot_entity = self.parent.backgrounds_coll.get_uid_vtk_obj(uid)
+            line_thick = self.parent.backgrnd_coll.get_uid_legend(uid=uid)["line_thick"]
+            point_size = self.parent.backgrnd_coll.get_uid_legend(uid=uid)["point_size"]
+            opacity = self.parent.backgrnd_coll.get_uid_legend(uid=uid)["opacity"] / 100
+            plot_entity = self.parent.backgrnd_coll.get_uid_vtk_obj(uid)
         else:
             # catch errors
             print("no collection", collection)
@@ -1972,13 +1972,13 @@ class VTKView(BaseView):
             plot_entity = self.parent.well_coll.get_uid_vtk_obj(uid)
             point = plot_entity.points[0].reshape(-1, 3)
             name_value = [self.parent.well_coll.get_uid_well_locid(uid)]
-        elif collection == "fluids_coll":
-            plot_entity = self.parent.fluids_coll.get_uid_vtk_obj(uid)
+        elif collection == "fluid_coll":
+            plot_entity = self.parent.fluid_coll.get_uid_vtk_obj(uid)
             point = plot_entity.GetCenter()
-            name_value = self.parent.fluids_coll.get_uid_name(uid)
-        elif collection == "backgrounds_coll":
-            plot_entity = self.parent.backgrounds_coll.get_uid_vtk_obj(uid)
-            if self.parent.backgrounds_coll.get_uid_topology(uid) == "PolyLine":
+            name_value = self.parent.fluid_coll.get_uid_name(uid)
+        elif collection == "backgrnd_coll":
+            plot_entity = self.parent.backgrnd_coll.get_uid_vtk_obj(uid)
+            if self.parent.backgrnd_coll.get_uid_topology(uid) == "PolyLine":
                 point = plot_entity.GetCenter()
             else:
                 point = plot_entity.points
@@ -3122,32 +3122,32 @@ class NewViewMap(NewView2D):
             opacity = self.parent.well_coll.get_uid_legend(uid=uid)["opacity"] / 100
 
             plot_entity = self.parent.well_coll.get_uid_vtk_obj(uid)
-        elif collection == "fluids_coll":
-            color_R = self.parent.fluids_coll.get_uid_legend(uid=uid)["color_R"]
-            color_G = self.parent.fluids_coll.get_uid_legend(uid=uid)["color_G"]
-            color_B = self.parent.fluids_coll.get_uid_legend(uid=uid)["color_B"]
+        elif collection == "fluid_coll":
+            color_R = self.parent.fluid_coll.get_uid_legend(uid=uid)["color_R"]
+            color_G = self.parent.fluid_coll.get_uid_legend(uid=uid)["color_G"]
+            color_B = self.parent.fluid_coll.get_uid_legend(uid=uid)["color_B"]
             color_RGB = [color_R / 255, color_G / 255, color_B / 255]
-            line_thick = self.parent.fluids_coll.get_uid_legend(uid=uid)["line_thick"]
-            point_size = self.parent.fluids_coll.get_uid_legend(uid=uid)["point_size"]
-            opacity = self.parent.fluids_coll.get_uid_legend(uid=uid)["opacity"] / 100
+            line_thick = self.parent.fluid_coll.get_uid_legend(uid=uid)["line_thick"]
+            point_size = self.parent.fluid_coll.get_uid_legend(uid=uid)["point_size"]
+            opacity = self.parent.fluid_coll.get_uid_legend(uid=uid)["opacity"] / 100
 
-            plot_entity = self.parent.fluids_coll.get_uid_vtk_obj(uid)
-        elif collection == "backgrounds_coll":
-            color_R = self.parent.backgrounds_coll.get_uid_legend(uid=uid)["color_R"]
-            color_G = self.parent.backgrounds_coll.get_uid_legend(uid=uid)["color_G"]
-            color_B = self.parent.backgrounds_coll.get_uid_legend(uid=uid)["color_B"]
+            plot_entity = self.parent.fluid_coll.get_uid_vtk_obj(uid)
+        elif collection == "backgrnd_coll":
+            color_R = self.parent.backgrnd_coll.get_uid_legend(uid=uid)["color_R"]
+            color_G = self.parent.backgrnd_coll.get_uid_legend(uid=uid)["color_G"]
+            color_B = self.parent.backgrnd_coll.get_uid_legend(uid=uid)["color_B"]
             color_RGB = [color_R / 255, color_G / 255, color_B / 255]
-            line_thick = self.parent.backgrounds_coll.get_uid_legend(uid=uid)[
+            line_thick = self.parent.backgrnd_coll.get_uid_legend(uid=uid)[
                 "line_thick"
             ]
-            point_size = self.parent.backgrounds_coll.get_uid_legend(uid=uid)[
+            point_size = self.parent.backgrnd_coll.get_uid_legend(uid=uid)[
                 "point_size"
             ]
             opacity = (
-                    self.parent.backgrounds_coll.get_uid_legend(uid=uid)["opacity"] / 100
+                    self.parent.backgrnd_coll.get_uid_legend(uid=uid)["opacity"] / 100
             )
 
-            plot_entity = self.parent.backgrounds_coll.get_uid_vtk_obj(uid)
+            plot_entity = self.parent.backgrnd_coll.get_uid_vtk_obj(uid)
         else:
             print("no collection")
             print(collection)
@@ -3697,26 +3697,26 @@ class NewViewXsection(NewView2D):
     #             },
     #             ignore_index=True,
     #         )
-    #     for uid in self.parent.fluids_coll.df["uid"].tolist():
-    #         if self.parent.fluids_coll.get_uid_x_section(uid) == sec_uid:
+    #     for uid in self.parent.fluid_coll.df["uid"].tolist():
+    #         if self.parent.fluid_coll.get_uid_x_section(uid) == sec_uid:
     #             this_actor = self.show_actor_with_property(
-    #                 uid=uid, collection="fluids_coll", show_property=None, visible=False
+    #                 uid=uid, collection="fluid_coll", show_property=None, visible=False
     #             )
     #             self.actors_df = self.actors_df.append(
     #                 {
     #                     "uid": uid,
     #                     "actor": this_actor,
     #                     "show": False,
-    #                     "collection": "fluids_coll",
+    #                     "collection": "fluid_coll",
     #                     "show_property": None,
     #                 },
     #                 ignore_index=True,
     #             )
-    #     for uid in self.parent.backgrounds_coll.df["uid"].tolist():
-    #         if self.parent.backgrounds_coll.get_uid_x_section(uid) == sec_uid:
+    #     for uid in self.parent.backgrnd_coll.df["uid"].tolist():
+    #         if self.parent.backgrnd_coll.get_uid_x_section(uid) == sec_uid:
     #             this_actor = self.show_actor_with_property(
     #                 uid=uid,
-    #                 collection="backgrounds_coll",
+    #                 collection="backgrnd_coll",
     #                 show_property=None,
     #                 visible=False,
     #             )
@@ -3725,7 +3725,7 @@ class NewViewXsection(NewView2D):
     #                     "uid": uid,
     #                     "actor": this_actor,
     #                     "show": False,
-    #                     "collection": "backgrounds_coll",
+    #                     "collection": "backgrnd_coll",
     #                     "show_property": None,
     #                 },
     #                 ignore_index=True,
@@ -3766,18 +3766,18 @@ class NewViewXsection(NewView2D):
     #             color_R = self.parent.well_coll.get_uid_legend(uid=uid)["color_R"]
     #             color_G = self.parent.well_coll.get_uid_legend(uid=uid)["color_G"]
     #             color_B = self.parent.well_coll.get_uid_legend(uid=uid)["color_B"]
-    #         elif collection == "fluids_coll":
-    #             color_R = self.parent.fluids_coll.get_uid_legend(uid=uid)["color_R"]
-    #             color_G = self.parent.fluids_coll.get_uid_legend(uid=uid)["color_G"]
-    #             color_B = self.parent.fluids_coll.get_uid_legend(uid=uid)["color_B"]
-    #         elif collection == "backgrounds_coll":
-    #             color_R = self.parent.backgrounds_coll.get_uid_legend(uid=uid)[
+    #         elif collection == "fluid_coll":
+    #             color_R = self.parent.fluid_coll.get_uid_legend(uid=uid)["color_R"]
+    #             color_G = self.parent.fluid_coll.get_uid_legend(uid=uid)["color_G"]
+    #             color_B = self.parent.fluid_coll.get_uid_legend(uid=uid)["color_B"]
+    #         elif collection == "backgrnd_coll":
+    #             color_R = self.parent.backgrnd_coll.get_uid_legend(uid=uid)[
     #                 "color_R"
     #             ]
-    #             color_G = self.parent.backgrounds_coll.get_uid_legend(uid=uid)[
+    #             color_G = self.parent.backgrnd_coll.get_uid_legend(uid=uid)[
     #                 "color_G"
     #             ]
-    #             color_B = self.parent.backgrounds_coll.get_uid_legend(uid=uid)[
+    #             color_B = self.parent.backgrnd_coll.get_uid_legend(uid=uid)[
     #                 "color_B"
     #             ]
     #         """Note: no legend for image."""
@@ -3832,12 +3832,12 @@ class NewViewXsection(NewView2D):
     #             self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[
     #                 0
     #             ].GetProperty().SetLineWidth(line_thick)
-    #         elif collection == "fluids_coll":
-    #             line_thick = self.parent.fluids_coll.get_uid_legend(uid=uid)[
+    #         elif collection == "fluid_coll":
+    #             line_thick = self.parent.fluid_coll.get_uid_legend(uid=uid)[
     #                 "line_thick"
     #             ]
     #
-    #             if isinstance(self.parent.fluids_coll.get_uid_vtk_obj(uid), VertexSet):
+    #             if isinstance(self.parent.fluid_coll.get_uid_vtk_obj(uid), VertexSet):
     #                 self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[
     #                     0
     #                 ].GetProperty().SetPointSize(line_thick)
@@ -3846,13 +3846,13 @@ class NewViewXsection(NewView2D):
     #                     0
     #                 ].GetProperty().SetLineWidth(line_thick)
     #
-    #         elif collection == "backgrounds_coll":
-    #             line_thick = self.parent.backgrounds_coll.get_uid_legend(uid=uid)[
+    #         elif collection == "backgrnd_coll":
+    #             line_thick = self.parent.backgrnd_coll.get_uid_legend(uid=uid)[
     #                 "line_thick"
     #             ]
     #
     #             if isinstance(
-    #                 self.parent.backgrounds_coll.get_uid_vtk_obj(uid), VertexSet
+    #                 self.parent.backgrnd_coll.get_uid_vtk_obj(uid), VertexSet
     #             ):
     #                 self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[
     #                     0
@@ -3954,37 +3954,37 @@ class NewViewXsection(NewView2D):
     #
     #         plot_entity = self.parent.well_coll.get_uid_vtk_obj(uid)
     #     elif (
-    #         collection == "fluids_coll"
-    #         and self.parent.fluids_coll.get_uid_x_section(uid) == sec_uid
+    #         collection == "fluid_coll"
+    #         and self.parent.fluid_coll.get_uid_x_section(uid) == sec_uid
     #     ):
-    #         color_R = self.parent.fluids_coll.get_uid_legend(uid=uid)["color_R"]
-    #         color_G = self.parent.fluids_coll.get_uid_legend(uid=uid)["color_G"]
-    #         color_B = self.parent.fluids_coll.get_uid_legend(uid=uid)["color_B"]
+    #         color_R = self.parent.fluid_coll.get_uid_legend(uid=uid)["color_R"]
+    #         color_G = self.parent.fluid_coll.get_uid_legend(uid=uid)["color_G"]
+    #         color_B = self.parent.fluid_coll.get_uid_legend(uid=uid)["color_B"]
     #         color_RGB = [color_R / 255, color_G / 255, color_B / 255]
-    #         line_thick = self.parent.fluids_coll.get_uid_legend(uid=uid)["line_thick"]
-    #         point_size = self.parent.fluids_coll.get_uid_legend(uid=uid)["point_size"]
-    #         opacity = self.parent.fluids_coll.get_uid_legend(uid=uid)["opacity"] / 100
+    #         line_thick = self.parent.fluid_coll.get_uid_legend(uid=uid)["line_thick"]
+    #         point_size = self.parent.fluid_coll.get_uid_legend(uid=uid)["point_size"]
+    #         opacity = self.parent.fluid_coll.get_uid_legend(uid=uid)["opacity"] / 100
     #
-    #         plot_entity = self.parent.fluids_coll.get_uid_vtk_obj(uid)
+    #         plot_entity = self.parent.fluid_coll.get_uid_vtk_obj(uid)
     #     elif (
-    #         collection == "backgrounds_coll"
-    #         and self.parent.backgrounds_coll.get_uid_x_section(uid) == sec_uid
+    #         collection == "backgrnd_coll"
+    #         and self.parent.backgrnd_coll.get_uid_x_section(uid) == sec_uid
     #     ):
-    #         color_R = self.parent.backgrounds_coll.get_uid_legend(uid=uid)["color_R"]
-    #         color_G = self.parent.backgrounds_coll.get_uid_legend(uid=uid)["color_G"]
-    #         color_B = self.parent.backgrounds_coll.get_uid_legend(uid=uid)["color_B"]
+    #         color_R = self.parent.backgrnd_coll.get_uid_legend(uid=uid)["color_R"]
+    #         color_G = self.parent.backgrnd_coll.get_uid_legend(uid=uid)["color_G"]
+    #         color_B = self.parent.backgrnd_coll.get_uid_legend(uid=uid)["color_B"]
     #         color_RGB = [color_R / 255, color_G / 255, color_B / 255]
-    #         line_thick = self.parent.backgrounds_coll.get_uid_legend(uid=uid)[
+    #         line_thick = self.parent.backgrnd_coll.get_uid_legend(uid=uid)[
     #             "line_thick"
     #         ]
-    #         point_size = self.parent.backgrounds_coll.get_uid_legend(uid=uid)[
+    #         point_size = self.parent.backgrnd_coll.get_uid_legend(uid=uid)[
     #             "point_size"
     #         ]
     #         opacity = (
-    #             self.parent.backgrounds_coll.get_uid_legend(uid=uid)["opacity"] / 100
+    #             self.parent.backgrnd_coll.get_uid_legend(uid=uid)["opacity"] / 100
     #         )
     #
-    #         plot_entity = self.parent.backgrounds_coll.get_uid_vtk_obj(uid)
+    #         plot_entity = self.parent.backgrnd_coll.get_uid_vtk_obj(uid)
     #     else:
     #         print("no collection")
     #         print(collection)

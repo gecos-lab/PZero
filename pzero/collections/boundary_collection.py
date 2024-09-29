@@ -207,7 +207,7 @@ class BoundaryCollection(BaseCollection):
         # Reset data model.
         self.modelReset.emit()
         # Then emit signal to update the views. A list of uids is emitted, even if the entity is just one.
-        self.parent.boundary_added_signal.emit([entity_dict["uid"]])
+        self.parent.boundary_coll.signals.added.emit([entity_dict["uid"]])
         return entity_dict["uid"]
 
     def remove_entity(self, uid: str = None) -> str:
@@ -216,7 +216,7 @@ class BoundaryCollection(BaseCollection):
         self.df.drop(self.df[self.df["uid"] == uid].index, inplace=True)
         self.modelReset.emit()  # is this really necessary?
         # When done, send a signal over to the views. A list of uids is emitted, even if the entity is just one.
-        self.parent.boundary_removed_signal.emit([uid])
+        self.parent.boundary_coll.signals.removed.emit([uid])
         return uid
 
     def clone_entity(self, uid: str = None) -> str:
@@ -229,7 +229,7 @@ class BoundaryCollection(BaseCollection):
         # ============ CAN BE UNIFIED AS COMMON METHOD OF THE ABSTRACT COLLECTION WHEN SIGNALS WILL BE UNIFIED ==========
         if isinstance(vtk_object, type(self.df.loc[self.df["uid"] == uid, "vtk_obj"].values[0])):
             self.df.loc[self.df["uid"] == uid, "vtk_obj"] = vtk_object
-            self.parent.boundary_geom_modified_signal.emit([uid])
+            self.parent.boundary_coll.signals.geom_modified.emit([uid])
         else:
             print("ERROR - replace_vtk with vtk of a different type not allowed.")
 
@@ -254,11 +254,11 @@ class BoundaryCollection(BaseCollection):
         # Not implemented for this collection, but required by the abstract superclass.
         pass
 
-    def metadata_modified_signal(self, updated_list: list = None):
-        """Signal emitted when metadata change."""
-        self.parent.boundary_metadata_modified_signal.emit(updated_list)
+    # def metadata_modified_signal(self, updated_list: list = None):
+    #     """Signal emitted when metadata change."""
+    #     self.parent.boundary_coll.signals.metadata_modified.emit(updated_list)
 
-    def data_keys_modified_signal(self, updated_list: list = None):
-        """Signal emitted when point data keys change."""
-        # Not implemented for this collection, but required by the abstract superclass.
-        pass
+    # def data_keys_modified_signal(self, updated_list: list = None):
+    #     """Signal emitted when point data keys change."""
+    #     # Not implemented for this collection, but required by the abstract superclass.
+    #     pass

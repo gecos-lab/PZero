@@ -12,8 +12,8 @@ class FakeSignal:
 # Class used for test the main window (project_window) as a parent
 class FakeWindow(QMainWindow):
 
-    boundary_added_signal = FakeSignal()
-    boundary_removed_signal = FakeSignal()
+    boundary_coll.signals.added = FakeSignal()
+    boundary_coll.signals.removed = FakeSignal()
 
 
 # Class for testing the boundary collection

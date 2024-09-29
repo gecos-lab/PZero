@@ -15,7 +15,7 @@ def create_fluids_tree(self):
     )
     self.FluidsTreeWidget.hideColumn(1)  # hide the uid column
     self.FluidsTreeWidget.setItemsExpandable(True)
-    roles = pd_unique(self.parent.fluids_coll.df.query(self.view_filter)["role"])
+    roles = pd_unique(self.parent.fluid_coll.df.query(self.view_filter)["role"])
     for role in roles:
         flevel_1 = QTreeWidgetItem(
             self.FluidsTreeWidget, [role]
@@ -24,8 +24,8 @@ def create_fluids_tree(self):
             flevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
         )
         features = pd_unique(
-            self.parent.fluids_coll.df.query(self.view_filter).loc[
-                self.parent.fluids_coll.df.query(self.view_filter)["role"] == role,
+            self.parent.fluid_coll.df.query(self.view_filter).loc[
+                self.parent.fluid_coll.df.query(self.view_filter)["role"] == role,
                 "feature",
             ]
         )
@@ -37,9 +37,9 @@ def create_fluids_tree(self):
                 flevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
             )
             fluid_scenario = pd_unique(
-                self.parent.fluids_coll.df.query(self.view_filter).loc[
-                    (self.parent.fluids_coll.df.query(self.view_filter)["role"] == role)
-                    & (self.parent.fluids_coll.df.query(self.view_filter)["feature"] == feature),
+                self.parent.fluid_coll.df.query(self.view_filter).loc[
+                    (self.parent.fluid_coll.df.query(self.view_filter)["role"] == role)
+                    & (self.parent.fluid_coll.df.query(self.view_filter)["feature"] == feature),
                     "scenario",
                 ]
             )
@@ -50,10 +50,10 @@ def create_fluids_tree(self):
                 flevel_3.setFlags(
                     flevel_3.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
                 )
-                uids = self.parent.fluids_coll.df.query(self.view_filter).loc[
-                    (self.parent.fluids_coll.df.query(self.view_filter)["role"] == role)
-                    & (self.parent.fluids_coll.df.query(self.view_filter)["feature"] == feature)
-                    & (self.parent.fluids_coll.df.query(self.view_filter)["scenario"] == scenario),
+                uids = self.parent.fluid_coll.df.query(self.view_filter).loc[
+                    (self.parent.fluid_coll.df.query(self.view_filter)["role"] == role)
+                    & (self.parent.fluid_coll.df.query(self.view_filter)["feature"] == feature)
+                    & (self.parent.fluid_coll.df.query(self.view_filter)["scenario"] == scenario),
                     "uid",
                 ].to_list()
                 for uid in uids:
@@ -63,12 +63,12 @@ def create_fluids_tree(self):
                     property_combo.addItem("X")
                     property_combo.addItem("Y")
                     property_combo.addItem("Z")
-                    for prop in self.parent.fluids_coll.get_uid_properties_names(
+                    for prop in self.parent.fluid_coll.get_uid_properties_names(
                             uid
                     ):
                         property_combo.addItem(prop)
-                    name = self.parent.fluids_coll.df.loc[
-                        (self.parent.fluids_coll.df["uid"] == uid), "name"
+                    name = self.parent.fluid_coll.df.loc[
+                        (self.parent.fluid_coll.df["uid"] == uid), "name"
                     ].values[0]
                     flevel_4 = QTreeWidgetItem(
                         flevel_3, [name, uid]
@@ -103,7 +103,7 @@ def create_fluids_topology_tree(self):
     )
     self.FluidsTopologyTreeWidget.hideColumn(1)  # hide the uid column
     self.FluidsTopologyTreeWidget.setItemsExpandable(True)
-    topo_types = pd_unique(self.parent.fluids_coll.df.query(self.view_filter)["topology"])
+    topo_types = pd_unique(self.parent.fluid_coll.df.query(self.view_filter)["topology"])
 
     for topo_type in topo_types:
         tlevel_1 = QTreeWidgetItem(
@@ -113,8 +113,8 @@ def create_fluids_topology_tree(self):
             tlevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
         )
         for scenario in pd_unique(
-                self.parent.fluids_coll.df.query(self.view_filter).loc[
-                    self.parent.fluids_coll.df.query(self.view_filter)["topology"] == topo_type,
+                self.parent.fluid_coll.df.query(self.view_filter).loc[
+                    self.parent.fluid_coll.df.query(self.view_filter)["topology"] == topo_type,
                     "scenario",
                 ]
         ):
@@ -124,9 +124,9 @@ def create_fluids_topology_tree(self):
             tlevel_2.setFlags(
                 tlevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
             )
-            uids = self.parent.fluids_coll.df.query(self.view_filter).loc[
-                (self.parent.fluids_coll.df.query(self.view_filter)["topology"] == topo_type)
-                & (self.parent.fluids_coll.df.query(self.view_filter)["scenario"] == scenario),
+            uids = self.parent.fluid_coll.df.query(self.view_filter).loc[
+                (self.parent.fluid_coll.df.query(self.view_filter)["topology"] == topo_type)
+                & (self.parent.fluid_coll.df.query(self.view_filter)["scenario"] == scenario),
                 "uid",
             ].to_list()
             for uid in uids:
@@ -136,10 +136,10 @@ def create_fluids_topology_tree(self):
                 property_combo.addItem("X")
                 property_combo.addItem("Y")
                 property_combo.addItem("Z")
-                for prop in self.parent.fluids_coll.get_uid_properties_names(uid):
+                for prop in self.parent.fluid_coll.get_uid_properties_names(uid):
                     property_combo.addItem(prop)
-                name = self.parent.fluids_coll.df.loc[
-                    self.parent.fluids_coll.df["uid"] == uid, "name"
+                name = self.parent.fluid_coll.df.loc[
+                    self.parent.fluid_coll.df["uid"] == uid, "name"
                 ].values[0]
                 tlevel_3 = QTreeWidgetItem(
                     tlevel_2, [name, uid]
@@ -174,15 +174,15 @@ def update_fluids_tree_added(self, new_list=None, sec_uid=None):
         for i, uid in enumerate(new_list["uid"]):
             if (
                     sec_uid
-                    != self.parent.fluids_coll.df.loc[
-                self.parent.fluids_coll.df["uid"] == uid, "x_section"
+                    != self.parent.fluid_coll.df.loc[
+                self.parent.fluid_coll.df["uid"] == uid, "x_section"
             ].values[0]
             ):
                 del uid_list[i]
     for uid in uid_list:
         if (
                 self.FluidsTreeWidget.findItems(
-                    self.parent.fluids_coll.get_uid_role(uid), Qt.MatchExactly, 0
+                    self.parent.fluid_coll.get_uid_role(uid), Qt.MatchExactly, 0
                 )
                 != []
         ):
@@ -190,37 +190,37 @@ def update_fluids_tree_added(self, new_list=None, sec_uid=None):
             counter_1 = 0
             for child_1 in range(
                     self.FluidsTreeWidget.findItems(
-                        self.parent.fluids_coll.get_uid_role(uid),
+                        self.parent.fluid_coll.get_uid_role(uid),
                         Qt.MatchExactly,
                         0,
                     )[0].childCount()
             ):
                 """for cycle that loops n times as the number of subItems in the specific fluid type branch"""
                 if self.FluidsTreeWidget.findItems(
-                        self.parent.fluids_coll.get_uid_role(uid),
+                        self.parent.fluid_coll.get_uid_role(uid),
                         Qt.MatchExactly,
                         0,
                 )[0].child(child_1).text(
                     0
-                ) == self.parent.fluids_coll.get_uid_feature(
+                ) == self.parent.fluid_coll.get_uid_feature(
                     uid
                 ):
                     counter_1 += 1
             if counter_1 != 0:
                 for child_1 in range(
                         self.FluidsTreeWidget.findItems(
-                            self.parent.fluids_coll.get_uid_role(uid),
+                            self.parent.fluid_coll.get_uid_role(uid),
                             Qt.MatchExactly,
                             0,
                         )[0].childCount()
                 ):
                     if self.FluidsTreeWidget.findItems(
-                            self.parent.fluids_coll.get_uid_role(uid),
+                            self.parent.fluid_coll.get_uid_role(uid),
                             Qt.MatchExactly,
                             0,
                     )[0].child(child_1).text(
                         0
-                    ) == self.parent.fluids_coll.get_uid_feature(
+                    ) == self.parent.fluid_coll.get_uid_feature(
                         uid
                     ):
                         """Already exists a TreeItem (2 level) for the fluid feature"""
@@ -228,7 +228,7 @@ def update_fluids_tree_added(self, new_list=None, sec_uid=None):
                         for child_2 in range(
                                 self.FluidsTreeWidget.itemBelow(
                                     self.FluidsTreeWidget.findItems(
-                                        self.parent.fluids_coll.get_uid_role(uid),
+                                        self.parent.fluid_coll.get_uid_role(uid),
                                         Qt.MatchExactly,
                                         0,
                                     )[0]
@@ -237,13 +237,13 @@ def update_fluids_tree_added(self, new_list=None, sec_uid=None):
                             """for cycle that loops n times as the number of sub-subItems in the specific fluid type and fluid feature branch"""
                             if self.FluidsTreeWidget.itemBelow(
                                     self.FluidsTreeWidget.findItems(
-                                        self.parent.fluids_coll.get_uid_role(uid),
+                                        self.parent.fluid_coll.get_uid_role(uid),
                                         Qt.MatchExactly,
                                         0,
                                     )[0]
                             ).child(child_2).text(
                                 0
-                            ) == self.parent.fluids_coll.get_uid_scenario(
+                            ) == self.parent.fluid_coll.get_uid_scenario(
                                 uid
                             ):
                                 counter_2 += 1
@@ -251,7 +251,7 @@ def update_fluids_tree_added(self, new_list=None, sec_uid=None):
                             for child_2 in range(
                                     self.FluidsTreeWidget.itemBelow(
                                         self.FluidsTreeWidget.findItems(
-                                            self.parent.fluids_coll.get_uid_role(
+                                            self.parent.fluid_coll.get_uid_role(
                                                 uid
                                             ),
                                             Qt.MatchExactly,
@@ -261,7 +261,7 @@ def update_fluids_tree_added(self, new_list=None, sec_uid=None):
                             ):
                                 if self.FluidsTreeWidget.itemBelow(
                                         self.FluidsTreeWidget.findItems(
-                                            self.parent.fluids_coll.get_uid_role(
+                                            self.parent.fluid_coll.get_uid_role(
                                                 uid
                                             ),
                                             Qt.MatchExactly,
@@ -269,7 +269,7 @@ def update_fluids_tree_added(self, new_list=None, sec_uid=None):
                                         )[0]
                                 ).child(child_2).text(
                                     0
-                                ) == self.parent.fluids_coll.get_uid_scenario(
+                                ) == self.parent.fluid_coll.get_uid_scenario(
                                     uid
                                 ):
                                     """Same fluid type, fluid feature and scenario"""
@@ -281,14 +281,14 @@ def update_fluids_tree_added(self, new_list=None, sec_uid=None):
                                     property_combo.addItem("Z")
                                     for (
                                             prop
-                                    ) in self.parent.fluids_coll.get_uid_properties_names(
+                                    ) in self.parent.fluid_coll.get_uid_properties_names(
                                         uid
                                     ):
                                         property_combo.addItem(prop)
-                                    name = self.parent.fluids_coll.get_uid_name(uid)
+                                    name = self.parent.fluid_coll.get_uid_name(uid)
                                     flevel_4 = QTreeWidgetItem(
                                         self.FluidsTreeWidget.findItems(
-                                            self.parent.fluids_coll.get_uid_role(
+                                            self.parent.fluid_coll.get_uid_role(
                                                 uid
                                             ),
                                             Qt.MatchExactly,
@@ -323,11 +323,11 @@ def update_fluids_tree_added(self, new_list=None, sec_uid=None):
                             """Same fluid type and fluid feature, different scenario"""
                             flevel_3 = QTreeWidgetItem(
                                 self.FluidsTreeWidget.findItems(
-                                    self.parent.fluids_coll.get_uid_role(uid),
+                                    self.parent.fluid_coll.get_uid_role(uid),
                                     Qt.MatchExactly,
                                     0,
                                 )[0].child(child_1),
-                                [self.parent.fluids_coll.get_uid_scenario(uid)],
+                                [self.parent.fluid_coll.get_uid_scenario(uid)],
                             )
                             flevel_3.setFlags(
                                 flevel_3.flags()
@@ -343,11 +343,11 @@ def update_fluids_tree_added(self, new_list=None, sec_uid=None):
                             property_combo.addItem("Z")
                             for (
                                     prop
-                            ) in self.parent.fluids_coll.get_uid_properties_names(
+                            ) in self.parent.fluid_coll.get_uid_properties_names(
                                 uid
                             ):
                                 property_combo.addItem(prop)
-                            name = self.parent.fluids_coll.get_uid_name(uid)
+                            name = self.parent.fluid_coll.get_uid_name(uid)
                             flevel_4 = QTreeWidgetItem(flevel_3, [name, uid])
                             self.FluidsTreeWidget.setItemWidget(
                                 flevel_4, 2, property_combo
@@ -372,18 +372,18 @@ def update_fluids_tree_added(self, new_list=None, sec_uid=None):
                 """Same fluid type, different fluid feature and scenario"""
                 flevel_2 = QTreeWidgetItem(
                     self.FluidsTreeWidget.findItems(
-                        self.parent.fluids_coll.get_uid_role(uid),
+                        self.parent.fluid_coll.get_uid_role(uid),
                         Qt.MatchExactly,
                         0,
                     )[0],
-                    [self.parent.fluids_coll.get_uid_feature(uid)],
+                    [self.parent.fluid_coll.get_uid_feature(uid)],
                 )
                 flevel_2.setFlags(
                     flevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
                 )
                 self.FluidsTreeWidget.insertTopLevelItem(0, flevel_2)
                 flevel_3 = QTreeWidgetItem(
-                    flevel_2, [self.parent.fluids_coll.get_uid_scenario(uid)]
+                    flevel_2, [self.parent.fluid_coll.get_uid_scenario(uid)]
                 )
                 flevel_3.setFlags(
                     flevel_3.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
@@ -395,9 +395,9 @@ def update_fluids_tree_added(self, new_list=None, sec_uid=None):
                 property_combo.addItem("X")
                 property_combo.addItem("Y")
                 property_combo.addItem("Z")
-                for prop in self.parent.fluids_coll.get_uid_properties_names(uid):
+                for prop in self.parent.fluid_coll.get_uid_properties_names(uid):
                     property_combo.addItem(prop)
-                name = self.parent.fluids_coll.get_uid_name(uid)
+                name = self.parent.fluid_coll.get_uid_name(uid)
                 flevel_4 = QTreeWidgetItem(flevel_3, [name, uid])
                 self.FluidsTreeWidget.setItemWidget(flevel_4, 2, property_combo)
                 property_combo.currentIndexChanged.connect(
@@ -418,21 +418,21 @@ def update_fluids_tree_added(self, new_list=None, sec_uid=None):
             """Different fluid type, fluid feature and scenario"""
             flevel_1 = QTreeWidgetItem(
                 self.FluidsTreeWidget,
-                [self.parent.fluids_coll.get_uid_role(uid)],
+                [self.parent.fluid_coll.get_uid_role(uid)],
             )
             flevel_1.setFlags(
                 flevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
             )
             self.FluidsTreeWidget.insertTopLevelItem(0, flevel_1)
             flevel_2 = QTreeWidgetItem(
-                flevel_1, [self.parent.fluids_coll.get_uid_feature(uid)]
+                flevel_1, [self.parent.fluid_coll.get_uid_feature(uid)]
             )
             flevel_2.setFlags(
                 flevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
             )
             self.FluidsTreeWidget.insertTopLevelItem(0, flevel_2)
             flevel_3 = QTreeWidgetItem(
-                flevel_2, [self.parent.fluids_coll.get_uid_scenario(uid)]
+                flevel_2, [self.parent.fluid_coll.get_uid_scenario(uid)]
             )
             flevel_3.setFlags(
                 flevel_3.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
@@ -444,9 +444,9 @@ def update_fluids_tree_added(self, new_list=None, sec_uid=None):
             property_combo.addItem("X")
             property_combo.addItem("Y")
             property_combo.addItem("Z")
-            for prop in self.parent.fluids_coll.get_uid_properties_names(uid):
+            for prop in self.parent.fluid_coll.get_uid_properties_names(uid):
                 property_combo.addItem(prop)
-            name = self.parent.fluids_coll.get_uid_name(uid)
+            name = self.parent.fluid_coll.get_uid_name(uid)
             flevel_4 = QTreeWidgetItem(flevel_3, [name, uid])
             self.FluidsTreeWidget.setItemWidget(flevel_4, 2, property_combo)
             property_combo.currentIndexChanged.connect(
@@ -574,7 +574,7 @@ def update_fluids_topology_tree_added(self, new_list=None, sec_uid=None):
     for uid in uid_list:
         if (
                 self.FluidsTopologyTreeWidget.findItems(
-                    self.parent.fluids_coll.get_uid_topology(uid),
+                    self.parent.fluid_coll.get_uid_topology(uid),
                     Qt.MatchExactly,
                     0,
                 )
@@ -584,37 +584,37 @@ def update_fluids_topology_tree_added(self, new_list=None, sec_uid=None):
             counter_1 = 0
             for child_1 in range(
                     self.FluidsTopologyTreeWidget.findItems(
-                        self.parent.fluids_coll.get_uid_topology(uid),
+                        self.parent.fluid_coll.get_uid_topology(uid),
                         Qt.MatchExactly,
                         0,
                     )[0].childCount()
             ):
                 """for cycle that loops n times as the number of subItems in the specific topological type branch"""
                 if self.FluidsTopologyTreeWidget.findItems(
-                        self.parent.fluids_coll.get_uid_topology(uid),
+                        self.parent.fluid_coll.get_uid_topology(uid),
                         Qt.MatchExactly,
                         0,
                 )[0].child(child_1).text(
                     0
-                ) == self.parent.fluids_coll.get_uid_scenario(
+                ) == self.parent.fluid_coll.get_uid_scenario(
                     uid
                 ):
                     counter_1 += 1
             if counter_1 != 0:
                 for child_1 in range(
                         self.FluidsTopologyTreeWidget.findItems(
-                            self.parent.fluids_coll.get_uid_topology(uid),
+                            self.parent.fluid_coll.get_uid_topology(uid),
                             Qt.MatchExactly,
                             0,
                         )[0].childCount()
                 ):
                     if self.FluidsTopologyTreeWidget.findItems(
-                            self.parent.fluids_coll.get_uid_topology(uid),
+                            self.parent.fluid_coll.get_uid_topology(uid),
                             Qt.MatchExactly,
                             0,
                     )[0].child(child_1).text(
                         0
-                    ) == self.parent.fluids_coll.get_uid_scenario(
+                    ) == self.parent.fluid_coll.get_uid_scenario(
                         uid
                     ):
                         """Same topological type and scenario"""
@@ -626,12 +626,12 @@ def update_fluids_topology_tree_added(self, new_list=None, sec_uid=None):
                         property_combo.addItem("Z")
                         for (
                                 prop
-                        ) in self.parent.fluids_coll.get_uid_properties_names(uid):
+                        ) in self.parent.fluid_coll.get_uid_properties_names(uid):
                             property_combo.addItem(prop)
-                        name = self.parent.fluids_coll.get_uid_name(uid)
+                        name = self.parent.fluid_coll.get_uid_name(uid)
                         tlevel_3 = QTreeWidgetItem(
                             self.FluidsTopologyTreeWidget.findItems(
-                                self.parent.fluids_coll.get_uid_topology(
+                                self.parent.fluid_coll.get_uid_topology(
                                     uid
                                 ),
                                 Qt.MatchExactly,
@@ -660,11 +660,11 @@ def update_fluids_topology_tree_added(self, new_list=None, sec_uid=None):
                 """Same topological type, different scenario"""
                 tlevel_2 = QTreeWidgetItem(
                     self.FluidsTopologyTreeWidget.findItems(
-                        self.parent.fluids_coll.get_uid_topology(uid),
+                        self.parent.fluid_coll.get_uid_topology(uid),
                         Qt.MatchExactly,
                         0,
                     )[0],
-                    [self.parent.fluids_coll.get_uid_scenario(uid)],
+                    [self.parent.fluid_coll.get_uid_scenario(uid)],
                 )
                 tlevel_2.setFlags(
                     tlevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
@@ -676,9 +676,9 @@ def update_fluids_topology_tree_added(self, new_list=None, sec_uid=None):
                 property_combo.addItem("X")
                 property_combo.addItem("Y")
                 property_combo.addItem("Z")
-                for prop in self.parent.fluids_coll.get_uid_properties_names(uid):
+                for prop in self.parent.fluid_coll.get_uid_properties_names(uid):
                     property_combo.addItem(prop)
-                name = self.parent.fluids_coll.get_uid_name(uid)
+                name = self.parent.fluid_coll.get_uid_name(uid)
                 tlevel_3 = QTreeWidgetItem(tlevel_2, [name, uid])
                 self.FluidsTopologyTreeWidget.setItemWidget(
                     tlevel_3, 2, property_combo
@@ -701,14 +701,14 @@ def update_fluids_topology_tree_added(self, new_list=None, sec_uid=None):
             """Different topological type and scenario"""
             tlevel_1 = QTreeWidgetItem(
                 self.FluidsTopologyTreeWidget,
-                [self.parent.fluids_coll.get_uid_topology(uid)],
+                [self.parent.fluid_coll.get_uid_topology(uid)],
             )
             tlevel_1.setFlags(
                 tlevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
             )
             self.FluidsTopologyTreeWidget.insertTopLevelItem(0, tlevel_1)
             tlevel_2 = QTreeWidgetItem(
-                tlevel_1, [self.parent.fluids_coll.get_uid_scenario(uid)]
+                tlevel_1, [self.parent.fluid_coll.get_uid_scenario(uid)]
             )
             tlevel_2.setFlags(
                 tlevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
@@ -720,9 +720,9 @@ def update_fluids_topology_tree_added(self, new_list=None, sec_uid=None):
             property_combo.addItem("X")
             property_combo.addItem("Y")
             property_combo.addItem("Z")
-            for prop in self.parent.fluids_coll.get_uid_properties_names(uid):
+            for prop in self.parent.fluid_coll.get_uid_properties_names(uid):
                 property_combo.addItem(prop)
-            name = self.parent.fluids_coll.get_uid_name(uid)
+            name = self.parent.fluid_coll.get_uid_name(uid)
             tlevel_3 = QTreeWidgetItem(tlevel_2, [name, uid])
             self.FluidsTopologyTreeWidget.setItemWidget(tlevel_3, 2, property_combo)
             property_combo.currentIndexChanged.connect(

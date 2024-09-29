@@ -90,8 +90,8 @@ class PropertiesCMaps(QObject):
             parent.dom_coll,
             parent.image_coll,
             parent.mesh3d_coll,
-            parent.fluids_coll,
-            parent.backgrounds_coll,
+            parent.fluid_coll,
+            parent.backgrnd_coll,
         ]:
             coll_props = collection.df["properties_names"].to_list()
             coll_props = list(pd_flatten(coll_props))

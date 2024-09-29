@@ -17,14 +17,14 @@ def fluid_added_update_views(self, updated_list=None):
     )
     for uid in updated_list:
         this_actor = self.show_actor_with_property(
-            uid=uid, collection="fluids_coll", show_property=None, visible=True
+            uid=uid, collection="fluid_coll", show_property=None, visible=True
         )
         self.actors_df = self.actors_df.append(
             {
                 "uid": uid,
                 "actor": this_actor,
                 "show": True,
-                "collection": "fluids_coll",
+                "collection": "fluid_coll",
                 "show_property": None,
             },
             ignore_index=True,
@@ -34,7 +34,7 @@ def fluid_added_update_views(self, updated_list=None):
                 "uid": uid,
                 "actor": this_actor,
                 "show": True,
-                "collection": "fluids_coll",
+                "collection": "fluid_coll",
                 "show_property": None,
             },
             ignore_index=True,
@@ -76,7 +76,7 @@ def fluid_geom_modified_update_views(self, updated_list=None):
         show_property = self.actors_df.loc[self.actors_df["uid"] == uid, "show_property"].values[0]
         # This replaces the previous copy of the actor with the same uid, and updates the actors dataframe.
         # See issue #33 for a discussion on actors replacement by the PyVista add_mesh and add_volume methods.
-        this_actor = self.show_actor_with_property(uid=uid, collection="fluids_coll", show_property=show_property,
+        this_actor = self.show_actor_with_property(uid=uid, collection="fluid_coll", show_property=show_property,
                                                    visible=show)
 
 
@@ -89,11 +89,11 @@ def fluid_data_keys_modified_update_views(self, updated_list=None):
     for uid in updated_list:
         if not self.actors_df.loc[self.actors_df["uid"] == uid, "show_property"].to_list() == []:
             if not self.actors_df.loc[self.actors_df["uid"] == uid, "show_property"].values[
-                       0] in self.parent.fluids_coll.get_uid_properties_names(uid):
+                       0] in self.parent.fluid_coll.get_uid_properties_names(uid):
                 show = self.actors_df.loc[self.actors_df["uid"] == uid, "show"].to_list()[0]
                 # This replaces the previous copy of the actor with the same uid, and updates the actors dataframe.
                 # See issue #33 for a discussion on actors replacement by the PyVista add_mesh and add_volume methods.
-                this_actor = self.show_actor_with_property(uid=uid, collection="fluids_coll", show_property=None,
+                this_actor = self.show_actor_with_property(uid=uid, collection="fluid_coll", show_property=None,
                                                            visible=show)
                 create_fluids_tree(self)
                 create_fluids_topology_tree(self)
@@ -126,8 +126,8 @@ def fluid_metadata_modified_update_views(self, updated_list=None):
     self.FluidsTopologyTreeWidget.itemChanged.disconnect()
     for uid in updated_list:
         """Case for entities modified"""
-        self.change_actor_color(uid=uid, collection="fluids_coll")
-        self.change_actor_line_thick(uid=uid, collection="fluids_coll")
+        self.change_actor_color(uid=uid, collection="fluid_coll")
+        self.change_actor_line_thick(uid=uid, collection="fluid_coll")
         create_fluids_tree(self)
         create_fluids_topology_tree(self)
     """Re-connect signals."""
@@ -148,13 +148,13 @@ def fluid_legend_color_modified_update_views(self, updated_list=None):
     self.FluidsTopologyTreeWidget.itemChanged.disconnect()
     for uid in updated_list:
         """Case for color changed"""
-        fluids_list = self.parent.fluids_coll.get_uids
-        if self.parent.fluids_coll.get_uid_x_section(uid) in fluids_list:
+        fluids_list = self.parent.fluid_coll.get_uids
+        if self.parent.fluid_coll.get_uid_x_section(uid) in fluids_list:
             self.change_actor_color(
-                uid=self.parent.fluids_coll.get_uid_x_section(uid),
-                collection="fluids_coll",
+                uid=self.parent.fluid_coll.get_uid_x_section(uid),
+                collection="fluid_coll",
             )
-        self.change_actor_color(uid=uid, collection="fluids_coll")
+        self.change_actor_color(uid=uid, collection="fluid_coll")
 
     """Re-connect signals."""
     self.FluidsTreeWidget.itemChanged.connect(
@@ -173,7 +173,7 @@ def fluid_legend_thick_modified_update_views(self, updated_list=None):
     self.FluidsTopologyTreeWidget.itemChanged.disconnect()
     for uid in updated_list:
         """Case for line_thick changed"""
-        self.change_actor_line_thick(uid=uid, collection="fluids_coll")
+        self.change_actor_line_thick(uid=uid, collection="fluid_coll")
     """Re-connect signals."""
     self.FluidsTreeWidget.itemChanged.connect(
         self.toggle_fluids_visibility 
@@ -191,7 +191,7 @@ def fluid_legend_point_size_modified_update_views(self, updated_list=None):
     self.FluidsTopologyTreeWidget.itemChanged.disconnect()
     for uid in updated_list:
         """Case for line_thick changed"""
-        self.change_actor_line_point_size(uid=uid, collection="fluids_coll")
+        self.change_actor_line_point_size(uid=uid, collection="fluid_coll")
     """Re-connect signals."""
     self.FluidsTreeWidget.itemChanged.connect(
         self.toggle_fluids_visibility 
@@ -209,7 +209,7 @@ def fluid_legend_opacity_modified_update_views(self, updated_list=None):
     self.FluidsTopologyTreeWidget.itemChanged.disconnect()
     for uid in updated_list:
         """Case for line_thick changed"""
-        self.change_actor_opacity(uid=uid, collection="fluids_coll")
+        self.change_actor_opacity(uid=uid, collection="fluid_coll")
     """Re-connect signals."""
     self.FluidsTreeWidget.itemChanged.connect(
         self.toggle_fluids_visibility 

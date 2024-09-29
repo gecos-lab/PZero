@@ -26,9 +26,9 @@ class FakeWindow(QMainWindow):
     fluidss_coll.legend_df = pd_DataFrame(columns=list(Legend.fluids_legend_dict.keys()))
     legend = FakeLegend()
     prop_legend = FakeLegend()
-    fluid_added_signal = FakeSignal()
-    fluid_removed_signal = FakeSignal()
-    fluids_coll = FluidsCollection()
+    fluid_coll.signals.added = FakeSignal()
+    fluid_coll.signals.removed = FakeSignal()
+    fluid_coll = FluidsCollection()
 
 
 class TestFluidCollection:

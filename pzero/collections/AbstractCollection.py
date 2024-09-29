@@ -14,7 +14,7 @@ from vtkmodules.vtkCommonDataModel import vtkDataObject
 class CollectionSignals(QObject):
     """
     This class is necessary since non-Qt classes cannot emit Qt signals. Therefore, we create a generic
-    CollSignal() Qt object, that will include all signals used by collections. These will be used according
+    CollectionSignals() Qt object, that will include all signals used by collections. These will be used according
     to the following pattern:
 
     self.signals = CollectionSignals()
@@ -22,6 +22,8 @@ class CollectionSignals(QObject):
     self.signals.specific_signal.emit(some_message)
 
     etc.
+
+    Basically in this way, instead of using inheritance, we add all signals with a qick move by composition.
     """
 
     added = pyqtSignal(list)
@@ -120,15 +122,17 @@ class BaseCollection(ABC):
         """Set legend properties from uid. Take care since this resets the legend for all similar objects."""
         pass
 
-    @abstractmethod
-    def metadata_modified_signal(self, updated_list: list = None):
-        """Method used to emit the metadata modified signal for the given collection."""
-        pass
+    # @abstractmethod
+    # def metadata_modified_signal(self, updated_list: list = None):
+    #     """Method used to emit the metadata modified signal for the given collection."""
+    #     # ============================================================================================TO BE REMOVED
+    #     pass
 
-    @abstractmethod
-    def data_keys_modified_signal(self, updated_list: list = None):
-        """Method used to emit the data keys removed signal modified signal for the given collection."""
-        pass
+    # @abstractmethod
+    # def well_coll.signals.data_keys_modified(self, updated_list: list = None):
+    #     """Method used to emit the data keys removed signal modified signal for the given collection."""
+    #     # ============================================================================================TO BE REMOVED
+    #     pass
 
     # @staticmethod
     # @abstractmethod
@@ -380,7 +384,7 @@ class BaseCollection(ABC):
             data_key=property_name, dimension=property_components
         )
         # IN THE FUTURE add cell data.
-        self.metadata_modified_signal([uid])
+        self.signals.metadata_modified.emit([uid])
 
     def remove_uid_property(self, uid: str = None, property_name: str = None):
         """Remove property name and components from an uid and remove property on vtk object.
@@ -396,7 +400,7 @@ class BaseCollection(ABC):
         )
         self.get_uid_vtk_obj(uid=uid).remove_point_data(data_key=property_name)
         # IN THE FUTURE add cell data.
-        self.data_keys_modified_signal([uid])
+        self.signals.data_keys_modified([uid])
 
     def get_uid_property_shape(self, uid: str = None, property_name: str = None) -> tuple:
         """Returns the shape of the property data array."""
@@ -475,7 +479,6 @@ class BaseTableModel(QAbstractTableModel):
                 uid = self.collection.df.iloc[index.row(), 0]
                 self.collection.attr_modified_update_legend_table()
                 # a list of uids is emitted, even if the entity is just one
-                # this signal should be moved in the collection!
-                self.parent.metadata_modified_signal.emit([uid])
+                self.collection.signals.metadata_modified.emit([uid])
                 return True
         return QVariant()

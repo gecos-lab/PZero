@@ -39,14 +39,14 @@ class FakeWindow(QMainWindow):
     def __init__(self):
         super(FakeWindow, self).__init__()
 
-    backgrounds_coll.legend_df = pd_DataFrame(columns=list(Legend.backgrounds_legend_dict.keys()))
-    backgrounds_coll = FakeBGCollection()
+    backgrnd_coll.legend_df = pd_DataFrame(columns=list(Legend.backgrounds_legend_dict.keys()))
+    backgrnd_coll = FakeBGCollection()
 
     legend = FakeLegend()
     prop_legend = FakeLegend()
 
-    background_added_signal = FakeSignal()
-    background_removed_signal = FakeSignal()
+    backgrnd_coll.signals.added = FakeSignal()
+    backgrnd_coll.signals.removed = FakeSignal()
 
 
 class TestBackgroundCollection:

@@ -17,14 +17,14 @@ def background_added_update_views(self, updated_list=None):
     )
     for uid in updated_list:
         this_actor = self.show_actor_with_property(
-            uid=uid, collection="backgrounds_coll", show_property=None, visible=True
+            uid=uid, collection="backgrnd_coll", show_property=None, visible=True
         )
         self.actors_df = self.actors_df.append(
             {
                 "uid": uid,
                 "actor": this_actor,
                 "show": True,
-                "collection": "backgrounds_coll",
+                "collection": "backgrnd_coll",
                 "show_property": None,
             },
             ignore_index=True,
@@ -34,7 +34,7 @@ def background_added_update_views(self, updated_list=None):
                 "uid": uid,
                 "actor": this_actor,
                 "show": True,
-                "collection": "backgrounds_coll",
+                "collection": "backgrnd_coll",
                 "show_property": None,
             },
             ignore_index=True,
@@ -76,7 +76,7 @@ def background_geom_modified_update_views(self, updated_list=None):
         show_property = self.actors_df.loc[self.actors_df["uid"] == uid, "show_property"].values[0]
         # This replaces the previous copy of the actor with the same uid, and updates the actors dataframe.
         # See issue #33 for a discussion on actors replacement by the PyVista add_mesh and add_volume methods.
-        this_actor = self.show_actor_with_property(uid=uid, collection="backgrounds_coll",
+        this_actor = self.show_actor_with_property(uid=uid, collection="backgrnd_coll",
                                                    show_property=show_property, visible=show)
 
 
@@ -89,11 +89,11 @@ def background_data_keys_modified_update_views(self, updated_list=None):
     for uid in updated_list:
         if not self.actors_df.loc[self.actors_df["uid"] == uid, "show_property"].to_list() == []:
             if not self.actors_df.loc[self.actors_df["uid"] == uid, "show_property"].values[
-                       0] in self.parent.backgrounds_coll.get_uid_properties_names(uid):
+                       0] in self.parent.backgrnd_coll.get_uid_properties_names(uid):
                 show = self.actors_df.loc[self.actors_df["uid"] == uid, "show"].to_list()[0]
                 # This replaces the previous copy of the actor with the same uid, and updates the actors dataframe.
                 # See issue #33 for a discussion on actors replacement by the PyVista add_mesh and add_volume methods.
-                this_actor = self.show_actor_with_property(uid=uid, collection="backgrounds_coll",
+                this_actor = self.show_actor_with_property(uid=uid, collection="backgrnd_coll",
                                                            show_property=None, visible=show)
                 create_fluid_tree(self)
                 create_fluids_topology_tree(self)
@@ -126,8 +126,8 @@ def background_metadata_modified_update_views(self, updated_list=None):
     self.BackgroundsTopologyTreeWidget.itemChanged.disconnect()
     for uid in updated_list:
         """Case for entities modified"""
-        self.change_actor_color(uid=uid, collection="backgrounds_coll")
-        self.change_actor_line_thick(uid=uid, collection="backgrounds_coll")
+        self.change_actor_color(uid=uid, collection="backgrnd_coll")
+        self.change_actor_line_thick(uid=uid, collection="backgrnd_coll")
         create_backgrounds_tree(self)
         create_backgrounds_topology_tree(self)
     """Re-connect signals."""
@@ -149,12 +149,12 @@ def background_legend_color_modified_update_views(self, updated_list=None):
     for uid in updated_list:
         """Case for color changed"""
         wells_list = self.parent.well_coll.get_uids
-        if self.parent.backgrounds_coll.get_uid_x_section(uid) in wells_list:
+        if self.parent.backgrnd_coll.get_uid_x_section(uid) in wells_list:
             self.change_actor_color(
-                uid=self.parent.backgrounds_coll.get_uid_x_section(uid),
+                uid=self.parent.backgrnd_coll.get_uid_x_section(uid),
                 collection="well_coll",
             )
-        self.change_actor_color(uid=uid, collection="backgrounds_coll")
+        self.change_actor_color(uid=uid, collection="backgrnd_coll")
 
     """Re-connect signals."""
     self.BackgroundsTreeWidget.itemChanged.connect(
@@ -173,7 +173,7 @@ def background_legend_thick_modified_update_views(self, updated_list=None):
     self.BackgroundsTopologyTreeWidget.itemChanged.disconnect()
     for uid in updated_list:
         """Case for line_thick changed"""
-        self.change_actor_line_thick(uid=uid, collection="backgrounds_coll")
+        self.change_actor_line_thick(uid=uid, collection="backgrnd_coll")
     """Re-connect signals."""
     self.BackgroundsTreeWidget.itemChanged.connect(
         self.toggle_backgrounds_visibility
@@ -191,7 +191,7 @@ def background_legend_point_size_modified_update_views(self, updated_list=None):
     self.BackgroundsTopologyTreeWidget.itemChanged.disconnect()
     for uid in updated_list:
         """Case for line_thick changed"""
-        self.change_actor_point_size(uid=uid, collection="backgrounds_coll")
+        self.change_actor_point_size(uid=uid, collection="backgrnd_coll")
     """Re-connect signals."""
     self.BackgroundsTreeWidget.itemChanged.connect(
         self.toggle_backgrounds_visibility
@@ -209,7 +209,7 @@ def background_legend_opacity_modified_update_views(self, updated_list=None):
     self.BackgroundsTopologyTreeWidget.itemChanged.disconnect()
     for uid in updated_list:
         """Case for line_thick changed"""
-        self.change_actor_opacity(uid=uid, collection="backgrounds_coll")
+        self.change_actor_opacity(uid=uid, collection="backgrnd_coll")
     """Re-connect signals."""
     self.BackgroundsTreeWidget.itemChanged.connect(
         self.toggle_backgrounds_visibility

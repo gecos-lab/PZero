@@ -91,7 +91,7 @@ class ImageCollection(BaseCollection):
                     )
                     self.parent.prop_legend.update_widget(self.parent)
         # Then emit signal to update the views. A list of uids is emitted, even if the entity is just one
-        self.parent.image_added_signal.emit(
+        self.parent.image_coll.signals.added.emit(
             [entity_dict["uid"]]
         )
         return entity_dict["uid"]
@@ -109,7 +109,7 @@ class ImageCollection(BaseCollection):
         self.modelReset.emit()  # is this really necessary?
         self.parent.prop_legend.update_widget(self.parent)
         # When done, send a signal over to the views. A list of uids is emitted, even if the entity is just one.
-        self.parent.image_removed_signal.emit(
+        self.parent.image_coll.signals.removed.emit(
             [uid]
         )
         return uid
@@ -146,11 +146,11 @@ class ImageCollection(BaseCollection):
         # Not implemented for this collection, but required by the abstract superclass.
         pass
 
-    def metadata_modified_signal(self, updated_list: list = None):
-        """Signal emitted when metadata change."""
-        self.parent.image_metadata_modified_signal.emit(updated_list)
+    # def metadata_modified_signal(self, updated_list: list = None):
+    #     """Signal emitted when metadata change."""
+    #     self.parent.image_coll.signals.metadata_modified.emit(updated_list)
 
-    def data_keys_modified_signal(self, updated_list: list = None):
-        """Signal emitted when point data keys change."""
-        # Not implemented for this collection, but required by the abstract superclass.
-        pass
+    # def data_keys_modified_signal(self, updated_list: list = None):
+    #     """Signal emitted when point data keys change."""
+    #     # Not implemented for this collection, but required by the abstract superclass.
+    #     pass
