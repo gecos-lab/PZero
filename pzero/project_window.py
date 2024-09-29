@@ -111,8 +111,8 @@ from .windows_factory import ViewStereoplot
 class ProjectWindow(QMainWindow, Ui_ProjectWindow):
     """Create project window and import UI created with Qt Designer by subclassing both"""
 
-    """Signals defined here are meant to be broadcast TO ALL views. This is why we use signals
-    instead of functions that will act within a single view only. They all pass a list of uid's."""
+    # Signals defined here are meant to be broadcast TO ALL views. This is why we use signals
+    # instead of functions that will act within a single view only. They all pass a list of uid's.
     project_close_signal = (
         pyqtSignal()
     )  # this is used to delete open windows when the current project is closed (and a new one is opened)
@@ -1067,15 +1067,15 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.backgrounds_coll = BackgroundCollection(parent=self)
         self.BackgroundsTableView.setModel(self.backgrounds_coll.proxy_table_model)
 
-        """Create the geol_legend_df legend table (a Pandas dataframe), create the corresponding QT
+        """Create the geol_coll.legend_df legend table (a Pandas dataframe), create the corresponding QT
         Legend self.legend (a Qt QTreeWidget that is internally connected to its data source),
         and update the widget."""
-        self.geol_legend_df = pd_DataFrame(columns=list(Legend.geol_legend_dict.keys()))
+        self.geol_coll.legend_df = pd_DataFrame(columns=list(Legend.geol_legend_dict.keys()))
         self.well_legend_df = pd_DataFrame(columns=list(Legend.well_legend_dict.keys()))
-        self.fluids_legend_df = pd_DataFrame(
+        self.fluids_coll.legend_df = pd_DataFrame(
             columns=list(Legend.fluids_legend_dict.keys())
         )
-        self.backgrounds_legend_df = pd_DataFrame(
+        self.backgrounds_coll.legend_df = pd_DataFrame(
             columns=list(Legend.backgrounds_legend_dict.keys())
         )
 
@@ -1126,10 +1126,10 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         """--------------------- SAVE LEGENDS ---------------------"""
 
         """Save geological legend table to JSON file. Keep old CSV table format here in comments, in case it might be useful in the future."""
-        self.geol_legend_df.to_json(
+        self.geol_coll.legend_df.to_json(
             out_dir_name + "/geol_legend_table.json", orient="index"
         )
-        # self.geol_legend_df.to_csv(out_dir_name + '/geol_legend_table.csv', encoding='utf-8', index=False)
+        # self.geol_coll.legend_df.to_csv(out_dir_name + '/geol_legend_table.csv', encoding='utf-8', index=False)
         """Save others legend table to JSON file."""
         self.others_legend_df.to_json(
             out_dir_name + "/others_legend_table.json", orient="index"
@@ -1145,11 +1145,11 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             out_dir_name + "/well_legend_table.json", orient="index"
         )
 
-        self.fluids_legend_df.to_json(
+        self.fluids_coll.legend_df.to_json(
             out_dir_name + "/fluids_legend_table.json", orient="index"
         )
 
-        self.backgrounds_legend_df.to_json(
+        self.backgrounds_coll.legend_df.to_json(
             out_dir_name + "/backgrounds_legend_table.json", orient="index"
         )
 
@@ -1446,7 +1446,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             (in_dir_name + "/geol_legend_table.json")
         ):
             if os.path.isfile((in_dir_name + "/geol_legend_table.json")):
-                new_geol_legend_df = pd_read_json(
+                new_geol_coll_legend_df = pd_read_json(
                     in_dir_name + "/geol_legend_table.json",
                     orient="index",
                     dtype=Legend.legend_dict_types,
@@ -1454,23 +1454,23 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 # in the branch called "Riccardo", a control to set opacity to 100 in
                 # case it was null was added here, but it is most problably useless
             else:
-                new_geol_legend_df = pd_read_csv(
+                new_geol_coll_legend_df = pd_read_csv(
                     in_dir_name + "/geol_legend_table.csv",
                     encoding="utf-8",
                     dtype=Legend.legend_dict_types,
                     keep_default_na=False,
                 )
-            if not new_geol_legend_df.empty:
-                self.geol_legend_df = new_geol_legend_df
+            if not new_geol_coll_legend_df.empty:
+                self.geol_coll.legend_df = new_geol_coll_legend_df
 
-            in_keys = set(self.geol_legend_df.keys())
+            in_keys = set(self.geol_coll.legend_df.keys())
             def_keys = set(Legend.geol_legend_dict.keys())
 
             diffs = def_keys.difference(in_keys)
 
             for diff in diffs:
-                self.geol_legend_df[diff] = Legend.geol_legend_dict[diff]
-            self.geol_legend_df.sort_values(
+                self.geol_coll.legend_df[diff] = Legend.geol_legend_dict[diff]
+            self.geol_coll.legend_df.sort_values(
                 by="time", ascending=True, inplace=True
             )
 
@@ -1520,15 +1520,15 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     keep_default_na=False,
                 )
             if not new_fluids_legend_df.empty:
-                self.fluids_legend_df = new_fluids_legend_df
-            in_keys = set(self.fluids_legend_df.keys())
+                self.fluids_coll.legend_df = new_fluids_legend_df
+            in_keys = set(self.fluids_coll.legend_df.keys())
             def_keys = set(Legend.fluids_legend_dict.keys())
 
             diffs = def_keys.difference(in_keys)
 
             for diff in diffs:
-                self.fluids_legend_df[diff] = Legend.fluids_legend_dict[diff]
-            self.fluids_legend_df.sort_values(
+                self.fluids_coll.legend_df[diff] = Legend.fluids_legend_dict[diff]
+            self.fluids_coll.legend_df.sort_values(
                 by="time", ascending=True, inplace=True
             )
 
@@ -1550,14 +1550,14 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     keep_default_na=False,
                 )
             if not new_backgrounds_legend_df.empty:
-                self.backgrounds_legend_df = new_backgrounds_legend_df
-            in_keys = set(self.backgrounds_legend_df.keys())
+                self.backgrounds_coll.legend_df = new_backgrounds_legend_df
+            in_keys = set(self.backgrounds_coll.legend_df.keys())
             def_keys = set(Legend.backgrounds_legend_dict.keys())
 
             diffs = def_keys.difference(in_keys)
 
             for diff in diffs:
-                self.backgrounds_legend_df[diff] = Legend.backgrounds_legend_dict[diff]
+                self.backgrounds_coll.legend_df[diff] = Legend.backgrounds_legend_dict[diff]
 
         # Read other legend tables.
         if os.path.isfile((in_dir_name + "/others_legend_table.csv")) or os.path.isfile(
@@ -2449,10 +2449,10 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         else:
             return
         """Save geological legend table to CSV and JSON files."""
-        self.geol_legend_df.to_csv(
+        self.geol_coll.legend_df.to_csv(
             out_dir_name + "/geol_legend_table.csv", encoding="utf-8", index=False
         )
-        self.geol_legend_df.to_json(
+        self.geol_coll.legend_df.to_json(
             out_dir_name + "/geol_legend_table.json", orient="index"
         )
         """Save others legend table to CSV and JSON files."""

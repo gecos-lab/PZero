@@ -39,7 +39,7 @@ class FakeWindow(QMainWindow):
     def __init__(self):
         super(FakeWindow, self).__init__()
 
-    backgrounds_legend_df = pd_DataFrame(columns=list(Legend.backgrounds_legend_dict.keys()))
+    backgrounds_coll.legend_df = pd_DataFrame(columns=list(Legend.backgrounds_legend_dict.keys()))
     backgrounds_coll = FakeBGCollection()
 
     legend = FakeLegend()

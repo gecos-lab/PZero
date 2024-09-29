@@ -23,7 +23,7 @@ class FakeWindow(QMainWindow):
     def __init__(self):
         super(FakeWindow, self).__init__()
 
-    fluids_legend_df = pd_DataFrame(columns=list(Legend.fluids_legend_dict.keys()))
+    fluidss_coll.legend_df = pd_DataFrame(columns=list(Legend.fluids_legend_dict.keys()))
     legend = FakeLegend()
     prop_legend = FakeLegend()
     fluid_added_signal = FakeSignal()

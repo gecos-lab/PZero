@@ -289,15 +289,12 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.parent.geology_metadata_modified_signal.connect(
             self.upd_list_geo_metadata_mod
         )  # this is emitted from collection and three_d_surfaces
-
         self.parent.geology_geom_modified_signal.connect(
             self.upd_list_geo_mod
         )  # this is emitted from two_d_lines and three_d_surfaces
-
         self.parent.geology_data_val_modified_signal.connect(
             self.upd_list_geo_dataval_mod
         )  # this is emitted from nowhere (?)
-
         self.parent.geology_legend_color_modified_signal.connect(
             self.upd_list_geo_leg_col_mod
         )  # this is emitted from legend manager

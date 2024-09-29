@@ -377,30 +377,30 @@ def implicit_model_loop_structural(self):
                 uid=uid, property_name="Normals"
             )
         """feature_name value"""
-        featname_single = self.geol_legend_df.loc[
+        featname_single = self.geol_coll.legend_df.loc[
             (
-                self.geol_legend_df["role"]
+                self.geol_coll.legend_df["role"]
                 == self.geol_coll.get_uid_role(uid)
             )
             & (
-                self.geol_legend_df["feature"]
+                self.geol_coll.legend_df["feature"]
                 == self.geol_coll.get_uid_feature(uid)
             )
-            & (self.geol_legend_df["scenario"] == self.geol_coll.get_uid_scenario(uid)),
+            & (self.geol_coll.legend_df["scenario"] == self.geol_coll.get_uid_scenario(uid)),
             "sequence",
         ].values[0]
         entity_input_data_df["feature_name"] = featname_single
         """val value"""
-        val_single = self.geol_legend_df.loc[
+        val_single = self.geol_coll.legend_df.loc[
             (
-                self.geol_legend_df["role"]
+                self.geol_coll.legend_df["role"]
                 == self.geol_coll.get_uid_role(uid)
             )
             & (
-                self.geol_legend_df["feature"]
+                self.geol_coll.legend_df["feature"]
                 == self.geol_coll.get_uid_feature(uid)
             )
-            & (self.geol_legend_df["scenario"] == self.geol_coll.get_uid_scenario(uid)),
+            & (self.geol_coll.legend_df["scenario"] == self.geol_coll.get_uid_scenario(uid)),
             "time",
         ].values[0]
         if val_single == -999999.0:
@@ -632,14 +632,14 @@ def implicit_model_loop_structural(self):
         voxet_dict["vtk_obj"].GetPointData().SetActiveScalars("strati_0")
         print("-> extract iso-surface at value = ", value)
         """Get metadata of first geological feature of this time"""
-        role = self.geol_legend_df.loc[
-            self.geol_legend_df["time"] == value, "role"
+        role = self.geol_coll.legend_df.loc[
+            self.geol_coll.legend_df["time"] == value, "role"
         ].values[0]
-        feature = self.geol_legend_df.loc[
-            self.geol_legend_df["time"] == value, "feature"
+        feature = self.geol_coll.legend_df.loc[
+            self.geol_coll.legend_df["time"] == value, "feature"
         ].values[0]
-        scenario = self.geol_legend_df.loc[
-            self.geol_legend_df["time"] == value, "scenario"
+        scenario = self.geol_coll.legend_df.loc[
+            self.geol_coll.legend_df["time"] == value, "scenario"
         ].values[0]
         """Iso-surface algorithm"""
         iso_surface = vtkContourFilter()

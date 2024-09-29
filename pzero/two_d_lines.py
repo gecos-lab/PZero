@@ -60,11 +60,11 @@ def draw_line(self):
         ],
         "feature": [
             "Feature: ",
-            self.parent.geol_legend_df["feature"].tolist(),
+            self.parent.geol_coll.legend_df["feature"].tolist(),
         ],
         "scenario": [
             "Scenario: ",
-            list(set(self.parent.geol_legend_df["scenario"].tolist())),
+            list(set(self.parent.geol_coll.legend_df["scenario"].tolist())),
         ],
     }
     line_dict_updt = multiple_input_dialog(

@@ -64,7 +64,7 @@ class PropertiesCMaps(QObject):
 
     def update_widget(self, parent=None):
         """Update the properties colormap dataframe and widget. This is different from legend manager,
-        where the geol_legend_df dataframe is managed directly by the geol_coll class. The reason for
+        where the geol_coll.legend_df dataframe is managed directly by the geol_coll class. The reason for
         this difference is that property colormaps are managed at the whole project level, across the
         geological, dom and mesh3d collections.
         The pattern to extract a cell value from a Pandas dataframe is:
