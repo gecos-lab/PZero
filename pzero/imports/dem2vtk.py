@@ -17,7 +17,7 @@ from numpy import nan as np_nan
 from pyvista import StructuredGrid as pv_StructuredGrid
 
 from pzero.collections.dom_collection import DomCollection
-from pzero.collections.fluid_collection import FluidsCollection
+from pzero.collections.fluid_collection import FluidCollection
 from pzero.entities_factory import DEM
 
 # from AbstractImporter import BaseIO
@@ -83,7 +83,7 @@ def dem2vtk(self=None, in_file_name=None, collection=None):
         """Add to entity collection."""
         self.dom_coll.add_entity_from_dict(entity_dict=curr_obj_attributes)
     elif collection == "Fluid contacts":
-        curr_obj_attributes = deepcopy(FluidsCollection.entity_dict)
+        curr_obj_attributes = deepcopy(FluidCollection.entity_dict)
         curr_obj_attributes["uid"] = str(uuid4())
         curr_obj_attributes["name"] = os.path.basename(in_file_name)
         curr_obj_attributes["role"] = "raster"

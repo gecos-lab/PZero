@@ -29,7 +29,7 @@ from vtk import (
 from pzero.collections.background_collection import BackgroundCollection
 from pzero.collections.boundary_collection import BoundaryCollection
 from pzero.collections.dom_collection import DomCollection
-from pzero.collections.fluid_collection import FluidsCollection
+from pzero.collections.fluid_collection import FluidCollection
 from pzero.collections.geological_collection import GeologicalCollection
 from pzero.collections.image_collection import ImageCollection
 from pzero.collections.mesh3d_collection import Mesh3DCollection
@@ -1053,10 +1053,10 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.well_coll = WellCollection(parent=self)
         self.WellsTableView.setModel(self.well_coll.proxy_table_model)
 
-        """[Gabriele]  Create the fluid_coll FluidsCollection (a Qt QAbstractTableModel with a Pandas dataframe as attribute)
+        """[Gabriele]  Create the fluid_coll FluidCollection (a Qt QAbstractTableModel with a Pandas dataframe as attribute)
         and connect the model to FluidTableView (a Qt QTableView created with QTDesigner and provided by
         Ui_ProjectWindow). Setting the model also updates the view."""
-        self.fluid_coll = FluidsCollection(parent=self)
+        self.fluid_coll = FluidCollection(parent=self)
         self.FluidsTableView.setModel(self.fluid_coll.proxy_table_model)
 
         """[Gabriele]  Create the backgrnd_coll BackgroundCollection (a Qt QAbstractTableModel with a Pandas dataframe as attribute)
@@ -2007,13 +2007,13 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 new_fluids_coll_df = pd_read_json(
                     in_dir_name + "/fluids_table.json",
                     orient="index",
-                    dtype=FluidsCollection.entity_dict_types,
+                    dtype=FluidCollection.entity_dict_types,
                 )
             else:
                 new_fluids_coll_df = pd_read_csv(
                     in_dir_name + "/fluids_table.csv",
                     encoding="utf-8",
-                    dtype=FluidsCollection.entity_dict_types,
+                    dtype=FluidCollection.entity_dict_types,
                     keep_default_na=False,
                 )
             if not new_fluids_coll_df.empty:
@@ -2063,13 +2063,13 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 new_backgrounds_coll_df = pd_read_json(
                     in_dir_name + "/backgrounds_table.json",
                     orient="index",
-                    dtype=FluidsCollection.entity_dict_types,
+                    dtype=FluidCollection.entity_dict_types,
                 )
             else:
                 new_backgrounds_coll_df = pd_read_csv(
                     in_dir_name + "/backgrounds_table.csv",
                     encoding="utf-8",
-                    dtype=FluidsCollection.entity_dict_types,
+                    dtype=FluidCollection.entity_dict_types,
                     keep_default_na=False,
                 )
             if not new_backgrounds_coll_df.empty:

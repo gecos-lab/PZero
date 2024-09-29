@@ -1,4 +1,4 @@
-from pzero.collections.fluid_collection import FluidsCollection
+from pzero.collections.fluid_collection import FluidCollection
 from pzero.legend_manager import Legend
 from pzero.entities_factory import DEM
 
@@ -28,11 +28,11 @@ class FakeWindow(QMainWindow):
     prop_legend = FakeLegend()
     fluid_coll.signals.added = FakeSignal()
     fluid_coll.signals.removed = FakeSignal()
-    fluid_coll = FluidsCollection()
+    fluid_coll = FluidCollection()
 
 
 class TestFluidCollection:
-    fluid_coll_istance = FluidsCollection(FakeWindow)
+    fluid_coll_istance = FluidCollection(FakeWindow)
     test_vtk_obj = DEM()
     test_vtk_obj2 = DEM()
     entity_dict = {'uid': "4",
