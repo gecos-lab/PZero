@@ -114,94 +114,14 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
     # Signals defined here are meant to be broadcast TO ALL views. This is why we use signals
     # instead of functions that will act within a single view only. They all pass a list of uid's.
 
-    # this is used to delete open windows when the current project is closed (and a new one is opened)
+    # This is used to delete open windows when the current project is closed (and a new one is opened).
     project_close_signal = (pyqtSignal())
 
-    # geology_added_signal = pyqtSignal(list)
-    # geology_removed_signal = pyqtSignal(list)
-    # geology_geom_modified_signal = pyqtSignal(list)  # this includes topology modified
-    # geology_data_keys_modified_signal = pyqtSignal(list)
-    # geology_data_val_modified_signal = pyqtSignal(list)
-    # geology_metadata_modified_signal = pyqtSignal(list)
-    # geology_legend_color_modified_signal = pyqtSignal(list)
-    # geology_legend_thick_modified_signal = pyqtSignal(list)
-    # geology_legend_point_size_modified_signal = pyqtSignal(list)
-    # geology_legend_opacity_modified_signal = pyqtSignal(list)
-    #
-    # xsect_added_signal = pyqtSignal(list)
-    # xsect_removed_signal = pyqtSignal(list)
-    # xsect_geom_modified_signal = pyqtSignal(list)  # this includes topology modified
-    # xsect_metadata_modified_signal = pyqtSignal(list)
-    # xsect_legend_color_modified_signal = pyqtSignal(list)
-    # xsect_legend_thick_modified_signal = pyqtSignal(list)
-    # xsect_legend_opacity_modified_signal = pyqtSignal(list)
-    #
-    # boundary_added_signal = pyqtSignal(list)
-    # boundary_removed_signal = pyqtSignal(list)
-    # boundary_geom_modified_signal = pyqtSignal(list)  # this includes topology modified
-    # boundary_metadata_modified_signal = pyqtSignal(list)
-    # boundary_legend_color_modified_signal = pyqtSignal(list)
-    # boundary_legend_thick_modified_signal = pyqtSignal(list)
-    # boundary_legend_opacity_modified_signal = pyqtSignal(list)
-    #
-    # mesh3d_added_signal = pyqtSignal(list)
-    # mesh3d_removed_signal = pyqtSignal(list)
-    # mesh3d_data_keys_modified_signal = pyqtSignal(list)
-    # mesh3d_data_val_modified_signal = pyqtSignal(list)
-    # mesh3d_metadata_modified_signal = pyqtSignal(list)
-    # mesh3d_legend_color_modified_signal = pyqtSignal(list)
-    # mesh3d_legend_thick_modified_signal = pyqtSignal(list)
-    # mesh3d_legend_opacity_modified_signal = pyqtSignal(list)
-    #
-    # dom_added_signal = pyqtSignal(list)
-    # dom_removed_signal = pyqtSignal(list)
-    # dom_data_keys_modified_signal = pyqtSignal(list)
-    # dom_data_val_modified_signal = pyqtSignal(list)
-    # dom_metadata_modified_signal = pyqtSignal(list)
-    # dom_legend_color_modified_signal = pyqtSignal(list)
-    # dom_legend_thick_modified_signal = pyqtSignal(list)
-    # dom_legend_point_size_modified_signal = pyqtSignal(list)
-    # dom_legend_opacity_modified_signal = pyqtSignal(list)
-    #
-    # image_added_signal = pyqtSignal(list)
-    # image_removed_signal = pyqtSignal(list)
-    # image_metadata_modified_signal = pyqtSignal(list)
-    # image_legend_opacity_modified_signal = pyqtSignal(list)
-    #
-    # well_added_signal = pyqtSignal(list)
-    # well_removed_signal = pyqtSignal(list)
-    # well_data_keys_modified_signal = pyqtSignal(list)
-    # well_data_val_modified_signal = pyqtSignal(list)
-    # well_metadata_modified_signal = pyqtSignal(list)
-    # well_legend_color_modified_signal = pyqtSignal(list)
-    # well_legend_thick_modified_signal = pyqtSignal(list)
-    # well_legend_opacity_modified_signal = pyqtSignal(list)
-    #
-    # fluid_added_signal = pyqtSignal(list)
-    # fluid_removed_signal = pyqtSignal(list)
-    # fluid_geom_modified_signal = pyqtSignal(list)  # this includes topology modified
-    # fluid_data_keys_modified_signal = pyqtSignal(list)
-    # fluid_data_val_modified_signal = pyqtSignal(list)
-    # fluid_metadata_modified_signal = pyqtSignal(list)
-    # fluid_legend_color_modified_signal = pyqtSignal(list)
-    # fluid_legend_thick_modified_signal = pyqtSignal(list)
-    # fluid_legend_point_size_modified_signal = pyqtSignal(list)
-    # fluid_legend_opacity_modified_signal = pyqtSignal(list)
-    #
-    # background_added_signal = pyqtSignal(list)
-    # background_removed_signal = pyqtSignal(list)
-    # background_coll_geom_modified_signal = pyqtSignal(list)  # this includes topology modified
-    # background_data_keys_modified_signal = pyqtSignal(list)
-    # background_data_val_modified_signal = pyqtSignal(list)
-    # background_metadata_modified_signal = pyqtSignal(list)
-    # background_legend_color_modified_signal = pyqtSignal(list)
-    # background_legend_thick_modified_signal = pyqtSignal(list)
-    # background_legend_point_size_modified_signal = pyqtSignal(list)
-    # background_legend_opacity_modified_signal = pyqtSignal(list)
-
+    # Maybe also this one could be moved to collections?
     prop_legend_cmap_modified_signal = pyqtSignal(str)
 
-    line_digitized_signal = pyqtSignal(dict)
+    # It appears this is not used anywhere. _______________________________________
+    # line_digitized_signal = pyqtSignal(dict)
 
     """Add other signals above this line ----------------------------------------"""
 
@@ -220,16 +140,6 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
 
         """Initialize empty project."""
         self.create_empty()
-
-        # startup_option = options_dialog(title='PZero', message='Do you want to create a new project or open an existing one?', yes_role='Create New Project', no_role='Open Existing Project', reject_role='Close PZero')
-        # if startup_option == 0:
-        #     self.TextTerminal.appendPlainText("Creating a new empty project.")
-        #     self.new_project()
-        # elif startup_option == 1:
-        #     self.TextTerminal.appendPlainText("Opening an existing project.")
-        #     self.open_project()
-        # else:
-        #     self.close(True)  # this actually crashes the application, but at the moment I do not have another working solution to close it
 
         """File>Project actions -> slots"""
         self.actionProjectNew.triggered.connect(self.new_project)
@@ -272,23 +182,13 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.actionBuildOctree.triggered.connect(self.build_octree)
 
         """Interpolation actions -> slots"""
-        self.actionDelaunay2DInterpolation.triggered.connect(
-            lambda: interpolation_delaunay_2d(self)
-        )
-        self.actionPoissonInterpolation.triggered.connect(
-            lambda: poisson_interpolation(self)
-        )
-        self.actionLoopStructuralImplicitModelling.triggered.connect(
-            lambda: implicit_model_loop_structural(self)
-        )
+        self.actionDelaunay2DInterpolation.triggered.connect(lambda: interpolation_delaunay_2d(self))
+        self.actionPoissonInterpolation.triggered.connect(lambda: poisson_interpolation(self))
+        self.actionLoopStructuralImplicitModelling.triggered.connect(lambda: implicit_model_loop_structural(self))
         self.actionSurfaceSmoothing.triggered.connect(self.smooth_dialog)
         self.actionSubdivisionResampling.triggered.connect(self.subd_res_dialog)
-        self.actionDecimationPro.triggered.connect(
-            lambda: decimation_pro_resampling(self)
-        )
-        self.actionDecimationQuadric.triggered.connect(
-            lambda: decimation_quadric_resampling(self)
-        )
+        self.actionDecimationPro.triggered.connect(lambda: decimation_pro_resampling(self))
+        self.actionDecimationQuadric.triggered.connect(lambda: decimation_quadric_resampling(self))
         self.actionExtrusion.triggered.connect(lambda: linear_extrusion(self))
         self.actionProject2DEM.triggered.connect(lambda: project_2_dem(self))
         self.actionIntersectionXSection.triggered.connect(lambda: intersection_xs(self))
@@ -299,9 +199,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         """View actions -> slots"""
         self.actionView3D.triggered.connect(lambda: View3D(parent=self))
         self.actionViewMap.triggered.connect(lambda: NewViewMap(parent=self))
-        self.actionViewPlaneXsection.triggered.connect(
-            lambda: NewViewXsection(parent=self)
-        )
+        self.actionViewPlaneXsection.triggered.connect(lambda: NewViewXsection(parent=self))
         self.actionViewStereoplot.triggered.connect(lambda: ViewStereoplot(parent=self))
 
         self.update_actors = True
@@ -342,7 +240,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         """Returns a list of uids selected in the table view. Just rows completely selected are returned."""
         selected_uids = []
         if self.shown_table == "tabGeology":
-            selected_idxs_proxy = self.GeologyTableView.selectionModel().selectedRows(column=0)  # this will always give rows that have selected the column 0 (in this case uid). By changing the column=0 to another index it will give the value in another column
+            # this will always give rows that have selected the column 0 (in this case uid). By changing
+            # the column=0 to another index it will give the value in another column.
+            selected_idxs_proxy = self.GeologyTableView.selectionModel().selectedRows(column=0)
             for idx_proxy in selected_idxs_proxy:
                 selected_uids.append(idx_proxy.data())
 
@@ -1009,7 +909,8 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
 
     def create_empty(self):
         """Create empty containers for a new empty project."""
-        self.project_close_signal.emit()  # this is used to delete open windows when the current project is closed (and a new one is opened)
+        # this is used to delete open windows when the current project is closed (and a new one is opened)
+        self.project_close_signal.emit()
 
         """Create the geol_coll GeologicalCollection (a Qt QAbstractTableModel with a Pandas dataframe as attribute)
         and connect the model to GeologyTableView (a Qt QTableView created with QTDesigner and provided by
