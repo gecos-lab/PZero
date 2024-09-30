@@ -91,7 +91,7 @@ class ImageCollection(BaseCollection):
                     )
                     self.parent.prop_legend.update_widget(self.parent)
         # Then emit signal to update the views. A list of uids is emitted, even if the entity is just one
-        self.parent.image_coll.signals.added.emit(
+        self.signals.added.emit(
             [entity_dict["uid"]]
         )
         return entity_dict["uid"]
@@ -109,7 +109,7 @@ class ImageCollection(BaseCollection):
         self.modelReset.emit()  # is this really necessary?
         self.parent.prop_legend.update_widget(self.parent)
         # When done, send a signal over to the views. A list of uids is emitted, even if the entity is just one.
-        self.parent.image_coll.signals.removed.emit(
+        self.signals.removed.emit(
             [uid]
         )
         return uid

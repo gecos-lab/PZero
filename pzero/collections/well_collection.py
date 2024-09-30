@@ -90,7 +90,7 @@ class WellCollection(BaseCollection):
             self.parent.legend.update_widget(self.parent)
             self.parent.prop_legend.update_widget(self.parent)
         # Then emit signal to update the views. A list of uids is emitted, even if the entity is just one.
-        self.parent.well_coll.signals.added.emit([entity_dict["uid"]])
+        self.signals.added.emit([entity_dict["uid"]])
         return entity_dict["uid"]
 
     def remove_entity(self, uid: str = None) -> str:
@@ -100,7 +100,7 @@ class WellCollection(BaseCollection):
         self.modelReset.emit()  # is this really necessary?
         self.parent.prop_legend.update_widget(self.parent)
         # When done, send a signal over to the views. A list of uids is emitted, even if the entity is just one.
-        self.parent.well_coll.signals.removed.emit([uid])
+        self.signals.removed.emit([uid])
         return uid
 
     def clone_entity(self, uid: str = None) -> str:
