@@ -253,12 +253,3 @@ class BoundaryCollection(BaseCollection):
         """Set the legend for a particular uid."""
         # Not implemented for this collection, but required by the abstract superclass.
         pass
-
-    # def metadata_modified_signal(self, updated_list: list = None):
-    #     """Signal emitted when metadata change."""
-    #     self.parent.boundary_coll.signals.metadata_modified.emit(updated_list)
-
-    # def data_keys_modified_signal(self, updated_list: list = None):
-    #     """Signal emitted when point data keys change."""
-    #     # Not implemented for this collection, but required by the abstract superclass.
-    #     pass

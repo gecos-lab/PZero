@@ -1,8 +1,7 @@
 from PyQt5.QtWidgets import QTableWidgetItem, QComboBox
 from PyQt5.QtCore import Qt
 
-# Methods used to build and update the IMAGE table
-
+"""Methods used to build and update the IMAGE table."""
 
 def create_image_list(self, sec_uid=None):
     """Create image list with checkboxes."""
@@ -46,7 +45,6 @@ def create_image_list(self, sec_uid=None):
     """Send message with argument = the cell being checked/unchecked."""
     self.ImagesTableWidget.itemChanged.connect(self.toggle_image_visibility)
 
-
 def update_image_list_added(self, new_list=None, sec_uid=None):
     """Update Image list without creating a new model"""
     row = self.ImagesTableWidget.rowCount()
@@ -89,7 +87,6 @@ def update_image_list_added(self, new_list=None, sec_uid=None):
     """Send message with argument = the cell being checked/unchecked."""
     self.ImagesTableWidget.itemChanged.connect(self.toggle_image_visibility)
 
-
 def update_image_list_removed(self, removed_list=None):
     """Update Image list without creating a new model"""
     for uid in removed_list:
@@ -102,7 +99,6 @@ def update_image_list_removed(self, removed_list=None):
                 break
     """Send message with argument = the cell being checked/unchecked."""
     self.ImagesTableWidget.itemChanged.connect(self.toggle_dom_visibility)
-
 
 def toggle_image_visibility(self, cell):
     """Called by self.ImagesTableWidget.itemChanged.connect(self.toggle_image_visibility)."""
@@ -120,7 +116,6 @@ def toggle_image_visibility(self, cell):
         if self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]:
             self.actors_df.loc[self.actors_df["uid"] == uid, "show"] = False
             self.set_actor_visible(uid=uid, visible=False)
-
 
 def toggle_property_image(self):
     """Method to toggle the property shown by an image that is already present in the view."""

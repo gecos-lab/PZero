@@ -3,8 +3,7 @@ from PyQt5.QtCore import Qt
 
 from pandas import unique as pd_unique
 
-# Methods used to build and update the WELLS table
-
+"""Methods used to build and update the WELLS table."""
 
 def create_well_tree(self):
     """Create topology tree with checkboxes and properties"""
@@ -113,7 +112,6 @@ def create_well_tree(self):
     changed item, but upper levels do not broadcast uid's so they are filtered in the toggle method."""
     self.WellsTreeWidget.itemChanged.connect(self.toggle_well_visibility)
     self.WellsTreeWidget.expandAll()
-
 
 def update_well_tree_added(self, new_list=None):
     #############################################################
@@ -238,7 +236,6 @@ def update_well_tree_added(self, new_list=None):
     self.WellsTreeWidget.itemChanged.connect(self.toggle_well_visibility)
     self.WellsTreeWidget.expandAll()
 
-
 def update_well_tree_removed(self, removed_list=None):
     """When geological entity is removed, update Geology Tree without building a new model"""
     success = 0
@@ -273,7 +270,6 @@ def update_well_tree_removed(self, removed_list=None):
                     break
             if success == 1:
                 break
-
 
 def toggle_well_visibility(self, item):
     """Called by self.WellsTreeWidget.itemChanged.connect(self.toggle_boundary_visibility)."""

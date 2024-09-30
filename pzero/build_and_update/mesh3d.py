@@ -1,8 +1,7 @@
 from PyQt5.QtWidgets import QTableWidgetItem, QComboBox
 from PyQt5.QtCore import Qt
 
-# Methods used to build and update the MESH3D table
-
+"""Methods used to build and update the MESH3D table in views."""
 
 def create_mesh3d_list(self):
     """Create mesh3D list with checkboxes."""
@@ -44,7 +43,6 @@ def create_mesh3d_list(self):
         row += 1
     """Send message with argument = the cell being checked/unchecked."""
     self.Mesh3DTableWidget.itemChanged.connect(self.toggle_mesh3d_visibility)
-
 
 def update_mesh3d_list_added(self, new_list=None, sec_uid=None):
     """Update Mesh3D list without creating a new model"""
@@ -91,7 +89,6 @@ def update_mesh3d_list_added(self, new_list=None, sec_uid=None):
     """Send message with argument = the cell being checked/unchecked."""
     self.Mesh3DTableWidget.itemChanged.connect(self.toggle_mesh3d_visibility)
 
-
 def update_mesh3d_list_removed(self, removed_list=None):
     """Update Mesh3D list without creating a new model"""
     for uid in removed_list:
@@ -104,7 +101,6 @@ def update_mesh3d_list_removed(self, removed_list=None):
                 break
     """Send message with argument = the cell being checked/unchecked."""
     self.Mesh3DTableWidget.itemChanged.connect(self.toggle_dom_visibility)
-
 
 def toggle_mesh3d_visibility(self, cell):
     """Called by self.Mesh3DTableWidget.itemChanged.connect(self.toggle_mesh3d_visibility)."""
@@ -122,7 +118,6 @@ def toggle_mesh3d_visibility(self, cell):
         if self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]:
             self.actors_df.loc[self.actors_df["uid"] == uid, "show"] = False
             self.set_actor_visible(uid=uid, visible=False)
-
 
 def toggle_property_mesh3d(self):
     """Method to toggle the texture shown by a Mesh3D that is already present in the view."""

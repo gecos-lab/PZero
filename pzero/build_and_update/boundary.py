@@ -1,8 +1,7 @@
 from PyQt5.QtWidgets import QTableWidgetItem
 from PyQt5.QtCore import Qt
 
-# Methods used to build and update the BOUNDARY table
-
+"""Methods used to build and update the BOUNDARY table."""
 
 def create_boundary_list(self):
     """Create boundaries list with checkboxes."""
@@ -32,7 +31,6 @@ def create_boundary_list(self):
     """Send message with argument = the cell being checked/unchecked."""
     self.BoundariesTableWidget.itemChanged.connect(self.toggle_boundary_visibility)
 
-
 def update_boundary_list_added(self, new_list=None, sec_uid=None):
     """Update boundaries list without creating a new model"""
     row = self.BoundariesTableWidget.rowCount()
@@ -61,7 +59,6 @@ def update_boundary_list_added(self, new_list=None, sec_uid=None):
     """Send message with argument = the cell being checked/unchecked."""
     self.BoundariesTableWidget.itemChanged.connect(self.toggle_boundary_visibility)
 
-
 def update_boundary_list_removed(self, removed_list=None):
     """Update boundary list without creating a new model"""
     for uid in removed_list:
@@ -74,7 +71,6 @@ def update_boundary_list_removed(self, removed_list=None):
                 break
     """Send message with argument = the cell being checked/unchecked."""
     self.BoundariesTableWidget.itemChanged.connect(self.toggle_boundary_visibility)
-
 
 def toggle_boundary_visibility(self, cell):
     """Called by self.BoundariesTableWidget.itemChanged.connect(self.toggle_boundary_visibility)."""

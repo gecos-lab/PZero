@@ -1,8 +1,7 @@
 from PyQt5.QtWidgets import QTableWidgetItem, QComboBox
 from PyQt5.QtCore import Qt
 
-# Methods used to build and update the DOM table
-
+"""Methods used to build and update the DOM table."""
 
 def create_dom_list(self, sec_uid=None):
     """Create cross-sections list with checkboxes."""
@@ -75,7 +74,6 @@ def create_dom_list(self, sec_uid=None):
         row += 1
     """Send message with argument = the cell being checked/unchecked."""
     self.DOMsTableWidget.itemChanged.connect(self.toggle_dom_visibility)
-
 
 def update_dom_list_added(self, new_list=None, sec_uid=None):
     """Update DOM list without creating a new model"""
@@ -152,7 +150,6 @@ def update_dom_list_added(self, new_list=None, sec_uid=None):
     """Send message with argument = the cell being checked/unchecked."""
     self.DOMsTableWidget.itemChanged.connect(self.toggle_dom_visibility)
 
-
 def update_dom_list_removed(self, removed_list=None):
     """Update DOM list without creating a new model"""
     for uid in removed_list:
@@ -165,7 +162,6 @@ def update_dom_list_removed(self, removed_list=None):
                 break
     """Send message with argument = the cell being checked/unchecked."""
     self.DOMsTableWidget.itemChanged.connect(self.toggle_dom_visibility)
-
 
 def toggle_dom_visibility(self, cell):
     """Called by self.DOMsTableWidget.itemChanged.connect(self.toggle_dom_visibility)."""
@@ -188,7 +184,6 @@ def toggle_dom_visibility(self, cell):
         if self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]:
             self.actors_df.loc[self.actors_df["uid"] == uid, "show"] = False
             self.set_actor_visible(uid=uid, visible=False)
-
 
 def toggle_property_texture(self):
     """Method to toggle the texture shown by a DEM that is already present in the view."""

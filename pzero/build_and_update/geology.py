@@ -3,13 +3,8 @@ from PyQt5.QtCore import Qt
 
 from pandas import unique as pd_unique
 
-
-# ================================  build and update trees and tables ================================
-
-# Methods used to build and update the GEOLOGY and TOPOLOGY trees
-
+"""Methods used to build and update the GEOLOGY and TOPOLOGY trees."""
 # It would be nice to find a way to further separate the two trees but it looks like they are very co-dependent
-
 
 def create_geology_tree(self):
     """Create geology tree with checkboxes and properties"""
@@ -106,7 +101,6 @@ def create_geology_tree(self):
     # changed item, but upper levels do not broadcast uid's so they are filtered in the toggle method.
     self.GeologyTreeWidget.itemChanged.connect(self.toggle_geology_visibility )
     self.GeologyTreeWidget.expandAll()
-
 
 def update_geology_tree_added(self, uid_list=None):
     """Update geology tree without creating a new model"""
@@ -404,7 +398,6 @@ def update_geology_tree_added(self, uid_list=None):
     self.GeologyTreeWidget.itemChanged.connect(self.toggle_geology_visibility )
     self.GeologyTreeWidget.expandAll()
 
-
 def update_geology_tree_removed(self, removed_list=None):
     """When geological entity is removed, update Geology Tree without building a new model"""
     success = 0
@@ -495,7 +488,6 @@ def update_geology_tree_removed(self, removed_list=None):
             if success == 1:
                 break
 
-
 def update_geology_checkboxes(self, uid=None, uid_checkState=None):
     """Update checkboxes in geology tree, called when state changed in topology tree."""
     item = self.GeologyTreeWidget.findItems(
@@ -505,7 +497,6 @@ def update_geology_checkboxes(self, uid=None, uid_checkState=None):
         item.setCheckState(0, Qt.Checked)
     elif uid_checkState == Qt.Unchecked:
         item.setCheckState(0, Qt.Unchecked)
-
 
 def create_topology_tree(self):
     """Create topology tree with checkboxes and properties"""
@@ -580,7 +571,6 @@ def create_topology_tree(self):
         self.toggle_geology_visibility 
     )
     self.TopologyTreeWidget.expandAll()
-
 
 def update_topology_tree_added(self, uid_list=None):
     """Update topology tree without creating a new model"""
@@ -751,7 +741,6 @@ def update_topology_tree_added(self, uid_list=None):
     )
     self.TopologyTreeWidget.expandAll()
 
-
 def update_topology_tree_removed(self, removed_list=None):
     """When geological entity is removed, update Topology Tree without building a new model"""
     success = 0
@@ -813,7 +802,6 @@ def update_topology_tree_removed(self, removed_list=None):
             if success == 1:
                 break
 
-
 def update_topology_checkboxes(self, uid=None, uid_checkState=None):
     """Update checkboxes in topology tree, called when state changed in geology tree."""
     item = self.TopologyTreeWidget.findItems(
@@ -823,7 +811,6 @@ def update_topology_checkboxes(self, uid=None, uid_checkState=None):
         item.setCheckState(0, Qt.Checked)
     elif uid_checkState == Qt.Unchecked:
         item.setCheckState(0, Qt.Unchecked)
-
 
 def toggle_geology_visibility (self, item):
     """Called by self.GeologyTreeWidget.itemChanged.connect(self.toggle_geology_visibility ) and

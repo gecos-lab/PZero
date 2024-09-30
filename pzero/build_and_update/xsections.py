@@ -1,8 +1,7 @@
 from PyQt5.QtWidgets import QTreeWidgetItem
 from PyQt5.QtCore import Qt
 
-
-# Methods used to build and update the X-SECTION table
+"""Methods used to build and update the X-SECTION table."""
 
 def create_xsections_tree(self):
     """Create XSection tree with checkboxes and properties"""
@@ -43,7 +42,6 @@ def create_xsections_tree(self):
     self.XSectionTreeWidget.itemChanged.connect(self.toggle_xsection_visibility)
     self.XSectionTreeWidget.expandAll()
 
-
 def update_xsections_tree_added(self, new_list=None, sec_uid=None):
     """Update XSection tree without creating a new model"""
     uid_list = list(new_list["uid"])
@@ -66,7 +64,6 @@ def update_xsections_tree_added(self, new_list=None, sec_uid=None):
             xslevel_2.setCheckState(0, Qt.Unchecked)
     self.XSectionTreeWidget.itemChanged.connect(self.toggle_xsection_visibility)
     self.XSectionTreeWidget.expandAll()
-
 
 def update_xsections_tree_removed(self, removed_list=None):
     """Update XSection tree without creating a new model"""
@@ -95,7 +92,6 @@ def update_xsections_tree_removed(self, removed_list=None):
             if success == 1:
                 break
 
-
 def update_xsection_checkboxes(self, uid=None, uid_checkState=None):
     """Update checkboxes in XSection tree, called when state changed in xsection tree."""
     item = self.XSectionTreeWidget.findItems(
@@ -105,7 +101,6 @@ def update_xsection_checkboxes(self, uid=None, uid_checkState=None):
         item.setCheckState(0, Qt.Checked)
     elif uid_checkState == Qt.Unchecked:
         item.setCheckState(0, Qt.Unchecked)
-
 
 def toggle_xsection_visibility(self, item):
     """Called by self.XSectionTreeWidget.itemChanged.connect(self.toggle_xsection_visibility)."""

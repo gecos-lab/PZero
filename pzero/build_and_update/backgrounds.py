@@ -3,8 +3,7 @@ from PyQt5.QtCore import Qt
 
 from pandas import unique as pd_unique
 
-# Methods used to build and update the BACKGROUNDS and BACKGROUNDS TOPOLOGY trees __________________???
-
+"""Methods used to build and update the BACKGROUNDS and BACKGROUNDS TOPOLOGY trees."""
 
 def create_backgrounds_tree(self):
     """Create Backgrounds tree with checkboxes and properties"""
@@ -88,7 +87,6 @@ def create_backgrounds_tree(self):
     )
     self.BackgroundsTreeWidget.expandAll()
 
-
 def create_backgrounds_topology_tree(self):
     """Create topology tree with checkboxes and properties"""
     self.BackgroundsTopologyTreeWidget.clear()
@@ -167,7 +165,6 @@ def create_backgrounds_topology_tree(self):
         self.toggle_backgrounds_visibility
     )
     self.BackgroundsTopologyTreeWidget.expandAll()
-
 
 def update_backgrounds_tree_added(self, new_list=None, sec_uid=None):
     """Update background tree without creating a new model"""
@@ -358,7 +355,6 @@ def update_backgrounds_tree_added(self, new_list=None, sec_uid=None):
     )
     self.BackgroundsTreeWidget.expandAll()
 
-
 def update_backgrounds_tree_removed(self, removed_list=None):  # second attchild_background_featempt
     """When background entity is removed, update Geology Tree without building a new model"""
     success = 0
@@ -431,7 +427,6 @@ def update_backgrounds_tree_removed(self, removed_list=None):  # second attchild
                 break
         if success == 1:
             break
-
 
 def update_backgrounds_topology_tree_added(self, new_list=None, sec_uid=None):
     """Update topology tree without creating a new model"""
@@ -622,7 +617,6 @@ def update_backgrounds_topology_tree_added(self, new_list=None, sec_uid=None):
     )
     self.BackgroundsTopologyTreeWidget.expandAll()
 
-
 def update_backgrounds_topology_tree_removed(self, removed_list=None):
     """When background entity is removed, update Topology Tree without building a new model"""
     success = 0
@@ -693,7 +687,6 @@ def update_backgrounds_topology_tree_removed(self, removed_list=None):
             if success == 1:
                 break
 
-
 def update_backgrounds_checkboxes(self, uid=None, uid_checkState=None):
     """Update checkboxes in background tree, called when state changed in topology tree."""
     item = self.BackgroundsTreeWidget.findItems(
@@ -704,7 +697,6 @@ def update_backgrounds_checkboxes(self, uid=None, uid_checkState=None):
     elif uid_checkState == Qt.Unchecked:
         item.setCheckState(0, Qt.Unchecked)
 
-
 def update_backgrounds_topology_checkboxes(self, uid=None, uid_checkState=None):
     """Update checkboxes in topology tree, called when state changed in geology tree."""
     item = self.BackgroundsTopologyTreeWidget.findItems(
@@ -714,7 +706,6 @@ def update_backgrounds_topology_checkboxes(self, uid=None, uid_checkState=None):
         item.setCheckState(0, Qt.Checked)
     elif uid_checkState == Qt.Unchecked:
         item.setCheckState(0, Qt.Unchecked)
-
 
 def toggle_backgrounds_visibility(self, item):
 

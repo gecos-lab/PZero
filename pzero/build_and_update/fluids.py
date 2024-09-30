@@ -3,8 +3,7 @@ from PyQt5.QtCore import Qt
 
 from pandas import unique as pd_unique
 
-
-# Methods used to build and update the FLUID and FLUID TOPOLOGY trees __________________???
+"""Methods used to build and update the FLUID and FLUID TOPOLOGY trees"""
 
 def create_fluids_tree(self):
     """Create fluids tree with checkboxes and properties"""
@@ -93,7 +92,6 @@ def create_fluids_tree(self):
     )
     self.FluidsTreeWidget.expandAll()
 
-
 def create_fluids_topology_tree(self):
     """Create topology tree with checkboxes and properties"""
     self.FluidsTopologyTreeWidget.clear()
@@ -165,7 +163,6 @@ def create_fluids_topology_tree(self):
         self.toggle_fluids_visibility 
     )
     self.FluidsTopologyTreeWidget.expandAll()
-
 
 def update_fluids_tree_added(self, new_list=None, sec_uid=None):
     """Update fluid tree without creating a new model"""
@@ -466,7 +463,6 @@ def update_fluids_tree_added(self, new_list=None, sec_uid=None):
     )
     self.FluidsTreeWidget.expandAll()
 
-
 def update_fluids_tree_removed(self, removed_list=None):  # second attchild_fluid_featempt
     """When fluid entity is removed, update Geology Tree without building a new model"""
     success = 0
@@ -557,7 +553,6 @@ def update_fluids_tree_removed(self, removed_list=None):  # second attchild_flui
                     break
             if success == 1:
                 break
-
 
 def update_fluids_topology_tree_added(self, new_list=None, sec_uid=None):
     """Update topology tree without creating a new model"""
@@ -742,7 +737,6 @@ def update_fluids_topology_tree_added(self, new_list=None, sec_uid=None):
     )
     self.FluidsTopologyTreeWidget.expandAll()
 
-
 def update_fluids_topology_tree_removed(self, removed_list=None):
     """When fluid entity is removed, update Topology Tree without building a new model"""
     success = 0
@@ -811,7 +805,6 @@ def update_fluids_topology_tree_removed(self, removed_list=None):
             if success == 1:
                 break
 
-
 def update_fluids_checkboxes(self, uid=None, uid_checkState=None):
     """Update checkboxes in fluid tree, called when state changed in topology tree."""
     item = self.FluidsTreeWidget.findItems(
@@ -822,7 +815,6 @@ def update_fluids_checkboxes(self, uid=None, uid_checkState=None):
     elif uid_checkState == Qt.Unchecked:
         item.setCheckState(0, Qt.Unchecked)
 
-
 def update_fluids_topology_checkboxes(self, uid=None, uid_checkState=None):
     """Update checkboxes in topology tree, called when state changed in geology tree."""
     item = self.FluidsTopologyTreeWidget.findItems(
@@ -832,7 +824,6 @@ def update_fluids_topology_checkboxes(self, uid=None, uid_checkState=None):
         item.setCheckState(0, Qt.Checked)
     elif uid_checkState == Qt.Unchecked:
         item.setCheckState(0, Qt.Unchecked)
-
 
 def toggle_fluids_visibility (self, item):
     """Called by self.FluidsTreeWidget.itemChanged.connect(self.toggle_fluids_visibility ) and self.FluidsTopologyTreeWidget.itemChanged.connect(self.toggle_fluids_visibility )"""
