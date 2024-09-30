@@ -199,14 +199,6 @@ class WellCollection(BaseCollection):
         # Not implemented for this collection, but required by the abstract superclass.
         pass
 
-    # def metadata_modified_signal(self, updated_list: list = None):
-    #     """Signal emitted when metadata change."""
-    #     self.parent.well_coll.signals.metadata_modified.emit(updated_list)
-
-    # def data_keys_modified_signal(self, updated_list: list = None):
-    #     """Signal emitted when point data keys change."""
-    #     self.parent.well_coll.signals.data_keys_modified.emit(updated_list)
-
     # =================================== Additional methods ===========================================
 
     def get_well_locid_uids(self, locid=None):

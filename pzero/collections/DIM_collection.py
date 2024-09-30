@@ -136,8 +136,15 @@ class DIMCollection(BaseCollection):
         """Get legend for a particular uid."""
         pass
 
-    def set_uid_legend(self, uid: str = None, color_R: float = None, color_G: float = None, color_B: float = None,
-                       line_thick: float = None, point_size: float = None, opacity: float = None):
+    def set_uid_legend(self,
+                       uid: str = None,
+                       color_R: float = None,
+                       color_G: float = None,
+                       color_B: float = None,
+                       line_thick: float = None,
+                       point_size: float = None,
+                       opacity: float = None,
+                       ):
         """Set the legend for a particular uid."""
         # Not implemented for this collection, but required by the abstract superclass.
         pass

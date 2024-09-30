@@ -364,17 +364,6 @@ class GFBCollection(BaseCollection):
                     "opacity",
                 ] = opacity
 
-    # def metadata_modified_signal(self, updated_list: list = None):
-    #     """Signal emitted when metadata change."""
-    #     self.parent.geol_coll.signals.metadata_modified.emit(updated_list)
-
-    # def data_keys_modified_signal(self, updated_list: list = None):
-    #     """Signal emitted when point data keys change."""
-    #     self.parent.geol_coll.signals.data_keys_modified.emit(updated_list)
-
-    # =================================== Additional methods ===========================================
-    # ====== CAN BE UNIFIED AS COMMON METHOD OF THE ABSTRACT COLLECTION IF "GEOLOGICAL" METHODS WILL BE UNIFIED ====
-
     def get_role_uids(self, role: str = None) -> list:
         """Get list of uids with a given role in a given collection."""
         # ====== in the future use the query method? ========================================

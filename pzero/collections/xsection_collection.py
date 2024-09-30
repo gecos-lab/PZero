@@ -394,14 +394,6 @@ class XSectionCollection(BaseCollection):
         """Not implemented for XSectionCollection, but required by the abstract superclass."""
         pass
 
-    # def metadata_modified_signal(self, updated_list: list = None):
-    #     """Not implemented for XSectionCollection, but required by the abstract superclass."""
-    #     pass
-
-    # def data_keys_modified_signal(self, updated_list: list = None):
-    #     """Not implemented for XSectionCollection, but required by the abstract superclass."""
-    #     pass
-
     # =================================== Additional methods ===========================================
 
     def get_uid_base_x(self, uid=None):

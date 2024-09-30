@@ -1,3 +1,6 @@
+"""AbstractCollection.py
+PZero© Andrea Bistacchi"""
+
 from PyQt5.QtCore import QAbstractTableModel, Qt, QVariant, QSortFilterProxyModel, QObject, pyqtSignal
 
 from abc import abstractmethod, ABC
@@ -121,23 +124,6 @@ class BaseCollection(ABC):
                        ):
         """Set legend properties from uid. Take care since this resets the legend for all similar objects."""
         pass
-
-    # @abstractmethod
-    # def metadata_modified_signal(self, updated_list: list = None):
-    #     """Method used to emit the metadata modified signal for the given collection."""
-    #     # ============================================================================================TO BE REMOVED
-    #     pass
-
-    # @abstractmethod
-    # def well_coll.signals.data_keys_modified(self, updated_list: list = None):
-    #     """Method used to emit the data keys removed signal modified signal for the given collection."""
-    #     # ============================================================================================TO BE REMOVED
-    #     pass
-
-    # @staticmethod
-    # @abstractmethod
-    # def import_data(path: str):
-    #     pass
 
     # =================================== Common properties ================================================
 
