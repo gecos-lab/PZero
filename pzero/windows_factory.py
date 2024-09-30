@@ -2294,7 +2294,7 @@ class VTKView(BaseView):
         # )
         if isinstance(self, View3D):
             self.plotter.enable_trackball_style()
-        elif isinstance(self, NewView2D):
+        elif isinstance(self, View2D):
             self.plotter.enable_image_style()
 
         self.plotter.reset_key_events()
@@ -2835,11 +2835,11 @@ class View3D(VTKView):
         # off_screen_plot.close()
 
 
-class NewView2D(VTKView):
+class View2D(VTKView):
     """Create 2D view using vtk/pyvista. This should be more efficient than matplotlib"""
 
     def __init__(self, *args, **kwargs):
-        super(NewView2D, self).__init__(*args, **kwargs)
+        super(View2D, self).__init__(*args, **kwargs)
 
         self.line_dict = None
         self.plotter.enable_image_style()
@@ -3016,9 +3016,9 @@ class NewView2D(VTKView):
         vector.EnabledOn()
 
 
-class NewViewMap(NewView2D):
+class ViewMap(View2D):
     def __init__(self, *args, **kwargs):
-        super(NewViewMap, self).__init__(*args, **kwargs)
+        super(ViewMap, self).__init__(*args, **kwargs)
         self.setWindowTitle("Map View")
         self.plotter.view_xy()
 
@@ -3526,7 +3526,7 @@ class NewViewMap(NewView2D):
         return this_actor
 
 
-class NewViewXsection(NewView2D):
+class ViewXsection(View2D):
     def __init__(self, parent=None, *args, **kwargs):
         # Choose section name with dialog.
         if parent.xsect_coll.get_names:
@@ -3552,7 +3552,7 @@ class NewViewXsection(NewView2D):
         self.view_filter = f'x_section == "{self.this_x_section_uid}"'
 
         # Super here after having set the x_section_uid and _name
-        super(NewViewXsection, self).__init__(parent, *args, **kwargs)
+        super(ViewXsection, self).__init__(parent, *args, **kwargs)
 
         # Rename Base View, Menu and Tool
         self.setWindowTitle(f"Xsection View: {self.this_x_section_name}")

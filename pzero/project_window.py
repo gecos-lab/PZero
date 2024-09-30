@@ -102,8 +102,8 @@ from .three_d_surfaces import (
     split_surf,
     retopo,
 )
-from .windows_factory import NewViewMap
-from .windows_factory import NewViewXsection
+from .windows_factory import ViewMap
+from .windows_factory import ViewXsection
 from .windows_factory import View3D
 from .windows_factory import ViewStereoplot
 
@@ -198,8 +198,8 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
 
         """View actions -> slots"""
         self.actionView3D.triggered.connect(lambda: View3D(parent=self))
-        self.actionViewMap.triggered.connect(lambda: NewViewMap(parent=self))
-        self.actionViewPlaneXsection.triggered.connect(lambda: NewViewXsection(parent=self))
+        self.actionViewMap.triggered.connect(lambda: ViewMap(parent=self))
+        self.actionViewPlaneXsection.triggered.connect(lambda: ViewXsection(parent=self))
         self.actionViewStereoplot.triggered.connect(lambda: ViewStereoplot(parent=self))
 
         self.update_actors = True

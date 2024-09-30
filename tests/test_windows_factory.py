@@ -1,7 +1,7 @@
 import pytest
 
-from pzero.windows_factory import BaseView, View3D, View2D, ViewMap, ViewStereoplot, NavigationToolbar, NewView2D, \
-    NewViewMap
+from pzero.windows_factory import BaseView, View3D, View2D, ViewMap, ViewStereoplot, NavigationToolbar, View2D, \
+    ViewMap
 from pzero.project_window import ProjectWindow
 
 
@@ -290,24 +290,24 @@ class TestViewStereoplot:
         assert isinstance(view_stereoplot.navi_toolbar, NavigationToolbar)
 
 
-# Testing NewView2D class
-class TestNewView2D:
+# Testing View2D class
+class TestView2D:
 
     @pytest.fixture
-    # Testing if NewView2D is initialized and showed
+    # Testing if View2D is initialized and showed
     def test_show_canvas(self, qtbot):
         parent = ProjectWindow()
-        new_view_2d = NewView2D(parent=parent)
+        new_view_2d = View2D(parent=parent)
         new_view_2d.show_qt_canvas()
 
         assert new_view_2d.isWindow() is True \
                and new_view_2d.isVisible() is True
 
     @pytest.fixture
-    # Testing NewView2D initialize_menu_tools
+    # Testing View2D initialize_menu_tools
     def test_initialize_menu_tools(self, qtbot):
         parent = ProjectWindow()
-        new_view_2d = NewView2D(parent=parent)
+        new_view_2d = View2D(parent=parent)
 
         # Start initialize_menu_tools
         new_view_2d.initialize_menu_tools()
@@ -332,24 +332,24 @@ class TestNewView2D:
         assert new_view_2d.cleanSectionButton.isVisible() is True
 
 
-# Testing NewViewMap class
-class TestNewViewMap:
+# Testing ViewMap class
+class TestViewMap:
     @pytest.fixture
-    # Testing if NewViewMap is initialized and showed
+    # Testing if ViewMap is initialized and showed
     def test_show_canvas(self, qtbot):
         parent = ProjectWindow()
-        new_view_map = NewViewMap(parent=parent)
+        new_view_map = ViewMap(parent=parent)
         new_view_map.show_qt_canvas()
 
         assert new_view_map.isWindow() is True \
                and new_view_map.isVisible() is True
 
     # @pytest.fixture
-    # Testing NewViewMap initialize_menu_tools
-    @pytest.mark.skipif(reason="NewView2D object has no attribute sectionFromAzimuthButton")
+    # Testing ViewMap initialize_menu_tools
+    @pytest.mark.skipif(reason="View2D object has no attribute sectionFromAzimuthButton")
     def test_initialize_menu_tools(self, qtbot):
         parent = ProjectWindow()
-        new_view_map = NewView2D(parent=parent)
+        new_view_map = View2D(parent=parent)
 
         # Start initialize_menu_tools
         new_view_map.initialize_menu_tools()
