@@ -64,9 +64,7 @@ def create_dom_list(self, sec_uid=None):
         self.DOMsTableWidget.setItem(row, 0, name_item)
         self.DOMsTableWidget.setItem(row, 1, uid_item)
         self.DOMsTableWidget.setCellWidget(row, 2, property_texture_combo)
-        property_texture_combo.currentIndexChanged.connect(
-            lambda: self.toggle_property_texture()
-        )
+        property_texture_combo.currentIndexChanged.connect(lambda: toggle_property_texture(self))
         if self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]:
             name_item.setCheckState(Qt.Checked)
         elif not self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]:
@@ -139,9 +137,7 @@ def update_dom_list_added(self, new_list=None, sec_uid=None):
         self.DOMsTableWidget.setItem(row, 0, name_item)
         self.DOMsTableWidget.setItem(row, 1, uid_item)
         self.DOMsTableWidget.setCellWidget(row, 2, property_texture_combo)
-        property_texture_combo.currentIndexChanged.connect(
-            lambda: self.toggle_property_texture()
-        )
+        property_texture_combo.currentIndexChanged.connect(lambda: toggle_property_texture(self))
         if self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]:
             name_item.setCheckState(Qt.Checked)
         elif not self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]:

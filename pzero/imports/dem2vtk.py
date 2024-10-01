@@ -7,7 +7,7 @@ from uuid import uuid4
 
 from copy import deepcopy
 
-from xarray import open_rasterio as xr_open_rasterio
+from xarray import open_dataset as xr_open_dataset
 
 from numpy import any as np_any
 from numpy import asarray as np_asarray
@@ -57,7 +57,7 @@ def dem2vtk(self=None, in_file_name=None, collection=None):
     """Read raster file format (geotiff) with xarray and rasterio and create DEM structured grid.
     Helpful: http://xarray.pydata.org/en/stable/auto_gallery/plot_rasterio.html
     https://github.com/pyvista/pyvista-support/issues/205, thanks to Bane Sullivan"""
-    data = xr_open_rasterio(in_file_name)
+    data = xr_open_dataset(in_file_name, engine='rasterio')
     values = np_asarray(data)
     nans = values == data.nodatavals
     if np_any(nans):

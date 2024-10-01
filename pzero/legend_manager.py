@@ -29,8 +29,8 @@ class Legend(QObject):
         "color_R": int(255),
         "color_G": int(255),
         "color_B": int(255),
-        "line_thick": 2.0,
-        "point_size": 10.0,
+        "line_thick": int(2),
+        "point_size": int(10),
         "opacity": int(100),
     }
     fluids_legend_dict = {
@@ -42,9 +42,9 @@ class Legend(QObject):
         "color_R": int(255),
         "color_G": int(255),
         "color_B": int(255),
-        "line_thick": 2.0,
-        "point_size": 10.0,
-        "opacity": 100,
+        "line_thick": int(2),
+        "point_size": int(10),
+        "opacity": int(100),
     }
     backgrounds_legend_dict = {
         "role": "undef",
@@ -55,9 +55,9 @@ class Legend(QObject):
         "color_R": int(255),
         "color_G": int(255),
         "color_B": int(255),
-        "line_thick": 2.0,
-        "point_size": 10.0,
-        "opacity": 100,
+        "line_thick": int(2),
+        "point_size": int(10),
+        "opacity": int(100),
     }
 
     well_legend_dict = {
@@ -66,8 +66,8 @@ class Legend(QObject):
         "color_R": int(255),
         "color_G": int(255),
         "color_B": int(255),
-        "line_thick": 2.0,
-        "opacity": 100,
+        "line_thick": int(2),
+        "opacity": int(100),
     }
 
     legend_dict_types = {
@@ -87,8 +87,8 @@ class Legend(QObject):
         "color_R": int,
         "color_G": int,
         "color_B": int,
-        "line_thick": float,
-        "point_size": float,
+        "line_thick": int,
+        "point_size": int,
         "opacity": int,
     }
 
@@ -97,8 +97,8 @@ class Legend(QObject):
         "color_R": [255, 255, 255, 255, 255],
         "color_G": [255, 255, 255, 255, 255],
         "color_B": [255, 255, 255, 255, 255],
-        "line_thick": [2.0, 2.0, 2.0, 1.0, 2.0],
-        "point_size": [2.0, 2.0, 2.0, 1.0, 2.0],
+        "line_thick": [2, 2, 2, 1, 2],
+        "point_size": [2, 2, 2, 1, 2],
         "opacity": [100, 100, 100, 100, 100],
     }
 

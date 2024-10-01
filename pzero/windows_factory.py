@@ -85,7 +85,7 @@ from matplotlib.backends.backend_qt5agg import (
 from matplotlib.lines import Line2D
 from matplotlib.image import AxesImage
 from matplotlib.collections import PathCollection
-from matplotlib.tri.tricontour import TriContourSet
+from matplotlib.tri import TriContourSet
 import matplotlib.style as mplstyle
 # from matplotlib.backend_bases import FigureCanvasBase
 import mplstereonet

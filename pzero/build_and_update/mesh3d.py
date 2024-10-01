@@ -3,6 +3,7 @@ from PyQt5.QtCore import Qt
 
 """Methods used to build and update the MESH3D table in views."""
 
+
 def create_mesh3d_list(self):
     """Create mesh3D list with checkboxes."""
     self.Mesh3DTableWidget.clear()
@@ -33,9 +34,7 @@ def create_mesh3d_list(self):
         self.Mesh3DTableWidget.setItem(row, 0, name_item)
         self.Mesh3DTableWidget.setItem(row, 1, uid_item)
         self.Mesh3DTableWidget.setCellWidget(row, 2, property_combo)
-        property_combo.currentIndexChanged.connect(
-            lambda: self.toggle_property_mesh3d()
-        )
+        property_combo.currentIndexChanged.connect(lambda: toggle_property_mesh3d(self))
         if self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]:
             name_item.setCheckState(Qt.Checked)
         elif not self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]:
@@ -43,6 +42,7 @@ def create_mesh3d_list(self):
         row += 1
     """Send message with argument = the cell being checked/unchecked."""
     self.Mesh3DTableWidget.itemChanged.connect(self.toggle_mesh3d_visibility)
+
 
 def update_mesh3d_list_added(self, new_list=None, sec_uid=None):
     """Update Mesh3D list without creating a new model"""
@@ -78,9 +78,7 @@ def update_mesh3d_list_added(self, new_list=None, sec_uid=None):
         self.Mesh3DTableWidget.setItem(row, 0, name_item)
         self.Mesh3DTableWidget.setItem(row, 1, uid_item)
         self.Mesh3DTableWidget.setCellWidget(row, 2, property_combo)
-        property_combo.currentIndexChanged.connect(
-            lambda: self.toggle_property_mesh3d()
-        )
+        property_combo.currentIndexChanged.connect(lambda: toggle_property_mesh3d(self))
         if self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]:
             name_item.setCheckState(Qt.Checked)
         elif not self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]:
@@ -88,6 +86,7 @@ def update_mesh3d_list_added(self, new_list=None, sec_uid=None):
         row += 1
     """Send message with argument = the cell being checked/unchecked."""
     self.Mesh3DTableWidget.itemChanged.connect(self.toggle_mesh3d_visibility)
+
 
 def update_mesh3d_list_removed(self, removed_list=None):
     """Update Mesh3D list without creating a new model"""
@@ -101,6 +100,7 @@ def update_mesh3d_list_removed(self, removed_list=None):
                 break
     """Send message with argument = the cell being checked/unchecked."""
     self.Mesh3DTableWidget.itemChanged.connect(self.toggle_dom_visibility)
+
 
 def toggle_mesh3d_visibility(self, cell):
     """Called by self.Mesh3DTableWidget.itemChanged.connect(self.toggle_mesh3d_visibility)."""
@@ -119,6 +119,7 @@ def toggle_mesh3d_visibility(self, cell):
             self.actors_df.loc[self.actors_df["uid"] == uid, "show"] = False
             self.set_actor_visible(uid=uid, visible=False)
 
+
 def toggle_property_mesh3d(self):
     """Method to toggle the texture shown by a Mesh3D that is already present in the view."""
     # Collect values from combo box.
@@ -129,6 +130,8 @@ def toggle_property_mesh3d(self):
     collection = self.actors_df.loc[self.actors_df["uid"] == uid, "collection"].values[0]
     # This replaces the previous copy of the actor with the same uid, and updates the actors dataframe.
     # See issue #33 for a discussion on actors replacement by the PyVista add_mesh and add_volume methods.
-    this_actor = self.show_actor_with_property(uid=uid, collection=collection, show_property=show_property,
+    this_actor = self.show_actor_with_property(uid=uid,
+                                               collection=collection,
+                                               show_property=show_property,
                                                visible=show)
     self.actors_df.loc[self.actors_df["uid"] == uid, ["show_property"]] = show_property

@@ -34,9 +34,7 @@ def create_image_list(self, sec_uid=None):
         self.ImagesTableWidget.setItem(row, 0, name_item)
         self.ImagesTableWidget.setItem(row, 1, uid_item)
         self.ImagesTableWidget.setCellWidget(row, 2, property_combo)
-        property_combo.currentIndexChanged.connect(
-            lambda: self.toggle_property_image()
-        )  # ___________
+        property_combo.currentIndexChanged.connect(lambda: toggle_property_image(self))
         if self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]:
             name_item.setCheckState(Qt.Checked)
         elif not self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]:
@@ -76,9 +74,7 @@ def update_image_list_added(self, new_list=None, sec_uid=None):
         self.ImagesTableWidget.setItem(row, 0, name_item)
         self.ImagesTableWidget.setItem(row, 1, uid_item)
         self.ImagesTableWidget.setCellWidget(row, 2, property_combo)
-        property_combo.currentIndexChanged.connect(
-            lambda: self.toggle_property_image()
-        )  # ___________
+        property_combo.currentIndexChanged.connect(lambda: toggle_property_image(self))
         if self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]:
             name_item.setCheckState(Qt.Checked)
         elif not self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]:
@@ -127,7 +123,9 @@ def toggle_property_image(self):
     collection = self.actors_df.loc[self.actors_df["uid"] == uid, "collection"].values[0]
     # This replaces the previous copy of the actor with the same uid, and updates the actors dataframe.
     # See issue #33 for a discussion on actors replacement by the PyVista add_mesh and add_volume methods.
-    this_actor = self.show_actor_with_property(uid=uid, collection=collection, show_property=show_property,
+    this_actor = self.show_actor_with_property(uid=uid,
+                                               collection=collection,
+                                               show_property=show_property,
                                                visible=show)
     self.actors_df.loc[self.actors_df["uid"] == uid, ["show_property"]] = show_property
     print(f"TEST uid {uid} property {show_property}")
