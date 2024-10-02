@@ -7,9 +7,9 @@ import colorcet as cc
 
 from matplotlib.pyplot import colormaps as plt_colormaps
 
-from PyQt5.QtCore import QObject
-from PyQt5.QtGui import QColor, QImage, QPixmap
-from PyQt5.QtWidgets import QTableWidgetItem, QLabel, QComboBox
+from PySide6.QtCore import QObject
+from PySide6.QtGui import QColor, QImage, QPixmap
+from PySide6.QtWidgets import QTableWidgetItem, QLabel, QComboBox
 
 from numpy import linspace as np_linspace
 

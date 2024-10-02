@@ -1,5 +1,5 @@
-from PyQt5.QtWidgets import QTreeWidgetItem, QComboBox
-from PyQt5.QtCore import Qt
+from PySide6.QtWidgets import QTreeWidgetItem, QComboBox
+from PySide6.QtCore import Qt
 
 from pandas import unique as pd_unique
 
@@ -23,7 +23,7 @@ def create_geology_tree(self):
             self.GeologyTreeWidget, [role]
         )
         glevel_1.setFlags(
-            glevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
+            glevel_1.flags() | Qt.ItemIsUserTristate | Qt.ItemIsUserCheckable
         )
         features = pd_unique(
             self.parent.geol_coll.df.query(self.view_filter).loc[
@@ -37,7 +37,7 @@ def create_geology_tree(self):
                 glevel_1, [feature]
             )
             glevel_2.setFlags(
-                glevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
+                glevel_2.flags() | Qt.ItemIsUserTristate | Qt.ItemIsUserCheckable
             )
             geo_scenario = pd_unique(
                 self.parent.geol_coll.df.query(self.view_filter).loc[
@@ -55,7 +55,7 @@ def create_geology_tree(self):
                     glevel_2, [scenario]
                 )
                 glevel_3.setFlags(
-                    glevel_3.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
+                    glevel_3.flags() | Qt.ItemIsUserTristate | Qt.ItemIsUserCheckable
                 )
                 uids = self.parent.geol_coll.df.query(self.view_filter).loc[
                     (self.parent.geol_coll.df.query(self.view_filter)["role"] == role)
@@ -85,9 +85,7 @@ def create_geology_tree(self):
                     self.GeologyTreeWidget.setItemWidget(
                         glevel_4, 2, property_combo
                     )
-                    property_combo.currentIndexChanged.connect(
-                        lambda: self.toggle_property()
-                    )
+                    property_combo.currentIndexChanged.connect(self.toggle_property)
                     glevel_4.setFlags(glevel_4.flags() | Qt.ItemIsUserCheckable)
                     if self.actors_df.loc[
                         self.actors_df["uid"] == uid, "show"
@@ -265,7 +263,7 @@ def update_geology_tree_added(self, uid_list=None):
                             )
                             glevel_3.setFlags(
                                 glevel_3.flags()
-                                | Qt.ItemIsTristate
+                                | Qt.ItemIsUserTristate
                                 | Qt.ItemIsUserCheckable
                             )
                             self.GeologyTreeWidget.insertTopLevelItem(0, glevel_3)
@@ -313,14 +311,14 @@ def update_geology_tree_added(self, uid_list=None):
                     [self.parent.geol_coll.get_uid_feature(uid)],
                 )
                 glevel_2.setFlags(
-                    glevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
+                    glevel_2.flags() | Qt.ItemIsUserTristate | Qt.ItemIsUserCheckable
                 )
                 self.GeologyTreeWidget.insertTopLevelItem(0, glevel_2)
                 glevel_3 = QTreeWidgetItem(
                     glevel_2, [self.parent.geol_coll.get_uid_scenario(uid)]
                 )
                 glevel_3.setFlags(
-                    glevel_3.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
+                    glevel_3.flags() | Qt.ItemIsUserTristate | Qt.ItemIsUserCheckable
                 )
                 self.GeologyTreeWidget.insertTopLevelItem(0, glevel_3)
                 property_combo = QComboBox()
@@ -355,21 +353,21 @@ def update_geology_tree_added(self, uid_list=None):
                 [self.parent.geol_coll.get_uid_role(uid)],
             )
             glevel_1.setFlags(
-                glevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
+                glevel_1.flags() | Qt.ItemIsUserTristate | Qt.ItemIsUserCheckable
             )
             self.GeologyTreeWidget.insertTopLevelItem(0, glevel_1)
             glevel_2 = QTreeWidgetItem(
                 glevel_1, [self.parent.geol_coll.get_uid_feature(uid)]
             )
             glevel_2.setFlags(
-                glevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
+                glevel_2.flags() | Qt.ItemIsUserTristate | Qt.ItemIsUserCheckable
             )
             self.GeologyTreeWidget.insertTopLevelItem(0, glevel_2)
             glevel_3 = QTreeWidgetItem(
                 glevel_2, [self.parent.geol_coll.get_uid_scenario(uid)]
             )
             glevel_3.setFlags(
-                glevel_3.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
+                glevel_3.flags() | Qt.ItemIsUserTristate | Qt.ItemIsUserCheckable
             )
             self.GeologyTreeWidget.insertTopLevelItem(0, glevel_3)
             property_combo = QComboBox()
@@ -516,7 +514,7 @@ def create_topology_tree(self):
             self.TopologyTreeWidget, [topo_type]
         )
         tlevel_1.setFlags(
-            tlevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
+            tlevel_1.flags() | Qt.ItemIsUserTristate | Qt.ItemIsUserCheckable
         )
         for scenario in pd_unique(
                 self.parent.geol_coll.df.query(self.view_filter).loc[
@@ -529,7 +527,7 @@ def create_topology_tree(self):
                 tlevel_1, [scenario]
             )
             tlevel_2.setFlags(
-                tlevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
+                tlevel_2.flags() | Qt.ItemIsUserTristate | Qt.ItemIsUserCheckable
             )
             uids = self.parent.geol_coll.df.query(self.view_filter).loc[
                 (self.parent.geol_coll.df.query(self.view_filter)["topology"] == topo_type)
@@ -668,7 +666,7 @@ def update_topology_tree_added(self, uid_list=None):
                     [self.parent.geol_coll.get_uid_scenario(uid)],
                 )
                 tlevel_2.setFlags(
-                    tlevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
+                    tlevel_2.flags() | Qt.ItemIsUserTristate | Qt.ItemIsUserCheckable
                 )
                 self.TopologyTreeWidget.insertTopLevelItem(0, tlevel_2)
                 property_combo = QComboBox()
@@ -703,14 +701,14 @@ def update_topology_tree_added(self, uid_list=None):
                 [self.parent.geol_coll.get_uid_topology(uid)],
             )
             tlevel_1.setFlags(
-                tlevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
+                tlevel_1.flags() | Qt.ItemIsUserTristate | Qt.ItemIsUserCheckable
             )
             self.TopologyTreeWidget.insertTopLevelItem(0, tlevel_1)
             tlevel_2 = QTreeWidgetItem(
                 tlevel_1, [self.parent.geol_coll.get_uid_scenario(uid)]
             )
             tlevel_2.setFlags(
-                tlevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
+                tlevel_2.flags() | Qt.ItemIsUserTristate | Qt.ItemIsUserCheckable
             )
             self.TopologyTreeWidget.insertTopLevelItem(0, tlevel_2)
             property_combo = QComboBox()

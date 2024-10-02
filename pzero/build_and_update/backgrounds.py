@@ -1,5 +1,5 @@
-from PyQt5.QtWidgets import QTreeWidgetItem, QComboBox
-from PyQt5.QtCore import Qt
+from PySide6.QtWidgets import QTreeWidgetItem, QComboBox
+from PySide6.QtCore import Qt
 
 from pandas import unique as pd_unique
 
@@ -22,7 +22,7 @@ def create_backgrounds_tree(self):
             self.BackgroundsTreeWidget, [role]
         )  # self.BackgroundsTreeWidget as parent -> top level
         flevel_1.setFlags(
-            flevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
+            flevel_1.flags() | Qt.ItemIsUserTristate | Qt.ItemIsUserCheckable
         )
         features = pd_unique(
             self.parent.backgrnd_coll.df.query(self.view_filter).loc[
@@ -36,7 +36,7 @@ def create_backgrounds_tree(self):
                 flevel_1, [feature]
             )  # flevel_1 as parent -> 1st middle level
             flevel_2.setFlags(
-                flevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
+                flevel_2.flags() | Qt.ItemIsUserTristate | Qt.ItemIsUserCheckable
             )
             uids = self.parent.backgrnd_coll.df.query(self.view_filter).loc[
                 (
@@ -102,7 +102,7 @@ def create_backgrounds_topology_tree(self):
             self.BackgroundsTopologyTreeWidget, [topo_type]
         )  # self.GeologyTreeWidget as parent -> top level
         tlevel_1.setFlags(
-            tlevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
+            tlevel_1.flags() | Qt.ItemIsUserTristate | Qt.ItemIsUserCheckable
         )
 
         for role in pd_unique(
@@ -115,7 +115,7 @@ def create_backgrounds_topology_tree(self):
                 tlevel_1, [role]
             )  # tlevel_1 as parent -> middle level
             tlevel_2.setFlags(
-                tlevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
+                tlevel_2.flags() | Qt.ItemIsUserTristate | Qt.ItemIsUserCheckable
             )
             uids = self.parent.backgrnd_coll.df.query(self.view_filter).loc[
                 (
@@ -278,7 +278,7 @@ def update_backgrounds_tree_added(self, new_list=None, sec_uid=None):
                     [self.parent.backgrnd_coll.get_uid_feature(uid)],
                 )
                 flevel_2.setFlags(
-                    flevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
+                    flevel_2.flags() | Qt.ItemIsUserTristate | Qt.ItemIsUserCheckable
                 )
                 self.BackgroundsTreeWidget.insertTopLevelItem(0, flevel_2)
                 property_combo = QComboBox()
@@ -317,7 +317,7 @@ def update_backgrounds_tree_added(self, new_list=None, sec_uid=None):
                 [self.parent.backgrnd_coll.get_uid_role(uid)],
             )
             flevel_1.setFlags(
-                flevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
+                flevel_1.flags() | Qt.ItemIsUserTristate | Qt.ItemIsUserCheckable
             )
             self.BackgroundsTreeWidget.insertTopLevelItem(0, flevel_1)
             flevel_2 = QTreeWidgetItem(
@@ -325,7 +325,7 @@ def update_backgrounds_tree_added(self, new_list=None, sec_uid=None):
                 [self.parent.backgrnd_coll.get_uid_feature(uid)],
             )
             flevel_2.setFlags(
-                flevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
+                flevel_2.flags() | Qt.ItemIsUserTristate | Qt.ItemIsUserCheckable
             )
             self.BackgroundsTreeWidget.insertTopLevelItem(0, flevel_2)
             property_combo = QComboBox()
@@ -539,7 +539,7 @@ def update_backgrounds_topology_tree_added(self, new_list=None, sec_uid=None):
                     [self.parent.backgrnd_coll.get_uid_feature(uid)],
                 )
                 tlevel_2.setFlags(
-                    tlevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
+                    tlevel_2.flags() | Qt.ItemIsUserTristate | Qt.ItemIsUserCheckable
                 )
                 self.BackgroundsTopologyTreeWidget.insertTopLevelItem(0, tlevel_2)
                 property_combo = QComboBox()
@@ -577,7 +577,7 @@ def update_backgrounds_topology_tree_added(self, new_list=None, sec_uid=None):
                 [self.parent.backgrnd_coll.get_uid_topology(uid)],
             )
             tlevel_1.setFlags(
-                tlevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
+                tlevel_1.flags() | Qt.ItemIsUserTristate | Qt.ItemIsUserCheckable
             )
             self.BackgroundsTopologyTreeWidget.insertTopLevelItem(0, tlevel_1)
             tlevel_2 = QTreeWidgetItem(
@@ -585,7 +585,7 @@ def update_backgrounds_topology_tree_added(self, new_list=None, sec_uid=None):
                 [self.parent.backgrnd_coll.get_uid_feature(uid)],
             )
             tlevel_2.setFlags(
-                tlevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
+                tlevel_2.flags() | Qt.ItemIsUserTristate | Qt.ItemIsUserCheckable
             )
             self.BackgroundsTopologyTreeWidget.insertTopLevelItem(0, tlevel_2)
             property_combo = QComboBox()

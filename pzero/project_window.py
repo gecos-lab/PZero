@@ -7,8 +7,8 @@ from copy import deepcopy
 
 from datetime import datetime
 
-from PyQt5.QtCore import pyqtSignal
-from PyQt5.QtWidgets import QMainWindow, QMessageBox
+from PySide6.QtCore import Signal as pyqtSignal
+from PySide6.QtWidgets import QMainWindow, QMessageBox
 
 from pandas import DataFrame as pd_DataFrame
 from pandas import read_csv as pd_read_csv

@@ -3,7 +3,7 @@ PZero© Andrea Bistacchi"""
 
 from copy import deepcopy
 
-from PyQt5.QtWidgets import QAction
+from PySide6.QtGui import QAction
 
 from geopandas import GeoDataFrame as geodataframe
 

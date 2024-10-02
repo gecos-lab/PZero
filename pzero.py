@@ -3,9 +3,9 @@ PZero© Andrea Bistacchi"""
 
 from sys import argv, exit
 
-from PyQt5.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication
 
-from PyQt5.QtCore import Qt
+from PySide6.QtCore import Qt
 
 if hasattr(Qt, 'AA_EnableHighDpiScaling'):
     QApplication.setAttribute(Qt.AA_EnableHighDpiScaling, True)

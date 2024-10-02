@@ -1,5 +1,5 @@
-from PyQt5.QtWidgets import QTreeWidgetItem, QComboBox
-from PyQt5.QtCore import Qt
+from PySide6.QtWidgets import QTreeWidgetItem, QComboBox
+from PySide6.QtCore import Qt
 
 from pandas import unique as pd_unique
 
@@ -20,7 +20,7 @@ def create_fluids_tree(self):
             self.FluidsTreeWidget, [role]
         )  # self.FluidsTreeWidget as parent -> top level
         flevel_1.setFlags(
-            flevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
+            flevel_1.flags() | Qt.ItemIsUserTristate | Qt.ItemIsUserCheckable
         )
         features = pd_unique(
             self.parent.fluid_coll.df.query(self.view_filter).loc[
@@ -33,7 +33,7 @@ def create_fluids_tree(self):
                 flevel_1, [feature]
             )  # flevel_1 as parent -> 1st middle level
             flevel_2.setFlags(
-                flevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
+                flevel_2.flags() | Qt.ItemIsUserTristate | Qt.ItemIsUserCheckable
             )
             fluid_scenario = pd_unique(
                 self.parent.fluid_coll.df.query(self.view_filter).loc[
@@ -47,7 +47,7 @@ def create_fluids_tree(self):
                     flevel_2, [scenario]
                 )  # flevel_2 as parent -> 2nd middle level
                 flevel_3.setFlags(
-                    flevel_3.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
+                    flevel_3.flags() | Qt.ItemIsUserTristate | Qt.ItemIsUserCheckable
                 )
                 uids = self.parent.fluid_coll.df.query(self.view_filter).loc[
                     (self.parent.fluid_coll.df.query(self.view_filter)["role"] == role)
@@ -108,7 +108,7 @@ def create_fluids_topology_tree(self):
             self.FluidsTopologyTreeWidget, [topo_type]
         )  # self.GeologyTreeWidget as parent -> top level
         tlevel_1.setFlags(
-            tlevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
+            tlevel_1.flags() | Qt.ItemIsUserTristate | Qt.ItemIsUserCheckable
         )
         for scenario in pd_unique(
                 self.parent.fluid_coll.df.query(self.view_filter).loc[
@@ -120,7 +120,7 @@ def create_fluids_topology_tree(self):
                 tlevel_1, [scenario]
             )  # tlevel_1 as parent -> middle level
             tlevel_2.setFlags(
-                tlevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
+                tlevel_2.flags() | Qt.ItemIsUserTristate | Qt.ItemIsUserCheckable
             )
             uids = self.parent.fluid_coll.df.query(self.view_filter).loc[
                 (self.parent.fluid_coll.df.query(self.view_filter)["topology"] == topo_type)
@@ -328,7 +328,7 @@ def update_fluids_tree_added(self, new_list=None, sec_uid=None):
                             )
                             flevel_3.setFlags(
                                 flevel_3.flags()
-                                | Qt.ItemIsTristate
+                                | Qt.ItemIsUserTristate
                                 | Qt.ItemIsUserCheckable
                             )
                             self.FluidsTreeWidget.insertTopLevelItem(0, flevel_3)
@@ -376,14 +376,14 @@ def update_fluids_tree_added(self, new_list=None, sec_uid=None):
                     [self.parent.fluid_coll.get_uid_feature(uid)],
                 )
                 flevel_2.setFlags(
-                    flevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
+                    flevel_2.flags() | Qt.ItemIsUserTristate | Qt.ItemIsUserCheckable
                 )
                 self.FluidsTreeWidget.insertTopLevelItem(0, flevel_2)
                 flevel_3 = QTreeWidgetItem(
                     flevel_2, [self.parent.fluid_coll.get_uid_scenario(uid)]
                 )
                 flevel_3.setFlags(
-                    flevel_3.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
+                    flevel_3.flags() | Qt.ItemIsUserTristate | Qt.ItemIsUserCheckable
                 )
                 self.FluidsTreeWidget.insertTopLevelItem(0, flevel_3)
                 property_combo = QComboBox()
@@ -418,21 +418,21 @@ def update_fluids_tree_added(self, new_list=None, sec_uid=None):
                 [self.parent.fluid_coll.get_uid_role(uid)],
             )
             flevel_1.setFlags(
-                flevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
+                flevel_1.flags() | Qt.ItemIsUserTristate | Qt.ItemIsUserCheckable
             )
             self.FluidsTreeWidget.insertTopLevelItem(0, flevel_1)
             flevel_2 = QTreeWidgetItem(
                 flevel_1, [self.parent.fluid_coll.get_uid_feature(uid)]
             )
             flevel_2.setFlags(
-                flevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
+                flevel_2.flags() | Qt.ItemIsUserTristate | Qt.ItemIsUserCheckable
             )
             self.FluidsTreeWidget.insertTopLevelItem(0, flevel_2)
             flevel_3 = QTreeWidgetItem(
                 flevel_2, [self.parent.fluid_coll.get_uid_scenario(uid)]
             )
             flevel_3.setFlags(
-                flevel_3.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
+                flevel_3.flags() | Qt.ItemIsUserTristate | Qt.ItemIsUserCheckable
             )
             self.FluidsTreeWidget.insertTopLevelItem(0, flevel_3)
             property_combo = QComboBox()
@@ -662,7 +662,7 @@ def update_fluids_topology_tree_added(self, new_list=None, sec_uid=None):
                     [self.parent.fluid_coll.get_uid_scenario(uid)],
                 )
                 tlevel_2.setFlags(
-                    tlevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
+                    tlevel_2.flags() | Qt.ItemIsUserTristate | Qt.ItemIsUserCheckable
                 )
                 self.FluidsTopologyTreeWidget.insertTopLevelItem(0, tlevel_2)
                 property_combo = QComboBox()
@@ -699,14 +699,14 @@ def update_fluids_topology_tree_added(self, new_list=None, sec_uid=None):
                 [self.parent.fluid_coll.get_uid_topology(uid)],
             )
             tlevel_1.setFlags(
-                tlevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
+                tlevel_1.flags() | Qt.ItemIsUserTristate | Qt.ItemIsUserCheckable
             )
             self.FluidsTopologyTreeWidget.insertTopLevelItem(0, tlevel_1)
             tlevel_2 = QTreeWidgetItem(
                 tlevel_1, [self.parent.fluid_coll.get_uid_scenario(uid)]
             )
             tlevel_2.setFlags(
-                tlevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
+                tlevel_2.flags() | Qt.ItemIsUserTristate | Qt.ItemIsUserCheckable
             )
             self.FluidsTopologyTreeWidget.insertTopLevelItem(0, tlevel_2)
             property_combo = QComboBox()

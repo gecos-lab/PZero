@@ -1,5 +1,5 @@
-from PyQt5.QtWidgets import QTableWidgetItem
-from PyQt5.QtCore import Qt
+from PySide6.QtWidgets import QTableWidgetItem
+from PySide6.QtCore import Qt
 
 """Methods used to build and update the BOUNDARY table."""
 

@@ -3,8 +3,10 @@ PZero© Andrea Bistacchi"""
 
 from vtkmodules.vtkRenderingCore import vtkPropPicker
 
-from PyQt5.QtWidgets import QMainWindow, QAction, QMenu, QAbstractItemView
-from PyQt5.QtCore import Qt, pyqtSignal
+from PySide6.QtWidgets import QMainWindow, QMenu, QAbstractItemView
+from PySide6.QtGui import QAction
+from PySide6.QtCore import Qt
+from PySide6.QtCore import Signal as pyqtSignal
 
 from pzero.ui.base_view_window_ui import Ui_BaseViewWindow
 from pzero.helpers.helper_dialogs import (
@@ -1228,7 +1230,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
 
     def disable_actions(self):
         for action in self.findChildren(QAction):
-            if isinstance(action.parentWidget(), NavigationToolbar) is False:
+            if isinstance(action.parent(), NavigationToolbar) is False:
                 action.setDisabled(True)
 
     def enable_actions(self):
@@ -4580,7 +4582,7 @@ class ViewStereoplot(MPLView):
                 self.GeologyTreeWidget, [role]
             )  # self.GeologyTreeWidget as parent -> top level
             glevel_1.setFlags(
-                glevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
+                glevel_1.flags() | Qt.ItemIsUserTristate | Qt.ItemIsUserCheckable
             )
             filtered_features = self.parent.geol_coll.df.loc[
                 (self.parent.geol_coll.df["role"] == role)
@@ -4597,7 +4599,7 @@ class ViewStereoplot(MPLView):
                     glevel_1, [feature]
                 )  # glevel_1 as parent -> 1st middle level
                 glevel_2.setFlags(
-                    glevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
+                    glevel_2.flags() | Qt.ItemIsUserTristate | Qt.ItemIsUserCheckable
                 )
                 geo_scenario = pd_unique(
                     self.parent.geol_coll.df.loc[
@@ -4611,7 +4613,7 @@ class ViewStereoplot(MPLView):
                         glevel_2, [scenario]
                     )  # glevel_2 as parent -> 2nd middle level
                     glevel_3.setFlags(
-                        glevel_3.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
+                        glevel_3.flags() | Qt.ItemIsUserTristate | Qt.ItemIsUserCheckable
                     )
                     uids = self.parent.geol_coll.df.loc[
                         (self.parent.geol_coll.df["role"] == role)
@@ -4677,7 +4679,7 @@ class ViewStereoplot(MPLView):
                 self.TopologyTreeWidget, [topo_type]
             )  # self.GeologyTreeWidget as parent -> top level
             tlevel_1.setFlags(
-                tlevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
+                tlevel_1.flags() | Qt.ItemIsUserTristate | Qt.ItemIsUserCheckable
             )
             for scenario in pd_unique(
                     self.parent.geol_coll.df.loc[
@@ -4689,7 +4691,7 @@ class ViewStereoplot(MPLView):
                     tlevel_1, [scenario]
                 )  # tlevel_1 as parent -> middle level
                 tlevel_2.setFlags(
-                    tlevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
+                    tlevel_2.flags() | Qt.ItemIsUserTristate | Qt.ItemIsUserCheckable
                 )
 
                 uids = self.parent.geol_coll.df.loc[
@@ -4896,7 +4898,7 @@ class ViewStereoplot(MPLView):
                                 )
                                 glevel_3.setFlags(
                                     glevel_3.flags()
-                                    | Qt.ItemIsTristate
+                                    | Qt.ItemIsUserTristate
                                     | Qt.ItemIsUserCheckable
                                 )
                                 self.GeologyTreeWidget.insertTopLevelItem(0, glevel_3)
@@ -4942,14 +4944,14 @@ class ViewStereoplot(MPLView):
                         [self.parent.geol_coll.get_uid_feature(uid)],
                     )
                     glevel_2.setFlags(
-                        glevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
+                        glevel_2.flags() | Qt.ItemIsUserTristate | Qt.ItemIsUserCheckable
                     )
                     self.GeologyTreeWidget.insertTopLevelItem(0, glevel_2)
                     glevel_3 = QTreeWidgetItem(
                         glevel_2, [self.parent.geol_coll.get_uid_scenario(uid)]
                     )
                     glevel_3.setFlags(
-                        glevel_3.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
+                        glevel_3.flags() | Qt.ItemIsUserTristate | Qt.ItemIsUserCheckable
                     )
                     self.GeologyTreeWidget.insertTopLevelItem(0, glevel_3)
                     property_combo = QComboBox()
@@ -4982,21 +4984,21 @@ class ViewStereoplot(MPLView):
                     [self.parent.geol_coll.get_uid_role(uid)],
                 )
                 glevel_1.setFlags(
-                    glevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
+                    glevel_1.flags() | Qt.ItemIsUserTristate | Qt.ItemIsUserCheckable
                 )
                 self.GeologyTreeWidget.insertTopLevelItem(0, glevel_1)
                 glevel_2 = QTreeWidgetItem(
                     glevel_1, [self.parent.geol_coll.get_uid_feature(uid)]
                 )
                 glevel_2.setFlags(
-                    glevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
+                    glevel_2.flags() | Qt.ItemIsUserTristate | Qt.ItemIsUserCheckable
                 )
                 self.GeologyTreeWidget.insertTopLevelItem(0, glevel_2)
                 glevel_3 = QTreeWidgetItem(
                     glevel_2, [self.parent.geol_coll.get_uid_scenario(uid)]
                 )
                 glevel_3.setFlags(
-                    glevel_3.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
+                    glevel_3.flags() | Qt.ItemIsUserTristate | Qt.ItemIsUserCheckable
                 )
                 self.GeologyTreeWidget.insertTopLevelItem(0, glevel_3)
                 property_combo = QComboBox()
@@ -5120,7 +5122,7 @@ class ViewStereoplot(MPLView):
                         [self.parent.geol_coll.get_uid_scenario(uid)],
                     )
                     tlevel_2.setFlags(
-                        tlevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
+                        tlevel_2.flags() | Qt.ItemIsUserTristate | Qt.ItemIsUserCheckable
                     )
                     self.TopologyTreeWidget.insertTopLevelItem(0, tlevel_2)
                     property_combo = QComboBox()
@@ -5153,14 +5155,14 @@ class ViewStereoplot(MPLView):
                     [self.parent.geol_coll.get_uid_topology(uid)],
                 )
                 tlevel_1.setFlags(
-                    tlevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
+                    tlevel_1.flags() | Qt.ItemIsUserTristate | Qt.ItemIsUserCheckable
                 )
                 self.TopologyTreeWidget.insertTopLevelItem(0, tlevel_1)
                 tlevel_2 = QTreeWidgetItem(
                     tlevel_1, [self.parent.geol_coll.get_uid_scenario(uid)]
                 )
                 tlevel_2.setFlags(
-                    tlevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
+                    tlevel_2.flags() | Qt.ItemIsUserTristate | Qt.ItemIsUserCheckable
                 )
                 self.TopologyTreeWidget.insertTopLevelItem(0, tlevel_2)
                 property_combo = QComboBox()
@@ -5172,9 +5174,7 @@ class ViewStereoplot(MPLView):
                 name = self.parent.geol_coll.get_uid_name(uid)
                 tlevel_3 = QTreeWidgetItem(tlevel_2, [name, uid])
                 self.TopologyTreeWidget.setItemWidget(tlevel_3, 2, property_combo)
-                property_combo.currentIndexChanged.connect(
-                    lambda: self.toggle_property()
-                )
+                property_combo.currentIndexChanged.connect(lambda: toggle_property(self))
                 tlevel_3.setFlags(tlevel_3.flags() | Qt.ItemIsUserCheckable)
                 if self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]:
                     tlevel_3.setCheckState(0, Qt.Checked)

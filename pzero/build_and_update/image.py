@@ -1,5 +1,5 @@
-from PyQt5.QtWidgets import QTableWidgetItem, QComboBox
-from PyQt5.QtCore import Qt
+from PySide6.QtWidgets import QTableWidgetItem, QComboBox
+from PySide6.QtCore import Qt
 
 """Methods used to build and update the IMAGE table."""
 

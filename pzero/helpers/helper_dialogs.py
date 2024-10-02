@@ -5,9 +5,9 @@ from difflib import SequenceMatcher
 
 from os import path as os_path
 
-from PyQt5.QtCore import QEventLoop, Qt, QAbstractTableModel
-from PyQt5.QtGui import QColor
-from PyQt5.QtWidgets import (
+from PySide6.QtCore import QEventLoop, Qt, QAbstractTableModel
+from PySide6.QtGui import QColor
+from PySide6.QtWidgets import (
     QMessageBox,
     QInputDialog,
     QLineEdit,
@@ -526,7 +526,7 @@ class progress_dialog(QProgressDialog):
         *args,
         **kwargs,
     ):
-        super(QProgressDialog, self).__init__(*args, **kwargs)
+        super(progress_dialog, self).__init__(*args, **kwargs)
         self.parent = parent
         self.setWindowModality(Qt.WindowModal)
         self.setAutoReset(True)

@@ -1,5 +1,5 @@
-from PyQt5.QtWidgets import QTreeWidgetItem, QComboBox
-from PyQt5.QtCore import Qt
+from PySide6.QtWidgets import QTreeWidgetItem, QComboBox
+from PySide6.QtCore import Qt
 
 from pandas import unique as pd_unique
 
@@ -24,7 +24,7 @@ def create_well_tree(self):
             self.WellsTreeWidget, [locid]
         )  # self.GeologyTreeWidget as parent -> top level
         tlevel_1.setFlags(
-            tlevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
+            tlevel_1.flags() | Qt.ItemIsUserTristate | Qt.ItemIsUserCheckable
         )
 
         property_combo = QComboBox()
@@ -41,7 +41,7 @@ def create_well_tree(self):
             tlevel_1, ["Trace", uid]
         )  # tlevel_1 as parent -> middle level
         tlevel_2_trace.setFlags(
-            tlevel_2_trace.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
+            tlevel_2_trace.flags() | Qt.ItemIsUserTristate | Qt.ItemIsUserCheckable
         )
 
         property_combo = QComboBox()
@@ -70,7 +70,7 @@ def create_well_tree(self):
     # ======================================= MARKER =======================================
 
     # tlevel_2_mark = QTreeWidgetItem(tlevel_1, ['Markers', uid])  # tlevel_1 as parent -> middle level
-    # tlevel_2_mark.setFlags(tlevel_2_mark.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
+    # tlevel_2_mark.setFlags(tlevel_2_mark.flags() | Qt.ItemIsUserTristate | Qt.ItemIsUserCheckable)
 
     # property_combo = QComboBox()
     # property_combo.uid = uid
@@ -90,7 +90,7 @@ def create_well_tree(self):
     # ======================================= ANNOTATIONS =======================================
 
     # tlevel_2_mark = QTreeWidgetItem(tlevel_1, ['Annotations', uid])  # tlevel_1 as parent -> middle level
-    # tlevel_2_mark.setFlags(tlevel_2_mark.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
+    # tlevel_2_mark.setFlags(tlevel_2_mark.flags() | Qt.ItemIsUserTristate | Qt.ItemIsUserCheckable)
 
     # property_combo = QComboBox()
     # property_combo.uid = uid
@@ -142,7 +142,7 @@ def update_well_tree_added(self, new_list=None):
                     )[0]
                 )
                 glevel_2.setFlags(
-                    glevel_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
+                    glevel_2.flags() | Qt.ItemIsUserTristate | Qt.ItemIsUserCheckable
                 )
                 self.WellsTreeWidget.insertTopLevelItem(0, glevel_2)
 
@@ -183,7 +183,7 @@ def update_well_tree_added(self, new_list=None):
                 [self.parent.well_coll.get_uid_well_locid(uid)],
             )  # self.GeologyTreeWidget as parent -> top level
             tlevel_1.setFlags(
-                tlevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
+                tlevel_1.flags() | Qt.ItemIsUserTristate | Qt.ItemIsUserCheckable
             )
 
             property_combo = QComboBox()
@@ -202,7 +202,7 @@ def update_well_tree_added(self, new_list=None):
                 tlevel_1, ["Trace", uid]
             )  # tlevel_1 as parent -> middle level
             tlevel_2_trace.setFlags(
-                tlevel_2_trace.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
+                tlevel_2_trace.flags() | Qt.ItemIsUserTristate | Qt.ItemIsUserCheckable
             )
 
             property_combo = QComboBox()

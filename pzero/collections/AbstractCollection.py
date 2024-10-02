@@ -1,7 +1,9 @@
 """AbstractCollection.py
 PZero© Andrea Bistacchi"""
 
-from PyQt5.QtCore import QAbstractTableModel, Qt, QVariant, QSortFilterProxyModel, QObject, pyqtSignal
+# from PySide6.QtCore import QAbstractTableModel, Qt, QVariant, QSortFilterProxyModel, QObject, pyqtSignal
+from PySide6.QtCore import QAbstractTableModel, Qt, QSortFilterProxyModel, QObject
+from PySide6.QtCore import Signal as pyqtSignal
 
 from abc import abstractmethod, ABC
 
@@ -467,4 +469,5 @@ class BaseTableModel(QAbstractTableModel):
                 # a list of uids is emitted, even if the entity is just one
                 self.collection.signals.metadata_modified.emit([uid])
                 return True
-        return QVariant()
+        # return QVariant()
+        return None

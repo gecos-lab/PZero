@@ -1,7 +1,7 @@
 """legend_manager.py
 PZero© Andrea Bistacchi"""
 
-from PyQt5.QtWidgets import (
+from PySide6.QtWidgets import (
     QTreeWidgetItem,
     QColorDialog,
     QPushButton,
@@ -9,8 +9,8 @@ from PyQt5.QtWidgets import (
     QDoubleSpinBox,
     QComboBox,
 )
-from PyQt5.QtGui import QColor
-from PyQt5.QtCore import QObject
+from PySide6.QtGui import QColor
+from PySide6.QtCore import QObject
 
 from pandas import unique as pd_unique
 from math import isnan

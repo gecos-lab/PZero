@@ -5,7 +5,7 @@ from uuid import uuid4
 
 from vedo import load as vd_load
 
-from PyQt5.QtWidgets import QFileDialog
+from PySide6.QtWidgets import QFileDialog
 
 from pzero.collections.geological_collection import GeologicalCollection
 from pzero.entities_factory import VertexSet, PolyLine, TriSurf, TetraSolid

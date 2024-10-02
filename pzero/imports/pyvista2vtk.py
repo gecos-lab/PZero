@@ -5,7 +5,7 @@ from uuid import uuid4
 
 from pyvista import read as pv_read
 
-from PyQt5.QtWidgets import QFileDialog
+from PySide6.QtWidgets import QFileDialog
 
 from pzero.entities_factory import VertexSet, PolyLine, TriSurf, TetraSolid
 

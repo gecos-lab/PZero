@@ -1,5 +1,5 @@
-from PyQt5.QtWidgets import QTreeWidgetItem
-from PyQt5.QtCore import Qt
+from PySide6.QtWidgets import QTreeWidgetItem
+from PySide6.QtCore import Qt
 
 """Methods used to build and update the X-SECTION table."""
 
@@ -16,7 +16,7 @@ def create_xsections_tree(self):
         self.XSectionTreeWidget, name_xslevel1
     )
     xslevel_1.setFlags(
-        xslevel_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable
+        xslevel_1.flags() | Qt.ItemIsUserTristate | Qt.ItemIsUserCheckable
     )
     # The following manages the exception when a X sections wants to show itself.
     try:
