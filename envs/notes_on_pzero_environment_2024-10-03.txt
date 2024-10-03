@@ -1,0 +1,71 @@
+===================================
+ Notes on pzero conda environments
+
+THIS DOCUMENT MUST BE KEPT UPDATED!
+===================================
+
+_______________________
+Last updated 2024-10-03
+
+
+1) To build a clean pzero environment, start updating the conda base environment:
+
+conda activate base
+conda update -n base -c conda-forge conda
+conda update --all
+
+(sometimes repeating this more than once helps having a completely up-to-date base environment)
+
+3) Then remove any old pzero environment, e.g.:
+
+conda remove --name pzero --all
+
+4) Create a new empty environment. Here we propose to create two environments, one with PyQt5 (pzero5) and another one with PySide6 (pzero6). In the future probably we will keep just one.
+
+conda create -n pzero5
+conda activate pzero5
+
+and/or
+
+conda create -n pzero6
+conda activate pzero6
+
+4) Activate channels (this must be done for each new environment):
+
+conda config --env --add channels conda-forge
+conda config --env --add channels loop3d
+conda config --env --add channels anaconda
+
+5) Install packages:
+
+-> pzero5
+
+conda install blackd>=23.7.0 cmocean colorcet ezdxf>=1.0.3 geopandas>=0.11.1 laspy>=2.3.0 loop3d::loopstructural>=v1.6.1 lxml>=5.3.0 mplstereonet>=0.6.3 pandas=1.5.3 anaconda::pyqt>=5.15.10 pyinstaller>=6 pytest>=7 python>=3.9 pyvista>=0.44.1 pyvistaqt>=0.11.1 qtpy rasterio>=1.3.6 seaborn shapely>=2.0.6 sphinx>=5 sphinx_rtd_theme>=2 vedo vtk>=9.3.1 vtk-base>=9.3.1 xarray>=2023.1.0
+
+-> pzero6
+
+conda install blackd>=23.7.0 cmocean colorcet ezdxf>=1.0.3 geopandas>=0.11.1 laspy>=2.3.0 loop3d::loopstructural>=v1.6.1 lxml>=5.3.0 mplstereonet>=0.6.3 pandas=1.5.3 pyinstaller>=6 conda-forge::pyside6>=6.7.2 pytest>=7 python>=3.9 pyvista>=0.44.1 pyvistaqt>=0.11.1 qtpy rasterio>=1.3.6 seaborn shapely>=2.0.6 sphinx>=5 sphinx_rtd_theme>=2 vedo vtk>=9.3.1 vtk-base>=9.3.1 xarray>=2023.1.0
+
+The logic in any case is to have the most recent versions as possible, or at least well proven ones (>=), with excetions (strictly =) motivated in the issues.
+
+Note that updating from shapely=1.8.5 to >=2.0.6 was mandatory to be able to solve the environment. We still keep pandas=1.5.3 (instead of >=2) because changing this will require some major refactoring.
+
+Additional modules that where explicitly required in the past, but apparently not now, are:
+
+openpyxl>=3.1.5 pillow>=9.5.0 pythreejs>=2.4.2
+
+6) Finally record the environment in .yml files:
+
+-> pzero5
+
+conda env export --from-history > "./PZero/envs/pzero5-env-from-history.yml"
+conda env export > "./PZero/envs/pzero5-env.yml"
+
+-> pzero6
+
+conda env export --from-history > "./PZero/envs/pzero6-env-from-history.yml"
+conda env export > "./PZero/envs/pzero6-env.yml"
+
+Thes allow a quick installation with:
+
+conda env create -n pzero -f ./PZero/envs/<your selected environment>.yml
