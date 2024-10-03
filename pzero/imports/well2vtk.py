@@ -321,7 +321,7 @@ def well2vtk(self, path=None):
     #     # curr_obj_attributes['properties_types'] = []
     #     # curr_obj_attributes['vtk_obj'] = well_line
 
-    #     # marker_obj_attributes = deepcopy(GeologicalCollection.entity_dict)
+    #     # marker_obj_attributes = deepcopy(GeologicalCollection().entity_dict)
     #     # marker_obj_attributes['uid'] = str(uuid4())
     #     # marker_obj_attributes['name'] = f'{data.loc[i,"GeologyCode"]}_marker'
     #     # marker_obj_attributes["topology"] = "VertexSet"

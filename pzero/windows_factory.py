@@ -2601,7 +2601,7 @@ class View3D(VTKView):
                 att_point.get_point_data_shape(i)[1] for i in properties_name
             ]
 
-            curr_obj_dict = deepcopy(GeologicalCollection.entity_dict)
+            curr_obj_dict = deepcopy(GeologicalCollection().entity_dict)
             curr_obj_dict["uid"] = str(uuid4())
             curr_obj_dict["name"] = set_opt["name"]
             curr_obj_dict["role"] = set_opt["role"]

@@ -51,7 +51,7 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
             for row in range(gdf.shape[0]):
                 # print("____ROW: ", row)
                 # print("geometry type: ", gdf.geom_type[row])
-                curr_obj_dict = deepcopy(GeologicalCollection.entity_dict)
+                curr_obj_dict = deepcopy(GeologicalCollection().entity_dict)
                 # if gdf.is_valid[row] and not gdf.is_empty[row]:
                 # try:
                 if "name" in column_names:
@@ -65,29 +65,20 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
                 curr_obj_dict["topology"] = "PolyLine"
                 curr_obj_dict["vtk_obj"] = PolyLine()
                 if gdf.geom_type[row] == "LineString":
-                    # to be solved with https://shapely.readthedocs.io/en/stable/migration.html ???
-                    outXYZ = np_array(gdf.loc[row].geometry)  # !!This does not work with shapely 2.0!!
-                    # print("outXYZ:\n", outXYZ)
+                    outXYZ = np_array(list(gdf.loc[row].geometry.coords), dtype=float)
                     if np_shape(outXYZ)[1] == 2:
                         outZ = np_zeros((np_shape(outXYZ)[0], 1))
-                        # print("outZ:\n", outZ)
                         outXYZ = np_column_stack((outXYZ, outZ))
-                    # print("outXYZ:\n", outXYZ)
                     curr_obj_dict["vtk_obj"].points = outXYZ
                     curr_obj_dict["vtk_obj"].auto_cells()
                 elif gdf.geom_type[row] == "MultiLineString":
-                    # to be solved with https://shapely.readthedocs.io/en/stable/migration.html ???
-                    outXYZ_list = np_array(gdf.loc[row].geometry)
+                    outXYZ_list = [np_array(list(line.coords), dtype=float) for line in gdf.loc[row].geometry.geoms]
                     vtkappend = vtkAppendPolyData()
                     for outXYZ in outXYZ_list:
                         temp_vtk = PolyLine()
-                        # print("outXYZ:\n", outXYZ)
-                        # print("np_shape(outXYZ):\n", np_shape(outXYZ))
                         if np_shape(outXYZ)[1] == 2:
                             outZ = np_zeros((np_shape(outXYZ)[0], 1))
-                            # print("outZ:\n", outZ)
                             outXYZ = np_column_stack((outXYZ, outZ))
-                        # print("outXYZ:\n", outXYZ)
                         temp_vtk.points = outXYZ
                         temp_vtk.auto_cells()
                         vtkappend.AddInputData(temp_vtk)
@@ -107,7 +98,7 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
                 gdf_index = gdf.set_index("feature")
                 feat_list = set(gdf_index.index)
                 for i in feat_list:
-                    curr_obj_dict = deepcopy(GeologicalCollection.entity_dict)
+                    curr_obj_dict = deepcopy(GeologicalCollection().entity_dict)
                     if "dip" in gdf.columns:
                         vtk_obj = Attitude()
                     else:
@@ -123,7 +114,7 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
                     curr_obj_dict["topology"] = "VertexSet"
                     curr_obj_dict["vtk_obj"] = vtk_obj
                     # Add a coordinate column in the gdf_index dataframe
-                    gdf_index["coords"] = gdf_index.geometry.apply(lambda x: np_array(x))
+                    gdf_index["coords"] = gdf_index.geometry.apply(lambda x: np_array(x.coords[0], dtype=float))
                     outXYZ = np_array([p for p in gdf_index.loc[i, "coords"]])
                     if outXYZ.ndim == 1:
                         outXYZ = outXYZ.reshape(-1, np_shape(outXYZ)[0])
@@ -185,7 +176,8 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
             for row in range(gdf.shape[0]):
                 # print("____ROW: ", row)
                 # print("geometry type: ", gdf.geom_type[row])
-                curr_obj_dict = deepcopy(FluidCollection.entity_dict)
+                # curr_obj_dict = deepcopy(self.fluid_coll.entity_dict)
+                curr_obj_dict = deepcopy(FluidCollection().entity_dict)
                 # if gdf.is_valid[row] and not gdf.is_empty[row]:
                 # try:
                 if "name" in column_names:
@@ -200,7 +192,7 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
                 curr_obj_dict["vtk_obj"] = PolyLine()
 
                 if gdf.geom_type[row] == "LineString":
-                    outXYZ = np_array(gdf.loc[row].geometry)
+                    outXYZ = np_array(list(gdf.loc[row].geometry.coords), dtype=float)
                     if np_shape(outXYZ)[1] == 2:
                         outZ = np_zeros((np_shape(outXYZ)[0], 1))
                         # print("outZ:\n", outZ)
@@ -209,7 +201,7 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
                     curr_obj_dict["vtk_obj"].points = outXYZ
                     curr_obj_dict["vtk_obj"].auto_cells()
                 elif gdf.geom_type[row] == "MultiLineString":
-                    outXYZ_list = np_array(gdf.loc[row].geometry)
+                    outXYZ_list = [np_array(list(line.coords), dtype=float) for line in gdf.loc[row].geometry.geoms]
                     vtkappend = vtkAppendPolyData()
                     for outXYZ in outXYZ_list:
                         temp_vtk = PolyLine()
@@ -237,7 +229,7 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
                 gdf_index = gdf.set_index("feature")
                 feat_list = set(gdf_index.index)
                 for i in feat_list:
-                    curr_obj_dict = deepcopy(FluidCollection.entity_dict)
+                    curr_obj_dict = deepcopy(FluidCollection().entity_dict)
                     if "dip" in gdf.columns:
                         vtk_obj = Attitude()
                     else:
@@ -253,7 +245,7 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
                     curr_obj_dict["topology"] = "VertexSet"
                     curr_obj_dict["vtk_obj"] = vtk_obj
                     # Add a coordinate column in the gdf_index dataframe
-                    gdf_index["coords"] = gdf_index.geometry.apply(lambda x: np_array(x))
+                    gdf_index["coords"] = gdf_index.geometry.apply(lambda x: np_array(x.coords[0], dtype=float))
                     outXYZ = np_array([p for p in gdf_index.loc[i, "coords"]])
                     if outXYZ.ndim == 1:
                         outXYZ = outXYZ.reshape(-1, np_shape(outXYZ)[0])
@@ -299,7 +291,8 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
             for row in range(gdf.shape[0]):
                 # print("____ROW: ", row)
                 # print("geometry type: ", gdf.geom_type[row])
-                curr_obj_dict = deepcopy(BackgroundCollection.entity_dict)
+                # curr_obj_dict = deepcopy(self.backgrnd_coll.entity_dict)
+                curr_obj_dict = deepcopy(BackgroundCollection().entity_dict)
                 # if gdf.is_valid[row] and not gdf.is_empty[row]:
                 # try:
                 if "name" in column_names:
@@ -311,7 +304,7 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
                 curr_obj_dict["topology"] = "PolyLine"
                 curr_obj_dict["vtk_obj"] = PolyLine()
                 if gdf.geom_type[row] == "LineString":
-                    outXYZ = np_array(gdf.loc[row].geometry)
+                    outXYZ = np_array(list(gdf.loc[row].geometry.coords), dtype=float)
                     # print("outXYZ:\n", outXYZ)
                     if np_shape(outXYZ)[1] == 2:
                         outZ = np_zeros((np_shape(outXYZ)[0], 1))
@@ -322,7 +315,7 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
                     curr_obj_dict["vtk_obj"].auto_cells()
                     curr_obj_dict["vtk_obj"].set_field_data(name="name", data=gdf["label"].values)
                 elif gdf.geom_type[row] == "MultiLineString":
-                    outXYZ_list = np_array(gdf.loc[row].geometry)
+                    outXYZ_list = [np_array(line.coords) for line in gdf.loc[row].geometry.geoms]
                     vtkappend = vtkAppendPolyData()
                     for outXYZ in outXYZ_list:
                         temp_vtk = PolyLine()
@@ -358,7 +351,7 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
                 gdf_index = gdf.set_index("feature")
                 feat_list = set(gdf_index.index)
                 for i in feat_list:
-                    curr_obj_dict = deepcopy(BackgroundCollection.entity_dict)
+                    curr_obj_dict = deepcopy(BackgroundCollection().entity_dict)
                     vtk_obj = VertexSet()
                     if "name" in column_names:
                         curr_obj_dict["name"] = pd_series(gdf_index.loc[i, "name"])[0]
@@ -369,7 +362,7 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
                     curr_obj_dict["topology"] = "VertexSet"
                     curr_obj_dict["vtk_obj"] = vtk_obj
                     # Add a coordinate column in the gdf_index dataframe
-                    gdf_index["coords"] = gdf_index.geometry.apply(lambda x: np_array(x))
+                    gdf_index["coords"] = gdf_index.geometry.apply(lambda x: np_array(x.coords[0], dtype=float))
                     outXYZ = np_array([p for p in gdf_index.loc[i, "coords"]])
                     if outXYZ.ndim == 1:
                         outXYZ = outXYZ.reshape(-1, np_shape(outXYZ)[0])
