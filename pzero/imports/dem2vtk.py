@@ -24,7 +24,6 @@ def dem2vtk(self=None, in_file_name=None, collection=None):
     data = rioxarray.open_rasterio(in_file_name)
     # Alternatively, you can use:
     # data = rioxarray.open_rasterio(in_file_name)
-
     # Access the raster data
     values = data.values[0]  # Assuming single-band raster
     nans = values == data.rio.nodata
