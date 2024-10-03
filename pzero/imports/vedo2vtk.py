@@ -86,7 +86,7 @@ def vedo2vtk(self):
             curr_obj.type = "TetraSolid"
             curr_obj.__class__ = TetraSolid
         self.e_c.add_entity_from_dict(
-            vtk_entity=curr_obj, entity_dict=deepcopy(GeologicalCollection.entity_dict)
+            vtk_entity=curr_obj, entity_dict=deepcopy(GeologicalCollection().entity_dict)
         )  # to APPROPRIATE collection_________________
 
         """Clean"""

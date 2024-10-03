@@ -169,20 +169,20 @@ class Legend(QObject):
             other_line_thick_spn.other_collection = (
                 other_collection  # this is to pass these values to the update function below
             )
-            other_line_thick_spn.setValue(line_thick)
+            other_line_thick_spn.setValue(int(line_thick))
             "other_point_size_spn > QSpinBox used to select point size"
             other_point_size_spn = QSpinBox()
             other_point_size_spn.other_collection = (
                 other_collection  # this is to pass these values to the update function below
             )
-            other_point_size_spn.setValue(point_size)
+            other_point_size_spn.setValue(int(point_size))
             "other_opacity_spn > QSpinBox used to select opacity"
             other_opacity_spn = QSpinBox()
             other_opacity_spn.setMaximum(100)
             other_opacity_spn.other_collection = (
                 other_collection  # this is to pass these values to the update function below
             )
-            other_opacity_spn.setValue(opacity)
+            other_opacity_spn.setValue(int(opacity))
             "IN THE FUTURE add QComboBox() here to show/hide mesh edges___________"
             "IN THE FUTURE add QComboBox() here to show/hide points___________"
             "Create items"
@@ -302,7 +302,7 @@ class Legend(QObject):
                     geol_line_thick_spn.role = role  # this is to pass these values to the update function below
                     geol_line_thick_spn.feature = feature
                     geol_line_thick_spn.scenario = scenario
-                    geol_line_thick_spn.setValue(line_thick)
+                    geol_line_thick_spn.setValue(int(line_thick))
                     "geol_point_size_spn > QSpinBox used to select point size"
                     geol_point_size_spn = QSpinBox()
                     geol_point_size_spn.role = role  # this is to pass these values to the update function below
@@ -310,7 +310,7 @@ class Legend(QObject):
                     geol_point_size_spn.scenario = scenario
                     if isnan(point_size):
                         point_size = 0
-                    geol_point_size_spn.setValue(point_size)
+                    geol_point_size_spn.setValue(int(point_size))
                     "geol_line_opacity_spn > QSpinBox used to select opacity"
                     geol_opacity_spn = QSpinBox()
                     geol_opacity_spn.role = role  # this is to pass these values to the update function below

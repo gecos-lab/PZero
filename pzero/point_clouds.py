@@ -420,7 +420,7 @@ def facets_pc(self):
     properties_name = facets.point_data_keys
     properties_components = [facets.get_point_data_shape(i)[1] for i in properties_name]
 
-    curr_obj_dict = deepcopy(GeologicalCollection.entity_dict)
+    curr_obj_dict = deepcopy(GeologicalCollection().entity_dict)
     curr_obj_dict["uid"] = str(uuid4())
     curr_obj_dict["name"] = f"{name}facets"
     curr_obj_dict["role"] = "undef"
@@ -537,7 +537,7 @@ def auto_pick(self):
     properties_name = points.point_data_keys
     properties_components = [points.get_point_data_shape(i)[1] for i in properties_name]
 
-    curr_obj_dict = deepcopy(GeologicalCollection.entity_dict)
+    curr_obj_dict = deepcopy(GeologicalCollection().entity_dict)
     curr_obj_dict["uid"] = str(uuid4())
     curr_obj_dict["name"] = f"{name}auto_pick"
     curr_obj_dict["role"] = "undef"
