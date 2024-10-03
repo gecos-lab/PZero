@@ -7,7 +7,7 @@ from uuid import uuid4
 
 from copy import deepcopy
 
-from xarray import open_dataset as xr_open_dataset
+from rioxarray import open_rasterio as rx_open_rasterio
 
 from numpy import any as np_any
 from numpy import asarray as np_asarray
@@ -57,11 +57,11 @@ def dem2vtk(self=None, in_file_name=None, collection=None):
     """Read raster file format (geotiff) with xarray and rasterio and create DEM structured grid.
     Helpful: http://xarray.pydata.org/en/stable/auto_gallery/plot_rasterio.html
     https://github.com/pyvista/pyvista-support/issues/205, thanks to Bane Sullivan"""
-    data = xr_open_dataset(in_file_name, engine='rasterio')
-    values = np_asarray(data)
-    nans = values == data.nodatavals
-    if np_any(nans):
-        values[nans] = np_nan
+    data = rx_open_rasterio(in_file_name)
+    values = data.values[0]
+    # nans = values == data.nodatavals
+    # if np_any(nans):
+    #     values[nans] = np_nan
     xx, yy = np_meshgrid(data["x"], data["y"])
     zz = values.reshape(xx.shape)
     """Convert to DEM() instance."""
@@ -72,7 +72,7 @@ def dem2vtk(self=None, in_file_name=None, collection=None):
     curr_obj.Modified()
     """Create dictionary."""
     if collection == "DEMs and DOMs":
-        curr_obj_attributes = deepcopy(DomCollection.entity_dict)
+        curr_obj_attributes = deepcopy(DomCollection().entity_dict)
         curr_obj_attributes["uid"] = str(uuid4())
         curr_obj_attributes["name"] = os.path.basename(in_file_name)
         curr_obj_attributes["topology"] = "DEM"
