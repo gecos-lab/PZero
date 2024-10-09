@@ -319,14 +319,14 @@ class Legend(QObject):
                     geol_opacity_spn.setMaximum(100)
                     if isnan(opacity):
                         opacity = 0
-                    geol_opacity_spn.setValue(opacity)
+                    geol_opacity_spn.setValue(int(opacity))
                     "geol_time_spn > QDoubleSpinBox used to give relative geological time"
                     geol_time_spn = QDoubleSpinBox()
                     geol_time_spn.setMinimum(-999999.0)  # no negative relative ages
                     geol_time_spn.role = role  # this is to pass these values to the update function below
                     geol_time_spn.feature = feature
                     geol_time_spn.scenario = scenario
-                    geol_time_spn.setValue(time_value)
+                    geol_time_spn.setValue(int(time_value))
                     # "geol_time_combo > QComboBox used to define relative geological time"
                     # geol_time_combo = QComboBox()
                     # geol_time_combo.setEditable(True)
@@ -432,12 +432,12 @@ class Legend(QObject):
             well_line_thick_spn.locid = (
                 locid  # this is to pass these values to the update function below
             )
-            well_line_thick_spn.setValue(line_thick)
+            well_line_thick_spn.setValue(int(line_thick))
             "well_line_opacity_spn > QSpinBox used to select line thickness"
             well_line_opacity_spn = QSpinBox()
             well_line_opacity_spn.locid = locid
             well_line_opacity_spn.setMaximum(100)
-            well_line_opacity_spn.setValue(opacity)
+            well_line_opacity_spn.setValue(int(opacity))
 
             "Create items"
             parent.LegendTreeWidget.setItemWidget(llevel_2, 4, well_color_dialog_btn)
@@ -541,27 +541,27 @@ class Legend(QObject):
                     fluid_line_thick_spn.role = role  # this is to pass these values to the update function below
                     fluid_line_thick_spn.feature = feature
                     fluid_line_thick_spn.scenario = scenario
-                    fluid_line_thick_spn.setValue(line_thick)
+                    fluid_line_thick_spn.setValue(int(line_thick))
                     "fluid_point_size_spn > QSpinBox used to select point size"
                     fluid_point_size_spn = QSpinBox()
                     fluid_point_size_spn.role = role  # this is to pass these values to the update function below
                     fluid_point_size_spn.feature = feature
                     fluid_point_size_spn.scenario = scenario
-                    fluid_point_size_spn.setValue(point_size)
+                    fluid_point_size_spn.setValue(int(point_size))
                     "fluid_opacity_spn > QSpinBox used to select line thickness"
                     fluid_opacity_spn = QSpinBox()
                     fluid_opacity_spn.role = role  # this is to pass these values to the update function below
                     fluid_opacity_spn.feature = feature
                     fluid_opacity_spn.scenario = scenario
                     fluid_opacity_spn.setMaximum(100)
-                    fluid_opacity_spn.setValue(opacity)
+                    fluid_opacity_spn.setValue(int(opacity))
                     "geol_time_spn > QDoubleSpinBox used to give relative geological time"
                     fluid_time_spn = QDoubleSpinBox()
                     fluid_time_spn.setMinimum(-999999.0)  # no negative relative ages
                     fluid_time_spn.role = role  # this is to pass these values to the update function below
                     fluid_time_spn.feature = feature
                     fluid_time_spn.scenario = scenario
-                    fluid_time_spn.setValue(time_value)
+                    fluid_time_spn.setValue(int(time_value))
                     # "geol_time_combo > QComboBox used to define relative geological time"
                     # geol_time_combo = QComboBox()
                     # geol_time_combo.setEditable(True)
@@ -675,19 +675,19 @@ class Legend(QObject):
                 background_line_thick_spn.role = role  # this is to pass these values to the update function below
                 background_line_thick_spn.feature = feature
 
-                background_line_thick_spn.setValue(line_thick)
+                background_line_thick_spn.setValue(int(line_thick))
 
                 "background_point_size_spn > QSpinBox used to select line thickness"
                 background_point_size_spn = QSpinBox()
                 background_point_size_spn.role = role  # this is to pass these values to the update function below
                 background_point_size_spn.feature = feature
-                background_point_size_spn.setValue(point_size)
+                background_point_size_spn.setValue(int(point_size))
                 "background_opacity_spn > QSpinBox used to select line thickness"
                 background_opacity_spn = QSpinBox()
                 background_opacity_spn.role = role  # this is to pass these values to the update function below
                 background_opacity_spn.feature = feature
                 background_opacity_spn.setMaximum(100)
-                background_opacity_spn.setValue(opacity)
+                background_opacity_spn.setValue(int(opacity))
 
                 "Create items"
                 # llevel_3 = QTreeWidgetItem(llevel_2, [scenario, str(color_R), str(color_G), str(color_B)])  # llevel_2 as parent -> 3rd level

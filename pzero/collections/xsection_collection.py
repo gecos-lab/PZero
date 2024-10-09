@@ -32,7 +32,6 @@ from pzero.helpers.helper_functions import auto_sep
 from pzero.orientation_analysis import dip_directions2normals, get_dip_dir_vectors
 
 from .AbstractCollection import BaseCollection
-
 # =================================== Options to print Pandas dataframes in console ===================================
 
 pd_desired_width = 800
@@ -50,7 +49,7 @@ pd_set_option("display.max_colwidth", pd_max_colwidth)
 
 def section_from_azimuth(self, vector):
     """Create cross section from one point and azimuth."""
-    section_dict = deepcopy(self.parent.xsect_coll.section_dict)
+    section_dict = deepcopy(XSectionCollection().entity_dict)
     self.plotter.untrack_click_position(side="left")
 
     # points = np.array([vector.p1, vector.p2])
