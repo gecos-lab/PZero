@@ -108,4 +108,4 @@ def xsect_legend_opacity_modified_update_views(self, updated_list=None):
         """Case for color changed"""
         self.change_actor_opacity(uid=uid, collection="xsect_coll")
     """Re-connect signals."""
-    self.XSectionTreeWidget.itemChanged.connect(self.toggle_xsect_visibility)
+    self.XSectionTreeWidget.itemChanged.connect(self.toggle_xsection_visibility)
