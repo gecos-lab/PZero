@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 ################################################################################
-## Form generated from reading UI file 'project_windowsBmsmo.ui'
+## Form generated from reading UI file 'project_windowGlVHRP.ui'
 ##
 ## Created by: Qt User Interface Compiler version 6.7.3
 ##
@@ -18,8 +18,8 @@ from PySide6.QtGui import (QAction, QBrush, QColor, QConicalGradient,
     QTransform)
 from PySide6.QtWidgets import (QApplication, QHBoxLayout, QHeaderView, QMainWindow,
     QMenu, QMenuBar, QPlainTextEdit, QSizePolicy,
-    QStatusBar, QTabWidget, QTableView, QTableWidget,
-    QTableWidgetItem, QTreeWidget, QTreeWidgetItem, QVBoxLayout,
+    QSplitter, QStatusBar, QTabWidget, QTableView,
+    QTableWidget, QTableWidgetItem, QTreeWidget, QTreeWidgetItem,
     QWidget)
 
 class Ui_ProjectWindow(object):
@@ -139,9 +139,10 @@ class Ui_ProjectWindow(object):
         self.centralwidget.setObjectName(u"centralwidget")
         self.horizontalLayout = QHBoxLayout(self.centralwidget)
         self.horizontalLayout.setObjectName(u"horizontalLayout")
-        self.verticalLayout = QVBoxLayout()
-        self.verticalLayout.setObjectName(u"verticalLayout")
-        self.tabWidgetTopLeft = QTabWidget(self.centralwidget)
+        self.splitter = QSplitter(self.centralwidget)
+        self.splitter.setObjectName(u"splitter")
+        self.splitter.setOrientation(Qt.Orientation.Vertical)
+        self.tabWidgetTopLeft = QTabWidget(self.splitter)
         self.tabWidgetTopLeft.setObjectName(u"tabWidgetTopLeft")
         self.tabGeology = QWidget()
         self.tabGeology.setObjectName(u"tabGeology")
@@ -233,10 +234,8 @@ class Ui_ProjectWindow(object):
         self.horizontalLayout_10.addWidget(self.WellsTableView)
 
         self.tabWidgetTopLeft.addTab(self.tabWells, "")
-
-        self.verticalLayout.addWidget(self.tabWidgetTopLeft)
-
-        self.tabWidgetBottomLeft = QTabWidget(self.centralwidget)
+        self.splitter.addWidget(self.tabWidgetTopLeft)
+        self.tabWidgetBottomLeft = QTabWidget(self.splitter)
         self.tabWidgetBottomLeft.setObjectName(u"tabWidgetBottomLeft")
         self.tabLegend = QWidget()
         self.tabLegend.setObjectName(u"tabLegend")
@@ -271,11 +270,9 @@ class Ui_ProjectWindow(object):
         self.horizontalLayout_13.addWidget(self.TextTerminal)
 
         self.tabWidgetBottomLeft.addTab(self.tabTerminal, "")
+        self.splitter.addWidget(self.tabWidgetBottomLeft)
 
-        self.verticalLayout.addWidget(self.tabWidgetBottomLeft)
-
-
-        self.horizontalLayout.addLayout(self.verticalLayout)
+        self.horizontalLayout.addWidget(self.splitter)
 
         ProjectWindow.setCentralWidget(self.centralwidget)
         self.menubar = QMenuBar(ProjectWindow)

@@ -16,148 +16,147 @@
   <widget class="QWidget" name="centralwidget">
    <layout class="QHBoxLayout" name="horizontalLayout">
     <item>
-     <layout class="QVBoxLayout" name="verticalLayout">
-      <item>
-       <widget class="QTabWidget" name="tabWidgetTopLeft">
-        <property name="currentIndex">
-         <number>0</number>
-        </property>
-        <widget class="QWidget" name="tabGeology">
-         <attribute name="title">
-          <string>Geology</string>
-         </attribute>
-         <layout class="QHBoxLayout" name="horizontalLayout_2">
-          <item>
-           <widget class="QTableView" name="GeologyTableView"/>
-          </item>
-         </layout>
-        </widget>
-        <widget class="QWidget" name="tabFluids">
-         <attribute name="title">
-          <string>Fluids</string>
-         </attribute>
-         <layout class="QHBoxLayout" name="horizontalLayout_3">
-          <item>
-           <widget class="QTableView" name="FluidsTableView"/>
-          </item>
-         </layout>
-        </widget>
-        <widget class="QWidget" name="tabBackgrounds">
-         <attribute name="title">
-          <string>Background</string>
-         </attribute>
-         <layout class="QHBoxLayout" name="horizontalLayout_4">
-          <item>
-           <widget class="QTableView" name="BackgroundsTableView"/>
-          </item>
-         </layout>
-        </widget>
-        <widget class="QWidget" name="tabDOMs">
-         <attribute name="title">
-          <string>DEMs and DOMs</string>
-         </attribute>
-         <layout class="QHBoxLayout" name="horizontalLayout_5">
-          <item>
-           <widget class="QTableView" name="DOMsTableView"/>
-          </item>
-         </layout>
-        </widget>
-        <widget class="QWidget" name="tabImages">
-         <attribute name="title">
-          <string>Images</string>
-         </attribute>
-         <layout class="QHBoxLayout" name="horizontalLayout_6">
-          <item>
-           <widget class="QTableView" name="ImagesTableView"/>
-          </item>
-         </layout>
-        </widget>
-        <widget class="QWidget" name="tabMeshes">
-         <attribute name="title">
-          <string>Meshes and Grids</string>
-         </attribute>
-         <layout class="QHBoxLayout" name="horizontalLayout_7">
-          <item>
-           <widget class="QTableView" name="Meshes3DTableView"/>
-          </item>
-         </layout>
-        </widget>
-        <widget class="QWidget" name="tabBoundaries">
-         <attribute name="title">
-          <string>Boundaries</string>
-         </attribute>
-         <layout class="QHBoxLayout" name="horizontalLayout_8">
-          <item>
-           <widget class="QTableView" name="BoundariesTableView"/>
-          </item>
-         </layout>
-        </widget>
-        <widget class="QWidget" name="tabXSections">
-         <attribute name="title">
-          <string>X Sections</string>
-         </attribute>
-         <layout class="QHBoxLayout" name="horizontalLayout_9">
-          <item>
-           <widget class="QTableView" name="XSectionsTableView"/>
-          </item>
-         </layout>
-        </widget>
-        <widget class="QWidget" name="tabWells">
-         <attribute name="title">
-          <string>Wells</string>
-         </attribute>
-         <layout class="QHBoxLayout" name="horizontalLayout_10">
-          <item>
-           <widget class="QTableView" name="WellsTableView"/>
-          </item>
-         </layout>
-        </widget>
+     <widget class="QSplitter" name="splitter">
+      <property name="orientation">
+       <enum>Qt::Orientation::Vertical</enum>
+      </property>
+      <widget class="QTabWidget" name="tabWidgetTopLeft">
+       <property name="currentIndex">
+        <number>0</number>
+       </property>
+       <widget class="QWidget" name="tabGeology">
+        <attribute name="title">
+         <string>Geology</string>
+        </attribute>
+        <layout class="QHBoxLayout" name="horizontalLayout_2">
+         <item>
+          <widget class="QTableView" name="GeologyTableView"/>
+         </item>
+        </layout>
        </widget>
-      </item>
-      <item>
-       <widget class="QTabWidget" name="tabWidgetBottomLeft">
-        <property name="currentIndex">
-         <number>0</number>
-        </property>
-        <widget class="QWidget" name="tabLegend">
-         <attribute name="title">
-          <string>Legend</string>
-         </attribute>
-         <layout class="QHBoxLayout" name="horizontalLayout_11">
-          <item>
-           <widget class="QTreeWidget" name="LegendTreeWidget">
-            <column>
-             <property name="text">
-              <string notr="true">1</string>
-             </property>
-            </column>
-           </widget>
-          </item>
-         </layout>
-        </widget>
-        <widget class="QWidget" name="tabProperties">
-         <attribute name="title">
-          <string>Properties</string>
-         </attribute>
-         <layout class="QHBoxLayout" name="horizontalLayout_12">
-          <item>
-           <widget class="QTableWidget" name="PropertiesTableWidget"/>
-          </item>
-         </layout>
-        </widget>
-        <widget class="QWidget" name="tabTerminal">
-         <attribute name="title">
-          <string>Terminal</string>
-         </attribute>
-         <layout class="QHBoxLayout" name="horizontalLayout_13">
-          <item>
-           <widget class="QPlainTextEdit" name="TextTerminal"/>
-          </item>
-         </layout>
-        </widget>
+       <widget class="QWidget" name="tabFluids">
+        <attribute name="title">
+         <string>Fluids</string>
+        </attribute>
+        <layout class="QHBoxLayout" name="horizontalLayout_3">
+         <item>
+          <widget class="QTableView" name="FluidsTableView"/>
+         </item>
+        </layout>
        </widget>
-      </item>
-     </layout>
+       <widget class="QWidget" name="tabBackgrounds">
+        <attribute name="title">
+         <string>Background</string>
+        </attribute>
+        <layout class="QHBoxLayout" name="horizontalLayout_4">
+         <item>
+          <widget class="QTableView" name="BackgroundsTableView"/>
+         </item>
+        </layout>
+       </widget>
+       <widget class="QWidget" name="tabDOMs">
+        <attribute name="title">
+         <string>DEMs and DOMs</string>
+        </attribute>
+        <layout class="QHBoxLayout" name="horizontalLayout_5">
+         <item>
+          <widget class="QTableView" name="DOMsTableView"/>
+         </item>
+        </layout>
+       </widget>
+       <widget class="QWidget" name="tabImages">
+        <attribute name="title">
+         <string>Images</string>
+        </attribute>
+        <layout class="QHBoxLayout" name="horizontalLayout_6">
+         <item>
+          <widget class="QTableView" name="ImagesTableView"/>
+         </item>
+        </layout>
+       </widget>
+       <widget class="QWidget" name="tabMeshes">
+        <attribute name="title">
+         <string>Meshes and Grids</string>
+        </attribute>
+        <layout class="QHBoxLayout" name="horizontalLayout_7">
+         <item>
+          <widget class="QTableView" name="Meshes3DTableView"/>
+         </item>
+        </layout>
+       </widget>
+       <widget class="QWidget" name="tabBoundaries">
+        <attribute name="title">
+         <string>Boundaries</string>
+        </attribute>
+        <layout class="QHBoxLayout" name="horizontalLayout_8">
+         <item>
+          <widget class="QTableView" name="BoundariesTableView"/>
+         </item>
+        </layout>
+       </widget>
+       <widget class="QWidget" name="tabXSections">
+        <attribute name="title">
+         <string>X Sections</string>
+        </attribute>
+        <layout class="QHBoxLayout" name="horizontalLayout_9">
+         <item>
+          <widget class="QTableView" name="XSectionsTableView"/>
+         </item>
+        </layout>
+       </widget>
+       <widget class="QWidget" name="tabWells">
+        <attribute name="title">
+         <string>Wells</string>
+        </attribute>
+        <layout class="QHBoxLayout" name="horizontalLayout_10">
+         <item>
+          <widget class="QTableView" name="WellsTableView"/>
+         </item>
+        </layout>
+       </widget>
+      </widget>
+      <widget class="QTabWidget" name="tabWidgetBottomLeft">
+       <property name="currentIndex">
+        <number>0</number>
+       </property>
+       <widget class="QWidget" name="tabLegend">
+        <attribute name="title">
+         <string>Legend</string>
+        </attribute>
+        <layout class="QHBoxLayout" name="horizontalLayout_11">
+         <item>
+          <widget class="QTreeWidget" name="LegendTreeWidget">
+           <column>
+            <property name="text">
+             <string notr="true">1</string>
+            </property>
+           </column>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+       <widget class="QWidget" name="tabProperties">
+        <attribute name="title">
+         <string>Properties</string>
+        </attribute>
+        <layout class="QHBoxLayout" name="horizontalLayout_12">
+         <item>
+          <widget class="QTableWidget" name="PropertiesTableWidget"/>
+         </item>
+        </layout>
+       </widget>
+       <widget class="QWidget" name="tabTerminal">
+        <attribute name="title">
+         <string>Terminal</string>
+        </attribute>
+        <layout class="QHBoxLayout" name="horizontalLayout_13">
+         <item>
+          <widget class="QPlainTextEdit" name="TextTerminal"/>
+         </item>
+        </layout>
+       </widget>
+      </widget>
+     </widget>
     </item>
    </layout>
   </widget>
