@@ -149,14 +149,14 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         """File>Import actions -> slots"""
         self.actionImportGocad.triggered.connect(self.import_gocad)
         self.actionImportGocadXsection.triggered.connect(self.import_gocad_sections)
-        self.actionImportGocadBoundary.triggered.connect(self.import_gocad_boundary)
-        self.actionImportPyvista.triggered.connect(lambda: pyvista2vtk(self=self))
+        self.actionImportBoundary.triggered.connect(self.import_gocad_boundary)
+        self.actionImportPyVista.triggered.connect(lambda: pyvista2vtk(self=self))
         self.actionImportPC.triggered.connect(self.import_PC)
-        self.actionImportVedo.triggered.connect(lambda: vedo2vtk(self=self))
+        # self.actionImportVedo.triggered.connect(lambda: vedo2vtk(self=self))
         self.actionImportSHP.triggered.connect(self.import_SHP)
         self.actionImportDEM.triggered.connect(self.import_DEM)
         self.actionImportOrthoImage.triggered.connect(self.import_mapimage)
-        self.actionImportXsectionImage.triggered.connect(self.import_xsimage)
+        self.actionImportXSectionImage.triggered.connect(self.import_xsimage)
         self.actionImportWellData.triggered.connect(self.import_welldata)
         self.actionImportSEGY.triggered.connect(self.import_SEGY)
 
@@ -166,41 +166,41 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.actionExportCSV.triggered.connect(self.export_csv)
 
         """Edit actions -> slots"""
-        self.actionEditEntityRemove.triggered.connect(self.entity_remove)
+        self.actionRemoveEntity.triggered.connect(self.entity_remove)
         self.actionConnectedParts.triggered.connect(self.connected_parts)
         self.actionMergeEntities.triggered.connect(self.entities_merge)
         self.actionSplitMultipart.triggered.connect(self.split_multipart)
         self.actionDecimatePointCloud.triggered.connect(self.decimate_pc_dialog)
         """______________________________________ ADD TOOL TO PRINT VTK INFO self.TextTerminal.appendPlainText( -- vtk object as text -- )"""
-        self.actionEditTextureAdd.triggered.connect(self.texture_add)
-        self.actionEditTextureRemove.triggered.connect(self.texture_remove)
+        self.actionAddTexture.triggered.connect(self.texture_add)
+        self.actionRemoveTexture.triggered.connect(self.texture_remove)
         self.actionAddProperty.triggered.connect(self.property_add)
         self.actionRemoveProperty.triggered.connect(self.property_remove)
-        self.actionCalculateNormal.triggered.connect(self.normals_calculate)
-        self.actionCalculateLineation.triggered.connect(self.lineations_calculate)
+        self.actionCalculateNormals.triggered.connect(self.normals_calculate)
+        self.actionCalculateLineations.triggered.connect(self.lineations_calculate)
 
         self.actionBuildOctree.triggered.connect(self.build_octree)
 
         """Interpolation actions -> slots"""
-        self.actionDelaunay2DInterpolation.triggered.connect(lambda: interpolation_delaunay_2d(self))
-        self.actionPoissonInterpolation.triggered.connect(lambda: poisson_interpolation(self))
-        self.actionLoopStructuralImplicitModelling.triggered.connect(lambda: implicit_model_loop_structural(self))
+        self.actionDelaunay2D.triggered.connect(lambda: interpolation_delaunay_2d(self))
+        self.actionPoisson.triggered.connect(lambda: poisson_interpolation(self))
+        self.actionLoopStructural.triggered.connect(lambda: implicit_model_loop_structural(self))
         self.actionSurfaceSmoothing.triggered.connect(self.smooth_dialog)
         self.actionSubdivisionResampling.triggered.connect(self.subd_res_dialog)
         self.actionDecimationPro.triggered.connect(lambda: decimation_pro_resampling(self))
         self.actionDecimationQuadric.triggered.connect(lambda: decimation_quadric_resampling(self))
         self.actionExtrusion.triggered.connect(lambda: linear_extrusion(self))
         self.actionProject2DEM.triggered.connect(lambda: project_2_dem(self))
-        self.actionIntersectionXSection.triggered.connect(lambda: intersection_xs(self))
+        self.actionXSectionIntersection.triggered.connect(lambda: intersection_xs(self))
         self.actionProject2XSection.triggered.connect(lambda: project_2_xs(self))
-        self.actionSplitSurf.triggered.connect(lambda: split_surf(self))
+        self.actionSplitSurfaces.triggered.connect(lambda: split_surf(self))
         self.actionRetopologize.triggered.connect(self.retopologize_surface)
 
         """View actions -> slots"""
-        self.actionView3D.triggered.connect(lambda: View3D(parent=self))
-        self.actionViewMap.triggered.connect(lambda: ViewMap(parent=self))
-        self.actionViewPlaneXsection.triggered.connect(lambda: ViewXsection(parent=self))
-        self.actionViewStereoplot.triggered.connect(lambda: ViewStereoplot(parent=self))
+        self.action3DView.triggered.connect(lambda: View3D(parent=self))
+        self.actionMapView.triggered.connect(lambda: ViewMap(parent=self))
+        self.actionXSectionView.triggered.connect(lambda: ViewXsection(parent=self))
+        self.actionStereoplotView.triggered.connect(lambda: ViewStereoplot(parent=self))
 
         self.update_actors = True
 

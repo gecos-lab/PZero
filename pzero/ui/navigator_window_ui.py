@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 ################################################################################
-## Form generated from reading UI file 'navigator_windowTAXyBZ.ui'
+## Form generated from reading UI file 'navigator_windowtkAWbV.ui'
 ##
 ## Created by: Qt User Interface Compiler version 6.7.3
 ##

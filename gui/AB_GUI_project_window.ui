@@ -1,0 +1,1069 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>ProjectWindow</class>
+ <widget class="QMainWindow" name="ProjectWindow">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>1280</width>
+    <height>800</height>
+   </rect>
+  </property>
+  <property name="sizePolicy">
+   <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+    <horstretch>1</horstretch>
+    <verstretch>1</verstretch>
+   </sizepolicy>
+  </property>
+  <property name="minimumSize">
+   <size>
+    <width>0</width>
+    <height>0</height>
+   </size>
+  </property>
+  <property name="baseSize">
+   <size>
+    <width>1280</width>
+    <height>800</height>
+   </size>
+  </property>
+  <property name="windowTitle">
+   <string>PZero</string>
+  </property>
+  <property name="styleSheet">
+   <string notr="true"/>
+  </property>
+  <property name="locale">
+   <locale language="English" country="UnitedStates"/>
+  </property>
+  <widget class="QWidget" name="centralwidget">
+   <property name="sizePolicy">
+    <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+     <horstretch>1</horstretch>
+     <verstretch>1</verstretch>
+    </sizepolicy>
+   </property>
+   <property name="minimumSize">
+    <size>
+     <width>0</width>
+     <height>0</height>
+    </size>
+   </property>
+   <property name="baseSize">
+    <size>
+     <width>638</width>
+     <height>757</height>
+    </size>
+   </property>
+   <property name="styleSheet">
+    <string notr="true"/>
+   </property>
+   <layout class="QVBoxLayout" name="verticalLayout">
+    <item>
+     <widget class="QTabWidget" name="tabCentral">
+      <property name="sizePolicy">
+       <sizepolicy hsizetype="MinimumExpanding" vsizetype="MinimumExpanding">
+        <horstretch>1</horstretch>
+        <verstretch>1</verstretch>
+       </sizepolicy>
+      </property>
+      <property name="minimumSize">
+       <size>
+        <width>0</width>
+        <height>0</height>
+       </size>
+      </property>
+      <property name="baseSize">
+       <size>
+        <width>0</width>
+        <height>0</height>
+       </size>
+      </property>
+      <property name="currentIndex">
+       <number>0</number>
+      </property>
+      <widget class="QWidget" name="tabGeology">
+       <property name="sizePolicy">
+        <sizepolicy hsizetype="MinimumExpanding" vsizetype="MinimumExpanding">
+         <horstretch>1</horstretch>
+         <verstretch>1</verstretch>
+        </sizepolicy>
+       </property>
+       <property name="minimumSize">
+        <size>
+         <width>0</width>
+         <height>0</height>
+        </size>
+       </property>
+       <property name="baseSize">
+        <size>
+         <width>0</width>
+         <height>0</height>
+        </size>
+       </property>
+       <property name="toolTip">
+        <string>Entities</string>
+       </property>
+       <property name="accessibleName">
+        <string>Entities</string>
+       </property>
+       <attribute name="title">
+        <string>Geology</string>
+       </attribute>
+       <attribute name="toolTip">
+        <string>Geology</string>
+       </attribute>
+       <attribute name="whatsThis">
+        <string>Geology</string>
+       </attribute>
+       <layout class="QHBoxLayout" name="horizontalLayout">
+        <item>
+         <widget class="QTableView" name="GeologyTableView">
+          <property name="sizePolicy">
+           <sizepolicy hsizetype="MinimumExpanding" vsizetype="MinimumExpanding">
+            <horstretch>1</horstretch>
+            <verstretch>1</verstretch>
+           </sizepolicy>
+          </property>
+          <property name="minimumSize">
+           <size>
+            <width>0</width>
+            <height>0</height>
+           </size>
+          </property>
+          <property name="baseSize">
+           <size>
+            <width>0</width>
+            <height>0</height>
+           </size>
+          </property>
+          <property name="toolTip">
+           <string>Entities</string>
+          </property>
+          <property name="accessibleName">
+           <string>Entities</string>
+          </property>
+          <property name="sortingEnabled">
+           <bool>true</bool>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </widget>
+      <widget class="QWidget" name="tabXSections">
+       <property name="sizePolicy">
+        <sizepolicy hsizetype="MinimumExpanding" vsizetype="MinimumExpanding">
+         <horstretch>1</horstretch>
+         <verstretch>1</verstretch>
+        </sizepolicy>
+       </property>
+       <attribute name="title">
+        <string>X Sections</string>
+       </attribute>
+       <attribute name="toolTip">
+        <string>X Sections</string>
+       </attribute>
+       <attribute name="whatsThis">
+        <string>X Sections</string>
+       </attribute>
+       <layout class="QHBoxLayout" name="horizontalLayout_3">
+        <item>
+         <widget class="QTableView" name="XSectionsTableView">
+          <property name="sizePolicy">
+           <sizepolicy hsizetype="MinimumExpanding" vsizetype="MinimumExpanding">
+            <horstretch>1</horstretch>
+            <verstretch>1</verstretch>
+           </sizepolicy>
+          </property>
+          <property name="sortingEnabled">
+           <bool>true</bool>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </widget>
+      <widget class="QWidget" name="tabBoundaries">
+       <property name="sizePolicy">
+        <sizepolicy hsizetype="MinimumExpanding" vsizetype="MinimumExpanding">
+         <horstretch>1</horstretch>
+         <verstretch>1</verstretch>
+        </sizepolicy>
+       </property>
+       <attribute name="title">
+        <string>Boundaries</string>
+       </attribute>
+       <layout class="QHBoxLayout" name="horizontalLayout_4">
+        <item>
+         <widget class="QTableView" name="BoundariesTableView">
+          <property name="sizePolicy">
+           <sizepolicy hsizetype="MinimumExpanding" vsizetype="MinimumExpanding">
+            <horstretch>1</horstretch>
+            <verstretch>1</verstretch>
+           </sizepolicy>
+          </property>
+          <property name="sortingEnabled">
+           <bool>true</bool>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </widget>
+      <widget class="QWidget" name="tabMeshes3D">
+       <property name="sizePolicy">
+        <sizepolicy hsizetype="MinimumExpanding" vsizetype="MinimumExpanding">
+         <horstretch>1</horstretch>
+         <verstretch>1</verstretch>
+        </sizepolicy>
+       </property>
+       <attribute name="title">
+        <string>3D Meshes and Grids</string>
+       </attribute>
+       <attribute name="toolTip">
+        <string>3D Meshes and Grids</string>
+       </attribute>
+       <attribute name="whatsThis">
+        <string>3D Meshes and Grids</string>
+       </attribute>
+       <layout class="QHBoxLayout" name="horizontalLayout_5">
+        <item>
+         <widget class="QTableView" name="Meshes3DTableView">
+          <property name="sizePolicy">
+           <sizepolicy hsizetype="MinimumExpanding" vsizetype="MinimumExpanding">
+            <horstretch>1</horstretch>
+            <verstretch>1</verstretch>
+           </sizepolicy>
+          </property>
+          <property name="sortingEnabled">
+           <bool>true</bool>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </widget>
+      <widget class="QWidget" name="tabDOMs">
+       <property name="sizePolicy">
+        <sizepolicy hsizetype="MinimumExpanding" vsizetype="MinimumExpanding">
+         <horstretch>1</horstretch>
+         <verstretch>1</verstretch>
+        </sizepolicy>
+       </property>
+       <attribute name="title">
+        <string>DEMs and DOMs</string>
+       </attribute>
+       <attribute name="toolTip">
+        <string>DEMs and DOMs</string>
+       </attribute>
+       <attribute name="whatsThis">
+        <string>DEMs and DOMs</string>
+       </attribute>
+       <layout class="QHBoxLayout" name="horizontalLayout_6">
+        <item>
+         <widget class="QTableView" name="DOMsTableView">
+          <property name="sizePolicy">
+           <sizepolicy hsizetype="MinimumExpanding" vsizetype="MinimumExpanding">
+            <horstretch>1</horstretch>
+            <verstretch>1</verstretch>
+           </sizepolicy>
+          </property>
+          <property name="sortingEnabled">
+           <bool>true</bool>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </widget>
+      <widget class="QWidget" name="tabImages">
+       <property name="sizePolicy">
+        <sizepolicy hsizetype="MinimumExpanding" vsizetype="MinimumExpanding">
+         <horstretch>1</horstretch>
+         <verstretch>1</verstretch>
+        </sizepolicy>
+       </property>
+       <attribute name="title">
+        <string>Images</string>
+       </attribute>
+       <attribute name="toolTip">
+        <string>Images</string>
+       </attribute>
+       <attribute name="whatsThis">
+        <string>Images</string>
+       </attribute>
+       <layout class="QHBoxLayout" name="horizontalLayout_7">
+        <item>
+         <widget class="QTableView" name="ImagesTableView">
+          <property name="sizePolicy">
+           <sizepolicy hsizetype="MinimumExpanding" vsizetype="MinimumExpanding">
+            <horstretch>1</horstretch>
+            <verstretch>1</verstretch>
+           </sizepolicy>
+          </property>
+          <property name="sortingEnabled">
+           <bool>true</bool>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </widget>
+      <widget class="QWidget" name="tabWells">
+       <property name="sizePolicy">
+        <sizepolicy hsizetype="MinimumExpanding" vsizetype="MinimumExpanding">
+         <horstretch>1</horstretch>
+         <verstretch>1</verstretch>
+        </sizepolicy>
+       </property>
+       <attribute name="title">
+        <string>Wells</string>
+       </attribute>
+       <layout class="QHBoxLayout" name="horizontalLayout_8">
+        <item>
+         <widget class="QTableView" name="WellsTableView">
+          <property name="sizePolicy">
+           <sizepolicy hsizetype="MinimumExpanding" vsizetype="MinimumExpanding">
+            <horstretch>1</horstretch>
+            <verstretch>1</verstretch>
+           </sizepolicy>
+          </property>
+          <property name="minimumSize">
+           <size>
+            <width>0</width>
+            <height>0</height>
+           </size>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </widget>
+      <widget class="QWidget" name="tabFluids">
+       <property name="enabled">
+        <bool>true</bool>
+       </property>
+       <property name="sizePolicy">
+        <sizepolicy hsizetype="MinimumExpanding" vsizetype="MinimumExpanding">
+         <horstretch>0</horstretch>
+         <verstretch>0</verstretch>
+        </sizepolicy>
+       </property>
+       <property name="minimumSize">
+        <size>
+         <width>1</width>
+         <height>1</height>
+        </size>
+       </property>
+       <property name="contextMenuPolicy">
+        <enum>Qt::DefaultContextMenu</enum>
+       </property>
+       <attribute name="title">
+        <string>Fluid contacts</string>
+       </attribute>
+       <layout class="QHBoxLayout" name="horizontalLayout_9">
+        <item>
+         <widget class="QTableView" name="FluidsTableView">
+          <property name="sizePolicy">
+           <sizepolicy hsizetype="MinimumExpanding" vsizetype="MinimumExpanding">
+            <horstretch>1</horstretch>
+            <verstretch>1</verstretch>
+           </sizepolicy>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </widget>
+      <widget class="QWidget" name="tabBackgrounds">
+       <property name="sizePolicy">
+        <sizepolicy hsizetype="MinimumExpanding" vsizetype="MinimumExpanding">
+         <horstretch>1</horstretch>
+         <verstretch>1</verstretch>
+        </sizepolicy>
+       </property>
+       <attribute name="title">
+        <string>Background data</string>
+       </attribute>
+       <layout class="QHBoxLayout" name="horizontalLayout_10">
+        <item>
+         <widget class="QTableView" name="BackgroundsTableView">
+          <property name="sizePolicy">
+           <sizepolicy hsizetype="MinimumExpanding" vsizetype="MinimumExpanding">
+            <horstretch>1</horstretch>
+            <verstretch>1</verstretch>
+           </sizepolicy>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </widget>
+      <widget class="QWidget" name="tabLegend">
+       <property name="sizePolicy">
+        <sizepolicy hsizetype="MinimumExpanding" vsizetype="MinimumExpanding">
+         <horstretch>1</horstretch>
+         <verstretch>1</verstretch>
+        </sizepolicy>
+       </property>
+       <property name="minimumSize">
+        <size>
+         <width>0</width>
+         <height>0</height>
+        </size>
+       </property>
+       <property name="baseSize">
+        <size>
+         <width>0</width>
+         <height>0</height>
+        </size>
+       </property>
+       <property name="toolTip">
+        <string>Legend</string>
+       </property>
+       <property name="accessibleName">
+        <string>Legend</string>
+       </property>
+       <attribute name="title">
+        <string>Legend</string>
+       </attribute>
+       <layout class="QHBoxLayout" name="horizontalLayout_11">
+        <item>
+         <widget class="QTreeWidget" name="LegendTreeWidget">
+          <property name="sizePolicy">
+           <sizepolicy hsizetype="MinimumExpanding" vsizetype="MinimumExpanding">
+            <horstretch>1</horstretch>
+            <verstretch>1</verstretch>
+           </sizepolicy>
+          </property>
+          <property name="minimumSize">
+           <size>
+            <width>0</width>
+            <height>0</height>
+           </size>
+          </property>
+          <property name="baseSize">
+           <size>
+            <width>0</width>
+            <height>0</height>
+           </size>
+          </property>
+          <property name="toolTip">
+           <string>Legend</string>
+          </property>
+          <property name="accessibleName">
+           <string>Legend</string>
+          </property>
+          <column>
+           <property name="text">
+            <string notr="true">1</string>
+           </property>
+          </column>
+         </widget>
+        </item>
+       </layout>
+      </widget>
+      <widget class="QWidget" name="tabProperties">
+       <property name="sizePolicy">
+        <sizepolicy hsizetype="MinimumExpanding" vsizetype="MinimumExpanding">
+         <horstretch>1</horstretch>
+         <verstretch>1</verstretch>
+        </sizepolicy>
+       </property>
+       <property name="minimumSize">
+        <size>
+         <width>0</width>
+         <height>0</height>
+        </size>
+       </property>
+       <property name="baseSize">
+        <size>
+         <width>0</width>
+         <height>0</height>
+        </size>
+       </property>
+       <property name="toolTip">
+        <string>Properties</string>
+       </property>
+       <property name="toolTipDuration">
+        <number>-3</number>
+       </property>
+       <property name="accessibleName">
+        <string>Properties</string>
+       </property>
+       <attribute name="title">
+        <string>Properties</string>
+       </attribute>
+       <layout class="QHBoxLayout" name="horizontalLayout_12">
+        <item>
+         <widget class="QTableWidget" name="PropertiesTableWidget">
+          <property name="sizePolicy">
+           <sizepolicy hsizetype="MinimumExpanding" vsizetype="MinimumExpanding">
+            <horstretch>1</horstretch>
+            <verstretch>1</verstretch>
+           </sizepolicy>
+          </property>
+          <property name="minimumSize">
+           <size>
+            <width>0</width>
+            <height>0</height>
+           </size>
+          </property>
+          <property name="baseSize">
+           <size>
+            <width>0</width>
+            <height>0</height>
+           </size>
+          </property>
+          <property name="toolTip">
+           <string>Properties</string>
+          </property>
+          <property name="accessibleName">
+           <string>Properties</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </widget>
+      <widget class="QWidget" name="tabTerminal">
+       <property name="sizePolicy">
+        <sizepolicy hsizetype="MinimumExpanding" vsizetype="MinimumExpanding">
+         <horstretch>1</horstretch>
+         <verstretch>1</verstretch>
+        </sizepolicy>
+       </property>
+       <property name="minimumSize">
+        <size>
+         <width>0</width>
+         <height>0</height>
+        </size>
+       </property>
+       <property name="baseSize">
+        <size>
+         <width>0</width>
+         <height>0</height>
+        </size>
+       </property>
+       <property name="toolTip">
+        <string>Terminal</string>
+       </property>
+       <property name="accessibleName">
+        <string>Terminal</string>
+       </property>
+       <attribute name="title">
+        <string>Terminal</string>
+       </attribute>
+       <attribute name="toolTip">
+        <string>Terminal</string>
+       </attribute>
+       <attribute name="whatsThis">
+        <string>Terminal</string>
+       </attribute>
+       <layout class="QHBoxLayout" name="horizontalLayout_13">
+        <item>
+         <widget class="QPlainTextEdit" name="TextTerminal">
+          <property name="sizePolicy">
+           <sizepolicy hsizetype="MinimumExpanding" vsizetype="MinimumExpanding">
+            <horstretch>1</horstretch>
+            <verstretch>1</verstretch>
+           </sizepolicy>
+          </property>
+          <property name="minimumSize">
+           <size>
+            <width>0</width>
+            <height>0</height>
+           </size>
+          </property>
+          <property name="baseSize">
+           <size>
+            <width>0</width>
+            <height>0</height>
+           </size>
+          </property>
+          <property name="toolTip">
+           <string>Terminal</string>
+          </property>
+          <property name="accessibleName">
+           <string>Terminal</string>
+          </property>
+          <property name="readOnly">
+           <bool>true</bool>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </widget>
+     </widget>
+    </item>
+   </layout>
+  </widget>
+  <widget class="QMenuBar" name="menubar">
+   <property name="geometry">
+    <rect>
+     <x>0</x>
+     <y>0</y>
+     <width>1280</width>
+     <height>22</height>
+    </rect>
+   </property>
+   <property name="sizePolicy">
+    <sizepolicy hsizetype="MinimumExpanding" vsizetype="Minimum">
+     <horstretch>1</horstretch>
+     <verstretch>1</verstretch>
+    </sizepolicy>
+   </property>
+   <property name="minimumSize">
+    <size>
+     <width>0</width>
+     <height>22</height>
+    </size>
+   </property>
+   <property name="maximumSize">
+    <size>
+     <width>16777215</width>
+     <height>16777215</height>
+    </size>
+   </property>
+   <property name="baseSize">
+    <size>
+     <width>0</width>
+     <height>0</height>
+    </size>
+   </property>
+   <property name="font">
+    <font>
+     <family>MS Shell Dlg 2</family>
+     <pointsize>9</pointsize>
+     <weight>75</weight>
+     <bold>true</bold>
+    </font>
+   </property>
+   <property name="autoFillBackground">
+    <bool>false</bool>
+   </property>
+   <widget class="QMenu" name="menuFile">
+    <property name="tearOffEnabled">
+     <bool>true</bool>
+    </property>
+    <property name="title">
+     <string>File</string>
+    </property>
+    <addaction name="actionProjectNew"/>
+    <addaction name="actionProjectOpen"/>
+    <addaction name="actionProjectSave"/>
+    <addaction name="separator"/>
+    <addaction name="actionImportGocad"/>
+    <addaction name="actionImportGocadXsection"/>
+    <addaction name="actionImportGocadBoundary"/>
+    <addaction name="actionImportPC"/>
+    <addaction name="actionImportPyvista"/>
+    <addaction name="actionImportVedo"/>
+    <addaction name="actionImportSHP"/>
+    <addaction name="actionImportDEM"/>
+    <addaction name="actionImportOrthoImage"/>
+    <addaction name="actionImportXsectionImage"/>
+    <addaction name="actionImportWellData"/>
+    <addaction name="actionImportSEGY"/>
+    <addaction name="separator"/>
+    <addaction name="actionExportCAD"/>
+    <addaction name="actionExportVTK"/>
+    <addaction name="actionExportCSV"/>
+    <addaction name="separator"/>
+    <addaction name="actionQuit"/>
+   </widget>
+   <widget class="QMenu" name="menuWindow">
+    <property name="tearOffEnabled">
+     <bool>true</bool>
+    </property>
+    <property name="title">
+     <string>Window</string>
+    </property>
+    <addaction name="actionView3D"/>
+    <addaction name="actionViewMap"/>
+    <addaction name="actionViewPlaneXsection"/>
+    <addaction name="actionViewWellLog"/>
+    <addaction name="separator"/>
+    <addaction name="actionViewXYPlot"/>
+    <addaction name="actionViewHistogram"/>
+    <addaction name="actionViewStereoplot"/>
+    <addaction name="separator"/>
+   </widget>
+   <widget class="QMenu" name="menuHelp">
+    <property name="tearOffEnabled">
+     <bool>true</bool>
+    </property>
+    <property name="title">
+     <string>Help</string>
+    </property>
+    <addaction name="actionHelp"/>
+    <addaction name="actionAbout"/>
+   </widget>
+   <widget class="QMenu" name="menuEdit">
+    <property name="sizePolicy">
+     <sizepolicy hsizetype="MinimumExpanding" vsizetype="MinimumExpanding">
+      <horstretch>0</horstretch>
+      <verstretch>0</verstretch>
+     </sizepolicy>
+    </property>
+    <property name="tearOffEnabled">
+     <bool>true</bool>
+    </property>
+    <property name="title">
+     <string>Edit</string>
+    </property>
+    <addaction name="actionEditEntityClone"/>
+    <addaction name="actionEditEntityRemove"/>
+    <addaction name="separator"/>
+    <addaction name="actionConnectedParts"/>
+    <addaction name="actionMergeEntities"/>
+    <addaction name="actionSplitMultipart"/>
+    <addaction name="separator"/>
+    <addaction name="actionEditTextureAdd"/>
+    <addaction name="actionEditTextureRemove"/>
+    <addaction name="separator"/>
+    <addaction name="actionAddProperty"/>
+    <addaction name="actionRemoveProperty"/>
+    <addaction name="separator"/>
+    <addaction name="actionCalculateNormal"/>
+    <addaction name="actionCalculateLineation"/>
+    <addaction name="separator"/>
+    <addaction name="actionShowInfo"/>
+   </widget>
+   <widget class="QMenu" name="menuInterpolation_tools">
+    <property name="tearOffEnabled">
+     <bool>true</bool>
+    </property>
+    <property name="title">
+     <string>Interpolation</string>
+    </property>
+    <addaction name="actionDelaunay2DInterpolation"/>
+    <addaction name="actionPoissonInterpolation"/>
+    <addaction name="actionLoopStructuralImplicitModelling"/>
+    <addaction name="separator"/>
+    <addaction name="actionSurfaceSmoothing"/>
+    <addaction name="actionSubdivisionResampling"/>
+    <addaction name="actionDecimationPro"/>
+    <addaction name="actionDecimationQuadric"/>
+    <addaction name="actionRetopologize"/>
+    <addaction name="separator"/>
+    <addaction name="actionExtrusion"/>
+    <addaction name="actionIntersectionXSection"/>
+    <addaction name="actionProject2XSection"/>
+    <addaction name="actionProject2DEM"/>
+    <addaction name="actionSplitSurf"/>
+   </widget>
+   <widget class="QMenu" name="menuPoint_cloud">
+    <property name="title">
+     <string>Point Clouds</string>
+    </property>
+    <addaction name="actionBuildOctree"/>
+    <addaction name="actionDecimatePointCloud"/>
+   </widget>
+   <addaction name="menuFile"/>
+   <addaction name="menuEdit"/>
+   <addaction name="menuInterpolation_tools"/>
+   <addaction name="menuPoint_cloud"/>
+   <addaction name="menuWindow"/>
+   <addaction name="menuHelp"/>
+  </widget>
+  <widget class="QStatusBar" name="statusbar">
+   <property name="sizePolicy">
+    <sizepolicy hsizetype="MinimumExpanding" vsizetype="Fixed">
+     <horstretch>0</horstretch>
+     <verstretch>0</verstretch>
+    </sizepolicy>
+   </property>
+  </widget>
+  <action name="actionProjectNew">
+   <property name="text">
+    <string>New Project</string>
+   </property>
+  </action>
+  <action name="actionProjectOpen">
+   <property name="text">
+    <string>Open Project</string>
+   </property>
+  </action>
+  <action name="actionProjectSave">
+   <property name="text">
+    <string>Save Project</string>
+   </property>
+  </action>
+  <action name="actionImportGocad">
+   <property name="text">
+    <string>Import Gocad</string>
+   </property>
+   <property name="toolTip">
+    <string>Import Gocad</string>
+   </property>
+  </action>
+  <action name="actionExportCAD">
+   <property name="text">
+    <string>Export CAD</string>
+   </property>
+  </action>
+  <action name="actionQuit">
+   <property name="text">
+    <string>Quit</string>
+   </property>
+  </action>
+  <action name="actionView3D">
+   <property name="text">
+    <string>3D View</string>
+   </property>
+  </action>
+  <action name="actionViewPlaneXsection">
+   <property name="text">
+    <string>Plane X Section View</string>
+   </property>
+  </action>
+  <action name="actionViewMap">
+   <property name="text">
+    <string>Map View</string>
+   </property>
+  </action>
+  <action name="actionViewXYPlot">
+   <property name="text">
+    <string>XY Plot View</string>
+   </property>
+  </action>
+  <action name="actionAbout">
+   <property name="text">
+    <string>About</string>
+   </property>
+  </action>
+  <action name="actionHelp">
+   <property name="text">
+    <string>Help</string>
+   </property>
+  </action>
+  <action name="actionViewWellLog">
+   <property name="text">
+    <string>Well Log View</string>
+   </property>
+  </action>
+  <action name="actionViewStereoplot">
+   <property name="text">
+    <string>Stereoplot View</string>
+   </property>
+  </action>
+  <action name="actionViewHistogram">
+   <property name="text">
+    <string>Histogram View</string>
+   </property>
+  </action>
+  <action name="actionImportPyvista">
+   <property name="text">
+    <string>Import PyVista</string>
+   </property>
+  </action>
+  <action name="actionImportVedo">
+   <property name="text">
+    <string>Import Vedo</string>
+   </property>
+  </action>
+  <action name="actionImportDEM">
+   <property name="text">
+    <string>Import DEM</string>
+   </property>
+  </action>
+  <action name="actionImportOrthoImage">
+   <property name="text">
+    <string>Import OrthoImage</string>
+   </property>
+  </action>
+  <action name="actionEditEntityRemove">
+   <property name="text">
+    <string>Remove Entity</string>
+   </property>
+  </action>
+  <action name="actionEditTextureAdd">
+   <property name="text">
+    <string>Add Texture</string>
+   </property>
+  </action>
+  <action name="actionEditTextureRemove">
+   <property name="text">
+    <string>Remove Texture</string>
+   </property>
+  </action>
+  <action name="actionEditEntityClone">
+   <property name="text">
+    <string>Clone Entity</string>
+   </property>
+  </action>
+  <action name="actionImportGocadXsection">
+   <property name="text">
+    <string>Import Gocad Xsection</string>
+   </property>
+  </action>
+  <action name="actionDelaunay2DInterpolation">
+   <property name="checkable">
+    <bool>false</bool>
+   </property>
+   <property name="text">
+    <string>Delaunay 2D</string>
+   </property>
+  </action>
+  <action name="actionMergeEntities">
+   <property name="text">
+    <string>Merge Entities</string>
+   </property>
+  </action>
+  <action name="actionPoissonInterpolation">
+   <property name="text">
+    <string>Poisson</string>
+   </property>
+  </action>
+  <action name="actionSurfaceSmoothing">
+   <property name="text">
+    <string>Surface Smoothing</string>
+   </property>
+  </action>
+  <action name="actionExtrusion">
+   <property name="text">
+    <string>Extrusion</string>
+   </property>
+  </action>
+  <action name="actionDecimationPro">
+   <property name="text">
+    <string>Decimation Pro</string>
+   </property>
+   <property name="toolTip">
+    <string>DecimationPro</string>
+   </property>
+  </action>
+  <action name="actionSubdivisionResampling">
+   <property name="text">
+    <string>Subdivision Resampling</string>
+   </property>
+  </action>
+  <action name="actionDecimationQuadric">
+   <property name="text">
+    <string>Decimation Quadric</string>
+   </property>
+   <property name="toolTip">
+    <string>DecimationQuadric</string>
+   </property>
+  </action>
+  <action name="actionIntersectionXSection">
+   <property name="text">
+    <string>XSection Intersection</string>
+   </property>
+  </action>
+  <action name="actionProject2DEM">
+   <property name="text">
+    <string>Project to DEM</string>
+   </property>
+  </action>
+  <action name="actionLoopStructuralImplicitModelling">
+   <property name="text">
+    <string>LoopStructural Implicit Modelling</string>
+   </property>
+  </action>
+  <action name="actionImportSEGY">
+   <property name="text">
+    <string>Import SEGY</string>
+   </property>
+  </action>
+  <action name="actionCalculateNormal">
+   <property name="text">
+    <string>Calculate Normals</string>
+   </property>
+   <property name="toolTip">
+    <string>Calculate normal unit vector</string>
+   </property>
+  </action>
+  <action name="actionCalculateLineation">
+   <property name="text">
+    <string>Calculate Lineations</string>
+   </property>
+   <property name="toolTip">
+    <string>Calculate lineation unit vector</string>
+   </property>
+  </action>
+  <action name="actionAddProperty">
+   <property name="text">
+    <string>Add Property</string>
+   </property>
+   <property name="toolTip">
+    <string>Add empty property</string>
+   </property>
+  </action>
+  <action name="actionRemoveProperty">
+   <property name="text">
+    <string>Remove Property</string>
+   </property>
+  </action>
+  <action name="actionProject2XSection">
+   <property name="text">
+    <string>Project to XSection</string>
+   </property>
+  </action>
+  <action name="actionImportSHP">
+   <property name="text">
+    <string>Import SHP</string>
+   </property>
+  </action>
+  <action name="actionImportGocadBoundary">
+   <property name="text">
+    <string>Import Gocad Boundary</string>
+   </property>
+  </action>
+  <action name="actionImportXsectionImage">
+   <property name="text">
+    <string>Import Xsection Image</string>
+   </property>
+  </action>
+  <action name="actionConnectedParts">
+   <property name="text">
+    <string>Connected Parts</string>
+   </property>
+  </action>
+  <action name="actionSplitMultipart">
+   <property name="text">
+    <string>Split Multi-part</string>
+   </property>
+  </action>
+  <action name="actionImportPC">
+   <property name="text">
+    <string>Import Point Clouds</string>
+   </property>
+  </action>
+  <action name="actionImportWellData">
+   <property name="text">
+    <string>Import well data</string>
+   </property>
+  </action>
+  <action name="actionExportVTK">
+   <property name="text">
+    <string>Export vtk</string>
+   </property>
+  </action>
+  <action name="actionSplitSurf">
+   <property name="text">
+    <string>Split Surfaces</string>
+   </property>
+  </action>
+  <action name="actionRetopologize">
+   <property name="text">
+    <string>Retopologize</string>
+   </property>
+  </action>
+  <action name="actionBuildOctree">
+   <property name="text">
+    <string>Build Octree</string>
+   </property>
+  </action>
+  <action name="actionDecimatePointCloud">
+   <property name="text">
+    <string>Decimate Point Cloud</string>
+   </property>
+  </action>
+  <action name="actionExportCSV">
+   <property name="text">
+    <string>Export CSV</string>
+   </property>
+  </action>
+  <action name="actionShowInfo">
+   <property name="text">
+    <string>Show Entities Info</string>
+   </property>
+  </action>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>
