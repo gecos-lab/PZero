@@ -102,10 +102,11 @@ from .three_d_surfaces import (
     split_surf,
     retopo,
 )
-from .windows_factory import ViewMap
-from .windows_factory import ViewXsection
-from .windows_factory import View3D
-from .windows_factory import ViewStereoplot
+# from .windows_factory import ViewMap
+# from .windows_factory import ViewXsection
+# from .windows_factory import View3D
+# from .windows_factory import ViewStereoplot
+from .windows_factory import DockWindow
 
 
 class ProjectWindow(QMainWindow, Ui_ProjectWindow):
@@ -197,10 +198,15 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.actionRetopologize.triggered.connect(self.retopologize_surface)
 
         """View actions -> slots"""
-        self.action3DView.triggered.connect(lambda: View3D(parent=self))
-        self.actionMapView.triggered.connect(lambda: ViewMap(parent=self))
-        self.actionXSectionView.triggered.connect(lambda: ViewXsection(parent=self))
-        self.actionStereoplotView.triggered.connect(lambda: ViewStereoplot(parent=self))
+        # self.action3DView.triggered.connect(lambda: View3D(parent=self))
+        # self.actionMapView.triggered.connect(lambda: ViewMap(parent=self))
+        # self.actionXSectionView.triggered.connect(lambda: ViewXsection(parent=self))
+        # self.actionStereoplotView.triggered.connect(lambda: ViewStereoplot(parent=self))
+        self.action3DView.triggered.connect(lambda: DockWindow(parent=self, window_type='View3D'))
+        self.actionMapView.triggered.connect(lambda: DockWindow(parent=self, window_type='ViewMap'))
+        self.actionXSectionView.triggered.connect(lambda: DockWindow(parent=self, window_type='ViewXsection'))
+        self.actionStereoplotView.triggered.connect(lambda: DockWindow(parent=self, window_type='ViewStereoplot'))
+
 
         self.update_actors = True
 

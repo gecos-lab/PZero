@@ -3,7 +3,7 @@ PZero© Andrea Bistacchi"""
 
 from vtkmodules.vtkRenderingCore import vtkPropPicker
 
-from PySide6.QtWidgets import QMainWindow, QMenu, QAbstractItemView
+from PySide6.QtWidgets import QMainWindow, QMenu, QAbstractItemView, QDockWidget, QSizePolicy, QMessageBox
 from PySide6.QtGui import QAction
 from PySide6.QtCore import Qt
 from PySide6.QtCore import Signal as pyqtSignal
@@ -134,6 +134,79 @@ class NavigationToolbar(NavigationToolbar2QT):
 
     def __init__(self, parent=None, *args, **kwargs):
         super(NavigationToolbar, self).__init__(parent, *args, **kwargs)
+
+
+class DockWindow(QDockWidget):
+    """Creates a QDockWidget and then fills it with a single QWidget that includes all objects of a dockable graphical window.
+        Each window needs its specific dock widget in order to be dockable, movable anc closable independently.
+        In the following code, copied from Qt Designer (Form > View Python code - layout saved as project_window_with_dock_widget.ui),
+        the dock widget is locked to the right dock area, floatable, movable and closable, hence it will only appear in the
+        right dock area or undocked on the desktop."""
+    def __init__(self, parent=None, window_type=None, *args, **kwargs):
+        super(DockWindow, self).__init__(parent, *args, **kwargs)
+        n_docks = len(parent.findChildren(QDockWidget))
+        """Setup property and connect signal to delete dock widget (not only hide) when the project is closed."""
+        # check if this is all OK <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+        parent.project_close_signal.connect(self.deleteLater)
+        self.setAttribute(Qt.WA_DeleteOnClose, True)
+        """uuid string for widget and content names -- check if this is necessary --"""
+        # dock_widget_id = str(uuid4())
+        # dock_widget_contents_id = str(uuid4())
+        # create widget and set some parameters
+        # self.setObjectName(dock_widget_id)
+        self.setWindowTitle(window_type)
+        #self.setMinimumSize(QSize(60, 40))
+        #self.setMaximumSize(QSize(524287, 524287))
+        #self.setBaseSize(QSize(638, 757))
+        self.setFeatures(QDockWidget.DockWidgetClosable | QDockWidget.DockWidgetFloatable | QDockWidget.DockWidgetMovable)
+        self.setAllowedAreas(Qt.RightDockWidgetArea)
+        # create the graphical window as a QWidget to be included into the QDockWidget as its content
+        if window_type == 'View3D':
+            self.canvas = View3D(parent=parent)
+        elif window_type == 'ViewMap':
+            self.canvas = ViewMap(parent=parent)
+        elif window_type == 'ViewXsection':
+            self.canvas = ViewXsection(parent=parent)
+        elif window_type == 'ViewStereoplot':
+            self.canvas = ViewStereoplot(parent=parent)
+        else:
+            # exit doing nothing in case the window type is not recognized
+            print('window type not recognized')
+            return
+        # set parameters of the graphical window
+        size_policy = QSizePolicy(QSizePolicy.MinimumExpanding, QSizePolicy.MinimumExpanding)
+        size_policy.setHorizontalStretch(0)
+        size_policy.setVerticalStretch(0)
+        # size_policy.setHeightForWidth(self.canvas.size_policy().hasHeightForWidth())
+        # self.canvas.setSizePolicy(size_policy)
+        # self.canvas.setObjectName(dock_widget_contents_id)
+        """Add the content widget to the dock widget and add the dock widget to the main project window.
+        After this has been set, calling self.canvas returns the same object as calling self.widget()"""
+        self.setWidget(self.canvas)
+        """Add dock widget to main window (= parent)"""
+        parent.addDockWidget(Qt.RightDockWidgetArea, self)
+        """Make all dock widgets tabbed if more than one is open."""
+        if n_docks > 1:
+            parent.tabifyDockWidget(parent.findChildren(QDockWidget)[0], self)
+
+    # def closeEvent(self, event):
+    #     """Override the standard closeEvent method since self.plotter.close() is needed
+    #     to cleanly close the vtk plotter and disconnect_all_lambda_signals is required to
+    #     disconnect signals before deleting the window."""
+    #     if self.isFloating():
+    #         self.setFloating(False)
+    #         event.ignore()
+    #         return
+    #     reply = QMessageBox.question(self, 'Closing window', 'Close this window?', QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+    #     if reply == QMessageBox.Yes:
+    #         # disconnect_all_signals(self.signals)
+    #         self.canvas.disconnect_all_lambda_signals()
+    #         # self.upd_list_geo_rm
+    #         if not isinstance(self, ViewStereoplot):
+    #             self.canvas.plotter.close()  # needed to cleanly close the vtk plotter
+    #         event.accept()
+    #     else:
+    #         event.ignore()
 
 
 class BaseView(QMainWindow, Ui_BaseViewWindow):
