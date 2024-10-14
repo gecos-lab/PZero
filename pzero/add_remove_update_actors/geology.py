@@ -7,7 +7,7 @@ def geology_added_update_views(self, updated_list=None):
     Disconnect signals to geology and topology tree, if they are set, to avoid a nasty loop
     that disrupts the trees, then they are reconnected when the trees are rebuilt"""
     self.GeologyTreeWidget.itemChanged.disconnect()
-    self.TopologyTreeWidget.itemChanged.disconnect()
+    self.GeologyTopologyTreeWidget.itemChanged.disconnect()
     # remove from updated_list the uid's that are excluded from this view by self.view_filter
     # by removing from the list of all uid's that should appear in this view (from query)
     # the uid's that do not belong to the updated_list
@@ -35,7 +35,7 @@ def geology_added_update_views(self, updated_list=None):
     update_topology_tree_added(self, uid_list=updated_list)
     """Re-connect signals."""
     self.GeologyTreeWidget.itemChanged.connect(self.toggle_geology_visibility )
-    self.TopologyTreeWidget.itemChanged.connect(self.toggle_geology_visibility )
+    self.GeologyTopologyTreeWidget.itemChanged.connect(self.toggle_geology_visibility )
 
 
 def geology_removed_update_views(self, updated_list=None):
@@ -45,14 +45,14 @@ def geology_removed_update_views(self, updated_list=None):
     No need to apply a filter, since if a uid is not found in the actors list,
     nothing happens."""
     self.GeologyTreeWidget.itemChanged.disconnect()
-    self.TopologyTreeWidget.itemChanged.disconnect()
+    self.GeologyTopologyTreeWidget.itemChanged.disconnect()
     for uid in updated_list:
         self.remove_actor_in_view(uid=uid, redraw=True)
     update_geology_tree_removed(self, removed_list=updated_list)
     update_topology_tree_removed(self, removed_list=updated_list)
     """Re-connect signals."""
     self.GeologyTreeWidget.itemChanged.connect(self.toggle_geology_visibility )
-    self.TopologyTreeWidget.itemChanged.connect(self.toggle_geology_visibility )
+    self.GeologyTopologyTreeWidget.itemChanged.connect(self.toggle_geology_visibility )
 
 
 def geology_geom_modified_update_views(self, updated_list=None):
@@ -90,7 +90,7 @@ def geology_data_keys_modified_update_views(self, updated_list=None):
          )
     )
     self.GeologyTreeWidget.itemChanged.disconnect()
-    self.TopologyTreeWidget.itemChanged.disconnect()
+    self.GeologyTopologyTreeWidget.itemChanged.disconnect()
     for uid in updated_list:
         # Replace the previous copy of the actor with the same uid, and update the actors dataframe, only if a
         # property that has been removed is shown at the moment. See issue #33 for a discussion on actors
@@ -105,7 +105,7 @@ def geology_data_keys_modified_update_views(self, updated_list=None):
     create_topology_tree(self)
     """Re-connect signals."""
     self.GeologyTreeWidget.itemChanged.connect(self.toggle_geology_visibility )
-    self.TopologyTreeWidget.itemChanged.connect(self.toggle_geology_visibility )
+    self.GeologyTopologyTreeWidget.itemChanged.connect(self.toggle_geology_visibility )
 
 
 def geology_data_val_modified_update_views(self, updated_list=None):
@@ -138,13 +138,13 @@ def geology_metadata_modified_update_views(self, updated_list=None):
     Disconnect signals to geology and topology tree, if they are set, to avoid a nasty loop
     that disrupts the trees, then they are reconnected when the trees are rebuilt"""
     self.GeologyTreeWidget.itemChanged.disconnect()
-    self.TopologyTreeWidget.itemChanged.disconnect()
+    self.GeologyTopologyTreeWidget.itemChanged.disconnect()
     geology_legend_modified_update_views(self, updated_list=updated_list)
     create_geology_tree(self)
     create_topology_tree(self)
     """Re-connect signals."""
     self.GeologyTreeWidget.itemChanged.connect(self.toggle_geology_visibility )
-    self.TopologyTreeWidget.itemChanged.connect(self.toggle_geology_visibility )
+    self.GeologyTopologyTreeWidget.itemChanged.connect(self.toggle_geology_visibility )
 
 
 def geology_legend_modified_update_views(self, updated_list=None):

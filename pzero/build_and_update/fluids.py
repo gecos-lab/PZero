@@ -649,7 +649,7 @@ def update_fluids_topology_tree_added(self, new_list=None, sec_uid=None):
                             self.actors_df["uid"] == uid, "show"
                         ].values[0]:
                             tlevel_3.setCheckState(0, Qt.Unchecked)
-                        self.TopologyTreeWidget.insertTopLevelItem(0, tlevel_3)
+                        self.GeologyTopologyTreeWidget.insertTopLevelItem(0, tlevel_3)
                         break
             else:
                 """Same topological type, different scenario"""

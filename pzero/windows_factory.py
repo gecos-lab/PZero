@@ -189,24 +189,19 @@ class DockWindow(QDockWidget):
         if n_docks > 1:
             parent.tabifyDockWidget(parent.findChildren(QDockWidget)[0], self)
 
-    # def closeEvent(self, event):
-    #     """Override the standard closeEvent method since self.plotter.close() is needed
-    #     to cleanly close the vtk plotter and disconnect_all_lambda_signals is required to
-    #     disconnect signals before deleting the window."""
-    #     if self.isFloating():
-    #         self.setFloating(False)
-    #         event.ignore()
-    #         return
-    #     reply = QMessageBox.question(self, 'Closing window', 'Close this window?', QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
-    #     if reply == QMessageBox.Yes:
-    #         # disconnect_all_signals(self.signals)
-    #         self.canvas.disconnect_all_lambda_signals()
-    #         # self.upd_list_geo_rm
-    #         if not isinstance(self, ViewStereoplot):
-    #             self.canvas.plotter.close()  # needed to cleanly close the vtk plotter
-    #         event.accept()
-    #     else:
-    #         event.ignore()
+    def closeEvent(self, event):
+        """Override the standard closeEvent method since self.plotter.close() is needed
+        to cleanly close the vtk plotter and disconnect_all_lambda_signals is required to
+        disconnect signals before deleting the window."""
+        if self.isFloating():
+            self.setFloating(False)
+            event.ignore()
+            return
+        # Disconnect all signals of BaseView()
+        self.canvas.disconnect_all_lambda_signals()
+        # Cleanly close the VTK plotter
+        if isinstance(self.canvas, VTKView):
+            self.canvas.plotter.close()
 
 
 class BaseView(QMainWindow, Ui_BaseViewWindow):
@@ -225,9 +220,9 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.setAttribute(Qt.WA_DeleteOnClose, True)
         self.parent = parent
         # Connect actionQuit.triggered SIGNAL to self.close SLOT
-        self.actionClose.triggered.connect(self.close)
+        # self.actionClose.triggered.connect(self.close)
         # Connect signal to delete window when the project is closed (and a new one is opened)
-        self.parent.project_close_signal.connect(self.close)
+        # self.parent.project_close_signal.connect(self.close)
         # Create empty Pandas dataframe with actor's with columns:
         # uid = actor's uid -> the same as the original object's uid
         # actor = the actor
@@ -2092,55 +2087,39 @@ class VTKView(BaseView):
         The code appearing here is appended in subclasses using super().initialize_menu_tools() in their first line."""
         # append code from BaseView()
         super().initialize_menu_tools()
+
         # then add new code specific to VTKView()
-        self.saveHomeView = QAction("Save home view", self)  # create action
-        self.saveHomeView.triggered.connect(
-            self.save_home_view
-        )  # connect action to function
-        self.menuBaseView.addAction(self.saveHomeView)  # add action to menu
-        self.toolBarBase.addAction(self.saveHomeView)  # add action to toolbar
+        self.saveHomeView = QAction("Save home view", self)
+        self.saveHomeView.triggered.connect(self.save_home_view)
+        self.menuView.addAction(self.saveHomeView)  # add action to menu
 
         self.zoomHomeView = QAction("Zoom to home", self)
         self.zoomHomeView.triggered.connect(self.zoom_home_view)
-        self.menuBaseView.addAction(self.zoomHomeView)
-        self.toolBarBase.addAction(self.zoomHomeView)
+        self.menuView.addAction(self.zoomHomeView)
 
         self.zoomActive = QAction("Zoom to active", self)
         self.zoomActive.triggered.connect(self.zoom_active)
-        self.menuBaseView.addAction(self.zoomActive)
-        self.toolBarBase.addAction(self.zoomActive)
+        self.menuView.addAction(self.zoomActive)
 
-        self.selectLineButton = QAction("Select entity", self)  # create action
-        self.selectLineButton.triggered.connect(
-            self.select_actor_with_mouse
-        )  # connect action to function
-        self.menuBaseView.addAction(self.selectLineButton)  # add action to menu
-        self.toolBarBase.addAction(self.selectLineButton)  # add action to toolbar
+        self.selectLineButton = QAction("Select entity", self)
+        self.selectLineButton.triggered.connect(self.select_actor_with_mouse)
+        self.menuSelect.addAction(self.selectLineButton)
 
-        self.clearSelectionButton = QAction("Clear Selection", self)  # create action
-        self.clearSelectionButton.triggered.connect(
-            self.clear_selection
-        )  # connect action to function
-        self.menuBaseView.addAction(self.clearSelectionButton)  # add action to menu
-        self.toolBarBase.addAction(self.clearSelectionButton)  # add action to toolbar
+        self.clearSelectionButton = QAction("Clear Selection", self)
+        self.clearSelectionButton.triggered.connect(self.clear_selection)
+        self.menuSelect.addAction(self.clearSelectionButton)
 
-        self.removeEntityButton = QAction("Remove Entity", self)  # create action
-        self.removeEntityButton.triggered.connect(
-            self.remove_entity
-        )  # connect action to function
-        self.menuBaseView.addAction(self.removeEntityButton)  # add action to menu
-        self.toolBarBase.addAction(self.removeEntityButton)  # add action to toolbar
+        self.removeEntityButton = QAction("Remove Entity", self)
+        self.removeEntityButton.triggered.connect(self.remove_entity)
+        self.menuModify.addAction(self.removeEntityButton)
 
         self.vertExagButton = QAction("Vertical exaggeration", self)
-        self.vertExagButton.triggered.connect(
-            self.vert_exag
-        )  # connect action to function
-        self.menuWindow.addAction(self.vertExagButton)  # add action to menu
+        self.vertExagButton.triggered.connect(self.vert_exag)
+        self.menuView.addAction(self.vertExagButton)
 
         self.actionExportScreen = QAction("Take screenshot", self)
         self.actionExportScreen.triggered.connect(self.export_screen)
-        self.menuBaseView.addAction(self.actionExportScreen)
-        self.toolBarBase.addAction(self.actionExportScreen)
+        self.menuView.addAction(self.actionExportScreen)
 
     def export_screen(self):
         out_file_name = save_file_dialog(
@@ -2500,49 +2479,45 @@ class View3D(VTKView):
         )
 
         super().initialize_menu_tools()
-        self.menuBaseView.setTitle("Edit")
-        self.actionBase_Tool.setText("Edit")
 
         self.menuBoreTraceVis = QMenu("Borehole visualization methods", self)
-        self.actionBoreTrace = QAction("Trace", self)
 
+        self.actionBoreTrace = QAction("Trace", self)
         self.actionBoreTrace.triggered.connect(lambda: self.change_bore_vis("trace"))
 
         self.actionBoreCylinder = QAction("Cylinder", self)
-        self.actionBoreCylinder.triggered.connect(
-            lambda: self.change_bore_vis("cylinder")
-        )
+        self.actionBoreCylinder.triggered.connect(lambda: self.change_bore_vis("cylinder"))
+
         self.actionToggleGeology = QAction("Toggle geology", self)
         self.actionToggleGeology.triggered.connect(lambda: self.change_bore_vis("geo"))
+
         self.actionToggleLithology = QAction("Toggle lithology", self)
-        self.actionToggleLithology.triggered.connect(
-            lambda: self.change_bore_vis("litho")
-        )
+        self.actionToggleLithology.triggered.connect(lambda: self.change_bore_vis("litho"))
 
         self.menuBoreTraceVis.addAction(self.actionBoreTrace)
         self.menuBoreTraceVis.addAction(self.actionBoreCylinder)
         self.menuBoreTraceVis.addAction(self.actionToggleLithology)
         self.menuBoreTraceVis.addAction(self.actionToggleGeology)
 
-        self.menuBaseView.addMenu(self.menuBoreTraceVis)
+        self.menuView.addMenu(self.menuBoreTraceVis)
 
-        self.actionThresholdf.triggered.connect(lambda: thresh_filt(self))
-        self.actionSurface_densityf.triggered.connect(lambda: self.surf_den_filt())
-        self.actionRoughnessf.triggered.connect(lambda: self.rough_filt())
-        self.actionCurvaturef.triggered.connect(lambda: self.curv_filt())
-        self.actionNormalsf.triggered.connect(lambda: self.norm_filt())
-        self.actionManualBoth.triggered.connect(lambda: cut_pc(self))
-        self.actionManualInner.triggered.connect(lambda: cut_pc(self, "inner"))
-        self.actionManualOuter.triggered.connect(lambda: cut_pc(self, "outer"))
-
-        self.actionCalibration.triggered.connect(lambda: calibration_pc(self))
-        self.actionManual_picking.triggered.connect(lambda: self.act_att())
-        self.actionSegment.triggered.connect(lambda: segment_pc(self))
-        self.actionPick.triggered.connect(lambda: auto_pick(self))
-        self.actionFacets.triggered.connect(lambda: facets_pc(self))
-
-        # self.actionCalculate_normals.triggered.connect(lambda: self.normalGeometry())
-        self.actionNormals_to_DDR.triggered.connect(lambda: normals2dd(self))
+        # self.actionThresholdf.triggered.connect(lambda: thresh_filt(self))
+        # self.actionSurface_densityf.triggered.connect(lambda: self.surf_den_filt())
+        # self.actionRoughnessf.triggered.connect(lambda: self.rough_filt())
+        # self.actionCurvaturef.triggered.connect(lambda: self.curv_filt())
+        # self.actionNormalsf.triggered.connect(lambda: self.norm_filt())
+        # self.actionManualBoth.triggered.connect(lambda: cut_pc(self))
+        # self.actionManualInner.triggered.connect(lambda: cut_pc(self, "inner"))
+        # self.actionManualOuter.triggered.connect(lambda: cut_pc(self, "outer"))
+        #
+        # self.actionCalibration.triggered.connect(lambda: calibration_pc(self))
+        # self.actionManual_picking.triggered.connect(lambda: self.act_att())
+        # self.actionSegment.triggered.connect(lambda: segment_pc(self))
+        # self.actionPick.triggered.connect(lambda: auto_pick(self))
+        # self.actionFacets.triggered.connect(lambda: facets_pc(self))
+        #
+        # # self.actionCalculate_normals.triggered.connect(lambda: self.normalGeometry())
+        # self.actionNormals_to_DDR.triggered.connect(lambda: normals2dd(self))
 
         # self.showOct = QAction("Show octree structure", self)
         # self.showOct.triggered.connect(self.show_octree)
@@ -2551,31 +2526,25 @@ class View3D(VTKView):
 
         self.actionExportGltf = QAction("Export as GLTF", self)
         self.actionExportGltf.triggered.connect(self.export_gltf)
-        self.menuBaseView.addAction(self.actionExportGltf)
-        self.toolBarBase.addAction(self.actionExportGltf)
+        self.menuView.addAction(self.actionExportGltf)
 
         self.actionExportHtml = QAction("Export as HTML", self)
         self.actionExportHtml.triggered.connect(self.export_html)
-        self.menuBaseView.addAction(self.actionExportHtml)
-        self.toolBarBase.addAction(self.actionExportHtml)
+        self.menuView.addAction(self.actionExportHtml)
 
         self.actionExportObj = QAction("Export as OBJ", self)
         self.actionExportObj.triggered.connect(self.export_obj)
-        self.menuBaseView.addAction(self.actionExportObj)
-        self.toolBarBase.addAction(self.actionExportObj)
+        self.menuView.addAction(self.actionExportObj)
 
         self.actionExportVtkjs = QAction("Export as VTKjs", self)
         self.actionExportVtkjs.triggered.connect(self.export_vtkjs)
-        self.menuBaseView.addAction(self.actionExportVtkjs)
-        self.toolBarBase.addAction(self.actionExportVtkjs)
+        self.menuView.addAction(self.actionExportVtkjs)
 
-        self.menuOrbit = QMenu("Orbit around", self)
-
-        self.actionOrbitEntity = QAction("Entity", self)
-        self.actionOrbitEntity.triggered.connect(lambda: self.orbit_entity())
-        self.menuOrbit.addAction(self.actionOrbitEntity)
-
-        self.menuWindow.addMenu(self.menuOrbit)
+        # self.menuOrbit = QMenu("Orbit around", self)
+        # self.actionOrbitEntity = QAction("Entity", self)
+        # self.actionOrbitEntity.triggered.connect(lambda: self.orbit_entity())
+        # self.menuOrbit.addAction(self.actionOrbitEntity)
+        # self.menuWindow.addMenu(self.menuOrbit)
 
     def export_html(self):
         out_file_name = save_file_dialog(
@@ -2954,133 +2923,77 @@ class View2D(VTKView):
         # CONSIDER MOVING SOME OF THE FOLLOWING METHODS TO VTKView(), IN ORDER TO HAVE THEM ALSO IN 3D VIEWS
         # ------------------------------------
 
-        self.drawLineButton = QAction("Draw line", self)  # create action
-        self.drawLineButton.triggered.connect(
-            lambda: draw_line(self)
-        )  # connect action to function with additional argument parent
-        self.menuBaseView.addAction(self.drawLineButton)  # add action to menu
-        self.toolBarBase.addAction(self.drawLineButton)  # add action to toolbar
+        self.drawLineButton = QAction("Draw line", self)
+        self.drawLineButton.triggered.connect(lambda: draw_line(self))
+        self.menuCreate.addAction(self.drawLineButton)
 
-        self.editLineButton = QAction("Edit line", self)  # create action
-        self.editLineButton.triggered.connect(
-            lambda: edit_line(self)
-        )  # connect action to function
-        self.menuBaseView.addAction(self.editLineButton)  # add action to menu
-        self.toolBarBase.addAction(self.editLineButton)  # add action to toolbar
+        self.editLineButton = QAction("Edit line", self)
+        self.editLineButton.triggered.connect(lambda: edit_line(self))
+        self.menuModify.addAction(self.editLineButton)
 
-        self.sortLineButton = QAction("Sort line nodes", self)  # create action
-        self.sortLineButton.triggered.connect(
-            lambda: sort_line_nodes(self)
-        )  # connect action to function
-        self.menuBaseView.addAction(self.sortLineButton)  # add action to menu
-        self.toolBarBase.addAction(self.sortLineButton)  # add action to toolbar
+        self.sortLineButton = QAction("Sort line nodes", self)
+        self.sortLineButton.triggered.connect(lambda: sort_line_nodes(self))
+        self.menuModify.addAction(self.sortLineButton)
 
-        self.moveLineButton = QAction("Move line", self)  # create action
-        self.moveLineButton.triggered.connect(
-            lambda: self.vector_by_mouse(move_line)
-        )  # connect action to function
-        self.menuBaseView.addAction(self.moveLineButton)  # add action to menu
-        self.toolBarBase.addAction(self.moveLineButton)  # add action to toolbar
+        self.moveLineButton = QAction("Move line", self)
+        self.moveLineButton.triggered.connect(lambda: self.vector_by_mouse(move_line))
+        self.menuModify.addAction(self.moveLineButton)
 
-        self.rotateLineButton = QAction("Rotate line", self)  # create action
-        self.rotateLineButton.triggered.connect(
-            lambda: rotate_line(self)
-        )  # connect action to function
-        self.menuBaseView.addAction(self.rotateLineButton)  # add action to menu
-        self.toolBarBase.addAction(self.rotateLineButton)  # add action to toolbar
+        self.rotateLineButton = QAction("Rotate line", self)
+        self.rotateLineButton.triggered.connect(lambda: rotate_line(self))
+        self.menuModify.addAction(self.rotateLineButton)
 
-        self.extendButton = QAction("Extend line", self)  # create action
-        self.extendButton.triggered.connect(
-            lambda: extend_line(self)
-        )  # connect action to function
-        self.menuBaseView.addAction(self.extendButton)  # add action to menu
-        self.toolBarBase.addAction(self.extendButton)  # add action to toolbar
+        self.extendButton = QAction("Extend line", self)
+        self.extendButton.triggered.connect(lambda: extend_line(self))
+        self.menuModify.addAction(self.extendButton)
 
-        self.splitLineByLineButton = QAction("Split line-line", self)  # create action
-        self.splitLineByLineButton.triggered.connect(
-            lambda: split_line_line(self)
-        )  # connect action to function
-        self.menuBaseView.addAction(self.splitLineByLineButton)  # add action to menu
-        self.toolBarBase.addAction(self.splitLineByLineButton)  # add action to toolbar
+        self.splitLineByLineButton = QAction("Split line-line", self)
+        self.splitLineByLineButton.triggered.connect(lambda: split_line_line(self))
+        self.menuModify.addAction(self.splitLineByLineButton)
 
-        self.splitLineByPointButton = QAction("Split line-point", self)  # create action
-        self.splitLineByPointButton.triggered.connect(
-            lambda: split_line_existing_point(self)
-        )  # connect action to function
-        self.menuBaseView.addAction(self.splitLineByPointButton)  # add action to menu
-        self.toolBarBase.addAction(self.splitLineByPointButton)  # add action to toolbar
+        self.splitLineByPointButton = QAction("Split line-point", self)
+        self.splitLineByPointButton.triggered.connect(lambda: split_line_existing_point(self))
+        self.menuModify.addAction(self.splitLineByPointButton)
 
-        self.mergeLineButton = QAction("Merge lines", self)  # create action
-        self.mergeLineButton.triggered.connect(
-            lambda: merge_lines(self)
-        )  # connect action to function
-        self.menuBaseView.addAction(self.mergeLineButton)  # add action to menu
-        self.toolBarBase.addAction(self.mergeLineButton)  # add action to toolbar
+        self.mergeLineButton = QAction("Merge lines", self)
+        self.mergeLineButton.triggered.connect(lambda: merge_lines(self))
+        self.menuModify.addAction(self.mergeLineButton)
 
-        self.snapLineButton = QAction("Snap line", self)  # create action
-        self.snapLineButton.triggered.connect(
-            lambda: snap_line(self)
-        )  # connect action to function
-        self.menuBaseView.addAction(self.snapLineButton)  # add action to menu
-        self.toolBarBase.addAction(self.snapLineButton)  # add action to toolbar
+        self.snapLineButton = QAction("Snap line", self)
+        self.snapLineButton.triggered.connect(lambda: snap_line(self))
+        self.menuModify.addAction(self.snapLineButton)
 
-        self.resampleDistanceButton = QAction(
-            "Resample distance", self
-        )  # create action
-        self.resampleDistanceButton.triggered.connect(
-            lambda: resample_line_distance(self)
-        )  # connect action to function
-        self.menuBaseView.addAction(self.resampleDistanceButton)  # add action to menu
-        self.toolBarBase.addAction(self.resampleDistanceButton)  # add action to toolbar
+        self.resampleDistanceButton = QAction("Resample distance", self)
+        self.resampleDistanceButton.triggered.connect(lambda: resample_line_distance(self))
+        self.menuModify.addAction(self.resampleDistanceButton)
 
-        self.resampleNumberButton = QAction("Resample number", self)  # create action
-        self.resampleNumberButton.triggered.connect(
-            lambda: resample_line_number_points(self)
-        )  # connect action to function
-        self.menuBaseView.addAction(self.resampleNumberButton)  # add action to menu
-        self.toolBarBase.addAction(self.resampleNumberButton)  # add action to toolbar
+        self.resampleNumberButton = QAction("Resample number", self)
+        self.resampleNumberButton.triggered.connect(lambda: resample_line_number_points(self))
+        self.menuModify.addAction(self.resampleNumberButton)
 
-        self.simplifyButton = QAction("Simplify line", self)  # create action
-        self.simplifyButton.triggered.connect(
-            lambda: simplify_line(self)
-        )  # connect action to function
-        self.menuBaseView.addAction(self.simplifyButton)  # add action to menu
-        self.toolBarBase.addAction(self.simplifyButton)  # add action to toolbar
+        self.simplifyButton = QAction("Simplify line", self)
+        self.simplifyButton.triggered.connect(lambda: simplify_line(self))
+        self.menuModify.addAction(self.simplifyButton)
 
-        self.copyParallelButton = QAction("Copy parallel", self)  # create action
-        self.copyParallelButton.triggered.connect(
-            lambda: copy_parallel(self)
-        )  # connect action to function
-        self.menuBaseView.addAction(self.copyParallelButton)  # add action to menu
-        self.toolBarBase.addAction(self.copyParallelButton)  # add action to toolbar
+        self.copyParallelButton = QAction("Copy parallel", self)
+        self.copyParallelButton.triggered.connect(lambda: copy_parallel(self))
+        self.menuCreate.addAction(self.copyParallelButton)
 
-        self.copyKinkButton = QAction("Copy kink", self)  # create action
-        self.copyKinkButton.triggered.connect(
-            lambda: copy_kink(self)
-        )  # connect action to function
-        self.menuBaseView.addAction(self.copyKinkButton)  # add action to menu
-        self.toolBarBase.addAction(self.copyKinkButton)  # add action to toolbar
+        self.copyKinkButton = QAction("Copy kink", self)
+        self.copyKinkButton.triggered.connect(lambda: copy_kink(self))
+        self.menuCreate.addAction(self.copyKinkButton)
 
-        self.copySimilarButton = QAction("Copy similar", self)  # create action
-        self.copySimilarButton.triggered.connect(
-            lambda: self.vector_by_mouse(copy_similar)
-        )  # connect action to function
-        self.menuBaseView.addAction(self.copySimilarButton)  # add action to menu
-        self.toolBarBase.addAction(self.copySimilarButton)  # add action to toolbar
+        self.copySimilarButton = QAction("Copy similar", self)
+        self.copySimilarButton.triggered.connect(lambda: self.vector_by_mouse(copy_similar))
+        self.menuCreate.addAction(self.copySimilarButton)
 
-        self.measureDistanceButton = QAction("Measure", self)  # cline_thickreate action
-        self.measureDistanceButton.triggered.connect(
-            lambda: self.vector_by_mouse(measure_distance)
-        )  # connect action to function
-        self.menuBaseView.addAction(self.measureDistanceButton)  # add action to menu
-        self.toolBarBase.addAction(self.measureDistanceButton)  # add action to toolbar
+        self.measureDistanceButton = QAction("Measure", self)
+        self.measureDistanceButton.triggered.connect(lambda: self.vector_by_mouse(measure_distance))
+        self.menuView.addAction(self.measureDistanceButton)
 
         self.cleanSectionButton = QAction("Clean intersections", self)
-        self.cleanSectionButton.triggered.connect(
-            lambda: clean_intersection(self)
-        )  # connect action to function
-        self.menuBaseView.addAction(self.cleanSectionButton)  # add action to menu
-        self.toolBarBase.addAction(self.cleanSectionButton)  # add action to toolbar
+        self.cleanSectionButton.triggered.connect(lambda: clean_intersection(self))
+        self.menuSelect.addAction(self.cleanSectionButton)
 
     def vector_by_mouse(self, func):
         # if not self.selected_uids:
@@ -3104,27 +3017,13 @@ class ViewMap(View2D):
         """Imports for this view."""
         """Customize menus and tools for this view"""
         super().initialize_menu_tools()
-        self.sectionFromAzimuthButton = QAction(
-            "Section from azimuth", self
-        )  # create action
-        self.sectionFromAzimuthButton.triggered.connect(
-            lambda: self.vector_by_mouse(section_from_azimuth)
-        )  # connect action to function)  # connect action to function with additional argument parent
-        self.menuBaseView.addAction(self.sectionFromAzimuthButton)  # add action to menu
-        self.toolBarBase.addAction(
-            self.sectionFromAzimuthButton
-        )  # add action to toolbar
+        self.sectionFromAzimuthButton = QAction("Section from azimuth", self)
+        self.sectionFromAzimuthButton.triggered.connect(lambda: self.vector_by_mouse(section_from_azimuth))
+        self.menuCreate.addAction(self.sectionFromAzimuthButton)
 
-        self.boundaryFromPointsButton = QAction(
-            "Boundary from 2 points", self
-        )  # create action
-        self.boundaryFromPointsButton.triggered.connect(
-            lambda: self.vector_by_mouse(boundary_from_points)
-        )  # connect action to function with additional argument parent
-        self.menuBaseView.addAction(self.boundaryFromPointsButton)  # add action to menu
-        self.toolBarBase.addAction(
-            self.boundaryFromPointsButton
-        )  # add action to toolbar
+        self.boundaryFromPointsButton = QAction("Boundary from 2 points", self)
+        self.boundaryFromPointsButton.triggered.connect(lambda: self.vector_by_mouse(boundary_from_points))
+        self.menuCreate.addAction(self.boundaryFromPointsButton)
 
     def show_actor_with_property(
             self, uid=None, collection=None, show_property=None, visible=None
@@ -4568,38 +4467,27 @@ class ViewStereoplot(MPLView):
         superclasses, that are appended here using super().initialize_menu_tools()."""
         # append code from MPLView()
         super().initialize_menu_tools()
+
         # then add new code specific to MPLView()
         self.actionContours = QAction("View contours", self)
-        self.actionContours.triggered.connect(
-            lambda: self.toggle_contours(filled=False)
-        )
-        self.menuTools.addAction(self.actionContours)
+        self.actionContours.triggered.connect(lambda: self.toggle_contours(filled=False))
+        self.menuView.addAction(self.actionContours)
 
-        self.menuPlot = QMenu("Plot options", self)
-
-        self.menuGrids = QMenu("Grid overlays", self)
         self.actionSetPolar = QAction("Set polar grid", self)
         self.actionSetPolar.triggered.connect(lambda: self.change_grid(kind="polar"))
+        self.menuView.addAction(self.actionSetPolar)
+
         self.actionSetEq = QAction("Set equatorial grid", self)
         self.actionSetEq.triggered.connect(lambda: self.change_grid(kind="equatorial"))
-        self.menuGrids.addAction(self.actionSetPolar)
-        self.menuGrids.addAction(self.actionSetEq)
-        self.menuPlot.addMenu(self.menuGrids)
+        self.menuView.addAction(self.actionSetEq)
 
-        self.menuProj = QMenu("Stereoplot projection", self)
         self.actionSetEquiare = QAction("Equiareal (Schmidt)", self)
-        self.actionSetEquiare.triggered.connect(
-            lambda: self.change_proj(projection="equal_area_stereonet")
-        )
-        self.actionSetEquiang = QAction("Equiangolar (Wulff)", self)
-        self.actionSetEquiang.triggered.connect(
-            lambda: self.change_proj(projection="equal_angle_stereonet")
-        )
-        self.menuProj.addAction(self.actionSetEquiare)
-        self.menuProj.addAction(self.actionSetEquiang)
-        self.menuPlot.addMenu(self.menuProj)
+        self.actionSetEquiare.triggered.connect(lambda: self.change_proj(projection="equal_area_stereonet"))
+        self.menuView.addAction(self.actionSetEquiare)
 
-        self.menubar.insertMenu(self.menuHelp.menuAction(), self.menuPlot)
+        self.actionSetEquiang = QAction("Equiangolar (Wulff)", self)
+        self.actionSetEquiang.triggered.connect(lambda: self.change_proj(projection="equal_angle_stereonet"))
+        self.menuView.addAction(self.actionSetEquiang)
 
     def initialize_interactor(self, kind=None, projection="equal_area_stereonet"):
         self.grid_kind = kind
@@ -4733,13 +4621,13 @@ class ViewStereoplot(MPLView):
 
     def create_topology_tree(self):
         """Create topology tree with checkboxes and properties"""
-        self.TopologyTreeWidget.clear()
-        self.TopologyTreeWidget.setColumnCount(3)
-        self.TopologyTreeWidget.setHeaderLabels(
+        self.GeologyTopologyTreeWidget.clear()
+        self.GeologyTopologyTreeWidget.setColumnCount(3)
+        self.GeologyTopologyTreeWidget.setHeaderLabels(
             ["Role > Scenario > Name", "uid", "property"]
         )
-        self.TopologyTreeWidget.hideColumn(1)  # hide the uid column
-        self.TopologyTreeWidget.setItemsExpandable(True)
+        self.GeologyTopologyTreeWidget.hideColumn(1)  # hide the uid column
+        self.GeologyTopologyTreeWidget.setItemsExpandable(True)
 
         filtered_topo = self.parent.geol_coll.df.loc[
             (self.parent.geol_coll.df["topology"] == "VertexSet")
@@ -4749,7 +4637,7 @@ class ViewStereoplot(MPLView):
         topo_types = pd_unique(filtered_topo)
         for topo_type in topo_types:
             tlevel_1 = QTreeWidgetItem(
-                self.TopologyTreeWidget, [topo_type]
+                self.GeologyTopologyTreeWidget, [topo_type]
             )  # self.GeologyTreeWidget as parent -> top level
             tlevel_1.setFlags(
                 tlevel_1.flags() | Qt.ItemIsUserTristate | Qt.ItemIsUserCheckable
@@ -4790,7 +4678,7 @@ class ViewStereoplot(MPLView):
                     tlevel_3 = QTreeWidgetItem(
                         tlevel_2, [name, uid]
                     )  # tlevel_2 as parent -> lower level
-                    self.TopologyTreeWidget.setItemWidget(tlevel_3, 2, property_combo)
+                    self.GeologyTopologyTreeWidget.setItemWidget(tlevel_3, 2, property_combo)
                     property_combo.currentIndexChanged.connect(
                         lambda: self.toggle_property()
                     )
@@ -4805,10 +4693,10 @@ class ViewStereoplot(MPLView):
                         tlevel_3.setCheckState(0, Qt.Unchecked)
         """Send messages. Note that with tristate several signals are emitted in a sequence, one for each
         changed item, but upper levels do not broadcast uid's so they are filtered in the toggle method."""
-        self.TopologyTreeWidget.itemChanged.connect(
+        self.GeologyTopologyTreeWidget.itemChanged.connect(
             self.toggle_geology_visibility 
         )
-        self.TopologyTreeWidget.expandAll()
+        self.GeologyTopologyTreeWidget.expandAll()
 
     def update_geology_tree_added(self, new_list=None):
         """Update geology tree without creating a new model"""
@@ -5105,7 +4993,7 @@ class ViewStereoplot(MPLView):
         uid_list = list(new_list["uid"])
         for uid in uid_list:
             if (
-                    self.TopologyTreeWidget.findItems(
+                    self.GeologyTopologyTreeWidget.findItems(
                         self.parent.geol_coll.get_uid_topology(uid),
                         Qt.MatchExactly,
                         0,
@@ -5115,14 +5003,14 @@ class ViewStereoplot(MPLView):
                 """Already exists a TreeItem (1 level) for the topological type"""
                 counter_1 = 0
                 for child_1 in range(
-                        self.TopologyTreeWidget.findItems(
+                        self.GeologyTopologyTreeWidget.findItems(
                             self.parent.geol_coll.get_uid_topology(uid),
                             Qt.MatchExactly,
                             0,
                         )[0].childCount()
                 ):
                     """for cycle that loops n times as the number of subItems in the specific topological type branch"""
-                    if self.TopologyTreeWidget.findItems(
+                    if self.GeologyTopologyTreeWidget.findItems(
                             self.parent.geol_coll.get_uid_topology(uid),
                             Qt.MatchExactly,
                             0,
@@ -5134,13 +5022,13 @@ class ViewStereoplot(MPLView):
                         counter_1 += 1
                 if counter_1 != 0:
                     for child_1 in range(
-                            self.TopologyTreeWidget.findItems(
+                            self.GeologyTopologyTreeWidget.findItems(
                                 self.parent.geol_coll.get_uid_topology(uid),
                                 Qt.MatchExactly,
                                 0,
                             )[0].childCount()
                     ):
-                        if self.TopologyTreeWidget.findItems(
+                        if self.GeologyTopologyTreeWidget.findItems(
                                 self.parent.geol_coll.get_uid_topology(uid),
                                 Qt.MatchExactly,
                                 0,
@@ -5160,14 +5048,14 @@ class ViewStereoplot(MPLView):
                                 property_combo.addItem(prop)
                             name = self.parent.geol_coll.get_uid_name(uid)
                             tlevel_3 = QTreeWidgetItem(
-                                self.TopologyTreeWidget.findItems(
+                                self.GeologyTopologyTreeWidget.findItems(
                                     self.parent.geol_coll.get_uid_topology(uid),
                                     Qt.MatchExactly,
                                     0,
                                 )[0].child(child_1),
                                 [name, uid],
                             )
-                            self.TopologyTreeWidget.setItemWidget(
+                            self.GeologyTopologyTreeWidget.setItemWidget(
                                 tlevel_3, 2, property_combo
                             )
                             property_combo.currentIndexChanged.connect(
@@ -5182,12 +5070,12 @@ class ViewStereoplot(MPLView):
                                 self.actors_df["uid"] == uid, "show"
                             ].values[0]:
                                 tlevel_3.setCheckState(0, Qt.Unchecked)
-                            self.TopologyTreeWidget.insertTopLevelItem(0, tlevel_3)
+                            self.GeologyTopologyTreeWidget.insertTopLevelItem(0, tlevel_3)
                             break
                 else:
                     """Same topological type, different scenario"""
                     tlevel_2 = QTreeWidgetItem(
-                        self.TopologyTreeWidget.findItems(
+                        self.GeologyTopologyTreeWidget.findItems(
                             self.parent.geol_coll.get_uid_topology(uid),
                             Qt.MatchExactly,
                             0,
@@ -5197,7 +5085,7 @@ class ViewStereoplot(MPLView):
                     tlevel_2.setFlags(
                         tlevel_2.flags() | Qt.ItemIsUserTristate | Qt.ItemIsUserCheckable
                     )
-                    self.TopologyTreeWidget.insertTopLevelItem(0, tlevel_2)
+                    self.GeologyTopologyTreeWidget.insertTopLevelItem(0, tlevel_2)
                     property_combo = QComboBox()
                     property_combo.uid = uid
                     # property_combo.addItem("Planes")
@@ -5206,7 +5094,7 @@ class ViewStereoplot(MPLView):
                         property_combo.addItem(prop)
                     name = self.parent.geol_coll.get_uid_name(uid)
                     tlevel_3 = QTreeWidgetItem(tlevel_2, [name, uid])
-                    self.TopologyTreeWidget.setItemWidget(tlevel_3, 2, property_combo)
+                    self.GeologyTopologyTreeWidget.setItemWidget(tlevel_3, 2, property_combo)
                     property_combo.currentIndexChanged.connect(
                         lambda: self.toggle_property()
                     )
@@ -5219,25 +5107,25 @@ class ViewStereoplot(MPLView):
                         self.actors_df["uid"] == uid, "show"
                     ].values[0]:
                         tlevel_3.setCheckState(0, Qt.Unchecked)
-                    self.TopologyTreeWidget.insertTopLevelItem(0, tlevel_3)
+                    self.GeologyTopologyTreeWidget.insertTopLevelItem(0, tlevel_3)
                     break
             else:
                 """Different topological type and scenario"""
                 tlevel_1 = QTreeWidgetItem(
-                    self.TopologyTreeWidget,
+                    self.GeologyTopologyTreeWidget,
                     [self.parent.geol_coll.get_uid_topology(uid)],
                 )
                 tlevel_1.setFlags(
                     tlevel_1.flags() | Qt.ItemIsUserTristate | Qt.ItemIsUserCheckable
                 )
-                self.TopologyTreeWidget.insertTopLevelItem(0, tlevel_1)
+                self.GeologyTopologyTreeWidget.insertTopLevelItem(0, tlevel_1)
                 tlevel_2 = QTreeWidgetItem(
                     tlevel_1, [self.parent.geol_coll.get_uid_scenario(uid)]
                 )
                 tlevel_2.setFlags(
                     tlevel_2.flags() | Qt.ItemIsUserTristate | Qt.ItemIsUserCheckable
                 )
-                self.TopologyTreeWidget.insertTopLevelItem(0, tlevel_2)
+                self.GeologyTopologyTreeWidget.insertTopLevelItem(0, tlevel_2)
                 property_combo = QComboBox()
                 property_combo.uid = uid
                 # property_combo.addItem("Planes")
@@ -5246,7 +5134,7 @@ class ViewStereoplot(MPLView):
                     property_combo.addItem(prop)
                 name = self.parent.geol_coll.get_uid_name(uid)
                 tlevel_3 = QTreeWidgetItem(tlevel_2, [name, uid])
-                self.TopologyTreeWidget.setItemWidget(tlevel_3, 2, property_combo)
+                self.GeologyTopologyTreeWidget.setItemWidget(tlevel_3, 2, property_combo)
                 property_combo.currentIndexChanged.connect(lambda: toggle_property(self))
                 tlevel_3.setFlags(tlevel_3.flags() | Qt.ItemIsUserCheckable)
                 if self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]:
@@ -5255,12 +5143,12 @@ class ViewStereoplot(MPLView):
                     self.actors_df["uid"] == uid, "show"
                 ].values[0]:
                     tlevel_3.setCheckState(0, Qt.Unchecked)
-                self.TopologyTreeWidget.insertTopLevelItem(0, tlevel_3)
+                self.GeologyTopologyTreeWidget.insertTopLevelItem(0, tlevel_3)
                 break
-        self.TopologyTreeWidget.itemChanged.connect(
+        self.GeologyTopologyTreeWidget.itemChanged.connect(
             self.toggle_geology_visibility 
         )
-        self.TopologyTreeWidget.expandAll()
+        self.GeologyTopologyTreeWidget.expandAll()
 
     def set_actor_visible(self, uid=None, visible=None):
         # print(self.actors_df)
