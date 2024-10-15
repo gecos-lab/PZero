@@ -69,7 +69,7 @@ def create_backgrounds_tree(self):
                     flevel_3, 2, property_combo
                 )
                 property_combo.currentIndexChanged.connect(
-                    lambda: self.toggle_property()
+                    lambda *, sender=property_combo: self.toggle_property(sender=sender)
                 )
                 flevel_3.setFlags(flevel_3.flags() | Qt.ItemIsUserCheckable)
                 if self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[
@@ -148,7 +148,7 @@ def create_backgrounds_topology_tree(self):
                     tlevel_3, 2, property_combo
                 )
                 property_combo.currentIndexChanged.connect(
-                    lambda: self.toggle_property()
+                    lambda *, sender=property_combo: self.toggle_property(sender=sender)
                 )
                 tlevel_3.setFlags(tlevel_3.flags() | Qt.ItemIsUserCheckable)
                 if self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[
@@ -254,7 +254,7 @@ def update_backgrounds_tree_added(self, new_list=None, sec_uid=None):
                             flevel_3, 2, property_combo
                         )
                         property_combo.currentIndexChanged.connect(
-                            lambda: self.toggle_property()
+                            lambda *, sender=property_combo: self.toggle_property(sender=sender)
                         )
                         flevel_3.setFlags(flevel_3.flags() | Qt.ItemIsUserCheckable)
                         if self.actors_df.loc[
@@ -297,7 +297,7 @@ def update_backgrounds_tree_added(self, new_list=None, sec_uid=None):
                     flevel_3, 2, property_combo
                 )
                 property_combo.currentIndexChanged.connect(
-                    lambda: self.toggle_property()
+                    lambda *, sender=property_combo: self.toggle_property(sender=sender)
                 )
                 flevel_3.setFlags(flevel_3.flags() | Qt.ItemIsUserCheckable)
                 if self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[
@@ -339,7 +339,7 @@ def update_backgrounds_tree_added(self, new_list=None, sec_uid=None):
             flevel_3 = QTreeWidgetItem(flevel_2, [name, uid])
             self.BackgroundsTreeWidget.setItemWidget(flevel_3, 2, property_combo)
             property_combo.currentIndexChanged.connect(
-                lambda: self.toggle_property()
+                lambda *, sender=property_combo: self.toggle_property(sender=sender)
             )
             flevel_3.setFlags(flevel_3.flags() | Qt.ItemIsUserCheckable)
             if self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]:
@@ -513,7 +513,7 @@ def update_backgrounds_topology_tree_added(self, new_list=None, sec_uid=None):
                             tlevel_3, 2, property_combo
                         )
                         property_combo.currentIndexChanged.connect(
-                            lambda: self.toggle_property()
+                            lambda *, sender=property_combo: self.toggle_property(sender=sender)
                         )
                         tlevel_3.setFlags(tlevel_3.flags() | Qt.ItemIsUserCheckable)
                         if self.actors_df.loc[
@@ -557,7 +557,7 @@ def update_backgrounds_topology_tree_added(self, new_list=None, sec_uid=None):
                     tlevel_3, 2, property_combo
                 )
                 property_combo.currentIndexChanged.connect(
-                    lambda: self.toggle_property()
+                    lambda *, sender=property_combo: self.toggle_property(sender=sender)
                 )
                 tlevel_3.setFlags(tlevel_3.flags() | Qt.ItemIsUserCheckable)
                 if self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[
@@ -601,7 +601,7 @@ def update_backgrounds_topology_tree_added(self, new_list=None, sec_uid=None):
                 tlevel_3, 2, property_combo
             )
             property_combo.currentIndexChanged.connect(
-                lambda: self.toggle_property()
+                lambda *, sender=property_combo: self.toggle_property(sender=sender)
             )
             tlevel_3.setFlags(tlevel_3.flags() | Qt.ItemIsUserCheckable)
             if self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]:

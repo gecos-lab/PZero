@@ -74,7 +74,7 @@ def create_fluids_tree(self):
                     )  # flevel_3 as parent -> lower level
                     self.FluidsTreeWidget.setItemWidget(flevel_4, 2, property_combo)
                     property_combo.currentIndexChanged.connect(
-                        lambda: self.toggle_property()
+                        lambda *, sender=property_combo: self.toggle_property(sender=sender)
                     )
                     flevel_4.setFlags(flevel_4.flags() | Qt.ItemIsUserCheckable)
                     if self.actors_df.loc[
@@ -146,7 +146,7 @@ def create_fluids_topology_tree(self):
                     tlevel_3, 2, property_combo
                 )
                 property_combo.currentIndexChanged.connect(
-                    lambda: self.toggle_property()
+                    lambda *, sender=property_combo: self.toggle_property(sender=sender)
                 )
                 tlevel_3.setFlags(tlevel_3.flags() | Qt.ItemIsUserCheckable)
                 if self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[
@@ -299,7 +299,7 @@ def update_fluids_tree_added(self, new_list=None, sec_uid=None):
                                         flevel_4, 2, property_combo
                                     )
                                     property_combo.currentIndexChanged.connect(
-                                        lambda: self.toggle_property()
+                                        lambda *, sender=property_combo: self.toggle_property(sender=sender)
                                     )
                                     flevel_4.setFlags(
                                         flevel_4.flags() | Qt.ItemIsUserCheckable
@@ -350,7 +350,7 @@ def update_fluids_tree_added(self, new_list=None, sec_uid=None):
                                 flevel_4, 2, property_combo
                             )
                             property_combo.currentIndexChanged.connect(
-                                lambda: self.toggle_property()
+                                lambda *, sender=property_combo: self.toggle_property(sender=sender)
                             )
                             flevel_4.setFlags(
                                 flevel_4.flags() | Qt.ItemIsUserCheckable
@@ -398,7 +398,7 @@ def update_fluids_tree_added(self, new_list=None, sec_uid=None):
                 flevel_4 = QTreeWidgetItem(flevel_3, [name, uid])
                 self.FluidsTreeWidget.setItemWidget(flevel_4, 2, property_combo)
                 property_combo.currentIndexChanged.connect(
-                    lambda: self.toggle_property()
+                    lambda *, sender=property_combo: self.toggle_property(sender=sender)
                 )
                 flevel_4.setFlags(flevel_4.flags() | Qt.ItemIsUserCheckable)
                 if self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[
@@ -447,7 +447,7 @@ def update_fluids_tree_added(self, new_list=None, sec_uid=None):
             flevel_4 = QTreeWidgetItem(flevel_3, [name, uid])
             self.FluidsTreeWidget.setItemWidget(flevel_4, 2, property_combo)
             property_combo.currentIndexChanged.connect(
-                lambda: self.toggle_property()
+                lambda *, sender=property_combo: self.toggle_property(sender=sender)
             )
             flevel_4.setFlags(flevel_4.flags() | Qt.ItemIsUserCheckable)
             if self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]:
@@ -638,7 +638,7 @@ def update_fluids_topology_tree_added(self, new_list=None, sec_uid=None):
                             tlevel_3, 2, property_combo
                         )
                         property_combo.currentIndexChanged.connect(
-                            lambda: self.toggle_property()
+                            lambda *, sender=property_combo: self.toggle_property(sender=sender)
                         )
                         tlevel_3.setFlags(tlevel_3.flags() | Qt.ItemIsUserCheckable)
                         if self.actors_df.loc[
@@ -679,7 +679,7 @@ def update_fluids_topology_tree_added(self, new_list=None, sec_uid=None):
                     tlevel_3, 2, property_combo
                 )
                 property_combo.currentIndexChanged.connect(
-                    lambda: self.toggle_property()
+                    lambda *, sender=property_combo: self.toggle_property(sender=sender)
                 )
                 tlevel_3.setFlags(tlevel_3.flags() | Qt.ItemIsUserCheckable)
                 if self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[
@@ -721,7 +721,7 @@ def update_fluids_topology_tree_added(self, new_list=None, sec_uid=None):
             tlevel_3 = QTreeWidgetItem(tlevel_2, [name, uid])
             self.FluidsTopologyTreeWidget.setItemWidget(tlevel_3, 2, property_combo)
             property_combo.currentIndexChanged.connect(
-                lambda: self.toggle_property()
+                lambda *, sender=property_combo: self.toggle_property(sender=sender)
             )
             tlevel_3.setFlags(tlevel_3.flags() | Qt.ItemIsUserCheckable)
             if self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]:

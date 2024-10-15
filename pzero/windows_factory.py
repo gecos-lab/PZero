@@ -1047,13 +1047,12 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
 
     # General methods shared by all views
 
-    def toggle_property(self):
+    def toggle_property(self, sender=None):
         """Generic method to toggle the property shown by an actor that is already present in the view."""
-        combo = self.sender()
-        show_property = combo.currentText()
-        uid = combo.uid
+        show_property = sender.currentText()
+        uid = sender.uid
         try:
-            name = combo.name
+            name = sender.name
         except AttributeError:
             name = None
         show = self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]
@@ -4602,7 +4601,7 @@ class ViewStereoplot(MPLView):
                             glevel_4, 2, property_combo
                         )
                         property_combo.currentIndexChanged.connect(
-                            lambda: self.toggle_property()
+                            lambda *, sender=property_combo: self.toggle_property(sender=sender)
                         )
                         glevel_4.setFlags(glevel_4.flags() | Qt.ItemIsUserCheckable)
                         if self.actors_df.loc[
@@ -4681,7 +4680,7 @@ class ViewStereoplot(MPLView):
                     )  # tlevel_2 as parent -> lower level
                     self.GeologyTopologyTreeWidget.setItemWidget(tlevel_3, 2, property_combo)
                     property_combo.currentIndexChanged.connect(
-                        lambda: self.toggle_property()
+                        lambda *, sender=property_combo: self.toggle_property(sender=sender)
                     )
                     tlevel_3.setFlags(tlevel_3.flags() | Qt.ItemIsUserCheckable)
                     if self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[
@@ -4829,7 +4828,7 @@ class ViewStereoplot(MPLView):
                                             glevel_4, 2, property_combo
                                         )
                                         property_combo.currentIndexChanged.connect(
-                                            lambda: self.toggle_property()
+                                            lambda *, sender=property_combo: self.toggle_property(sender=sender)
                                         )
                                         glevel_4.setFlags(
                                             glevel_4.flags() | Qt.ItemIsUserCheckable
@@ -4880,7 +4879,7 @@ class ViewStereoplot(MPLView):
                                     glevel_4, 2, property_combo
                                 )
                                 property_combo.currentIndexChanged.connect(
-                                    lambda: self.toggle_property()
+                                    lambda *, sender=property_combo: self.toggle_property(sender=sender)
                                 )
                                 glevel_4.setFlags(
                                     glevel_4.flags() | Qt.ItemIsUserCheckable
@@ -4926,7 +4925,7 @@ class ViewStereoplot(MPLView):
                     glevel_4 = QTreeWidgetItem(glevel_3, [name, uid])
                     self.GeologyTreeWidget.setItemWidget(glevel_4, 2, property_combo)
                     property_combo.currentIndexChanged.connect(
-                        lambda: self.toggle_property()
+                        lambda *, sender=property_combo: self.toggle_property(sender=sender)
                     )
                     glevel_4.setFlags(glevel_4.flags() | Qt.ItemIsUserCheckable)
                     if self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[
@@ -4973,7 +4972,7 @@ class ViewStereoplot(MPLView):
                 glevel_4 = QTreeWidgetItem(glevel_3, [name, uid])
                 self.GeologyTreeWidget.setItemWidget(glevel_4, 2, property_combo)
                 property_combo.currentIndexChanged.connect(
-                    lambda: self.toggle_property()
+                    lambda *, sender=property_combo: self.toggle_property(sender=sender)
                 )
                 glevel_4.setFlags(glevel_4.flags() | Qt.ItemIsUserCheckable)
                 if self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]:
@@ -5060,7 +5059,7 @@ class ViewStereoplot(MPLView):
                                 tlevel_3, 2, property_combo
                             )
                             property_combo.currentIndexChanged.connect(
-                                lambda: self.toggle_property()
+                                lambda *, sender=property_combo: self.toggle_property(sender=sender)
                             )
                             tlevel_3.setFlags(tlevel_3.flags() | Qt.ItemIsUserCheckable)
                             if self.actors_df.loc[
@@ -5097,7 +5096,7 @@ class ViewStereoplot(MPLView):
                     tlevel_3 = QTreeWidgetItem(tlevel_2, [name, uid])
                     self.GeologyTopologyTreeWidget.setItemWidget(tlevel_3, 2, property_combo)
                     property_combo.currentIndexChanged.connect(
-                        lambda: self.toggle_property()
+                        lambda *, sender=property_combo: self.toggle_property(sender=sender)
                     )
                     tlevel_3.setFlags(tlevel_3.flags() | Qt.ItemIsUserCheckable)
                     if self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[
@@ -5136,7 +5135,9 @@ class ViewStereoplot(MPLView):
                 name = self.parent.geol_coll.get_uid_name(uid)
                 tlevel_3 = QTreeWidgetItem(tlevel_2, [name, uid])
                 self.GeologyTopologyTreeWidget.setItemWidget(tlevel_3, 2, property_combo)
-                property_combo.currentIndexChanged.connect(lambda: toggle_property(self))
+                property_combo.currentIndexChanged.connect(
+                    lambda *, sender=property_combo: self.toggle_property(sender=sender)
+                )
                 tlevel_3.setFlags(tlevel_3.flags() | Qt.ItemIsUserCheckable)
                 if self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]:
                     tlevel_3.setCheckState(0, Qt.Checked)

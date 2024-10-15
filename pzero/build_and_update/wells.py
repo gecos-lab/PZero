@@ -33,7 +33,9 @@ def create_well_tree(self):
         property_combo.addItem("none")
         property_combo.addItem("name")
         self.WellsTreeWidget.setItemWidget(tlevel_1, 2, property_combo)
-        property_combo.currentIndexChanged.connect(lambda: self.toggle_property())
+        property_combo.currentIndexChanged.connect(
+            lambda *, sender=property_combo: self.toggle_property(sender=sender)
+        )
 
         # ======================================= TRACE =======================================
 
@@ -60,7 +62,9 @@ def create_well_tree(self):
                 property_combo.addItem(prop)
 
         self.WellsTreeWidget.setItemWidget(tlevel_2_trace, 2, property_combo)
-        property_combo.currentIndexChanged.connect(lambda: self.toggle_property())
+        property_combo.currentIndexChanged.connect(
+            lambda *, sender=property_combo: self.toggle_property(sender=sender)
+        )
         tlevel_2_trace.setFlags(tlevel_2_trace.flags() | Qt.ItemIsUserCheckable)
         if self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]:
             tlevel_2_trace.setCheckState(0, Qt.Checked)
@@ -80,7 +84,9 @@ def create_well_tree(self):
     #     property_combo.addItem(prop)
 
     # self.WellsTreeWidget.setItemWidget(tlevel_2_mark, 2, property_combo)
-    # property_combo.currentIndexChanged.connect(lambda: self.toggle_property())
+    # property_combo.currentIndexChanged.connect(
+    #     lambda *, sender=property_combo: self.toggle_property(sender=sender)
+    # )
     # tlevel_2_mark.setFlags(tlevel_2_mark.flags() | Qt.ItemIsUserCheckable)
     # if self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]:
     #     tlevel_2_mark.setCheckState(0, Qt.Checked)
@@ -101,7 +107,9 @@ def create_well_tree(self):
     #     property_combo.addItem(name)
 
     # self.WellsTreeWidget.setItemWidget(tlevel_2_mark, 2, property_combo)
-    # property_combo.currentIndexChanged.connect(lambda: self.toggle_property())
+    # property_combo.currentIndexChanged.connect(
+    #     lambda *, sender=property_combo: self.toggle_property(sender=sender)
+    # )
     # tlevel_2_mark.setFlags(tlevel_2_mark.flags() | Qt.ItemIsUserCheckable)
     # if self.actors_df.loc[self.actors_df['uid'] == uid, 'show'].values[0]:
     #     tlevel_2_mark.setCheckState(0, Qt.Checked)
@@ -163,7 +171,7 @@ def update_well_tree_added(self, new_list=None):
 
                 self.WellsTreeWidget.setItemWidget(glevel_2, 2, property_combo)
                 property_combo.currentIndexChanged.connect(
-                    lambda: self.toggle_property()
+                    lambda *, sender=property_combo: self.toggle_property(sender=sender)
                 )
                 glevel_2.setFlags(glevel_2.flags() | Qt.ItemIsUserCheckable)
                 if self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[
@@ -193,7 +201,7 @@ def update_well_tree_added(self, new_list=None):
             property_combo.addItem("name")
             self.WellsTreeWidget.setItemWidget(tlevel_1, 2, property_combo)
             property_combo.currentIndexChanged.connect(
-                lambda: self.toggle_property()
+                lambda *, sender=property_combo: self.toggle_property(sender=sender)
             )
 
             # ======================================= TRACE =======================================
@@ -222,7 +230,7 @@ def update_well_tree_added(self, new_list=None):
 
             self.WellsTreeWidget.setItemWidget(tlevel_2_trace, 2, property_combo)
             property_combo.currentIndexChanged.connect(
-                lambda: self.toggle_property()
+                lambda *, sender=property_combo: self.toggle_property(sender=sender)
             )
             tlevel_2_trace.setFlags(tlevel_2_trace.flags() | Qt.ItemIsUserCheckable)
             if self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]:

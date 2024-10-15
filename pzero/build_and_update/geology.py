@@ -85,7 +85,9 @@ def create_geology_tree(self):
                     self.GeologyTreeWidget.setItemWidget(
                         glevel_4, 2, property_combo
                     )
-                    property_combo.currentIndexChanged.connect(self.toggle_property)
+                    property_combo.currentIndexChanged.connect(
+                        lambda *, sender=property_combo: self.toggle_property(sender=sender)
+                    )
                     glevel_4.setFlags(glevel_4.flags() | Qt.ItemIsUserCheckable)
                     if self.actors_df.loc[
                         self.actors_df["uid"] == uid, "show"
@@ -232,7 +234,7 @@ def update_geology_tree_added(self, uid_list=None):
                                         glevel_4, 2, property_combo
                                     )
                                     property_combo.currentIndexChanged.connect(
-                                        lambda: self.toggle_property()
+                                        lambda *, sender=property_combo: self.toggle_property(sender=sender)
                                     )
                                     glevel_4.setFlags(
                                         glevel_4.flags() | Qt.ItemIsUserCheckable
@@ -285,7 +287,7 @@ def update_geology_tree_added(self, uid_list=None):
                                 glevel_4, 2, property_combo
                             )
                             property_combo.currentIndexChanged.connect(
-                                lambda: self.toggle_property()
+                                lambda *, sender=property_combo: self.toggle_property(sender=sender)
                             )
                             glevel_4.setFlags(
                                 glevel_4.flags() | Qt.ItemIsUserCheckable
@@ -333,7 +335,7 @@ def update_geology_tree_added(self, uid_list=None):
                 glevel_4 = QTreeWidgetItem(glevel_3, [name, uid])
                 self.GeologyTreeWidget.setItemWidget(glevel_4, 2, property_combo)
                 property_combo.currentIndexChanged.connect(
-                    lambda: self.toggle_property()
+                    lambda *, sender=property_combo: self.toggle_property(sender=sender)
                 )
                 glevel_4.setFlags(glevel_4.flags() | Qt.ItemIsUserCheckable)
                 if self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[
@@ -382,7 +384,7 @@ def update_geology_tree_added(self, uid_list=None):
             glevel_4 = QTreeWidgetItem(glevel_3, [name, uid])
             self.GeologyTreeWidget.setItemWidget(glevel_4, 2, property_combo)
             property_combo.currentIndexChanged.connect(
-                lambda: self.toggle_property()
+                lambda *, sender=property_combo: self.toggle_property(sender=sender)
             )
             glevel_4.setFlags(glevel_4.flags() | Qt.ItemIsUserCheckable)
             if self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]:
@@ -552,7 +554,7 @@ def create_topology_tree(self):
                 )
                 self.GeologyTopologyTreeWidget.setItemWidget(tlevel_3, 2, property_combo)
                 property_combo.currentIndexChanged.connect(
-                    lambda: self.toggle_property()
+                    lambda *, sender=property_combo: self.toggle_property(sender=sender)
                 )
                 tlevel_3.setFlags(tlevel_3.flags() | Qt.ItemIsUserCheckable)
                 if self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[
@@ -642,7 +644,7 @@ def update_topology_tree_added(self, uid_list=None):
                             tlevel_3, 2, property_combo
                         )
                         property_combo.currentIndexChanged.connect(
-                            lambda: self.toggle_property()
+                            lambda *, sender=property_combo: self.toggle_property(sender=sender)
                         )
                         tlevel_3.setFlags(tlevel_3.flags() | Qt.ItemIsUserCheckable)
                         if self.actors_df.loc[
@@ -681,7 +683,7 @@ def update_topology_tree_added(self, uid_list=None):
                 tlevel_3 = QTreeWidgetItem(tlevel_2, [name, uid])
                 self.GeologyTopologyTreeWidget.setItemWidget(tlevel_3, 2, property_combo)
                 property_combo.currentIndexChanged.connect(
-                    lambda: self.toggle_property()
+                    lambda *, sender=property_combo: self.toggle_property(sender=sender)
                 )
                 tlevel_3.setFlags(tlevel_3.flags() | Qt.ItemIsUserCheckable)
                 if self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[
@@ -723,7 +725,7 @@ def update_topology_tree_added(self, uid_list=None):
             tlevel_3 = QTreeWidgetItem(tlevel_2, [name, uid])
             self.GeologyTopologyTreeWidget.setItemWidget(tlevel_3, 2, property_combo)
             property_combo.currentIndexChanged.connect(
-                lambda: self.toggle_property()
+                lambda *, sender=property_combo: self.toggle_property(sender=sender)
             )
             tlevel_3.setFlags(tlevel_3.flags() | Qt.ItemIsUserCheckable)
             if self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]:
