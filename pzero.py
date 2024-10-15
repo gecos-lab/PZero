@@ -16,6 +16,11 @@ from PySide6.QtCore import Qt
 # Start Qt application
 app = QApplication(argv)
 
+# Use Fusion style: this is a uniform style for all platforms, but the
+# real reason to use it is that the standard Windows 11 style has some bug
+# in Qt 6.7.2, including one related to tear-off submenus.
+app.setStyle('Fusion')
+
 # Display splash screen before doing anything else
 splash_image = QPixmap("./images/splash_image.jpg")
 splash = QSplashScreen(splash_image)

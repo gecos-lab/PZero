@@ -1298,6 +1298,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
 
     def disable_actions(self):
         for action in self.findChildren(QAction):
+            print("action: ", action)
             if isinstance(action.parent(), NavigationToolbar) is False:
                 action.setDisabled(True)
 
@@ -2916,8 +2917,8 @@ class View2D(VTKView):
         """Imports for this view."""
         """Customize menus and tools for this view"""
         super().initialize_menu_tools()
-        self.menuBaseView.setTitle("Edit")
-        self.actionBase_Tool.setText("Edit")
+        # self.menuBaseView.setTitle("Edit")
+        # self.actionBase_Tool.setText("Edit")
 
         # ------------------------------------
         # CONSIDER MOVING SOME OF THE FOLLOWING METHODS TO VTKView(), IN ORDER TO HAVE THEM ALSO IN 3D VIEWS

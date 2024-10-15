@@ -170,6 +170,9 @@
     </rect>
    </property>
    <widget class="QMenu" name="menuFile">
+    <property name="tearOffEnabled">
+     <bool>true</bool>
+    </property>
     <property name="title">
      <string>File</string>
     </property>
@@ -195,7 +198,10 @@
     <addaction name="separator"/>
     <addaction name="actionQuit"/>
    </widget>
-   <widget class="QMenu" name="menuEdit">
+   <widget class="QMenu" name="menuEntities">
+    <property name="tearOffEnabled">
+     <bool>true</bool>
+    </property>
     <property name="title">
      <string>Entities</string>
     </property>
@@ -209,6 +215,9 @@
     <addaction name="actionShowInfoOnEntities"/>
    </widget>
    <widget class="QMenu" name="menuInterpolation">
+    <property name="tearOffEnabled">
+     <bool>true</bool>
+    </property>
     <property name="title">
      <string>Interpolation</string>
     </property>
@@ -223,6 +232,9 @@
     <addaction name="actionRetopologize"/>
    </widget>
    <widget class="QMenu" name="menuWindows">
+    <property name="tearOffEnabled">
+     <bool>true</bool>
+    </property>
     <property name="title">
      <string>Windows</string>
     </property>
@@ -236,13 +248,19 @@
     <addaction name="actionHistogramView"/>
    </widget>
    <widget class="QMenu" name="menuHelp">
+    <property name="tearOffEnabled">
+     <bool>true</bool>
+    </property>
     <property name="title">
      <string>Help</string>
     </property>
     <addaction name="actionHelp"/>
     <addaction name="actionAbout"/>
    </widget>
-   <widget class="QMenu" name="menuPoint_Clouds">
+   <widget class="QMenu" name="menuPointClouds">
+    <property name="tearOffEnabled">
+     <bool>true</bool>
+    </property>
     <property name="title">
      <string>Point Clouds</string>
     </property>
@@ -254,17 +272,26 @@
     <addaction name="actionThreshold"/>
    </widget>
    <widget class="QMenu" name="menuSurfaces">
+    <property name="tearOffEnabled">
+     <bool>true</bool>
+    </property>
     <property name="title">
      <string>Surfaces</string>
     </property>
     <addaction name="actionSplitSurfaces"/>
    </widget>
    <widget class="QMenu" name="menuLines">
+    <property name="tearOffEnabled">
+     <bool>true</bool>
+    </property>
     <property name="title">
      <string>Lines</string>
     </property>
    </widget>
-   <widget class="QMenu" name="menuProject">
+   <widget class="QMenu" name="menuProjection">
+    <property name="tearOffEnabled">
+     <bool>true</bool>
+    </property>
     <property name="title">
      <string>Projection</string>
     </property>
@@ -274,6 +301,9 @@
     <addaction name="actionExtrusion"/>
    </widget>
    <widget class="QMenu" name="menuProperties">
+    <property name="tearOffEnabled">
+     <bool>true</bool>
+    </property>
     <property name="title">
      <string>Properties</string>
     </property>
@@ -289,11 +319,11 @@
     <addaction name="actionRemoveTexture"/>
    </widget>
    <addaction name="menuFile"/>
-   <addaction name="menuEdit"/>
-   <addaction name="menuPoint_Clouds"/>
+   <addaction name="menuEntities"/>
+   <addaction name="menuPointClouds"/>
    <addaction name="menuLines"/>
    <addaction name="menuSurfaces"/>
-   <addaction name="menuProject"/>
+   <addaction name="menuProjection"/>
    <addaction name="menuInterpolation"/>
    <addaction name="menuProperties"/>
    <addaction name="menuWindows"/>
