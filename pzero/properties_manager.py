@@ -1,5 +1,6 @@
 """properties_manager.py
 PZero© Andrea Bistacchi"""
+from operator import index
 
 import cmocean as cmo
 
@@ -147,23 +148,40 @@ class PropertiesCMaps(QObject):
             cmap_combo_box.addItems(self.colormaps_list)
             cmap_combo_box.setCurrentText(row["colormap"])
             cmap_combo_box.this_property = row["property_name"]
+            cmap_combo_box.index = index
+            cmap_combo_box.row = row
             parent.PropertiesTableWidget.setCellWidget(index, 1, cmap_combo_box)
             label = QLabel()
             label.setPixmap(cmap2qpixmap(row["colormap"]))
             parent.PropertiesTableWidget.setCellWidget(index, 2, label)
             cmap_combo_box.currentTextChanged.connect(
-                lambda: self.change_property_cmap(parent=parent)
+                lambda *, sender=cmap_combo_box: self.change_property_cmap(
+                    sender=sender, parent=parent
+                )
             )
 
-    def change_property_cmap(self, parent=None):
-        new_cmap = str(self.sender().currentText())
-        this_property = self.sender().this_property
-        "Here the query is reversed and modified, dropping the values() method, to allow SETTING the line thickness in the legend"
+    def change_property_cmap(self, sender=None, parent=None):
+        # new_cmap = str(self.sender().currentText())
+        # this_property = self.sender().this_property
+        new_cmap = str(sender.currentText())
+        this_property = sender.this_property
+        index = sender.index
+        row = sender.row
+        # Here the query is reversed and modified, dropping the values() method,
+        # to allow SETTING the line thickness in the legend"
         parent.prop_legend_df.loc[
-            parent.prop_legend_df["property_name"] == this_property, "colormap"
+            parent.prop_legend_df["property_name"] == this_property,
+            "colormap"
         ] = new_cmap
-        self.update_widget(
-            parent=parent
-        )  # this is to update the button color - see if there is a simpler solution
-        """Signal to update actors in windows. This is emitted only for the modified uid under the 'line_thick' key."""
+
+        ## old solution
+        # # this is to update the sender color - see if there is a simpler solution
+        # self.update_widget(parent=parent)
+
+        # this is to update the sender color
+        label = QLabel()
+        label.setPixmap(cmap2qpixmap(row["colormap"]))
+        parent.PropertiesTableWidget.setCellWidget(index, 2, label)
+        # Signal to update actors in windows. This is emitted only for the modified
+        # uid under the 'line_thick' key.
         parent.prop_legend_cmap_modified_signal.emit(this_property)

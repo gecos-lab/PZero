@@ -43,7 +43,7 @@ from .helper_functions import auto_sep
 
 def options_dialog(title=None, message=None, yes_role=None, no_role=None, reject_role=None):
     """Generic message box with title, message, and three buttons.
-    Returns 0, 1, or 2 (int) for the 1st, 2nd and 3rd button.
+    Returns 0, 1, or 2 (int) for the 1st, 2nd and 3rd sender.
     If reject_role is None, the third button is not visualized."""
     msg_box = QMessageBox()
     msg_box.setWindowTitle(title)
