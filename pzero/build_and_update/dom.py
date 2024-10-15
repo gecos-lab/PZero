@@ -64,7 +64,9 @@ def create_dom_list(self, sec_uid=None):
         self.DOMsTableWidget.setItem(row, 0, name_item)
         self.DOMsTableWidget.setItem(row, 1, uid_item)
         self.DOMsTableWidget.setCellWidget(row, 2, property_texture_combo)
-        property_texture_combo.currentIndexChanged.connect(lambda: toggle_property_texture(self))
+        property_texture_combo.currentIndexChanged.connect(
+            lambda *, sender=property_texture_combo: toggle_property_texture(self=self, sender=sender)
+        )
         if self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]:
             name_item.setCheckState(Qt.Checked)
         elif not self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]:
@@ -137,7 +139,9 @@ def update_dom_list_added(self, new_list=None, sec_uid=None):
         self.DOMsTableWidget.setItem(row, 0, name_item)
         self.DOMsTableWidget.setItem(row, 1, uid_item)
         self.DOMsTableWidget.setCellWidget(row, 2, property_texture_combo)
-        property_texture_combo.currentIndexChanged.connect(lambda: toggle_property_texture(self))
+        property_texture_combo.currentIndexChanged.connect(
+            lambda *, sender=property_texture_combo: toggle_property_texture(self=self, sender=sender)
+        )
         if self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]:
             name_item.setCheckState(Qt.Checked)
         elif not self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]:
@@ -181,15 +185,14 @@ def toggle_dom_visibility(self, cell):
             self.actors_df.loc[self.actors_df["uid"] == uid, "show"] = False
             self.set_actor_visible(uid=uid, visible=False)
 
-def toggle_property_texture(self):
+def toggle_property_texture(self, sender=None):
     """Method to toggle the texture shown by a DEM that is already present in the view."""
     # Collect values from combo box and actor's dataframe.
-    combo = self.sender()
-    uid = combo.uid
+    uid = sender.uid
     show = self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]
     collection = self.actors_df.loc[self.actors_df["uid"] == uid, "collection"].values[0]
-    property_texture_id = combo.currentIndex()  # 0 means "none"
-    property_texture_list = combo.texture_uid_list
+    property_texture_id = sender.currentIndex()  # 0 means "none"
+    property_texture_list = sender.texture_uid_list
     property_texture_uid = property_texture_list[property_texture_id]
     # Set the active texture coordinates.
     if property_texture_uid in \
@@ -199,7 +202,8 @@ def toggle_property_texture(self):
     if hasattr(self, "plotter"):
         try:
             self.plotter.remove_scalar_bar()
-        except IndexError:
+        # except IndexError:
+        except:
             pass
     # This replaces the previous copy of the actor with the same uid, and updates the actors dataframe.
     # See issue #33 for a discussion on actors replacement by the PyVista add_mesh and add_volume methods.
