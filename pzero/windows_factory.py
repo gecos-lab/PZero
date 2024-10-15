@@ -174,9 +174,9 @@ class DockWindow(QDockWidget):
             print('window type not recognized')
             return
         # set parameters of the graphical window
-        size_policy = QSizePolicy(QSizePolicy.MinimumExpanding, QSizePolicy.MinimumExpanding)
-        size_policy.setHorizontalStretch(0)
-        size_policy.setVerticalStretch(0)
+        # size_policy = QSizePolicy(QSizePolicy.MinimumExpanding, QSizePolicy.MinimumExpanding)
+        # size_policy.setHorizontalStretch(0)
+        # size_policy.setVerticalStretch(0)
         # size_policy.setHeightForWidth(self.canvas.size_policy().hasHeightForWidth())
         # self.canvas.setSizePolicy(size_policy)
         # self.canvas.setObjectName(dock_widget_contents_id)

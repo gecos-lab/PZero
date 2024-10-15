@@ -2130,7 +2130,8 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
 
     def import_sections(self):
         """Import section traces from different kinds of files."""
-        sections_from_file(self)
+        # sections_from_file(self)
+        pass
 
     def import_PC(self):
         """Import point cloud data. File extension dependent (.txt, .xyz, .las) -> Ui_ImportOptionsWindow ui to preview the data (similar to stereonet)"""
