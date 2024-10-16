@@ -95,8 +95,8 @@ def background_data_keys_modified_update_views(self, updated_list=None):
                 # See issue #33 for a discussion on actors replacement by the PyVista add_mesh and add_volume methods.
                 this_actor = self.show_actor_with_property(uid=uid, collection="backgrnd_coll",
                                                            show_property=None, visible=show)
-                create_fluid_tree(self)
-                create_fluids_topology_tree(self)
+                create_backgrounds_tree(self)
+                create_backgrounds_topology_tree(self)
     """Re-connect signals."""
     self.BackgroundsTreeWidget.itemChanged.connect(self.toggle_backgrounds_visibility)
     self.BackgroundsTopologyTreeWidget.itemChanged.connect(self.toggle_backgrounds_visibility)

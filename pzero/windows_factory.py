@@ -1,14 +1,77 @@
 """windows_factory.py
 PZero© Andrea Bistacchi"""
 
-from vtkmodules.vtkRenderingCore import vtkPropPicker
+# General Python imports____
+from copy import deepcopy
+from uuid import uuid4
+# from math import degrees, sqrt, atan2
+# import sys
+# from time import sleep
+# from uuid import UUID (there is already above 'from uuid import uuid4')
 
-from PySide6.QtWidgets import QMainWindow, QMenu, QAbstractItemView, QDockWidget, QSizePolicy, QMessageBox
+# PySide6 imports____
+from PySide6.QtWidgets import (
+    QMainWindow,
+    QMenu,
+    QAbstractItemView,
+    QDockWidget,
+    QSizePolicy,
+    QMessageBox
+)
 from PySide6.QtGui import QAction
 from PySide6.QtCore import Qt
 from PySide6.QtCore import Signal as pyqtSignal
 
+# Numpy imports____
+from numpy import append as np_append
+from numpy import ndarray as np_ndarray
+# from numpy import sin as np_sin
+# from numpy import cos as np_cos
+# from numpy import pi as np_pi
+from numpy import array as np_array
+from numpy import all as np_all
+# from numpy import cross as np_cross
+
+# Pandas imports____
+from pandas import DataFrame as pd_DataFrame
+from pandas import unique as pd_unique
+
+# VTK imports incl. VTK-Numpy interface____
+from vtkmodules.vtkRenderingCore import vtkPropPicker
+# import vtk.numpy_interface.dataset_adapter as dsa
+from vtkmodules.util import numpy_support
+from vtkmodules.vtkInteractionWidgets import vtkCameraOrientationWidget
+from vtk import vtkExtractPoints, vtkSphere, vtkAppendPolyData
+
+# PyVista imports____
+from pyvista import global_theme as pv_global_theme
+from pyvistaqt import QtInteractor as pvQtInteractor
+from pyvista import Box as pv_Box
+from pyvista import Line as pv_Line
+from pyvista import Disc as pv_Disc
+from pyvista import PointSet as pvPointSet
+from pyvista import Plotter as pv_plot
+
+# Matplotlib imports____
+from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+# the following is customized in subclass NavigationToolbar a few lines below
+from matplotlib.backends.backend_qt5agg import (NavigationToolbar2QT)
+# DO NOT USE import matplotlib.pyplot as plt  IT CREATES A DUPLICATE WINDOW IN NOTEBOOK
+# from matplotlib.figure import Figure
+# from matplotlib.offsetbox import TextArea
+from matplotlib.lines import Line2D
+from matplotlib.image import AxesImage
+from matplotlib.collections import PathCollection
+from matplotlib.tri import TriContourSet
+import matplotlib.style as mplstyle
+# from matplotlib.backend_bases import FigureCanvasBase
+
+# mplstereonet import____
+import mplstereonet
+
+# PZero imports____
 from pzero.ui.base_view_window_ui import Ui_BaseViewWindow
+from pzero.collections.geological_collection import GeologicalCollection
 from pzero.helpers.helper_dialogs import (
     input_one_value_dialog,
     input_combo_dialog,
@@ -17,7 +80,6 @@ from pzero.helpers.helper_dialogs import (
     progress_dialog,
     save_file_dialog,
 )
-from pzero.collections.geological_collection import GeologicalCollection
 from pzero.helpers.helper_functions import best_fitting_plane, gen_frame
 from pzero.helpers.helper_widgets import Vector
 from .entities_factory import (
@@ -40,63 +102,6 @@ from .entities_factory import (
     Attitude,
 )
 from .orientation_analysis import get_dip_dir_vectors
-
-"""Maths imports"""
-# from math import degrees, sqrt, atan2
-from numpy import append as np_append
-from numpy import ndarray as np_ndarray
-# from numpy import sin as np_sin
-# from numpy import cos as np_cos
-# from numpy import pi as np_pi
-from numpy import array as np_array
-from numpy import all as np_all
-# from numpy import cross as np_cross
-
-from pandas import DataFrame as pd_DataFrame
-from pandas import unique as pd_unique
-
-from copy import deepcopy
-from uuid import uuid4
-
-""""VTK imports"""
-""""VTK Numpy interface imports"""
-# import vtk.numpy_interface.dataset_adapter as dsa
-from vtkmodules.util import numpy_support
-from vtkmodules.vtkInteractionWidgets import vtkCameraOrientationWidget
-from vtk import vtkExtractPoints, vtkSphere, vtkAppendPolyData
-
-"""3D plotting imports"""
-from pyvista import global_theme as pv_global_theme
-from pyvistaqt import QtInteractor as pvQtInteractor
-from pyvista import Box as pv_Box
-from pyvista import Line as pv_Line
-from pyvista import Disc as pv_Disc
-
-from pyvista import PointSet as pvPointSet
-from pyvista import Plotter as pv_plot
-
-"""2D plotting imports"""
-from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
-from matplotlib.backends.backend_qt5agg import (
-    NavigationToolbar2QT,
-)  # this is customized in subclass NavigationToolbar a few lines below
-
-# DO NOT USE import matplotlib.pyplot as plt  IT CREATES A DUPLICATE WINDOW IN NOTEBOOK
-# from matplotlib.figure import Figure
-# from matplotlib.offsetbox import TextArea
-from matplotlib.lines import Line2D
-from matplotlib.image import AxesImage
-from matplotlib.collections import PathCollection
-from matplotlib.tri import TriContourSet
-import matplotlib.style as mplstyle
-# from matplotlib.backend_bases import FigureCanvasBase
-import mplstereonet
-
-"""Probably not-required imports"""
-# import sys
-# from time import sleep
-# from uuid import UUID (there is already above 'from uuid import uuid4')
-
 from .build_and_update.backgrounds import *
 from .build_and_update.boundary import *
 from .build_and_update.dom import *
@@ -106,7 +111,6 @@ from .build_and_update.image import *
 from .build_and_update.mesh3d import *
 from .build_and_update.wells import *
 from .build_and_update.xsections import *
-
 from .add_remove_update_actors.background import *
 from .add_remove_update_actors.boundary import *
 from .add_remove_update_actors.dom import *
@@ -117,10 +121,10 @@ from .add_remove_update_actors.mesh3d import *
 from .add_remove_update_actors.wells import *
 from .add_remove_update_actors.xsection import *
 
+# Background color for matplotlib plots.
+# Could be made interactive in the future.
+# 'fast' is supposed to make plotting large objects faster.
 mplstyle.use(["dark_background", "fast"])
-"""Background color for matplotlib plots.
-Could be made interactive in the future.
-'fast' is supposed to make plotting large objects faster"""
 
 
 class NavigationToolbar(NavigationToolbar2QT):
