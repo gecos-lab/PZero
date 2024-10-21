@@ -41,19 +41,34 @@ from pzero.ui.preview_window_ui import Ui_PreviewWindow
 from .helper_functions import auto_sep
 
 
-def options_dialog(title=None, message=None, yes_role=None, no_role=None, reject_role=None):
-    """Generic message box with title, message, and three buttons.
-    Returns 0, 1, or 2 (int) for the 1st, 2nd and 3rd sender.
-    If reject_role is None, the third button is not visualized."""
+def options_dialog(title=None, message=None, yes_role="Yes", no_role="No", reject_role=None):
+    """Generic message box with title, message, and up to three buttons.
+    Returns 0, 1, or 2 for the first, second, and third button, respectively.
+    If reject_role is None, the third button is not displayed."""
     msg_box = QMessageBox()
     msg_box.setWindowTitle(title)
     msg_box.setText(message)
-    msg_box.addButton(QPushButton(yes_role), QMessageBox.YesRole)
-    msg_box.addButton(QPushButton(no_role), QMessageBox.NoRole)
+
+    buttons = []
+    if yes_role:
+        yes_button = msg_box.addButton(yes_role, QMessageBox.YesRole)
+        buttons.append(yes_button)
+    if no_role:
+        no_button = msg_box.addButton(no_role, QMessageBox.NoRole)
+        buttons.append(no_button)
     if reject_role:
-        msg_box.addButton(QPushButton(reject_role), QMessageBox.RejectRole)
-    output = msg_box.exec()
-    return output
+        reject_button = msg_box.addButton(reject_role, QMessageBox.RejectRole)
+        buttons.append(reject_button)
+
+    msg_box.exec()
+
+    clicked_button = msg_box.clickedButton()
+    try:
+        index = buttons.index(clicked_button)
+        return index
+    except ValueError:
+        return -1  # In case no button is matched
+
 
 
 def input_text_dialog(parent=None, title="title", label="label", default_text="text"):
