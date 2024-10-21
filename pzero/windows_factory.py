@@ -202,7 +202,7 @@ class DockWindow(QDockWidget):
             event.ignore()
             return
         # Disconnect all signals of BaseView()
-        self.canvas.disconnect_all_lambda_signals()
+        self.canvas.disconnect_all_signals()
         # Cleanly close the VTK plotter
         if isinstance(self.canvas, VTKView):
             self.canvas.plotter.close()
@@ -758,34 +758,44 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
 
         # Define BACKGROUND lamda functions and signals
 
-        self.upd_list_background_add = lambda updated_list: background_added_update_views(self,
+        self.upd_list_background_add = lambda updated_list: background_added_update_views(
+            self,
             updated_list=updated_list
         )
-        self.upd_list_background_rm = lambda updated_list: background_removed_update_views(self,
+        self.upd_list_background_rm = lambda updated_list: background_removed_update_views(
+            self,
             updated_list=updated_list
         )
-        self.upd_list_background_geo_mod = lambda updated_list: background_geom_modified_update_views(self,
+        self.upd_list_background_geo_mod = lambda updated_list: background_geom_modified_update_views(
+            self,
             updated_list=updated_list
         )
-        self.upd_list_background_data_keys = lambda updated_list: background_data_keys_modified_update_views(self,
+        self.upd_list_background_data_keys = lambda updated_list: background_data_keys_modified_update_views(
+            self,
             updated_list=updated_list
         )
-        self.upd_list_background_data_val = lambda updated_list: background_data_val_modified_update_views(self,
+        self.upd_list_background_data_val = lambda updated_list: background_data_val_modified_update_views(
+            self,
             updated_list=updated_list
         )
-        self.upd_list_background_metadata = lambda updated_list: background_metadata_modified_update_views(self,
+        self.upd_list_background_metadata = lambda updated_list: background_metadata_modified_update_views(
+            self,
             updated_list=updated_list
         )
-        self.upd_list_background_leg_col = lambda updated_list: background_legend_color_modified_update_views(self,
+        self.upd_list_background_leg_col = lambda updated_list: background_legend_color_modified_update_views(
+            self,
             updated_list=updated_list
         )
-        self.upd_list_background_leg_thick = lambda updated_list: background_legend_thick_modified_update_views(self,
+        self.upd_list_background_leg_thick = lambda updated_list: background_legend_thick_modified_update_views(
+            self,
             updated_list=updated_list
         )
-        self.upd_list_background_leg_point = lambda updated_list: background_legend_point_size_modified_update_views(self,
+        self.upd_list_background_leg_point = lambda updated_list: background_legend_point_size_modified_update_views(
+            self,
             updated_list=updated_list
         )
-        self.upd_list_background_leg_op = lambda updated_list: background_legend_opacity_modified_update_views(self,
+        self.upd_list_background_leg_op = lambda updated_list: background_legend_opacity_modified_update_views(
+            self,
             updated_list=updated_list
         )
 
@@ -2282,12 +2292,12 @@ class VTKView(BaseView):
                 table = self.parent.GeologyTableView
                 df = self.parent.geol_coll.df
                 # set the correct tab to avoid problems
-                self.parent.tabCentral.setCurrentIndex(0)
+                self.parent.tabWidgetTopLeft.setCurrentIndex(0)
             elif collection == "dom_coll":
                 table = self.parent.DOMsTableView
                 df = self.parent.dom_coll.df
                 # set the correct tab to avoid problems
-                self.parent.tabCentral.setCurrentIndex(4)
+                self.parent.tabWidgetTopLeft.setCurrentIndex(4)
             else:
                 print("Selection not supported for entities that do not belong to geological or DOM collection.")
                 return
@@ -2748,11 +2758,11 @@ class View3D(VTKView):
         vis_uids = self.actors_df.loc[self.actors_df["show"] == True, "uid"]
         for uid in vis_uids:
             vtk_obj = self.parent.dom_coll.get_uid_vtk_obj(uid)
-            oct = PolyData()  # [Gabriele] possible recursion problem
+            octree = PolyData()  # [Gabriele] possible recursion problem
             # print(vtk_obj.locator)
-            vtk_obj.locator.GenerateRepresentation(3, oct)
+            vtk_obj.locator.GenerateRepresentation(3, octree)
 
-            self.plotter.add_mesh(oct, style="wireframe", color="red")
+            self.plotter.add_mesh(octree, style="wireframe", color="red")
 
     def change_bore_vis(self, method):
         actors = set(self.plotter.renderer.actors.copy())
@@ -2799,7 +2809,7 @@ class View3D(VTKView):
     def orbit_entity(self):
         uid_list = list(self.actors_df["uid"].values)
 
-        dict = {
+        in_dict = {
             "uid": ["Actor uid", uid_list],
             "up_x": ["Orbital plane (Nx)", 0.0],
             "up_y": ["Orbital plane (Ny)", 0.0],
@@ -2812,7 +2822,7 @@ class View3D(VTKView):
         }
 
         opt_dict = multiple_input_dialog(
-            title="Orbiting options", input_dict=dict, return_widget=False
+            title="Orbiting options", input_dict=in_dict, return_widget=False
         )
 
         uid = opt_dict["uid"]
@@ -4498,7 +4508,8 @@ class ViewStereoplot(MPLView):
         self.proj_type = projection
 
         with mplstyle.context("default"):
-            """Create Matplotlib canvas, figure and navi_toolbar. this implicitly creates also the canvas to contain the figure"""
+            # Create Matplotlib canvas, figure and navi_toolbar. this implicitly
+            # creates also the canvas to contain the figure.
             self.figure, self.ax = mplstereonet.subplots(
                 projection=self.proj_type
             )
@@ -4764,7 +4775,8 @@ class ViewStereoplot(MPLView):
                                         )[0]
                                     ).childCount()
                             ):
-                                """for cycle that loops n times as the number of sub-subItems in the specific geological type and geological feature branch"""
+                                # For cycle that loops n times as the number of sub-subItems in the
+                                # specific geological type and geological feature branch.
                                 if self.GeologyTreeWidget.itemBelow(
                                         self.GeologyTreeWidget.findItems(
                                             self.parent.geol_coll.get_uid_role(
@@ -5326,7 +5338,8 @@ class ViewStereoplot(MPLView):
         self.initialize_interactor(kind=kind, projection=self.proj_type)
         uids = self.parent.geol_coll.df.loc[self.parent.geol_coll.df["topology"] == "VertexSet", "uid"]
 
-        # [Gabriele]It is not always the case that VertexSets have normal data (are attitude measurements). When importing from shp we should add a dialog to identify VertexSets as Attitude measurements
+        # [Gabriele]It is not always the case that VertexSets have normal data (are attitude measurements). When
+        # importing from shp we should add a dialog to identify VertexSets as Attitude measurements
 
         # att_uid_list = []
         # for uid in uids:
@@ -5417,7 +5430,7 @@ class ViewStereoplot(MPLView):
             )
 
     def change_actor_color(self, uid=None, collection=None):
-        "Change colour with Matplotlib method."
+        """Change colour with Matplotlib method."""
         if collection == "geol_coll":
             color_R = self.parent.geol_coll.get_uid_legend(uid=uid)["color_R"]
             color_G = self.parent.geol_coll.get_uid_legend(uid=uid)["color_G"]

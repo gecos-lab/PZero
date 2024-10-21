@@ -239,7 +239,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
     @property
     def shown_table(self):
         """Returns which collection table tab is shown (if any)."""
-        return self.tabCentral.currentWidget().objectName()
+        return self.tabWidgetTopLeft.currentWidget().objectName()
 
     @property
     def selected_uids(self):

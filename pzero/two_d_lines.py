@@ -243,15 +243,13 @@ def rotate_line(self):
             inV = self.parent.geol_coll.get_uid_vtk_obj(current_uid).points_Y
         elif isinstance(self, ViewXsection):
             inU, inV = self.parent.geol_coll.get_uid_vtk_obj(current_uid).world2plane()
-        """Stack coordinates in two-columns matrix"""
-        """Run the Shapely function."""
+        # Stack coordinates in two-columns matrix and convert into Shapely object.
         inUV = np_column_stack((inU, inV))
         shp_line_in = shp_linestring(inUV)
-        shp_line_out = shp_rotate(
-            shp_line_in, angle, origin="centroid", use_radians=False
-        )  # Use Shapely to rotate
-        outUV = np_array(shp_line_out)
-        """Un-stack output coordinates and write them to the empty dictionary."""
+        # Use Shapely to rotate
+        shp_line_out = shp_rotate(shp_line_in, angle, origin="centroid", use_radians=False)
+        # Un-stack output coordinates and write them to the empty dictionary.
+        outUV = np_array(shp_line_out.coords)
         outU = outUV[:, 0]
         outV = outUV[:, 1]
         if isinstance(self, ViewMap):
@@ -407,9 +405,7 @@ def split_line_line(self):
         """Check if the two lineal geometries have shared path with dimension 1 (= they share a line-type object)"""
         if shp_line_in_paper.crosses(shp_line_in_scissors):
             """Run the split shapely function."""
-            lines = shp_split(
-                shp_line_in_paper, shp_line_in_scissors
-            )  # lines must include all line parts not affected by splitting and two parts for the split line__________
+            split_lines = shp_split(shp_line_in_paper, shp_line_in_scissors)  # lines must include all line parts not affected by splitting and two parts for the split line__________
         else:  # handles the case when the shp_linestring share a linear path and, for the moment, exists the tool
             """Un-Freeze QT interface"""
             self.clear_selection()
@@ -417,7 +413,7 @@ def split_line_line(self):
             return
         replace = 1  # replace = 1 for the first line to operate replace_vtk
         uids = [current_uid_scissors]
-        for line in lines:
+        for line in split_lines.geoms:
             """Create empty dictionary for the output lines."""
             new_line = deepcopy(self.parent.geol_coll.entity_dict)
             new_line["name"] = (
@@ -439,8 +435,8 @@ def split_line_line(self):
             new_line["scenario"] = self.parent.geol_coll.df.loc[
                 self.parent.geol_coll.df["uid"] == current_uid_paper, "scenario"
             ].values[0]
-            outU = np_array(line)[:, 0]
-            outV = np_array(line)[:, 1]
+            outU = np_array(line.coords)[:, 0]
+            outV = np_array(line.coords)[:, 1]
             if isinstance(self, ViewMap):
                 new_line["x_section"] = None
                 new_line["vtk_obj"] = PolyLine()
@@ -527,12 +523,12 @@ def split_line_existing_point(self):
         # y_vertex_unit = deepcopy(current_line_V_true[vertex_ind])
         shp_point_in = shp_point(point_pos[0], point_pos[1], point_pos[2])
         """Splitting shapely function."""
-        line1, line2 = shp_split(shp_line_in, shp_point_in)
-        line1_out = shp_linestring(line1)
-        line2_out = shp_linestring(line2)
+        split_lines = shp_split(shp_line_in, shp_point_in)
+        line1_out = shp_linestring(split_lines.geoms[0])
+        line2_out = shp_linestring(split_lines.geoms[1])
         """Convert shapely lines to UV objects"""
-        outUV_1 = deepcopy(np_array(line1_out))
-        outUV_2 = deepcopy(np_array(line2_out))
+        outUV_1 = deepcopy(np_array(line1_out.coords))
+        outUV_2 = deepcopy(np_array(line2_out.coords))
         """Un-stack output coordinates and write them to the empty dictionary."""
         outU_1 = outUV_1[:, 0]
         outV_1 = outUV_1[:, 1]
@@ -566,9 +562,9 @@ def split_line_existing_point(self):
             new_line_2["vtk_obj"] = XsPolyLine(
                 self.this_x_section_uid, parent=self.parent
             )
-        new_line_1["vtk_obj"].points = deepcopy(np_array(line1_out))
+        new_line_1["vtk_obj"].points = deepcopy(np_array(line1_out.coords))
         new_line_1["vtk_obj"].auto_cells()
-        new_line_2["vtk_obj"].points = deepcopy(np_array(line2_out))
+        new_line_2["vtk_obj"].points = deepcopy(np_array(line2_out.coords))
         new_line_2[
             "vtk_obj"
         ].auto_cells()  # lines must include all line parts not affected by splitting and two parts for the split line__________
@@ -731,7 +727,7 @@ def merge_lines(self):
         inlines = shp_multilinestring([shp_line_out_diff, shp_line_in_two])
         outcoords = [list(i.coords) for i in inlines]
         shp_line_out = shp_linestring([i for sublist in outcoords for i in sublist])
-        outUV = deepcopy(np_array(shp_line_out))
+        outUV = deepcopy(np_array(shp_line_out.coords))
     else:
         print("Polyline is not simple, it self-intersects")
         """Un-Freeze QT interface"""
@@ -858,8 +854,8 @@ def snap_line(self):
         shp_line_in_goal = shp_linestring(inUV_goal)
 
         shp_line_in_goal, extended = int_node(shp_line_in_goal, shp_line_in_snap)
-        # plt.plot(np_array(shp_line_in_goal)[:, 0], np_array(shp_line_in_goal)[:, 1], 'r-o')
-        # plt.plot(np_array(extended)[:, 0], np_array(extended)[:, 1], 'b-o')
+        # plt.plot(np_array(shp_line_in_goal.coords)[:, 0], np_array(shp_line_in_goal.coords)[:, 1], 'r-o')
+        # plt.plot(np_array(extended.coords)[:, 0], np_array(extended.coords)[:, 1], 'b-o')
         # plt.show()
 
         """In the snapping tool, the last input value is called Tolerance. Can be modified, do some checks.
@@ -875,8 +871,8 @@ def snap_line(self):
         shp_line_out_diff = shp_line_out_snap.difference(
             shp_line_in_goal
         )  # eliminate the shared path that Snap may create
-        outUV_snap = deepcopy(np_array(shp_line_out_diff))
-        outUV_goal = deepcopy(np_array(shp_line_in_goal))
+        outUV_snap = deepcopy(np_array(shp_line_out_diff.coords))
+        outUV_goal = deepcopy(np_array(shp_line_in_goal.coords))
         """Un-stack output coordinates and write them to the empty dictionary."""
         if outUV_snap.ndim < 2:
             print("Invalid shape")
@@ -984,11 +980,10 @@ def resample_line_distance(
             while distance_delta >= shp_line_in.length:
                 distance_delta = distance_delta / 2
         distances = np_arange(0, shp_line_in.length, distance_delta)
-        points = [shp_line_in.interpolate(distance) for distance in distances] + [
-            shp_line_in.boundary[1]
-        ]
+        points = [[np_array(shp_line_in.interpolate(distance).coords) for distance in distances], np_array(shp_line_in.coords[-1])]
+        print("points: ", points)
         shp_line_out = shp_linestring(points)
-        outUV = deepcopy(np_array(shp_line_out))
+        outUV = deepcopy(np_array(shp_line_out.coords))
         """Un-stack output coordinates and write them to the empty dictionary."""
         outU = outUV[:, 0]
         outV = outUV[:, 1]
@@ -1090,7 +1085,7 @@ def resample_line_number_points(
         )
         points = [shp_line_in.interpolate(distance) for distance in distances]
         shp_line_out = shp_linestring(points)
-        outUV = deepcopy(np_array(shp_line_out))
+        outUV = deepcopy(np_array(shp_line_out.coords))
         """Un-stack output coordinates and write them to the empty dictionary."""
         outU = outUV[:, 0]
         outV = outUV[:, 1]
@@ -1190,7 +1185,7 @@ def simplify_line(
         """Run the Shapely function."""
         shp_line_in = shp_linestring(inUV)
         shp_line_out = shp_line_in.simplify(tolerance_p, preserve_topology=False)
-        outUV = deepcopy(np_array(shp_line_out))
+        outUV = deepcopy(np_array(shp_line_out.coords))
         """Un-stack output coordinates and write them to the empty dictionary."""
         outU = outUV[:, 0]
         outV = outUV[:, 1]
@@ -1312,7 +1307,7 @@ def copy_parallel(
             distance, "left", resolution=16, join_style=1
         )  # parallel folds are obtained with join_style=1
 
-        outUV = np_array(shp_line_out)
+        outUV = np_array(shp_line_out.coords)
         """Un-stack output coordinates and write them to the empty dictionary."""
         outU = outUV[:, 0]
         outV = outUV[:, 1]
@@ -1430,7 +1425,7 @@ def copy_kink(
         shp_line_out = shp_line_in.parallel_offset(
             distance, "left", resolution=16, join_style=2, mitre_limit=10.0
         )  # kink folds are obtained with join_style=2, mitre_limit=10.0
-        outUV = np_array(shp_line_out)
+        outUV = np_array(shp_line_out.coords)
         """Un-stack output coordinates and write them to the empty dictionary."""
         outU = outUV[:, 0]
         outV = outUV[:, 1]
@@ -1635,7 +1630,7 @@ def int_node(line1, line2):
     fac = 100
     if line1.crosses(line2):
         split_lines1 = shp_split(line1, line2)
-        outcoords1 = [list(i.coords) for i in split_lines1]
+        outcoords1 = [list(i.coords) for i in split_lines1.geoms]
 
         new_line = shp_linestring([i for sublist in outcoords1 for i in sublist])
         extended_line = line2
@@ -1684,7 +1679,7 @@ def int_node(line1, line2):
 
         split_lines = shp_split(line1, extended_line)
 
-        outcoords = [list(i.coords) for i in split_lines]
+        outcoords = [list(i.coords) for i in split_lines.geoms]
         new_line = shp_linestring([i for sublist in outcoords for i in sublist])
 
     return new_line, extended_line

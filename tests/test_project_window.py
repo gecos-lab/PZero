@@ -75,9 +75,9 @@ class TestProjectWindow:
 
         tab_img = 'tabImages'
 
-        page_img = project_window.tabCentral.findChild(QWidget, tab_img)
+        page_img = project_window.tabWidgetTopLeft.findChild(QWidget, tab_img)
 
-        project_window.tabCentral.setCurrentWidget(page_img)
+        project_window.tabWidgetTopLeft.setCurrentWidget(page_img)
         shown_table = project_window.shown_table
 
         assert shown_table == tab_img
