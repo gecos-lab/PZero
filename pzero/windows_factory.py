@@ -1520,20 +1520,13 @@ class VTKView(BaseView):
             this_actor.SetVisibility(visible)
 
     def remove_actor_in_view(self, uid=None, redraw=False):
-        update = self.parent.update_actors
-        print("update: ", update)
         """"Remove actor from plotter"""
         """plotter.remove_actor can remove a single entity or a list of entities as actors -> 
         here we remove a single entity"""
         if not self.actors_df.loc[self.actors_df["uid"] == uid].empty:
-            this_actor = self.actors_df.loc[
-                self.actors_df["uid"] == uid, "actor"
-            ].values[0]
-            if not update:
-                success = self.plotter.remove_actor(this_actor)
-            self.actors_df.drop(
-                self.actors_df[self.actors_df["uid"] == uid].index, inplace=True
-            )
+            this_actor = self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[0]
+            success = self.plotter.remove_actor(this_actor)
+            self.actors_df.drop(self.actors_df[self.actors_df["uid"] == uid].index, inplace=True)
 
     def show_actor_with_property(self, uid=None, collection=None, show_property=None, visible=None):
         """
@@ -2400,9 +2393,7 @@ class VTKView(BaseView):
         # end_pos = style.GetEndPosition()
 
         picker = vtkPropPicker()
-        print("dir(picker): ", dir(picker))
         picker_output = picker.PickProp(pos[0], pos[1], style.GetDefaultRenderer())
-        print("picker_output: ", picker_output)
 
         actors = set(self.plotter.renderer.actors)
 
@@ -3537,7 +3528,6 @@ class ViewXsection(View2D):
                 label="Choose Xsection",
                 choice_list=parent.xsect_coll.get_names,
             )
-            print("self.this_x_section_name: ", self.this_x_section_name)
         else:
             message_dialog(title="Xsection", message="No Xsection in project")
             return
@@ -3546,7 +3536,6 @@ class ViewXsection(View2D):
             self.this_x_section_uid = parent.xsect_coll.df.loc[
                 parent.xsect_coll.df["name"] == self.this_x_section_name, "uid"
             ].values[0]
-            print("self.this_x_section_uid: ", self.this_x_section_uid)
         else:
             return
         # Set filter for entities belonging to this cross section.

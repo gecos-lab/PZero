@@ -11,18 +11,19 @@ from numpy import stack as np_stack
 from numpy import arange as np_arange
 from numpy import array as np_array
 from numpy import column_stack as np_column_stack
-from numpy import flip as np_flip
+from numpy import flipud as np_flipud
 from numpy import round as np_round
 from numpy import shape as np_shape
-from numpy import sqrt as np_sqrt
 from numpy import zeros as np_zeros
+from numpy import concatenate as np_concatenate
+from numpy.linalg import norm as np_norm
 
-from shapely import affinity
+# from shapely import affinity
 from shapely.affinity import scale as shp_scale
 from shapely.affinity import rotate as shp_rotate
 from shapely.geometry import Point as shp_point
 from shapely.geometry import LineString as shp_linestring
-from shapely.geometry import MultiLineString as shp_multilinestring
+# from shapely.geometry import MultiLineString as shp_multilinestring
 from shapely.ops import snap as shp_snap
 from shapely.ops import split as shp_split
 
@@ -628,140 +629,96 @@ def split_line_vector(self, vector):
 
 
 def merge_lines(self):
-    """Merge two (contiguous or non-contiguous) lines."""  # lines must include all line parts not affected by splitting and two parts for the split line__________
-    print(
-        "Merge two lines. First line has been selected, please select second line for merging."
-    )
-    """Terminate running event loops"""
-    """Check if a line is selected"""
+    """Merge two (contiguous or non-contiguous) lines.
+    Metadata will be taken from the first selected line."""
+    # Freeze QT interface
+    self.disable_actions()
+    # Check if at least 2 lines are selected.
     if not self.selected_uids:
         print(" -- No input data selected -- ")
+        self.enable_actions()
         return
-    elif len(self.selected_uids) <= 1:
+    # Create local copy of selected_uids
+    in_uids = self.selected_uids
+    if len(in_uids) <= 1:
         print(" -- Not enough input data selected. Select at least 2 objects -- ")
+        self.enable_actions()
         return
-    if (
-        self.parent.geol_coll.get_uid_topology(self.selected_uids[0])
-        != "PolyLine"
-    ) and (
-        self.parent.geol_coll.get_uid_topology(self.selected_uids[0])
-        != "XsPolyLine"
-    ):
-        print(" -- Selected data is not a line -- ")
-        return
-    """Freeze QT interface"""
-    self.disable_actions()
-
-    current_uid_one = self.selected_uids[0]
-    current_uid_two = self.selected_uids[1]
-    """Create empty dictionary for the output line."""
+    # Check if all input entities are PolyLine or XsPolyLine
+    print(in_uids)
+    for uid in in_uids:
+        if self.parent.geol_coll.get_uid_topology(uid) == "PolyLine":
+            continue
+        elif self.parent.geol_coll.get_uid_topology(uid) == "XsPolyLine":
+            continue
+        else:
+            print(" -- Selection must include lines only -- ")
+            self.enable_actions()
+            return
+    # For XsPolyLine, check that they all belong to the same cross-section.
+    this_xsection = None
+    for uid in in_uids:
+        if self.parent.geol_coll.get_uid_topology(uid) == "XsPolyLine":
+            if this_xsection is None:
+                this_xsection = self.parent.geol_coll.get_uid_x_section(uid)
+            elif this_xsection is not None:
+                if self.parent.geol_coll.get_uid_x_section(uid) != this_xsection:
+                    print(" -- Selection must include lines belonging to the same cross-section only -- ")
+                    self.enable_actions()
+                    return
+    # Create empty dictionary for the output line.
     new_line = deepcopy(self.parent.geol_coll.entity_dict)
-    if isinstance(self, ViewMap):
-        # if isinstance(self, (ViewMap, ViewMap)):
+    # Populate metadata from first selected line.
+    new_line["name"] = self.parent.geol_coll.get_uid_name(in_uids[0])
+    new_line["topology"] = self.parent.geol_coll.get_uid_topology(in_uids[0])
+    new_line["role"] = self.parent.geol_coll.get_uid_role(in_uids[0])
+    new_line["feature"] = self.parent.geol_coll.get_uid_feature(in_uids[0])
+    new_line["scenario"] = self.parent.geol_coll.get_uid_scenario(in_uids[0])
+    new_line["x_section"] = self.parent.geol_coll.get_uid_x_section(in_uids[0])
+    # Mering properties not yet implemented.
+    new_line["properties_names"] = []
+    new_line["properties_components"] = []
+    # Create empty PolyLine() or XsPolyLine().
+    if self.parent.geol_coll.get_uid_topology(in_uids[0]) == "XsPolyLine":
+        new_line["vtk_obj"] = XsPolyLine()
+    else:
         new_line["vtk_obj"] = PolyLine()
-        new_line["x_section"] = None
-        inU_one = deepcopy(
-            self.parent.geol_coll.get_uid_vtk_obj(current_uid_one).points[:, 0]
-        )
-        inV_one = deepcopy(
-            self.parent.geol_coll.get_uid_vtk_obj(current_uid_one).points[:, 1]
-        )
-        inU_two = deepcopy(
-            self.parent.geol_coll.get_uid_vtk_obj(current_uid_two).points[:, 0]
-        )
-        inV_two = deepcopy(
-            self.parent.geol_coll.get_uid_vtk_obj(current_uid_two).points[:, 1]
-        )
-    # elif isinstance(self, (ViewXsection, ViewXsection)):
-    elif isinstance(self, ViewXsection):
-        new_line["vtk_obj"] = XsPolyLine(self.this_x_section_uid, parent=self.parent)
-        new_line["x_section"] = self.this_x_section_uid
-        inU_one, inV_one = self.parent.geol_coll.get_uid_vtk_obj(
-            current_uid_one
-        ).world2plane()
-        inU_two, inV_two = self.parent.geol_coll.get_uid_vtk_obj(
-            current_uid_two
-        ).world2plane()
-    """Calculate distances"""
-    dist_start_start = np_sqrt(
-        (inU_one[0] - inU_two[0]) ** 2 + (inV_one[0] - inV_two[0]) ** 2
-    )
-    dist_end_end = np_sqrt(
-        (inU_one[-1] - inU_two[-1]) ** 2 + (inV_one[-1] - inV_two[-1]) ** 2
-    )
-    dist_start_end = np_sqrt(
-        (inU_one[0] - inU_two[-1]) ** 2 + (inV_one[0] - inV_two[-1]) ** 2
-    )
-    dist_end_start = np_sqrt(
-        (inU_one[-1] - inU_two[0]) ** 2 + (inV_one[-1] - inV_two[0]) ** 2
-    )
-    if (
-        min(dist_start_start, dist_end_end, dist_start_end, dist_end_start)
-        == dist_start_start
-    ):  # flip line 1
-        inU_one = np_flip(inU_one, 0)
-        inV_one = np_flip(inV_one, 0)
-    elif (
-        min(dist_start_start, dist_end_end, dist_start_end, dist_end_start)
-        == dist_end_end
-    ):  # flip line 2
-        inU_two = np_flip(inU_two, 0)
-        inV_two = np_flip(inV_two, 0)
-    elif (
-        min(dist_start_start, dist_end_end, dist_start_end, dist_end_start)
-        == dist_start_end
-    ):  # flip both line 1 and line 2
-        inU_one = np_flip(inU_one, 0)
-        inV_one = np_flip(inV_one, 0)
-        inU_two = np_flip(inU_two, 0)
-        inV_two = np_flip(inV_two, 0)
-    inUV_one = np_column_stack((inU_one, inV_one))
-    inUV_two = np_column_stack((inU_two, inV_two))
-    """Run the Shapely function."""
-    shp_line_in_one = shp_linestring(inUV_one)
-    shp_line_in_two = shp_linestring(inUV_two)
-    """Remove the path that lines may share"""
-    shp_line_out_diff = shp_line_in_one.difference(shp_line_in_two)
-    """Extract coordinates of the two lines to create a new shp_linestring"""
-    if shp_line_out_diff.is_simple and shp_line_in_two.is_simple:
-        inlines = shp_multilinestring([shp_line_out_diff, shp_line_in_two])
-        outcoords = [list(i.coords) for i in inlines]
-        shp_line_out = shp_linestring([i for sublist in outcoords for i in sublist])
-        outUV = deepcopy(np_array(shp_line_out.coords))
-    else:
-        print("Polyline is not simple, it self-intersects")
-        """Un-Freeze QT interface"""
-        self.disable_actions()
-        return
-    """Un-stack output coordinates and write them to the empty dictionary."""
-    outU = outUV[:, 0]
-    outV = outUV[:, 1]
-    if isinstance(self, ViewMap):
-        # if isinstance(self, (ViewMap, ViewMap)):
-        outX = outU
-        outY = outV
-        outZ = np_zeros(np_shape(outX))
-    # elif isinstance(self, (ViewXsection, ViewXsection)):
-    elif isinstance(self, ViewXsection):
-        outX, outY, outZ = self.parent.xsect_coll.plane2world(
-            self.this_x_section_uid, outU, outV
-        )
-
-    outXYZ = np_column_stack((outX, outY, outZ))
-
-    new_line["vtk_obj"].points = outXYZ
+    # Add points to new merged line.
+    points_0 = self.parent.geol_coll.get_uid_vtk_obj(in_uids[0]).points.copy()
+    for uid in in_uids[1::]:
+        points_1 = self.parent.geol_coll.get_uid_vtk_obj(uid).points.copy()
+        first2first = points_0[1,:] - points_1[1,:]
+        first2first_norm = np_norm(first2first)
+        first2last = points_0[1, :] - points_1[-1, :]
+        first2last_norm = np_norm(first2last)
+        last2first = points_0[-1, :] - points_1[1, :]
+        last2first_norm = np_norm(last2first)
+        last2last = points_0[-1, :] - points_1[-1, :]
+        last2last_norm = np_norm(last2last)
+        scores = np_array([first2first_norm, first2last_norm, last2first_norm, last2last_norm])
+        # Smaller norm first2first_norm -> join first node of points_0 to first point of points_1 -> need to revert points_0
+        if scores.argmin() == 0:
+            points_0 = np_flipud(points_0)
+        # Smaller norm first2last_norm -> join first node of points_0 to last point of points_1 -> need to revert both
+        if scores.argmin() == 1:
+            points_0 = np_flipud(points_0)
+            points_1 = np_flipud(points_1)
+        # Smaller norm last2first_norm -> join last node of points_0 to first point of points_1 -> need to revert none
+        if scores.argmin() == 2:
+            pass
+        # Smaller norm last2last_norm -> join last node of points_0 to last point of points_1 -> need to revert points_1
+        if scores.argmin() == 3:
+            points_1 = np_flipud(points_1)
+        points_0 = np_concatenate((points_0, points_1), axis=0)
+    new_line["vtk_obj"].points = points_0
+    # Automatically create all line cells.
     new_line["vtk_obj"].auto_cells()
-    """Replace VTK object"""
-    if new_line["vtk_obj"].points_number > 0:
-        self.parent.geol_coll.replace_vtk(uid=current_uid_one, vtk_object=new_line["vtk_obj"])
-        del new_line
-    else:
-        print("Empty object")
-    """Deselect input line."""
+    # Deselect input lines.
     self.clear_selection()
-    self.parent.update_actors = False
-    self.parent.geol_coll.remove_entity(current_uid_two)
-    # self.parent.geol_coll.signals.geom_modified.emit([current_uid_one])  # emit uid as list to force redraw()
+    # Remove input lines.
+    for uid in in_uids:
+        self.parent.geol_coll.remove_entity(uid)
+    self.parent.geol_coll.add_entity_from_dict(new_line)
     """Un-Freeze QT interface"""
     self.enable_actions()
 
@@ -1581,11 +1538,9 @@ def measure_distance(self, vector):
 
 
 def flip_line(self, uid=None):
-    """Ensures lines are oriented left-to-right and bottom-to-top"""
+    """Flip points array top to bottom in order to reverse the line order."""
     # self.parent.geol_coll.get_uid_vtk_obj(uid).points = np_flip(self.parent.geol_coll.get_uid_vtk_obj(uid).points, 0)
-    self.parent.geol_coll.get_uid_vtk_obj(uid).points = np_flip(
-        self.parent.geol_coll.get_uid_vtk_obj(uid).points, 0
-    )
+    self.parent.geol_coll.get_uid_vtk_obj(uid).points = np_flipud(self.parent.geol_coll.get_uid_vtk_obj(uid).points)
 
 
 def left_right(self, uid=None):

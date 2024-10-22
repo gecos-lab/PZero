@@ -217,6 +217,10 @@ class PolyData(vtkPolyData):
     @property
     def points(self):
         """Returns point coordinates as a Numpy array with columns for x, y, z."""
+        # old version, returns a numpy.ndarray
+        # return vtk_to_numpy(WrapDataObject(self).Points)
+        # new version, returns a vtkmodules.numpy_interface.dataset_adapter.VTKArray
+        # this is also a subclass of numpy.ndarray and numpy methods can be applied
         return WrapDataObject(self).Points
 
     @points.setter
