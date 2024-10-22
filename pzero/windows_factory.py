@@ -1310,14 +1310,25 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         event.accept()
 
     def disable_actions(self):
-        for action in self.findChildren(QAction):
-            print("action: ", action)
-            if isinstance(action.parent(), NavigationToolbar) is False:
-                action.setDisabled(True)
+        """Freeze all actions while doing something."""
+        # self.parent.findChildren(QAction) returns a list of all actions in the application.
+        for action in self.parent.findChildren(QAction):
+            try:
+                # try - except added to catch an inexplicable bug with an action with text=""
+                if isinstance(action.parent(), NavigationToolbar) is False:
+                    action.setDisabled(True)
+            except:
+                pass
 
     def enable_actions(self):
-        for action in self.findChildren(QAction):
-            action.setEnabled(True)
+        """Un-freeze all actions after having done something."""
+        # self.parent.findChildren(QAction) returns a list of all actions in the application.
+        for action in self.parent.findChildren(QAction):
+            try:
+                # try - except added for symmetry with disable_actions (bug with an action with text="")
+                action.setEnabled(True)
+            except:
+                pass
 
 
 class VTKView(BaseView):
@@ -3009,7 +3020,7 @@ class View2D(VTKView):
 
         self.cleanSectionButton = QAction("Clean intersections", self)
         self.cleanSectionButton.triggered.connect(lambda: clean_intersection(self))
-        self.menuSelect.addAction(self.cleanSectionButton)
+        self.menuModify.addAction(self.cleanSectionButton)
 
     def vector_by_mouse(self, func):
         # if not self.selected_uids:
