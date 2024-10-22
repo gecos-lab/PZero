@@ -51,7 +51,7 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
             for row in range(gdf.shape[0]):
                 # print("____ROW: ", row)
                 # print("geometry type: ", gdf.geom_type[row])
-                curr_obj_dict = deepcopy(GeologicalCollection.entity_dict)
+                curr_obj_dict = deepcopy(GeologicalCollection().entity_dict)
                 # if gdf.is_valid[row] and not gdf.is_empty[row]:
                 # try:
                 if "name" in column_names:
@@ -65,14 +65,10 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
                 curr_obj_dict["topology"] = "PolyLine"
                 curr_obj_dict["vtk_obj"] = PolyLine()
                 if gdf.geom_type[row] == "LineString":
-                    # to be solved with https://shapely.readthedocs.io/en/stable/migration.html ???
-                    outXYZ = np_array(gdf.loc[row].geometry)  # !!This does not work with shapely 2.0!!
-                    # print("outXYZ:\n", outXYZ)
+                    outXYZ = np_array(list(gdf.loc[row].geometry.coords), dtype=float)
                     if np_shape(outXYZ)[1] == 2:
                         outZ = np_zeros((np_shape(outXYZ)[0], 1))
-                        # print("outZ:\n", outZ)
                         outXYZ = np_column_stack((outXYZ, outZ))
-                    # print("outXYZ:\n", outXYZ)
                     curr_obj_dict["vtk_obj"].points = outXYZ
                     curr_obj_dict["vtk_obj"].auto_cells()
                 elif gdf.geom_type[row] == "MultiLineString":
@@ -107,7 +103,7 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
                 gdf_index = gdf.set_index("feature")
                 feat_list = set(gdf_index.index)
                 for i in feat_list:
-                    curr_obj_dict = deepcopy(GeologicalCollection.entity_dict)
+                    curr_obj_dict = deepcopy(GeologicalCollection().entity_dict)
                     if "dip" in gdf.columns:
                         vtk_obj = Attitude()
                     else:
