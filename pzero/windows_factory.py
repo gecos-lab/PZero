@@ -2389,7 +2389,9 @@ class VTKView(BaseView):
         # end_pos = style.GetEndPosition()
 
         picker = vtkPropPicker()
-        picker.PickProp(pos[0], pos[1], style.GetDefaultRenderer())
+        print("dir(picker): ", dir(picker))
+        picker_output = picker.PickProp(pos[0], pos[1], style.GetDefaultRenderer())
+        print("picker_output: ", picker_output)
 
         actors = set(self.plotter.renderer.actors)
 
