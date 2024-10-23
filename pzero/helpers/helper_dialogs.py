@@ -641,9 +641,7 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
         self.setupUi(self)
 
         self.parent = parent
-        self.action = (
-            self.sender()
-        )  # [Gabriele] Name of the actionmenu from which the import function was called.
+        # self.action = (self.sender())  # [Gabriele] Name of the action menu from which the import function was called.
         self.default_attr_list = default_attr_list
         self.ext_filter = ext_filter
         self.caption = caption
@@ -955,7 +953,8 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
 
         def ass_value(attr):
             """[Gabriele] Get column and row of clicked widget in table"""
-            sel_combo = self.sender()  # [Gabriele] Combobox @ row and column
+            # sel_combo = self.sender()  # [Gabriele] Combobox @ row and column
+            sel_combo = attr  # [Gabriele] Combobox @ row and column
             row = int(sel_combo.objectName().split("_")[1])
             print(row)
 

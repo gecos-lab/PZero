@@ -1194,7 +1194,8 @@ class Legend(QObject):
             "color_B",
         ] = new_color_B
         """Update sender color."""
-        self.sender().setStyleSheet(
+        # self.sender().setStyleSheet(
+        sender.setStyleSheet(
             "background-color:rgb({},{},{})".format(
                 new_color_R, new_color_G, new_color_B
             )
@@ -1409,9 +1410,9 @@ class Legend(QObject):
         # role = self.sender().role
         # feature = self.sender().feature
         # point_size = self.sender().value()
-        role = self.sender().role
-        feature = self.sender().feature
-        point_size = self.sender().value()
+        role = sender.role
+        feature = sender.feature
+        point_size = sender.value()
         "Here the query is reversed and modified, dropping the values() method, to allow SETTING the line thickness in the legend"
         parent.backgrnd_coll.legend_df.loc[
             (parent.backgrnd_coll.legend_df["role"] == role)

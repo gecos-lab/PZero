@@ -34,7 +34,7 @@ def create_mesh3d_list(self):
         self.Mesh3DTableWidget.setItem(row, 0, name_item)
         self.Mesh3DTableWidget.setItem(row, 1, uid_item)
         self.Mesh3DTableWidget.setCellWidget(row, 2, property_combo)
-        property_combo.currentIndexChanged.connect(lambda: toggle_property_mesh3d(self))
+        property_combo.currentIndexChanged.connect(lambda *, sender=property_combo: toggle_property_mesh3d(self, sender=sender))
         if self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]:
             name_item.setCheckState(Qt.Checked)
         elif not self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]:
@@ -78,7 +78,7 @@ def update_mesh3d_list_added(self, new_list=None, sec_uid=None):
         self.Mesh3DTableWidget.setItem(row, 0, name_item)
         self.Mesh3DTableWidget.setItem(row, 1, uid_item)
         self.Mesh3DTableWidget.setCellWidget(row, 2, property_combo)
-        property_combo.currentIndexChanged.connect(lambda: toggle_property_mesh3d(self))
+        property_combo.currentIndexChanged.connect(lambda *, sender=property_combo: toggle_property_mesh3d(self, sender=sender))
         if self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]:
             name_item.setCheckState(Qt.Checked)
         elif not self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]:
@@ -120,12 +120,12 @@ def toggle_mesh3d_visibility(self, cell):
             self.set_actor_visible(uid=uid, visible=False)
 
 
-def toggle_property_mesh3d(self):
+def toggle_property_mesh3d(self, sender=None):
     """Method to toggle the texture shown by a Mesh3D that is already present in the view."""
     # Collect values from combo box.
-    combo = self.sender()
-    show_property = combo.currentText()
-    uid = combo.uid
+    # combo = self.sender()
+    show_property = sender.currentText()
+    uid = sender.uid
     show = self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]
     collection = self.actors_df.loc[self.actors_df["uid"] == uid, "collection"].values[0]
     # This replaces the previous copy of the actor with the same uid, and updates the actors dataframe.

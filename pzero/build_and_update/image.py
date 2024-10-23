@@ -34,7 +34,7 @@ def create_image_list(self, sec_uid=None):
         self.ImagesTableWidget.setItem(row, 0, name_item)
         self.ImagesTableWidget.setItem(row, 1, uid_item)
         self.ImagesTableWidget.setCellWidget(row, 2, property_combo)
-        property_combo.currentIndexChanged.connect(lambda: toggle_property_image(self))
+        property_combo.currentIndexChanged.connect(lambda *, sender=property_combo : toggle_property_image(self, sender=sender))
         if self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]:
             name_item.setCheckState(Qt.Checked)
         elif not self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]:
@@ -74,7 +74,7 @@ def update_image_list_added(self, new_list=None, sec_uid=None):
         self.ImagesTableWidget.setItem(row, 0, name_item)
         self.ImagesTableWidget.setItem(row, 1, uid_item)
         self.ImagesTableWidget.setCellWidget(row, 2, property_combo)
-        property_combo.currentIndexChanged.connect(lambda: toggle_property_image(self))
+        property_combo.currentIndexChanged.connect(lambda *, sender=property_combo : toggle_property_image(self, sender=sender))
         if self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]:
             name_item.setCheckState(Qt.Checked)
         elif not self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]:
@@ -98,12 +98,10 @@ def update_image_list_removed(self, removed_list=None):
 
 def toggle_image_visibility(self, cell):
     """Called by self.ImagesTableWidget.itemChanged.connect(self.toggle_image_visibility)."""
-    check_state = self.ImagesTableWidget.item(
-        cell.row(), 0
-    ).checkState()  # this is the check state of cell "name"
-    uid = self.ImagesTableWidget.item(
-        cell.row(), 1
-    ).text()  # this is the text of cell "uid"
+    # this is the check state of cell "name"
+    check_state = self.ImagesTableWidget.item(cell.row(), 0).checkState()
+    # this is the text of cell "uid"
+    uid = self.ImagesTableWidget.item(cell.row(), 1).text()
     if check_state == Qt.Checked:
         if not self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]:
             self.actors_df.loc[self.actors_df["uid"] == uid, "show"] = True
@@ -113,12 +111,12 @@ def toggle_image_visibility(self, cell):
             self.actors_df.loc[self.actors_df["uid"] == uid, "show"] = False
             self.set_actor_visible(uid=uid, visible=False)
 
-def toggle_property_image(self):
+def toggle_property_image(self, sender=None):
     """Method to toggle the property shown by an image that is already present in the view."""
     # Collect values from combo box.
-    combo = self.sender()
-    show_property = combo.currentText()
-    uid = combo.uid
+    # combo = self.sender()
+    show_property = sender.currentText()
+    uid = sender.uid
     show = self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]
     collection = self.actors_df.loc[self.actors_df["uid"] == uid, "collection"].values[0]
     # This replaces the previous copy of the actor with the same uid, and updates the actors dataframe.
@@ -128,4 +126,4 @@ def toggle_property_image(self):
                                                show_property=show_property,
                                                visible=show)
     self.actors_df.loc[self.actors_df["uid"] == uid, ["show_property"]] = show_property
-    print(f"TEST uid {uid} property {show_property}")
+    # print(f"TEST uid {uid} property {show_property}")
