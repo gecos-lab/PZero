@@ -1,4 +1,4 @@
-from PySide6.QtWidgets import QTableWidgetItem, QComboBox
+from PySide6.QtWidgets import QTableWidgetItem, QComboBox, QHeaderView
 from PySide6.QtCore import Qt
 
 """Methods used to build and update the IMAGE table."""
@@ -42,6 +42,8 @@ def create_image_list(self, sec_uid=None):
         row += 1
     """Send message with argument = the cell being checked/unchecked."""
     self.ImagesTableWidget.itemChanged.connect(self.toggle_image_visibility)
+    # Squeeze column width to fit content
+    self.ImagesTableWidget.horizontalHeader().ResizeMode(QHeaderView.ResizeToContents)
 
 def update_image_list_added(self, new_list=None, sec_uid=None):
     """Update Image list without creating a new model"""
@@ -82,6 +84,8 @@ def update_image_list_added(self, new_list=None, sec_uid=None):
         row += 1
     """Send message with argument = the cell being checked/unchecked."""
     self.ImagesTableWidget.itemChanged.connect(self.toggle_image_visibility)
+    # Squeeze column width to fit content
+    self.ImagesTableWidget.horizontalHeader().ResizeMode(QHeaderView.ResizeToContents)
 
 def update_image_list_removed(self, removed_list=None):
     """Update Image list without creating a new model"""

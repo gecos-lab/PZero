@@ -1,4 +1,4 @@
-from PySide6.QtWidgets import QTableWidgetItem
+from PySide6.QtWidgets import QTableWidgetItem, QHeaderView
 from PySide6.QtCore import Qt
 
 """Methods used to build and update the BOUNDARY table."""
@@ -30,6 +30,8 @@ def create_boundary_list(self):
         row += 1
     """Send message with argument = the cell being checked/unchecked."""
     self.BoundariesTableWidget.itemChanged.connect(self.toggle_boundary_visibility)
+    # Squeeze column width to fit content
+    self.BoundariesTableWidget.horizontalHeader().ResizeMode(QHeaderView.ResizeToContents)
 
 def update_boundary_list_added(self, new_list=None, sec_uid=None):
     """Update boundaries list without creating a new model"""
@@ -58,6 +60,8 @@ def update_boundary_list_added(self, new_list=None, sec_uid=None):
         row += 1
     """Send message with argument = the cell being checked/unchecked."""
     self.BoundariesTableWidget.itemChanged.connect(self.toggle_boundary_visibility)
+    # Squeeze column width to fit content
+    self.BoundariesTableWidget.horizontalHeader().ResizeMode(QHeaderView.ResizeToContents)
 
 def update_boundary_list_removed(self, removed_list=None):
     """Update boundary list without creating a new model"""

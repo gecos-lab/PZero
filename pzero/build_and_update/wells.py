@@ -119,6 +119,9 @@ def create_well_tree(self):
     """Send messages. Note that with tristate several signals are emitted in a sequence, one for each
     changed item, but upper levels do not broadcast uid's so they are filtered in the toggle method."""
     self.WellsTreeWidget.itemChanged.connect(self.toggle_well_visibility)
+    # Squeeze column width to fit content
+    for col in range(self.WellsTreeWidget.columnCount()):
+        self.WellsTreeWidget.resizeColumnToContents(col)
     self.WellsTreeWidget.expandAll()
 
 def update_well_tree_added(self, new_list=None):
@@ -242,6 +245,9 @@ def update_well_tree_added(self, new_list=None):
             break
 
     self.WellsTreeWidget.itemChanged.connect(self.toggle_well_visibility)
+    # Squeeze column width to fit content
+    for col in range(self.WellsTreeWidget.columnCount()):
+        self.WellsTreeWidget.resizeColumnToContents(col)
     self.WellsTreeWidget.expandAll()
 
 def update_well_tree_removed(self, removed_list=None):

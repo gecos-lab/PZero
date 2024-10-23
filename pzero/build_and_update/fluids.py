@@ -87,9 +87,10 @@ def create_fluids_tree(self):
                         flevel_4.setCheckState(0, Qt.Unchecked)
     """Send messages. Note that with tristate several signals are emitted in a sequence, one for each
     changed item, but upper levels do not broadcast uid's so they are filtered in the toggle method."""
-    self.FluidsTreeWidget.itemChanged.connect(
-        self.toggle_fluids_visibility 
-    )
+    self.FluidsTreeWidget.itemChanged.connect(self.toggle_fluids_visibility)
+    # Squeeze column width to fit content
+    for col in range(self.FluidsTreeWidget.columnCount()):
+        self.FluidsTreeWidget.resizeColumnToContents(col)
     self.FluidsTreeWidget.expandAll()
 
 def create_fluids_topology_tree(self):
@@ -159,9 +160,10 @@ def create_fluids_topology_tree(self):
                     tlevel_3.setCheckState(0, Qt.Unchecked)
     """Send messages. Note that with tristate several signals are emitted in a sequence, one for each
     changed item, but upper levels do not broadcast uid's so they are filtered in the toggle method."""
-    self.FluidsTopologyTreeWidget.itemChanged.connect(
-        self.toggle_fluids_visibility 
-    )
+    self.FluidsTopologyTreeWidget.itemChanged.connect(self.toggle_fluids_visibility)
+    # Squeeze column width to fit content
+    for col in range(self.FluidsTopologyTreeWidget.columnCount()):
+        self.FluidsTopologyTreeWidget.resizeColumnToContents(col)
     self.FluidsTopologyTreeWidget.expandAll()
 
 def update_fluids_tree_added(self, new_list=None, sec_uid=None):
@@ -458,9 +460,10 @@ def update_fluids_tree_added(self, new_list=None, sec_uid=None):
                 flevel_4.setCheckState(0, Qt.Unchecked)
             self.FluidsTreeWidget.insertTopLevelItem(0, flevel_4)
             break
-    self.FluidsTreeWidget.itemChanged.connect(
-        self.toggle_fluids_visibility 
-    )
+    self.FluidsTreeWidget.itemChanged.connect(self.toggle_fluids_visibility)
+    # Squeeze column width to fit content
+    for col in range(self.FluidsTreeWidget.columnCount()):
+        self.FluidsTreeWidget.resizeColumnToContents(col)
     self.FluidsTreeWidget.expandAll()
 
 def update_fluids_tree_removed(self, removed_list=None):  # second attchild_fluid_featempt
@@ -732,9 +735,10 @@ def update_fluids_topology_tree_added(self, new_list=None, sec_uid=None):
                 tlevel_3.setCheckState(0, Qt.Unchecked)
             self.FluidsTopologyTreeWidget.insertTopLevelItem(0, tlevel_3)
             break
-    self.FluidsTopologyTreeWidget.itemChanged.connect(
-        self.toggle_fluids_visibility 
-    )
+    self.FluidsTopologyTreeWidget.itemChanged.connect(self.toggle_fluids_visibility)
+    # Squeeze column width to fit content
+    for col in range(self.FluidsTopologyTreeWidget.columnCount()):
+        self.FluidsTopologyTreeWidget.resizeColumnToContents(col)
     self.FluidsTopologyTreeWidget.expandAll()
 
 def update_fluids_topology_tree_removed(self, removed_list=None):

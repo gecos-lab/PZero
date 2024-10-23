@@ -8,6 +8,7 @@ from PySide6.QtWidgets import (
     QSpinBox,
     QDoubleSpinBox,
     QComboBox,
+    QHeaderView,
 )
 from PySide6.QtGui import QColor
 from PySide6.QtCore import QObject
@@ -136,6 +137,7 @@ class Legend(QObject):
             ]
         )
         parent.LegendTreeWidget.setItemsExpandable(True)
+
         for other_collection in pd_unique(parent.others_legend_df["other_collection"]):
             color_R = parent.others_legend_df.loc[
                 parent.others_legend_df["other_collection"] == other_collection, "color_R"
@@ -385,6 +387,7 @@ class Legend(QObject):
                     geol_sequence_combo.currentTextChanged.connect(
                         lambda *, sender=geol_sequence_combo: self.change_geological_sequence(sender=sender, parent=parent)
                     )
+
         for locid in pd_unique(parent.well_legend_df["Loc ID"]):
             llevel_1 = QTreeWidgetItem(
                 parent.LegendTreeWidget, ["Wells"]
@@ -444,6 +447,7 @@ class Legend(QObject):
             well_line_opacity_spn.valueChanged.connect(
                 lambda *, sender=well_line_opacity_spn: self.change_well_line_opacity(sender=sender, parent=parent)
             )
+
         for role in pd_unique(parent.fluid_coll.legend_df["role"]):
             llevel_1 = QTreeWidgetItem(
                 parent.LegendTreeWidget, [role]
@@ -606,6 +610,7 @@ class Legend(QObject):
                     )
                     # geol_time_combo.currentTextChanged.connect(lambda: self.change_time(parent=parent))
                     # fluid_sequence_combo.currentTextChanged.connect(lambda: self.change_fluid_sequence(parent=parent))
+
         for role in pd_unique(
             parent.backgrnd_coll.legend_df["role"]
         ):
@@ -702,6 +707,10 @@ class Legend(QObject):
                 background_opacity_spn.valueChanged.connect(
                     lambda *, sender=background_opacity_spn: self.change_background_opacity(sender=sender, parent=parent)
                 )
+        # Squeeze column width to fit content
+        for col in range(parent.LegendTreeWidget.columnCount()):
+            parent.LegendTreeWidget.resizeColumnToContents(col)
+        # Expand all tree items
         parent.LegendTreeWidget.expandAll()
 
     def change_geology_feature_color(self, sender=None, parent=None):

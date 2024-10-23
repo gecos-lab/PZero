@@ -1,4 +1,4 @@
-from PySide6.QtWidgets import QTableWidgetItem, QComboBox
+from PySide6.QtWidgets import QTableWidgetItem, QComboBox, QHeaderView
 from PySide6.QtCore import Qt
 
 """Methods used to build and update the DOM table."""
@@ -74,6 +74,8 @@ def create_dom_list(self, sec_uid=None):
         row += 1
     """Send message with argument = the cell being checked/unchecked."""
     self.DOMsTableWidget.itemChanged.connect(self.toggle_dom_visibility)
+    # Squeeze column width to fit content
+    self.DOMsTableWidget.horizontalHeader().ResizeMode(QHeaderView.ResizeToContents)
 
 def update_dom_list_added(self, new_list=None, sec_uid=None):
     """Update DOM list without creating a new model"""
@@ -149,6 +151,8 @@ def update_dom_list_added(self, new_list=None, sec_uid=None):
         row += 1
     """Send message with argument = the cell being checked/unchecked."""
     self.DOMsTableWidget.itemChanged.connect(self.toggle_dom_visibility)
+    # Squeeze column width to fit content
+    self.DOMsTableWidget.horizontalHeader().ResizeMode(QHeaderView.ResizeToContents)
 
 def update_dom_list_removed(self, removed_list=None):
     """Update DOM list without creating a new model"""

@@ -100,6 +100,9 @@ def create_geology_tree(self):
     # Send messages. Note that with tristate several signals are emitted in a sequence, one for each
     # changed item, but upper levels do not broadcast uid's so they are filtered in the toggle method.
     self.GeologyTreeWidget.itemChanged.connect(self.toggle_geology_visibility )
+    # Squeeze column width to fit content
+    for col in range(self.GeologyTreeWidget.columnCount()):
+        self.GeologyTreeWidget.resizeColumnToContents(col)
     self.GeologyTreeWidget.expandAll()
 
 def update_geology_tree_added(self, uid_list=None):
@@ -395,7 +398,10 @@ def update_geology_tree_added(self, uid_list=None):
                 glevel_4.setCheckState(0, Qt.Unchecked)
             self.GeologyTreeWidget.insertTopLevelItem(0, glevel_4)
             break
-    self.GeologyTreeWidget.itemChanged.connect(self.toggle_geology_visibility )
+    self.GeologyTreeWidget.itemChanged.connect(self.toggle_geology_visibility)
+    # Squeeze column width to fit content
+    for col in range(self.GeologyTreeWidget.columnCount()):
+        self.GeologyTreeWidget.resizeColumnToContents(col)
     self.GeologyTreeWidget.expandAll()
 
 def update_geology_tree_removed(self, removed_list=None):
@@ -567,9 +573,10 @@ def create_topology_tree(self):
                     tlevel_3.setCheckState(0, Qt.Unchecked)
     # Send messages. Note that with tristate several signals are emitted in a sequence, one for each
     # changed item, but upper levels do not broadcast uid's so they are filtered in the toggle method
-    self.GeologyTopologyTreeWidget.itemChanged.connect(
-        self.toggle_geology_visibility 
-    )
+    self.GeologyTopologyTreeWidget.itemChanged.connect(self.toggle_geology_visibility)
+    # Squeeze column width to fit content
+    for col in range(self.GeologyTopologyTreeWidget.columnCount()):
+        self.GeologyTopologyTreeWidget.resizeColumnToContents(col)
     self.GeologyTopologyTreeWidget.expandAll()
 
 def update_topology_tree_added(self, uid_list=None):
@@ -736,9 +743,10 @@ def update_topology_tree_added(self, uid_list=None):
                 tlevel_3.setCheckState(0, Qt.Unchecked)
             self.GeologyTopologyTreeWidget.insertTopLevelItem(0, tlevel_3)
             break
-    self.GeologyTopologyTreeWidget.itemChanged.connect(
-        self.toggle_geology_visibility 
-    )
+    self.GeologyTopologyTreeWidget.itemChanged.connect(self.toggle_geology_visibility)
+    # Squeeze column width to fit content
+    for col in range(self.GeologyTopologyTreeWidget.columnCount()):
+        self.GeologyTopologyTreeWidget.resizeColumnToContents(col)
     self.GeologyTopologyTreeWidget.expandAll()
 
 def update_topology_tree_removed(self, removed_list=None):

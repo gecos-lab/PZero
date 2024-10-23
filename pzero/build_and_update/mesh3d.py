@@ -1,4 +1,4 @@
-from PySide6.QtWidgets import QTableWidgetItem, QComboBox
+from PySide6.QtWidgets import QTableWidgetItem, QComboBox, QHeaderView
 from PySide6.QtCore import Qt
 
 """Methods used to build and update the MESH3D table in views."""
@@ -42,6 +42,8 @@ def create_mesh3d_list(self):
         row += 1
     """Send message with argument = the cell being checked/unchecked."""
     self.Mesh3DTableWidget.itemChanged.connect(self.toggle_mesh3d_visibility)
+    # Squeeze column width to fit content
+    self.Mesh3DTableWidget.horizontalHeader().ResizeMode(QHeaderView.ResizeToContents)
 
 
 def update_mesh3d_list_added(self, new_list=None, sec_uid=None):
@@ -86,6 +88,8 @@ def update_mesh3d_list_added(self, new_list=None, sec_uid=None):
         row += 1
     """Send message with argument = the cell being checked/unchecked."""
     self.Mesh3DTableWidget.itemChanged.connect(self.toggle_mesh3d_visibility)
+    # Squeeze column width to fit content
+    self.Mesh3DTableWidget.horizontalHeader().ResizeMode(QHeaderView.ResizeToContents)
 
 
 def update_mesh3d_list_removed(self, removed_list=None):

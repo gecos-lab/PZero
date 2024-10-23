@@ -10,7 +10,7 @@ from matplotlib.pyplot import colormaps as plt_colormaps
 
 from PySide6.QtCore import QObject
 from PySide6.QtGui import QColor, QImage, QPixmap
-from PySide6.QtWidgets import QTableWidgetItem, QLabel, QComboBox
+from PySide6.QtWidgets import QTableWidgetItem, QLabel, QComboBox, QHeaderView
 
 from numpy import linspace as np_linspace
 
@@ -115,13 +115,15 @@ class PropertiesCMaps(QObject):
         add_props = list(set(add_props))  # a set is composed of unique values from a list
         add_props = list(filter(None, add_props))  # eliminate empty elements
         all_props = all_props + add_props
-        """Add new properties to dataframe."""
+
+        # Add new properties to dataframe.
         for prop in all_props:
             if not prop in parent.prop_legend_df["property_name"].to_list():
                 parent.prop_legend_df = parent.prop_legend_df.append(
                     {"property_name": prop, "colormap": "rainbow"}, ignore_index=True
                 )
-        """The remove old ones no more used."""
+
+        # The remove old ones no more used.
         for prop in parent.prop_legend_df["property_name"].to_list():
             if not prop in all_props:
                 """Get index of row to be removed, then remove it in place with .drop()."""
@@ -129,17 +131,20 @@ class PropertiesCMaps(QObject):
                     parent.prop_legend_df["property_name"] == prop
                 ].index
                 parent.prop_legend_df.drop(idx_remove, inplace=True)
-        """Reset dataframe index otherwise the TableWidget indexing can be messed up."""
+
+        # Reset dataframe index otherwise the TableWidget indexing can be messed up.
         parent.prop_legend_df.reset_index(drop=True, inplace=True)
-        """Set up the PropertiesTableWidget."""
+
+        # Set up the PropertiesTableWidget.
         parent.PropertiesTableWidget.clear()
         parent.PropertiesTableWidget.setColumnCount(3)
         parent.PropertiesTableWidget.setRowCount(len(all_props))
         parent.PropertiesTableWidget.setHorizontalHeaderLabels(
             list(self.prop_cmap_dict.keys()) + [""]
         )
-        parent.PropertiesTableWidget.setColumnWidth(1, 500)
+        # parent.PropertiesTableWidget.setColumnWidth(1, 500)
         parent.PropertiesTableWidget.setColumnWidth(2, 200)
+
         for index, row in parent.prop_legend_df.iterrows():
             parent.PropertiesTableWidget.setItem(
                 index, 0, QTableWidgetItem(row["property_name"])
@@ -159,6 +164,9 @@ class PropertiesCMaps(QObject):
                     sender=sender, parent=parent
                 )
             )
+
+        # Squeeze column width to fit content
+        parent.PropertiesTableWidget.horizontalHeader().ResizeMode(QHeaderView.ResizeToContents)
 
     def change_property_cmap(self, sender=None, parent=None):
         # new_cmap = str(self.sender().currentText())

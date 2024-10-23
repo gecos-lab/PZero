@@ -40,6 +40,9 @@ def create_xsections_tree(self):
     # Send messages. Note that with tristate several signals are emitted in a sequence, one for each
     # changed item, but upper levels do not broadcast uid's so they are filtered in the toggle method
     self.XSectionTreeWidget.itemChanged.connect(self.toggle_xsection_visibility)
+    # Squeeze column width to fit content
+    for col in range(self.XSectionTreeWidget.columnCount()):
+        self.XSectionTreeWidget.resizeColumnToContents(col)
     self.XSectionTreeWidget.expandAll()
 
 def update_xsections_tree_added(self, new_list=None, sec_uid=None):
@@ -63,6 +66,9 @@ def update_xsections_tree_added(self, new_list=None, sec_uid=None):
         elif not self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]:
             xslevel_2.setCheckState(0, Qt.Unchecked)
     self.XSectionTreeWidget.itemChanged.connect(self.toggle_xsection_visibility)
+    # Squeeze column width to fit content
+    for col in range(self.XSectionTreeWidget.columnCount()):
+        self.XSectionTreeWidget.resizeColumnToContents(col)
     self.XSectionTreeWidget.expandAll()
 
 def update_xsections_tree_removed(self, removed_list=None):

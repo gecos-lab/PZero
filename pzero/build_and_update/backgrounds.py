@@ -82,9 +82,10 @@ def create_backgrounds_tree(self):
                     flevel_3.setCheckState(0, Qt.Unchecked)
     """Send messages. Note that with tristate several signals are emitted in a sequence, one for each
     changed item, but upper levels do not broadcast uid's so they are filtered in the toggle method."""
-    self.BackgroundsTreeWidget.itemChanged.connect(
-        self.toggle_backgrounds_visibility
-    )
+    self.BackgroundsTreeWidget.itemChanged.connect(self.toggle_backgrounds_visibility)
+    # Squeeze column width to fit content
+    for col in range(self.BackgroundsTreeWidget.columnCount()):
+        self.BackgroundsTreeWidget.resizeColumnToContents(col)
     self.BackgroundsTreeWidget.expandAll()
 
 def create_backgrounds_topology_tree(self):
@@ -161,9 +162,10 @@ def create_backgrounds_topology_tree(self):
                     tlevel_3.setCheckState(0, Qt.Unchecked)
     """Send messages. Note that with tristate several signals are emitted in a sequence, one for each
     changed item, but upper levels do not broadcast uid's so they are filtered in the toggle method."""
-    self.BackgroundsTopologyTreeWidget.itemChanged.connect(
-        self.toggle_backgrounds_visibility
-    )
+    self.BackgroundsTopologyTreeWidget.itemChanged.connect(self.toggle_backgrounds_visibility)
+    # Squeeze column width to fit content
+    for col in range(self.BackgroundsTopologyTreeWidget.columnCount()):
+        self.BackgroundsTopologyTreeWidget.resizeColumnToContents(col)
     self.BackgroundsTopologyTreeWidget.expandAll()
 
 def update_backgrounds_tree_added(self, new_list=None, sec_uid=None):
@@ -350,9 +352,10 @@ def update_backgrounds_tree_added(self, new_list=None, sec_uid=None):
                 flevel_3.setCheckState(0, Qt.Unchecked)
             self.BackgroundsTreeWidget.insertTopLevelItem(0, flevel_3)
             break
-    self.BackgroundsTreeWidget.itemChanged.connect(
-        self.toggle_backgrounds_visibility
-    )
+    self.BackgroundsTreeWidget.itemChanged.connect(self.toggle_backgrounds_visibility)
+    # Squeeze column width to fit content
+    for col in range(self.BackgroundsTreeWidget.columnCount()):
+        self.BackgroundsTreeWidget.resizeColumnToContents(col)
     self.BackgroundsTreeWidget.expandAll()
 
 def update_backgrounds_tree_removed(self, removed_list=None):  # second attchild_background_featempt
@@ -612,9 +615,10 @@ def update_backgrounds_topology_tree_added(self, new_list=None, sec_uid=None):
                 tlevel_3.setCheckState(0, Qt.Unchecked)
             self.BackgroundsTopologyTreeWidget.insertTopLevelItem(0, tlevel_3)
             break
-    self.BackgroundsTopologyTreeWidget.itemChanged.connect(
-        self.toggle_geology_visibility 
-    )
+    self.BackgroundsTopologyTreeWidget.itemChanged.connect(self.toggle_geology_visibility)
+    # Squeeze column width to fit content
+    for col in range(self.BackgroundsTopologyTreeWidget.columnCount()):
+        self.BackgroundsTopologyTreeWidget.resizeColumnToContents(col)
     self.BackgroundsTopologyTreeWidget.expandAll()
 
 def update_backgrounds_topology_tree_removed(self, removed_list=None):
