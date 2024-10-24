@@ -273,9 +273,7 @@ class PolyData(vtkPolyData):
         pass
 
     @cells.setter
-    def cells(
-        self, cells_matrix=None
-    ):  # _______________________________________________________________ this does not work - see how to fix this that is very important - possibly use VEDO or PYVISTA or BETTER numpy_to_vtk.
+    def cells(self, cells_matrix=None):  # _______________________________________________________________ this does not work - see how to fix this that is very important - possibly use VEDO or PYVISTA or BETTER numpy_to_vtk.
         """Set all cells by applying append_cell recursively"""
         if self.GetNumberOfCells() != 0:
             self.DeleteCells()  # this marks the cells to be deleted
@@ -285,9 +283,7 @@ class PolyData(vtkPolyData):
             self.append_cell(cell_array=cells_matrix[row, :])
 
     @property
-    def cell_centers(
-        self,
-    ):  # ___________________________________________________ SEEMS USEFUL BUT NOT YET USED AND TESTED
+    def cell_centers(self):  # ___________________________________________________ SEEMS USEFUL BUT NOT YET USED AND TESTED
         """Returns a 3xn array of n point coordinates at the parametric center of n cells.
         This is not necessarily the same as the geometric or bonding box center."""
         vtk_cell_ctrs = vtkCellCenters()
@@ -448,6 +444,7 @@ class PolyData(vtkPolyData):
             return None
 
     # ==================== POINT DATA ====================
+
     @property
     def point_data_keys(self):
         """Lists point data keys, if present (except handles the case of objects with no properties)."""
@@ -471,9 +468,7 @@ class PolyData(vtkPolyData):
         """Removes a point data attribute with name = data_key."""
         self.GetPointData().RemoveArray(data_key)
 
-    def get_point_data(
-        self, data_key=None
-    ):  # _________________________________________________________ CHECK THIS - PROBABLY reshape SHOULD APPLY TO ALL CASES
+    def get_point_data(self, data_key=None):  # _________________________________________________________ CHECK THIS - PROBABLY reshape SHOULD APPLY TO ALL CASES
         """Returns a point data attribute as Numpy array. This cannot be converted to
         a property method since the key of the attribute must be specified."""
         # if isinstance(self, (VertexSet, PolyLine, TriSurf, XsVertexSet, XsPolyLine)):
@@ -1449,11 +1444,11 @@ class Voxet(vtkImageData):
 
     def get_point_data_shape(self, data_key=None):
         """Returns the shape of a point data attribute matrix."""
-        """For 2D matrices we get the shape of the matrix and the number of components of
-        the attribute. The third shape parameter, that for 2D images is 1, is omitted."""
+        # An old comment said: "For 2D matrices we get the shape of the matrix and the number of components
+        # of the attribute. The third shape parameter, that for 2D images is 1, is omitted."
         extent = self.GetExtent()
         n_components = self.GetPointData().GetArray(data_key).GetNumberOfComponents()
-        return [extent[1] + 1, extent[3] + 1, n_components]
+        return [extent[1] + 1, extent[3] + 1, extent[5] + 1, n_components]
 
     def get_point_data_range(self, data_key=None):
         """Returns the range [mon, max] of a point data attribute matrix."""

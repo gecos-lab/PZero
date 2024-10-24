@@ -255,7 +255,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.initialize_menu_tools()
         self.initialize_interactor()
         self.add_all_entities()
-        self.show_qt_canvas()
+        # self.show_qt_canvas()  # comment this to avoid flashing window when opening a new view
 
         self.toggle_backgrounds_visibility = lambda item: toggle_backgrounds_visibility(self, item)
 
