@@ -194,16 +194,19 @@ class DockWindow(QDockWidget):
             parent.tabifyDockWidget(parent.findChildren(QDockWidget)[0], self)
 
     def closeEvent(self, event):
-        """Override the standard closeEvent method since self.plotter.close() is needed
-        to cleanly close the vtk plotter and disconnect_all_lambda_signals is required to
-        disconnect signals before deleting the window."""
+        """Override the standard closeEvent method in two cases:
+        1) when a window is floating, "closing" it actually brings it back in
+        the docking area;
+        2) when really closing/deleting a window, self.plotter.close() is needed
+        to cleanly close the vtk plotter and disconnect_all_lambda_signals."""
+        # Case to send floating window back to docking area.
         if self.isFloating():
             self.setFloating(False)
             event.ignore()
             return
-        # Disconnect all signals of BaseView()
+        # Case to actually close/delete a window, disconnecting all signals
+        # of BaseView(), then cleanly close the VTK plotter.
         self.canvas.disconnect_all_signals()
-        # Cleanly close the VTK plotter
         if isinstance(self.canvas, VTKView):
             self.canvas.plotter.close()
 
@@ -1535,7 +1538,6 @@ class VTKView(BaseView):
         """
         # First get the vtk object from its collection
         show_property_title = show_property
-        show_scalar_bar = True
         if collection == "geol_coll":
             color_R = self.parent.geol_coll.get_uid_legend(uid=uid)["color_R"]
             color_G = self.parent.geol_coll.get_uid_legend(uid=uid)["color_G"]
@@ -1627,12 +1629,9 @@ class VTKView(BaseView):
         ):
             plot_rgb_option = None
             if isinstance(plot_entity.points, np_ndarray):
-                """This  check is needed to avoid errors when trying to plot an empty
-                PolyData, just created at the beginning of a digitizing session."""
-                if show_property is None:
-                    show_scalar_bar = False
-                elif show_property == "none":
-                    show_scalar_bar = False
+                # This  check is needed to avoid errors when trying to plot an empty
+                # PolyData, just created at the beginning of a digitizing session.
+                if show_property == "none" or show_property is None:
                     show_property = None
                 elif show_property == "X":
                     show_property = plot_entity.points_X
@@ -1648,7 +1647,6 @@ class VTKView(BaseView):
                     plot_entity=plot_entity,
                     color_RGB=color_RGB,
                     show_property=show_property,
-                    show_scalar_bar=show_scalar_bar,
                     color_bar_range=None,
                     show_property_title=show_property_title,
                     line_thick=line_thick,
@@ -1669,13 +1667,9 @@ class VTKView(BaseView):
             plot_rgb_option = None
             smooth_shading = False
             if isinstance(plot_entity.points, np_ndarray):
-                """This  check is needed to avoid errors when trying to plot an empty
-                PolyData, just created at the beginning of a digitizing session."""
-                if show_property is None:
-                    show_scalar_bar = False
-                    pass
-                elif show_property == "none":
-                    show_scalar_bar = False
+                # This  check is needed to avoid errors when trying to plot an empty
+                # PolyData, just created at the beginning of a digitizing session.
+                if show_property == "none" or show_property is None:
                     show_property = None
                 elif show_property == "X":
                     show_property = plot_entity.points_X
@@ -1684,7 +1678,6 @@ class VTKView(BaseView):
                 elif show_property == "Z":
                     show_property = plot_entity.points_Z
                 elif show_property == "Normals":
-                    show_scalar_bar = False
                     show_property_title = None
                     show_property = None
                     style = "surface"
@@ -1734,7 +1727,6 @@ class VTKView(BaseView):
                     plot_entity=plot_entity,
                     color_RGB=color_RGB,
                     show_property=show_property,
-                    show_scalar_bar=show_scalar_bar,
                     color_bar_range=None,
                     show_property_title=show_property_title,
                     line_thick=line_thick,
@@ -1765,7 +1757,6 @@ class VTKView(BaseView):
                     plot_entity=plot_entity,
                     color_RGB=None,
                     show_property=None,
-                    show_scalar_bar=None,
                     color_bar_range=None,
                     show_property_title=None,
                     line_thick=None,
@@ -1775,11 +1766,7 @@ class VTKView(BaseView):
                 )
             else:
                 plot_rgb_option = None
-                if show_property is None:
-                    show_scalar_bar = False
-                    pass
-                elif show_property == "none":
-                    show_scalar_bar = False
+                if show_property == "none" or show_property is None:
                     show_property = None
                 elif show_property == "X":
                     show_property = plot_entity.points_X
@@ -1788,7 +1775,6 @@ class VTKView(BaseView):
                 elif show_property == "Z":
                     show_property = plot_entity.points_Z
                 elif show_property == "RGB":
-                    show_scalar_bar = False
                     show_property = None
                 else:
                     if plot_entity.get_point_data_shape(show_property)[-1] == 3:
@@ -1798,7 +1784,6 @@ class VTKView(BaseView):
                     plot_entity=plot_entity,
                     color_RGB=color_RGB,
                     show_property=show_property,
-                    show_scalar_bar=show_scalar_bar,
                     color_bar_range=None,
                     show_property_title=show_property_title,
                     line_thick=line_thick,
@@ -1816,12 +1801,7 @@ class VTKView(BaseView):
             if isinstance(plot_entity.points, np_ndarray):
                 """This check is needed to avoid errors when trying to plot an empty
                 PolyData, just created at the beginning of a digitizing session."""
-                if show_property is None:
-                    show_scalar_bar = False
-                    show_property_value = None
-                    pass
-                elif show_property == "none":
-                    show_scalar_bar = False
+                if show_property == "none" or show_property is None:
                     show_property_value = None
                 elif show_property == "X":
                     show_property_value = plot_entity.points_X
@@ -1830,14 +1810,14 @@ class VTKView(BaseView):
                 elif show_property == "Z":
                     show_property_value = plot_entity.points_Z
                 elif show_property[-1] == "]":
-                    """[Gabriele] we can identify multicomponents properties such as RGB[0] or Normals[0] by taking the last character of the property name ("]")."""
-                    show_scalar_bar = True
-                    # [Gabriele] Get the start and end index of the [n_component]
+                    # We can identify multicomponents properties such as RGB[0] or Normals[0] by
+                    # taking the last character of the property name ("]").
+                    # Get the start and end index of the [n_component]
                     pos1 = show_property.index("[")
                     pos2 = show_property.index("]")
-                    # [Gabriele] Get the original property (e.g. RGB[0] -> RGB)
+                    # Get the original property (e.g. RGB[0] -> RGB)
                     original_prop = show_property[:pos1]
-                    # [Gabriele] Get the column index (the n_component value)
+                    # Get the column index (the n_component value)
                     index = int(show_property[pos1 + 1: pos2])
                     show_property_value = plot_entity.get_point_data(original_prop)[
                                           :, index
@@ -1848,21 +1828,18 @@ class VTKView(BaseView):
                             show_property
                         )
                     ]
-                    """[Gabriele] Get the n of components for the given property. If it's > 1 then do stuff depending on the type of property (e.g. show_rgb_option -> True if the property is RGB)"""
+                    # Get the n of components for the given property. If it's > 1 then do stuff depending
+                    # on the type of property (e.g. show_rgb_option -> True if the property is RGB).
                     if n_comp > 1:
                         show_property_value = plot_entity.get_point_data(show_property)
-                        show_scalar_bar = False
-                        # if show_property == 'RGB':
                         plot_rgb_option = True
                     else:
-                        show_scalar_bar = True
                         show_property_value = plot_entity.get_point_data(show_property)
             this_actor = self.plot_PC_3D(
                 uid=uid,
                 plot_entity=new_plot,
                 color_RGB=color_RGB,
                 show_property=show_property_value,
-                show_scalar_bar=show_scalar_bar,
                 color_bar_range=None,
                 show_property_title=show_property_title,
                 plot_rgb_option=plot_rgb_option,
@@ -1874,7 +1851,7 @@ class VTKView(BaseView):
         elif isinstance(plot_entity, (MapImage, XsImage)):
             """Do not plot directly image - it is much slower.
             Texture options according to type."""
-            if show_property is None or show_property == "none":
+            if show_property == "none" or show_property is None:
                 plot_texture_option = None
             else:
                 plot_texture_option = plot_entity.texture
@@ -1883,7 +1860,6 @@ class VTKView(BaseView):
                 plot_entity=plot_entity.frame,
                 color_RGB=None,
                 show_property=None,
-                show_scalar_bar=None,
                 color_bar_range=None,
                 show_property_title=None,
                 line_thick=line_thick,
@@ -1895,13 +1871,9 @@ class VTKView(BaseView):
         elif isinstance(plot_entity, Seismics):
             plot_rgb_option = None
             if isinstance(plot_entity.points, np_ndarray):
-                """This  check is needed to avoid errors when trying to plot an empty
-                PolyData, just created at the beginning of a digitizing session."""
-                if show_property is None:
-                    show_scalar_bar = False
-                    pass
-                elif show_property == "none":
-                    show_scalar_bar = False
+                # This  check is needed to avoid errors when trying to plot an empty
+                # PolyData, just created at the beginning of a digitizing session.
+                if show_property == "none" or show_property is None:
                     show_property = None
                 elif show_property == "X":
                     show_property = plot_entity.points_X
@@ -1917,7 +1889,6 @@ class VTKView(BaseView):
                     plot_entity=plot_entity,
                     color_RGB=color_RGB,
                     show_property=show_property,
-                    show_scalar_bar=show_scalar_bar,
                     color_bar_range=None,
                     show_property_title=show_property_title,
                     line_thick=line_thick,
@@ -1931,12 +1902,15 @@ class VTKView(BaseView):
         elif isinstance(plot_entity, Voxet):
             plot_rgb_option = None
             if plot_entity.cells_number > 0:
-                """This  check is needed to avoid errors when trying to plot an empty Voxet."""
-                if show_property is None:
-                    show_scalar_bar = False
-                elif show_property == "none":
+                # This  check is needed to avoid errors when trying to plot an empty Voxet.
+                # Here we treat X, Y, Z as None, in order to avoid a crash related to the fact that Voxets
+                # do not have XYZ coordinates stored explicitly. This can be improved in the future.
+                if any([show_property == "none",
+                        show_property is None,
+                        show_property == 'X',
+                        show_property == 'Y',
+                        show_property == 'Z']):
                     show_property = None
-                    show_scalar_bar = False
                 else:
                     if plot_entity.get_point_data_shape(show_property)[-1] == 3:
                         plot_rgb_option = True
@@ -1945,7 +1919,6 @@ class VTKView(BaseView):
                     plot_entity=plot_entity,
                     color_RGB=None,
                     show_property=show_property,
-                    show_scalar_bar=show_scalar_bar,
                     color_bar_range=None,
                     show_property_title=show_property_title,
                     line_thick=line_thick,
@@ -1958,11 +1931,7 @@ class VTKView(BaseView):
                 this_actor = None
         elif isinstance(plot_entity, WellTrace):
             plot_rgb_option = None
-            if show_property is None:
-                show_scalar_bar = False
-                pass
-            elif show_property == "none":
-                show_scalar_bar = False
+            if show_property == "none" or show_property is None:
                 show_property = None
                 self.plotter.remove_actor(f"{uid}_prop")
             elif show_property == "X":
@@ -1985,7 +1954,6 @@ class VTKView(BaseView):
                 plot_entity=plot_entity,
                 color_RGB=color_RGB,
                 show_property=show_property,
-                show_scalar_bar=show_scalar_bar,
                 color_bar_range=None,
                 show_property_title=show_property_title,
                 line_thick=line_thick,
@@ -2004,16 +1972,10 @@ class VTKView(BaseView):
     def show_markers(self, uid=None, show_property=None):
         plot_entity = self.parent.well_coll.get_uid_vtk_obj(uid)
         marker_data = self.parent.well_coll.get_uid_marker_names(uid)
-
-        if show_property is None:
-            show_scalar_bar = False
-            pass
-        elif show_property == "none":
-            show_scalar_bar = False
+        if show_property == "none" or show_property is None:
             show_property = None
             self.plotter.remove_actor(f"{uid}_marker-labels")
             self.plotter.remove_actor(f"{uid}_marker-points")
-
         elif show_property in marker_data:
             points_pos, points_labels = plot_entity.plot_markers(show_property)
             # print(points_pos,points_labels)
@@ -2072,12 +2034,7 @@ class VTKView(BaseView):
                 point = plot_entity.points
             name = plot_entity.get_field_data_keys()[0]
             name_value = plot_entity.get_field_data(name)
-
-        if show_property is None:
-            show_scalar_bar = False
-            pass
-        elif show_property == "none":
-            show_scalar_bar = False
+        if show_property == "none" or show_property is None:
             show_property = None
             self.plotter.remove_actor(f"{uid}_name-labels")
         else:
@@ -2189,7 +2146,6 @@ class VTKView(BaseView):
             plot_entity=None,
             color_RGB=None,
             show_property=None,
-            show_scalar_bar=None,
             color_bar_range=None,
             show_property_title=None,
             line_thick=None,
@@ -2204,12 +2160,10 @@ class VTKView(BaseView):
             opacity=1.0,
             smooth_shading=False,
     ):
+        """Plot mesh in PyVista interactive plotter."""
         if not self.actors_df.empty:
-            """This stores the camera position before redrawing the actor.
-            Added to avoid a bug that sometimes sends the scene to a very distant place.
-            Could be used as a basis to implement saved views widgets, synced 3D views, etc.
-            The is is needed to avoid sending the camera to the origin that is the
-            default position before any mesh is plotted."""
+            # This stores the camera position before redrawing the actor. Added to avoid a bug that sometimes sends
+            # the scene to a very distant place or to the origin that is the default position before any mesh is plotted.
             camera_position = self.plotter.camera_position
         if show_property_title is not None and show_property_title != "none":
             show_property_cmap = self.parent.prop_legend_df.loc[
@@ -2220,8 +2174,7 @@ class VTKView(BaseView):
             show_property_cmap = None
         this_actor = self.plotter.add_mesh(
             plot_entity,
-            color=color_RGB,
-            # string, RGB list, or hex string, overridden if scalars are specified
+            color=color_RGB,  # string, RGB list, or hex string, overridden if scalars are specified
             style=style,  # 'surface' (default), 'wireframe', or 'points'
             scalars=show_property,  # str pointing to vtk property or numpy.ndarray
             clim=color_bar_range,  # color bar range for scalars, e.g. [-1, 2]
@@ -2229,30 +2182,19 @@ class VTKView(BaseView):
             edge_color=None,  # default black
             point_size=point_size,  # was 5.0
             line_width=line_thick,
-            opacity=opacity,
-            # ___________________ single value > uniform opacity. A string can be specified to map the scalars range to opacity.
+            opacity=opacity,  # single value > uniform opacity, but string can be specified to map the scalars range to opacity.
             flip_scalars=False,  # flip direction of cmap
             lighting=None,  # bool to enable view-direction lighting
             n_colors=256,  # number of colors to use when displaying scalars
-            interpolate_before_map=True,
-            # bool for smoother scalars display (default True)
-            cmap=show_property_cmap,
-            # ____________________________ name of the Matplotlib colormap, includes 'colorcet' and 'cmocean', and custom colormaps like ['green', 'red', 'blue']
+            interpolate_before_map=True,  # bool for smoother scalars display (default True)
+            cmap=show_property_cmap,  # name of the Matplotlib colormap, includes 'colorcet' and 'cmocean', and custom colormaps like ['green', 'red', 'blue']
             label=None,  # string label for legend with pyvista.BasePlotter.add_legend
             reset_camera=None,
-            scalar_bar_args={
-                "title": show_property_title,
-                "title_font_size": 10,
-                "label_font_size": 8,
-                "shadow": True,
-                "interactive": True,
-            },
-            # keyword arguments for scalar bar, see pyvista.BasePlotter.add_scalar_bar
-            show_scalar_bar=show_scalar_bar,  # bool (default True)
+            scalar_bar_args=None,  # keyword arguments for scalar bar, see pyvista.BasePlotter.add_scalar_bar
+            show_scalar_bar=False,  # bool (default True)
             multi_colors=False,  # for MultiBlock datasets
             name=uid,  # actor name
-            texture=plot_texture_option,
-            # ________________________________ vtk.vtkTexture or np_ndarray or boolean, will work if input mesh has texture coordinates. True > first available texture. String > texture with that name already associated to mesh.
+            texture=plot_texture_option,  # vtk.vtkTexture or np_ndarray or boolean, will work if input mesh has texture coordinates. True > first available texture. String > texture with that name already associated to mesh.
             render_points_as_spheres=points_as_spheres,
             render_lines_as_tubes=render_lines_as_tubes,
             smooth_shading=smooth_shading,
@@ -2262,17 +2204,13 @@ class VTKView(BaseView):
             specular_power=100.0,
             nan_color=None,  # color to use for all NaN values
             nan_opacity=1.0,  # opacity to use for all NaN values
-            culling=None,
-            # 'front', 'back', 'false' (default) > does not render faces that are culled
+            culling=None,  # 'front', 'back', 'false' (default) > does not render faces that are culled
             rgb=plot_rgb_option,  # True > plot array values as RGB(A) colors
-            categories=False,
-            # True > number of unique values in the scalar used as 'n_colors' argument
-            use_transparency=False,
-            # _______________________ invert the opacity mapping as transparency mapping
+            categories=False,  # True > number of unique values in the scalar used as 'n_colors' argument
+            use_transparency=False,  # invert the opacity mapping as transparency mapping
             below_color=None,  # solid color for values below the scalars range in 'clim'
             above_color=None,  # solid color for values above the scalars range in 'clim'
-            annotations=None,
-            # dictionary of annotations for scale bar witor 'points'h keys = float values and values = string annotations
+            annotations=None,  # dictionary of annotations for scale bar witor 'points'h keys = float values and values = string annotations
             pickable=pickable,  # bool
             preference="point",
             log_scale=False,
@@ -2702,7 +2640,6 @@ class View3D(VTKView):
             visible=None,
             color_RGB=None,
             show_property=None,
-            show_scalar_bar=None,
             color_bar_range=None,
             show_property_title=None,
             plot_rgb_option=None,
@@ -2738,16 +2675,9 @@ class View3D(VTKView):
             flip_scalars=False,
             interpolate_before_map=True,
             cmap=show_property_cmap,
-            scalar_bar_args={
-                "title": show_property_title,
-                "title_font_size": 20,
-                "label_font_size": 16,
-                "shadow": True,
-                "interactive": True,
-                "vertical": False,
-            },
+            scalar_bar_args=None,
             rgb=plot_rgb_option,
-            show_scalar_bar=show_scalar_bar,
+            show_scalar_bar=False,
             opacity=opacity,
         )
         # self.n_points = plot_entity.GetNumberOfPoints()
@@ -3051,7 +2981,6 @@ class ViewMap(View2D):
         """
         """First get the vtk object from its collection."""
         show_property_title = show_property
-        show_scalar_bar = True
         if collection == "geol_coll":
             color_R = self.parent.geol_coll.get_uid_legend(uid=uid)["color_R"]
             color_G = self.parent.geol_coll.get_uid_legend(uid=uid)["color_G"]
@@ -3150,13 +3079,9 @@ class ViewMap(View2D):
         ):
             plot_rgb_option = None
             if isinstance(plot_entity.points, np_ndarray):
-                """This  check is needed to avoid errors when trying to plot an empty
-                PolyData, just created at the beginning of a digitizing session."""
-                if show_property is None:
-                    show_scalar_bar = False
-                    pass
-                elif show_property == "none":
-                    show_scalar_bar = False
+                # This  check is needed to avoid errors when trying to plot an empty
+                # PolyData, just created at the beginning of a digitizing session.
+                if show_property == "none" or show_property is None:
                     show_property = None
                 elif show_property == "X":
                     show_property = plot_entity.points_X
@@ -3172,7 +3097,6 @@ class ViewMap(View2D):
                     plot_entity=plot_entity,
                     color_RGB=color_RGB,
                     show_property=show_property,
-                    show_scalar_bar=show_scalar_bar,
                     color_bar_range=None,
                     show_property_title=show_property_title,
                     line_thick=line_thick,
@@ -3192,13 +3116,9 @@ class ViewMap(View2D):
             texture = False
             smooth_shading = False
             if isinstance(plot_entity.points, np_ndarray):
-                """This  check is needed to avoid errors when trying to plot an empty
-                PolyData, just created at the beginning of a digitizing session."""
-                if show_property is None:
-                    show_scalar_bar = False
-                    pass
-                elif show_property == "none":
-                    show_scalar_bar = False
+                # This  check is needed to avoid errors when trying to plot an empty
+                # PolyData, just created at the beginning of a digitizing session.
+                if show_property == "none" or show_property is None:
                     show_property = None
                 elif show_property == "X":
                     show_property = plot_entity.points_X
@@ -3207,7 +3127,6 @@ class ViewMap(View2D):
                 elif show_property == "Z":
                     show_property = plot_entity.points_Z
                 elif show_property == "Normals":
-                    show_scalar_bar = False
                     show_property_title = None
                     show_property = None
                     style = "surface"
@@ -3252,7 +3171,6 @@ class ViewMap(View2D):
                     plot_entity=plot_entity,
                     color_RGB=color_RGB,
                     show_property=show_property,
-                    show_scalar_bar=show_scalar_bar,
                     color_bar_range=None,
                     show_property_title=show_property_title,
                     line_thick=line_thick,
@@ -3282,7 +3200,6 @@ class ViewMap(View2D):
                     plot_entity=plot_entity,
                     color_RGB=None,
                     show_property=None,
-                    show_scalar_bar=None,
                     color_bar_range=None,
                     show_property_title=None,
                     line_thick=None,
@@ -3292,11 +3209,7 @@ class ViewMap(View2D):
                 )
             else:
                 plot_rgb_option = None
-                if show_property is None:
-                    show_scalar_bar = False
-                    pass
-                elif show_property == "none":
-                    show_scalar_bar = False
+                if show_property == "none" or show_property is None:
                     show_property = None
                 elif show_property == "X":
                     show_property = plot_entity.points_X
@@ -3305,7 +3218,6 @@ class ViewMap(View2D):
                 elif show_property == "Z":
                     show_property = plot_entity.points_Z
                 elif show_property == "RGB":
-                    show_scalar_bar = False
                     show_property = None
                 else:
                     if plot_entity.get_point_data_shape(show_property)[-1] == 3:
@@ -3315,7 +3227,6 @@ class ViewMap(View2D):
                     plot_entity=plot_entity,
                     color_RGB=color_RGB,
                     show_property=show_property,
-                    show_scalar_bar=show_scalar_bar,
                     color_bar_range=None,
                     show_property_title=show_property_title,
                     line_thick=line_thick,
@@ -3333,12 +3244,7 @@ class ViewMap(View2D):
             if isinstance(plot_entity.points, np_ndarray):
                 """This check is needed to avoid errors when trying to plot an empty
                 PolyData, just created at the beginning of a digitizing session."""
-                if show_property is None:
-                    show_scalar_bar = False
-                    show_property_value = None
-                    pass
-                elif show_property == "none":
-                    show_scalar_bar = False
+                if show_property == "none" or show_property is None:
                     show_property_value = None
                 elif show_property == "X":
                     show_property_value = plot_entity.points_X
@@ -3347,8 +3253,8 @@ class ViewMap(View2D):
                 elif show_property == "Z":
                     show_property_value = plot_entity.points_Z
                 elif show_property[-1] == "]":
-                    """[Gabriele] we can identify multicomponents properties such as RGB[0] or Normals[0] by taking the last character of the property name ("]")."""
-                    show_scalar_bar = True
+                    # [Gabriele] we can identify multicomponent properties such as RGB[0] or Normals[0] by
+                    # taking the last character of the property name ("]").
                     # [Gabriele] Get the start and end index of the [n_component]
                     pos1 = show_property.index("[")
                     pos2 = show_property.index("]")
@@ -3368,18 +3274,14 @@ class ViewMap(View2D):
                     """[Gabriele] Get the n of components for the given property. If it's > 1 then do stuff depending on the type of property (e.g. show_rgb_option -> True if the property is RGB)"""
                     if n_comp > 1:
                         show_property_value = plot_entity.get_point_data(show_property)
-                        show_scalar_bar = False
-                        # if show_property == 'RGB':
                         plot_rgb_option = True
                     else:
-                        show_scalar_bar = True
                         show_property_value = plot_entity.get_point_data(show_property)
             this_actor = self.plot_PC_3D(
                 uid=uid,
                 plot_entity=new_plot,
                 color_RGB=color_RGB,
                 show_property=show_property_value,
-                show_scalar_bar=show_scalar_bar,
                 color_bar_range=None,
                 show_property_title=show_property_title,
                 plot_rgb_option=plot_rgb_option,
@@ -3391,7 +3293,7 @@ class ViewMap(View2D):
         elif isinstance(plot_entity, (MapImage, XsImage)):
             """Do not plot directly image - it is much slower.
             Texture options according to type."""
-            if show_property is None or show_property == "none":
+            if show_property == "none" or show_property is None:
                 plot_texture_option = None
             else:
                 plot_texture_option = plot_entity.texture
@@ -3400,7 +3302,6 @@ class ViewMap(View2D):
                 plot_entity=plot_entity.frame,
                 color_RGB=None,
                 show_property=None,
-                show_scalar_bar=None,
                 color_bar_range=None,
                 show_property_title=None,
                 line_thick=line_thick,
@@ -3412,13 +3313,9 @@ class ViewMap(View2D):
         elif isinstance(plot_entity, Seismics):
             plot_rgb_option = None
             if isinstance(plot_entity.points, np_ndarray):
-                """This  check is needed to avoid errors when trying to plot an empty
-                PolyData, just created at the beginning of a digitizing session."""
-                if show_property is None:
-                    show_scalar_bar = False
-                    pass
-                elif show_property == "none":
-                    show_scalar_bar = False
+                # This  check is needed to avoid errors when trying to plot an empty
+                # PolyData, just created at the beginning of a digitizing session.
+                if show_property == "none" or show_property is None:
                     show_property = None
                 elif show_property == "X":
                     show_property = plot_entity.points_X
@@ -3434,7 +3331,6 @@ class ViewMap(View2D):
                     plot_entity=plot_entity,
                     color_RGB=color_RGB,
                     show_property=show_property,
-                    show_scalar_bar=show_scalar_bar,
                     color_bar_range=None,
                     show_property_title=show_property_title,
                     line_thick=line_thick,
@@ -3448,12 +3344,15 @@ class ViewMap(View2D):
         elif isinstance(plot_entity, Voxet):
             plot_rgb_option = None
             if plot_entity.cells_number > 0:
-                """This  check is needed to avoid errors when trying to plot an empty Voxet."""
-                if show_property is None:
-                    show_scalar_bar = False
-                elif show_property == "none":
+                # This  check is needed to avoid errors when trying to plot an empty Voxet.
+                # Here we treat X, Y, Z as None, in order to avoid a crash related to the fact that Voxets
+                # do not have XYZ coordinates stored explicitly. This can be improved in the future.
+                if any([show_property == "none",
+                        show_property is None,
+                        show_property == 'X',
+                        show_property == 'Y',
+                        show_property == 'Z']):
                     show_property = None
-                    show_scalar_bar = False
                 else:
                     if plot_entity.get_point_data_shape(show_property)[-1] == 3:
                         plot_rgb_option = True
@@ -3462,7 +3361,6 @@ class ViewMap(View2D):
                     plot_entity=plot_entity,
                     color_RGB=None,
                     show_property=show_property,
-                    show_scalar_bar=show_scalar_bar,
                     color_bar_range=None,
                     show_property_title=show_property_title,
                     line_thick=line_thick,
@@ -3475,11 +3373,7 @@ class ViewMap(View2D):
                 this_actor = None
         elif isinstance(plot_entity, WellTrace):
             plot_rgb_option = None
-            if show_property is None:
-                show_scalar_bar = False
-                pass
-            elif show_property == "none":
-                show_scalar_bar = False
+            if show_property == "none" or show_property is None:
                 show_property = None
                 self.plotter.remove_actor(f"{uid}_prop")
             elif show_property == "X":
@@ -3502,7 +3396,6 @@ class ViewMap(View2D):
                 plot_entity=plot_entity,
                 color_RGB=color_RGB,
                 show_property=show_property,
-                show_scalar_bar=show_scalar_bar,
                 color_bar_range=None,
                 show_property_title=show_property_title,
                 line_thick=line_thick,
@@ -3547,22 +3440,6 @@ class ViewXsection(View2D):
         # Rename Base View, Menu and Tool
         self.setWindowTitle(f"Xsection View: {self.this_x_section_name}")
 
-        # Commented due to more general implementation in BaseView
-        # self.create_geology_tree(sec_uid=self.this_x_section_uid)
-        # self.create_topology_tree(sec_uid=self.this_x_section_uid)
-        # self.create_xsections_tree(sec_uid=self.this_x_section_uid)
-        # self.create_boundary_list(sec_uid=self.this_x_section_uid)
-        # self.create_mesh3d_list(sec_uid=self.this_x_section_uid)
-        # self.create_dom_list(sec_uid=self.this_x_section_uid)
-        # self.create_image_list(sec_uid=self.this_x_section_uid)
-
-        # We should add something to programmatically set the visibility of entities via UID
-        # Should be already implemented in BaseView - trying to comment
-        # self.set_actor_visible(uid=self.this_x_section_uid, visible=True)
-        # self.update_xsection_checkboxes(
-        #     uid=self.this_x_section_uid, uid_checkState=Qt.Checked
-        # )
-
         section_plane = parent.xsect_coll.get_uid_vtk_plane(self.this_x_section_uid)
         center = np_array(section_plane.GetOrigin())
         # direction = -np_array(section_plane.GetNormal())
@@ -3572,903 +3449,9 @@ class ViewXsection(View2D):
         self.plotter.camera.position = center + direction
         self.plotter.reset_camera()
 
-    # def add_all_entities(self):
-    #     ##########################################################
-    #     # MAKE THIS MORE GENERAL IN BASE VIEW
-    #     ##########################################################
-    #     """Add all entities in project collections. All objects are visible by default -> show = True"""
-    #     sec_uid = self.this_x_section_uid
-    #     for uid in self.parent.geol_coll.df["uid"].tolist():
-    #         if self.parent.geol_coll.get_uid_x_section(uid) == sec_uid:
-    #             this_actor = self.show_actor_with_property(
-    #                 uid=uid, collection="geol_coll", show_property=None, visible=True
-    #             )
-    #             self.actors_df = self.actors_df.append(
-    #                 {
-    #                     "uid": uid,
-    #                     "actor": this_actor,
-    #                     "show": True,
-    #                     "collection": "geol_coll",
-    #                     "show_property": None,
-    #                 },
-    #                 ignore_index=True,
-    #             )
-    #
-    #     for uid in self.parent.xsect_coll.df["uid"].tolist():
-    #         if uid == sec_uid:
-    #             this_actor = self.show_actor_with_property(
-    #                 uid=uid, collection="xsect_coll", show_property=None, visible=False
-    #             )
-    #             self.actors_df = self.actors_df.append(
-    #                 {
-    #                     "uid": uid,
-    #                     "actor": this_actor,
-    #                     "show": False,
-    #                     "collection": "xsect_coll",
-    #                     "show_property": None,
-    #                 },
-    #                 ignore_index=True,
-    #             )
-    #
-    #     for uid in self.parent.boundary_coll.df["uid"].tolist():
-    #         if self.parent.boundary_coll.get_uid_x_section(uid) == sec_uid:
-    #             this_actor = self.show_actor_with_property(
-    #                 uid=uid,
-    #                 collection="boundary_coll",
-    #                 show_property=None,
-    #                 visible=False,
-    #             )
-    #             self.actors_df = self.actors_df.append(
-    #                 {
-    #                     "uid": uid,
-    #                     "actor": this_actor,
-    #                     "show": False,
-    #                     "collection": "boundary_coll",
-    #                     "show_property": None,
-    #                 },
-    #                 ignore_index=True,
-    #             )
-    #     for uid in self.parent.mesh3d_coll.df["uid"].tolist():
-    #         if self.parent.mesh3d_coll.get_uid_x_section(uid) == sec_uid:
-    #             this_actor = self.show_actor_with_property(
-    #                 uid=uid, collection="mesh3d_coll", show_property=None, visible=False
-    #             )
-    #             self.actors_df = self.actors_df.append(
-    #                 {
-    #                     "uid": uid,
-    #                     "actor": this_actor,
-    #                     "show": False,
-    #                     "collection": "mesh3d_coll",
-    #                     "show_property": None,
-    #                 },
-    #                 ignore_index=True,
-    #             )
-    #     for uid in self.parent.dom_coll.df["uid"].tolist():
-    #         if self.parent.dom_coll.get_uid_x_section(uid) == sec_uid:
-    #             this_actor = self.show_actor_with_property(
-    #                 uid=uid, collection="dom_coll", show_property=None, visible=False
-    #             )
-    #             self.actors_df = self.actors_df.append(
-    #                 {
-    #                     "uid": uid,
-    #                     "actor": this_actor,
-    #                     "show": False,
-    #                     "collection": "dom_coll",
-    #                     "show_property": None,
-    #                 },
-    #                 ignore_index=True,
-    #             )
-    #     for uid in self.parent.image_coll.df["uid"].tolist():
-    #         if self.parent.image_coll.get_uid_x_section(uid) == sec_uid:
-    #             this_actor = self.show_actor_with_property(
-    #                 uid=uid, collection="image_coll", show_property=None, visible=False
-    #             )
-    #             self.actors_df = self.actors_df.append(
-    #                 {
-    #                     "uid": uid,
-    #                     "actor": this_actor,
-    #                     "show": False,
-    #                     "collection": "image_coll",
-    #                     "show_property": None,
-    #                 },
-    #                 ignore_index=True,
-    #             )
-    #     for uid in self.parent.well_coll.df["uid"].tolist():
-    #         this_actor = self.show_actor_with_property(
-    #             uid=uid, collection="well_coll", show_property=None, visible=False
-    #         )
-    #         self.actors_df = self.actors_df.append(
-    #             {
-    #                 "uid": uid,
-    #                 "actor": this_actor,
-    #                 "show": False,
-    #                 "collection": "well_coll",
-    #                 "show_property": None,
-    #             },
-    #             ignore_index=True,
-    #         )
-    #     for uid in self.parent.fluid_coll.df["uid"].tolist():
-    #         if self.parent.fluid_coll.get_uid_x_section(uid) == sec_uid:
-    #             this_actor = self.show_actor_with_property(
-    #                 uid=uid, collection="fluid_coll", show_property=None, visible=False
-    #             )
-    #             self.actors_df = self.actors_df.append(
-    #                 {
-    #                     "uid": uid,
-    #                     "actor": this_actor,
-    #                     "show": False,
-    #                     "collection": "fluid_coll",
-    #                     "show_property": None,
-    #                 },
-    #                 ignore_index=True,
-    #             )
-    #     for uid in self.parent.backgrnd_coll.df["uid"].tolist():
-    #         if self.parent.backgrnd_coll.get_uid_x_section(uid) == sec_uid:
-    #             this_actor = self.show_actor_with_property(
-    #                 uid=uid,
-    #                 collection="backgrnd_coll",
-    #                 show_property=None,
-    #                 visible=False,
-    #             )
-    #             self.actors_df = self.actors_df.append(
-    #                 {
-    #                     "uid": uid,
-    #                     "actor": this_actor,
-    #                     "show": False,
-    #                     "collection": "backgrnd_coll",
-    #                     "show_property": None,
-    #                 },
-    #                 ignore_index=True,
-    #             )
-
-    # def change_actor_color(self, uid=None, collection=None):
-    #     """Update color for actor uid"""
-    #     sec_uid = self.this_x_section_uid
-    #     attr = getattr(self.parent, collection)
-    #     # if attr.get_uid_x_section(uid=uid) == sec_uid:
-    #     #     color_R = attr.get_uid_legend(uid=uid)['color_R']
-    #     #     color_G = attr.get_uid_legend(uid=uid)['color_G']
-    #     #     color_B = attr.get_uid_legend(uid=uid)['color_B']
-    #
-    #     # if attr.get_uid_x_section(uid=uid) == sec_uid:
-    #     if uid in self.actors_df.uid:
-    #         if collection == "geol_coll":
-    #             color_R = self.parent.geol_coll.get_uid_legend(uid=uid)["color_R"]
-    #             color_G = self.parent.geol_coll.get_uid_legend(uid=uid)["color_G"]
-    #             color_B = self.parent.geol_coll.get_uid_legend(uid=uid)["color_B"]
-    #         elif collection == "xsect_coll":
-    #             color_R = self.parent.xsect_coll.get_legend()["color_R"]
-    #             color_G = self.parent.xsect_coll.get_legend()["color_G"]
-    #             color_B = self.parent.xsect_coll.get_legend()["color_B"]
-    #         elif collection == "boundary_coll":
-    #             color_R = self.parent.boundary_coll.get_legend()["color_R"]
-    #             color_G = self.parent.boundary_coll.get_legend()["color_G"]
-    #             color_B = self.parent.boundary_coll.get_legend()["color_B"]
-    #         elif collection == "mesh3d_coll":
-    #             color_R = self.parent.mesh3d_coll.get_legend()["color_R"]
-    #             color_G = self.parent.mesh3d_coll.get_legend()["color_G"]
-    #             color_B = self.parent.mesh3d_coll.get_legend()["color_B"]
-    #         elif collection == "dom_coll":
-    #             color_R = self.parent.dom_coll.get_legend()["color_R"]
-    #             color_G = self.parent.dom_coll.get_legend()["color_G"]
-    #             color_B = self.parent.dom_coll.get_legend()["color_B"]
-    #         elif collection == "well_coll":
-    #             color_R = self.parent.well_coll.get_uid_legend(uid=uid)["color_R"]
-    #             color_G = self.parent.well_coll.get_uid_legend(uid=uid)["color_G"]
-    #             color_B = self.parent.well_coll.get_uid_legend(uid=uid)["color_B"]
-    #         elif collection == "fluid_coll":
-    #             color_R = self.parent.fluid_coll.get_uid_legend(uid=uid)["color_R"]
-    #             color_G = self.parent.fluid_coll.get_uid_legend(uid=uid)["color_G"]
-    #             color_B = self.parent.fluid_coll.get_uid_legend(uid=uid)["color_B"]
-    #         elif collection == "backgrnd_coll":
-    #             color_R = self.parent.backgrnd_coll.get_uid_legend(uid=uid)[
-    #                 "color_R"
-    #             ]
-    #             color_G = self.parent.backgrnd_coll.get_uid_legend(uid=uid)[
-    #                 "color_G"
-    #             ]
-    #             color_B = self.parent.backgrnd_coll.get_uid_legend(uid=uid)[
-    #                 "color_B"
-    #             ]
-    #         """Note: no legend for image."""
-    #         """Update color for actor uid"""
-    #         color_RGB = [color_R / 255, color_G / 255, color_B / 255]
-    #         self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[
-    #             0
-    #         ].GetProperty().SetColor(color_RGB)
-
-    # def change_actor_line_thick(self, uid=None, collection=None):
-    #     """Update line thickness for actor uid"""
-    #
-    #     sec_uid = self.this_x_section_uid
-    #     attr = getattr(self.parent, collection)
-    #     if attr.get_uid_x_section(uid) == sec_uid:
-    #
-    #         if collection == "geol_coll":
-    #             line_thick = self.parent.geol_coll.get_uid_legend(uid=uid)["line_thick"]
-    #             if isinstance(
-    #                 self.parent.geol_coll.get_uid_vtk_obj(uid), VertexSet
-    #             ) or isinstance(
-    #                 self.parent.geol_coll.get_uid_vtk_obj(uid), XsVertexSet
-    #             ):
-    #                 self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[
-    #                     0
-    #                 ].GetProperty().SetPointSize(line_thick)
-    #             else:
-    #                 self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[
-    #                     0
-    #                 ].GetProperty().SetLineWidth(line_thick)
-    #
-    #         elif collection == "xsect_coll":
-    #             line_thick = self.parent.xsect_coll.get_legend()["line_thick"]
-    #         elif collection == "boundary_coll":
-    #             line_thick = self.parent.boundary_coll.get_legend()["line_thick"]
-    #         elif collection == "mesh3d_coll":
-    #             line_thick = self.parent.mesh3d_coll.get_legend()["line_thick"]
-    #         elif collection == "dom_coll":
-    #             line_thick = self.parent.dom_coll.get_legend()["line_thick"]
-    #             """Note: no legend for image."""
-    #             if isinstance(self.parent.dom_coll.get_uid_vtk_obj(uid), PCDom):
-    #                 """Use line_thick to set point size here."""
-    #                 self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[
-    #                     0
-    #                 ].GetProperty().SetPointSize(line_thick)
-    #             else:
-    #                 self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[
-    #                     0
-    #                 ].GetProperty().SetLineWidth(line_thick)
-    #         elif collection == "well_coll":
-    #             line_thick = self.parent.well_coll.get_uid_legend(uid=uid)["line_thick"]
-    #             self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[
-    #                 0
-    #             ].GetProperty().SetLineWidth(line_thick)
-    #         elif collection == "fluid_coll":
-    #             line_thick = self.parent.fluid_coll.get_uid_legend(uid=uid)[
-    #                 "line_thick"
-    #             ]
-    #
-    #             if isinstance(self.parent.fluid_coll.get_uid_vtk_obj(uid), VertexSet):
-    #                 self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[
-    #                     0
-    #                 ].GetProperty().SetPointSize(line_thick)
-    #             else:
-    #                 self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[
-    #                     0
-    #                 ].GetProperty().SetLineWidth(line_thick)
-    #
-    #         elif collection == "backgrnd_coll":
-    #             line_thick = self.parent.backgrnd_coll.get_uid_legend(uid=uid)[
-    #                 "line_thick"
-    #             ]
-    #
-    #             if isinstance(
-    #                 self.parent.backgrnd_coll.get_uid_vtk_obj(uid), VertexSet
-    #             ):
-    #                 self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[
-    #                     0
-    #                 ].GetProperty().SetPointSize(line_thick)
-    #             else:
-    #                 self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[
-    #                     0
-    #                 ].GetProperty().SetLineWidth(line_thick)
-
-    # def show_actor_with_property(
-    #     self, uid=None, collection=None, show_property=None, visible=None
-    # ):
-    #     """Show actor with scalar property (default None)
-    #     https://github.com/pyvista/pyvista/blob/140b15be1d4021b81ded46b1c212c70e86a98ee7/pyvista/plotting/plotting.py#L1045
-    #     """
-    #     """First get the vtk object from its collection."""
-    #     show_property_title = show_property
-    #     show_scalar_bar = True
-    #     sec_uid = self.this_x_section_uid
-    #     if (
-    #         collection == "geol_coll"
-    #         and self.parent.geol_coll.get_uid_x_section(uid) == sec_uid
-    #     ):
-    #         color_R = self.parent.geol_coll.get_uid_legend(uid=uid)["color_R"]
-    #         color_G = self.parent.geol_coll.get_uid_legend(uid=uid)["color_G"]
-    #         color_B = self.parent.geol_coll.get_uid_legend(uid=uid)["color_B"]
-    #         color_RGB = [color_R / 255, color_G / 255, color_B / 255]
-    #         line_thick = self.parent.geol_coll.get_uid_legend(uid=uid)["line_thick"]
-    #         point_size = self.parent.geol_coll.get_uid_legend(uid=uid)["point_size"]
-    #         opacity = self.parent.geol_coll.get_uid_legend(uid=uid)["opacity"] / 100
-    #
-    #         plot_entity = self.parent.geol_coll.get_uid_vtk_obj(uid)
-    #     elif collection == "xsect_coll" and uid == sec_uid:
-    #         color_R = self.parent.xsect_coll.get_legend()["color_R"]
-    #         color_G = self.parent.xsect_coll.get_legend()["color_G"]
-    #         color_B = self.parent.xsect_coll.get_legend()["color_B"]
-    #         color_RGB = [color_R / 255, color_G / 255, color_B / 255]
-    #         line_thick = self.parent.xsect_coll.get_legend()["line_thick"]
-    #         opacity = self.parent.xsect_coll.get_legend()["opacity"] / 100
-    #
-    #         plot_entity = self.parent.xsect_coll.get_uid_vtk_frame(uid)
-    #     elif (
-    #         collection == "boundary_coll"
-    #         and self.parent.boundary_coll.get_uid_x_section(uid) == sec_uid
-    #     ):
-    #         color_R = self.parent.boundary_coll.get_legend()["color_R"]
-    #         color_G = self.parent.boundary_coll.get_legend()["color_G"]
-    #         color_B = self.parent.boundary_coll.get_legend()["color_B"]
-    #         color_RGB = [color_R / 255, color_G / 255, color_B / 255]
-    #         line_thick = self.parent.boundary_coll.get_legend()["line_thick"]
-    #         opacity = self.parent.boundary_coll.get_legend()["opacity"] / 100
-    #
-    #         plot_entity = self.parent.boundary_coll.get_uid_vtk_obj(uid)
-    #     elif (
-    #         collection == "mesh3d_coll"
-    #         and self.parent.mesh3d_coll.get_uid_x_section(uid) == sec_uid
-    #     ):
-    #         color_R = self.parent.mesh3d_coll.get_legend()["color_R"]
-    #         color_G = self.parent.mesh3d_coll.get_legend()["color_G"]
-    #         color_B = self.parent.mesh3d_coll.get_legend()["color_B"]
-    #         color_RGB = [color_R / 255, color_G / 255, color_B / 255]
-    #         line_thick = self.parent.mesh3d_coll.get_legend()["line_thick"]
-    #         opacity = self.parent.mesh3d_coll.get_legend()["opacity"] / 100
-    #
-    #         plot_entity = self.parent.mesh3d_coll.get_uid_vtk_obj(uid)
-    #     elif (
-    #         collection == "dom_coll"
-    #         and self.parent.dom_coll.get_uid_x_section(uid) == sec_uid
-    #     ):
-    #         color_R = self.parent.dom_coll.get_legend()["color_R"]
-    #         color_G = self.parent.dom_coll.get_legend()["color_G"]
-    #         color_B = self.parent.dom_coll.get_legend()["color_B"]
-    #         color_RGB = [color_R / 255, color_G / 255, color_B / 255]
-    #         line_thick = self.parent.dom_coll.get_legend()["line_thick"]
-    #         opacity = self.parent.dom_coll.get_legend()["opacity"] / 100
-    #
-    #         plot_entity = self.parent.dom_coll.get_uid_vtk_obj(uid)
-    #
-    #     elif (
-    #         collection == "image_coll"
-    #         and self.parent.image_coll.get_uid_x_section(uid) == sec_uid
-    #     ):
-    #         """Note: no legend for image."""
-    #         color_RGB = [255, 255, 255]
-    #         line_thick = 5.0
-    #         opacity = self.parent.image_coll.get_legend()["opacity"] / 100
-    #
-    #         plot_entity = self.parent.image_coll.get_uid_vtk_obj(uid)
-    #     elif (
-    #         collection == "well_coll"
-    #         and self.parent.well_coll.get_uid_x_section(uid) == sec_uid
-    #     ):
-    #         color_R = self.parent.well_coll.get_uid_legend(uid=uid)["color_R"]
-    #         color_G = self.parent.well_coll.get_uid_legend(uid=uid)["color_G"]
-    #         color_B = self.parent.well_coll.get_uid_legend(uid=uid)["color_B"]
-    #         color_RGB = [color_R / 255, color_G / 255, color_B / 255]
-    #         line_thick = self.parent.well_coll.get_uid_legend(uid=uid)["line_thick"]
-    #         opacity = self.parent.well_coll.get_uid_legend(uid=uid)["opacity"] / 100
-    #
-    #         plot_entity = self.parent.well_coll.get_uid_vtk_obj(uid)
-    #     elif (
-    #         collection == "fluid_coll"
-    #         and self.parent.fluid_coll.get_uid_x_section(uid) == sec_uid
-    #     ):
-    #         color_R = self.parent.fluid_coll.get_uid_legend(uid=uid)["color_R"]
-    #         color_G = self.parent.fluid_coll.get_uid_legend(uid=uid)["color_G"]
-    #         color_B = self.parent.fluid_coll.get_uid_legend(uid=uid)["color_B"]
-    #         color_RGB = [color_R / 255, color_G / 255, color_B / 255]
-    #         line_thick = self.parent.fluid_coll.get_uid_legend(uid=uid)["line_thick"]
-    #         point_size = self.parent.fluid_coll.get_uid_legend(uid=uid)["point_size"]
-    #         opacity = self.parent.fluid_coll.get_uid_legend(uid=uid)["opacity"] / 100
-    #
-    #         plot_entity = self.parent.fluid_coll.get_uid_vtk_obj(uid)
-    #     elif (
-    #         collection == "backgrnd_coll"
-    #         and self.parent.backgrnd_coll.get_uid_x_section(uid) == sec_uid
-    #     ):
-    #         color_R = self.parent.backgrnd_coll.get_uid_legend(uid=uid)["color_R"]
-    #         color_G = self.parent.backgrnd_coll.get_uid_legend(uid=uid)["color_G"]
-    #         color_B = self.parent.backgrnd_coll.get_uid_legend(uid=uid)["color_B"]
-    #         color_RGB = [color_R / 255, color_G / 255, color_B / 255]
-    #         line_thick = self.parent.backgrnd_coll.get_uid_legend(uid=uid)[
-    #             "line_thick"
-    #         ]
-    #         point_size = self.parent.backgrnd_coll.get_uid_legend(uid=uid)[
-    #             "point_size"
-    #         ]
-    #         opacity = (
-    #             self.parent.backgrnd_coll.get_uid_legend(uid=uid)["opacity"] / 100
-    #         )
-    #
-    #         plot_entity = self.parent.backgrnd_coll.get_uid_vtk_obj(uid)
-    #     else:
-    #         print("no collection")
-    #         print(collection)
-    #         return
-    #     """Then plot the vtk object with proper options."""
-    #     if isinstance(plot_entity, (PolyLine, TriSurf, XsPolyLine)) and not isinstance(
-    #         plot_entity, WellTrace
-    #     ):
-    #         plot_rgb_option = None
-    #         if isinstance(plot_entity.points, np_ndarray):
-    #             """This  check is needed to avoid errors when trying to plot an empty
-    #             PolyData, just created at the beginning of a digitizing session."""
-    #             if show_property is None:
-    #                 show_scalar_bar = False
-    #                 pass
-    #             elif show_property == "none":
-    #                 show_scalar_bar = False
-    #                 show_property = None
-    #             elif show_property == "X":
-    #                 show_property = plot_entity.points_X
-    #             elif show_property == "Y":
-    #                 show_property = plot_entity.points_Y
-    #             elif show_property == "Z":
-    #                 show_property = plot_entity.points_Z
-    #             else:
-    #                 if plot_entity.get_point_data_shape(show_property)[-1] == 3:
-    #                     plot_rgb_option = True
-    #             this_actor = self.plot_mesh(
-    #                 uid=uid,
-    #                 plot_entity=plot_entity,
-    #                 color_RGB=color_RGB,
-    #                 show_property=show_property,
-    #                 show_scalar_bar=show_scalar_bar,
-    #                 color_bar_range=None,
-    #                 show_property_title=show_property_title,
-    #                 line_thick=line_thick,
-    #                 plot_texture_option=False,
-    #                 plot_rgb_option=plot_rgb_option,
-    #                 visible=visible,
-    #             )
-    #         else:
-    #             this_actor = None
-    #     elif isinstance(plot_entity, (VertexSet, XsVertexSet, WellMarker, Attitude)):
-    #         if isinstance(plot_entity, Attitude):
-    #             pickable = False
-    #         else:
-    #             pickable = True
-    #         style = "points"
-    #         plot_rgb_option = None
-    #         texture = False
-    #         smooth_shading = False
-    #         if isinstance(plot_entity.points, np_ndarray):
-    #             """This  check is needed to avoid errors when trying to plot an empty
-    #             PolyData, just created at the beginning of a digitizing session."""
-    #             if show_property is None:
-    #                 show_scalar_bar = False
-    #                 pass
-    #             elif show_property == "none":
-    #                 show_scalar_bar = False
-    #                 show_property = None
-    #             elif show_property == "X":
-    #                 show_property = plot_entity.points_X
-    #             elif show_property == "Y":
-    #                 show_property = plot_entity.points_Y
-    #             elif show_property == "Z":
-    #                 show_property = plot_entity.points_Z
-    #             elif show_property == "Normals":
-    #                 show_scalar_bar = False
-    #                 show_property_title = None
-    #                 show_property = None
-    #                 style = "surface"
-    #                 appender = vtkAppendPolyData()
-    #                 r = self.parent.geol_coll.get_uid_legend(uid=uid)["point_size"] * 4
-    #                 normals = plot_entity.get_point_data("Normals")
-    #                 dip_vectors, _ = get_dip_dir_vectors(normals=normals)
-    #
-    #                 plane_n = -np_array(
-    #                     self.parent.xsect_coll.get_uid_vtk_plane(
-    #                         self.this_x_section_uid
-    #                     ).GetNormal()
-    #                 )
-    #                 vector2 = np_cross(plane_n, dip_vectors)
-    #                 line1 = pv_Line(pointa=(0, 0, 0), pointb=(r, 0, 0))
-    #                 line2 = pv_Line(pointa=(0, 0, 0), pointb=(r * 0.25, 0, 0))
-    #
-    #                 dip_glyph = plot_entity.glyph(geometry=line1, prop=dip_vectors)
-    #                 n_glyph = plot_entity.glyph(geometry=line2, prop=vector2)
-    #
-    #                 appender.AddInputData(dip_glyph)
-    #                 appender.AddInputData(n_glyph)
-    #                 appender.Update()
-    #                 plot_entity = appender.GetOutput()
-    #
-    #             elif show_property == "name":
-    #                 point = plot_entity.points
-    #                 name_value = plot_entity.get_field_data("name")
-    #                 self.plotter.add_point_labels(
-    #                     point,
-    #                     name_value,
-    #                     always_visible=True,
-    #                     show_points=False,
-    #                     font_size=15,
-    #                     shape_opacity=0.5,
-    #                     name=f"{uid}_name",
-    #                 )
-    #                 show_property = None
-    #                 show_property_title = None
-    #
-    #             else:
-    #                 if plot_entity.get_point_data_shape(show_property)[-1] == 3:
-    #                     plot_rgb_option = True
-    #             this_actor = self.plot_mesh(
-    #                 uid=uid,
-    #                 plot_entity=plot_entity,
-    #                 color_RGB=color_RGB,
-    #                 show_property=show_property,
-    #                 show_scalar_bar=show_scalar_bar,
-    #                 color_bar_range=None,
-    #                 show_property_title=show_property_title,
-    #                 line_thick=line_thick,
-    #                 plot_texture_option=texture,
-    #                 plot_rgb_option=plot_rgb_option,
-    #                 visible=visible,
-    #                 style=style,
-    #                 point_size=point_size,
-    #                 points_as_spheres=True,
-    #                 pickable=pickable,
-    #             )
-    #         else:
-    #             this_actor = None
-    #     elif isinstance(plot_entity, DEM):
-    #         """Show texture specified in show_property"""
-    #         if (
-    #             show_property
-    #             in self.parent.dom_coll.df.loc[
-    #                 self.parent.dom_coll.df["uid"] == uid, "texture_uids"
-    #             ].values[0]
-    #         ):
-    #             active_image = self.parent.image_coll.get_uid_vtk_obj(show_property)
-    #             active_image_texture = active_image.texture
-    #             # active_image_properties_components = active_image.properties_components[0]  # IF USED THIS MUST BE FIXED FOR TEXTURES WITH MORE THAN 3 COMPONENTS
-    #             this_actor = self.plot_mesh(
-    #                 uid=uid,
-    #                 plot_entity=plot_entity,
-    #                 color_RGB=None,
-    #                 show_property=None,
-    #                 show_scalar_bar=None,
-    #                 color_bar_range=None,
-    #                 show_property_title=None,
-    #                 line_thick=None,
-    #                 plot_texture_option=active_image_texture,
-    #                 plot_rgb_option=False,
-    #                 visible=visible,
-    #             )
-    #         else:
-    #             plot_rgb_option = None
-    #             if show_property is None:
-    #                 show_scalar_bar = False
-    #                 pass
-    #             elif show_property == "none":
-    #                 show_scalar_bar = False
-    #                 show_property = None
-    #             elif show_property == "X":
-    #                 show_property = plot_entity.points_X
-    #             elif show_property == "Y":
-    #                 show_property = plot_entity.points_Y
-    #             elif show_property == "Z":
-    #                 show_property = plot_entity.points_Z
-    #             elif show_property == "RGB":
-    #                 show_scalar_bar = False
-    #                 show_property = None
-    #             else:
-    #                 if plot_entity.get_point_data_shape(show_property)[-1] == 3:
-    #                     plot_rgb_option = True
-    #             this_actor = self.plot_mesh(
-    #                 uid=uid,
-    #                 plot_entity=plot_entity,
-    #                 color_RGB=color_RGB,
-    #                 show_property=show_property,
-    #                 show_scalar_bar=show_scalar_bar,
-    #                 color_bar_range=None,
-    #                 show_property_title=show_property_title,
-    #                 line_thick=line_thick,
-    #                 plot_texture_option=False,
-    #                 plot_rgb_option=plot_rgb_option,
-    #                 visible=visible,
-    #             )
-    #     elif isinstance(plot_entity, PCDom):
-    #         plot_rgb_option = None
-    #         new_plot = pvPointSet()
-    #         new_plot.ShallowCopy(plot_entity)  # this is temporary
-    #         file = self.parent.dom_coll.df.loc[
-    #             self.parent.dom_coll.df["uid"] == uid, "name"
-    #         ].values[0]
-    #         if isinstance(plot_entity.points, np_ndarray):
-    #             """This check is needed to avoid errors when trying to plot an empty
-    #             PolyData, just created at the beginning of a digitizing session."""
-    #             if show_property is None:
-    #                 show_scalar_bar = False
-    #                 show_property_value = None
-    #                 pass
-    #             elif show_property == "none":
-    #                 show_scalar_bar = False
-    #                 show_property_value = None
-    #             elif show_property == "X":
-    #                 show_property_value = plot_entity.points_X
-    #             elif show_property == "Y":
-    #                 show_property_value = plot_entity.points_Y
-    #             elif show_property == "Z":
-    #                 show_property_value = plot_entity.points_Z
-    #             elif show_property[-1] == "]":
-    #                 """[Gabriele] we can identify multicomponents properties such as RGB[0] or Normals[0] by taking the last character of the property name ("]")."""
-    #                 show_scalar_bar = True
-    #                 # [Gabriele] Get the start and end index of the [n_component]
-    #                 pos1 = show_property.index("[")
-    #                 pos2 = show_property.index("]")
-    #                 # [Gabriele] Get the original property (e.g. RGB[0] -> RGB)
-    #                 original_prop = show_property[:pos1]
-    #                 # [Gabriele] Get the column index (the n_component value)
-    #                 index = int(show_property[pos1 + 1 : pos2])
-    #                 show_property_value = plot_entity.get_point_data(original_prop)[
-    #                     :, index
-    #                 ]
-    #             else:
-    #                 n_comp = self.parent.dom_coll.get_uid_properties_components(uid)[
-    #                     self.parent.dom_coll.get_uid_properties_names(uid).index(
-    #                         show_property
-    #                     )
-    #                 ]
-    #                 """[Gabriele] Get the n of components for the given property. If it's > 1 then do stuff depending on the type of property (e.g. show_rgb_option -> True if the property is RGB)"""
-    #                 if n_comp > 1:
-    #                     show_property_value = plot_entity.get_point_data(show_property)
-    #                     show_scalar_bar = False
-    #                     # if show_property == 'RGB':
-    #                     plot_rgb_option = True
-    #                 else:
-    #                     show_scalar_bar = True
-    #                     show_property_value = plot_entity.get_point_data(show_property)
-    #         this_actor = self.plot_PC_3D(
-    #             uid=uid,
-    #             plot_entity=new_plot,
-    #             color_RGB=color_RGB,
-    #             show_property=show_property_value,
-    #             show_scalar_bar=show_scalar_bar,
-    #             color_bar_range=None,
-    #             show_property_title=show_property_title,
-    #             plot_rgb_option=plot_rgb_option,
-    #             visible=visible,
-    #             point_size=point_size,
-    #             opacity=opacity,
-    #         )
-    #
-    #     elif isinstance(plot_entity, (MapImage, XsImage)):
-    #         """Do not plot directly image - it is much slower.
-    #         Texture options according to type."""
-    #         if show_property is None or show_property == "none":
-    #             plot_texture_option = None
-    #         else:
-    #             plot_texture_option = plot_entity.texture
-    #         this_actor = self.plot_mesh(
-    #             uid=uid,
-    #             plot_entity=plot_entity.frame,
-    #             color_RGB=None,
-    #             show_property=None,
-    #             show_scalar_bar=None,
-    #             color_bar_range=None,
-    #             show_property_title=None,
-    #             line_thick=line_thick,
-    #             plot_texture_option=plot_texture_option,
-    #             plot_rgb_option=False,
-    #             visible=visible,
-    #             opacity=opacity,
-    #         )
-    #     elif isinstance(plot_entity, Seismics):
-    #         plot_rgb_option = None
-    #         if isinstance(plot_entity.points, np_ndarray):
-    #             """This  check is needed to avoid errors when trying to plot an empty
-    #             PolyData, just created at the beginning of a digitizing session."""
-    #             if show_property is None:
-    #                 show_scalar_bar = False
-    #                 pass
-    #             elif show_property == "none":
-    #                 show_scalar_bar = False
-    #                 show_property = None
-    #             elif show_property == "X":
-    #                 show_property = plot_entity.points_X
-    #             elif show_property == "Y":
-    #                 show_property = plot_entity.points_Y
-    #             elif show_property == "Z":
-    #                 show_property = plot_entity.points_Z
-    #             else:
-    #                 if plot_entity.get_point_data_shape(show_property)[-1] == 3:
-    #                     plot_rgb_option = True
-    #             this_actor = self.plot_mesh(
-    #                 uid=uid,
-    #                 plot_entity=plot_entity,
-    #                 color_RGB=color_RGB,
-    #                 show_property=show_property,
-    #                 show_scalar_bar=show_scalar_bar,
-    #                 color_bar_range=None,
-    #                 show_property_title=show_property_title,
-    #                 line_thick=line_thick,
-    #                 plot_texture_option=False,
-    #                 plot_rgb_option=plot_rgb_option,
-    #                 visible=visible,
-    #                 opacity=opacity,
-    #             )
-    #         else:
-    #             this_actor = None
-    #     elif isinstance(plot_entity, Voxet):
-    #         plot_rgb_option = None
-    #         if plot_entity.cells_number > 0:
-    #             """This  check is needed to avoid errors when trying to plot an empty Voxet."""
-    #             if show_property is None:
-    #                 show_scalar_bar = False
-    #             elif show_property == "none":
-    #                 show_property = None
-    #                 show_scalar_bar = False
-    #             else:
-    #                 if plot_entity.get_point_data_shape(show_property)[-1] == 3:
-    #                     plot_rgb_option = True
-    #             this_actor = self.plot_mesh(
-    #                 uid=uid,
-    #                 plot_entity=plot_entity,
-    #                 color_RGB=None,
-    #                 show_property=show_property,
-    #                 show_scalar_bar=show_scalar_bar,
-    #                 color_bar_range=None,
-    #                 show_property_title=show_property_title,
-    #                 line_thick=line_thick,
-    #                 plot_texture_option=False,
-    #                 plot_rgb_option=plot_rgb_option,
-    #                 visible=visible,
-    #                 opacity=opacity,
-    #             )
-    #         else:
-    #             this_actor = None
-    #     elif isinstance(plot_entity, WellTrace):
-    #         plot_rgb_option = None
-    #         if show_property is None:
-    #             show_scalar_bar = False
-    #             pass
-    #         elif show_property == "none":
-    #             show_scalar_bar = False
-    #             show_property = None
-    #             self.plotter.remove_actor(f"{uid}_prop")
-    #         elif show_property == "X":
-    #             show_property = plot_entity.points_X
-    #         elif show_property == "Y":
-    #             show_property = plot_entity.points_Y
-    #         elif show_property == "Z":
-    #             show_property = plot_entity.points_Z
-    #         elif show_property == "MD":
-    #             show_property = plot_entity.get_point_data(data_key="MD")
-    #         else:
-    #             prop = plot_entity.plot_along_trace(
-    #                 show_property, method=self.trace_method, camera=self.plotter.camera
-    #             )
-    #             self.plotter.add_actor(prop, name=f"{uid}_prop")
-    #             show_property = None
-    #             show_property_title = None
-    #         this_actor = self.plot_mesh(
-    #             uid=uid,
-    #             plot_entity=plot_entity,
-    #             color_RGB=color_RGB,
-    #             show_property=show_property,
-    #             show_scalar_bar=show_scalar_bar,
-    #             color_bar_range=None,
-    #             show_property_title=show_property_title,
-    #             line_thick=line_thick,
-    #             plot_texture_option=False,
-    #             plot_rgb_option=plot_rgb_option,
-    #             visible=visible,
-    #             render_lines_as_tubes=False,
-    #             opacity=opacity,
-    #         )
-    #     else:
-    #         print("[Windows factory]: actor with no class")
-    #         this_actor = None
-    #     return this_actor
-
-    """[Gabriele] Update the views depending on the sec_uid. We need to redefine the functions to use the sec_uid parameter for the update_dom_list_added func. We just need the x_added_x functions because the x_removed_x works on an already build/modified tree"""
-
-    #
-    # def mesh3d_added_update_views(self, updated_list=None):
-    #     """This is called when a mesh3d is added to the mesh3d collection.
-    #     Disconnect signals to mesh3d list, if they are set, then they are
-    #     reconnected when the list is rebuilt"""
-    #     self.Mesh3DTableWidget.itemChanged.disconnect()
-    #     actors_df_new = pd_DataFrame(
-    #         columns=["uid", "actor", "show", "collection", "show_property"]
-    #     )
-    #     for uid in updated_list:
-    #         this_actor = self.show_actor_with_property(
-    #             uid=uid, collection="mesh3d_coll", show_property=None, visible=False
-    #         )
-    #         self.actors_df = self.actors_df.append(
-    #             {
-    #                 "uid": uid,
-    #                 "actor": this_actor,
-    #                 "show": False,
-    #                 "collection": "mesh3d_coll",
-    #                 "show_property": None,
-    #             },
-    #             ignore_index=True,
-    #         )
-    #         actors_df_new = actors_df_new.append(
-    #             {
-    #                 "uid": uid,
-    #                 "actor": this_actor,
-    #                 "show": False,
-    #                 "collection": "mesh3d_coll",
-    #                 "show_property": None,
-    #             },
-    #             ignore_index=True,
-    #         )
-    #         self.update_mesh3d_list_added(
-    #             actors_df_new, sec_uid=self.this_x_section_uid
-    #         )
-    #     self.Mesh3DTableWidget.itemChanged.connect(self.toggle_mesh3d_visibility)
-    #
-    # def dom_added_update_views(self, updated_list=None):
-    #     """This is called when a DOM is added to the xsect collection.
-    #     Disconnect signals to dom list, if they are set, then they are
-    #     reconnected when the list is rebuilt"""
-    #     self.DOMsTableWidget.itemChanged.disconnect()
-    #     actors_df_new = pd_DataFrame(
-    #         columns=["uid", "actor", "show", "collection", "show_property"]
-    #     )
-    #     for uid in updated_list:
-    #         this_actor = self.show_actor_with_property(
-    #             uid=uid, collection="dom_coll", show_property=None, visible=False
-    #         )
-    #         self.actors_df = self.actors_df.append(
-    #             {
-    #                 "uid": uid,
-    #                 "actor": this_actor,
-    #                 "show": False,
-    #                 "collection": "dom_coll",
-    #                 "show_property": None,
-    #             },
-    #             ignore_index=True,
-    #         )
-    #         actors_df_new = actors_df_new.append(
-    #             {
-    #                 "uid": uid,
-    #                 "actor": this_actor,
-    #                 "show": False,
-    #                 "collection": "dom_coll",
-    #                 "show_property": None,
-    #             },
-    #             ignore_index=True,
-    #         )
-    #         self.update_dom_list_added(actors_df_new, sec_uid=self.this_x_section_uid)
-    #     """Re-connect signals."""
-    #     self.DOMsTableWidget.itemChanged.connect(self.toggle_dom_visibility)
-    #
-    # def xsect_added_update_views(self, updated_list=None):
-    #     """This is called when a cross-section is added to the xsect collection.
-    #     Disconnect signals to xsect list, if they are set, then they are
-    #     reconnected when the list is rebuilt"""
-    #     self.XSectionTreeWidget.itemChanged.disconnect()
-    #     actors_df_new = pd_DataFrame(
-    #         columns=["uid", "actor", "show", "collection", "show_property"]
-    #     )
-    #     for uid in updated_list:
-    #         this_actor = self.show_actor_with_property(
-    #             uid=uid, collection="xsect_coll", show_property=None, visible=True
-    #         )
-    #         self.actors_df = self.actors_df.append(
-    #             {
-    #                 "uid": uid,
-    #                 "actor": this_actor,
-    #                 "show": True,
-    #                 "collection": "xsect_coll",
-    #                 "show_property": None,
-    #             },
-    #             ignore_index=True,
-    #         )
-    #         actors_df_new = actors_df_new.append(
-    #             {
-    #                 "uid": uid,
-    #                 "actor": this_actor,
-    #                 "show": True,
-    #                 "collection": "xsect_coll",
-    #                 "show_property": None,
-    #             },
-    #             ignore_index=True,
-    #         )
-    #         self.update_xsections_tree_added(
-    #             actors_df_new, sec_uid=self.this_x_section_uid
-    #         )
-    #     """Re-connect signals."""
-    #     self.XSectionTreeWidget.itemChanged.connect(self.toggle_xsection_visibility)
+    # Update the views depending on the sec_uid. We need to redefine the functions to use
+    # the sec_uid parameter for the update_dom_list_added func. We just need the x_added_x
+    # functions because the x_removed_x works on an already built/modified tree.
 
 
 class ViewStereoplot(MPLView):
