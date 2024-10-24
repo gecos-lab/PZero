@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 ################################################################################
-## Form generated from reading UI file 'base_view_windowrbaIBs.ui'
+## Form generated from reading UI file 'base_view_windowNBwkyi.ui'
 ##
 ## Created by: Qt User Interface Compiler version 6.7.3
 ##
@@ -254,7 +254,7 @@ class Ui_BaseViewWindow(object):
 
         self.retranslateUi(BaseViewWindow)
 
-        self.toolBox.setCurrentIndex(1)
+        self.toolBox.setCurrentIndex(0)
 
 
         QMetaObject.connectSlotsByName(BaseViewWindow)
