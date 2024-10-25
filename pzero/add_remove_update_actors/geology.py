@@ -1,3 +1,6 @@
+from pandas import DataFrame as pd_DataFrame
+from pandas import concat as pd_concat
+
 from pzero.build_and_update.geology import *
 # Methods used to add, remove, and update actors from the GEOLOGICAL collection.
 
@@ -21,16 +24,28 @@ def geology_added_update_views(self, updated_list=None):
         this_actor = self.show_actor_with_property(
             uid=uid, collection="geol_coll", show_property=None, visible=True
         )
-        self.actors_df = self.actors_df.append(
-            {
-                "uid": uid,
-                "actor": this_actor,
-                "show": True,
-                "collection": "geol_coll",
-                "show_property": None,
-            },
-            ignore_index=True,
-        )
+        # Old Pandas <= 1.5.3
+        # self.actors_df = self.actors_df.append(
+        #     {
+        #         "uid": uid,
+        #         "actor": this_actor,
+        #         "show": True,
+        #         "collection": "geol_coll",
+        #         "show_property": None,
+        #     },
+        #     ignore_index=True,
+        # )
+        # New Pandas >= 2.0.0
+        self.actors_df = pd_concat([self.actors_df,
+                                    pd_DataFrame([{
+                                        "uid": uid,
+                                        "actor": this_actor,
+                                        "show": True,
+                                        "collection": "geol_coll",
+                                        "show_property": None,
+                                    }])],
+                                   ignore_index=True,
+                                   )
     update_geology_tree_added(self, uid_list=updated_list)
     update_topology_tree_added(self, uid_list=updated_list)
     """Re-connect signals."""

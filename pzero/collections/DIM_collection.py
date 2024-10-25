@@ -8,6 +8,7 @@ from numpy import ndarray as np_ndarray
 
 from pandas import DataFrame as pd_DataFrame
 from pandas import set_option as pd_set_option
+from pandas import concat as pd_concat
 
 from vtkmodules.vtkCommonDataModel import vtkDataObject
 
@@ -73,7 +74,10 @@ class DIMCollection(BaseCollection):
             entity_dict["uid"] = str(uuid4())
         # Append new row to dataframe. Note that the 'append()' method for Pandas dataframes DOES NOT
         # work in place, hence a NEW dataframe is created every time and then substituted to the old one.
-        self.df = self.df.append(entity_dict, ignore_index=True)
+        # Old and less efficient syntax used up to Pandas 1.5.3:
+        # self.df = self.df.append(entity_dict, ignore_index=True)
+        # New syntax with Pandas >= 2.0.0:
+        self.df = pd_concat([self.df, pd_DataFrame([entity_dict])], ignore_index=True)
         # Reset data model.
         self.modelReset.emit()
         # Update properties colormaps if needed. This is generally necessary just for images,

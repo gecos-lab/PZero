@@ -1,4 +1,6 @@
 from pandas import DataFrame as pd_DataFrame
+from pandas import concat as pd_concat
+
 from pzero.build_and_update.dom import *
 
 # Methods used to add, remove, and update actors from the DOM collection
@@ -16,26 +18,48 @@ def dom_added_update_views(self, updated_list=None):
         this_actor = self.show_actor_with_property(
             uid=uid, collection="dom_coll", show_property=None, visible=False
         )
-        self.actors_df = self.actors_df.append(
-            {
-                "uid": uid,
-                "actor": this_actor,
-                "show": False,
-                "collection": "dom_coll",
-                "show_property": None,
-            },
-            ignore_index=True,
-        )
-        actors_df_new = actors_df_new.append(
-            {
-                "uid": uid,
-                "actor": this_actor,
-                "show": False,
-                "collection": "dom_coll",
-                "show_property": None,
-            },
-            ignore_index=True,
-        )
+        # Old Pandas <= 1.5.3
+        # self.actors_df = self.actors_df.append(
+        #     {
+        #         "uid": uid,
+        #         "actor": this_actor,
+        #         "show": False,
+        #         "collection": "dom_coll",
+        #         "show_property": None,
+        #     },
+        #     ignore_index=True,
+        # )
+        # actors_df_new = actors_df_new.append(
+        #     {
+        #         "uid": uid,
+        #         "actor": this_actor,
+        #         "show": False,
+        #         "collection": "dom_coll",
+        #         "show_property": None,
+        #     },
+        #     ignore_index=True,
+        # )
+        # New Pandas >= 2.0.0
+        self.actors_df = pd_concat([self.actors_df,
+                                    pd_DataFrame([{
+                                        "uid": uid,
+                                        "actor": this_actor,
+                                        "show": False,
+                                        "collection": "dom_coll",
+                                        "show_property": None,
+                                    }])],
+                                   ignore_index=True,
+                                   )
+        actors_df_new = pd_concat([actors_df_new,
+                                   pd_DataFrame([{
+                                       "uid": uid,
+                                       "actor": this_actor,
+                                       "show": False,
+                                       "collection": "dom_coll",
+                                       "show_property": None,
+                                   }])],
+                                  ignore_index=True,
+                                  )
         update_dom_list_added(self, actors_df_new)
     """Re-connect signals."""
     self.DOMsTableWidget.itemChanged.connect(self.toggle_dom_visibility)
