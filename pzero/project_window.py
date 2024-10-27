@@ -63,7 +63,6 @@ from pzero.imports.pyvista2vtk import pyvista2vtk
 from pzero.imports.segy2vtk import segy2vtk
 from pzero.imports.shp2vtk import shp2vtk
 from pzero.imports.stl2vtk import vtk2stl, vtk2stl_dilation
-from pzero.imports.vedo2vtk import vedo2vtk
 from pzero.imports.well2vtk import well2vtk
 from pzero.ui.project_window_ui import Ui_ProjectWindow
 from .entities_factory import (
@@ -153,7 +152,6 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.actionImportBoundary.triggered.connect(self.import_gocad_boundary)
         self.actionImportPyVista.triggered.connect(lambda: pyvista2vtk(self=self))
         self.actionImportPC.triggered.connect(self.import_PC)
-        # self.actionImportVedo.triggered.connect(lambda: vedo2vtk(self=self))
         self.actionImportSHP.triggered.connect(self.import_SHP)
         self.actionImportDEM.triggered.connect(self.import_DEM)
         self.actionImportOrthoImage.triggered.connect(self.import_mapimage)

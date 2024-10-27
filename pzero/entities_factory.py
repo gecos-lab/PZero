@@ -273,7 +273,7 @@ class PolyData(vtkPolyData):
         pass
 
     @cells.setter
-    def cells(self, cells_matrix=None):  # _______________________________________________________________ this does not work - see how to fix this that is very important - possibly use VEDO or PYVISTA or BETTER numpy_to_vtk.
+    def cells(self, cells_matrix=None):  # _______________________________________________________________ this does not work - see how to fix this that is very important - possibly use PYVISTA or BETTER numpy_to_vtk.
         """Set all cells by applying append_cell recursively"""
         if self.GetNumberOfCells() != 0:
             self.DeleteCells()  # this marks the cells to be deleted
