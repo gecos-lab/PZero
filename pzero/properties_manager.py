@@ -14,6 +14,8 @@ from PySide6.QtWidgets import QTableWidgetItem, QLabel, QComboBox, QHeaderView
 
 from numpy import linspace as np_linspace
 
+from pandas import DataFrame as pd_DataFrame
+from pandas import concat as pd_concat
 from pandas.core.common import flatten as pd_flatten
 
 from pyvista import get_cmap_safe as pv_get_cmap_safe
@@ -119,10 +121,16 @@ class PropertiesCMaps(QObject):
         # Add new properties to dataframe.
         for prop in all_props:
             if not prop in parent.prop_legend_df["property_name"].to_list():
-                parent.prop_legend_df = parent.prop_legend_df.append(
-                    {"property_name": prop, "colormap": "rainbow"}, ignore_index=True
-                )
-
+                # Old Pandas <= 1.5.3
+                # parent.prop_legend_df = parent.prop_legend_df.append(
+                #     {"property_name": prop, "colormap": "rainbow"}, ignore_index=True
+                # )
+                # New Pandas >= 2.0.0
+                parent.prop_legend_df = pd_concat([
+                    parent.prop_legend_df,
+                    pd_DataFrame([{"property_name": prop, "colormap": "rainbow"}])
+                    ],
+                    ignore_index=True)
         # The remove old ones no more used.
         for prop in parent.prop_legend_df["property_name"].to_list():
             if not prop in all_props:

@@ -111,22 +111,40 @@ class GFBCollection(BaseCollection):
             else:
                 R, G, B = np_round(np_random.random(3) * 255)
             # Use default generic values for legend.
-            self.legend_df = self.legend_df.append(
-                {
-                    "role": role,
-                    "feature": feature,
-                    "time": 0.0,
-                    "sequence": self.default_sequence,
-                    "scenario": scenario,
-                    "color_R": R,
-                    "color_G": G,
-                    "color_B": B,
-                    "line_thick": 5.0,
-                    "point_size": 10.0,
-                    "opacity": 100,
-                },
-                ignore_index=True,
-            )
+            # Old Pandas <= 1.5.3
+            # self.legend_df = self.legend_df.append(
+            #     {
+            #         "role": role,
+            #         "feature": feature,
+            #         "time": 0.0,
+            #         "sequence": self.default_sequence,
+            #         "scenario": scenario,
+            #         "color_R": R,
+            #         "color_G": G,
+            #         "color_B": B,
+            #         "line_thick": 5.0,
+            #         "point_size": 10.0,
+            #         "opacity": 100,
+            #     },
+            #     ignore_index=True,
+            # )
+            # New Pandas >= 2.0.0
+            self.legend_df = pd_concat([self.legend_df,
+                                        pd_DataFrame([{
+                                            "role": role,
+                                            "feature": feature,
+                                            "time": 0.0,
+                                            "sequence": self.default_sequence,
+                                            "scenario": scenario,
+                                            "color_R": R,
+                                            "color_G": G,
+                                            "color_B": B,
+                                            "line_thick": 5.0,
+                                            "point_size": 10.0,
+                                            "opacity": 100,
+                                        }])],
+                                       ignore_index=True,
+                                       )
             self.parent.legend.update_widget(self.parent)
             self.parent.prop_legend.update_widget(self.parent)
         # Then emit signal to update the views. A list of uids is emitted, even if the
@@ -211,20 +229,36 @@ class GFBCollection(BaseCollection):
                 & (self.legend_df["feature"] == feature)
                 & (self.legend_df["scenario"] == scenario)
             ].empty:
-                self.legend_df = self.legend_df.append(
-                    {
-                        "role": role,
-                        "feature": feature,
-                        "time": 0.0,
-                        "sequence": self.default_sequence,
-                        "scenario": scenario,
-                        "color_R": round(np_random.random() * 255),
-                        "color_G": round(np_random.random() * 255),
-                        "color_B": round(np_random.random() * 255),
-                        "line_thick": 2.0,
-                    },
-                    ignore_index=True,
-                )
+                # Old Pandas <= 1.5.3
+                # self.legend_df = self.legend_df.append(
+                #     {
+                #         "role": role,
+                #         "feature": feature,
+                #         "time": 0.0,
+                #         "sequence": self.default_sequence,
+                #         "scenario": scenario,
+                #         "color_R": round(np_random.random() * 255),
+                #         "color_G": round(np_random.random() * 255),
+                #         "color_B": round(np_random.random() * 255),
+                #         "line_thick": 2.0,
+                #     },
+                #     ignore_index=True,
+                # )
+                # New Pandas >= 2.0.0
+                self.legend_df = pd_concat([self.legend_df,
+                                            pd_DataFrame([{
+                                                "role": role,
+                                                "feature": feature,
+                                                "time": 0.0,
+                                                "sequence": self.default_sequence,
+                                                "scenario": scenario,
+                                                "color_R": round(np_random.random() * 255),
+                                                "color_G": round(np_random.random() * 255),
+                                                "color_B": round(np_random.random() * 255),
+                                                "line_thick": 2.0,
+                                            }])],
+                                           ignore_index=True,
+                                           )
                 legend_updated = legend_updated or True
         # When done, if the table was updated, update the widget. No signal is sent here to the views.
         if legend_updated:

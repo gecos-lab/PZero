@@ -21,6 +21,7 @@ from numpy import sqrt as np_sqrt
 from numpy import zeros as np_zeros
 
 from pandas import DataFrame as pd_DataFrame
+from pandas import concat as pd_concat
 
 from scipy.interpolate import griddata as sp_griddata
 
@@ -406,12 +407,18 @@ def implicit_model_loop_structural(self):
         if val_single == -999999.0:
             val_single = float("nan")
         entity_input_data_df["val"] = val_single
-        """nx, ny and nz: TO BE IMPLEMENTED"""
-        """gx, gy and gz: TO BE IMPLEMENTED"""
-        """Append dataframe for this input entity to the general input dataframe."""
-        all_input_data_df = all_input_data_df.append(
-            entity_input_data_df, ignore_index=True
-        )
+        # nx, ny and nz: TO BE IMPLEMENTED
+        # gx, gy and gz: TO BE IMPLEMENTED
+        # Append dataframe for this input entity to the general input dataframe.
+        # Old Pandas <= 1.5.3
+        # all_input_data_df = all_input_data_df.append(
+        #     entity_input_data_df, ignore_index=True
+        # )
+        # New Pandas >= 2.0.0
+        all_input_data_df = pd_concat([
+            all_input_data_df,
+            entity_input_data_df
+        ], ignore_index=True)
         prgs_bar.add_one()
     toc()
     prgs_bar.close()

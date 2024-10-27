@@ -80,17 +80,30 @@ class WellCollection(BaseCollection):
             self.parent.well_legend_df["Loc ID"] == locid
         ].empty:
             R, G, B = np_round(np_random.random(3) * 255)
-            self.parent.well_legend_df = self.parent.well_legend_df.append(
-                {
-                    "Loc ID": locid,
-                    "color_R": R,
-                    "color_G": G,
-                    "color_B": B,
-                    "line_thick": 2.0,
-                    "opacity": 100,
-                },
-                ignore_index=True,
-            )
+        # Old Pandas <= 1.5.3
+        #     self.parent.well_legend_df = self.parent.well_legend_df.append(
+        #         {
+        #             "Loc ID": locid,
+        #             "color_R": R,
+        #             "color_G": G,
+        #             "color_B": B,
+        #             "line_thick": 2.0,
+        #             "opacity": 100,
+        #         },
+        #         ignore_index=True,
+        #     )
+        # New Pandas >= 2.0.0
+            self.parent.well_legend_df = pd_concat([self.parent.well_legend_df,
+                                                    pd_DataFrame([{
+                                                        "Loc ID": locid,
+                                                        "color_R": R,
+                                                        "color_G": G,
+                                                        "color_B": B,
+                                                        "line_thick": 2.0,
+                                                        "opacity": 100,
+                                                    }])],
+                                                   ignore_index=True,
+                                                   )
             self.parent.legend.update_widget(self.parent)
             self.parent.prop_legend.update_widget(self.parent)
         # Then emit signal to update the views. A list of uids is emitted, even if the entity is just one.
@@ -134,19 +147,32 @@ class WellCollection(BaseCollection):
                 (self.parent.well_legend_df["Loc ID"] == locid)
                 & (self.parent.well_legend_df["feature"] == feature)
             ].empty:
-                self.parent.well_legend_df = self.parent.well_legend_df.append(
-                    {
-                        "Loc ID": locid,
-                        "feature": feature,
-                        "color_R": round(np_random.random() * 255),
-                        "color_G": round(np_random.random() * 255),
-                        "color_B": round(np_random.random() * 255),
-                        "line_thick": 2.0,
-                    },
-                    ignore_index=True,
-                )
+                # Old Pandas <= 1.5.3
+                # self.parent.well_legend_df = self.parent.well_legend_df.append(
+                #     {
+                #         "Loc ID": locid,
+                #         "feature": feature,
+                #         "color_R": round(np_random.random() * 255),
+                #         "color_G": round(np_random.random() * 255),
+                #         "color_B": round(np_random.random() * 255),
+                #         "line_thick": 2.0,
+                #     },
+                #     ignore_index=True,
+                # )
+                # New Pandas >= 2.0.0
+                self.parent.well_legend_df = pd_concat([self.parent.well_legend_df,
+                                                        pd_DataFrame([{
+                                                            "Loc ID": locid,
+                                                            "feature": feature,
+                                                            "color_R": round(np_random.random() * 255),
+                                                            "color_G": round(np_random.random() * 255),
+                                                            "color_B": round(np_random.random() * 255),
+                                                            "line_thick": 2.0,
+                                                        }])],
+                                                       ignore_index=True,
+                                                       )
                 legend_updated = legend_updated or True
-        # When done, if the table was updated update the widget. No signal is sent here to the views.
+        # When done, if the table was updated, update the widget. No signal is sent here to the views.
         if legend_updated:
             self.parent.legend.update_widget(self.parent)
 

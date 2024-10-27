@@ -88,10 +88,19 @@ class DIMCollection(BaseCollection):
                 if self.parent.prop_legend_df.loc[
                     self.parent.prop_legend_df["property_name"] == property_name
                 ].empty:
-                    self.parent.prop_legend_df = self.parent.prop_legend_df.append(
-                        {"property_name": property_name, "colormap": self.default_colormap},
-                        ignore_index=True,
-                    )
+                    # Old Pandas <= 1.5.3
+                    # self.parent.prop_legend_df = self.parent.prop_legend_df.append(
+                    #     {"property_name": property_name, "colormap": self.default_colormap},
+                    #     ignore_index=True,
+                    # )
+                    # New Pandas >= 2.0.0
+                    self.parent.prop_legend_df = pd_concat([
+                                    self.parent.prop_legend_df,
+                                    pd_DataFrame([{
+                                            "property_name": property_name,
+                                            "colormap": self.default_colormap,
+                                    }])],
+                                    ignore_index=True)
                     self.parent.prop_legend.update_widget(self.parent)
         # Then emit signal to update the views. A list of uids is emitted, even if the
         # entity is just one, for future compatibility

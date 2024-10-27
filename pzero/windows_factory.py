@@ -1101,130 +1101,238 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             this_actor = self.show_actor_with_property(
                 uid=uid, collection="geol_coll", show_property=None, visible=True
             )
-            self.actors_df = self.actors_df.append(
-                {
-                    "uid": uid,
-                    "actor": this_actor,
-                    "show": True,
-                    "collection": "geol_coll",
-                    "show_property": None,
-                },
-                ignore_index=True,
-            )
+            # Old Pandas <= 1.5.3
+            # self.actors_df = self.actors_df.append(
+            #     {
+            #         "uid": uid,
+            #         "actor": this_actor,
+            #         "show": True,
+            #         "collection": "geol_coll",
+            #         "show_property": None,
+            #     },
+            #     ignore_index=True,
+            # )
+            # New Pandas >= 2.0.0
+            self.actors_df = pd_concat([self.actors_df,
+                                        pd_DataFrame([{
+                                            "uid": uid,
+                                            "actor": this_actor,
+                                            "show": True,
+                                            "collection": "geol_coll",
+                                            "show_property": None,
+                                        }])],
+                                       ignore_index=True,
+                                       )
         try:
             for uid in self.parent.xsect_coll.df.query(self.view_filter)["uid"].tolist():
                 this_actor = self.show_actor_with_property(
                     uid=uid, collection="xsect_coll", show_property=None, visible=False
                 )
-                self.actors_df = self.actors_df.append(
-                    {
-                        "uid": uid,
-                        "actor": this_actor,
-                        "show": False,
-                        "collection": "xsect_coll",
-                        "show_property": None,
-                    },
-                    ignore_index=True,
-                )
+                # Old Pandas <= 1.5.3
+                # self.actors_df = self.actors_df.append(
+                #     {
+                #         "uid": uid,
+                #         "actor": this_actor,
+                #         "show": False,
+                #         "collection": "xsect_coll",
+                #         "show_property": None,
+                #     },
+                #     ignore_index=True,
+                # )
+                # New Pandas >= 2.0.0
+                self.actors_df = pd_concat([self.actors_df,
+                                            pd_DataFrame([{
+                                                "uid": uid,
+                                                "actor": this_actor,
+                                                "show": False,
+                                                "collection": "xsect_coll",
+                                                "show_property": None,
+                                            }])],
+                                           ignore_index=True,
+                                           )
         except:
             # This plots the X section frame in cases where a X section is plotting itself in a NewXsView()
             this_actor = self.show_actor_with_property(
                 uid=self.this_x_section_uid, collection="xsect_coll", show_property=None, visible=False
             )
-            self.actors_df = self.actors_df.append(
-                {
-                    "uid": self.this_x_section_uid,
-                    "actor": this_actor,
-                    "show": False,
-                    "collection": "xsect_coll",
-                    "show_property": None,
-                },
-                ignore_index=True,
-            )
+            # Old Pandas <= 1.5.3
+            # self.actors_df = self.actors_df.append(
+            #     {
+            #         "uid": self.this_x_section_uid,
+            #         "actor": this_actor,
+            #         "show": False,
+            #         "collection": "xsect_coll",
+            #         "show_property": None,
+            #     },
+            #     ignore_index=True,
+            # )
+            # New Pandas >= 2.0.0
+            self.actors_df = pd_concat([self.actors_df,
+                                        pd_DataFrame([{
+                                            "uid": self.this_x_section_uid,
+                                            "actor": this_actor,
+                                            "show": False,
+                                            "collection": "xsect_coll",
+                                            "show_property": None,
+                                        }])],
+                                       ignore_index=True,
+                                       )
         for uid in self.parent.boundary_coll.df.query(self.view_filter)["uid"].tolist():
             this_actor = self.show_actor_with_property(
                 uid=uid, collection="boundary_coll", show_property=None, visible=False
             )
-            self.actors_df = self.actors_df.append(
-                {
-                    "uid": uid,
-                    "actor": this_actor,
-                    "show": False,
-                    "collection": "boundary_coll",
-                    "show_property": None,
-                },
-                ignore_index=True,
-            )
+            # Old Pandas <= 1.5.3
+            # self.actors_df = self.actors_df.append(
+            #     {
+            #         "uid": uid,
+            #         "actor": this_actor,
+            #         "show": False,
+            #         "collection": "boundary_coll",
+            #         "show_property": None,
+            #     },
+            #     ignore_index=True,
+            # )
+            # New Pandas >= 2.0.0
+            self.actors_df = pd_concat([self.actors_df,
+                                        pd_DataFrame([{
+                                            "uid": uid,
+                                            "actor": this_actor,
+                                            "show": False,
+                                            "collection": "boundary_coll",
+                                            "show_property": None,
+                                        }])],
+                                       ignore_index=True,
+                                       )
         for uid in self.parent.mesh3d_coll.df.query(self.view_filter)["uid"].tolist():
             this_actor = self.show_actor_with_property(
                 uid=uid, collection="mesh3d_coll", show_property=None, visible=False
             )
-            self.actors_df = self.actors_df.append(
-                {
-                    "uid": uid,
-                    "actor": this_actor,
-                    "show": False,
-                    "collection": "mesh3d_coll",
-                    "show_property": None,
-                },
-                ignore_index=True,
-            )
+            # Old Pandas <= 1.5.3
+            # self.actors_df = self.actors_df.append(
+            #     {
+            #         "uid": uid,
+            #         "actor": this_actor,
+            #         "show": False,
+            #         "collection": "mesh3d_coll",
+            #         "show_property": None,
+            #     },
+            #     ignore_index=True,
+            # )
+            # New Pandas >= 2.0.0
+            self.actors_df = pd_concat([self.actors_df,
+                                        pd_DataFrame([{
+                                            "uid": uid,
+                                            "actor": this_actor,
+                                            "show": False,
+                                            "collection": "mesh3d_coll",
+                                            "show_property": None,
+                                        }])],
+                                       ignore_index=True,
+                                       )
         for uid in self.parent.dom_coll.df.query(self.view_filter)["uid"].tolist():
             this_actor = self.show_actor_with_property(
                 uid=uid, collection="dom_coll", show_property=None, visible=False
             )
-            self.actors_df = self.actors_df.append(
-                {
-                    "uid": uid,
-                    "actor": this_actor,
-                    "show": False,
-                    "collection": "dom_coll",
-                    "show_property": None,
-                },
-                ignore_index=True,
-            )
+            # Old Pandas <= 1.5.3
+            # self.actors_df = self.actors_df.append(
+            #     {
+            #         "uid": uid,
+            #         "actor": this_actor,
+            #         "show": False,
+            #         "collection": "dom_coll",
+            #         "show_property": None,
+            #     },
+            #     ignore_index=True,
+            # )
+            # New Pandas >= 2.0.0
+            self.actors_df = pd_concat([self.actors_df,
+                                        pd_DataFrame([{
+                                            "uid": uid,
+                                            "actor": this_actor,
+                                            "show": False,
+                                            "collection": "dom_coll",
+                                            "show_property": None,
+                                        }])],
+                                       ignore_index=True,
+                                       )
         for uid in self.parent.image_coll.df.query(self.view_filter)["uid"].tolist():
             this_actor = self.show_actor_with_property(
                 uid=uid, collection="image_coll", show_property=None, visible=False
             )
-            self.actors_df = self.actors_df.append(
-                {
-                    "uid": uid,
-                    "actor": this_actor,
-                    "show": False,
-                    "collection": "image_coll",
-                    "show_property": None,
-                },
-                ignore_index=True,
-            )
+            # Old Pandas <= 1.5.3
+            # self.actors_df = self.actors_df.append(
+            #     {
+            #         "uid": uid,
+            #         "actor": this_actor,
+            #         "show": False,
+            #         "collection": "image_coll",
+            #         "show_property": None,
+            #     },
+            #     ignore_index=True,
+            # )
+            # New Pandas >= 2.0.0
+            self.actors_df = pd_concat([self.actors_df,
+                                        pd_DataFrame([{
+                                            "uid": uid,
+                                            "actor": this_actor,
+                                            "show": False,
+                                            "collection": "image_coll",
+                                            "show_property": None,
+                                        }])],
+                                       ignore_index=True,
+                                       )
         for uid in self.parent.well_coll.df.query(self.view_filter)["uid"].tolist():
             this_actor = self.show_actor_with_property(
                 uid=uid, collection="well_coll", show_property=None, visible=False
             )
-            self.actors_df = self.actors_df.append(
-                {
-                    "uid": uid,
-                    "actor": this_actor,
-                    "show": False,
-                    "collection": "well_coll",
-                    "show_property": None,
-                },
-                ignore_index=True,
-            )
+            # Old Pandas <= 1.5.3
+            # self.actors_df = self.actors_df.append(
+            #     {
+            #         "uid": uid,
+            #         "actor": this_actor,
+            #         "show": False,
+            #         "collection": "well_coll",
+            #         "show_property": None,
+            #     },
+            #     ignore_index=True,
+            # )
+            # New Pandas >= 2.0.0
+            self.actors_df = pd_concat([self.actors_df,
+                                        pd_DataFrame([{
+                                            "uid": uid,
+                                            "actor": this_actor,
+                                            "show": False,
+                                            "collection": "well_coll",
+                                            "show_property": None,
+                                        }])],
+                                       ignore_index=True,
+                                       )
         for uid in self.parent.fluid_coll.df.query(self.view_filter)["uid"].tolist():
             this_actor = self.show_actor_with_property(
                 uid=uid, collection="fluid_coll", show_property=None, visible=False
             )
-            self.actors_df = self.actors_df.append(
-                {
-                    "uid": uid,
-                    "actor": this_actor,
-                    "show": False,
-                    "collection": "fluid_coll",
-                    "show_property": None,
-                },
-                ignore_index=True,
-            )
+            # Old Pandas <= 1.5.3
+            # self.actors_df = self.actors_df.append(
+            #     {
+            #         "uid": uid,
+            #         "actor": this_actor,
+            #         "show": False,
+            #         "collection": "fluid_coll",
+            #         "show_property": None,
+            #     },
+            #     ignore_index=True,
+            # )
+            # New Pandas >= 2.0.0
+            self.actors_df = pd_concat([self.actors_df,
+                                        pd_DataFrame([{
+                                            "uid": uid,
+                                            "actor": this_actor,
+                                            "show": False,
+                                            "collection": "fluid_coll",
+                                            "show_property": None,
+                                        }])],
+                                       ignore_index=True,
+                                       )
         for uid in self.parent.backgrnd_coll.df.query(self.view_filter)["uid"].tolist():
             this_actor = self.show_actor_with_property(
                 uid=uid,
@@ -1232,16 +1340,28 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                 show_property=None,
                 visible=False,
             )
-            self.actors_df = self.actors_df.append(
-                {
-                    "uid": uid,
-                    "actor": this_actor,
-                    "show": False,
-                    "collection": "backgrnd_coll",
-                    "show_property": None,
-                },
-                ignore_index=True,
-            )
+            # Old Pandas <= 1.5.3
+            # self.actors_df = self.actors_df.append(
+            #     {
+            #         "uid": uid,
+            #         "actor": this_actor,
+            #         "show": False,
+            #         "collection": "backgrnd_coll",
+            #         "show_property": None,
+            #     },
+            #     ignore_index=True,
+            # )
+            # New Pandas >= 2.0.0
+            self.actors_df = pd_concat([self.actors_df,
+                                        pd_DataFrame([{
+                                            "uid": uid,
+                                            "actor": this_actor,
+                                            "show": False,
+                                            "collection": "backgrnd_coll",
+                                            "show_property": None,
+                                        }])],
+                                       ignore_index=True,
+                                       )
 
     def prop_legend_cmap_modified_update_views(self, this_property=None):
         """Redraw all actors that are currently shown with a property whose colormap has been changed."""
@@ -4336,16 +4456,28 @@ class ViewStereoplot(MPLView):
             show = self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]
             self.remove_actor_in_view(uid, redraw=False)
             this_actor = self.show_actor_with_property(uid, "geol_coll", visible=show)
-            self.actors_df = self.actors_df.append(
-                {
-                    "uid": uid,
-                    "actor": this_actor,
-                    "show": show,
-                    "collection": "geol_collection",
-                    "show_property": "poles",
-                },
-                ignore_index=True,
-            )
+            # Old Pandas <= 1.5.3
+            # self.actors_df = self.actors_df.append(
+            #     {
+            #         "uid": uid,
+            #         "actor": this_actor,
+            #         "show": show,
+            #         "collection": "geol_collection",
+            #         "show_property": "poles",
+            #     },
+            #     ignore_index=True,
+            # )
+            # New Pandas >= 2.0.0
+            self.actors_df = pd_concat([self.actors_df,
+                                        pd_DataFrame([{
+                                            "uid": uid,
+                                            "actor": this_actor,
+                                            "show": show,
+                                            "collection": "geol_collection",
+                                            "show_property": "poles",
+                                        }])],
+                                       ignore_index=True,
+                                       )
             # For now only geol_collection (I guess this is the only collection for attitude measurements)
 
     def change_proj(self, projection):
@@ -4360,16 +4492,28 @@ class ViewStereoplot(MPLView):
             show = self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]
             self.remove_actor_in_view(uid, redraw=False)
             this_actor = self.show_actor_with_property(uid, "geol_coll", visible=show)
-            self.actors_df = self.actors_df.append(
-                {
-                    "uid": uid,
-                    "actor": this_actor,
-                    "show": show,
-                    "collection": "geol_collection",
-                    "show_property": "poles",
-                },
-                ignore_index=True,
-            )
+            # Old Pandas <= 1.5.3
+            # self.actors_df = self.actors_df.append(
+            #     {
+            #         "uid": uid,
+            #         "actor": this_actor,
+            #         "show": show,
+            #         "collection": "geol_collection",
+            #         "show_property": "poles",
+            #     },
+            #     ignore_index=True,
+            # )
+            # New Pandas >= 2.0.0
+            self.actors_df = pd_concat([self.actors_df,
+                                        pd_DataFrame([{
+                                            "uid": uid,
+                                            "actor": this_actor,
+                                            "show": show,
+                                            "collection": "geol_collection",
+                                            "show_property": "poles",
+                                        }])],
+                                       ignore_index=True,
+                                       )
 
     def toggle_contours(self, filled=False):
         """[Gabriele] This is not the best way, but for now will do.
@@ -4403,16 +4547,28 @@ class ViewStereoplot(MPLView):
             this_actor = self.show_actor_with_property(
                 uid, "geol_coll", visible=show, filled=filled_opt
             )
-            self.actors_df = self.actors_df.append(
-                {
-                    "uid": uid,
-                    "actor": this_actor,
-                    "show": show,
-                    "collection": "geol_collection",
-                    "show_property": "poles",
-                },
-                ignore_index=True,
-            )
+            # Old Pandas <= 1.5.3
+            # self.actors_df = self.actors_df.append(
+            #     {
+            #         "uid": uid,
+            #         "actor": this_actor,
+            #         "show": show,
+            #         "collection": "geol_collection",
+            #         "show_property": "poles",
+            #     },
+            #     ignore_index=True,
+            # )
+            # New Pandas >= 2.0.0
+            self.actors_df = pd_concat([self.actors_df,
+                                        pd_DataFrame([{
+                                            "uid": uid,
+                                            "actor": this_actor,
+                                            "show": show,
+                                            "collection": "geol_collection",
+                                            "show_property": "poles",
+                                        }])],
+                                       ignore_index=True,
+                                       )
 
     def change_actor_color(self, uid=None, collection=None):
         """Change colour with Matplotlib method."""
