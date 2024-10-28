@@ -72,6 +72,14 @@ For some strange reason, openpyxl (used to import Excel files) is required by pa
 
 Additional modules that where explicitly required in the past, but apparently not now, are pillow>=9.5.0, pythreejs>=2.4.2, and vedo.
 
+This has been tested on Windows 11 and macOS 15 so far. On macOS it is possible that conda fails to detect the right version of the OS. In this case it is necessary to force the __osx variable with:
+
+conda env config vars set CONDA_OVERRIDE_OSX="11"
+
+Then the value of __osx can be checked with:
+
+conda info
+
 6) Finally record the environment in .yml files (from within ./PZero/envs directory):
 
 conda env export --from-history > ./pzero-env-from-history.yml
