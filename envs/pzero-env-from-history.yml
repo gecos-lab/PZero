@@ -24,6 +24,7 @@ dependencies:
   - conda-forge::vtk[version='>=9.3.1']
   - conda-forge::xarray[version='>=2023.1.0']
   - loop3d::loopstructural[version='>=v1.6.3']
+  - openpyxl
   - pandas[version='>=2.2.2']
   - pyinstaller[version='>=6']
   - pytest[version='>=7']

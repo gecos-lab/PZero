@@ -5,7 +5,7 @@ THIS DOCUMENT MUST BE KEPT UPDATED!
 ===================================
 
 _______________________
-Last updated 2024-10-27
+Last updated 2024-10-28
 
 
 1) To build a clean pzero environment, start updating the conda base environment:
@@ -46,6 +46,7 @@ This includes:
   - loop3d::loopstructural[version='>=v1.6.3']
   - conda-forge::lxml[version='>=5.3.0']
   - conda-forge::mplstereonet[version='>=0.6.3']
+  - openpyxl
   - pandas[version='>=2.2.2']
   - pyinstaller[version='>=6']
   - pytest[version='>=7']
@@ -67,9 +68,9 @@ The logic in any case is to have the most recent versions as possible, or at lea
 
 Note that version requirements are easily recorded/updated in the pzero-env-from-history.yml file.
 
-Additional modules that where explicitly required in the past, but apparently not now, are:
+For some strange reason, openpyxl (used to import Excel files) is required by pandas but not automatically added with its dependencies, so we have to add it eplicitly to the environment.
 
-openpyxl>=3.1.5 pillow>=9.5.0 pythreejs>=2.4.2 vedo
+Additional modules that where explicitly required in the past, but apparently not now, are pillow>=9.5.0, pythreejs>=2.4.2, and vedo.
 
 6) Finally record the environment in .yml files (from within ./PZero/envs directory):
 
