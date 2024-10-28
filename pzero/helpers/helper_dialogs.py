@@ -1147,35 +1147,58 @@ class PreviewWidget(QMainWindow, Ui_PreviewWindow):
 
 
 class SectionManagerDialog(QtWidgets.QDialog):
-    def __init__(self, existing_sections, view3D_instance, parent=None):
+    def __init__(self, existing_sections, existing_slices, view3D_instance, parent=None):
         super(SectionManagerDialog, self).__init__(parent)
         self.view3D_instance = view3D_instance  # Reference to the View3D instance
         self.existing_sections = existing_sections
+        self.existing_slices = existing_slices
         self.initUI()
 
     def initUI(self):
         self.setWindowTitle("Section Manager")
         self.mainLayout = QtWidgets.QVBoxLayout(self)
-        self.infoLabel = QtWidgets.QLabel("Here you can manage your project sections:")
+
+        self.infoLabel = QtWidgets.QLabel("Here you can manage your project sections and slices:")
         self.mainLayout.addWidget(self.infoLabel)
 
-        # Section Name ComboBox
+        # Main Sections Group
+        self.sectionsGroupBox = QtWidgets.QGroupBox("Main Sections")
+        self.sectionsLayout = QtWidgets.QVBoxLayout()
+
         self.sectionNameComboBox = QtWidgets.QComboBox()
-        self.sectionNameComboBox.addItems(self.existing_sections)  # Use the existing_sections from __init__
-        self.mainLayout.addWidget(self.sectionNameComboBox)
+        self.sectionNameComboBox.addItems(self.existing_sections)  # Main seismic volumes
+        self.sectionsLayout.addWidget(QtWidgets.QLabel("Select Main Volume:"))
+        self.sectionsLayout.addWidget(self.sectionNameComboBox)
 
-        # Section Type ComboBox
-        self.sectionTypeComboBox = QtWidgets.QComboBox()
-        self.sectionTypeComboBox.addItems(["Inline", "Xline", "Z Slice"])  # Example types
-        self.mainLayout.addWidget(self.sectionTypeComboBox)
+        self.removeSectionButton = QtWidgets.QPushButton("Remove Section")
+        self.sectionsLayout.addWidget(self.removeSectionButton)
 
-        # Add buttons for managing sections
-        self.addButton = QtWidgets.QPushButton("Add Section")
-        self.removeButton = QtWidgets.QPushButton("Remove Section")
-        self.buttonsLayout = QtWidgets.QHBoxLayout()
-        self.buttonsLayout.addWidget(self.addButton)
-        self.buttonsLayout.addWidget(self.removeButton)
-        self.mainLayout.addLayout(self.buttonsLayout)
+        self.sectionsGroupBox.setLayout(self.sectionsLayout)
+        self.mainLayout.addWidget(self.sectionsGroupBox)
+
+        # Slices Group
+        self.slicesGroupBox = QtWidgets.QGroupBox("Slices")
+        self.slicesLayout = QtWidgets.QVBoxLayout()
+
+        self.sliceNameComboBox = QtWidgets.QComboBox()
+        self.sliceNameComboBox.addItems(self.existing_slices)  # Existing slices
+        self.slicesLayout.addWidget(QtWidgets.QLabel("Select Slice:"))
+        self.slicesLayout.addWidget(self.sliceNameComboBox)
+
+        self.sliceTypeComboBox = QtWidgets.QComboBox()
+        self.sliceTypeComboBox.addItems(["Inline", "Xline", "Z Slice"])  # Example slice types
+        self.slicesLayout.addWidget(QtWidgets.QLabel("Select Slice Type for Adding:"))
+        self.slicesLayout.addWidget(self.sliceTypeComboBox)
+
+        self.addSliceButton = QtWidgets.QPushButton("Add Slice")
+        self.removeSliceButton = QtWidgets.QPushButton("Remove Slice")
+        self.slicesButtonsLayout = QtWidgets.QHBoxLayout()
+        self.slicesButtonsLayout.addWidget(self.addSliceButton)
+        self.slicesButtonsLayout.addWidget(self.removeSliceButton)
+        self.slicesLayout.addLayout(self.slicesButtonsLayout)
+
+        self.slicesGroupBox.setLayout(self.slicesLayout)
+        self.mainLayout.addWidget(self.slicesGroupBox)
 
         # Add standard dialog buttons
         self.dialogButtons = QtWidgets.QDialogButtonBox(
@@ -1187,28 +1210,77 @@ class SectionManagerDialog(QtWidgets.QDialog):
         # Connect signals
         self.dialogButtons.accepted.connect(self.accept)
         self.dialogButtons.rejected.connect(self.reject)
-        self.addButton.clicked.connect(self.addSection)
-        self.removeButton.clicked.connect(self.removeSection)
+        self.addSliceButton.clicked.connect(self.addSlice)
+        self.removeSectionButton.clicked.connect(self.removeSection)
+        self.removeSliceButton.clicked.connect(self.removeSlice)
 
-    def addSection(self):
+    def addSlice(self):
         selected_section = self.sectionNameComboBox.currentText()
-        selected_type = self.sectionTypeComboBox.currentText()
-        # Call the method in the View3D instance to add the section
+        selected_type = self.sliceTypeComboBox.currentText()
+        # Call the method in the View3D instance to add the slice
         self.view3D_instance.manage_section('add', selected_section, selected_type)
+        # Update the sliceNameComboBox
+        updated_slices = self.view3D_instance.getExistingSlices()
+        self.sliceNameComboBox.clear()
+        self.sliceNameComboBox.addItems(updated_slices)
 
     def removeSection(self):
         selected_section = self.sectionNameComboBox.currentText()
-        # Notify the View3D instance to remove the section
-        self.view3D_instance.manage_section('remove', selected_section)
+        print(f"Selected section to remove: {selected_section}")  # Debug statement
+
+        # Confirmation dialog
+        reply = QtWidgets.QMessageBox.question(
+            self, 'Confirm Removal',
+            f"Are you sure you want to remove the main section '{selected_section}' and all its slices?",
+            QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
+            QtWidgets.QMessageBox.No
+        )
+        if reply == QtWidgets.QMessageBox.Yes:
+            # Notify the View3D instance to remove the main section
+            self.view3D_instance.manage_section('remove', selected_section)
+            # Update the sectionNameComboBox
+            updated_sections = self.view3D_instance.getExistingSections()
+            self.sectionNameComboBox.clear()
+            self.sectionNameComboBox.addItems(updated_sections)
+            # Update the sliceNameComboBox
+            updated_slices = self.view3D_instance.getExistingSlices()
+            self.sliceNameComboBox.clear()
+            self.sliceNameComboBox.addItems(updated_slices)
+        else:
+            print("Removal of section canceled.")
+
+    def removeSlice(self):
+        selected_slice = self.sliceNameComboBox.currentText()
+        print(f"Selected slice to remove: {selected_slice}")  # Debug statement
+
+        # Confirmation dialog
+        reply = QtWidgets.QMessageBox.question(
+            self, 'Confirm Removal',
+            f"Are you sure you want to remove slice '{selected_slice}'?",
+            QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
+            QtWidgets.QMessageBox.No
+        )
+        if reply == QtWidgets.QMessageBox.Yes:
+            # Notify the View3D instance to remove the slice
+            self.view3D_instance.manage_section('remove', selected_slice)
+            # Update the sliceNameComboBox
+            updated_slices = self.view3D_instance.getExistingSlices()
+            self.sliceNameComboBox.clear()
+            self.sliceNameComboBox.addItems(updated_slices)
+        else:
+            print("Removal of slice canceled.")
+
 # This would be called somewhere in your main application window code
 def openSectionManagerDialog(self, view3D_instance):
-    existing_sections = view3D_instance.getExistingSections()  # Replace with actual data
+    existing_sections = view3D_instance.mesh3d_coll.df['name'].tolist()
+    print("Existing sections:", existing_sections)  # Add this debug statement
     dialog = SectionManagerDialog(existing_sections, view3D_instance, self)
     result = dialog.exec_()
     if result == QtWidgets.QDialog.Accepted:
         print("Dialog accepted, apply changes.")
     else:
         print("Dialog rejected, discard changes.")
+
 
 # This is just an example call, you'll want to integrate this into your application flow
 # openSectionManagerDialog(self)

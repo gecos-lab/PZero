@@ -168,20 +168,20 @@ class Legend(QObject):
             other_line_thick_spn.other_type = (
                 other_type  # this is to pass these values to the update function below
             )
-            other_line_thick_spn.setValue(line_thick)
+            other_line_thick_spn.setValue(int(line_thick))
             "other_point_size_spn > QSpinBox used to select point size"
             other_point_size_spn = QSpinBox()
             other_point_size_spn.other_type = (
                 other_type  # this is to pass these values to the update function below
             )
-            other_point_size_spn.setValue(point_size)
+            other_point_size_spn.setValue(int(point_size))
             "other_opacity_spn > QSpinBox used to select opacity"
             other_opacity_spn = QSpinBox()
             other_opacity_spn.setMaximum(100)
             other_opacity_spn.other_type = (
                 other_type  # this is to pass these values to the update function below
             )
-            other_opacity_spn.setValue(opacity)
+            other_opacity_spn.setValue(int(opacity))
             "IN THE FUTURE add QComboBox() here to show/hide mesh edges___________"
             "IN THE FUTURE add QComboBox() here to show/hide points___________"
             "Create items"

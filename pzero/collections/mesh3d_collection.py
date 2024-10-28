@@ -274,3 +274,33 @@ class Mesh3DCollection(QAbstractTableModel):
                 )  # a list of uids is emitted, even if the entity is just one
                 return True
         return QVariant()
+    def get_name_mesh3d_type(self, name):
+        """Get mesh3d_type based on name."""
+        df_row = self.df[self.df["name"] == name]
+        if not df_row.empty:
+            return df_row.iloc[0]["mesh3d_type"]
+        else:
+            return None
+
+    def remove_entity_by_name(self, name):
+        """Remove entity from collection based on name."""
+        self.df.drop(self.df[self.df["name"] == name].index, inplace=True)
+        self.modelReset.emit()
+        self.parent.prop_legend.update_widget(self.parent)
+        self.parent.mesh3d_removed_signal.emit([name])
+        return name
+    def get_uid_by_name(self, section_name):
+        print(f"Searching for UID with name: '{section_name}'")  # Debug statement
+        if hasattr(self.parent, 'mesh3d_coll') and hasattr(self.parent.mesh3d_coll, 'df'):
+            filtered_df = self.parent.mesh3d_coll.df[
+                self.parent.mesh3d_coll.df['name'].str.strip() == section_name.strip()
+                ]
+            if not filtered_df.empty:
+                uid = filtered_df.iloc[0]['uid']
+                print(f"Found UID: {uid}")  # Debug statement
+                return uid
+            else:
+                print("No matching UID found.")
+        else:
+            print("mesh3d_coll or its DataFrame does not exist or is not accessible.")
+        return None

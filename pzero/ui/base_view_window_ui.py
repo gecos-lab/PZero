@@ -14,16 +14,23 @@ from pzero.helpers.helper_dialogs import SectionManagerDialog
 
 class Ui_BaseViewWindow(object):
     def openSectionManager(self):
-        # Here you should have the logic to retrieve the existing sections
-        # For example:
-        existing_sections = self.getExistingSections()  # This method should retrieve the existing sections
+        """
+        Method to open the Section Manager dialog.
+        """
+        # Retrieve existing sections and slices directly from self (View3D instance)
+        existing_sections = self.getExistingSections()
+        existing_slices = self.getExistingSlices()
 
-        # You also need a reference to your View3D instance here, which might be part of another attribute
-        view3D_instance = self  # This method should return the instance of View3D
+        # Instantiate SectionManagerDialog with existing_sections and existing_slices
+        self.sectionManagerDialog = SectionManagerDialog(
+            existing_sections=existing_sections,
+            existing_slices=existing_slices,
+            view3D_instance=self,  # Pass the View3D instance correctly
+            parent=self
+        )
 
-        # Create the SectionManagerDialog with the existing sections and the View3D instance
-        self.sectionManagerDialog = SectionManagerDialog(existing_sections, view3D_instance, self)
-        self.sectionManagerDialog.show()
+        # Show the dialog
+        self.sectionManagerDialog.exec_()  # Use exec_() to run the dialog modally
 
     def setupUi(self, BaseViewWindow):
         BaseViewWindow.setObjectName("BaseViewWindow")

@@ -91,9 +91,9 @@ from matplotlib.offsetbox import TextArea
 from matplotlib.lines import Line2D
 from matplotlib.image import AxesImage
 from matplotlib.collections import PathCollection
-from matplotlib.tri.tricontour import TriContourSet
+from matplotlib.tri._tricontour import TriContourSet
 import matplotlib.style as mplstyle
-
+from PyQt5 import QtCore, QtGui, QtWidgets
 # from matplotlib.backend_bases import FigureCanvasBase
 import mplstereonet
 
@@ -7538,6 +7538,7 @@ class View3D(BaseView):
 
         self.trigger_event = "LeftButtonPressEvent"
         self.mesh3d_collection = Mesh3DCollection(parent=self)
+        self.mesh3d_coll = self.parent.mesh3d_coll
 
 
 
@@ -7844,118 +7845,144 @@ class View3D(BaseView):
     import copy
     def getExistingSections(self):
         """
-        Retrieve existing sections from the Mesh3DCollection's DataFrame.
+        Retrieve all main seismic volume names (excluding slices).
         """
-        # Ensure mesh3d_coll is correctly referenced and has a DataFrame with the 'name' column
-        if hasattr(self.parent, 'mesh3d_coll') and 'name' in self.parent.mesh3d_coll.df.columns:
-            # Retrieve unique, non-null section names from the DataFrame
-            existing_sections = self.parent.mesh3d_coll.df['name'].dropna().unique().tolist()
-            return existing_sections
-        else:
-            print("The 'name' column does not exist in the DataFrame or the DataFrame is not accessible.")
-            return []
+        return self.mesh3d_coll.df[
+            self.mesh3d_coll.df['mesh3d_type'] != 'seismic_slice'
+            ]['name'].tolist()
+
+    def getExistingSlices(self):
+        """
+        Retrieve all existing slice names.
+        """
+        return self.mesh3d_coll.df[
+            self.mesh3d_coll.df['mesh3d_type'] == 'seismic_slice'
+            ]['name'].tolist()
 
     def addOrthogonalSlices(self, uid, section_type, x_slice_location=None, y_slice_location=None,
                             z_slice_location=None):
-        # uid = self.get_uid_by_name(section_name)
-        #
-        # if not uid:
-        #     print(f"Section {section_name} not found.")
-        #     return
+        """
+        Add orthogonal slices to the visualization.
 
-        # Fetch the corresponding vtkStructuredGrid object for the UID
-        vtk_grid = self.retrieve_vtkStructuredGrid(uid) # here it should be get_uid_vtk_obj mesh3dCollection
+        Args:
+            uid (str): The unique identifier of the seismic section
+            section_type (str): Type of slice ('Inline', 'Xline', 'Z Slice')
+            x_slice_location (float, optional): Location for X slice
+            y_slice_location (float, optional): Location for Y slice
+            z_slice_location (float, optional): Location for Z slice
+        """
+        vtk_grid = self.mesh3d_coll.get_uid_vtk_obj(uid)
 
         if vtk_grid is None:
             print(f"No vtkStructuredGrid found for UID: {uid}.")
             return
 
-        # Visualization arguments for slices
+        # Visualization arguments
         dargs = {
-            'cmap': 'gist_ncar_r',  # Example colormap
-            # Add any other PyVista mesh display options here
+            'cmap': 'gist_ncar_r',
         }
 
-        # Perform orthogonal slicing based on the type of slice requested
-        slices = None
+        # Create cutter and plane
         cutter = vtkCutter()
+        plane = vtkPlane()
 
+        # Define normals based on section type
+        normals = {
+            'Inline': [1, 0, 0],
+            'Xline': [0, 1, 0],
+            'Z Slice': [0, 0, 1]
+        }
 
-        if section_type == 'Inline':
+        if section_type not in normals:
+            print(f"Invalid section type: {section_type}")
+            return
 
-            # [gabriele] This should be generalized in a function (eg in three_d_surfaces)
+        # Normalize section_type (replace spaces with underscores)
+        normalized_section_type = section_type.strip().replace(' ', '_')
 
-            normals = [1, 0, 0]
-            center = vtk_grid.center
-            plane = vtkPlane()
-            plane.SetNormal(normals)
-            plane.SetOrigin(center)
+        # Set plane normal and origin
+        plane.SetNormal(normals[section_type])
 
-            cutter.SetCutFunction(plane)
-            cutter.SetInputData(vtk_grid)
-            cutter.Update()
-            slices = cutter.GetOutput()
+        # Use provided slice location or default to center
+        center = vtk_grid.center
+        if section_type == 'Inline' and x_slice_location is not None:
+            center = (x_slice_location, center[1], center[2])
+        elif section_type == 'Xline' and y_slice_location is not None:
+            center = (center[0], y_slice_location, center[2])
+        elif section_type == 'Z Slice' and z_slice_location is not None:
+            center = (center[0], center[1], z_slice_location)
 
-        elif section_type == 'Xline':
-            normals = [0, 1, 0]
-            center = vtk_grid.center
-            plane = vtkPlane()
-            plane.SetNormal(normals)
-            plane.SetOrigin(center)
+        plane.SetOrigin(center)
 
-            cutter.SetCutFunction(plane)
-            cutter.SetInputData(vtk_grid)
-            cutter.Update()
-            slices = cutter.GetOutput()
-        elif section_type == 'Z Slice':
-            normals = [0, 0, 1]
-            center = vtk_grid.center
-            plane = vtkPlane()
-            plane.SetNormal(normals)
-            plane.SetOrigin(center)
+        # Set up and execute cutter
+        cutter.SetCutFunction(plane)
+        cutter.SetInputData(vtk_grid)
+        cutter.Update()
 
-            cutter.SetCutFunction(plane)
-            cutter.SetInputData(vtk_grid)
-            cutter.Update()
-            slices = cutter.GetOutput()
-
+        # Create TriSurf from cut result
         slices = TriSurf()
         slices.ShallowCopy(cutter.GetOutput())
 
         if slices:
-            # Define a unique identifier for the slice
-            slice_uid = f"{uid}_{section_type}"
+            # Create unique identifiers
+            slice_uid = f"{uid}_{normalized_section_type}"
             slice_name = f"{section_type} of {uid}"
 
-            # Plot the slice
-            slice_actor = self.plot_seismics(uid=slice_uid, plot_entity=slices, section_type=section_type)
+            print(f"Adding slice with UID: {slice_uid}")
 
-            # Update actors DataFrame (assuming self.actors_df exists and is the correct DataFrame for tracking actors)
-            self.actors_df = self.actors_df.append({
+            # Prevent duplicate entries in actors_df
+            if not self.actors_df[self.actors_df['uid'] == slice_uid].empty:
+                print(f"Slice with UID '{slice_uid}' already exists. Skipping addition.")
+                return
+
+            # Plot the slice and get the actor
+            slice_actor = self.plot_seismics(
+                uid=slice_uid,
+                plot_entity=slices,
+                section_type=section_type
+            )
+
+            if slice_actor is None:
+                print(f"Failed to plot slice with UID: {slice_uid}. Actor is None.")
+                return
+
+            # Update actors DataFrame
+            new_entry = {
                 'uid': slice_uid,
                 'actor': slice_actor,
-                'show': True,  # Or use the 'visible' variable if it's meant to control visibility
+                'show': True,
                 'collection': 'mesh3d_coll',
+                'show_prop': None,  # Adjust based on your DataFrame structure
+                'name': slice_name,
                 'properties_names': ['intensity'],
-                "properties_components": [1],# Adjust based on actual properties of the slice
-            }, ignore_index=True)
+                'properties_components': [1]
+            }
 
-            # Update Mesh3DCollection with new slice entity
+            # Ensure that the DataFrame has all required columns
+            required_columns = ['uid', 'actor', 'show', 'collection', 'show_prop', 'name',
+                                'properties_names', 'properties_components']
+            for col in required_columns:
+                if col not in self.actors_df.columns:
+                    self.actors_df[col] = None
+
+            self.actors_df = self.actors_df.append(new_entry, ignore_index=True)
+
+            # Add to Mesh3DCollection
             mesh3d_entity_dict = {
                 'uid': slice_uid,
                 'name': slice_name,
                 'mesh3d_type': 'seismic_slice',
                 'properties_names': ['intensity'],
-                "properties_components": [1],
-                "x_section": "",# Adjust as necessary
-                'vtk_obj': slices,  # Store the vtk object of the slice
+                'properties_components': [1],
+                'x_section': '',
+                'vtk_obj': slices
             }
             self.parent.mesh3d_coll.add_entity_from_dict(mesh3d_entity_dict)
 
-        elif slices:
-            self.plot_seismics(uid=f'{uid}_Inline',plot_entity=slices, section_type='Inline')
+            print(f"Successfully added slice with UID: {slice_uid}")
+
         else:
-            print(f"Failed to create orthogonal slices for section type: {section_type}")
+            print(f"Failed to create slice for section type: {section_type}")
 
     def retrieve_vtkStructuredGrid(self, uid):
 
@@ -7969,121 +7996,97 @@ class View3D(BaseView):
         else:
             print(f"The object retrieved is not a vtkStructuredGrid: {type(vtk_grid)}")
             return None
-        # try:
-        #     vtk_grid = self.parent.mesh3d_coll.df.loc[self.parent.mesh3d_coll.df['uid'] == uid, 'vtk_obj']
-        #     print(vtk_grid)
-        #
-        #     if isinstance(vtk_grid, pv.core.pointset.StructuredGrid):
-        #         return vtk_grid
-        #     else:
-        #         print(f"The object retrieved is not a vtkStructuredGrid: {type(vtk_grid)}")
-        #         return None
-        # except IndexError:
-        #     print(f"No entry found in DataFrame for UID: {uid}")
-        #     return None
-        # except Exception as e:
-        #     print(f"An error occurred: {e}")
-        #     return None
 
-    def get_uid_by_name(self, section_name):
-
-        # [gabriele] This can be put in the mesh3d_collection
-        """
-        Retrieve the UID of a seismic section based on its name.
-        It's assumed that self.parent has access to mesh3d_coll, which contains a DataFrame.
-        """
-        # Ensure mesh3d_coll is correctly referenced and contains the DataFrame
-        if hasattr(self.parent, 'mesh3d_coll') and hasattr(self.parent.mesh3d_coll, 'df'):
-            # Output the DataFrame for debugging
-            # print(self.parent.mesh3d_coll.df)
-
-            # Output the section name for debugging
-            # print(f"Searching for section name: {section_name}")
-
-            # Filter the DataFrame for rows where the 'name' matches section_name
-            filtered_df = self.parent.mesh3d_coll.df[
-                self.parent.mesh3d_coll.df['name'].str.strip() == section_name.strip()]
-
-            # Output the filtered DataFrame for debugging
-            # print(filtered_df)
-
-            if not filtered_df.empty:
-                # Return the 'uid' of the first matching row
-                return filtered_df.iloc[0]['uid']
+    def get_name_mesh3d_type(self, name):
+        """Get mesh3d_type based on name."""
+        df_row = self.mesh3d_coll.df[self.mesh3d_coll.df["name"] == name]
+        if not df_row.empty:
+            return df_row.iloc[0]["mesh3d_type"]
         else:
-            print("mesh3d_coll or its DataFrame does not exist or is not accessible.")
-
-        return None
+            return None
 
     def manage_section(self, action, section_name, section_type=None):
-
-        # [gabriele] this should go in the SectionManagerDialog class
-
-        # ... (existing code)
-        mesh3d_collection = self.mesh3d_collection
-        # print("Before managing section, DataFrame state:")
-        # print(mesh3d_collection.df)  # Corrected access to the DataFrame
+        """
+        Manage adding or removing seismic sections or slices.
+        """
         if action == 'add':
-            # Logic to add a new section
-            uid = self.get_uid_by_name(section_name)
+            # Logic to add a new slice
+            uid = self.mesh3d_coll.get_uid_by_name(section_name)
             if uid:
                 # Check if we are adding an orthogonal slice
-                print(section_type)
                 if section_type in ['Inline', 'Xline', 'Z Slice']:
                     self.addOrthogonalSlices(uid, section_type)
+                    print(self.mesh3d_coll.df[['uid', 'name']])
                 else:
                     # For other types, use existing logic
                     self.plot_seismics(uid=uid, section_type=section_type)
-                # Refresh the display, update UI, etc.
-                # self.refresh_display()
             else:
                 print(f"Section {section_name} not found, cannot add.")
 
         elif action == 'remove':
-            # Logic to remove a section
-            uid = self.get_uid_by_name(section_name)
-            if uid:
-                self.remove_seismic_section(uid)
-                # Refresh the display, update UI, etc.
-                # self.refresh_display()
+            print(f"Attempting to remove section: {section_name}")
+            # Retrieve mesh3d_type based on the name
+            mesh3d_type = self.mesh3d_coll.get_name_mesh3d_type(section_name)
+            print(f"mesh3d_type: {mesh3d_type}")  # Debug statement
+
+            if mesh3d_type:
+                if mesh3d_type == 'seismic_slice':
+                    print(f"Removing seismic slice with name: {section_name}")
+                    self.remove_seismic_slice_by_name(section_name)
+                else:
+                    print(f"Removing main seismic volume with name: {section_name}")
+                    # Remove main volume actor
+                    self.remove_actor_in_view_by_name(section_name)
+
+                    # Identify associated slices by checking if their names contain " of {section_name}"
+                    slice_names = self.mesh3d_coll.df[
+                        (self.mesh3d_coll.df["name"].str.contains(f" of {section_name}")) &
+                        (self.mesh3d_coll.df["mesh3d_type"] == 'seismic_slice')
+                        ]["name"].tolist()
+
+                    print(f"Associated slice names to remove: {slice_names}")
+                    for slice_name in slice_names:
+                        self.remove_seismic_slice_by_name(slice_name)
+
+                    # Remove the main seismic volume entity
+                    self.mesh3d_coll.remove_entity_by_name(section_name)
             else:
                 print(f"Section {section_name} not found, cannot remove.")
 
-    def remove_seismic_section(self, uid, section_type=None):
-        """Removes orthogonal slices of a specified type associated with the given mesh UID.
+    def remove_seismic_slice_by_name(self, name):
+        print(f"remove_seismic_slice_by_name called with name: {name}")
 
-        Args:
-            uid (str): The unique identifier of the seismic section from which slices are to be removed.
-            section_type (str, optional): The type of slice to remove ('Inline', 'Xline', 'Z Slice'). If None, removes all slices associated with the UID.
-        """
-
-        def is_target_slice(slice_uid):
-            """Helper to determine if a slice UID belongs to the given mesh UID and matches the specified section type"""
-            if section_type:
-                # Check if slice UID matches the pattern for the specified section type
-                return slice_uid.startswith(f"{uid}_{section_type}") and slice_uid != uid
-            else:
-                # If no section type specified, match any slice associated with the mesh UID
-                return slice_uid.startswith(uid) and slice_uid != uid
-
-        # Filter actors_df for target slice actors to remove
-        target_actors_to_remove = self.actors_df[self.actors_df["uid"].apply(is_target_slice)]
-
-        # Remove target slice actors from the Plotter
-        for index, row in target_actors_to_remove.iterrows():
-            actor = row['actor']
+        # Remove the actor from the plotter
+        actor_rows = self.actors_df[self.actors_df["name"] == name]
+        if not actor_rows.empty:
+            actor = actor_rows["actor"].values[0]
+            print(f"Removing actor with name: {name}")
             self.plotter.remove_actor(actor)
+            self.actors_df.drop(actor_rows.index, inplace=True)
+            QtWidgets.QMessageBox.information(None, "Removal Successful", f"Slice '{name}' has been removed.")
+        else:
+            print(f"No actor found with name: {name} in actors_df.")
+            QtWidgets.QMessageBox.warning(None, "Removal Failed", f"No slice named '{name}' was found.")
 
-        # Remove target slice entries from the actors DataFrame
-        self.actors_df.drop(target_actors_to_remove.index, inplace=True)
+        # Remove the entity from mesh3d_coll
+        entity_rows = self.mesh3d_coll.df[self.mesh3d_coll.df["name"] == name]
+        if not entity_rows.empty:
+            print(f"Removing entity with name: {name} from mesh3d_coll")
+            self.mesh3d_coll.remove_entity_by_name(name)
+        else:
+            print(f"No entity found with name: {name} in mesh3d_coll.")
 
-        # Additionally, remove entities from Mesh3DCollection
-        for slice_uid in target_actors_to_remove["uid"]:
-            self.parent.mesh3d_coll.remove_entity(slice_uid)
-
-        # Update UI and emit signals
-        self.parent.prop_legend.update_widget(self.parent)
-        self.parent.mesh3d_removed_signal.emit(list(target_actors_to_remove["uid"]))
+    def remove_actor_in_view_by_name(self, name):
+        print(f"Removing actor with name: {name}")
+        actor_row = self.actors_df[self.actors_df["name"] == name]
+        if not actor_row.empty:
+            actor = actor_row["actor"].values[0]
+            self.plotter.remove_actor(actor)
+            self.actors_df.drop(actor_row.index, inplace=True)
+            QtWidgets.QMessageBox.information(None, "Removal Successful", f"Section '{name}' has been removed.")
+        else:
+            print(f"No actor found with name: {name}")
+            QtWidgets.QMessageBox.warning(None, "Removal Failed", f"No section named '{name}' was found.")
 
     def plot_seismics(
         self,
