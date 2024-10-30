@@ -8,7 +8,7 @@ import pyvista as pv
 """QT imports"""
 from PyQt5.QtWidgets import *
 from PyQt5.QtCore import Qt
-
+import pandas as pd
 """PZero imports"""
 from pzero.ui.base_view_window_ui import Ui_BaseViewWindow
 from .entities_factory import (
@@ -7640,6 +7640,12 @@ class View3D(BaseView):
         self.menuBaseView.addAction(self.actionExportVtkjs)
         self.toolBarBase.addAction(self.actionExportVtkjs)
 
+        # Add seismic control panel button
+        self.seismicControlButton = QAction("Seismic Control Panel", self)
+        self.seismicControlButton.triggered.connect(self.show_seismic_control_panel)
+        self.menuWindow.addAction(self.seismicControlButton)
+        self.toolBarBase.addAction(self.seismicControlButton)
+
     def export_screen(self):
         out_file_name = save_file_dialog(
             parent=self,
@@ -7841,9 +7847,312 @@ class View3D(BaseView):
             """See above."""
             self.plotter.camera_position = camera_position
         return this_actor
+    def initialize_slice_controls(self, section_name):
+        """Initialize the slice control sliders based on the selected section."""
+        uid = self.mesh3d_coll.get_uid_by_name(section_name)
+        if not uid:
+            return
 
-    import copy
-    def getExistingSections(self):
+        vtk_grid = self.mesh3d_coll.get_uid_vtk_obj(uid)
+        if not isinstance(vtk_grid, pv.DataSet):
+            vtk_grid = pv.wrap(vtk_grid)
+
+        # Get data dimensions and bounds
+        dims = vtk_grid.dimensions
+        bounds = vtk_grid.bounds
+        x_min, x_max, y_min, y_max, z_min, z_max = bounds
+
+        # Create sliders with proper ranges
+        inline_slider = QSlider(Qt.Horizontal)
+        xline_slider = QSlider(Qt.Horizontal)
+        zslice_slider = QSlider(Qt.Horizontal)
+
+        # Set ranges based on actual seismic dimensions
+        # Note: dims[0] is inline, dims[1] is xline, dims[2] is time/depth
+        inline_slider.setMinimum(1)  # Usually seismic lines start from 1
+        inline_slider.setMaximum(dims[0])
+        
+        xline_slider.setMinimum(1)
+        xline_slider.setMaximum(dims[1])
+        
+        zslice_slider.setMinimum(int(z_min))
+        zslice_slider.setMaximum(int(z_max))
+
+        # Set initial positions to middle of volume
+        inline_slider.setValue(dims[0] // 2)
+        xline_slider.setValue(dims[1] // 2)
+        zslice_slider.setValue(int((z_max + z_min) // 2))
+
+        # Set step sizes for smooth movement
+        inline_slider.setSingleStep(1)
+        xline_slider.setSingleStep(1)
+        zslice_slider.setSingleStep(1)
+
+        # Update labels to show actual line numbers
+        inline_slider.setTickPosition(QSlider.TicksBelow)
+        xline_slider.setTickPosition(QSlider.TicksBelow)
+        zslice_slider.setTickPosition(QSlider.TicksBelow)
+
+        return inline_slider, xline_slider, zslice_slider
+    def update_slice_from_plane(self, normal, origin, slice_type):
+            """Update slice position based on plane widget movement"""
+            section_name = section_combo.currentText()
+            if section_name:
+                # Extract the relevant position component based on slice type
+                if slice_type == 'Inline':
+                    position = origin[0]  # x component
+                elif slice_type == 'Xline':
+                    position = origin[1]  # y component
+                else:  # Z Slice
+                    position = origin[2]  # z component
+                    
+                self.update_slice_visualization(section_name, slice_type, position)
+    def show_seismic_control_panel(self):
+        """Create and show a control panel for seismic visualization."""
+        # Create the control panel window
+        control_panel = QDialog(self)
+        control_panel.setWindowTitle("Seismic Control Panel")
+        layout = QVBoxLayout()
+
+        # Section selection group
+        section_group = QGroupBox("Section Management")
+        section_layout = QVBoxLayout()
+
+        # Combobox for selecting main seismic sections
+        section_label = QLabel("Available Sections:")
+        section_combo = QComboBox()
+        section_combo.addItems(self.getExistingSections())
+
+        # Buttons for adding different types of slices
+        add_inline_btn = QPushButton("Add Inline")
+        add_xline_btn = QPushButton("Add Xline")
+        add_zslice_btn = QPushButton("Add Z Slice")
+        section_combo.currentTextChanged.connect(self.initialize_slice_controls)
+        # Remove section button
+        remove_btn = QPushButton("Remove Section")
+        # Initialize default dimensions
+        n_inline = n_xline = n_samples = 100
+       # Add slice position control group
+        position_group = QGroupBox("Slice Position Control")
+        position_layout = QVBoxLayout()
+
+        # Get the seismic dimensions from the VTK grid
+        section_name = section_combo.currentText()
+        dims = (100, 100, 100)  # default values
+        if section_name:
+            uid = self.mesh3d_coll.get_uid_by_name(section_name)
+            if uid:
+                vtk_grid = self.mesh3d_coll.get_uid_vtk_obj(uid)
+                if isinstance(vtk_grid, pv.DataSet):
+                    dims = vtk_grid.dimensions
+                    # Get actual inline, crossline, and time/depth ranges
+                    n_inline = dims[0]
+                    n_xline = dims[1]
+                    n_samples = dims[2]
+                    print(f"Dimensions: Inlines={n_inline}, Crosslines={n_xline}, Samples={n_samples}")
+
+
+        # Create sliders with proper ranges
+        inline_slider = QSlider(Qt.Horizontal)
+        xline_slider = QSlider(Qt.Horizontal)
+        zslice_slider = QSlider(Qt.Horizontal)
+
+            # Set ranges based on actual seismic dimensions
+        inline_slider.setMinimum(1)
+        inline_slider.setMaximum(n_inline)  # Actual number of inlines
+        inline_slider.setValue(n_inline // 2)
+
+        xline_slider.setMinimum(1)
+        xline_slider.setMaximum(n_xline)  # Actual number of crosslines
+        xline_slider.setValue(n_xline // 2)
+
+        zslice_slider.setMinimum(1)
+        zslice_slider.setMaximum(n_samples)  # Actual number of samples
+        zslice_slider.setValue(n_samples // 2)
+
+        # Add labels for the sliders
+        inline_label = QLabel("Inline Position:")
+        xline_label = QLabel("Crossline Position:")
+        zslice_label = QLabel("Z Position:")
+
+        # Add value display labels
+        inline_value = QLabel(str(n_inline // 2))
+        xline_value = QLabel(str(n_xline // 2))
+        zslice_value = QLabel(str(n_samples // 2))
+        # Add to show_seismic_control_panel
+        interactive_check = QCheckBox("Enable Direct Manipulation")
+        position_layout.addWidget(interactive_check)
+
+        def toggle_direct_manipulation(enabled):
+            if enabled:
+                # Add an interactive plane widget for each slice type
+                self.plane_widgets = []
+                if section_combo.currentText():
+                    uid = self.mesh3d_coll.get_uid_by_name(section_combo.currentText())
+                    vtk_grid = self.mesh3d_coll.get_uid_vtk_obj(uid)
+                    if vtk_grid:
+                        # Add plane widgets for each orientation
+                        self.plane_widgets.append(self.plotter.add_plane_widget(
+                            callback=lambda normal, origin: self.update_slice_from_plane(normal, origin, 'Inline'),
+                            normal='x'
+                        ))
+                        self.plane_widgets.append(self.plotter.add_plane_widget(
+                            callback=lambda normal, origin: self.update_slice_from_plane(normal, origin, 'Xline'),
+                            normal='y'
+                        ))
+                        self.plane_widgets.append(self.plotter.add_plane_widget(
+                            callback=lambda normal, origin: self.update_slice_from_plane(normal, origin, 'Z Slice'),
+                            normal='z'
+                        ))
+            else:
+                # Remove the plane widgets
+                if hasattr(self, 'plane_widgets'):
+                    for widget in self.plane_widgets:
+                        self.plotter.remove_widget(widget)
+                    self.plane_widgets = []
+        
+        def update_slice_position(slider_type):
+            section_name = section_combo.currentText()
+            if not section_name:
+                return
+
+            # Get the current values from sliders
+            inline_pos = inline_slider.value()
+            xline_pos = xline_slider.value()
+            z_pos = zslice_slider.value()
+
+            # Update value labels
+            inline_value.setText(str(inline_pos))
+            xline_value.setText(str(xline_pos))
+            zslice_value.setText(str(z_pos))
+
+            # Calculate normalized positions (0 to 1)
+            if slider_type == 'inline':
+                norm_pos = (inline_pos - 1) / (n_inline - 1)
+                self.update_slice_visualization(section_name, 'Inline', norm_pos)
+            elif slider_type == 'xline':
+                norm_pos = (xline_pos - 1) / (n_xline - 1)
+                self.update_slice_visualization(section_name, 'Xline', norm_pos)
+            elif slider_type == 'zslice':
+                norm_pos = (z_pos - 1) / (n_samples - 1)
+                self.update_slice_visualization(section_name, 'Z Slice', norm_pos)
+
+        # Connect slider signals
+        inline_slider.valueChanged.connect(lambda: update_slice_position('inline'))
+        xline_slider.valueChanged.connect(lambda: update_slice_position('xline'))
+        zslice_slider.valueChanged.connect(lambda: update_slice_position('zslice'))
+
+        # Add widgets to position layout
+        position_group = QGroupBox("Slice Position Control")
+        position_layout = QVBoxLayout()
+
+        for label, slider, value in [
+            (inline_label, inline_slider, inline_value),
+            (xline_label, xline_slider, xline_value),
+            (zslice_label, zslice_slider, zslice_value)
+        ]:
+            slider_layout = QHBoxLayout()
+            slider_layout.addWidget(label)
+            slider_layout.addWidget(slider)
+            slider_layout.addWidget(value)
+            position_layout.addLayout(slider_layout)
+
+        position_group.setLayout(position_layout)
+        layout.addWidget(position_group)
+        # Define the add_slice function inside show_seismic_control_panel
+        def add_slice(section_type):
+            section_name = section_combo.currentText()
+            if section_name:
+                self.manage_section('add', section_name, section_type)
+                slice_combo.clear()
+                slice_combo.addItems(self.getExistingSlices())
+
+        def remove_section():
+            section_name = section_combo.currentText()
+            if section_name:
+                self.manage_section('remove', section_name)
+                section_combo.clear()
+                section_combo.addItems(self.getExistingSections())
+                slice_combo.clear()
+                slice_combo.addItems(self.getExistingSlices())
+
+        # Connect signals
+        add_inline_btn.clicked.connect(lambda: add_slice('Inline'))
+        add_xline_btn.clicked.connect(lambda: add_slice('Xline'))
+        add_zslice_btn.clicked.connect(lambda: add_slice('Z Slice'))
+        remove_btn.clicked.connect(remove_section)
+
+        # Add widgets to section layout
+        section_layout.addWidget(section_label)
+        section_layout.addWidget(section_combo)
+        section_layout.addWidget(add_inline_btn)
+        section_layout.addWidget(add_xline_btn)
+        section_layout.addWidget(add_zslice_btn)
+        section_layout.addWidget(remove_btn)
+        section_group.setLayout(section_layout)
+
+        # Slice control group
+        slice_group = QGroupBox("Slice Control")
+        slice_layout = QVBoxLayout()
+
+        # Combobox for selecting existing slices
+        slice_label = QLabel("Active Slices:")
+        slice_combo = QComboBox()
+        slice_combo.addItems(self.getExistingSlices())
+
+        # Add widgets to slice layout
+        slice_layout.addWidget(slice_label)
+        slice_layout.addWidget(slice_combo)
+        slice_group.setLayout(slice_layout)
+
+        # Add groups to main layout
+        layout.addWidget(section_group)
+        layout.addWidget(slice_group)
+        control_panel.setLayout(layout)
+
+        # Show the control panel
+        control_panel.show()
+
+    def update_slice_visualization(self, section_name, slice_type, normalized_position):
+        """Update the visualization of a seismic slice."""
+        uid = self.mesh3d_coll.get_uid_by_name(section_name)
+        if not uid:
+            return
+
+        vtk_grid = self.mesh3d_coll.get_uid_vtk_obj(uid)
+        if not isinstance(vtk_grid, pv.DataSet):
+            vtk_grid = pv.wrap(vtk_grid)
+
+        bounds = vtk_grid.bounds
+        x_min, x_max, y_min, y_max, z_min, z_max = bounds
+
+        # Calculate actual position based on normalized position (0-1)
+        if slice_type == 'Inline':
+            position = x_min + (x_max - x_min) * normalized_position
+        elif slice_type == 'Xline':
+            position = y_min + (y_max - y_min) * normalized_position
+        elif slice_type == 'Z Slice':
+            position = z_min + (z_max - z_min) * normalized_position
+        else:
+            return
+
+        # Update the slice
+        slice_uid = f"{uid}_{slice_type}"
+        actor_rows = self.actors_df[self.actors_df['uid'] == slice_uid]
+        if not actor_rows.empty:
+            for _, row in actor_rows.iterrows():
+                actor = row['actor']
+                self.plotter.remove_actor(actor)
+
+        if slice_type == 'Inline':
+            self.addOrthogonalSlices(uid, slice_type, x_slice_location=position)
+        elif slice_type == 'Xline':
+            self.addOrthogonalSlices(uid, slice_type, y_slice_location=position)
+        elif slice_type == 'Z Slice':
+            self.addOrthogonalSlices(uid, slice_type, z_slice_location=position)
+
+        self.plotter.render()
+    def getExistingSections(self): # 
         """
         Retrieve all main seismic volume names (excluding slices).
         """
@@ -7860,130 +8169,115 @@ class View3D(BaseView):
             ]['name'].tolist()
 
     def addOrthogonalSlices(self, uid, section_type, x_slice_location=None, y_slice_location=None,
-                            z_slice_location=None):
-        """
-        Add orthogonal slices to the visualization.
-
-        Args:
-            uid (str): The unique identifier of the seismic section
-            section_type (str): Type of slice ('Inline', 'Xline', 'Z Slice')
-            x_slice_location (float, optional): Location for X slice
-            y_slice_location (float, optional): Location for Y slice
-            z_slice_location (float, optional): Location for Z slice
-        """
+                        z_slice_location=None):
+        """Add orthogonal slices to the visualization."""
         vtk_grid = self.mesh3d_coll.get_uid_vtk_obj(uid)
-
         if vtk_grid is None:
-            print(f"No vtkStructuredGrid found for UID: {uid}.")
             return
 
-        # Visualization arguments
-        dargs = {
-            'cmap': 'gist_ncar_r',
-        }
+        # Convert to PyVista object if needed
+        if not isinstance(vtk_grid, pv.DataSet):
+            vtk_grid = pv.wrap(vtk_grid)
 
-        # Create cutter and plane
-        cutter = vtkCutter()
-        plane = vtkPlane()
+        # Get data dimensions and bounds
+        dims = vtk_grid.dimensions
+        bounds = vtk_grid.bounds
+        x_min, x_max, y_min, y_max, z_min, z_max = bounds
 
-        # Define normals based on section type
-        normals = {
-            'Inline': [1, 0, 0],
-            'Xline': [0, 1, 0],
-            'Z Slice': [0, 0, 1]
-        }
-
-        if section_type not in normals:
-            print(f"Invalid section type: {section_type}")
-            return
-
-        # Normalize section_type (replace spaces with underscores)
-        normalized_section_type = section_type.strip().replace(' ', '_')
-
-        # Set plane normal and origin
-        plane.SetNormal(normals[section_type])
-
-        # Use provided slice location or default to center
-        center = vtk_grid.center
-        if section_type == 'Inline' and x_slice_location is not None:
-            center = (x_slice_location, center[1], center[2])
-        elif section_type == 'Xline' and y_slice_location is not None:
-            center = (center[0], y_slice_location, center[2])
-        elif section_type == 'Z Slice' and z_slice_location is not None:
-            center = (center[0], center[1], z_slice_location)
-
-        plane.SetOrigin(center)
-
-        # Set up and execute cutter
-        cutter.SetCutFunction(plane)
-        cutter.SetInputData(vtk_grid)
-        cutter.Update()
-
-        # Create TriSurf from cut result
-        slices = TriSurf()
-        slices.ShallowCopy(cutter.GetOutput())
-
-        if slices:
-            # Create unique identifiers
-            slice_uid = f"{uid}_{normalized_section_type}"
-            slice_name = f"{section_type} of {uid}"
-
-            print(f"Adding slice with UID: {slice_uid}")
-
-            # Prevent duplicate entries in actors_df
-            if not self.actors_df[self.actors_df['uid'] == slice_uid].empty:
-                print(f"Slice with UID '{slice_uid}' already exists. Skipping addition.")
-                return
-
-            # Plot the slice and get the actor
-            slice_actor = self.plot_seismics(
-                uid=slice_uid,
-                plot_entity=slices,
-                section_type=section_type
-            )
-
-            if slice_actor is None:
-                print(f"Failed to plot slice with UID: {slice_uid}. Actor is None.")
-                return
-
-            # Update actors DataFrame
-            new_entry = {
-                'uid': slice_uid,
-                'actor': slice_actor,
-                'show': True,
-                'collection': 'mesh3d_coll',
-                'show_prop': None,  # Adjust based on your DataFrame structure
-                'name': slice_name,
-                'properties_names': ['intensity'],
-                'properties_components': [1]
-            }
-
-            # Ensure that the DataFrame has all required columns
-            required_columns = ['uid', 'actor', 'show', 'collection', 'show_prop', 'name',
-                                'properties_names', 'properties_components']
-            for col in required_columns:
-                if col not in self.actors_df.columns:
-                    self.actors_df[col] = None
-
-            self.actors_df = self.actors_df.append(new_entry, ignore_index=True)
-
-            # Add to Mesh3DCollection
-            mesh3d_entity_dict = {
-                'uid': slice_uid,
-                'name': slice_name,
-                'mesh3d_type': 'seismic_slice',
-                'properties_names': ['intensity'],
-                'properties_components': [1],
-                'x_section': '',
-                'vtk_obj': slices
-            }
-            self.parent.mesh3d_coll.add_entity_from_dict(mesh3d_entity_dict)
-
-            print(f"Successfully added slice with UID: {slice_uid}")
-
+        # Calculate spacing for each dimension
+        if isinstance(vtk_grid, pv.StructuredGrid):
+            x_spacing = (x_max - x_min) / (dims[0] - 1)
+            y_spacing = (y_max - y_min) / (dims[1] - 1)
+            z_spacing = (z_max - z_min) / (dims[2] - 1)
         else:
-            print(f"Failed to create slice for section type: {section_type}")
+            spacing = vtk_grid.spacing
+            x_spacing, y_spacing, z_spacing = spacing
 
+        try:
+            if section_type == 'Inline':
+                if x_slice_location is None:
+                    x_slice_location = (x_min + x_max) / 2
+                x_slice_location = max(x_min, min(x_max, x_slice_location))
+                slice_data = vtk_grid.extract_subset([
+                    int((x_slice_location - x_min) / x_spacing),
+                    int((x_slice_location - x_min) / x_spacing) + 1,
+                    0, dims[1],
+                    0, dims[2]
+                ])
+            elif section_type == 'Xline':
+                if y_slice_location is None:
+                    y_slice_location = (y_min + y_max) / 2
+                y_slice_location = max(y_min, min(y_max, y_slice_location))
+                slice_data = vtk_grid.extract_subset([
+                    0, dims[0],
+                    int((y_slice_location - y_min) / y_spacing),
+                    int((y_slice_location - y_min) / y_spacing) + 1,
+                    0, dims[2]
+                ])
+            elif section_type == 'Z Slice':
+                if z_slice_location is None:
+                    z_slice_location = (z_min + z_max) / 2
+                z_slice_location = max(z_min, min(z_max, z_slice_location))
+                slice_data = vtk_grid.extract_subset([
+                    0, dims[0],
+                    0, dims[1],
+                    int((z_slice_location - z_min) / z_spacing),
+                    int((z_slice_location - z_min) / z_spacing) + 1
+                ])
+            else:
+                return None
+
+            if slice_data is None or slice_data.n_points == 0:
+                print(f"Warning: Empty slice generated for {section_type} at position {x_slice_location or y_slice_location or z_slice_location}")
+                return None
+
+        except Exception as e:
+            print(f"Error creating slice: {e}")
+            return None
+
+        # Create the visualization with the slice data
+        dargs = {
+            'style': 'surface',
+            'opacity': 1.0,
+            'show_scalar_bar': True,
+            'scalar_bar_args': {'title': 'Intensity'},
+            'cmap': 'seismic'
+        }
+
+        # Get the active scalar name
+        active_scalars = vtk_grid.active_scalars_name
+        if active_scalars:
+            dargs['scalars'] = active_scalars
+
+        try:
+            slice_actor = self.plotter.add_mesh(slice_data, **dargs)
+            if slice_actor:
+                # Update the actors DataFrame
+                slice_uid = f"{uid}_{section_type}"
+                section_name = self.mesh3d_coll.get_uid_name(uid)
+                slice_name = f"{section_type} of {section_name}"
+
+                new_entry = {
+                    'uid': slice_uid,
+                    'actor': slice_actor,
+                    'show': True,
+                    'collection': 'mesh3d_coll',
+                    'show_prop': active_scalars,
+                    'name': slice_name,
+                    'properties_names': list(slice_data.point_data.keys()),
+                    'properties_components': [1] * len(slice_data.point_data.keys())
+                }
+                
+                # Remove any existing entries for this slice
+                self.actors_df = self.actors_df[self.actors_df['uid'] != slice_uid]
+                self.actors_df = pd.concat([self.actors_df, pd.DataFrame([new_entry])], ignore_index=True)
+
+                return slice_actor
+        except Exception as e:
+            print(f"Error adding mesh: {e}")
+            return None
+
+        return None
     def retrieve_vtkStructuredGrid(self, uid):
 
         # [gabriele] This is redundant, there is already the get_uid_vtk_obj method in mesh3d_collection
@@ -8054,27 +8348,24 @@ class View3D(BaseView):
                 print(f"Section {section_name} not found, cannot remove.")
 
     def remove_seismic_slice_by_name(self, name):
-        print(f"remove_seismic_slice_by_name called with name: {name}")
-
-        # Remove the actor from the plotter
-        actor_rows = self.actors_df[self.actors_df["name"] == name]
+        """Remove a seismic slice by its name."""
+        print(f"Attempting to remove slice: {name}")
+        
+        # Remove from actors_df
+        actor_rows = self.actors_df[self.actors_df["name"].str.contains(name, regex=False)]
         if not actor_rows.empty:
-            actor = actor_rows["actor"].values[0]
-            print(f"Removing actor with name: {name}")
-            self.plotter.remove_actor(actor)
+            for _, row in actor_rows.iterrows():
+                actor = row["actor"]
+                self.plotter.remove_actor(actor)
             self.actors_df.drop(actor_rows.index, inplace=True)
-            QtWidgets.QMessageBox.information(None, "Removal Successful", f"Slice '{name}' has been removed.")
-        else:
-            print(f"No actor found with name: {name} in actors_df.")
-            QtWidgets.QMessageBox.warning(None, "Removal Failed", f"No slice named '{name}' was found.")
-
-        # Remove the entity from mesh3d_coll
-        entity_rows = self.mesh3d_coll.df[self.mesh3d_coll.df["name"] == name]
+            print(f"Removed actor for slice: {name}")
+        
+        # Remove from mesh3d_coll
+        entity_rows = self.mesh3d_coll.df[self.mesh3d_coll.df["name"].str.contains(name, regex=False)]
         if not entity_rows.empty:
-            print(f"Removing entity with name: {name} from mesh3d_coll")
-            self.mesh3d_coll.remove_entity_by_name(name)
-        else:
-            print(f"No entity found with name: {name} in mesh3d_coll.")
+            for _, row in entity_rows.iterrows():
+                self.mesh3d_coll.remove_entity_by_name(row["name"])
+            print(f"Removed entity for slice: {name}")
 
     def remove_actor_in_view_by_name(self, name):
         print(f"Removing actor with name: {name}")
