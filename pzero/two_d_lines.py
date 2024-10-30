@@ -1503,38 +1503,43 @@ def copy_similar(
 def measure_distance(self, vector):
     """Tool to measure distance between two points. Draw a vector_by_mouse and obtain length and azimuth"""
     print("Measure Distance between two points by drawing a vector by mouse")
-    """Terminate running event loops"""
-    """Freeze QT interface"""
+
+    def end_measure(event=None):
+        """Cleanup function to properly end the measurement tool"""
+        self.enable_actions()
+        if hasattr(self, 'plotter'):
+            self.plotter.untrack_click_position(side="right")
+
     self.disable_actions()
-    # points = vector.points
+
     if vector.length == 0:
         print("Zero-length vector")
-        self.enable_actions()
+        end_measure()
         return
 
     message = (
-        "Distance (m): "
-        + str(round(vector.length, 2))
-        + "\n\n"
-        + "Azimuth: "
-        + str(round(vector.azimuth, 2))
-        + "\n\n"
-        + "Dip: "
-        + str(round(vector.dip, 2))
-        + "\n\n"
-        + "Point1: "
-        + str(np_round(vector.p1, 2))
-        + "\n\n"
-        + "Point2: "
-        + str(np_round(vector.p2, 2))
+            "Distance (m): "
+            + str(round(vector.length, 2))
+            + "\n\n"
+            + "Azimuth: "
+            + str(round(vector.azimuth, 2))
+            + "\n\n"
+            + "Dip: "
+            + str(round(vector.dip, 2))
+            + "\n\n"
+            + "Point1: "
+            + str(np_round(vector.p1, 2))
+            + "\n\n"
+            + "Point2: "
+            + str(np_round(vector.p2, 2))
     )
-    out = message_dialog(title="Measure Distance", message=message)
-    """Un-Freeze QT interface"""
-    for action in self.findChildren(QAction):
-        action.setEnabled(True)
 
+    dialog = message_dialog(title="Measure Distance", message=message)
 
-"""Helper and shared functions"""
+    if hasattr(dialog, 'finished'):
+        dialog.finished.connect(end_measure)
+    else:
+        end_measure()
 
 
 def flip_line(self, uid=None):
