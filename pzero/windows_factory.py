@@ -6518,6 +6518,50 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             opacity = self.parent.mesh3d_coll.get_legend()["opacity"] / 100
 
             plot_entity = self.parent.mesh3d_coll.get_uid_vtk_obj(uid)
+            
+            # Handle seismic slices
+            if any(x in str(uid) for x in ['_Inline', '_Xline', '_Z Slice']):
+                # Remove existing actor if present
+                existing_actor = self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[0] if not self.actors_df[self.actors_df["uid"] == uid].empty else None
+                if existing_actor is not None:
+                    self.plotter.remove_actor(existing_actor)
+
+                if show_property is None or show_property == "none":
+                    show_scalar_bar = False
+                    this_actor = self.plot_mesh(
+                        uid=uid,
+                        plot_entity=plot_entity,
+                        color_RGB=color_RGB,
+                        show_property=None,
+                        show_scalar_bar=False,
+                        line_thick=line_thick,
+                        plot_texture_option=False,
+                        visible=visible,
+                        style='surface',
+                        opacity=opacity
+                    )
+                else:
+                    this_actor = self.plot_mesh(
+                        uid=uid,
+                        plot_entity=plot_entity,
+                        color_RGB=None,
+                        show_property=show_property,
+                        show_scalar_bar=True,
+                        show_property_title=show_property_title,
+                        line_thick=line_thick,
+                        plot_texture_option=False,
+                        visible=visible,
+                        style='surface',
+                        opacity=opacity
+                    )
+
+                if this_actor:
+                    # Update actors_df
+                    self.actors_df.loc[self.actors_df["uid"] == uid, "actor"] = this_actor
+                    self.actors_df.loc[self.actors_df["uid"] == uid, "show_prop"] = show_property
+                    return this_actor
+
+                return None
         elif collection == "dom_coll":
             color_R = self.parent.dom_coll.get_legend()["color_R"]
             color_G = self.parent.dom_coll.get_legend()["color_G"]
@@ -6901,6 +6945,34 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             else:
                 this_actor = None
             return this_actor
+        elif isinstance(plot_entity, pv.DataSet) and any(x in str(uid) for x in ['_Inline', '_Xline', '_Z Slice']):
+            if show_property is None or show_property == 'none':
+                new_actor = self.plotter.add_mesh(
+                    plot_entity,
+                    style='surface',
+                    opacity=1.0,
+                    show_scalar_bar=False,
+                    color='white'
+                )
+            else:
+                new_actor = self.plotter.add_mesh(
+                    plot_entity,
+                    style='surface',
+                    opacity=1.0,
+                    show_scalar_bar=True,
+                    scalars=show_property,
+                    cmap='seismic'
+                )
+            
+            if new_actor:
+                # Update visibility
+                if visible is not None:
+                    new_actor.SetVisibility(visible)
+                
+                # Update actor in actors_df
+                self.actors_df.loc[self.actors_df['uid'] == uid, 'actor'] = new_actor
+                self.plotter.render()
+                return new_actor
         elif isinstance(plot_entity, Voxet):
             plot_rgb_option = None
             if plot_entity.cells_number > 0:
@@ -8119,6 +8191,9 @@ class View3D(BaseView):
         if not uid:
             return
 
+        # Generate the slice_uid
+        slice_uid = f"{uid}_{slice_type}"
+        
         vtk_grid = self.mesh3d_coll.get_uid_vtk_obj(uid)
         if not isinstance(vtk_grid, pv.DataSet):
             vtk_grid = pv.wrap(vtk_grid)
@@ -8129,27 +8204,41 @@ class View3D(BaseView):
         # Calculate actual position based on normalized position (0-1)
         if slice_type == 'Inline':
             position = x_min + (x_max - x_min) * normalized_position
+            slice_data = vtk_grid.slice(normal='x', origin=[position, 0, 0])
         elif slice_type == 'Xline':
             position = y_min + (y_max - y_min) * normalized_position
+            slice_data = vtk_grid.slice(normal='y', origin=[0, position, 0])
         elif slice_type == 'Z Slice':
             position = z_min + (z_max - z_min) * normalized_position
+            slice_data = vtk_grid.slice(normal='z', origin=[0, 0, position])
         else:
             return
 
-        # Update the slice
-        slice_uid = f"{uid}_{slice_type}"
+        # Update the vtk_obj in mesh3d collection
+        self.mesh3d_coll.df.loc[self.mesh3d_coll.df['uid'] == slice_uid, 'vtk_obj'] = slice_data
+
+        # Get current property if any
+        current_property = None
+        if 'show_prop' in self.actors_df.columns:
+            actor_row = self.actors_df[self.actors_df['uid'] == slice_uid]
+            if not actor_row.empty:
+                current_property = actor_row.iloc[0].get('show_prop', None)
+
+        # Remove existing actor
         actor_rows = self.actors_df[self.actors_df['uid'] == slice_uid]
         if not actor_rows.empty:
             for _, row in actor_rows.iterrows():
                 actor = row['actor']
-                self.plotter.remove_actor(actor)
+                if actor is not None:
+                    self.plotter.remove_actor(actor)
 
-        if slice_type == 'Inline':
-            self.addOrthogonalSlices(uid, slice_type, x_slice_location=position)
-        elif slice_type == 'Xline':
-            self.addOrthogonalSlices(uid, slice_type, y_slice_location=position)
-        elif slice_type == 'Z Slice':
-            self.addOrthogonalSlices(uid, slice_type, z_slice_location=position)
+        # Create new actor with current property
+        self.show_actor_with_property(
+            uid=slice_uid,
+            collection='mesh3d_coll',
+            show_property=current_property,
+            visible=True
+        )
 
         self.plotter.render()
     def getExistingSections(self): # 
@@ -8172,109 +8261,73 @@ class View3D(BaseView):
                         z_slice_location=None):
         """Add orthogonal slices to the visualization."""
         vtk_grid = self.mesh3d_coll.get_uid_vtk_obj(uid)
+        vtk_grid = pv.wrap(vtk_grid)
         if vtk_grid is None:
             return
 
-        # Convert to PyVista object if needed
-        if not isinstance(vtk_grid, pv.DataSet):
-            vtk_grid = pv.wrap(vtk_grid)
-
-        # Get data dimensions and bounds
-        dims = vtk_grid.dimensions
-        bounds = vtk_grid.bounds
-        x_min, x_max, y_min, y_max, z_min, z_max = bounds
-
-        # Calculate spacing for each dimension
-        if isinstance(vtk_grid, pv.StructuredGrid):
-            x_spacing = (x_max - x_min) / (dims[0] - 1)
-            y_spacing = (y_max - y_min) / (dims[1] - 1)
-            z_spacing = (z_max - z_min) / (dims[2] - 1)
-        else:
-            spacing = vtk_grid.spacing
-            x_spacing, y_spacing, z_spacing = spacing
-
         try:
+            print(f"Creating {section_type} slice...")
+            bounds = vtk_grid.bounds
             if section_type == 'Inline':
                 if x_slice_location is None:
-                    x_slice_location = (x_min + x_max) / 2
-                x_slice_location = max(x_min, min(x_max, x_slice_location))
-                slice_data = vtk_grid.extract_subset([
-                    int((x_slice_location - x_min) / x_spacing),
-                    int((x_slice_location - x_min) / x_spacing) + 1,
-                    0, dims[1],
-                    0, dims[2]
-                ])
+                    x_slice_location = (bounds[0] + bounds[1]) / 2
+                slice_data = vtk_grid.slice(normal='x', origin=[x_slice_location, 0, 0])
             elif section_type == 'Xline':
                 if y_slice_location is None:
-                    y_slice_location = (y_min + y_max) / 2
-                y_slice_location = max(y_min, min(y_max, y_slice_location))
-                slice_data = vtk_grid.extract_subset([
-                    0, dims[0],
-                    int((y_slice_location - y_min) / y_spacing),
-                    int((y_slice_location - y_min) / y_spacing) + 1,
-                    0, dims[2]
-                ])
+                    y_slice_location = (bounds[2] + bounds[3]) / 2
+                slice_data = vtk_grid.slice(normal='y', origin=[0, y_slice_location, 0])
             elif section_type == 'Z Slice':
                 if z_slice_location is None:
-                    z_slice_location = (z_min + z_max) / 2
-                z_slice_location = max(z_min, min(z_max, z_slice_location))
-                slice_data = vtk_grid.extract_subset([
-                    0, dims[0],
-                    0, dims[1],
-                    int((z_slice_location - z_min) / z_spacing),
-                    int((z_slice_location - z_min) / z_spacing) + 1
-                ])
+                    z_slice_location = (bounds[4] + bounds[5]) / 2
+                slice_data = vtk_grid.slice(normal='z', origin=[0, 0, z_slice_location])
             else:
                 return None
 
             if slice_data is None or slice_data.n_points == 0:
-                print(f"Warning: Empty slice generated for {section_type} at position {x_slice_location or y_slice_location or z_slice_location}")
+                print(f"Warning: Empty slice generated for {section_type}")
                 return None
 
-        except Exception as e:
-            print(f"Error creating slice: {e}")
-            return None
+            slice_uid = f"{uid}_{section_type}"
+            section_name = self.mesh3d_coll.get_uid_name(uid)
+            slice_name = f"{section_type} of {section_name}"
 
-        # Create the visualization with the slice data
-        dargs = {
-            'style': 'surface',
-            'opacity': 1.0,
-            'show_scalar_bar': True,
-            'scalar_bar_args': {'title': 'Intensity'},
-            'cmap': 'seismic'
-        }
+            # Get properties from parent seismic
+            parent_row = self.mesh3d_coll.df[self.mesh3d_coll.df['uid'] == uid].iloc[0]
 
-        # Get the active scalar name
-        active_scalars = vtk_grid.active_scalars_name
-        if active_scalars:
-            dargs['scalars'] = active_scalars
-
-        try:
-            slice_actor = self.plotter.add_mesh(slice_data, **dargs)
-            if slice_actor:
-                # Update the actors DataFrame
-                slice_uid = f"{uid}_{section_type}"
-                section_name = self.mesh3d_coll.get_uid_name(uid)
-                slice_name = f"{section_type} of {section_name}"
-
-                new_entry = {
+            # Check if slice already exists
+            if not any(self.mesh3d_coll.df['uid'] == slice_uid):
+                # Add to mesh3d collection
+                mesh3d_entity_dict = deepcopy(self.mesh3d_coll.mesh3d_entity_dict)
+                mesh3d_entity_dict.update({
                     'uid': slice_uid,
-                    'actor': slice_actor,
-                    'show': True,
-                    'collection': 'mesh3d_coll',
-                    'show_prop': active_scalars,
                     'name': slice_name,
-                    'properties_names': list(slice_data.point_data.keys()),
-                    'properties_components': [1] * len(slice_data.point_data.keys())
-                }
-                
-                # Remove any existing entries for this slice
-                self.actors_df = self.actors_df[self.actors_df['uid'] != slice_uid]
-                self.actors_df = pd.concat([self.actors_df, pd.DataFrame([new_entry])], ignore_index=True)
+                    'mesh3d_type': parent_row['mesh3d_type'],
+                    'properties_names': parent_row['properties_names'],
+                    'properties_components': parent_row['properties_components'],
+                    'x_section': '',
+                    'vtk_obj': slice_data,
+                })
+                self.mesh3d_coll.add_entity_from_dict(mesh3d_entity_dict)
+            else:
+                # Update existing vtk_obj in mesh3d collection
+                self.mesh3d_coll.df.loc[self.mesh3d_coll.df['uid'] == slice_uid, 'vtk_obj'] = slice_data
 
+            # Create initial actor with no properties
+            slice_actor = self.show_actor_with_property(
+                uid=slice_uid,
+                collection="mesh3d_coll",
+                show_property=None,  # Start with no property
+                visible=True
+            )
+
+            if slice_actor:
+                print(f"Actor added to collection with uid: {slice_uid}")
                 return slice_actor
+
         except Exception as e:
-            print(f"Error adding mesh: {e}")
+            print(f"Error in addOrthogonalSlices: {e}")
+            import traceback
+            traceback.print_exc()
             return None
 
         return None
@@ -12830,6 +12883,8 @@ class NewViewXsection(NewView2D):
                 )
             else:
                 this_actor = None
+            # Add before the final else clause
+        
         elif isinstance(plot_entity, Voxet):
             plot_rgb_option = None
             if plot_entity.cells_number > 0:
