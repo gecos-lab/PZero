@@ -96,7 +96,7 @@ import matplotlib.style as mplstyle
 from PyQt5 import QtCore, QtGui, QtWidgets
 # from matplotlib.backend_bases import FigureCanvasBase
 import mplstereonet
-
+import time 
 """Probably not-required imports"""
 # import sys
 # from time import sleep
@@ -8051,10 +8051,36 @@ class View3D(BaseView):
         inline_value = QLabel(str(n_inline // 2))
         xline_value = QLabel(str(n_xline // 2))
         zslice_value = QLabel(str(n_samples // 2))
-        # Add to show_seismic_control_panel
+        # In show_seismic_control_panel:
         interactive_check = QCheckBox("Enable Direct Manipulation")
+        interactive_check.stateChanged.connect(lambda state: toggle_direct_manipulation(state == Qt.Checked))
         position_layout.addWidget(interactive_check)
-
+        # Setup interactions
+         # Add manipulation control
+        manipulation_group = QGroupBox("Manipulation Control")
+        manipulation_layout = QVBoxLayout()
+        
+        enable_manipulation = QCheckBox("Enable Manipulation")
+        enable_manipulation.setChecked(False)  # Default to disabled
+        
+        # Remove any existing interactions when initializing the panel
+        self.remove_slice_interactions()
+        
+        # Add throttling for slider updates
+        self.last_slider_update = time.time()
+        slider_throttle = 1/30.0  # Limit to 30 FPS
+        def toggle_manipulation(state):
+            if state:
+                self.setup_slice_interactions()
+                print("Slice manipulation enabled")
+            else:
+                self.remove_slice_interactions()
+                print("Slice manipulation disabled")
+        
+        enable_manipulation.stateChanged.connect(toggle_manipulation)
+        manipulation_layout.addWidget(enable_manipulation)
+        manipulation_group.setLayout(manipulation_layout)
+        layout.addWidget(manipulation_group)
         def toggle_direct_manipulation(enabled):
             if enabled:
                 # Add an interactive plane widget for each slice type
@@ -8088,6 +8114,10 @@ class View3D(BaseView):
             if not section_name:
                 return
 
+            current_time = time.time()
+            if current_time - self.last_slider_update < slider_throttle:
+                return
+
             # Get the current values from sliders
             inline_pos = inline_slider.value()
             xline_pos = xline_slider.value()
@@ -8098,21 +8128,31 @@ class View3D(BaseView):
             xline_value.setText(str(xline_pos))
             zslice_value.setText(str(z_pos))
 
+            # Disable rendering during calculation
+            self.plotter.render_window.SetDesiredUpdateRate(30.0)
+            self.plotter.ren_win.GetInteractor().Disable()
+
             # Calculate normalized positions (0 to 1)
             if slider_type == 'inline':
                 norm_pos = (inline_pos - 1) / (n_inline - 1)
-                self.update_slice_visualization(section_name, 'Inline', norm_pos)
+                self.update_slice_visualization(section_name, 'Inline', norm_pos, fast_update=True)
             elif slider_type == 'xline':
                 norm_pos = (xline_pos - 1) / (n_xline - 1)
-                self.update_slice_visualization(section_name, 'Xline', norm_pos)
+                self.update_slice_visualization(section_name, 'Xline', norm_pos, fast_update=True)
             elif slider_type == 'zslice':
                 norm_pos = (z_pos - 1) / (n_samples - 1)
-                self.update_slice_visualization(section_name, 'Z Slice', norm_pos)
+                self.update_slice_visualization(section_name, 'Z Slice', norm_pos, fast_update=True)
 
-        # Connect slider signals
+            # Re-enable rendering and update
+            self.plotter.ren_win.GetInteractor().Enable()
+            self.plotter.render_window.SetDesiredUpdateRate(0.0001)
+            self.plotter.render()
+            self.last_slider_update = current_time
+        # Connect slider signals (keep your existing setup)
         inline_slider.valueChanged.connect(lambda: update_slice_position('inline'))
         xline_slider.valueChanged.connect(lambda: update_slice_position('xline'))
         zslice_slider.valueChanged.connect(lambda: update_slice_position('zslice'))
+
 
         # Add widgets to position layout
         position_group = QGroupBox("Slice Position Control")
@@ -8183,9 +8223,34 @@ class View3D(BaseView):
         control_panel.setLayout(layout)
 
         # Show the control panel
+        self.setup_slice_interactions()
         control_panel.show()
-
-    def update_slice_visualization(self, section_name, slice_type, normalized_position):
+    def remove_slice_interactions(self):
+        """Remove all slice interactions and set default style"""
+        try:
+            # Reset any highlighting
+            if hasattr(self, 'original_colors'):
+                for actor in list(self.original_colors.keys()):
+                    prop = actor.GetProperty()
+                    prop.SetColor(self.original_colors[actor])
+                self.original_colors.clear()
+            
+            # Reset dragging state
+            if hasattr(self.plotter.interactor, 'dragging_slice'):
+                delattr(self.plotter.interactor, 'dragging_slice')
+            if hasattr(self.plotter.interactor, 'is_dragging'):
+                delattr(self.plotter.interactor, 'is_dragging')
+            
+            # Set default interaction style
+            default_style = vtk.vtkInteractorStyleTrackballCamera()
+            self.plotter.interactor.SetInteractorStyle(default_style)
+            self.plotter._style = default_style
+            
+            self.plotter.render()
+            
+        except Exception as e:
+            print(f"Error removing slice interactions: {e}")
+    def update_slice_visualization(self, section_name, slice_type, normalized_position, fast_update=False):
         """Update the visualization of a seismic slice."""
         uid = self.mesh3d_coll.get_uid_by_name(section_name)
         if not uid:
@@ -8214,33 +8279,28 @@ class View3D(BaseView):
         else:
             return
 
-        # Update the vtk_obj in mesh3d collection
-        self.mesh3d_coll.df.loc[self.mesh3d_coll.df['uid'] == slice_uid, 'vtk_obj'] = slice_data
+        if fast_update:
+            # Update existing actor directly
+            actor = self.actors_df[self.actors_df['uid'] == slice_uid]['actor'].iloc[0]
+            if actor:
+                mapper = actor.GetMapper()
+                mapper.SetInputData(slice_data)
+                mapper.Update()
+        else:
+            # Full update with property handling
+            self.mesh3d_coll.df.loc[self.mesh3d_coll.df['uid'] == slice_uid, 'vtk_obj'] = slice_data
+            current_property = None
+            if 'show_prop' in self.actors_df.columns:
+                actor_row = self.actors_df[self.actors_df['uid'] == slice_uid]
+                if not actor_row.empty:
+                    current_property = actor_row.iloc[0].get('show_prop', None)
 
-        # Get current property if any
-        current_property = None
-        if 'show_prop' in self.actors_df.columns:
-            actor_row = self.actors_df[self.actors_df['uid'] == slice_uid]
-            if not actor_row.empty:
-                current_property = actor_row.iloc[0].get('show_prop', None)
-
-        # Remove existing actor
-        actor_rows = self.actors_df[self.actors_df['uid'] == slice_uid]
-        if not actor_rows.empty:
-            for _, row in actor_rows.iterrows():
-                actor = row['actor']
-                if actor is not None:
-                    self.plotter.remove_actor(actor)
-
-        # Create new actor with current property
-        self.show_actor_with_property(
-            uid=slice_uid,
-            collection='mesh3d_coll',
-            show_property=current_property,
-            visible=True
-        )
-
-        self.plotter.render()
+            self.show_actor_with_property(
+                uid=slice_uid,
+                collection='mesh3d_coll',
+                show_property=current_property,
+                visible=True
+            )
     def getExistingSections(self): # 
         """
         Retrieve all main seismic volume names (excluding slices).
@@ -8256,6 +8316,135 @@ class View3D(BaseView):
         return self.mesh3d_coll.df[
             self.mesh3d_coll.df['mesh3d_type'] == 'seismic_slice'
             ]['name'].tolist()
+    def add_slice_interaction(self):
+        """Add mouse interaction for seismic slices"""
+        style = vtk.vtkInteractorStyleUser()
+        
+        # Store the original actor properties for restoration
+        self.original_colors = {}
+        
+        # Add throttling for rendering
+        self.last_render_time = time.time()
+        render_throttle = 1/30.0  # Limit to 30 FPS
+        
+        def highlight_actor(actor):
+            """Highlight the actor by changing its color"""
+            if actor not in self.original_colors:
+                prop = actor.GetProperty()
+                self.original_colors[actor] = prop.GetColor()
+                prop.SetColor(1, 0, 0)  # Highlight in red
+                self.plotter.render()
+
+        def on_mouse_move(obj, event):
+            try:
+                current_time = time.time()
+                
+                # Handle dragging with throttling
+                if (hasattr(self.plotter.interactor, 'dragging_slice') and 
+                    self.plotter.interactor.dragging_slice and 
+                    hasattr(self.plotter.interactor, 'is_dragging') and 
+                    self.plotter.interactor.is_dragging):
+                    
+                    # Get mouse position and setup picker
+                    click_pos = self.plotter.interactor.GetEventPosition()
+                    picker = vtk.vtkCellPicker()
+                    picker.SetTolerance(0.0005)
+                    
+                    # Disable rendering during calculation
+                    self.plotter.render_window.SetDesiredUpdateRate(30.0)
+                    self.plotter.ren_win.GetInteractor().Disable()
+                    
+                    picker.Pick(click_pos[0], click_pos[1], 0, self.plotter.renderer)
+                    world_pos = picker.GetPickPosition()
+                    slice_uid = self.plotter.interactor.dragging_slice
+                    
+                    if slice_uid:
+                        parent_uid = slice_uid.split('_')[0]
+                        section_name = self.mesh3d_coll.get_uid_name(parent_uid)
+                        vtk_grid = self.mesh3d_coll.get_uid_vtk_obj(parent_uid)
+                        bounds = pv.wrap(vtk_grid).bounds
+                        
+                        # Update slice position
+                        if '_Inline' in slice_uid:
+                            normalized_pos = (world_pos[0] - bounds[0]) / (bounds[1] - bounds[0])
+                            if 0 <= normalized_pos <= 1:
+                                self.update_slice_visualization(section_name, 'Inline', normalized_pos, fast_update=True)
+                        elif '_Xline' in slice_uid:
+                            normalized_pos = (world_pos[1] - bounds[2]) / (bounds[3] - bounds[2])
+                            if 0 <= normalized_pos <= 1:
+                                self.update_slice_visualization(section_name, 'Xline', normalized_pos, fast_update=True)
+                        elif '_Z Slice' in slice_uid:
+                            normalized_pos = (world_pos[2] - bounds[4]) / (bounds[5] - bounds[4])
+                            if 0 <= normalized_pos <= 1:
+                                self.update_slice_visualization(section_name, 'Z Slice', normalized_pos, fast_update=True)
+                    
+                    # Re-enable rendering and update
+                    self.plotter.ren_win.GetInteractor().Enable()
+                    if current_time - self.last_render_time > render_throttle:
+                        self.plotter.render_window.SetDesiredUpdateRate(0.0001)
+                        self.plotter.render()
+                        self.last_render_time = current_time
+                        
+            except Exception as e:
+                print(f"Error in mouse move: {e}")
+
+        def on_left_press(obj, event):
+            try:
+                click_pos = self.plotter.interactor.GetEventPosition()
+                picker = vtk.vtkCellPicker()
+                picker.SetTolerance(0.0005)
+                picker.Pick(click_pos[0], click_pos[1], 0, self.plotter.renderer)
+                
+                actor = picker.GetActor()
+                if actor:
+                    for _, row in self.actors_df.iterrows():
+                        if row['actor'] == actor and '_' in row['uid']:  # Check if it's a slice
+                            self.plotter.interactor.dragging_slice = row['uid']
+                            self.plotter.interactor.is_dragging = True
+                            print(f"Started dragging slice: {row['uid']}")
+                            break
+            except Exception as e:
+                print(f"Error in left press: {e}")
+
+        def on_left_release(obj, event):
+            try:
+                if hasattr(self.plotter.interactor, 'dragging_slice'):
+                    print(f"Stopped dragging slice: {self.plotter.interactor.dragging_slice}")
+                    self.plotter.interactor.dragging_slice = None
+                    self.plotter.interactor.is_dragging = False
+                    
+                    # Unhighlight all actors
+                    for actor in list(self.original_colors.keys()):
+                        unhighlight_actor(actor)
+            except Exception as e:
+                print(f"Error in left release: {e}")
+
+        def on_right_button_down(obj, event):
+            style.OnMiddleButtonDown()
+            
+        def on_right_button_up(obj, event):
+            style.OnMiddleButtonUp()
+            
+        def on_middle_button_down(obj, event):
+            style.OnMiddleButtonDown()
+            
+        def on_middle_button_up(obj, event):
+            style.OnMiddleButtonUp()
+
+        # Add observers to the interactor style
+        style.AddObserver("LeftButtonPressEvent", on_left_press)
+        style.AddObserver("MouseMoveEvent", on_mouse_move)
+        style.AddObserver("LeftButtonReleaseEvent", on_left_release)
+        style.AddObserver("RightButtonPressEvent", on_right_button_down)
+        style.AddObserver("RightButtonReleaseEvent", on_right_button_up)
+        style.AddObserver("MiddleButtonPressEvent", on_middle_button_down)
+        style.AddObserver("MiddleButtonReleaseEvent", on_middle_button_up)
+        
+        # Set the custom style
+        self.plotter.interactor.SetInteractorStyle(style)
+        
+        # Store style reference
+        self.plotter._style = style
 
     def addOrthogonalSlices(self, uid, section_type, x_slice_location=None, y_slice_location=None,
                         z_slice_location=None):
@@ -8322,6 +8511,16 @@ class View3D(BaseView):
 
             if slice_actor:
                 print(f"Actor added to collection with uid: {slice_uid}")
+            # Ensure default interaction style
+                if hasattr(self.plotter.interactor, '_style') and isinstance(self.plotter.interactor._style, vtk.vtkInteractorStyleUser):
+                    # If manipulation is enabled, keep it
+                    pass
+                else:
+                    # Otherwise use default style
+                    default_style = vtk.vtkInteractorStyleTrackballCamera()
+                    self.plotter.interactor.SetInteractorStyle(default_style)
+                    self.plotter._style = default_style
+                
                 return slice_actor
 
         except Exception as e:
@@ -8331,6 +8530,76 @@ class View3D(BaseView):
             return None
 
         return None
+    
+
+    def add_slice_drag_interaction(self):
+        """Add drag interaction for seismic slices"""
+        def on_mouse_move(obj, event):
+            interactor = self.plotter.iren.interactor
+            if hasattr(interactor, 'dragging_slice'):
+                # Get current mouse position
+                click_pos = interactor.GetEventPosition()
+                
+                # Use cell picker for better accuracy
+                cell_picker = vtk.vtkCellPicker()
+                cell_picker.Pick(click_pos[0], click_pos[1], 0, self.plotter.renderer)
+                world_pos = cell_picker.GetPickPosition()
+                
+                slice_uid = interactor.dragging_slice
+                # Get the parent section name from the slice uid
+                parent_uid = slice_uid.split('_')[0]
+                section_name = self.mesh3d_coll.get_uid_name(parent_uid)
+                
+                # Get bounds from parent seismic
+                vtk_grid = self.mesh3d_coll.get_uid_vtk_obj(parent_uid)
+                if isinstance(vtk_grid, pv.DataSet):
+                    bounds = vtk_grid.bounds
+                else:
+                    bounds = pv.wrap(vtk_grid).bounds
+                
+                if '_Inline' in slice_uid:
+                    normalized_pos = (world_pos[0] - bounds[0]) / (bounds[1] - bounds[0])
+                    self.update_slice_visualization(section_name, 'Inline', normalized_pos)
+                elif '_Xline' in slice_uid:
+                    normalized_pos = (world_pos[1] - bounds[2]) / (bounds[3] - bounds[2])
+                    self.update_slice_visualization(section_name, 'Xline', normalized_pos)
+                elif '_Z Slice' in slice_uid:
+                    normalized_pos = (world_pos[2] - bounds[4]) / (bounds[5] - bounds[4])
+                    self.update_slice_visualization(section_name, 'Z Slice', normalized_pos)
+
+        def on_left_button_press(obj, event):
+            interactor = self.plotter.iren.interactor
+            click_pos = interactor.GetEventPosition()
+            
+            # Use cell picker for better accuracy
+            cell_picker = vtk.vtkCellPicker()
+            cell_picker.Pick(click_pos[0], click_pos[1], 0, self.plotter.renderer)
+            
+            actor = cell_picker.GetActor()
+            if actor:
+                for _, row in self.actors_df.iterrows():
+                    if row['actor'] == actor:
+                        interactor.dragging_slice = row['uid']
+                        break
+
+        def on_left_button_release(obj, event):
+            interactor = self.plotter.iren.interactor
+            if hasattr(interactor, 'dragging_slice'):
+                delattr(interactor, 'dragging_slice')
+
+        # Add observers to the interactor
+        self.plotter.iren.add_observer('MouseMoveEvent', on_mouse_move)
+        self.plotter.iren.add_observer('LeftButtonPressEvent', on_left_button_press)
+        self.plotter.iren.add_observer('LeftButtonReleaseEvent', on_left_button_release)
+    def setup_slice_interactions(self):
+        """Setup all slice interactions"""
+        try:
+            # Initialize or reset the original_colors dictionary
+            self.original_colors = {}
+            self.add_slice_interaction()
+            print("Slice interactions setup complete")
+        except Exception as e:
+            print(f"Error setting up slice interactions: {e}")
     def retrieve_vtkStructuredGrid(self, uid):
 
         # [gabriele] This is redundant, there is already the get_uid_vtk_obj method in mesh3d_collection
