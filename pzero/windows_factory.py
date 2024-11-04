@@ -8002,27 +8002,21 @@ class View3D(BaseView):
         section_combo.currentTextChanged.connect(self.initialize_slice_controls)
         # Remove section button
         remove_btn = QPushButton("Remove Section")
+        # Get the seismic dimensions from the VTK grid
         # Initialize default dimensions
-        n_inline = n_xline = n_samples = 100
-       # Add slice position control group
+        section_name = section_combo.currentText()
+        uid = self.mesh3d_coll.get_uid_by_name(section_name)
+        vtk_grid = self.mesh3d_coll.get_uid_vtk_obj(uid)
+        vtk_grid = pv.wrap(vtk_grid)
+        dims = vtk_grid.dimensions
+        n_inline = dims[0]
+        n_xline = dims[1]
+        n_samples = dims[2]
+        # Add slice position control group
         position_group = QGroupBox("Slice Position Control")
         position_layout = QVBoxLayout()
 
         # Get the seismic dimensions from the VTK grid
-        section_name = section_combo.currentText()
-        dims = (100, 100, 100)  # default values
-        if section_name:
-            uid = self.mesh3d_coll.get_uid_by_name(section_name)
-            if uid:
-                vtk_grid = self.mesh3d_coll.get_uid_vtk_obj(uid)
-                if isinstance(vtk_grid, pv.DataSet):
-                    dims = vtk_grid.dimensions
-                    # Get actual inline, crossline, and time/depth ranges
-                    n_inline = dims[0]
-                    n_xline = dims[1]
-                    n_samples = dims[2]
-                    print(f"Dimensions: Inlines={n_inline}, Crosslines={n_xline}, Samples={n_samples}")
-
 
         # Create sliders with proper ranges
         inline_slider = QSlider(Qt.Horizontal)
@@ -8061,7 +8055,7 @@ class View3D(BaseView):
         manipulation_layout = QVBoxLayout()
         
         enable_manipulation = QCheckBox("Enable Manipulation")
-        enable_manipulation.setChecked(False)  # Default to disabled
+        enable_manipulation.setChecked(True)  # Default to disabled
         
         # Remove any existing interactions when initializing the panel
         self.remove_slice_interactions()
@@ -8506,7 +8500,7 @@ class View3D(BaseView):
                 uid=slice_uid,
                 collection="mesh3d_coll",
                 show_property=None,  # Start with no property
-                visible=True
+                visible=None
             )
 
             if slice_actor:
