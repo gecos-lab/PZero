@@ -27,13 +27,12 @@ from shapely.geometry import LineString as shp_linestring
 from shapely.ops import snap as shp_snap
 from shapely.ops import split as shp_split
 
-from pzero.helpers.helper_dialogs import  multiple_input_dialog, input_one_value_dialog, message_dialog
-from pzero.helpers.helper_widgets import Editor, Tracer
+from .helpers.helper_dialogs import  multiple_input_dialog, input_one_value_dialog, message_dialog
+from .helpers.helper_widgets import Editor, Tracer
+from .helpers.helper_functions import freeze_gui
 from .entities_factory import PolyLine, XsPolyLine
 
 from .windows_factory import ViewMap, ViewXsection
-
-"""Implementation of functions specific to this view (e.g. particular editing or visualization functions)"""
 
 
 def draw_line(self):
@@ -206,38 +205,33 @@ def move_line(self, vector):
 
     self.enable_actions()
 
-
+@freeze_gui
 def rotate_line(self):
-    """Rotate the whole line by rigid-body rotation using Shapely."""
-    print(
+    """Rotate lines by rigid-body rotation using Shapely."""
+    self.parent.TextTerminal.appendPlainText(
         "Rotate Line. Rotate the whole line by rigid-body rotation. Please insert angle of anticlockwise rotation."
     )
-    """Terminate running event loops"""
-    """Check if a line is selected"""
+    # Check if at least a line is selected.
     if not self.selected_uids:
-        print(" -- No input data selected -- ")
+        self.parent.TextTerminal.appendPlainText(" -- No input data selected -- ")
         return
-    """Freeze QT interface"""
-    self.disable_actions()
-
+    # Input rotation angle. None exits the function.
     angle = input_one_value_dialog(
         parent=self,
         title="Rotate Line",
         label="Insert rotation angle in degrees, anticlockwise",
         default_value=10,
     )
+    if angle is None:
+        self.parent.TextTerminal.appendPlainText(" -- Angle is None -- ")
+        return
     for current_uid in self.selected_uids:
         if (
             self.parent.geol_coll.get_uid_topology(current_uid) != "PolyLine"
         ) and (
             self.parent.geol_coll.get_uid_topology(current_uid) != "XsPolyLine"
         ):
-            print(" -- Selected data is not a line -- ")
-            return
-
-        if angle is None:
-            """Un-Freeze QT interface"""
-            self.enable_actions()
+            self.parent.TextTerminal.appendPlainText(" -- Selected data is not a line -- ")
             return
         if isinstance(self, ViewMap):
             inU = self.parent.geol_coll.get_uid_vtk_obj(current_uid).points_X
@@ -257,22 +251,17 @@ def rotate_line(self):
             outX = outU
             outY = outV
             outZ = self.parent.geol_coll.get_uid_vtk_obj(current_uid).points_Z
-
         elif isinstance(self, ViewXsection):
             outX, outY, outZ = self.parent.xsect_coll.plane2world(
                 self.this_x_section_uid, outU, outV
             )
-
         outXYZ = np_column_stack((outX, outY, outZ))
         self.parent.geol_coll.get_uid_vtk_obj(current_uid).points = outXYZ
         left_right(current_uid)
-        self.parent.geol_coll.signals.geom_modified.emit(
-            [current_uid]
-        )  # emit uid as list to force redraw()
+        # emit uid as list to force redraw()
+        self.parent.geol_coll.signals.geom_modified.emit([current_uid])
     """Deselect input line."""
     self.clear_selection()
-    """Un-Freeze QT interface"""
-    self.enable_actions()
 
 
 def extend_line(self):

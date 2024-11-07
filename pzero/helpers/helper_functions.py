@@ -281,3 +281,15 @@ def srf(vectors):
     result = np_sqrt(np_square(x) + np_square(y) + np_square(z)) / n
 
     return result
+
+
+def freeze_gui(func):
+    """Decorator function used to freeze the GUI when some processing, editing etc. is running."""
+    def wrapper(self, *args, **kwargs):
+        # Disable GUI before function is called.
+        self.disable_actions()
+        # the wrapped function goes here
+        func(self, *args, **kwargs)
+        # Enable GUI after function is called.
+        self.enable_actions()
+    return wrapper
