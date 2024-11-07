@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 ################################################################################
-## Form generated from reading UI file 'base_view_windowNBwkyi.ui'
+## Form generated from reading UI file 'base_view_windowynxPCC.ui'
 ##
 ## Created by: Qt User Interface Compiler version 6.7.3
 ##
@@ -41,7 +41,7 @@ class Ui_BaseViewWindow(object):
         self.ViewFrame = QFrame(self.splitter)
         self.ViewFrame.setObjectName(u"ViewFrame")
         sizePolicy1 = QSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
-        sizePolicy1.setHorizontalStretch(10)
+        sizePolicy1.setHorizontalStretch(3)
         sizePolicy1.setVerticalStretch(0)
         sizePolicy1.setHeightForWidth(self.ViewFrame.sizePolicy().hasHeightForWidth())
         self.ViewFrame.setSizePolicy(sizePolicy1)

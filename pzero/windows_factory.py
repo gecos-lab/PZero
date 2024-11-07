@@ -149,22 +149,15 @@ class DockWindow(QDockWidget):
     def __init__(self, parent=None, window_type=None, *args, **kwargs):
         super(DockWindow, self).__init__(parent, *args, **kwargs)
         n_docks = len(parent.findChildren(QDockWidget))
-        """Setup property and connect signal to delete dock widget (not only hide) when the project is closed."""
-        # check if this is all OK <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+        # Setup property and connect signal to delete dock widget (not only hide) when the project is closed.
         parent.project_close_signal.connect(self.deleteLater)
         self.setAttribute(Qt.WA_DeleteOnClose, True)
-        """uuid string for widget and content names -- check if this is necessary --"""
-        # dock_widget_id = str(uuid4())
-        # dock_widget_contents_id = str(uuid4())
-        # create widget and set some parameters
-        # self.setObjectName(dock_widget_id)
+        # Set other dock window graphical properties.
+        self.sizePolicy().setHorizontalStretch(2)
         self.setWindowTitle(window_type)
-        #self.setMinimumSize(QSize(60, 40))
-        #self.setMaximumSize(QSize(524287, 524287))
-        #self.setBaseSize(QSize(638, 757))
         self.setFeatures(QDockWidget.DockWidgetClosable | QDockWidget.DockWidgetFloatable | QDockWidget.DockWidgetMovable)
         self.setAllowedAreas(Qt.RightDockWidgetArea)
-        # create the graphical window as a QWidget to be included into the QDockWidget as its content
+        # Create the graphical window as a QWidget to be included into the QDockWidget as its content
         if window_type == 'View3D':
             self.canvas = View3D(parent=parent)
         elif window_type == 'ViewMap':
@@ -174,22 +167,15 @@ class DockWindow(QDockWidget):
         elif window_type == 'ViewStereoplot':
             self.canvas = ViewStereoplot(parent=parent)
         else:
-            # exit doing nothing in case the window type is not recognized
+            # Exit doing nothing in case the window type is not recognized.
             print('window type not recognized')
             return
-        # set parameters of the graphical window
-        # size_policy = QSizePolicy(QSizePolicy.MinimumExpanding, QSizePolicy.MinimumExpanding)
-        # size_policy.setHorizontalStretch(0)
-        # size_policy.setVerticalStretch(0)
-        # size_policy.setHeightForWidth(self.canvas.size_policy().hasHeightForWidth())
-        # self.canvas.setSizePolicy(size_policy)
-        # self.canvas.setObjectName(dock_widget_contents_id)
-        """Add the content widget to the dock widget and add the dock widget to the main project window.
-        After this has been set, calling self.canvas returns the same object as calling self.widget()"""
+        # Add the content widget to the dock widget and add the dock widget to the main project window.
+        # After this has been set, calling self.canvas returns the same object as calling self.widget().
         self.setWidget(self.canvas)
-        """Add dock widget to main window (= parent)"""
+        # Add dock widget to main window (= parent).
         parent.addDockWidget(Qt.RightDockWidgetArea, self)
-        """Make all dock widgets tabbed if more than one is open."""
+        # Make all dock widgets tabbed if more than one is open.
         if n_docks > 1:
             parent.tabifyDockWidget(parent.findChildren(QDockWidget)[0], self)
 
