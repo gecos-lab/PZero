@@ -12,7 +12,8 @@ def create_fluids_tree(self):
     self.FluidsTreeWidget.setHeaderLabels(
         ["Role > Feature > Scenario > Name", "uid", "property"]
     )
-    self.FluidsTreeWidget.hideColumn(1)  # hide the uid column
+    # hide the uid column
+    self.FluidsTreeWidget.hideColumn(1)
     self.FluidsTreeWidget.setItemsExpandable(True)
     roles = pd_unique(self.parent.fluid_coll.df.query(self.view_filter)["role"])
     for role in roles:
@@ -85,13 +86,14 @@ def create_fluids_tree(self):
                         self.actors_df["uid"] == uid, "show"
                     ].values[0]:
                         flevel_4.setCheckState(0, Qt.Unchecked)
-    """Send messages. Note that with tristate several signals are emitted in a sequence, one for each
-    changed item, but upper levels do not broadcast uid's so they are filtered in the toggle method."""
+    # Send messages. Note that with tristate several signals are emitted in a sequence, one for each
+    # changed item, but upper levels do not broadcast uid's so they are filtered in the toggle method.
     self.FluidsTreeWidget.itemChanged.connect(self.toggle_fluids_visibility)
     # Squeeze column width to fit content
     for col in range(self.FluidsTreeWidget.columnCount()):
         self.FluidsTreeWidget.resizeColumnToContents(col)
     self.FluidsTreeWidget.expandAll()
+
 
 def create_fluids_topology_tree(self):
     """Create topology tree with checkboxes and properties"""
@@ -185,7 +187,7 @@ def update_fluids_tree_added(self, new_list=None, sec_uid=None):
                 )
                 != []
         ):
-            """Already exists a TreeItem (1 level) for the fluid type"""
+            # Already exists a TreeItem (1 level) for the fluid type
             counter_1 = 0
             for child_1 in range(
                     self.FluidsTreeWidget.findItems(
@@ -233,7 +235,8 @@ def update_fluids_tree_added(self, new_list=None, sec_uid=None):
                                     )[0]
                                 ).childCount()
                         ):
-                            """for cycle that loops n times as the number of sub-subItems in the specific fluid type and fluid feature branch"""
+                            # for cycle that loops n times as the number of sub-subItems in the specific fluid
+                            # type and fluid feature branch
                             if self.FluidsTreeWidget.itemBelow(
                                     self.FluidsTreeWidget.findItems(
                                         self.parent.fluid_coll.get_uid_role(uid),
@@ -271,7 +274,7 @@ def update_fluids_tree_added(self, new_list=None, sec_uid=None):
                                 ) == self.parent.fluid_coll.get_uid_scenario(
                                     uid
                                 ):
-                                    """Same fluid type, fluid feature and scenario"""
+                                    # Same fluid type, fluid feature and scenario
                                     property_combo = QComboBox()
                                     property_combo.uid = uid
                                     property_combo.addItem("none")
@@ -319,7 +322,7 @@ def update_fluids_tree_added(self, new_list=None, sec_uid=None):
                                     )
                                     break
                         else:
-                            """Same fluid type and fluid feature, different scenario"""
+                            # Same fluid type and fluid feature, different scenario
                             flevel_3 = QTreeWidgetItem(
                                 self.FluidsTreeWidget.findItems(
                                     self.parent.fluid_coll.get_uid_role(uid),
@@ -368,7 +371,7 @@ def update_fluids_tree_added(self, new_list=None, sec_uid=None):
                             self.FluidsTreeWidget.insertTopLevelItem(0, flevel_4)
                             break
             else:
-                """Same fluid type, different fluid feature and scenario"""
+                # Same fluid type, different fluid feature and scenario
                 flevel_2 = QTreeWidgetItem(
                     self.FluidsTreeWidget.findItems(
                         self.parent.fluid_coll.get_uid_role(uid),
@@ -414,7 +417,7 @@ def update_fluids_tree_added(self, new_list=None, sec_uid=None):
                 self.FluidsTreeWidget.insertTopLevelItem(0, flevel_4)
                 break
         else:
-            """Different fluid type, fluid feature and scenario"""
+            # Different fluid type, fluid feature and scenario
             flevel_1 = QTreeWidgetItem(
                 self.FluidsTreeWidget,
                 [self.parent.fluid_coll.get_uid_role(uid)],
@@ -466,29 +469,29 @@ def update_fluids_tree_added(self, new_list=None, sec_uid=None):
         self.FluidsTreeWidget.resizeColumnToContents(col)
     self.FluidsTreeWidget.expandAll()
 
-def update_fluids_tree_removed(self, removed_list=None):  # second attchild_fluid_featempt
+def update_fluids_tree_removed(self, removed_list=None):
     """When fluid entity is removed, update Geology Tree without building a new model"""
     success = 0
     for uid in removed_list:
         for top_role in range(self.FluidsTreeWidget.topLevelItemCount()):
-            """Iterate through every fluid Role top level"""
+            # Iterate through every fluid Role top level
             for child_feature in range(
                     self.FluidsTreeWidget.topLevelItem(top_role).childCount()
             ):
-                """Iterate through every fluid Feature child"""
+                # Iterate through every fluid Feature child
                 for child_scenario in range(
                         self.FluidsTreeWidget.topLevelItem(top_role)
                                 .child(child_feature)
                                 .childCount()
                 ):
-                    """Iterate through every Scenario child"""
+                    # Iterate through every Scenario child
                     for child_entity in range(
                             self.FluidsTreeWidget.topLevelItem(top_role)
                                     .child(child_feature)
                                     .child(child_scenario)
                                     .childCount()
                     ):
-                        """Iterate through every Entity child"""
+                        # Iterate through every Entity child
                         if (
                                 self.FluidsTreeWidget.topLevelItem(top_role)
                                         .child(child_feature)
@@ -497,7 +500,8 @@ def update_fluids_tree_removed(self, removed_list=None):  # second attchild_flui
                                         .text(1)
                                 == uid
                         ):
-                            """Complete check: entity found has the uid of the entity we need to remove. Delete child, then ensure no Child or Top Level remain empty"""
+                            # Complete check: entity found has the uid of the entity we need to remove. Delete
+                            # child, then ensure no Child or Top Level remain empty
                             success = 1
                             self.FluidsTreeWidget.topLevelItem(
                                 top_role
@@ -578,7 +582,7 @@ def update_fluids_topology_tree_added(self, new_list=None, sec_uid=None):
                 )
                 != []
         ):
-            """Already exists a TreeItem (1 level) for the topological type"""
+            # Already exists a TreeItem (1 level) for the topological type
             counter_1 = 0
             for child_1 in range(
                     self.FluidsTopologyTreeWidget.findItems(
@@ -587,7 +591,7 @@ def update_fluids_topology_tree_added(self, new_list=None, sec_uid=None):
                         0,
                     )[0].childCount()
             ):
-                """for cycle that loops n times as the number of subItems in the specific topological type branch"""
+                # for cycle that loops n times as the number of subItems in the specific topological type branch
                 if self.FluidsTopologyTreeWidget.findItems(
                         self.parent.fluid_coll.get_uid_topology(uid),
                         Qt.MatchExactly,
@@ -615,23 +619,19 @@ def update_fluids_topology_tree_added(self, new_list=None, sec_uid=None):
                     ) == self.parent.fluid_coll.get_uid_scenario(
                         uid
                     ):
-                        """Same topological type and scenario"""
+                        # Same topological type and scenario
                         property_combo = QComboBox()
                         property_combo.uid = uid
                         property_combo.addItem("none")
                         property_combo.addItem("X")
                         property_combo.addItem("Y")
                         property_combo.addItem("Z")
-                        for (
-                                prop
-                        ) in self.parent.fluid_coll.get_uid_properties_names(uid):
+                        for prop in self.parent.fluid_coll.get_uid_properties_names(uid):
                             property_combo.addItem(prop)
                         name = self.parent.fluid_coll.get_uid_name(uid)
                         tlevel_3 = QTreeWidgetItem(
                             self.FluidsTopologyTreeWidget.findItems(
-                                self.parent.fluid_coll.get_uid_topology(
-                                    uid
-                                ),
+                                self.parent.fluid_coll.get_uid_topology(uid),
                                 Qt.MatchExactly,
                                 0,
                             )[0].child(child_1),
@@ -655,7 +655,7 @@ def update_fluids_topology_tree_added(self, new_list=None, sec_uid=None):
                         self.GeologyTopologyTreeWidget.insertTopLevelItem(0, tlevel_3)
                         break
             else:
-                """Same topological type, different scenario"""
+                # Same topological type, different scenario
                 tlevel_2 = QTreeWidgetItem(
                     self.FluidsTopologyTreeWidget.findItems(
                         self.parent.fluid_coll.get_uid_topology(uid),
@@ -678,9 +678,7 @@ def update_fluids_topology_tree_added(self, new_list=None, sec_uid=None):
                     property_combo.addItem(prop)
                 name = self.parent.fluid_coll.get_uid_name(uid)
                 tlevel_3 = QTreeWidgetItem(tlevel_2, [name, uid])
-                self.FluidsTopologyTreeWidget.setItemWidget(
-                    tlevel_3, 2, property_combo
-                )
+                self.FluidsTopologyTreeWidget.setItemWidget(tlevel_3, 2, property_combo)
                 property_combo.currentIndexChanged.connect(
                     lambda *, sender=property_combo: self.toggle_property(sender=sender)
                 )
@@ -696,7 +694,7 @@ def update_fluids_topology_tree_added(self, new_list=None, sec_uid=None):
                 self.FluidsTopologyTreeWidget.insertTopLevelItem(0, tlevel_3)
                 break
         else:
-            """Different topological type and scenario"""
+            # Different topological type and scenario
             tlevel_1 = QTreeWidgetItem(
                 self.FluidsTopologyTreeWidget,
                 [self.parent.fluid_coll.get_uid_topology(uid)],
@@ -748,19 +746,19 @@ def update_fluids_topology_tree_removed(self, removed_list=None):
         for top_topo_type in range(
                 self.FluidsTopologyTreeWidget.topLevelItemCount()
         ):
-            """Iterate through every Topological Role top level"""
+            # Iterate through every Topological Role top level
             for child_scenario in range(
                     self.FluidsTopologyTreeWidget.topLevelItem(
                         top_topo_type
                     ).childCount()
             ):
-                """Iterate through every Scenario child"""
+                # Iterate through every Scenario child
                 for child_entity in range(
                         self.FluidsTopologyTreeWidget.topLevelItem(top_topo_type)
                                 .child(child_scenario)
                                 .childCount()
                 ):
-                    """Iterate through every Entity child"""
+                    # Iterate through every Entity child
                     if (
                             self.FluidsTopologyTreeWidget.topLevelItem(top_topo_type)
                                     .child(child_scenario)
@@ -768,21 +766,18 @@ def update_fluids_topology_tree_removed(self, removed_list=None):
                                     .text(1)
                             == uid
                     ):
-                        """Complete check: entity found has the uid of the entity we need to remove. Delete child, then ensure no Child or Top Level remain empty"""
+                        # Complete check: entity found has the uid of the entity we need to remove. Delete child,
+                        # then ensure no Child or Top Level remain empty
                         success = 1
-                        self.FluidsTopologyTreeWidget.topLevelItem(
-                            top_topo_type
-                        ).child(child_scenario).removeChild(
-                            self.FluidsTopologyTreeWidget.topLevelItem(
-                                top_topo_type
-                            )
+                        self.FluidsTopologyTreeWidget.topLevelItem(top_topo_type).child(
+                            child_scenario
+                        ).removeChild(
+                            self.FluidsTopologyTreeWidget.topLevelItem(top_topo_type)
                             .child(child_scenario)
                             .child(child_entity)
                         )
                         if (
-                                self.FluidsTopologyTreeWidget.topLevelItem(
-                                    top_topo_type
-                                )
+                                self.FluidsTopologyTreeWidget.topLevelItem(top_topo_type)
                                         .child(child_scenario)
                                         .childCount()
                                 == 0
@@ -830,13 +825,15 @@ def update_fluids_topology_checkboxes(self, uid=None, uid_checkState=None):
         item.setCheckState(0, Qt.Unchecked)
 
 def toggle_fluids_visibility (self, item):
-    """Called by self.FluidsTreeWidget.itemChanged.connect(self.toggle_fluids_visibility ) and self.FluidsTopologyTreeWidget.itemChanged.connect(self.toggle_fluids_visibility )"""
-    name = item.text(0)  # not used
+    """Called by self.FluidsTreeWidget.itemChanged.connect(self.toggle_fluids_visibility ) and
+    self.FluidsTopologyTreeWidget.itemChanged.connect(self.toggle_fluids_visibility )"""
+    # name = item.text(0)  # not used
     uid = item.text(1)
     uid_checkState = item.checkState(0)
+    # needed to skip messages from upper levels of tree that do not broadcast uid's
     if (
             uid
-    ):  # needed to skip messages from upper levels of tree that do not broadcast uid's
+    ):
         if uid_checkState == Qt.Checked:
             if not self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[
                 0
@@ -847,15 +844,13 @@ def toggle_fluids_visibility (self, item):
             if self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]:
                 self.actors_df.loc[self.actors_df["uid"] == uid, "show"] = False
                 self.set_actor_visible(uid=uid, visible=False)
-        """Before updating checkboxes, disconnect signals to fluid and topology tree, if they are set,
-        to avoid a nasty loop that disrupts the trees, then reconnect them (it is also possible that
-        they are automatically reconnected whe the trees are rebuilt."""
+        # Before updating checkboxes, disconnect signals to fluid and topology tree, if they are set,
+        # to avoid a nasty loop that disrupts the trees, then reconnect them (it is also possible that
+        # they are automatically reconnected whe the trees are rebuilt.
         self.FluidsTreeWidget.itemChanged.disconnect()
         self.FluidsTopologyTreeWidget.itemChanged.disconnect()
         self.update_fluids_checkboxes(uid=uid, uid_checkState=uid_checkState)
-        self.update_fluids_topology_checkboxes(
-            uid=uid, uid_checkState=uid_checkState
-        )
+        self.update_fluids_topology_checkboxes(uid=uid, uid_checkState=uid_checkState)
         self.FluidsTreeWidget.itemChanged.connect(
             self.toggle_fluids_visibility 
         )

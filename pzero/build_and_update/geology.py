@@ -4,7 +4,6 @@ from PySide6.QtCore import Qt
 from pandas import unique as pd_unique
 
 """Methods used to build and update the GEOLOGY and TOPOLOGY trees."""
-# It would be nice to find a way to further separate the two trees but it looks like they are very co-dependent
 
 def create_geology_tree(self):
     """Create geology tree with checkboxes and properties"""
@@ -104,6 +103,7 @@ def create_geology_tree(self):
     for col in range(self.GeologyTreeWidget.columnCount()):
         self.GeologyTreeWidget.resizeColumnToContents(col)
     self.GeologyTreeWidget.expandAll()
+
 
 def update_geology_tree_added(self, uid_list=None):
     """Update geology tree without creating a new model"""
@@ -634,9 +634,7 @@ def update_topology_tree_added(self, uid_list=None):
                         property_combo.addItem("X")
                         property_combo.addItem("Y")
                         property_combo.addItem("Z")
-                        for prop in self.parent.geol_coll.get_uid_properties_names(
-                                uid
-                        ):
+                        for prop in self.parent.geol_coll.get_uid_properties_names(uid):
                             property_combo.addItem(prop)
                         name = self.parent.geol_coll.get_uid_name(uid)
                         tlevel_3 = QTreeWidgetItem(
@@ -824,7 +822,6 @@ def toggle_geology_visibility (self, item):
     """Called by self.GeologyTreeWidget.itemChanged.connect(self.toggle_geology_visibility ) and
     self.GeologyTopologyTreeWidget.itemChanged.connect(self.toggle_geology_visibility )"""
     # name = item.text(0)  # not used
-
     uid = item.text(1)
     uid_checkState = item.checkState(0)
     # needed to skip messages from upper levels of tree that do not broadcast uid's
@@ -843,7 +840,7 @@ def toggle_geology_visibility (self, item):
                 self.set_actor_visible(uid=uid, visible=False)
         # Before updating checkboxes, disconnect signals to geology and topology tree, if they are set,
         # to avoid a nasty loop that disrupts the trees, then reconnect them (it is also possible that
-        # they are automatically reconnected whe the trees are rebuilt
+        # they are automatically reconnected whe the trees are rebuilt.
         self.GeologyTreeWidget.itemChanged.disconnect()
         self.GeologyTopologyTreeWidget.itemChanged.disconnect()
         update_geology_checkboxes(self, uid=uid, uid_checkState=uid_checkState)

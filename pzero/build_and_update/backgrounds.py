@@ -12,11 +12,10 @@ def create_backgrounds_tree(self):
     self.BackgroundsTreeWidget.setHeaderLabels(
         ["Role > Feature > Name", "uid", "property"]
     )
-    self.BackgroundsTreeWidget.hideColumn(1)  # hide the uid column
+    # hide the uid column
+    self.BackgroundsTreeWidget.hideColumn(1)
     self.BackgroundsTreeWidget.setItemsExpandable(True)
-    roles = pd_unique(
-        self.parent.backgrnd_coll.df.query(self.view_filter)["role"]
-    )
+    roles = pd_unique(self.parent.backgrnd_coll.df.query(self.view_filter)["role"])
     for role in roles:
         flevel_1 = QTreeWidgetItem(
             self.BackgroundsTreeWidget, [role]
@@ -26,8 +25,7 @@ def create_backgrounds_tree(self):
         )
         features = pd_unique(
             self.parent.backgrnd_coll.df.query(self.view_filter).loc[
-                self.parent.backgrnd_coll.df.query(self.view_filter)["role"]
-                == role,
+                self.parent.backgrnd_coll.df.query(self.view_filter)["role"] == role,
                 "feature",
             ]
         )
