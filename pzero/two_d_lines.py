@@ -27,7 +27,7 @@ from shapely.geometry import LineString as shp_linestring
 from shapely.ops import snap as shp_snap
 from shapely.ops import split as shp_split
 
-from .helpers.helper_dialogs import  multiple_input_dialog, input_one_value_dialog, message_dialog
+from .helpers.helper_dialogs import multiple_input_dialog, input_one_value_dialog, message_dialog
 from .helpers.helper_widgets import Editor, Tracer
 from .helpers.helper_functions import freeze_gui
 from .entities_factory import PolyLine, XsPolyLine
@@ -171,9 +171,9 @@ def move_line(self, vector):
 
     for current_uid in self.selected_uids:
         if (
-            self.parent.geol_coll.get_uid_topology(current_uid) != "PolyLine"
+                self.parent.geol_coll.get_uid_topology(current_uid) != "PolyLine"
         ) and (
-            self.parent.geol_coll.get_uid_topology(current_uid) != "XsPolyLine"
+                self.parent.geol_coll.get_uid_topology(current_uid) != "XsPolyLine"
         ):
             print(" -- Selected data is not a line -- ")
             return
@@ -181,16 +181,16 @@ def move_line(self, vector):
         """Editing loop."""
         """For some reason in the following the [:] is needed."""
         x = (
-            self.parent.geol_coll.get_uid_vtk_obj(current_uid).points_X[:]
-            + vector.deltas[0]
+                self.parent.geol_coll.get_uid_vtk_obj(current_uid).points_X[:]
+                + vector.deltas[0]
         )
         y = (
-            self.parent.geol_coll.get_uid_vtk_obj(current_uid).points_Y[:]
-            + vector.deltas[1]
+                self.parent.geol_coll.get_uid_vtk_obj(current_uid).points_Y[:]
+                + vector.deltas[1]
         )
         z = (
-            self.parent.geol_coll.get_uid_vtk_obj(current_uid).points_Z[:]
-            + vector.deltas[2]
+                self.parent.geol_coll.get_uid_vtk_obj(current_uid).points_Z[:]
+                + vector.deltas[2]
         )
 
         points = np_stack((x, y, z), axis=1)
@@ -204,6 +204,7 @@ def move_line(self, vector):
     self.clear_selection()
 
     self.enable_actions()
+
 
 @freeze_gui
 def rotate_line(self):
@@ -227,9 +228,9 @@ def rotate_line(self):
         return
     for current_uid in self.selected_uids:
         if (
-            self.parent.geol_coll.get_uid_topology(current_uid) != "PolyLine"
+                self.parent.geol_coll.get_uid_topology(current_uid) != "PolyLine"
         ) and (
-            self.parent.geol_coll.get_uid_topology(current_uid) != "XsPolyLine"
+                self.parent.geol_coll.get_uid_topology(current_uid) != "XsPolyLine"
         ):
             self.parent.TextTerminal.appendPlainText(" -- Selected data is not a line -- ")
             return
@@ -295,11 +296,11 @@ def extend_line(self):
         print(" -- No input data selected -- ")
         return
     if (
-        self.parent.geol_coll.get_uid_topology(self.selected_uids[0])
-        != "PolyLine"
+            self.parent.geol_coll.get_uid_topology(self.selected_uids[0])
+            != "PolyLine"
     ) and (
-        self.parent.geol_coll.get_uid_topology(self.selected_uids[0])
-        != "XsPolyLine"
+            self.parent.geol_coll.get_uid_topology(self.selected_uids[0])
+            != "XsPolyLine"
     ):
         print(" -- Selected data is not a line -- ")
         return
@@ -340,11 +341,11 @@ def split_line_line(self):
     self.disable_actions()
     current_uid_scissors = self.selected_uids[-1]
     if (
-        self.parent.geol_coll.get_uid_topology(current_uid_scissors)
-        != "PolyLine"
+            self.parent.geol_coll.get_uid_topology(current_uid_scissors)
+            != "PolyLine"
     ) and (
-        self.parent.geol_coll.get_uid_topology(current_uid_scissors)
-        != "XsPolyLine"
+            self.parent.geol_coll.get_uid_topology(current_uid_scissors)
+            != "XsPolyLine"
     ):
         print(" -- Selected scissor is not a line -- ")
         return
@@ -362,11 +363,11 @@ def split_line_line(self):
 
     for current_uid_paper in self.selected_uids[:-1]:
         if (
-            self.parent.geol_coll.get_uid_topology(current_uid_paper)
-            != "PolyLine"
+                self.parent.geol_coll.get_uid_topology(current_uid_paper)
+                != "PolyLine"
         ) and (
-            self.parent.geol_coll.get_uid_topology(current_uid_paper)
-            != "XsPolyLine"
+                self.parent.geol_coll.get_uid_topology(current_uid_paper)
+                != "XsPolyLine"
         ):
             print(" -- Selected paper is not a line -- ")
             return
@@ -395,7 +396,8 @@ def split_line_line(self):
         """Check if the two lineal geometries have shared path with dimension 1 (= they share a line-type object)"""
         if shp_line_in_paper.crosses(shp_line_in_scissors):
             """Run the split shapely function."""
-            split_lines = shp_split(shp_line_in_paper, shp_line_in_scissors)  # lines must include all line parts not affected by splitting and two parts for the split line__________
+            split_lines = shp_split(shp_line_in_paper,
+                                    shp_line_in_scissors)  # lines must include all line parts not affected by splitting and two parts for the split line__________
         else:  # handles the case when the shp_linestring share a linear path and, for the moment, exists the tool
             """Un-Freeze QT interface"""
             self.clear_selection()
@@ -407,10 +409,10 @@ def split_line_line(self):
             """Create empty dictionary for the output lines."""
             new_line = deepcopy(self.parent.geol_coll.entity_dict)
             new_line["name"] = (
-                self.parent.geol_coll.df.loc[
-                    self.parent.geol_coll.df["uid"] == current_uid_paper, "name"
-                ].values[0]
-                + "_split"
+                    self.parent.geol_coll.df.loc[
+                        self.parent.geol_coll.df["uid"] == current_uid_paper, "name"
+                    ].values[0]
+                    + "_split"
             )
             new_line["topology"] = self.parent.geol_coll.df.loc[
                 self.parent.geol_coll.df["uid"] == current_uid_paper, "topology"
@@ -479,10 +481,10 @@ def split_line_existing_point(self):
         new_line_1 = deepcopy(self.parent.geol_coll.entity_dict)
         new_line_2 = deepcopy(self.parent.geol_coll.entity_dict)
         new_line_2["name"] = (
-            self.parent.geol_coll.df.loc[
-                self.parent.geol_coll.df["uid"] == uid, "name"
-            ].values[0]
-            + "_split"
+                self.parent.geol_coll.df.loc[
+                    self.parent.geol_coll.df["uid"] == uid, "name"
+                ].values[0]
+                + "_split"
         )
         new_line_2["topology"] = self.parent.geol_coll.df.loc[
             self.parent.geol_coll.df["uid"] == uid, "topology"
@@ -586,11 +588,11 @@ def split_line_existing_point(self):
         print(" -- No input data selected -- ")
         return
     if (
-        self.parent.geol_coll.get_uid_topology(self.selected_uids[0])
-        != "PolyLine"
+            self.parent.geol_coll.get_uid_topology(self.selected_uids[0])
+            != "PolyLine"
     ) and (
-        self.parent.geol_coll.get_uid_topology(self.selected_uids[0])
-        != "XsPolyLine"
+            self.parent.geol_coll.get_uid_topology(self.selected_uids[0])
+            != "XsPolyLine"
     ):
         print(" -- Selected data is not a line -- ")
         return
@@ -676,7 +678,7 @@ def merge_lines(self):
     points_0 = self.parent.geol_coll.get_uid_vtk_obj(in_uids[0]).points.copy()
     for uid in in_uids[1::]:
         points_1 = self.parent.geol_coll.get_uid_vtk_obj(uid).points.copy()
-        first2first = points_0[1,:] - points_1[1,:]
+        first2first = points_0[1, :] - points_1[1, :]
         first2first_norm = np_norm(first2first)
         first2last = points_0[1, :] - points_1[-1, :]
         first2last_norm = np_norm(first2last)
@@ -730,9 +732,9 @@ def snap_line(self):
     self.disable_actions()
     current_uid_goal = self.selected_uids[-1]
     if (
-        self.parent.geol_coll.get_uid_topology(current_uid_goal) != "PolyLine"
+            self.parent.geol_coll.get_uid_topology(current_uid_goal) != "PolyLine"
     ) and (
-        self.parent.geol_coll.get_uid_topology(current_uid_goal) != "XsPolyLine"
+            self.parent.geol_coll.get_uid_topology(current_uid_goal) != "XsPolyLine"
     ):
         print(" -- Selected goal is not a line -- ")
         return
@@ -746,11 +748,11 @@ def snap_line(self):
     for current_uid_snap in self.selected_uids[:-1]:
         print(current_uid_snap)
         if (
-            self.parent.geol_coll.get_uid_topology(current_uid_snap)
-            != "PolyLine"
+                self.parent.geol_coll.get_uid_topology(current_uid_snap)
+                != "PolyLine"
         ) and (
-            self.parent.geol_coll.get_uid_topology(current_uid_snap)
-            != "XsPolyLine"
+                self.parent.geol_coll.get_uid_topology(current_uid_snap)
+                != "XsPolyLine"
         ):
             print(" -- Selected snap is not a line -- ")
             return
@@ -855,8 +857,8 @@ def snap_line(self):
         new_line_goal["vtk_obj"].auto_cells()
         """Replace VTK object"""
         if new_line_snap["vtk_obj"].points_number > 0:
-            self.parent.geol_coll.replace_vtk(uid=current_uid_snap,vtk_object=new_line_snap["vtk_obj"])
-            self.parent.geol_coll.replace_vtk(uid=current_uid_goal,vtk_object=new_line_goal["vtk_obj"])
+            self.parent.geol_coll.replace_vtk(uid=current_uid_snap, vtk_object=new_line_snap["vtk_obj"])
+            self.parent.geol_coll.replace_vtk(uid=current_uid_goal, vtk_object=new_line_goal["vtk_obj"])
             del new_line_snap
             del new_line_goal
         else:
@@ -866,61 +868,47 @@ def snap_line(self):
     self.enable_actions()
 
 
-def resample_line_distance(
-    self,
-):  # this must be done per-part_______________________________________________________
-    """Resample selected line with constant spacing. Distance of spacing is required"""
-    print("Resample line. Define constant spacing for resampling.")
-    """Terminate running event loops"""
-    """Check if a line is selected"""
+@freeze_gui
+def resample_lines_distance(self):
+    """Resample selected line with constant specified spacing."""
+    # Check if at least a line is selected.
     if not self.selected_uids:
-        print(" -- No input data selected -- ")
+        self.parent.TextTerminal.appendPlainText(" -- No input data selected -- ")
         return
-    """Freeze QT interface"""
-    self.disable_actions()
-    """Ask for distance for evenly spacing resampling"""
+    # Input distance for evenly spacing resampling.
     distance_delta = input_one_value_dialog(
         parent=self,
         title="Spacing distance for Line Resampling",
         label="Insert spacing distance",
         default_value="Distance",
     )
+    if any([distance_delta is None, isinstance(distance_delta, str), distance_delta <= 0]):
+        self.parent.TextTerminal.appendPlainText(" -- Distance is None -- ")
+        return
+    # distance_delta = int(distance_delta)
     for current_uid in self.selected_uids:
         if (
-            self.parent.geol_coll.get_uid_topology(current_uid) != "PolyLine"
+                self.parent.geol_coll.get_uid_topology(current_uid) != "PolyLine"
         ) and (
-            self.parent.geol_coll.get_uid_topology(current_uid) != "XsPolyLine"
+                self.parent.geol_coll.get_uid_topology(current_uid) != "XsPolyLine"
         ):
-            print(" -- Selected data is not a line -- ")
+            self.parent.TextTerminal.appendPlainText(" -- Selected data is not a line -- ")
             return
-
-        if distance_delta is None or isinstance(distance_delta, str):
-            """Un-Freeze QT interface"""
-            for action in self.findChildren(QAction):
-                action.setEnabled(True)
-            return
-        else:
-            distance_delta = int(distance_delta)
-        if distance_delta <= 0:
-            distance_delta = 20
-        """Create empty dictionary for the output line"""
+        # Create empty dictionary for the output line.
         new_line = deepcopy(self.parent.geol_coll.entity_dict)
+        # Define topology and x_section. Get coordinates of input line.
         if isinstance(self, ViewMap):
             new_line["topology"] = "PolyLine"
             new_line["x_section"] = None
-            inU = deepcopy(
-                self.parent.geol_coll.get_uid_vtk_obj(current_uid).points[:, 0]
-            )
-            inV = deepcopy(
-                self.parent.geol_coll.get_uid_vtk_obj(current_uid).points[:, 1]
-            )
+            inU = deepcopy(self.parent.geol_coll.get_uid_vtk_obj(current_uid).points[:, 0])
+            inV = deepcopy(self.parent.geol_coll.get_uid_vtk_obj(current_uid).points[:, 1])
         elif isinstance(self, ViewXsection):
             new_line["topology"] = "XsPolyLine"
             new_line["x_section"] = self.this_x_section_uid
             inU, inV = self.parent.geol_coll.get_uid_vtk_obj(current_uid).world2plane()
-        """Stack coordinates in two-columns matrix"""
+        # Stack coordinates in two-columns matrix.
         inUV = np_column_stack((inU, inV))
-        """Run the Shapely function."""
+        # Run the Shapely function.
         shp_line_in = shp_linestring(inUV)
         if distance_delta >= shp_line_in.length:
             while distance_delta >= shp_line_in.length:
@@ -930,146 +918,112 @@ def resample_line_distance(
         points.append(tuple(shp_line_in.coords[-1]))
         shp_line_out = shp_linestring(points)
         outUV = deepcopy(np_array(shp_line_out.coords))
-        """Un-stack output coordinates and write them to the empty dictionary."""
+        # Un-stack output coordinates and write them to the empty dictionary.
         outU = outUV[:, 0]
         outV = outUV[:, 1]
         if isinstance(self, ViewMap):
-            # if isinstance(self, (ViewMap, ViewMap)):
             outX = outU
             outY = outV
             outZ = np_zeros(np_shape(outX))
             new_line["vtk_obj"] = PolyLine()
-        # elif isinstance(self, (ViewXsection, ViewXsection)):
         elif isinstance(self, ViewXsection):
-            outX, outY, outZ = self.parent.xsect_coll.plane2world(
-                self.this_x_section_uid, outU, outV
-            )
-            new_line["vtk_obj"] = XsPolyLine(
-                self.this_x_section_uid, parent=self.parent
-            )
+            outX, outY, outZ = self.parent.xsect_coll.plane2world(self.this_x_section_uid, outU, outV)
+            new_line["vtk_obj"] = XsPolyLine(self.this_x_section_uid, parent=self.parent)
         outXYZ = np_column_stack((outX, outY, outZ))
         new_line["vtk_obj"].points = outXYZ
         new_line["vtk_obj"].auto_cells()
-        """Replace VTK object"""
+        # Replace VTK object.
         if new_line["vtk_obj"].points_number > 0:
             self.parent.geol_coll.replace_vtk(uid=current_uid, vtk_object=new_line["vtk_obj"])
             del new_line
         else:
-            print("Empty object")
-        """Deselect input line."""
-        self.parent.geol_coll.signals.geom_modified.emit(
-            [current_uid]
-        )  # emit uid as list to force redraw()
-        """Un-Freeze QT interface"""
-    self.clear_selection()
-    self.enable_actions()
+            self.parent.TextTerminal.appendPlainText(" -- Empty object -- ")
+        # Deselect input line and emit uid as list to force redraw.
+        self.clear_selection()
+        self.parent.geol_coll.signals.geom_modified.emit([current_uid])
+        self.parent.TextTerminal.appendPlainText(f"Line {current_uid} resampled with distance = {distance_delta}")
 
 
-def resample_line_number_points(
-    self,
-):  # this must be done per-part___________________________________________________
-    """Resample selected line with constant spacing. Number of points to divide the line in is required"""
-    print("Resample line. Define number of vertices to create on the line.")
-    """Terminate running event loops"""
-    """Check if a line is selected"""
+@freeze_gui
+def resample_lines_number_points(self):  # this must be done per-part___________________________________________________
+    """Resample selected line with constant spacing defined by a specified number of nodes."""
+    # Check if at least a line is selected.
     if not self.selected_uids:
-        print(" -- No input data selected -- ")
+        self.parent.TextTerminal.appendPlainText(" -- No input data selected -- ")
         return
-    """Freeze QT interface"""
-    self.disable_actions()
-    """Ask for the number of points for evenly spacing resampling"""
+    # Input the number of points for evenly spacing resampling.
     number_of_points = input_one_value_dialog(
         parent=self,
         title="Number of points for Line Resampling",
         label="Insert number of points",
         default_value="Number",
     )
+    if any([number_of_points is None, isinstance(number_of_points, str), number_of_points <= 1]):
+        self.parent.TextTerminal.appendPlainText(" -- Number of nodes is None -- ")
+        return
+    else:
+        number_of_points = int(number_of_points)
     for current_uid in self.selected_uids:
         if (
-            self.parent.geol_coll.get_uid_topology(current_uid) != "PolyLine"
+                self.parent.geol_coll.get_uid_topology(current_uid) != "PolyLine"
         ) and (
-            self.parent.geol_coll.get_uid_topology(current_uid) != "XsPolyLine"
+                self.parent.geol_coll.get_uid_topology(current_uid) != "XsPolyLine"
         ):
-            print(" -- Selected data is not a line -- ")
+            self.parent.TextTerminal.appendPlainText(" -- Selected data is not a line -- ")
             return
-
-        if number_of_points is None or isinstance(number_of_points, str):
-            """Un-Freeze QT interface"""
-            self.enable_actions()
-            return
-        else:
-            number_of_points = int(number_of_points)
-        if number_of_points <= 1:
-            number_of_points = 20
-        """Editing loop"""
-        """Create empty dictionary for the output line"""
+        # Create empty dictionary for the output line.
         new_line = deepcopy(self.parent.geol_coll.entity_dict)
-        """Define topology and x_section. Get coordinates of input line"""
+        # Define topology and x_section. Get coordinates of input line.
         if isinstance(self, ViewMap):
-            # if isinstance(self, (ViewMap, ViewMap)):
             new_line["topology"] = "PolyLine"
             new_line["x_section"] = None
-            inU = deepcopy(
-                self.parent.geol_coll.get_uid_vtk_obj(current_uid).points[:, 0]
-            )
-            inV = deepcopy(
-                self.parent.geol_coll.get_uid_vtk_obj(current_uid).points[:, 1]
-            )
-        # elif isinstance(self, (ViewXsection, ViewXsection)):
+            inU = deepcopy(self.parent.geol_coll.get_uid_vtk_obj(current_uid).points[:, 0])
+            inV = deepcopy(self.parent.geol_coll.get_uid_vtk_obj(current_uid).points[:, 1])
         elif isinstance(self, ViewXsection):
             new_line["topology"] = "XsPolyLine"
             new_line["x_section"] = self.this_x_section_uid
-
             inU, inV = self.parent.geol_coll.get_uid_vtk_obj(current_uid).world2plane()
-        """Stack coordinates in two-columns matrix"""
+        # Stack coordinates in two-columns matrix.
         inUV = np_column_stack((inU, inV))
-        """Run the Shapely function."""
+        # Run the Shapely function.
         shp_line_in = shp_linestring(inUV)
         distances = (
             shp_line_in.length * i / (number_of_points - 1)
             for i in range(number_of_points)
         )
-        points = [shp_line_in.interpolate(distance) for distance in distances]
+        points = [tuple(shp_line_in.interpolate(distance).coords[0]) for distance in distances]
+        points.append(tuple(shp_line_in.coords[-1]))
         shp_line_out = shp_linestring(points)
         outUV = deepcopy(np_array(shp_line_out.coords))
-        """Un-stack output coordinates and write them to the empty dictionary."""
+        # Un-stack output coordinates and write them to the empty dictionary.
         outU = outUV[:, 0]
         outV = outUV[:, 1]
         if isinstance(self, ViewMap):
-            # if isinstance(self, (ViewMap, ViewMap)):
             outX = outU
             outY = outV
             outZ = np_zeros(np_shape(outX))
             new_line["vtk_obj"] = PolyLine()
-        # elif isinstance(self, (ViewXsection, ViewXsection)):
         elif isinstance(self, ViewXsection):
-            outX, outY, outZ = self.parent.xsect_coll.plane2world(
-                self.this_x_section_uid, outU, outV
-            )
-            new_line["vtk_obj"] = XsPolyLine(
-                self.this_x_section_uid, parent=self.parent
-            )
+            outX, outY, outZ = self.parent.xsect_coll.plane2world(self.this_x_section_uid, outU, outV)
+            new_line["vtk_obj"] = XsPolyLine(self.this_x_section_uid, parent=self.parent)
         outXYZ = np_column_stack((outX, outY, outZ))
         new_line["vtk_obj"].points = outXYZ
         new_line["vtk_obj"].auto_cells()
-        """Replace VTK object"""
+        # Replace VTK object.
         if new_line["vtk_obj"].points_number > 0:
             self.parent.geol_coll.replace_vtk(uid=current_uid, vtk_object=new_line["vtk_obj"])
             del new_line
         else:
-            print("Empty object")
-
-        self.parent.geol_coll.signals.geom_modified.emit(
-            [current_uid]
-        )  # emit uid as list to force redraw()
-    """Deselect input line."""
-    self.clear_selection()
-    """Un-Freeze QT interface"""
-    self.enable_actions()
+            self.parent.TextTerminal.appendPlainText(" -- Empty object -- ")
+        # Deselect input line and emit uid as list to force redraw.
+        self.clear_selection()
+        self.parent.geol_coll.signals.geom_modified.emit([current_uid])
+        self.parent.TextTerminal.appendPlainText(
+            f"Line {current_uid} resampled with number of points = {number_of_points}")
 
 
 def simplify_line(
-    self,
+        self,
 ):  # this must be done per-part_______________________________________________________
     """Return a simplified representation of the line. Permits the user to choose a value for the Tolerance parameter."""
     print(
@@ -1093,9 +1047,9 @@ def simplify_line(
     )
     for current_uid in self.selected_uids:
         if (
-            self.parent.geol_coll.get_uid_topology(current_uid) != "PolyLine"
+                self.parent.geol_coll.get_uid_topology(current_uid) != "PolyLine"
         ) and (
-            self.parent.geol_coll.get_uid_topology(current_uid) != "XsPolyLine"
+                self.parent.geol_coll.get_uid_topology(current_uid) != "XsPolyLine"
         ):
             print(" -- Selected data is not a line -- ")
             return
@@ -1170,7 +1124,7 @@ def simplify_line(
 
 
 def copy_parallel(
-    self,
+        self,
 ):  # this must be done per-part_______________________________________________________
     """Parallel folding. Create a line copied and translated from a template line using Shapely.
     Since lines are oriented left-to-right and bottom-to-top, and here we copy a line to the left,
@@ -1183,11 +1137,11 @@ def copy_parallel(
         print(" -- No input data selected -- ")
         return
     if (
-        self.parent.geol_coll.get_uid_topology(self.selected_uids[0])
-        != "PolyLine"
+            self.parent.geol_coll.get_uid_topology(self.selected_uids[0])
+            != "PolyLine"
     ) and (
-        self.parent.geol_coll.get_uid_topology(self.selected_uids[0])
-        != "XsPolyLine"
+            self.parent.geol_coll.get_uid_topology(self.selected_uids[0])
+            != "XsPolyLine"
     ):
         print(" -- Selected data is not a line -- ")
         return
@@ -1290,7 +1244,7 @@ def copy_parallel(
 
 
 def copy_kink(
-    self,
+        self,
 ):  # this must be done per-part_______________________________________________________
     """Kink folding. Create a line copied and translated from a template line using Shapely.
     Since lines are oriented left-to-right and bottom-to-top, and here we copy a line to the left,
@@ -1302,11 +1256,11 @@ def copy_kink(
         print(" -- No input data selected -- ")
         return
     if (
-        self.parent.geol_coll.get_uid_topology(self.selected_uids[0])
-        != "PolyLine"
+            self.parent.geol_coll.get_uid_topology(self.selected_uids[0])
+            != "PolyLine"
     ) and (
-        self.parent.geol_coll.get_uid_topology(self.selected_uids[0])
-        != "XsPolyLine"
+            self.parent.geol_coll.get_uid_topology(self.selected_uids[0])
+            != "XsPolyLine"
     ):
         print(" -- Selected data is not a line -- ")
         return
@@ -1405,7 +1359,7 @@ def copy_kink(
 
 
 def copy_similar(
-    self, vector
+        self, vector
 ):  # this must be done per-part_______________________________________________________
     """Similar folding. Create a line copied and translated from a template line.
     Does not need U,V coordinates since the translation vector is already in world coords
@@ -1418,11 +1372,11 @@ def copy_similar(
         print(" -- No input data selected -- ")
         return
     if (
-        self.parent.geol_coll.get_uid_topology(self.selected_uids[0])
-        != "PolyLine"
+            self.parent.geol_coll.get_uid_topology(self.selected_uids[0])
+            != "PolyLine"
     ) and (
-        self.parent.geol_coll.get_uid_topology(self.selected_uids[0])
-        != "XsPolyLine"
+            self.parent.geol_coll.get_uid_topology(self.selected_uids[0])
+            != "XsPolyLine"
     ):
         print(" -- Selected data is not a line -- ")
         return
@@ -1551,7 +1505,7 @@ def left_right(self, uid=None):
     if U_line[0] > U_line[-1]:  # reverse if right-to-left
         flip_line(uid=uid)
     elif (
-        U_line[0] == U_line[-1] and V_line[0] > V_line[-1]
+            U_line[0] == U_line[-1] and V_line[0] > V_line[-1]
     ):  # reverse if vertical up-to-down
         flip_line(uid=uid)
 
@@ -1676,7 +1630,7 @@ def clean_intersection(self):
 
     idx_list = df_buffer.index[
         df_buffer.intersects(line1) == True
-    ]  # Subset the intersecting lines
+        ]  # Subset the intersecting lines
     uids = df.iloc[idx_list]["uid"].to_list()
 
     uids.append(sel_uid)

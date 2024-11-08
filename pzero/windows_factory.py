@@ -2957,8 +2957,8 @@ class View2D(VTKView):
             split_line_existing_point,
             merge_lines,
             snap_line,
-            resample_line_distance,
-            resample_line_number_points,
+            resample_lines_distance,
+            resample_lines_number_points,
             simplify_line,
             copy_parallel,
             copy_kink,
@@ -3018,11 +3018,11 @@ class View2D(VTKView):
         self.menuModify.addAction(self.snapLineButton)
 
         self.resampleDistanceButton = QAction("Resample distance", self)
-        self.resampleDistanceButton.triggered.connect(lambda: resample_line_distance(self))
+        self.resampleDistanceButton.triggered.connect(lambda: resample_lines_distance(self))
         self.menuModify.addAction(self.resampleDistanceButton)
 
         self.resampleNumberButton = QAction("Resample number", self)
-        self.resampleNumberButton.triggered.connect(lambda: resample_line_number_points(self))
+        self.resampleNumberButton.triggered.connect(lambda: resample_lines_number_points(self))
         self.menuModify.addAction(self.resampleNumberButton)
 
         self.simplifyButton = QAction("Simplify line", self)
