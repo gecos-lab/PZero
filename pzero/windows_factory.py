@@ -8060,7 +8060,7 @@ class View3D(BaseView):
         
         section_combo.currentTextChanged.connect(self.initialize_slice_controls)
         # Remove section button
-        remove_btn = QPushButton("Remove Section") # needs to be implemented
+        # remove_btn = QPushButton("Remove Section") # needs to be implemented
         # Get the seismic dimensions from the VTK grid
         # Initialize default dimensions
         section_name = section_combo.currentText()
@@ -8296,7 +8296,7 @@ class View3D(BaseView):
         xline_check.toggled.connect(lambda checked: toggle_slice('Xline', checked))
         zslice_check.toggled.connect(lambda checked: toggle_slice('Z Slice', checked))
 
-        remove_btn.clicked.connect(remove_section) # needs to be implemented
+        #remove_btn.clicked.connect(remove_section) # needs to be implemented
 
         # Add widgets to section layout
         section_layout.addWidget(section_label)
@@ -8304,7 +8304,7 @@ class View3D(BaseView):
         #section_layout.addWidget(add_inline_btn)
         #section_layout.addWidget(add_xline_btn)
         #section_layout.addWidget(add_zslice_btn)
-        section_layout.addWidget(remove_btn)
+        #section_layout.addWidget(remove_btn)
         section_group.setLayout(section_layout)
         # Add checkbox group instead
         section_layout.addWidget(slice_toggle_group)
@@ -8327,22 +8327,10 @@ class View3D(BaseView):
 
         section_combo.currentTextChanged.connect(on_section_selected)
         # Slice control group
-        slice_group = QGroupBox("Slice Control")
-        slice_layout = QVBoxLayout()
-
         # Combobox for selecting existing slices
-        slice_label = QLabel("Active Slices:")
-        slice_combo = QComboBox()
-        slice_combo.addItems(self.getExistingSlices())
-
-        # Add widgets to slice layout
-        slice_layout.addWidget(slice_label)
-        slice_layout.addWidget(slice_combo)
-        slice_group.setLayout(slice_layout)
-
         # Add groups to main layout
         layout.addWidget(section_group)
-        layout.addWidget(slice_group)
+        #layout.addWidget(slice_group)
         control_panel.setLayout(layout)
 
         # Show the control panel
