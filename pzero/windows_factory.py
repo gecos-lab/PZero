@@ -7987,6 +7987,109 @@ class View3D(BaseView):
                 return (origin[2] - z_min) / (z_max - z_min)
         except ZeroDivisionError:
             return 0.0
+    def create_fence_diagram(self):
+        import numpy as np
+        """Create a fence diagram control panel and visualization"""
+        fence_panel = QDialog(self)
+        fence_panel.setWindowTitle("Create Fence Diagram")
+        layout = QVBoxLayout()
+
+        # Volume selection
+        volume_layout = QHBoxLayout()
+        volume_layout.addWidget(QLabel("Seismic Volume:"))
+        volume_combo = QComboBox()
+        volume_combo.addItems(self.getExistingSections())
+        volume_layout.addWidget(volume_combo)
+        layout.addLayout(volume_layout)
+
+        # Direction selection
+        direction_layout = QHBoxLayout()
+        direction_layout.addWidget(QLabel("Direction:"))
+        direction_combo = QComboBox()
+        direction_combo.addItems(["Inline", "Crossline", "Z-Slice"])
+        direction_layout.addWidget(direction_combo)
+        layout.addLayout(direction_layout)
+
+        # Number of slices
+        slices_layout = QHBoxLayout()
+        slices_layout.addWidget(QLabel("Number of slices:"))
+        slices_spin = QSpinBox()
+        slices_spin.setRange(2, 50)
+        slices_spin.setValue(7)
+        slices_layout.addWidget(slices_spin)
+        layout.addLayout(slices_layout)
+
+        def create_fence():
+            section_name = volume_combo.currentText()
+            direction = direction_combo.currentText()
+            n_slices = slices_spin.value()
+
+            # Get volume data
+            uid = self.mesh3d_coll.get_uid_by_name(section_name)
+            vtk_grid = self.mesh3d_coll.get_uid_vtk_obj(uid)
+            vtk_grid = pv.wrap(vtk_grid)
+            
+            # Get proper axis and bounds based on direction
+            if direction == 'Inline':
+                axis = 'x'
+                min_val, max_val = vtk_grid.bounds[0], vtk_grid.bounds[1]
+            elif direction == 'Crossline':
+                axis = 'y'
+                min_val, max_val = vtk_grid.bounds[2], vtk_grid.bounds[3]
+            else:  # Z-Slice
+                axis = 'z'
+                min_val, max_val = vtk_grid.bounds[4], vtk_grid.bounds[5]
+
+            # Clear existing fence diagram actors
+            existing_fences = [uid for uid in self.slice_actors if uid.endswith("_fence")]
+            for fence_uid in existing_fences:
+                self.plotter.remove_actor(self.slice_actors[fence_uid])
+                del self.slice_actors[fence_uid]
+
+            # Generate evenly spaced positions
+            positions = np.linspace(min_val, max_val, n_slices)
+            
+            # Create slices
+            for i, pos in enumerate(positions):
+                slice_uid = f"{uid}_{direction}_fence_{i}"
+                
+                # Create slice directly using PyVista
+                try:
+                    slice_data = vtk_grid.slice(normal=axis, origin=[pos if axis == 'x' else 0,
+                                                                    pos if axis == 'y' else 0,
+                                                                    pos if axis == 'z' else 0])
+                    
+                    # Only add if slice contains data
+                    if slice_data.n_points > 0:
+                        # Get scalar array and colormap
+                        scalar_array, cmap = self.get_scalar_and_cmap(vtk_grid)
+                        
+                        # Add slice actor
+                        self.slice_actors[slice_uid] = self.plotter.add_mesh(
+                            slice_data,
+                            name=slice_uid,
+                            scalars=scalar_array,
+                            cmap=cmap,
+                            clim=vtk_grid.get_data_range(scalar_array) if scalar_array else None,
+                            show_scalar_bar=False,
+                            opacity=1.0,
+                            interpolate_before_map=True
+                        )
+                        self.slice_actors[slice_uid].fence_diagram = True
+                        
+                except Exception as e:
+                    print(f"Error creating slice at position {pos}: {e}")
+                    continue
+
+            self.plotter.render()
+
+        # Create button
+        create_btn = QPushButton("create slices")
+        create_btn.clicked.connect(create_fence)
+        layout.addWidget(create_btn)
+
+        fence_panel.setLayout(layout)
+        fence_panel.show()
     def show_seismic_control_panel(self):
         """Create and show a control panel for seismic visualization."""
         # Create the control panel window
@@ -7997,7 +8100,10 @@ class View3D(BaseView):
         # Section selection group
         section_group = QGroupBox("Section Management")
         section_layout = QVBoxLayout()
-
+        # Add fence diagram button
+        fence_btn = QPushButton("Grid Section manager")
+        fence_btn.clicked.connect(self.create_fence_diagram)
+        layout.addWidget(fence_btn)
         # Combobox for selecting main seismic sections
         section_label = QLabel("Available Sections:")
         section_combo = QComboBox()
@@ -8012,7 +8118,7 @@ class View3D(BaseView):
         n_inline = dims[0]
         n_xline = dims[1]
         n_samples = dims[2]
-
+    
         # Create sliders with proper ranges
         inline_slider = QSlider(Qt.Horizontal)
         xline_slider = QSlider(Qt.Horizontal)
@@ -8498,134 +8604,7 @@ class View3D(BaseView):
         return self.mesh3d_coll.df[
             self.mesh3d_coll.df['mesh3d_type'] == 'seismic_slice'
             ]['name'].tolist()
-        """Add mouse interaction for seismic slices"""
-        style = vtk.vtkInteractorStyleUser()
-        
-        # Store the original actor properties for restoration
-        self.original_colors = {}
-        
-        # Add throttling for rendering
-        self.last_render_time = time.time()
-        render_throttle = 1/30.0  # Limit to 30 FPS
-        
-        def highlight_actor(actor):
-            """Highlight the actor by changing its color"""
-            if actor not in self.original_colors:
-                prop = actor.GetProperty()
-                self.original_colors[actor] = prop.GetColor()
-                prop.SetColor(1, 0, 0)  # Highlight in red
-                self.plotter.render()
 
-        def on_mouse_move(obj, event):
-            try:
-                current_time = time.time()
-                
-                # Handle dragging with throttling
-                if (hasattr(self.plotter.interactor, 'dragging_slice') and 
-                    self.plotter.interactor.dragging_slice and 
-                    hasattr(self.plotter.interactor, 'is_dragging') and 
-                    self.plotter.interactor.is_dragging):
-                    
-                    # Get mouse position and setup picker
-                    click_pos = self.plotter.interactor.GetEventPosition()
-                    picker = vtk.vtkCellPicker()
-                    picker.SetTolerance(0.0005)
-                    
-                    # Disable rendering during calculation
-                    self.plotter.render_window.SetDesiredUpdateRate(30.0)
-                    self.plotter.ren_win.GetInteractor().Disable()
-                    
-                    picker.Pick(click_pos[0], click_pos[1], 0, self.plotter.renderer)
-                    world_pos = picker.GetPickPosition()
-                    slice_uid = self.plotter.interactor.dragging_slice
-                    
-                    if slice_uid:
-                        parent_uid = slice_uid.split('_')[0]
-                        section_name = self.mesh3d_coll.get_uid_name(parent_uid)
-                        vtk_grid = self.mesh3d_coll.get_uid_vtk_obj(parent_uid)
-                        bounds = pv.wrap(vtk_grid).bounds
-                        
-                        # Update slice position
-                        if '_Inline' in slice_uid:
-                            normalized_pos = (world_pos[0] - bounds[0]) / (bounds[1] - bounds[0])
-                            if 0 <= normalized_pos <= 1:
-                                self.update_slice_visualization(section_name, 'Inline', normalized_pos, fast_update=True)
-                        elif '_Xline' in slice_uid:
-                            normalized_pos = (world_pos[1] - bounds[2]) / (bounds[3] - bounds[2])
-                            if 0 <= normalized_pos <= 1:
-                                self.update_slice_visualization(section_name, 'Xline', normalized_pos, fast_update=True)
-                        elif '_Z Slice' in slice_uid:
-                            normalized_pos = (world_pos[2] - bounds[4]) / (bounds[5] - bounds[4])
-                            if 0 <= normalized_pos <= 1:
-                                self.update_slice_visualization(section_name, 'Z Slice', normalized_pos, fast_update=True)
-                    
-                    # Re-enable rendering and update
-                    self.plotter.ren_win.GetInteractor().Enable()
-                    if current_time - self.last_render_time > render_throttle:
-                        self.plotter.render_window.SetDesiredUpdateRate(0.0001)
-                        self.plotter.render()
-                        self.last_render_time = current_time
-                        
-            except Exception as e:
-                print(f"Error in mouse move: {e}")
-
-        def on_left_press(obj, event):
-            try:
-                click_pos = self.plotter.interactor.GetEventPosition()
-                picker = vtk.vtkCellPicker()
-                picker.SetTolerance(0.0005)
-                picker.Pick(click_pos[0], click_pos[1], 0, self.plotter.renderer)
-                
-                actor = picker.GetActor()
-                if actor:
-                    for _, row in self.actors_df.iterrows():
-                        if row['actor'] == actor and '_' in row['uid']:  # Check if it's a slice
-                            self.plotter.interactor.dragging_slice = row['uid']
-                            self.plotter.interactor.is_dragging = True
-                            print(f"Started dragging slice: {row['uid']}")
-                            break
-            except Exception as e:
-                print(f"Error in left press: {e}")
-
-        def on_left_release(obj, event):
-            try:
-                if hasattr(self.plotter.interactor, 'dragging_slice'):
-                    print(f"Stopped dragging slice: {self.plotter.interactor.dragging_slice}")
-                    self.plotter.interactor.dragging_slice = None
-                    self.plotter.interactor.is_dragging = False
-                    
-                    # Unhighlight all actors
-                    for actor in list(self.original_colors.keys()):
-                        unhighlight_actor(actor)
-            except Exception as e:
-                print(f"Error in left release: {e}")
-
-        def on_right_button_down(obj, event):
-            style.OnMiddleButtonDown()
-            
-        def on_right_button_up(obj, event):
-            style.OnMiddleButtonUp()
-            
-        def on_middle_button_down(obj, event):
-            style.OnMiddleButtonDown()
-            
-        def on_middle_button_up(obj, event):
-            style.OnMiddleButtonUp()
-
-        # Add observers to the interactor style
-        style.AddObserver("LeftButtonPressEvent", on_left_press)
-        style.AddObserver("MouseMoveEvent", on_mouse_move)
-        style.AddObserver("LeftButtonReleaseEvent", on_left_release)
-        style.AddObserver("RightButtonPressEvent", on_right_button_down)
-        style.AddObserver("RightButtonReleaseEvent", on_right_button_up)
-        style.AddObserver("MiddleButtonPressEvent", on_middle_button_down)
-        style.AddObserver("MiddleButtonReleaseEvent", on_middle_button_up)
-        
-        # Set the custom style
-        self.plotter.interactor.SetInteractorStyle(style)
-        
-        # Store style reference
-        self.plotter._style = style
 
     def addOrthogonalSlices(self, uid, section_type, x_slice_location=None, y_slice_location=None,
             z_slice_location=None):
@@ -8693,77 +8672,6 @@ class View3D(BaseView):
             return None
 
     
-
-        """Add drag interaction for seismic slices"""
-        def on_mouse_move(obj, event):
-            interactor = self.plotter.iren.interactor
-            if hasattr(interactor, 'dragging_slice'):
-                # Get current mouse position
-                click_pos = interactor.GetEventPosition()
-                
-                # Use cell picker for better accuracy
-                cell_picker = vtk.vtkCellPicker()
-                cell_picker.Pick(click_pos[0], click_pos[1], 0, self.plotter.renderer)
-                world_pos = cell_picker.GetPickPosition()
-                
-                slice_uid = interactor.dragging_slice
-                # Get the parent section name from the slice uid
-                parent_uid = slice_uid.split('_')[0]
-                section_name = self.mesh3d_coll.get_uid_name(parent_uid)
-                
-                # Get bounds from parent seismic
-                vtk_grid = self.mesh3d_coll.get_uid_vtk_obj(parent_uid)
-                if isinstance(vtk_grid, pv.DataSet):
-                    bounds = vtk_grid.bounds
-                else:
-                    bounds = pv.wrap(vtk_grid).bounds
-                
-                if '_Inline' in slice_uid:
-                    normalized_pos = (world_pos[0] - bounds[0]) / (bounds[1] - bounds[0])
-                    self.update_slice_visualization(section_name, 'Inline', normalized_pos)
-                elif '_Xline' in slice_uid:
-                    normalized_pos = (world_pos[1] - bounds[2]) / (bounds[3] - bounds[2])
-                    self.update_slice_visualization(section_name, 'Xline', normalized_pos)
-                elif '_Z Slice' in slice_uid:
-                    normalized_pos = (world_pos[2] - bounds[4]) / (bounds[5] - bounds[4])
-                    self.update_slice_visualization(section_name, 'Z Slice', normalized_pos)
-
-        def on_left_button_press(obj, event):
-            interactor = self.plotter.iren.interactor
-            click_pos = interactor.GetEventPosition()
-            
-            # Use cell picker for better accuracy
-            cell_picker = vtk.vtkCellPicker()
-            cell_picker.Pick(click_pos[0], click_pos[1], 0, self.plotter.renderer)
-            
-            actor = cell_picker.GetActor()
-            if actor:
-                for _, row in self.actors_df.iterrows():
-                    if row['actor'] == actor:
-                        interactor.dragging_slice = row['uid']
-                        break
-
-        def on_left_button_release(obj, event):
-            interactor = self.plotter.iren.interactor
-            if hasattr(interactor, 'dragging_slice'):
-                delattr(interactor, 'dragging_slice')
-
-        # Add observers to the interactor
-        self.plotter.iren.add_observer('MouseMoveEvent', on_mouse_move)
-        self.plotter.iren.add_observer('LeftButtonPressEvent', on_left_button_press)
-        self.plotter.iren.add_observer('LeftButtonReleaseEvent', on_left_button_release)
-    def retrieve_vtkStructuredGrid(self, uid): # This is redundant, there is already the get_uid_vtk_obj method in mesh3d_collection
-
-        # [gabriele] This is redundant, there is already the get_uid_vtk_obj method in mesh3d_collection
-
-        # Attempt to retrieve the vtkStructuredGrid object using the UID
-        vtk_grid = self.parent.mesh3d_coll.df.loc[self.parent.mesh3d_coll.df['uid'] == uid, 'vtk_obj'].values[0]
-
-        if isinstance(vtk_grid, Seismics):
-            return vtk_grid
-        else:
-            print(f"The object retrieved is not a vtkStructuredGrid: {type(vtk_grid)}")
-            return None
 
     def get_name_mesh3d_type(self, name): # This is redundant, there is already the get_name_mesh3d_type method in mesh3d_collection
         """Get mesh3d_type based on name."""
