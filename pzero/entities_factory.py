@@ -4,6 +4,7 @@ import segyio
 import numpy as np
 import pyvista as pv
 from numpy import NaN as np_NaN
+import numpy as np
 from numpy import append as np_append
 from numpy import arcsin as np_arcsin
 from numpy import arctan as np_arctan
@@ -27,13 +28,10 @@ from numpy import tan as np_tan
 from numpy import where as np_where
 from numpy import zeros as np_zeros
 from numpy.linalg import norm as np_linalg_norm
-from pyvista import Plotter  # this should be removed
-from pyvista import PolyData as pv_PolyData  # this should be removed
-from pyvista import Spline  # this should be removed
-from pyvista import helpers as pv_helpers  # very useful. Can be used when dsa fails
 from pyvista import image_to_texture as pv_image_to_texture
 from pyvista import wrap as pv_wrap
 from pyvista.core.filters import _update_alg
+import pyvista as pv
 from vtk import (
     vtkPolyData,
     vtkPoints,
@@ -72,9 +70,12 @@ from vtkmodules.numpy_interface.dataset_adapter import (
 from vtkmodules.util.numpy_support import vtk_to_numpy
 from vtkmodules.vtkFiltersCore import vtkThresholdPoints
 from vtkmodules.vtkFiltersPoints import vtkConvertToPointCloud
-
+import segyio 
 from .orientation_analysis import get_dip_dir_vectors
-
+from pyvista import Plotter  # this should be removed
+from pyvista import PolyData as pv_PolyData  # this should be removed
+from pyvista import Spline  # this should be removed
+from pyvista import helpers as pv_helpers
 """
 Some notes on the way we derive our classes from VTK.
 

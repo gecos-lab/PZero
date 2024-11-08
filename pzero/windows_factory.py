@@ -149,7 +149,6 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         show = a boolean to show (True) or hide (false) the actor
         collection = the original collection of the actor, e.g. geol_coll, xsect_coll, etc."""
         self.actors_df = pd_DataFrame(columns=["uid", "actor", "show", "collection"])
-
         """Create list of selected uid's."""
         self.selected_uids = []
 
@@ -6481,6 +6480,15 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         """First get the vtk object from its collection."""
         show_property_title = show_property
         show_scalar_bar = True
+
+        # Get colormap from property legend if it exists
+        if show_property_title in self.parent.prop_legend_df["property_name"].values:
+            show_property_cmap = self.parent.prop_legend_df.loc[
+                self.parent.prop_legend_df["property_name"] == show_property_title,
+                "colormap"
+            ].values[0]
+        else:
+            show_property_cmap = None
         if collection == "geol_coll":
             color_R = self.parent.geol_coll.get_uid_legend(uid=uid)["color_R"]
             color_G = self.parent.geol_coll.get_uid_legend(uid=uid)["color_G"]
@@ -6519,49 +6527,6 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
 
             plot_entity = self.parent.mesh3d_coll.get_uid_vtk_obj(uid)
             
-            # Handle seismic slices
-            if any(x in str(uid) for x in ['_Inline', '_Xline', '_Z Slice']):
-                # Remove existing actor if present
-                existing_actor = self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[0] if not self.actors_df[self.actors_df["uid"] == uid].empty else None
-                if existing_actor is not None:
-                    self.plotter.remove_actor(existing_actor)
-
-                if show_property is None or show_property == "none":
-                    show_scalar_bar = False
-                    this_actor = self.plot_mesh(
-                        uid=uid,
-                        plot_entity=plot_entity,
-                        color_RGB=color_RGB,
-                        show_property=None,
-                        show_scalar_bar=False,
-                        line_thick=line_thick,
-                        plot_texture_option=False,
-                        visible=visible,
-                        style='surface',
-                        opacity=opacity
-                    )
-                else:
-                    this_actor = self.plot_mesh(
-                        uid=uid,
-                        plot_entity=plot_entity,
-                        color_RGB=None,
-                        show_property=show_property,
-                        show_scalar_bar=True,
-                        show_property_title=show_property_title,
-                        line_thick=line_thick,
-                        plot_texture_option=False,
-                        visible=visible,
-                        style='surface',
-                        opacity=opacity
-                    )
-
-                if this_actor:
-                    # Update actors_df
-                    self.actors_df.loc[self.actors_df["uid"] == uid, "actor"] = this_actor
-                    self.actors_df.loc[self.actors_df["uid"] == uid, "show_prop"] = show_property
-                    return this_actor
-
-                return None
         elif collection == "dom_coll":
             color_R = self.parent.dom_coll.get_legend()["color_R"]
             color_G = self.parent.dom_coll.get_legend()["color_G"]
@@ -6889,27 +6854,13 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             )
         elif isinstance(plot_entity, Seismics):
             plot_rgb_option = None
-            # this_actor = None
 
             if isinstance(plot_entity.points, np_ndarray):
-                # Define the colormap based on the property name
-                # show_property_cmap = None
-                if show_property_title in self.parent.prop_legend_df["property_name"].values:
-                    show_property_cmap = self.parent.prop_legend_df.loc[
-                        self.parent.prop_legend_df["property_name"] == show_property_title,
-                        "colormap"
-                    ].values[0]
-                else:
-                    # Handle the case where the property name does not exist
-                    # You could set a default colormap or handle this case as needed
-                    show_property_cmap = "seismic"  # Replace with your default or desired action
-
-                if show_property is None:
-                    show_scalar_bar = False
-                    pass
-                elif show_property == "none":
+                # Get colormap from property legend if it exists
+                if show_property is None or show_property == "none":
                     show_scalar_bar = False
                     show_property = None
+                    show_property_cmap = None
                 elif show_property == "X":
                     show_property = plot_entity.points_X
                 elif show_property == "Y":
@@ -6917,62 +6868,64 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                 elif show_property == "Z":
                     show_property = plot_entity.points_Z
                 else:
+                    # Getting the property from the grid 
                     show_property = 'intensity'
-
-                # Call plot_seismics to add interactive slicing planes
-
-                this_actor = self.plot_seismics(uid=uid,
-                                                plot_entity=plot_entity,
-                                                color_RGB=None,
-                                                show_property=show_property,
-                                                show_scalar_bar=show_scalar_bar,
-                                                color_bar_range=None,
-                                                show_property_title=show_property_title,
-                                                plot_texture_option=False,
-                                                plot_rgb_option=plot_rgb_option,
-                                                visible=visible)
-
-
-                # if combined_assembly:
-                #     # Add the assembly to the plotter
-                #     self.plotter.add_actor(combined_assembly)
-                #
-                #     # Apply additional settings to the assembly
-                #     # Note: vtkAssembly does not have GetProperty method, so setting color and opacity might need a different approach
-                #     combined_assembly.SetVisibility(visible)  # Set visibility
-                #
-                #     this_actor = combined_assembly  # Store the assembly as this_actor
-            else:
-                this_actor = None
-            return this_actor
-        elif isinstance(plot_entity, pv.DataSet) and any(x in str(uid) for x in ['_Inline', '_Xline', '_Z Slice']):
-            if show_property is None or show_property == 'none':
-                new_actor = self.plotter.add_mesh(
-                    plot_entity,
-                    style='surface',
-                    opacity=1.0,
-                    show_scalar_bar=False,
-                    color='white'
+                    # Use the colormap from properties legend
+                    if show_property_cmap:
+                        cmap = show_property_cmap
+                    else:
+                        cmap = 'seismic' # Default fallback
+                    
+                # Create main seismic actor
+                this_actor = self.plot_seismics(
+                    uid=uid,
+                    plot_entity=plot_entity,
+                    color_RGB=None, 
+                    show_property=show_property,
+                    show_scalar_bar=show_scalar_bar,
+                    color_bar_range=None,
+                    show_property_title=show_property_title,
+                    plot_texture_option=False,
+                    plot_rgb_option=plot_rgb_option,
+                    visible=visible,
+                    cmap=show_property_cmap # Pass the colormap
                 )
+
+                # Update existing slice properties if they exist
+                # Update existing slice properties if they exist
+                if hasattr(self, 'slice_actors'):
+                    for slice_uid, slice_actor in self.slice_actors.items():
+                        if slice_uid.startswith(uid):  # Only update slices for this seismic
+                            mapper = slice_actor.GetMapper()
+                            # Fix pandas Series comparison
+                            parent_actor_row = self.actors_df[self.actors_df['uid'] == uid].iloc[0] if not self.actors_df[self.actors_df['uid'] == uid].empty else None
+                            
+                            # Fix: Handle array comparison properly
+                            is_none_property = show_property is None
+                            is_none_string = isinstance(show_property, str) and show_property.lower() == "none"
+                            
+                            if is_none_property or is_none_string:
+                                mapper.SetScalarVisibility(0)
+                                slice_actor.GetProperty().SetColor(1, 1, 1) 
+                            else:
+                                mapper.SetScalarVisibility(1) 
+                                if this_actor is not None and parent_actor_row is not None:
+                                    # Get the current property from parent actor
+                                    parent_mapper = parent_actor_row['actor'].GetMapper()
+                                    current_array = parent_mapper.GetArrayName() 
+                                    print(f"Current array: {current_array}")
+                                    print(f"Show property: {show_property_title}")
+                                    
+                                    # Only update if property has changed
+                                    if mapper.GetArrayName() != current_array:
+                                        mapper.SetArrayName(current_array)
+                                        mapper.SetLookupTable(parent_mapper.GetLookupTable())
+                                        mapper.SetScalarRange(parent_mapper.GetScalarRange())
+                                        self.plotter.render()
+
+                return this_actor
             else:
-                new_actor = self.plotter.add_mesh(
-                    plot_entity,
-                    style='surface',
-                    opacity=1.0,
-                    show_scalar_bar=True,
-                    scalars=show_property,
-                    cmap='seismic'
-                )
-            
-            if new_actor:
-                # Update visibility
-                if visible is not None:
-                    new_actor.SetVisibility(visible)
-                
-                # Update actor in actors_df
-                self.actors_df.loc[self.actors_df['uid'] == uid, 'actor'] = new_actor
-                self.plotter.render()
-                return new_actor
+                return None
         elif isinstance(plot_entity, Voxet):
             plot_rgb_option = None
             if plot_entity.cells_number > 0:
@@ -7611,9 +7564,11 @@ class View3D(BaseView):
         self.trigger_event = "LeftButtonPressEvent"
         self.mesh3d_collection = Mesh3DCollection(parent=self)
         self.mesh3d_coll = self.parent.mesh3d_coll
-
-
-
+        self.slice_actors = {}
+        self.current_property = None  # Track current property
+        self.current_property_title = None  # Track property title
+        self.current_cmap = None  #
+        self.parent.prop_legend_cmap_modified_signal.connect(self.on_property_changed)
     """Re-implementations of functions that appear in all views - see placeholders in BaseView()"""
 
     def initialize_menu_tools(self):
@@ -7925,12 +7880,12 @@ class View3D(BaseView):
         if not uid:
             return
 
-        vtk_grid = self.mesh3d_coll.get_uid_vtk_obj(uid)
+        vtk_grid = self.mesh3d_coll.get_uid_vtk_obj(uid) # Get the VTK grid from the collection uses the uid
         if not isinstance(vtk_grid, pv.DataSet):
-            vtk_grid = pv.wrap(vtk_grid)
+            vtk_grid = pv.wrap(vtk_grid) # Wrap the VTK grid in a PyVista object for easier manipulation
 
         # Get data dimensions and bounds
-        dims = vtk_grid.dimensions
+        dims = vtk_grid.dimensions # Get the dimensions of the seismic volume
         bounds = vtk_grid.bounds
         x_min, x_max, y_min, y_max, z_min, z_max = bounds
 
@@ -7959,26 +7914,79 @@ class View3D(BaseView):
         inline_slider.setSingleStep(1)
         xline_slider.setSingleStep(1)
         zslice_slider.setSingleStep(1)
-
+        # Store current section and sliders as class attributes
+        self.current_section = self.section_combo.currentText()
+        self.current_sliders = (inline_slider, xline_slider, zslice_slider)
+        
+        # Update when section changes
+        def on_section_changed(new_section):
+            self.current_section = new_section
+        
+        self.section_combo.currentTextChanged.connect(on_section_changed)
         # Update labels to show actual line numbers
         inline_slider.setTickPosition(QSlider.TicksBelow)
         xline_slider.setTickPosition(QSlider.TicksBelow)
         zslice_slider.setTickPosition(QSlider.TicksBelow)
 
         return inline_slider, xline_slider, zslice_slider
+    def update_sliders_without_signals(self, slice_type, normalized_position, sliders):
+        """Update slider positions without triggering their signals."""
+        inline_slider, xline_slider, zslice_slider = sliders
+        
+        # Block signals temporarily
+        if slice_type == 'Inline':
+            inline_slider.blockSignals(True)
+            pos = int(1 + (normalized_position * (inline_slider.maximum() - 1)))
+            inline_slider.setValue(pos)
+            inline_slider.blockSignals(False)
+        elif slice_type == 'Xline':
+            xline_slider.blockSignals(True)
+            pos = int(1 + (normalized_position * (xline_slider.maximum() - 1)))
+            xline_slider.setValue(pos)
+            xline_slider.blockSignals(False)
+        else:  # Z Slice
+            zslice_slider.blockSignals(True)
+            pos = int(1 + (normalized_position * (zslice_slider.maximum() - 1)))
+            zslice_slider.setValue(pos)
+            zslice_slider.blockSignals(False)
     def update_slice_from_plane(self, normal, origin, slice_type):
-            """Update slice position based on plane widget movement"""
-            section_name = section_combo.currentText()
-            if section_name:
-                # Extract the relevant position component based on slice type
-                if slice_type == 'Inline':
-                    position = origin[0]  # x component
-                elif slice_type == 'Xline':
-                    position = origin[1]  # y component
-                else:  # Z Slice
-                    position = origin[2]  # z component
-                    
-                self.update_slice_visualization(section_name, slice_type, position)
+        """Update slice position based on plane widget movement"""
+        section_name = self.current_section  # Store current section name as class attribute
+        if section_name:
+            # Extract the relevant position component based on slice type
+            if slice_type == 'Inline':
+                position = origin[0]  # x component
+            elif slice_type == 'Xline':
+                position = origin[1]  # y component
+            else:  # Z Slice
+                position = origin[2]  # z component
+            
+            # Get bounds for normalization
+            uid = self.mesh3d_coll.get_uid_by_name(section_name)
+            vtk_grid = self.mesh3d_coll.get_uid_vtk_obj(uid)
+            bounds = pv.wrap(vtk_grid).bounds
+            
+            # Calculate normalized position
+            normalized_pos = self.normalize_position(origin, slice_type, bounds)
+            
+            # Update visualization
+            self.update_slice_visualization(section_name, slice_type, normalized_pos)
+            
+            # Update sliders if they exist
+            if hasattr(self, 'current_sliders'):
+                self.update_sliders_without_signals(slice_type, normalized_pos, self.current_sliders)
+    # Helper method to normalize position
+    def normalize_position(self, origin, slice_type, bounds):
+        x_min, x_max, y_min, y_max, z_min, z_max = bounds
+        try:
+            if slice_type == 'Inline':
+                return (origin[0] - x_min) / (x_max - x_min)
+            elif slice_type == 'Xline':
+                return (origin[1] - y_min) / (y_max - y_min)
+            else:  # Z Slice
+                return (origin[2] - z_min) / (z_max - z_min)
+        except ZeroDivisionError:
+            return 0.0
     def show_seismic_control_panel(self):
         """Create and show a control panel for seismic visualization."""
         # Create the control panel window
@@ -7995,13 +8003,64 @@ class View3D(BaseView):
         section_combo = QComboBox()
         section_combo.addItems(self.getExistingSections())
 
-        # Buttons for adding different types of slices
-        add_inline_btn = QPushButton("Add Inline")
-        add_xline_btn = QPushButton("Add Xline")
-        add_zslice_btn = QPushButton("Add Z Slice")
+        # Get the seismic dimensions from the VTK grid
+        section_name = section_combo.currentText()
+        uid = self.mesh3d_coll.get_uid_by_name(section_name)
+        vtk_grid = self.mesh3d_coll.get_uid_vtk_obj(uid)
+        vtk_grid = pv.wrap(vtk_grid)
+        dims = vtk_grid.dimensions
+        n_inline = dims[0]
+        n_xline = dims[1]
+        n_samples = dims[2]
+
+        # Create sliders with proper ranges
+        inline_slider = QSlider(Qt.Horizontal)
+        xline_slider = QSlider(Qt.Horizontal)
+        zslice_slider = QSlider(Qt.Horizontal)
+
+        # Store sliders as class attributes AFTER creation
+        self.inline_slider = inline_slider
+        self.xline_slider = xline_slider 
+        self.zslice_slider = zslice_slider
+
+        # Replace the add buttons with checkboxes
+        slice_toggle_group = QGroupBox("Slice Visibility")
+        slice_toggle_layout = QVBoxLayout()
+
+        # Create checkboxes
+        inline_check = QCheckBox("Show Inline")
+        xline_check = QCheckBox("Show Xline") 
+        zslice_check = QCheckBox("Show Z Slice")
+
+        # Add checkboxes to layout and group
+        slice_toggle_layout.addWidget(inline_check)
+        slice_toggle_layout.addWidget(xline_check)
+        slice_toggle_layout.addWidget(zslice_check)
+        slice_toggle_group.setLayout(slice_toggle_layout)
+
+        # Toggle function
+         # Toggle function with proper self reference 
+        def toggle_slice(slice_type, checked):
+            section_name = section_combo.currentText()
+            if not section_name:
+                return
+                
+            uid = self.mesh3d_coll.get_uid_by_name(section_name)
+            slice_uid = f"{uid}_{slice_type}"
+            
+            # Only create slice if it doesn't exist
+            if slice_uid not in self.slice_actors:
+                self.addOrthogonalSlices(uid, slice_type)
+                
+            # Show/hide existing slice
+            if slice_uid in self.slice_actors:
+                self.slice_actors[slice_uid].SetVisibility(checked)
+                self.plotter.render()
+
+        
         section_combo.currentTextChanged.connect(self.initialize_slice_controls)
         # Remove section button
-        remove_btn = QPushButton("Remove Section")
+        remove_btn = QPushButton("Remove Section") # needs to be implemented
         # Get the seismic dimensions from the VTK grid
         # Initialize default dimensions
         section_name = section_combo.currentText()
@@ -8045,97 +8104,147 @@ class View3D(BaseView):
         inline_value = QLabel(str(n_inline // 2))
         xline_value = QLabel(str(n_xline // 2))
         zslice_value = QLabel(str(n_samples // 2))
-        # In show_seismic_control_panel:
-        interactive_check = QCheckBox("Enable Direct Manipulation")
-        interactive_check.stateChanged.connect(lambda state: toggle_direct_manipulation(state == Qt.Checked))
-        position_layout.addWidget(interactive_check)
-        # Setup interactions
-         # Add manipulation control
+        # In show_seismic_control_panel
+                # Add manipulation control
         manipulation_group = QGroupBox("Manipulation Control")
         manipulation_layout = QVBoxLayout()
-        
-        enable_manipulation = QCheckBox("Enable Manipulation")
-        enable_manipulation.setChecked(True)  # Default to disabled
-        
-        # Remove any existing interactions when initializing the panel
+
+        enable_manipulation = QCheckBox("Enable Direct Manipulation")
+        enable_manipulation.setChecked(False)  # Default to disabled
+        enable_manipulation.stateChanged.connect(
+            lambda state: toggle_direct_manipulation(enabled=state == Qt.Checked)
+        )
+
+        manipulation_layout.addWidget(enable_manipulation)
+        manipulation_group.setLayout(manipulation_layout)
+
+        # Add to main layout after position_group
+        layout.addWidget(manipulation_group)
+                # Remove any existing interactions when initializing the panel
         self.remove_slice_interactions()
         
         # Add throttling for slider updates
         self.last_slider_update = time.time()
         slider_throttle = 1/30.0  # Limit to 30 FPS
-        def toggle_manipulation(state):
-            if state:
-                self.setup_slice_interactions()
-                print("Slice manipulation enabled")
-            else:
-                self.remove_slice_interactions()
-                print("Slice manipulation disabled")
-        
-        enable_manipulation.stateChanged.connect(toggle_manipulation)
-        manipulation_layout.addWidget(enable_manipulation)
-        manipulation_group.setLayout(manipulation_layout)
-        layout.addWidget(manipulation_group)
+        # Fix the toggle_direct_manipulation function definition
         def toggle_direct_manipulation(enabled):
             if enabled:
-                # Add an interactive plane widget for each slice type
                 self.plane_widgets = []
-                if section_combo.currentText():
-                    uid = self.mesh3d_coll.get_uid_by_name(section_combo.currentText())
+                section_name = section_combo.currentText()
+                if section_name:
+                    uid = self.mesh3d_coll.get_uid_by_name(section_name)
                     vtk_grid = self.mesh3d_coll.get_uid_vtk_obj(uid)
                     if vtk_grid:
-                        # Add plane widgets for each orientation
-                        self.plane_widgets.append(self.plotter.add_plane_widget(
-                            callback=lambda normal, origin: self.update_slice_from_plane(normal, origin, 'Inline'),
-                            normal='x'
-                        ))
-                        self.plane_widgets.append(self.plotter.add_plane_widget(
-                            callback=lambda normal, origin: self.update_slice_from_plane(normal, origin, 'Xline'),
-                            normal='y'
-                        ))
-                        self.plane_widgets.append(self.plotter.add_plane_widget(
-                            callback=lambda normal, origin: self.update_slice_from_plane(normal, origin, 'Z Slice'),
-                            normal='z'
-                        ))
+                        bounds = pv.wrap(vtk_grid).bounds
+                        x_min, x_max, y_min, y_max, z_min, z_max = bounds
+                        
+                        # Get current slider positions to initialize planes
+                        inline_pos = inline_slider.value()
+                        xline_pos = xline_slider.value()
+                        z_pos = zslice_slider.value()
+                        
+                        # Calculate actual positions in world coordinates
+                        inline_world = x_min + (inline_pos - 1) * (x_max - x_min) / (inline_slider.maximum() - 1)
+                        xline_world = y_min + (xline_pos - 1) * (y_max - y_min) / (xline_slider.maximum() - 1)
+                        z_world = z_min + (z_pos - 1) * (z_max - z_min) / (zslice_slider.maximum() - 1)
+
+                        def plane_callback(normal, origin, slice_type):
+                            # Extract relevant coordinate based on slice type
+                            if slice_type == 'Inline':
+                                pos = origin[0]
+                                normalized_pos = (pos - x_min) / (x_max - x_min)
+                            elif slice_type == 'Xline':
+                                pos = origin[1]
+                                normalized_pos = (pos - y_min) / (y_max - y_min)
+                            else:  # Z Slice
+                                pos = origin[2]
+                                normalized_pos = (pos - z_min) / (z_max - z_min)
+                            
+                            # Update visualization
+                            self.update_slice_visualization(section_name, slice_type, normalized_pos)
+                            
+                            # Update slider
+                            if slice_type == 'Inline':
+                                pos = int(1 + normalized_pos * (inline_slider.maximum() - 1))
+                                inline_slider.setValue(pos)
+                            elif slice_type == 'Xline':
+                                pos = int(1 + normalized_pos * (xline_slider.maximum() - 1))
+                                xline_slider.setValue(pos)
+                            else:  # Z Slice
+                                pos = int(1 + normalized_pos * (zslice_slider.maximum() - 1))
+                                zslice_slider.setValue(pos)
+
+                        # Create plane widgets with correct initial positions
+                        slice_configs = [
+                            ('Inline', 'x', [inline_world, (y_min + y_max)/2, (z_min + z_max)/2]),
+                            ('Xline', 'y', [(x_min + x_max)/2, xline_world, (z_min + z_max)/2]),
+                            ('Z Slice', 'z', [(x_min + x_max)/2, (y_min + y_max)/2, z_world])
+                        ]
+
+                        for slice_type, normal, pos in slice_configs:
+                            plane = self.plotter.add_plane_widget(
+                                callback=lambda normal, origin, st=slice_type: 
+                                    plane_callback(normal, origin, st),
+                                normal=normal,
+                                origin=pos
+                            )
+                            self.plane_widgets.append(plane)
+                            
+                            slice_uid = f"{uid}_{slice_type}"
+                            if slice_uid in self.slice_actors:
+                                plane.SetEnabled(self.slice_actors[slice_uid].GetVisibility())
             else:
-                # Remove the plane widgets
                 if hasattr(self, 'plane_widgets'):
                     for widget in self.plane_widgets:
-                        self.plotter.remove_widget(widget)
+                        widget.SetEnabled(False)
+                        if hasattr(widget, 'GetRepresentation'):
+                            rep = widget.GetRepresentation()
+                            if rep:
+                                self.plotter.renderer.RemoveViewProp(rep)
+                        self.plotter.ren_win.GetInteractor().GetRenderWindow().Render() # Render the window after removing the plane widget
+                        widget.Off()
                     self.plane_widgets = []
+                    self.plotter.render()
         
         def update_slice_position(slider_type):
-            section_name = section_combo.currentText()
-            if not section_name:
+            if getattr(self, '_updating_visualization', False):
                 return
+            try:
+                self._updating_from_slider = True
+                section_name = section_combo.currentText()
+                if not section_name:
+                    return
 
-            current_time = time.time()
-            if current_time - self.last_slider_update < slider_throttle:
-                return
+                current_time = time.time()
+                if current_time - self.last_slider_update < slider_throttle:
+                    return
 
-            # Get the current values from sliders
-            inline_pos = inline_slider.value()
-            xline_pos = xline_slider.value()
-            z_pos = zslice_slider.value()
+                # Get the current values from sliders
+                inline_pos = inline_slider.value()
+                xline_pos = xline_slider.value()
+                z_pos = zslice_slider.value()
 
-            # Update value labels
-            inline_value.setText(str(inline_pos))
-            xline_value.setText(str(xline_pos))
-            zslice_value.setText(str(z_pos))
+                # Update value labels
+                inline_value.setText(str(inline_pos))
+                xline_value.setText(str(xline_pos))
+                zslice_value.setText(str(z_pos))
 
-            # Disable rendering during calculation
-            self.plotter.render_window.SetDesiredUpdateRate(30.0)
-            self.plotter.ren_win.GetInteractor().Disable()
+                # Disable rendering during calculation
+                self.plotter.render_window.SetDesiredUpdateRate(30.0)
+                self.plotter.ren_win.GetInteractor().Disable()
 
-            # Calculate normalized positions (0 to 1)
-            if slider_type == 'inline':
-                norm_pos = (inline_pos - 1) / (n_inline - 1)
-                self.update_slice_visualization(section_name, 'Inline', norm_pos, fast_update=True)
-            elif slider_type == 'xline':
-                norm_pos = (xline_pos - 1) / (n_xline - 1)
-                self.update_slice_visualization(section_name, 'Xline', norm_pos, fast_update=True)
-            elif slider_type == 'zslice':
-                norm_pos = (z_pos - 1) / (n_samples - 1)
-                self.update_slice_visualization(section_name, 'Z Slice', norm_pos, fast_update=True)
+                # Calculate normalized positions
+                if slider_type == 'inline':
+                    norm_pos = (inline_pos - 1) / (n_inline - 1)
+                    self.update_slice_visualization(section_name, 'Inline', norm_pos, fast_update=True)
+                elif slider_type == 'xline':
+                    norm_pos = (xline_pos - 1) / (n_xline - 1)
+                    self.update_slice_visualization(section_name, 'Xline', norm_pos, fast_update=True)
+                elif slider_type == 'zslice':
+                    norm_pos = (z_pos - 1) / (n_samples - 1)
+                    self.update_slice_visualization(section_name, 'Z Slice', norm_pos, fast_update=True)
+            finally:
+                self._updating_from_slider = False
 
             # Re-enable rendering and update
             self.plotter.ren_win.GetInteractor().Enable()
@@ -8152,7 +8261,7 @@ class View3D(BaseView):
         position_group = QGroupBox("Slice Position Control")
         position_layout = QVBoxLayout()
 
-        for label, slider, value in [
+        for label, slider, value in [ # Add the labels, sliders, and value labels to the layout,looping through each slice type
             (inline_label, inline_slider, inline_value),
             (xline_label, xline_slider, xline_value),
             (zslice_label, zslice_slider, zslice_value)
@@ -8182,21 +8291,41 @@ class View3D(BaseView):
                 slice_combo.clear()
                 slice_combo.addItems(self.getExistingSlices())
 
-        # Connect signals
-        add_inline_btn.clicked.connect(lambda: add_slice('Inline'))
-        add_xline_btn.clicked.connect(lambda: add_slice('Xline'))
-        add_zslice_btn.clicked.connect(lambda: add_slice('Z Slice'))
-        remove_btn.clicked.connect(remove_section)
+        # Connect toggle handlers with proper self reference
+        inline_check.toggled.connect(lambda checked: toggle_slice('Inline', checked)) # Connect the toggle_slice function to the checkbox toggled signal
+        xline_check.toggled.connect(lambda checked: toggle_slice('Xline', checked))
+        zslice_check.toggled.connect(lambda checked: toggle_slice('Z Slice', checked))
+
+        remove_btn.clicked.connect(remove_section) # needs to be implemented
 
         # Add widgets to section layout
         section_layout.addWidget(section_label)
         section_layout.addWidget(section_combo)
-        section_layout.addWidget(add_inline_btn)
-        section_layout.addWidget(add_xline_btn)
-        section_layout.addWidget(add_zslice_btn)
+        #section_layout.addWidget(add_inline_btn)
+        #section_layout.addWidget(add_xline_btn)
+        #section_layout.addWidget(add_zslice_btn)
         section_layout.addWidget(remove_btn)
         section_group.setLayout(section_layout)
+        # Add checkbox group instead
+        section_layout.addWidget(slice_toggle_group)
+        def on_section_selected(section_name):
+            if not section_name:
+                return
+                
+            uid = self.mesh3d_coll.get_uid_by_name(section_name)
+            
+            # Create all slice types initially hidden
+            for slice_type in ['Inline', 'Xline', 'Z Slice']:
+                slice_uid = f"{uid}_{slice_type}"
+                if not any(self.mesh3d_coll.df['uid'] == slice_uid):
+                    self.addOrthogonalSlices(uid, slice_type)
+                    # Hide slice initially
+                    actor = self.actors_df[self.actors_df['uid'] == slice_uid]['actor'].iloc[0]
+                    actor.SetVisibility(False)
+            
+            self.initialize_slice_controls(section_name)
 
+        section_combo.currentTextChanged.connect(on_section_selected)
         # Slice control group
         slice_group = QGroupBox("Slice Control")
         slice_layout = QVBoxLayout()
@@ -8219,7 +8348,7 @@ class View3D(BaseView):
         # Show the control panel
         self.setup_slice_interactions()
         control_panel.show()
-    def remove_slice_interactions(self):
+    def remove_slice_interactions(self): # Remove all slice interactions and set default style
         """Remove all slice interactions and set default style"""
         try:
             # Reset any highlighting
@@ -8244,57 +8373,130 @@ class View3D(BaseView):
             
         except Exception as e:
             print(f"Error removing slice interactions: {e}")
+
+    def sync_actor_properties(self, source_actor, target_actor): # Helper method to sync properties between actors 
+        """Helper method to sync properties between actors"""
+        if source_actor and target_actor:
+            source_mapper = source_actor.GetMapper() # Get the mapper from the source actor
+            target_mapper = target_actor.GetMapper() # why we use the mapper from the source actor and apply it to the target actor? because we want to sync the properties between the actors
+            
+            if source_mapper.GetScalarVisibility(): # retrieves mapping information from the source actor and applies it to the target actor
+                target_mapper.SetScalarVisibility(1) # vtk mapper is used to map scalar data to visual properties
+                target_mapper.SetArrayName(source_mapper.GetArrayName())
+                target_mapper.SetLookupTable(source_mapper.GetLookupTable())
+                target_mapper.SetScalarRange(source_mapper.GetScalarRange())
+            else:
+                target_mapper.SetScalarVisibility(0)
+                target_actor.GetProperty().SetColor(1, 1, 1) #the purpose of mapper is to map data to properties of the actor. Vtk mapper is used to map scalar data to visual properties
+
     def update_slice_visualization(self, section_name, slice_type, normalized_position, fast_update=False):
-        """Update the visualization of a seismic slice."""
         uid = self.mesh3d_coll.get_uid_by_name(section_name)
         if not uid:
             return
 
-        # Generate the slice_uid
         slice_uid = f"{uid}_{slice_type}"
-        
         vtk_grid = self.mesh3d_coll.get_uid_vtk_obj(uid)
-        if not isinstance(vtk_grid, pv.DataSet):
-            vtk_grid = pv.wrap(vtk_grid)
+        vtk_grid = pv.wrap(vtk_grid)
 
+        # Retrieve scalar array and colormap
+        scalar_array, cmap = self.get_scalar_and_cmap(vtk_grid)
+
+
+        # Store current visibility
+        current_visibility = self.slice_actors[slice_uid].GetVisibility() if slice_uid in self.slice_actors else True
+
+        # Calculate slice position and create slice
         bounds = vtk_grid.bounds
-        x_min, x_max, y_min, y_max, z_min, z_max = bounds
-
-        # Calculate actual position based on normalized position (0-1)
         if slice_type == 'Inline':
-            position = x_min + (x_max - x_min) * normalized_position
+            position = bounds[0] + (bounds[1] - bounds[0]) * normalized_position
             slice_data = vtk_grid.slice(normal='x', origin=[position, 0, 0])
         elif slice_type == 'Xline':
-            position = y_min + (y_max - y_min) * normalized_position
+            position = bounds[2] + (bounds[3] - bounds[2]) * normalized_position
             slice_data = vtk_grid.slice(normal='y', origin=[0, position, 0])
-        elif slice_type == 'Z Slice':
-            position = z_min + (z_max - z_min) * normalized_position
+        else:  # Z Slice
+            position = bounds[4] + (bounds[5] - bounds[4]) * normalized_position
             slice_data = vtk_grid.slice(normal='z', origin=[0, 0, position])
-        else:
-            return
 
-        if fast_update:
-            # Update existing actor directly
-            actor = self.actors_df[self.actors_df['uid'] == slice_uid]['actor'].iloc[0]
-            if actor:
-                mapper = actor.GetMapper()
-                mapper.SetInputData(slice_data)
-                mapper.Update()
+        if fast_update and slice_uid in self.slice_actors:
+            actor = self.slice_actors[slice_uid]
+            mapper = actor.GetMapper()
+            mapper.SetInputData(slice_data)
+            mapper.Update()
         else:
-            # Full update with property handling
-            self.mesh3d_coll.df.loc[self.mesh3d_coll.df['uid'] == slice_uid, 'vtk_obj'] = slice_data
-            current_property = None
-            if 'show_prop' in self.actors_df.columns:
-                actor_row = self.actors_df[self.actors_df['uid'] == slice_uid]
-                if not actor_row.empty:
-                    current_property = actor_row.iloc[0].get('show_prop', None)
+            if slice_uid in self.slice_actors:
+                self.plotter.remove_actor(self.slice_actors[slice_uid])
 
-            self.show_actor_with_property(
-                uid=slice_uid,
-                collection='mesh3d_coll',
-                show_property=current_property,
-                visible=True
+            # Create new slice actor with scalar mapping
+            slice_actor = self.plotter.add_mesh(
+                slice_data,
+                name=slice_uid,
+                scalars=scalar_array,
+                cmap=cmap,
+                clim=vtk_grid.get_data_range(scalar_array) if scalar_array else None,
+                show_scalar_bar=False,
+                opacity=1.0,
+                interpolate_before_map=True,
             )
+
+            self.slice_actors[slice_uid] = slice_actor
+            slice_actor.SetVisibility(current_visibility)
+        # Always update sliders if they exist
+        if hasattr(self, 'inline_slider'):
+            try:
+                # Block signals to prevent recursion
+                self._updating_visualization = True
+                
+                # Update slider positions
+                pos = int(1 + (normalized_position * (self.inline_slider.maximum() - 1)))
+                if slice_type == 'Inline':
+                    self.inline_slider.blockSignals(True)
+                    self.inline_slider.setValue(pos)
+                    self.inline_slider.blockSignals(False)
+                elif slice_type == 'Xline':
+                    self.xline_slider.blockSignals(True)
+                    self.xline_slider.setValue(pos)
+                    self.xline_slider.blockSignals(False)
+                else:  # Z Slice
+                    self.zslice_slider.blockSignals(True)
+                    self.zslice_slider.setValue(pos)
+                    self.zslice_slider.blockSignals(False)
+            finally:
+                self._updating_visualization = False
+        
+        self.plotter.render()
+    def on_property_changed(self, property_name):
+        """Update slices when a property's colormap changes."""
+        # Iterate over all slices
+        for slice_uid, actor in self.slice_actors.items():
+            # Get the parent volume UID
+            parent_uid = slice_uid.split('_')[0]
+            vtk_grid = self.mesh3d_coll.get_uid_vtk_obj(parent_uid)
+            vtk_grid = pv.wrap(vtk_grid)
+            # Retrieve scalar array and updated colormap
+            scalar_array, cmap = self.get_scalar_and_cmap(vtk_grid)
+            if scalar_array == property_name:
+                # Update the mapper's lookup table
+                mapper = actor.GetMapper()
+                lut = pv.plotting.lookup_table.LookupTable(cmap)
+                mapper.SetLookupTable(lut)
+                mapper.SetScalarRange(vtk_grid.get_data_range(scalar_array))
+                mapper.Update()
+                actor.GetProperty().Modified()
+        self.plotter.render()
+    def get_scalar_and_cmap(self, vtk_grid):
+        """Retrieve the scalar array and colormap for the given grid."""
+        if 'intensity' in vtk_grid.array_names:
+            scalar_array = 'intensity'
+            prop_row = self.parent.prop_legend_df[
+                self.parent.prop_legend_df['property_name'] == 'intensity']
+            if not prop_row.empty:
+                cmap = prop_row['colormap'].iloc[0]
+            else:
+                cmap = 'seismic'
+        else:
+            scalar_array = None
+            cmap = None
+        return scalar_array, cmap
     def getExistingSections(self): # 
         """
         Retrieve all main seismic volume names (excluding slices).
@@ -8441,7 +8643,7 @@ class View3D(BaseView):
         self.plotter._style = style
 
     def addOrthogonalSlices(self, uid, section_type, x_slice_location=None, y_slice_location=None,
-                        z_slice_location=None):
+            z_slice_location=None):
         """Add orthogonal slices to the visualization."""
         vtk_grid = self.mesh3d_coll.get_uid_vtk_obj(uid)
         vtk_grid = pv.wrap(vtk_grid)
@@ -8451,6 +8653,12 @@ class View3D(BaseView):
         try:
             print(f"Creating {section_type} slice...")
             bounds = vtk_grid.bounds
+            
+            # Retrieve scalar array and colormap
+            scalar_array, cmap = self.get_scalar_and_cmap(vtk_grid)
+
+
+            # Create slice based on type
             if section_type == 'Inline':
                 if x_slice_location is None:
                     x_slice_location = (bounds[0] + bounds[1]) / 2
@@ -8471,51 +8679,27 @@ class View3D(BaseView):
                 return None
 
             slice_uid = f"{uid}_{section_type}"
-            section_name = self.mesh3d_coll.get_uid_name(uid)
-            slice_name = f"{section_type} of {section_name}"
-
-            # Get properties from parent seismic
-            parent_row = self.mesh3d_coll.df[self.mesh3d_coll.df['uid'] == uid].iloc[0]
-
-            # Check if slice already exists
-            if not any(self.mesh3d_coll.df['uid'] == slice_uid):
-                # Add to mesh3d collection
-                mesh3d_entity_dict = deepcopy(self.mesh3d_coll.mesh3d_entity_dict)
-                mesh3d_entity_dict.update({
-                    'uid': slice_uid,
-                    'name': slice_name,
-                    'mesh3d_type': parent_row['mesh3d_type'],
-                    'properties_names': parent_row['properties_names'],
-                    'properties_components': parent_row['properties_components'],
-                    'x_section': '',
-                    'vtk_obj': slice_data,
-                })
-                self.mesh3d_coll.add_entity_from_dict(mesh3d_entity_dict)
-            else:
-                # Update existing vtk_obj in mesh3d collection
-                self.mesh3d_coll.df.loc[self.mesh3d_coll.df['uid'] == slice_uid, 'vtk_obj'] = slice_data
-
-            # Create initial actor with no properties
-            slice_actor = self.show_actor_with_property(
-                uid=slice_uid,
-                collection="mesh3d_coll",
-                show_property=None,  # Start with no property
-                visible=None
+            
+            # Create the slice actor with scalar mapping
+            slice_actor = self.plotter.add_mesh(
+                slice_data,
+                name=slice_uid,
+                scalars=scalar_array,
+                cmap=cmap,
+                clim=vtk_grid.get_data_range(scalar_array) if scalar_array else None,
+                show_scalar_bar=False,
+                opacity=1.0,
+                interpolate_before_map=True,
             )
 
-            if slice_actor:
-                print(f"Actor added to collection with uid: {slice_uid}")
-            # Ensure default interaction style
-                if hasattr(self.plotter.interactor, '_style') and isinstance(self.plotter.interactor._style, vtk.vtkInteractorStyleUser):
-                    # If manipulation is enabled, keep it
-                    pass
-                else:
-                    # Otherwise use default style
-                    default_style = vtk.vtkInteractorStyleTrackballCamera()
-                    self.plotter.interactor.SetInteractorStyle(default_style)
-                    self.plotter._style = default_style
-                
-                return slice_actor
+            
+            slice_actor.SetVisibility(False)  # Initially hidden
+            
+            if not hasattr(self, 'slice_actors'):
+                self.slice_actors = {}
+            self.slice_actors[slice_uid] = slice_actor
+
+            return slice_actor
 
         except Exception as e:
             print(f"Error in addOrthogonalSlices: {e}")
@@ -8523,10 +8707,9 @@ class View3D(BaseView):
             traceback.print_exc()
             return None
 
-        return None
     
 
-    def add_slice_drag_interaction(self):
+    def add_slice_drag_interaction(self): # might need to be implemented, it is redundant, we already have add_slice_interaction
         """Add drag interaction for seismic slices"""
         def on_mouse_move(obj, event):
             interactor = self.plotter.iren.interactor
@@ -8594,7 +8777,7 @@ class View3D(BaseView):
             print("Slice interactions setup complete")
         except Exception as e:
             print(f"Error setting up slice interactions: {e}")
-    def retrieve_vtkStructuredGrid(self, uid):
+    def retrieve_vtkStructuredGrid(self, uid): # This is redundant, there is already the get_uid_vtk_obj method in mesh3d_collection
 
         # [gabriele] This is redundant, there is already the get_uid_vtk_obj method in mesh3d_collection
 
@@ -8607,7 +8790,7 @@ class View3D(BaseView):
             print(f"The object retrieved is not a vtkStructuredGrid: {type(vtk_grid)}")
             return None
 
-    def get_name_mesh3d_type(self, name):
+    def get_name_mesh3d_type(self, name): # This is redundant, there is already the get_name_mesh3d_type method in mesh3d_collection
         """Get mesh3d_type based on name."""
         df_row = self.mesh3d_coll.df[self.mesh3d_coll.df["name"] == name]
         if not df_row.empty:
@@ -8615,7 +8798,7 @@ class View3D(BaseView):
         else:
             return None
 
-    def manage_section(self, action, section_name, section_type=None):
+    def manage_section(self, action, section_name, section_type=None): 
         """
         Manage adding or removing seismic sections or slices.
         """
@@ -8694,89 +8877,74 @@ class View3D(BaseView):
         else:
             print(f"No actor found with name: {name}")
             QtWidgets.QMessageBox.warning(None, "Removal Failed", f"No section named '{name}' was found.")
-
+    
+    
     def plot_seismics(
-        self,
-        uid=None,
-        plot_entity=None,
-        color_RGB=None,
-        show_property=None,
-        show_scalar_bar=None,
-        color_bar_range=None,
-        show_property_title=None,
-        x_slice_location=None,
-        y_slice_location=None,
-        z_slice_location=None,
-        line_thick=None,
-        plot_texture_option=None,
-        plot_rgb_option=None,
-        visible=None,
-        style="wireframe",
-        point_size=None,
-        points_as_spheres=False,
-        render_lines_as_tubes=False,
-        pickable=True,
-        opacity=1.0,
-        smooth_shading=False,
-        section_type=None,  # New parameter for orthogonal slices
-    ):
-        # Visualization arguments for slices
-        dargs = {
-            'color': color_RGB if color_RGB else 'white',
-            'line_width': line_thick,
-            'opacity': opacity,
-            'style': style,
-            # Additional visualization arguments as needed
-        }
+            self,
+            uid=None,
+            plot_entity=None,
+            color_RGB=None,
+            show_property=None,
+            show_scalar_bar=None,
+            color_bar_range=None,
+            show_property_title=None,
+            x_slice_location=None,
+            y_slice_location=None,
+            z_slice_location=None,
+            line_thick=None,
+            plot_texture_option=None,
+            plot_rgb_option=None,
+            visible=None,
+            style="wireframe",
+            point_size=None,
+            points_as_spheres=False,
+            render_lines_as_tubes=False,
+            pickable=True,
+            opacity=1.0,
+            smooth_shading=False,
+            section_type=None,
+            cmap=None,  # Add cmap parameter with None default
+        ):
+            # Visualization arguments for slices
+            dargs = {
+                'color': color_RGB if color_RGB else 'white',
+                'line_width': line_thick,
+                'opacity': opacity,
+                'style': style,
+                'cmap': cmap,  # Add cmap to visualization arguments
+                'show_scalar_bar': show_scalar_bar
+            }
 
-        # Debug print to check the initial state of plot_entity
-        # print(f"Initial plot_entity type: {type(plot_entity)}, provided section_type: {section_type}")
-        # print(plot_entity)
-        if plot_entity is None:
-            print("No plot entity provided at all.")
-            return
-
-
-
-        # Determine if plot_entity is for slicing or the main mesh
-        if section_type is None:
-            # Assuming main mesh visualization has no section_type
-            if hasattr(plot_entity, 'frame'):
-                # print("Wrapping plot_entity.frame as vtk grid for main mesh visualization.")
-                vtk_grid = pv.wrap(plot_entity.frame)
-            else:
-                print("Warning: plot_entity does not have a 'frame' attribute. Unable to wrap as vtk grid.")
+            # Rest of the method remains the same...
+            if plot_entity is None:
+                print("No plot entity provided at all.")
                 return
-        else:
-            # For orthogonal slices, use plot_entity directly
-            # print("Using plot_entity directly for slicing.")
-            vtk_grid = plot_entity  # Assuming plot_entity is a PyVista-compatible object
 
-        if vtk_grid is None:
-            print("Failed to prepare vtk_grid from plot_entity.")
-            return
+            # Determine if plot_entity is for slicing or the main mesh
+            if section_type is None:
+                if hasattr(plot_entity, 'frame'):
+                    vtk_grid = pv.wrap(plot_entity.frame)
+                else:
+                    print("Warning: plot_entity does not have a 'frame' attribute.")
+                    return
+            else:
+                vtk_grid = plot_entity
 
-        # Perform visualization based on section type
-        if section_type:
-            dargs['style'] = 'surface'
-            # print(f"Performing {section_type} on vtk_grid.")
-            # slices = None
-            # if section_type == 'x_slice':
-            #     slices = vtk_grid.slice_orthogonal(x=x_slice_location)
-            # elif section_type == 'y_slice':
-            #     slices = vtk_grid.slice_orthogonal(y=y_slice_location)
-            # elif section_type == 'z_plane':
-            #     slices = vtk_grid.slice_orthogonal(z=z_slice_location)
+            if vtk_grid is None:
+                print("Failed to prepare vtk_grid from plot_entity.")
+                return
 
-            mesh_actor = self.plotter.add_mesh(vtk_grid, **dargs)
-        else:
-            # print("Visualizing main mesh.")
-            mesh_actor = self.plotter.add_mesh(vtk_grid, **dargs)
+            # Perform visualization based on section type
+            if section_type:
+                dargs['style'] = 'surface'
+                mesh_actor = self.plotter.add_mesh(vtk_grid, **dargs)
+            else:
+                mesh_actor = self.plotter.add_mesh(vtk_grid, **dargs)
 
-        if visible is not None and mesh_actor is not None:
-            mesh_actor.SetVisibility(bool(visible))
+            if visible is not None and mesh_actor is not None:
+                mesh_actor.SetVisibility(bool(visible))
 
-        return mesh_actor
+            return mesh_actor
 
         # slice_actors.append()  # X-axis
 
