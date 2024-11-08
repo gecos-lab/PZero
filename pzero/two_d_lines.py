@@ -926,8 +926,8 @@ def resample_line_distance(
             while distance_delta >= shp_line_in.length:
                 distance_delta = distance_delta / 2
         distances = np_arange(0, shp_line_in.length, distance_delta)
-        points = points = [tuple(shp_line_in.interpolate(distance).coords[0]) for distance in distances]
-        points.append(tuple(shp_line_in.coords[-1]))
+        points = [np_array(shp_line_in.interpolate(distance).coords) for distance in distances],
+        np_array(shp_line_in.coords[-1])]
         print("points: ", points)
         shp_line_out = shp_linestring(points)
         outUV = deepcopy(np_array(shp_line_out.coords))
