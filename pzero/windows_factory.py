@@ -1651,7 +1651,7 @@ class VTKView(BaseView):
         # First get the vtk object from its collection.
         show_property_title = show_property
         this_coll = eval("self.parent."+collection)
-        if collection == "geol_coll":
+        if collection in ["geol_coll", "fluid_coll", "backgrnd_coll", "well_coll"]:
             color_R = this_coll.get_uid_legend(uid=uid)["color_R"]
             color_G = this_coll.get_uid_legend(uid=uid)["color_G"]
             color_B = this_coll.get_uid_legend(uid=uid)["color_B"]
@@ -1660,34 +1660,7 @@ class VTKView(BaseView):
             point_size = this_coll.get_uid_legend(uid=uid)["point_size"]
             opacity = this_coll.get_uid_legend(uid=uid)["opacity"] / 100
             plot_entity = this_coll.get_uid_vtk_obj(uid)
-        elif collection == "xsect_coll":
-            color_R = this_coll.get_legend()["color_R"]
-            color_G = this_coll.get_legend()["color_G"]
-            color_B = this_coll.get_legend()["color_B"]
-            color_RGB = [color_R / 255, color_G / 255, color_B / 255]
-            line_thick = this_coll.get_legend()["line_thick"]
-            point_size = 0
-            opacity = this_coll.get_legend()["opacity"] / 100
-            plot_entity = this_coll.get_uid_vtk_frame(uid)
-        elif collection == "boundary_coll":
-            color_R = this_coll.get_legend()["color_R"]
-            color_G = this_coll.get_legend()["color_G"]
-            color_B = this_coll.get_legend()["color_B"]
-            color_RGB = [color_R / 255, color_G / 255, color_B / 255]
-            line_thick = this_coll.get_legend()["line_thick"]
-            point_size = 0
-            opacity = this_coll.get_legend()["opacity"] / 100
-            plot_entity = this_coll.get_uid_vtk_obj(uid)
-        elif collection == "mesh3d_coll":
-            color_R = this_coll.get_legend()["color_R"]
-            color_G = this_coll.get_legend()["color_G"]
-            color_B = this_coll.get_legend()["color_B"]
-            color_RGB = [color_R / 255, color_G / 255, color_B / 255]
-            line_thick = this_coll.get_legend()["line_thick"]
-            point_size = 0
-            opacity = this_coll.get_legend()["opacity"] / 100
-            plot_entity = this_coll.get_uid_vtk_obj(uid)
-        elif collection == "dom_coll":
+        elif collection in ["xsect_coll", "boundary_coll", "mesh3d_coll", "dom_coll", "image_coll"]:
             color_R = this_coll.get_legend()["color_R"]
             color_G = this_coll.get_legend()["color_G"]
             color_B = this_coll.get_legend()["color_B"]
@@ -1696,47 +1669,11 @@ class VTKView(BaseView):
             point_size = this_coll.get_legend()["point_size"]
             opacity = this_coll.get_legend()["opacity"] / 100
             plot_entity = this_coll.get_uid_vtk_obj(uid)
-        elif collection == "image_coll":
-            color_R = this_coll.get_legend()["color_R"]
-            color_G = this_coll.get_legend()["color_G"]
-            color_B = this_coll.get_legend()["color_B"]
-            color_RGB = [color_R / 255, color_G / 255, color_B / 255]
-            line_thick = this_coll.get_legend()["line_thick"]
-            point_size = 0
-            opacity = this_coll.get_legend()["opacity"] / 100
-            plot_entity = this_coll.get_uid_vtk_obj(uid)
-        elif collection == "well_coll":
-            color_R = this_coll.get_uid_legend(uid=uid)["color_R"]
-            color_G = this_coll.get_uid_legend(uid=uid)["color_G"]
-            color_B = this_coll.get_uid_legend(uid=uid)["color_B"]
-            color_RGB = [color_R / 255, color_G / 255, color_B / 255]
-            line_thick = this_coll.get_uid_legend(uid=uid)["line_thick"]
-            point_size = 0
-            opacity = this_coll.get_uid_legend(uid=uid)["opacity"] / 100
-            plot_entity = this_coll.get_uid_vtk_obj(uid)
-        elif collection == "fluid_coll":
-            color_R = this_coll.get_uid_legend(uid=uid)["color_R"]
-            color_G = this_coll.get_uid_legend(uid=uid)["color_G"]
-            color_B = this_coll.get_uid_legend(uid=uid)["color_B"]
-            color_RGB = [color_R / 255, color_G / 255, color_B / 255]
-            line_thick = this_coll.get_uid_legend(uid=uid)["line_thick"]
-            point_size = this_coll.get_uid_legend(uid=uid)["point_size"]
-            opacity = this_coll.get_uid_legend(uid=uid)["opacity"] / 100
-            plot_entity = this_coll.get_uid_vtk_obj(uid)
-        elif collection == "backgrnd_coll":
-            color_R = this_coll.get_uid_legend(uid=uid)["color_R"]
-            color_G = this_coll.get_uid_legend(uid=uid)["color_G"]
-            color_B = this_coll.get_uid_legend(uid=uid)["color_B"]
-            color_RGB = [color_R / 255, color_G / 255, color_B / 255]
-            line_thick = this_coll.get_uid_legend(uid=uid)["line_thick"]
-            point_size = this_coll.get_uid_legend(uid=uid)["point_size"]
-            opacity = this_coll.get_uid_legend(uid=uid)["opacity"] / 100
-            plot_entity = this_coll.get_uid_vtk_obj(uid)
         else:
             # catch errors
             print("no collection", collection)
             this_actor = None
-        # Then plot the vtk object with proper options
+        # Then plot the vtk object with proper options.
         if isinstance(plot_entity, (PolyLine, TriSurf, XsPolyLine)) and not isinstance(
                 plot_entity, WellTrace
         ):
@@ -2112,7 +2049,7 @@ class VTKView(BaseView):
             point = plot_entity.GetCenter()
             name_value = self.parent.geol_coll.get_uid_name(uid)
         elif collection == "xsect_coll":
-            plot_entity = self.parent.xsect_coll.get_uid_vtk_frame(uid)
+            plot_entity = self.parent.xsect_coll.get_uid_vtk_obj(uid)
             point = plot_entity.GetCenter()
             name_value = self.parent.xsect_coll.get_uid_name(uid)
         elif collection == "boundary_coll":
@@ -3097,8 +3034,8 @@ class ViewMap(View2D):
         """
         # First get the vtk object from its collection.
         show_property_title = show_property
-        this_coll = eval("self.parent."+collection)
-        if collection == "geol_coll":
+        this_coll = eval("self.parent." + collection)
+        if collection in ["geol_coll", "fluid_coll", "backgrnd_coll", "well_coll"]:
             color_R = this_coll.get_uid_legend(uid=uid)["color_R"]
             color_G = this_coll.get_uid_legend(uid=uid)["color_G"]
             color_B = this_coll.get_uid_legend(uid=uid)["color_B"]
@@ -3107,75 +3044,20 @@ class ViewMap(View2D):
             point_size = this_coll.get_uid_legend(uid=uid)["point_size"]
             opacity = this_coll.get_uid_legend(uid=uid)["opacity"] / 100
             plot_entity = this_coll.get_uid_vtk_obj(uid)
-        elif collection == "xsect_coll":
+        elif collection in ["xsect_coll", "boundary_coll", "mesh3d_coll", "dom_coll", "image_coll"]:
             color_R = this_coll.get_legend()["color_R"]
             color_G = this_coll.get_legend()["color_G"]
             color_B = this_coll.get_legend()["color_B"]
             color_RGB = [color_R / 255, color_G / 255, color_B / 255]
             line_thick = this_coll.get_legend()["line_thick"]
+            point_size = this_coll.get_legend()["point_size"]
             opacity = this_coll.get_legend()["opacity"] / 100
-            plot_entity = this_coll.get_uid_vtk_frame(uid)
-        elif collection == "boundary_coll":
-            color_R = this_coll.get_legend()["color_R"]
-            color_G = this_coll.get_legend()["color_G"]
-            color_B = this_coll.get_legend()["color_B"]
-            color_RGB = [color_R / 255, color_G / 255, color_B / 255]
-            line_thick = this_coll.get_legend()["line_thick"]
-            opacity = this_coll.get_legend()["opacity"] / 100
-            plot_entity = this_coll.get_uid_vtk_obj(uid)
-        elif collection == "mesh3d_coll":
-            color_R = this_coll.get_legend()["color_R"]
-            color_G = this_coll.get_legend()["color_G"]
-            color_B = this_coll.get_legend()["color_B"]
-            color_RGB = [color_R / 255, color_G / 255, color_B / 255]
-            line_thick = this_coll.get_legend()["line_thick"]
-            opacity = this_coll.get_legend()["opacity"] / 100
-            plot_entity = this_coll.get_uid_vtk_obj(uid)
-        elif collection == "dom_coll":
-            color_R = this_coll.get_legend()["color_R"]
-            color_G = this_coll.get_legend()["color_G"]
-            color_B = this_coll.get_legend()["color_B"]
-            color_RGB = [color_R / 255, color_G / 255, color_B / 255]
-            line_thick = this_coll.get_legend()["line_thick"]
-            opacity = this_coll.get_legend()["opacity"] / 100
-            plot_entity = this_coll.get_uid_vtk_obj(uid)
-        elif collection == "image_coll":
-            """Note: no legend for image."""
-            color_RGB = [255, 255, 255]
-            line_thick = 5.0
-            opacity = this_coll.get_legend()["opacity"] / 100
-            plot_entity = this_coll.get_uid_vtk_obj(uid)
-        elif collection == "well_coll":
-            color_R = this_coll.get_uid_legend(uid=uid)["color_R"]
-            color_G = this_coll.get_uid_legend(uid=uid)["color_G"]
-            color_B = this_coll.get_uid_legend(uid=uid)["color_B"]
-            color_RGB = [color_R / 255, color_G / 255, color_B / 255]
-            line_thick = this_coll.get_uid_legend(uid=uid)["line_thick"]
-            opacity = this_coll.get_uid_legend(uid=uid)["opacity"] / 100
-            plot_entity = this_coll.get_uid_vtk_obj(uid)
-        elif collection == "fluid_coll":
-            color_R = this_coll.get_uid_legend(uid=uid)["color_R"]
-            color_G = this_coll.get_uid_legend(uid=uid)["color_G"]
-            color_B = this_coll.get_uid_legend(uid=uid)["color_B"]
-            color_RGB = [color_R / 255, color_G / 255, color_B / 255]
-            line_thick = this_coll.get_uid_legend(uid=uid)["line_thick"]
-            point_size = this_coll.get_uid_legend(uid=uid)["point_size"]
-            opacity = this_coll.get_uid_legend(uid=uid)["opacity"] / 100
-            plot_entity = this_coll.get_uid_vtk_obj(uid)
-        elif collection == "backgrnd_coll":
-            color_R = this_coll.get_uid_legend(uid=uid)["color_R"]
-            color_G = this_coll.get_uid_legend(uid=uid)["color_G"]
-            color_B = this_coll.get_uid_legend(uid=uid)["color_B"]
-            color_RGB = [color_R / 255, color_G / 255, color_B / 255]
-            line_thick = this_coll.get_uid_legend(uid=uid)["line_thick"]
-            point_size = this_coll.get_uid_legend(uid=uid)["point_size"]
-            opacity = this_coll.get_uid_legend(uid=uid)["opacity"] / 100
             plot_entity = this_coll.get_uid_vtk_obj(uid)
         else:
-            print("no collection")
-            print(collection)
+            # catch errors
+            print("no collection", collection)
             this_actor = None
-        """Then plot the vtk object with proper options."""
+        # Then plot the vtk object with proper options.
         if isinstance(plot_entity, (PolyLine, TriSurf, XsPolyLine)) and not isinstance(
                 plot_entity, WellTrace
         ):

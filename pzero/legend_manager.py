@@ -68,6 +68,7 @@ class Legend(QObject):
         "color_G": int(255),
         "color_B": int(255),
         "line_thick": int(2),
+        "point_size": int(0),
         "opacity": int(100),
     }
 
@@ -99,7 +100,7 @@ class Legend(QObject):
         "color_G": [255, 255, 255, 255, 255],
         "color_B": [255, 255, 255, 255, 255],
         "line_thick": [2, 2, 2, 1, 2],
-        "point_size": [2, 2, 2, 1, 2],
+        "point_size": [0, 2, 0, 0, 0],
         "opacity": [100, 100, 100, 100, 100],
     }
 

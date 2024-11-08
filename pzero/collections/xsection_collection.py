@@ -139,7 +139,7 @@ def section_from_azimuth(self, vector):
             trans_mat = np_array(
                 [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [tx, ty, tz, 1]]
             )
-            frame = self.parent.xsect_coll.get_uid_vtk_frame(uid)
+            frame = self.parent.xsect_coll.get_uid_vtk_obj(uid)
             homo_points = frame.get_homo_points()
             new_points = np_matmul(homo_points, trans_mat)[:, :-1]
             section_dict["base_x"] = new_points[0, 0]
@@ -520,7 +520,7 @@ class XSectionCollection(BaseCollection):
         """Set value(s) stored in dataframe (as pointer) from uid."""
         self.df.loc[self.df["uid"] == uid, "vtk_plane"] = vtk_plane
 
-    def get_uid_vtk_frame(self, uid=None):
+    def get_uid_vtk_obj(self, uid=None):
         """Get value(s) stored in dataframe (as pointer) from uid."""
         return self.df.loc[self.df["uid"] == uid, "vtk_frame"].values[0]
 
