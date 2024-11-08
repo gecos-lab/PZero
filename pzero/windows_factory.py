@@ -8121,7 +8121,6 @@ class View3D(BaseView):
         # Add to main layout after position_group
         layout.addWidget(manipulation_group)
                 # Remove any existing interactions when initializing the panel
-        self.remove_slice_interactions()
         
         # Add throttling for slider updates
         self.last_slider_update = time.time()
@@ -8186,7 +8185,8 @@ class View3D(BaseView):
                                 callback=lambda normal, origin, st=slice_type: 
                                     plane_callback(normal, origin, st),
                                 normal=normal,
-                                origin=pos
+                                origin=pos,
+                                normal_rotation=False,
                             )
                             self.plane_widgets.append(plane)
                             
@@ -8346,9 +8346,7 @@ class View3D(BaseView):
         control_panel.setLayout(layout)
 
         # Show the control panel
-        self.setup_slice_interactions()
         control_panel.show()
-    def remove_slice_interactions(self): # Remove all slice interactions and set default style
         """Remove all slice interactions and set default style"""
         try:
             # Reset any highlighting
@@ -8512,7 +8510,6 @@ class View3D(BaseView):
         return self.mesh3d_coll.df[
             self.mesh3d_coll.df['mesh3d_type'] == 'seismic_slice'
             ]['name'].tolist()
-    def add_slice_interaction(self):
         """Add mouse interaction for seismic slices"""
         style = vtk.vtkInteractorStyleUser()
         
@@ -8709,7 +8706,6 @@ class View3D(BaseView):
 
     
 
-    def add_slice_drag_interaction(self): # might need to be implemented, it is redundant, we already have add_slice_interaction
         """Add drag interaction for seismic slices"""
         def on_mouse_move(obj, event):
             interactor = self.plotter.iren.interactor
@@ -8768,15 +8764,6 @@ class View3D(BaseView):
         self.plotter.iren.add_observer('MouseMoveEvent', on_mouse_move)
         self.plotter.iren.add_observer('LeftButtonPressEvent', on_left_button_press)
         self.plotter.iren.add_observer('LeftButtonReleaseEvent', on_left_button_release)
-    def setup_slice_interactions(self):
-        """Setup all slice interactions"""
-        try:
-            # Initialize or reset the original_colors dictionary
-            self.original_colors = {}
-            self.add_slice_interaction()
-            print("Slice interactions setup complete")
-        except Exception as e:
-            print(f"Error setting up slice interactions: {e}")
     def retrieve_vtkStructuredGrid(self, uid): # This is redundant, there is already the get_uid_vtk_obj method in mesh3d_collection
 
         # [gabriele] This is redundant, there is already the get_uid_vtk_obj method in mesh3d_collection
