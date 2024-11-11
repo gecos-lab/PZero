@@ -8251,6 +8251,18 @@ class View3D(BaseView):
         slider_throttle = 1/30.0  # Limit to 30 FPS
         # Fix the toggle_direct_manipulation function definition
         def toggle_direct_manipulation(enabled):
+            inline_slider.setEnabled(not enabled) # Disable sliders when manipulation is enabled
+            xline_slider.setEnabled(not enabled)  # Disable sliders when manipulation is enabled
+            zslice_slider.setEnabled(not enabled) # Disable sliders when manipulation is enabled
+            if enabled:
+                inline_slider.setStyleSheet("Qslider::groove:horizontal {background-color: #cccccc;}") # Set the slider color to grey
+                xline_slider.setStyleSheet("Qslider::groove:horizontal {background-color: #cccccc;}")   # Set the slider color to grey
+                zslice_slider.setStyleSheet("Qslider::groove:horizontal {background-color: #cccccc;}") # Set the slider color to grey
+            else:
+                inline_slider.setStyleSheet("") # Reset the slider color
+                xline_slider.setStyleSheet("") # Reset the slider color
+                zslice_slider.setStyleSheet("") # Reset the slider color
+
             if enabled:
                 self.plane_widgets = []
                 section_name = section_combo.currentText()
