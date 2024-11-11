@@ -130,6 +130,7 @@ def edit_line(self):
     # self.plotter.track_click_position(side='left', callback=left_click, viewport=True)
 
 
+@freeze_gui
 def sort_line_nodes(self):
     """Sort line nodes."""
     print("Sort line nodes according to cell order.")
@@ -137,9 +138,8 @@ def sort_line_nodes(self):
     # self.stop_event_loops()
     """Check if a line is selected"""
     if not self.selected_uids:
-        print(" -- No input data selected -- ")
+        self.parent.TextTerminal.appendPlainText(" -- No input data selected -- ")
         return
-    # """Freeze QT interface"""
     # for action in self.findChildren(QAction):
     #     if isinstance(action.parentWidget(), NavigationToolbar) is False:
     #         action.setDisabled(True)
@@ -153,20 +153,25 @@ def sort_line_nodes(self):
         self.parent.geol_coll.signals.geom_modified.emit(
             [current_uid]
         )  # emit uid as list to force redraw()
-        # """Un-Freeze QT interface"""
         # for action in self.findChildren(QAction):
         #     action.setEnabled(True)
+    """Deselect input line."""
     self.clear_selection()
 
 
+@freeze_gui
 def move_line(self, vector):
     """Move the whole line by rigid-body translation.
     Here transformation to UV is not necessary since the translation vector is already in world space
     """
+    #It should block the function before to activate the vector
+    if not self.selected_uids:
+        self.parent.TextTerminal.appendPlainText(" -- No input data selected -- ")
+        return
+
     print("Move Line. Move the whole line by rigid-body translation.")
     if vector.length == 0:
         print("Zero-length vector")
-        self.enable_actions()
         return
 
     for current_uid in self.selected_uids:
@@ -175,7 +180,7 @@ def move_line(self, vector):
         ) and (
                 self.parent.geol_coll.get_uid_topology(current_uid) != "XsPolyLine"
         ):
-            print(" -- Selected data is not a line -- ")
+            self.parent.TextTerminal.appendPlainText(" -- Selected data is not a line -- ")
             return
 
         """Editing loop."""
@@ -200,10 +205,9 @@ def move_line(self, vector):
         self.parent.geol_coll.signals.geom_modified.emit(
             [current_uid]
         )  # emit uid as list to force redraw()
-        """Un-Freeze QT interface"""
+    """Deselect input line."""
     self.clear_selection()
 
-    self.enable_actions()
 
 
 @freeze_gui
@@ -293,7 +297,7 @@ def extend_line(self):
     # self.stop_event_loops()
     """Check if a line is selected"""
     if not self.selected_uids:
-        print(" -- No input data selected -- ")
+        self.parent.TextTerminal.appendPlainText(" -- No input data selected -- ")
         return
     if (
             self.parent.geol_coll.get_uid_topology(self.selected_uids[0])
@@ -302,7 +306,7 @@ def extend_line(self):
             self.parent.geol_coll.get_uid_topology(self.selected_uids[0])
             != "XsPolyLine"
     ):
-        print(" -- Selected data is not a line -- ")
+        self.parent.TextTerminal.appendPlainText(" -- Selected data is not a line -- ")
         return
     """Freeze QT interface"""
     self.disable_actions()
@@ -324,21 +328,19 @@ def extend_line(self):
     )
 
 
+@freeze_gui
 def split_line_line(self):
     """Split line (paper) with another line (scissors). First, select the paper-line then the scissors-line"""
-    print(
-        "Split line with line. Line to be split has been selected, please select an intersecting line."
-    )
+    #print("Split line with line. Line to be split has been selected, please select an intersecting line.")   #Reviw needed
     """Terminate running event loops"""
     """Check if a line is selected"""
     if not self.selected_uids:
-        print(" -- No input data selected -- ")
+        self.parent.TextTerminal.appendPlainText(" -- No input data selected -- ")
         return
     elif len(self.selected_uids) <= 1:
-        print(" -- Not enough input data selected. Select at least 2 objects -- ")
+        self.parent.TextTerminal.appendPlainText(" -- Not enough input data selected. Select at least 2 objects -- ")
         return
-    """Freeze QT interface"""
-    self.disable_actions()
+
     current_uid_scissors = self.selected_uids[-1]
     if (
             self.parent.geol_coll.get_uid_topology(current_uid_scissors)
@@ -347,7 +349,7 @@ def split_line_line(self):
             self.parent.geol_coll.get_uid_topology(current_uid_scissors)
             != "XsPolyLine"
     ):
-        print(" -- Selected scissor is not a line -- ")
+        self.parent.TextTerminal.appendPlainText(" -- Selected scissor is not a line -- ")
         return
 
     if isinstance(self, ViewMap):
@@ -369,7 +371,7 @@ def split_line_line(self):
                 self.parent.geol_coll.get_uid_topology(current_uid_paper)
                 != "XsPolyLine"
         ):
-            print(" -- Selected paper is not a line -- ")
+            self.parent.TextTerminal.appendPlainText(" -- Selected paper is not a line -- ")
             return
 
         if isinstance(self, ViewMap):
@@ -399,9 +401,8 @@ def split_line_line(self):
             split_lines = shp_split(shp_line_in_paper,
                                     shp_line_in_scissors)  # lines must include all line parts not affected by splitting and two parts for the split line__________
         else:  # handles the case when the shp_linestring share a linear path and, for the moment, exists the tool
-            """Un-Freeze QT interface"""
+            """Deselect input line."""
             self.clear_selection()
-            self.enable_actions()
             return
         replace = 1  # replace = 1 for the first line to operate replace_vtk
         uids = [current_uid_scissors]
@@ -463,13 +464,13 @@ def split_line_line(self):
                     uids.append(uid)
                 del new_line["vtk_obj"]
             else:
-                print("Empty object")
+                self.parent.TextTerminal.appendPlainText("Empty object")
         """Deselect input line and force redraw"""
 
         # self.parent.geol_coll.signals.geom_modified.emit(uids)  # emit uid as list to force redraw()
+    """Deselect input line."""
     self.clear_selection()
-    """Un-Freeze QT interface"""
-    self.enable_actions()
+
 
 
 def split_line_existing_point(self):
@@ -565,13 +566,13 @@ def split_line_existing_point(self):
             self.parent.geol_coll.replace_vtk(uid=uid, vtk_object=new_line_1["vtk_obj"])
             del new_line_1
         else:
-            print("Empty object")
+            self.parent.TextTerminal.appendPlainText("Empty object")
         """Create entity from the dictionary"""
         if new_line_2["vtk_obj"].points_number > 0:
             self.parent.geol_coll.add_entity_from_dict(new_line_2)
             del new_line_2
         else:
-            print("Empty object")
+            self.parent.TextTerminal.appendPlainText("Empty object")
         """Deselect input line."""
         self.clear_selection()
         selector.EnabledOff()
@@ -579,13 +580,13 @@ def split_line_existing_point(self):
         self.enable_actions()
 
     """Split line at selected existing point (vertex)"""
-    print(
+    self.parent.TextTerminal.appendPlainText(
         "Split line at existing point. Line to be split has been selected, "
         "please select an existing point for splitting."
     )
     """Check if a line is selected"""
     if not self.selected_uids:
-        print(" -- No input data selected -- ")
+        self.parent.TextTerminal.appendPlainText(" -- No input data selected -- ")
         return
     if (
             self.parent.geol_coll.get_uid_topology(self.selected_uids[0])
@@ -594,7 +595,7 @@ def split_line_existing_point(self):
             self.parent.geol_coll.get_uid_topology(self.selected_uids[0])
             != "XsPolyLine"
     ):
-        print(" -- Selected data is not a line -- ")
+        self.parent.TextTerminal.appendPlainText(" -- Selected data is not a line -- ")
         return
     """Freeze QT interface"""
     self.disable_actions
@@ -619,20 +620,19 @@ def split_line_vector(self, vector):
 # check merge, snap, and see if a bridge nodes method is needed____________________
 
 
+@freeze_gui
 def merge_lines(self):
     """Merge two (contiguous or non-contiguous) lines.
     Metadata will be taken from the first selected line."""
-    # Freeze QT interface
-    self.disable_actions()
     # Check if at least 2 lines are selected.
     if not self.selected_uids:
-        print(" -- No input data selected -- ")
+        self.parent.TextTerminal.appendPlainText(" -- No input data selected -- ")
         self.enable_actions()
         return
     # Create local copy of selected_uids
     in_uids = self.selected_uids
     if len(in_uids) <= 1:
-        print(" -- Not enough input data selected. Select at least 2 objects -- ")
+        self.parent.TextTerminal.appendPlainText(" -- Not enough input data selected. Select at least 2 objects -- ")
         self.enable_actions()
         return
     # Check if all input entities are PolyLine or XsPolyLine
@@ -643,7 +643,7 @@ def merge_lines(self):
         elif self.parent.geol_coll.get_uid_topology(uid) == "XsPolyLine":
             continue
         else:
-            print(" -- Selection must include lines only -- ")
+            self.parent.TextTerminal.appendPlainText(" -- Selection must include lines only -- ")
             self.enable_actions()
             return
     # For XsPolyLine, check that they all belong to the same cross-section.
@@ -654,7 +654,7 @@ def merge_lines(self):
                 this_xsection = self.parent.geol_coll.get_uid_x_section(uid)
             elif this_xsection is not None:
                 if self.parent.geol_coll.get_uid_x_section(uid) != this_xsection:
-                    print(" -- Selection must include lines belonging to the same cross-section only -- ")
+                    self.parent.TextTerminal.appendPlainText(" -- Selection must include lines belonging to the same cross-section only -- ")
                     self.enable_actions()
                     return
     # Create empty dictionary for the output line.
@@ -710,33 +710,29 @@ def merge_lines(self):
     for uid in in_uids:
         self.parent.geol_coll.remove_entity(uid)
     self.parent.geol_coll.add_entity_from_dict(new_line)
-    """Un-Freeze QT interface"""
-    self.enable_actions()
 
 
+
+@freeze_gui
 def snap_line(self):
     """Snaps vertices of the selected line (the snapping-line) to the nearest vertex of the chosen line (goal-line),
     depending on the Tolerance parameter."""
-    print(
-        "Snap line to line. Line to be snapped has been selected, please select second line."
-    )
+    #print("Snap line to line. Line to be snapped has been selected, please select second line.")
     """Terminate running event loops"""
     """Check if a line is selected"""
     if not self.selected_uids:
-        print(" -- No input data selected -- ")
+        self.parent.TextTerminal.appendPlainText(" -- No input data selected -- ")
         return
     elif len(self.selected_uids) <= 1:
-        print(" -- Not enough input data selected. Select at least 2 objects -- ")
+        self.parent.TextTerminal.appendPlainText(" -- Not enough input data selected. Select at least 2 objects -- ")
         return
-    """Freeze QT interface"""
-    self.disable_actions()
     current_uid_goal = self.selected_uids[-1]
     if (
             self.parent.geol_coll.get_uid_topology(current_uid_goal) != "PolyLine"
     ) and (
             self.parent.geol_coll.get_uid_topology(current_uid_goal) != "XsPolyLine"
     ):
-        print(" -- Selected goal is not a line -- ")
+        self.parent.TextTerminal.appendPlainText(" -- Selected goal is not a line -- ")
         return
     tolerance = input_one_value_dialog(
         parent=self,
@@ -754,7 +750,7 @@ def snap_line(self):
                 self.parent.geol_coll.get_uid_topology(current_uid_snap)
                 != "XsPolyLine"
         ):
-            print(" -- Selected snap is not a line -- ")
+            self.parent.TextTerminal.appendPlainText(" -- Selected snap is not a line -- ")
             return
 
         """Create empty dictionary for the output line."""
@@ -812,9 +808,7 @@ def snap_line(self):
         if shp_line_in_snap.is_simple and shp_line_in_goal.is_simple:
             shp_line_out_snap = shp_snap(shp_line_in_snap, shp_line_in_goal, tolerance)
         else:
-            print("Polyline is not simple, it self-intersects")
-            """Un-Freeze QT interface"""
-            self.enable_actions()
+            self.parent.TextTerminal.appendPlainText("Polyline is not simple, it self-intersects")
             return
         shp_line_out_diff = shp_line_out_snap.difference(
             shp_line_in_goal
@@ -823,7 +817,7 @@ def snap_line(self):
         outUV_goal = deepcopy(np_array(shp_line_in_goal.coords))
         """Un-stack output coordinates and write them to the empty dictionary."""
         if outUV_snap.ndim < 2:
-            print("Invalid shape")
+            self.parent.TextTerminal.appendPlainText("Invalid shape")
             continue
         outU_snap = outUV_snap[:, 0]
         outV_snap = outUV_snap[:, 1]
@@ -863,9 +857,8 @@ def snap_line(self):
             del new_line_goal
         else:
             print("Empty object")
-        """Un-Freeze QT interface"""
+        """Deselect input lines"""
     self.clear_selection()
-    self.enable_actions()
 
 
 @freeze_gui
@@ -1022,11 +1015,12 @@ def resample_lines_number_points(self):  # this must be done per-part___________
             f"Line {current_uid} resampled with number of points = {number_of_points}")
 
 
+@freeze_gui
 def simplify_line(
         self,
 ):  # this must be done per-part_______________________________________________________
     """Return a simplified representation of the line. Permits the user to choose a value for the Tolerance parameter."""
-    print(
+    self.parent.TextTerminal.appendPlainText(
         "Simplify line. Define tolerance value: "
         "small values result in more vertices and great similarity with the input line."
     )
@@ -1034,10 +1028,8 @@ def simplify_line(
 
     """Check if a line is selected"""
     if not self.selected_uids:
-        print(" -- No input data selected -- ")
+        self.parent.TextTerminal.appendPlainText(" -- No input data selected -- ")
         return
-    """Freeze QT interface"""
-    self.disable_actions()
     """Ask for the tolerance parameter"""
     tolerance_p = input_one_value_dialog(
         parent=self,
@@ -1051,12 +1043,10 @@ def simplify_line(
         ) and (
                 self.parent.geol_coll.get_uid_topology(current_uid) != "XsPolyLine"
         ):
-            print(" -- Selected data is not a line -- ")
+            self.parent.TextTerminal.appendPlainText(" -- Selected data is not a line -- ")
             return
 
         if tolerance_p is None:
-            """Un-Freeze QT interface"""
-            self.enable_actions()
             return
         if tolerance_p <= 0:
             tolerance_p = 0.1
@@ -1109,32 +1099,32 @@ def simplify_line(
         new_line["vtk_obj"].auto_cells()
         """Replace VTK object"""
         if new_line["vtk_obj"].points_number > 0:
-            self.parent.geol_coll.replace_vtk(uid=current_uid, vtk_object=new_line["vtk_obj"])
-            del new_line
+            self.parent.geol_coll.remove_entity(current_uid)
+            self.parent.geol_coll.add_entity_from_dict(new_line)
         else:
-            print("Empty object")
+            self.parent.TextTerminal.appendPlainText("Empty object")
 
         self.parent.geol_coll.signals.geom_modified.emit(
             [current_uid]
         )  # emit uid as list to force redraw()
     """Deselect input line."""
     self.clear_selection()
-    """Un-Freeze QT interface"""
-    self.enable_actions()
 
 
+
+@freeze_gui
 def copy_parallel(
         self,
 ):  # this must be done per-part_______________________________________________________
     """Parallel folding. Create a line copied and translated from a template line using Shapely.
     Since lines are oriented left-to-right and bottom-to-top, and here we copy a line to the left,
     a positive distance creates a line shifted upwards and to the left."""
-    print("Copy Parallel. Create a line copied and translated.")
+    self.parent.TextTerminal.appendPlainText("Copy Parallel. Create a line copied and translated.")
     """Terminate running event loops"""
 
     """Check if a line is selected"""
     if not self.selected_uids:
-        print(" -- No input data selected -- ")
+        self.parent.TextTerminal.appendPlainText(" -- No input data selected -- ")
         return
     if (
             self.parent.geol_coll.get_uid_topology(self.selected_uids[0])
@@ -1143,10 +1133,8 @@ def copy_parallel(
             self.parent.geol_coll.get_uid_topology(self.selected_uids[0])
             != "XsPolyLine"
     ):
-        print(" -- Selected data is not a line -- ")
+        self.parent.TextTerminal.appendPlainText(" -- Selected data is not a line -- ")
         return
-    """Freeze QT interface"""
-    self.disable_actions()
     """If more than one line is selected, keep the first."""
     input_uid = self.selected_uids[0]
     """IN THE FUTURE add a test to check that the selected feature is a geological feature"""
@@ -1212,11 +1200,9 @@ def copy_parallel(
         outU = outUV[:, 0]
         outV = outUV[:, 1]
     else:
-        print("Polyline is not simple, it self-intersects")
-        """Un-Freeze QT interface"""
+        self.parent.TextTerminal.appendPlainText("Polyline is not simple, it self-intersects")
         for action in self.findChildren(QAction):
-            action.setEnabled(True)
-        return
+            return
     if isinstance(self, ViewMap):
         # if isinstance(self, (ViewMap, ViewMap)):
         outX = outU
@@ -1228,7 +1214,7 @@ def copy_parallel(
             self.this_x_section_uid, outU, outV
         )
     """Stack coordinates in two-columns matrix and write to vtk object."""
-    print("outXYZ = np_column_stack((outX, outY, outZ))")
+    self.parent.TextTerminal.appendPlainText("outXYZ = np_column_stack((outX, outY, outZ))")
     outXYZ = np_column_stack((outX, outY, outZ))
 
     line_dict["vtk_obj"].points = outXYZ
@@ -1238,22 +1224,21 @@ def copy_parallel(
         output_uid = self.parent.geol_coll.add_entity_from_dict(line_dict)
         left_right(output_uid)
     else:
-        print("Empty object")
-    """Un-Freeze QT interface"""
-    self.enable_actions()
+        self.parent.TextTerminal.appendPlainText("Empty object")
 
 
+@freeze_gui
 def copy_kink(
         self,
 ):  # this must be done per-part_______________________________________________________
     """Kink folding. Create a line copied and translated from a template line using Shapely.
     Since lines are oriented left-to-right and bottom-to-top, and here we copy a line to the left,
     a positive distance creates a line shifted upwards and to the left."""
-    print("Copy Kink. Create a line copied and translated.")
+    self.parent.TextTerminal.appendPlainText("Copy Kink. Create a line copied and translated.")
     """Terminate running event loops"""
     """Check if a line is selected"""
     if not self.selected_uids:
-        print(" -- No input data selected -- ")
+        self.parent.TextTerminal.appendPlainText(" -- No input data selected -- ")
         return
     if (
             self.parent.geol_coll.get_uid_topology(self.selected_uids[0])
@@ -1262,10 +1247,8 @@ def copy_kink(
             self.parent.geol_coll.get_uid_topology(self.selected_uids[0])
             != "XsPolyLine"
     ):
-        print(" -- Selected data is not a line -- ")
+        self.parent.TextTerminal.appendPlainText(" -- Selected data is not a line -- ")
         return
-    """Freeze QT interface"""
-    self.disable_actions()
     """If more than one line is selected, keep the first."""
     input_uid = self.selected_uids[0]
     """IN THE FUTURE add a test to check that the selected feature is a geological feature"""
@@ -1277,8 +1260,6 @@ def copy_kink(
         default_value=100,
     )
     if distance is None:
-        """Un-Freeze QT interface"""
-        self.enable_actions()
         return
 
     in_line_name = self.parent.geol_coll.df.loc[
@@ -1330,9 +1311,7 @@ def copy_kink(
         outU = outUV[:, 0]
         outV = outUV[:, 1]
     else:
-        print("Polyline is not simple, it self-intersects")
-        """Un-Freeze QT interface"""
-        self.enable_actions()
+        self.parent.TextTerminal.appendPlainText("Polyline is not simple, it self-intersects")
         return
     if isinstance(self, ViewMap):
         # if isinstance(self, (ViewMap, ViewMap)):
@@ -1353,23 +1332,22 @@ def copy_kink(
         output_uid = self.parent.geol_coll.add_entity_from_dict(line_dict)
         left_right(output_uid)
     else:
-        print("Empty object")
-    """Un-Freeze QT interface"""
-    self.enable_actions()
+        self.parent.TextTerminal.appendPlainText("Empty object")
 
 
+@freeze_gui
 def copy_similar(
         self, vector
 ):  # this must be done per-part_______________________________________________________
     """Similar folding. Create a line copied and translated from a template line.
     Does not need U,V coordinates since the translation vector is already in world coords
     """
-    print("Copy Similar. Create a line copied and translated.")
+    self.parent.TextTerminal.appendPlainText("Copy Similar. Create a line copied and translated.")
     """Terminate running event loops"""
     # self.stop_event_loops()
     """Check if a line is selected"""
     if not self.selected_uids:
-        print(" -- No input data selected -- ")
+        self.parent.TextTerminal.appendPlainText(" -- No input data selected -- ")
         return
     if (
             self.parent.geol_coll.get_uid_topology(self.selected_uids[0])
@@ -1378,10 +1356,8 @@ def copy_similar(
             self.parent.geol_coll.get_uid_topology(self.selected_uids[0])
             != "XsPolyLine"
     ):
-        print(" -- Selected data is not a line -- ")
+        self.parent.TextTerminal.appendPlainText(" -- Selected data is not a line -- ")
         return
-    """Freeze QT interface"""
-    self.disable_actions()
     """If more than one line is selected, keep the first."""
     input_uid = self.selected_uids[0]
     """IN THE FUTURE add a test to check that the selected feature is a geological feature"""
@@ -1410,8 +1386,7 @@ def copy_similar(
     inZ = self.parent.geol_coll.get_uid_vtk_obj(input_uid).points_Z
     """Get similar folding vector."""
     if vector.length == 0:
-        print("Zero-length vector")
-        self.enable_actions()
+        self.parent.TextTerminal.appendPlainText("Zero-length vector")
         return
 
     """Create output line."""
@@ -1438,14 +1413,13 @@ def copy_similar(
         self.clear_selection()
         # self.parent.geol_coll.signals.geom_modified.emit([input_uid])  # emit uid as list to force redraw()
     else:
-        print("Empty object")
-    """Un-Freeze QT interface"""
-    self.enable_actions()
+        self.parent.TextTerminal.appendPlainText("Empty object")
+
 
 
 def measure_distance(self, vector):
     """Tool to measure distance between two points. Draw a vector_by_mouse and obtain length and azimuth"""
-    print("Measure Distance between two points by drawing a vector by mouse")
+    self.parent.TextTerminal.appendPlainText("Measure Distance between two points by drawing a vector by mouse")
 
     def end_measure(event=None):
         """Cleanup function to properly end the measurement tool"""
@@ -1456,7 +1430,7 @@ def measure_distance(self, vector):
     self.disable_actions()
 
     if vector.length == 0:
-        print("Zero-length vector")
+        self.parent.TextTerminal.appendPlainText("Zero-length vector")
         end_measure()
         return
 
