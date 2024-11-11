@@ -8019,6 +8019,16 @@ class View3D(BaseView):
         slices_layout.addWidget(slices_spin)
         layout.addLayout(slices_layout)
 
+        # Create buttons
+        create_btn = QPushButton("Create Slices")
+        remove_btn = QPushButton("Remove Slices")
+
+        # Add buttons to a horizontal layout
+        buttons_layout = QHBoxLayout()
+        buttons_layout.addWidget(create_btn)
+        buttons_layout.addWidget(remove_btn)
+        layout.addLayout(buttons_layout)
+
         def create_fence():
             section_name = volume_combo.currentText()
             direction = direction_combo.currentText()
@@ -8028,8 +8038,8 @@ class View3D(BaseView):
             uid = self.mesh3d_coll.get_uid_by_name(section_name)
             vtk_grid = self.mesh3d_coll.get_uid_vtk_obj(uid)
             vtk_grid = pv.wrap(vtk_grid)
-            
-            # Get proper axis and bounds based on direction
+
+            # Get axis and bounds based on direction
             if direction == 'Inline':
                 axis = 'x'
                 min_val, max_val = vtk_grid.bounds[0], vtk_grid.bounds[1]
@@ -8040,32 +8050,26 @@ class View3D(BaseView):
                 axis = 'z'
                 min_val, max_val = vtk_grid.bounds[4], vtk_grid.bounds[5]
 
-            # Clear existing fence diagram actors
-            existing_fences = [uid for uid in self.slice_actors if uid.endswith("_fence")]
-            for fence_uid in existing_fences:
-                self.plotter.remove_actor(self.slice_actors[fence_uid])
-                del self.slice_actors[fence_uid]
-
             # Generate evenly spaced positions
             positions = np.linspace(min_val, max_val, n_slices)
-            
+
             # Create slices
             for i, pos in enumerate(positions):
                 slice_uid = f"{uid}_{direction}_fence_{i}"
                 
-                # Create slice directly using PyVista
+                # Skip if slice already exists
+                if slice_uid in self.slice_actors:
+                    continue
+
                 try:
-                    slice_data = vtk_grid.slice(normal=axis, origin=[pos if axis == 'x' else 0,
-                                                                    pos if axis == 'y' else 0,
-                                                                    pos if axis == 'z' else 0])
-                    
-                    # Only add if slice contains data
+                    origin = [0, 0, 0]
+                    origin[['x', 'y', 'z'].index(axis)] = pos
+                    slice_data = vtk_grid.slice(normal=axis, origin=origin)
+
                     if slice_data.n_points > 0:
-                        # Get scalar array and colormap
                         scalar_array, cmap = self.get_scalar_and_cmap(vtk_grid)
                         
-                        # Add slice actor
-                        self.slice_actors[slice_uid] = self.plotter.add_mesh(
+                        actor = self.plotter.add_mesh(
                             slice_data,
                             name=slice_uid,
                             scalars=scalar_array,
@@ -8075,18 +8079,32 @@ class View3D(BaseView):
                             opacity=1.0,
                             interpolate_before_map=True
                         )
-                        self.slice_actors[slice_uid].fence_diagram = True
-                        
+                        self.slice_actors[slice_uid] = actor
+
                 except Exception as e:
                     print(f"Error creating slice at position {pos}: {e}")
                     continue
 
             self.plotter.render()
 
-        # Create button
-        create_btn = QPushButton("create slices")
+        def remove_fence_slices():
+            """Remove fence slices of the selected direction only."""
+            direction = direction_combo.currentText()
+            # Get list of fence slice UIDs for current direction
+            fence_slices = [uid for uid in list(self.slice_actors.keys()) 
+                        if '_fence_' in uid and direction in uid]
+            
+            for uid in fence_slices:
+                if uid in self.slice_actors:
+                    actor = self.slice_actors[uid]
+                    self.plotter.remove_actor(actor)
+                    del self.slice_actors[uid]
+            
+            self.plotter.render()
+
+        # Connect buttons
         create_btn.clicked.connect(create_fence)
-        layout.addWidget(create_btn)
+        remove_btn.clicked.connect(remove_fence_slices)
 
         fence_panel.setLayout(layout)
         fence_panel.show()
