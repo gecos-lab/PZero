@@ -78,20 +78,21 @@ from .entities_factory import (
     XsVertexSet,
     Attitude,
 )
+from .helpers.helper_functions import freeze_gui
 
-
+@freeze_gui
 def interpolation_delaunay_2d(self):
     """The vtkDelaunay2D object takes vtkPointSet (or any of its subclasses) as input and
     generates a vtkPolyData on output - typically a triangle mesh if Alpha value is not defined.
     Select the whole line of two or more vtkPointSet entities and start the algorithm.
     """
-    print("Delaunay2D: interpolation of Points, Lines and Surfaces")
+    self.parent.TextTerminal.appendPlainText("Delaunay2D: interpolation of Points, Lines and Surfaces")
     if self.shown_table != "tabGeology":
-        print(" -- Only geological objects can be interpolated -- ")
+        self.parent.TextTerminal.appendPlainText(" -- Only geological objects can be interpolated -- ")
         return
     """Check if some vtkPolyData is selected"""
     if not self.selected_uids:
-        print(" -- No input data selected -- ")
+        self.parent.TextTerminal.appendPlainText(" -- No input data selected -- ")
         return
     else:
         """Deep copy list of selected uids needed otherwise problems
@@ -108,7 +109,7 @@ def interpolation_delaunay_2d(self):
         ):
             pass
         else:
-            print(" -- Error input type -- ")
+            self.parent.TextTerminal.appendPlainText(" -- Error input type -- ")
             return
     """Create deepcopy of the geological entity dictionary."""
     surf_dict = deepcopy(self.geol_coll.entity_dict)
@@ -185,19 +186,20 @@ def interpolation_delaunay_2d(self):
     if surf_dict["vtk_obj"].points_number > 0:
         self.geol_coll.add_entity_from_dict(surf_dict)
     else:
-        print(" -- empty object -- ")
+        self.parent.TextTerminal.appendPlainText(" -- empty object -- ")
 
 
+@freeze_gui
 def poisson_interpolation(self):
     """vtkSurfaceReconstructionFilter can be used to reconstruct surfaces from point clouds. Input is a vtkDataSet
     defining points assumed to lie on the surface of a 3D object."""
-    print("Interpolation from point cloud: build surface from interpolation")
+    self.parent.TextTerminal.appendPlainText("Interpolation from point cloud: build surface from interpolation")
     if self.shown_table != "tabGeology":
-        print(" -- Only geological objects can be interpolated -- ")
+        self.parent.TextTerminal.appendPlainText(" -- Only geological objects can be interpolated -- ")
         return
     """Check if some vtkPolyData is selected"""
     if not self.selected_uids:
-        print("No input data selected.")
+        self.parent.TextTerminal.appendPlainText("No input data selected.")
         return
     else:
         """Deep copy list of selected uids needed otherwise problems can arise if the main geology table is deseselcted while the dataframe is being built"""
@@ -212,7 +214,7 @@ def poisson_interpolation(self):
         ):
             pass
         else:
-            print(" -- Error input type -- ")
+            self.parent.TextTerminal.appendPlainText(" -- Error input type -- ")
             return
     """Create deepcopy of the geological entity dictionary."""
     surf_dict = deepcopy(self.geol_coll.entity_dict)
@@ -300,9 +302,9 @@ def poisson_interpolation(self):
     if surf_dict["vtk_obj"].points_number > 0:
         self.geol_coll.add_entity_from_dict(surf_dict)
     else:
-        print(" -- empty object -- ")
+        self.parent.TextTerminal.appendPlainText(" -- empty object -- ")
 
-
+@freeze_gui
 def implicit_model_loop_structural(self):
     """Function to call LoopStructural's implicit modelling algorithms.
     Input Data is organized as the following columns:
@@ -323,13 +325,13 @@ def implicit_model_loop_structural(self):
     tz - z component of a gradient tangent constraint
     coord - coordinate of the structural frame data point is used for ???
     """
-    print("LoopStructural implicit geomodeller\ngithub.com/Loop3D/LoopStructural")
+    self.parent.TextTerminal.appendPlainText("LoopStructural implicit geomodeller\ngithub.com/Loop3D/LoopStructural")
     if self.shown_table != "tabGeology":
-        print(" -- Only geological objects can be interpolated -- ")
+        self.parent.TextTerminal.appendPlainText(" -- Only geological objects can be interpolated -- ")
         return
     """Check if some vtkPolyData is selected"""
     if not self.selected_uids:
-        print("No input data selected.")
+        self.parent.TextTerminal.appendPlainText("No input data selected.")
         return
     else:
         """Deep copy list of selected uids needed otherwise problems can arise if the main geology table is deseselcted while the dataframe is being built"""
@@ -354,7 +356,7 @@ def implicit_model_loop_structural(self):
         "coord": None,
     }
     """Create empty dataframe to collect all input data."""
-    print("-> creating input dataframe...")
+    self.parent.TextTerminal.appendPlainText("-> creating input dataframe...")
     tic()
     all_input_data_df = pd_DataFrame(columns=list(loop_input_dict.keys()))
     """For every selected item extract interesting data: XYZ, feature_name, val, etc."""
@@ -423,11 +425,11 @@ def implicit_model_loop_structural(self):
     toc()
     prgs_bar.close()
     """Drop columns with no valid value (i.e. all NaNs)."""
-    print("-> drop empty columns...")
+    self.parent.TextTerminal.appendPlainText("-> drop empty columns...")
     tic()
     all_input_data_df.dropna(axis=1, how="all", inplace=True)
     toc()
-    print("all_input_data_df:\n", all_input_data_df)
+    self.parent.TextTerminal.appendPlainText("all_input_data_df:\n", all_input_data_df)
     """Ask for bounding box for the model"""
     input_dict = {
         "boundary": ["Boundary: ", self.boundary_coll.get_names],
@@ -488,8 +490,8 @@ def implicit_model_loop_structural(self):
     """Define origin and maximum extension of modelling domain"""
     origin = [origin_x, origin_y, origin_z]
     maximum = [maximum_x, maximum_y, maximum_z]
-    print("origin: ", origin)
-    print("maximum: ", maximum)
+    self.parent.TextTerminal.appendPlainText("origin: ", origin)
+    self.parent.TextTerminal.appendPlainText("maximum: ", maximum)
     """Check if Input Data and Bounding Box overlaps. If so, gives warning and exists the tool."""
     if (
         (all_input_data_df["X"].min() > maximum_x)
@@ -499,7 +501,7 @@ def implicit_model_loop_structural(self):
         or (all_input_data_df["Z"].min() > maximum_z)
         or (all_input_data_df["Z"].max() < origin_z)
     ):
-        print("Exit tool: Bounding Box does not intersect input data")
+        self.parent.TextTerminal.appendPlainText("Exit tool: Bounding Box does not intersect input data")
         return
     default_spacing = np_cbrt(
         edge_x * edge_y * edge_z / (50 * 50 * 25)
@@ -525,8 +527,8 @@ def implicit_model_loop_structural(self):
     spacing_y = edge_y / dimension_y
     spacing_z = edge_z / dimension_z
     spacing = [spacing_x, spacing_y, spacing_z]
-    print("dimensions: ", dimensions)
-    print("spacing: ", spacing)
+    self.parent.TextTerminal.appendPlainText("dimensions: ", dimensions)
+    self.parent.TextTerminal.appendPlainText("spacing: ", spacing)
     """Create model as instance of Loop GeologicalModel with limits given by origin and maximum.
     Keep rescale=True (default) for performance and precision.
     THIS SHOULD BE CHANGED IN FUTURE TO BETTER DEAL WITH IRREGULARLY DISTRIBUTED INPUT DATA.
@@ -535,17 +537,17 @@ def implicit_model_loop_structural(self):
     * ``buffer - float`` buffer percentage around the model area
     * ``solver`` - the algorithm to solve the least squares problem e.g. ``lu`` for lower upper decomposition, ``cg`` for conjugate gradient, ``pyamg`` for an algorithmic multigrid solver
     * ``damp - bool`` - whether to add a small number to the diagonal of the interpolation matrix for discrete interpolators - this can help speed up the solver and makes the solution more stable for some interpolators"""
-    print("-> create model...")
+    self.parent.TextTerminal.appendPlainText("-> create model...")
     tic()
     model = GeologicalModel(origin, maximum)
     toc()
     """Link the input data dataframe to the model."""
-    print("-> set_model_data...")
+    self.parent.TextTerminal.appendPlainText("-> set_model_data...")
     tic()
     model.set_model_data(all_input_data_df)
     toc()
     """Add a foliation to the model"""
-    print("-> create_and_add_foliation...")
+    self.parent.TextTerminal.appendPlainText("-> create_and_add_foliation...")
     tic()
     model.create_and_add_foliation(
         "strati_0",
@@ -570,7 +572,7 @@ def implicit_model_loop_structural(self):
     )  # rescale is True by default
     toc()
     """Evaluate scalar field."""
-    print("-> evaluate_feature_value...")
+    self.parent.TextTerminal.appendPlainText("-> evaluate_feature_value...")
     tic()
     scalar_field = model.evaluate_feature_value("strati_0", regular_grid, scale=False)
     scalar_field = scalar_field.reshape((dimension_x, dimension_y, dimension_z))
@@ -587,7 +589,7 @@ def implicit_model_loop_structural(self):
     # scalar_field_gradient = model.evaluate_feature_gradient("strati_0", regular_grid, scale=False)
     toc()
     """Create deepcopy of the Mesh3D entity dictionary."""
-    print("-> create Voxet...")
+    self.parent.TextTerminal.appendPlainText("-> create Voxet...")
     tic()
     voxet_dict = deepcopy(self.mesh3d_coll.entity_dict)
     """Get output Voxet name."""
@@ -616,7 +618,7 @@ def implicit_model_loop_structural(self):
     print(voxet_dict)
     toc()
     """Pass calculated values of the LoopStructural model to the Voxet, as scalar fields"""
-    print("-> populate Voxet...")
+    self.parent.TextTerminal.appendPlainText("-> populate Voxet...")
     tic()
     voxet_dict["vtk_obj"].set_point_data(
         data_key="strati_0", attribute_matrix=scalar_field
@@ -625,19 +627,19 @@ def implicit_model_loop_structural(self):
     if voxet_dict["vtk_obj"].points_number > 0:
         self.mesh3d_coll.add_entity_from_dict(voxet_dict)
     else:
-        print(" -- empty object -- ")
+        self.parent.TextTerminal.appendPlainText(" -- empty object -- ")
         return
     voxet_dict["vtk_obj"].Modified()
     toc()
     """Extract isosurfaces with vtkFlyingEdges3D. Documentation in:
     https://vtk.org/doc/nightly/html/classvtkFlyingEdges3D.html
     https://python.hotexamples.com/examples/vtk/-/vtkFlyingEdges3D/python-vtkflyingedges3d-function-examples.html"""
-    print("-> extract isosurfaces...")
+    self.parent.TextTerminal.appendPlainText("-> extract isosurfaces...")
     tic()
     for value in all_input_data_df["val"].dropna().unique():
         value = float(value)
         voxet_dict["vtk_obj"].GetPointData().SetActiveScalars("strati_0")
-        print("-> extract iso-surface at value = ", value)
+        self.parent.TextTerminal.appendPlainText("-> extract iso-surface at value = ", value)
         """Get metadata of first geological feature of this time"""
         role = self.geol_coll.legend_df.loc[
             self.geol_coll.legend_df["time"] == value, "role"
@@ -674,24 +676,25 @@ def implicit_model_loop_structural(self):
             if len(surf_dict["vtk_obj"].points) > 0:
                 """Add entity to geological collection only if it is not empty"""
                 self.geol_coll.add_entity_from_dict(surf_dict)
-                print("-> iso-surface at value = ", value, " has been created")
+                self.parent.TextTerminal.appendPlainText("-> iso-surface at value = ", value, " has been created")
             else:
-                print(" -- empty object -- ")
+                self.parent.TextTerminal.appendPlainText(" -- empty object -- ")
     toc()
-    print("Loop interpolation completed.")
+    self.parent.TextTerminal.appendPlainText("Loop interpolation completed.")
 
 
+@freeze_gui
 def surface_smoothing(
     self, mode=0, convergence_value=1, boundary_smoothing=False, edge_smoothing=False
 ):
     """Smoothing tools adjust the positions of points to reduce the noise content in the surface."""
-    print("Surface Smoothing: reduce the noise of the surface")
+    self.parent.TextTerminal.appendPlainText("Surface Smoothing: reduce the noise of the surface")
     if self.shown_table != "tabGeology":
-        print(" -- Only geological objects can be modified -- ")
+        self.parent.TextTerminal.appendPlainText(" -- Only geological objects can be modified -- ")
         return
     """Check if some vtkPolyData is selected"""
     if not self.selected_uids:
-        print("No input data selected.")
+        self.parent.TextTerminal.appendPlainText("No input data selected.")
         return
     else:
         """Deep copy list of selected uids needed otherwise problems can arise if the main geology table is deseselcted while the dataframe is being built"""
@@ -727,10 +730,10 @@ def surface_smoothing(
                 if surf_dict["vtk_obj"].points_number > 0:
                     self.geol_coll.add_entity_from_dict(surf_dict)
                 else:
-                    print(" -- empty object -- ")
+                    self.parent.TextTerminal.appendPlainText(" -- empty object -- ")
 
         else:
-            print(" -- Error input type: only TriSurf type -- ")
+            self.parent.TextTerminal.appendPlainText(" -- Error input type: only TriSurf type -- ")
             return
     # """Create deepcopy of the geological entity dictionary."""
     # surf_dict = deepcopy(self.geol_coll.entity_dict)
@@ -779,18 +782,19 @@ def surface_smoothing(
     #     print(" -- empty object -- ")
 
 
+@freeze_gui
 def linear_extrusion(self):
     """vtkLinearExtrusionFilter sweeps the generating primitives along a straight line path. This tool is here
     used to create fault surfaces from faults traces."""
-    print(
+    self.parent.TextTerminal.appendPlainText(
         "Linear extrusion: create surface by projecting target linear object along a straight line path"
     )
     if self.shown_table != "tabGeology":
-        print(" -- Only geological objects can be projected -- ")
+        self.parent.TextTerminal.appendPlainText(" -- Only geological objects can be projected -- ")
         return
     """Check if some vtkPolyData is selected"""
     if not self.selected_uids:
-        print("No input data selected.")
+        self.parent.TextTerminal.appendPlainText("No input data selected.")
         return
     else:
         """Deep copy list of selected uids needed otherwise problems can arise if the main geology table is deselected while the dataframe is being built"""
@@ -801,7 +805,7 @@ def linear_extrusion(self):
         ):
             pass
         else:
-            print(" -- Error input type: only PolyLine and XsPolyLine type -- ")
+            self.parent.TextTerminal.appendPlainText(" -- Error input type: only PolyLine and XsPolyLine type -- ")
             return
     """Create deepcopy of the geological entity dictionary."""
     surf_dict = deepcopy(self.geol_coll.entity_dict)
@@ -851,7 +855,7 @@ def linear_extrusion(self):
         title="Vertical Extrusion", input_dict=extrusion_par
     )
     if vertical_extrusion is None:
-        print("Wrong extrusion parameters, please check the top and bottom values")
+        self.parent.TextTerminal.appendPlainText("Wrong extrusion parameters, please check the top and bottom values")
         return
 
     total_extrusion = vertical_extrusion["top"] + np_abs(vertical_extrusion["bottom"])
@@ -895,21 +899,22 @@ def linear_extrusion(self):
     if surf_dict["vtk_obj"].points_number > 0:
         self.geol_coll.add_entity_from_dict(surf_dict)
     else:
-        print(" -- empty object -- ")
+        self.parent.TextTerminal.appendPlainText(" -- empty object -- ")
 
 
+@freeze_gui
 def decimation_pro_resampling(self):
     """Decimation reduces the number of triangles in a triangle mesh while maintaining a faithful approximation to
     the original mesh."""
-    print(
+    self.parent.TextTerminal.appendPlainText(
         "Decimation Pro: resample target surface and reduce number of triangles of the mesh"
     )
     if self.shown_table != "tabGeology":
-        print(" -- Only geological objects can be resampled -- ")
+        self.parent.TextTerminal.appendPlainText(" -- Only geological objects can be resampled -- ")
         return
     """Check if some vtkPolyData is selected"""
     if not self.selected_uids:
-        print("No input data selected.")
+        self.parent.TextTerminal.appendPlainText("No input data selected.")
         return
     else:
         """Deep copy list of selected uids needed otherwise problems can arise if the main geology table is deseselcted while the dataframe is being built"""
@@ -918,7 +923,7 @@ def decimation_pro_resampling(self):
         if isinstance(self.geol_coll.get_uid_vtk_obj(uid), TriSurf):
             pass
         else:
-            print(" -- Error input type: only TriSurf type -- ")
+            self.parent.TextTerminal.appendPlainText(" -- Error input type: only TriSurf type -- ")
             return
     """Create deepcopy of the geological entity dictionary."""
     surf_dict = deepcopy(self.geol_coll.entity_dict)
@@ -988,21 +993,22 @@ def decimation_pro_resampling(self):
     if surf_dict["vtk_obj"].points_number > 0:
         self.geol_coll.add_entity_from_dict(surf_dict)
     else:
-        print(" -- empty object -- ")
+        self.parent.TextTerminal.appendPlainText(" -- empty object -- ")
 
 
+@freeze_gui
 def decimation_quadric_resampling(self):
     """Decimation reduces the number of triangles in a triangle mesh while maintaining a faithful approximation to
     the original mesh."""
-    print(
+    self.parent.TextTerminal.appendPlainText(
         "Decimation Quadric: resample target surface and reduce number of triangles of the mesh"
     )
     if self.shown_table != "tabGeology":
-        print(" -- Only geological objects can be resampled -- ")
+        self.parent.TextTerminal.appendPlainText(" -- Only geological objects can be resampled -- ")
         return
     """Check if some vtkPolyData is selected"""
     if not self.selected_uids:
-        print("No input data selected.")
+        self.parent.TextTerminal.appendPlainText("No input data selected.")
         return
     else:
         """Deep copy list of selected uids needed otherwise problems can arise if the main geology table is deseselcted while the dataframe is being built"""
@@ -1011,7 +1017,7 @@ def decimation_quadric_resampling(self):
         if isinstance(self.geol_coll.get_uid_vtk_obj(uid), TriSurf):
             pass
         else:
-            print(" -- Error input type: only TriSurf type -- ")
+            self.parent.TextTerminal.appendPlainText(" -- Error input type: only TriSurf type -- ")
             return
     """Create deepcopy of the geological entity dictionary."""
     surf_dict = deepcopy(self.geol_coll.entity_dict)
@@ -1044,24 +1050,25 @@ def decimation_quadric_resampling(self):
     if surf_dict["vtk_obj"].points_number > 0:
         self.geol_coll.add_entity_from_dict(surf_dict)
     else:
-        print(" -- empty object -- ")
+        self.parent.TextTerminal.appendPlainText(" -- empty object -- ")
 
 
+@freeze_gui
 def subdivision_resampling(self, mode=0, type="linear", n_subd=2):
     """Different types of subdivisions. Subdivides a triangular, polygonal surface; four new triangles are created for each triangle of the polygonal surface.:
 
     1. vtkLinearSubdivisionFilter (shape preserving)
     2. vtkButterflySubdivisionFilter  (not shape preserving)
     3. vtkLoopSubdivisionFilter (not shape preserving)"""
-    print(
+    self.parent.TextTerminal.appendPlainText(
         "Subdivision resampling: resample target surface and increase number of triangles of the mesh"
     )
     if self.shown_table != "tabGeology":
-        print(" -- Only geological objects can be resampled -- ")
+        self.parent.TextTerminal.appendPlainText(" -- Only geological objects can be resampled -- ")
         return
     """Check if some vtkPolyData is selected"""
     if not self.selected_uids:
-        print("No input data selected.")
+        self.parent.TextTerminal.appendPlainText("No input data selected.")
         return
     else:
         """Deep copy list of selected uids needed otherwise problems can arise if the main geology table is
@@ -1105,23 +1112,23 @@ def subdivision_resampling(self, mode=0, type="linear", n_subd=2):
                 if surf_dict["vtk_obj"].points_number > 0:
                     self.geol_coll.add_entity_from_dict(surf_dict)
                 else:
-                    print(" -- empty object -- ")
+                    self.parent.TextTerminal.appendPlainText(" -- empty object -- ")
         else:
-            print(" -- Error input type: only TriSurf type -- ")
+            self.parent.TextTerminal.appendPlainText(" -- Error input type: only TriSurf type -- ")
             return
 
-
+@freeze_gui
 def intersection_xs(self):
     """vtkCutter is a filter to cut through data using any subclass of vtkImplicitFunction.
     HOW TO USE: select one or more Geological objects, DOMs or 3D Meshes (Source data), then function asks for XSection
     (input data) for the filter."""
-    print(
+    self.parent.TextTerminal.appendPlainText(
         "Intersection with XSection: intersect Geological entities, 3D Meshes and DEM & DOMs"
     )
 
     """Check if some vtkPolyData is selected"""
     if not self.selected_uids:
-        print("No input data selected.")
+        self.parent.TextTerminal.appendPlainText("No input data selected.")
         return
     else:
         """Deep copy list of selected uids needed otherwise problems can arise if the
@@ -1188,9 +1195,9 @@ def intersection_xs(self):
                                     obj_dict["vtk_obj"].remove_point_data(data_key)
                             self.geol_coll.add_entity_from_dict(obj_dict)
                         else:
-                            print(" -- empty object from cutter -- ")
+                            self.parent.TextTerminal.appendPlainText(" -- empty object from cutter -- ")
                     else:
-                        print(
+                        self.parent.TextTerminal.appendPlainText(
                             " -- no intersection of XsPolyLine with its own XSection -- "
                         )
                 elif self.geol_coll.get_uid_topology(uid) == "TriSurf":
@@ -1291,9 +1298,9 @@ def intersection_xs(self):
                                         obj_dict["vtk_obj"].remove_point_data(data_key)
                                 self.geol_coll.add_entity_from_dict(obj_dict)
                             else:
-                                print(" -- empty object from connectivity_clean-- ")
+                                self.parent.TextTerminal.appendPlainText(" -- empty object from connectivity_clean-- ")
                     else:
-                        print(
+                        self.parent.TextTerminal.appendPlainText(
                             " -- empty object from cutter_clean_strips_clean_triangle -- "
                         )
         elif self.shown_table == "tabMeshes3D":
@@ -1451,9 +1458,9 @@ def intersection_xs(self):
                         if obj_dict["vtk_obj"].points_number > 0:
                             self.mesh3d_coll.add_entity_from_dict(obj_dict)
                         else:
-                            print(" -- empty object -- ")
+                            self.parent.TextTerminal.appendPlainText(" -- empty object -- ")
                     else:
-                        print(" -- empty object -- ")
+                        self.parent.TextTerminal.appendPlainText(" -- empty object -- ")
         elif self.shown_table == "tabDOMs":
             for uid in input_uids:
                 if self.dom_coll.get_uid_topology(uid) == "DEM":
@@ -1477,33 +1484,34 @@ def intersection_xs(self):
                         x_section_uid=xsect_uid, parent=self
                     )
                     obj_dict["vtk_obj"].DeepCopy(cutter.GetOutput())
-                    print("obj_dict['vtk_obj']:\n", obj_dict["vtk_obj"])
+                    self.parent.TextTerminal.appendPlainText("obj_dict['vtk_obj']:\n", obj_dict["vtk_obj"])
                     if obj_dict["vtk_obj"].points_number > 0:
                         for data_key in obj_dict["vtk_obj"].point_data_keys:
                             if not data_key in obj_dict["properties_names"]:
                                 obj_dict["vtk_obj"].remove_point_data(data_key)
                         self.dom_coll.add_entity_from_dict(obj_dict)
                     else:
-                        print(" -- empty object -- ")
+                        self.parent.TextTerminal.appendPlainText(" -- empty object -- ")
         else:
             print(
                 " -- Only Geological objects, 3D Meshes and DEM & DOMs can be intersected with XSection -- "
             )
-            return
+            self.parent.TextTerminal.appendPlainText
 
 
+@freeze_gui
 def project_2_dem(self):
     """vtkProjectedTerrainPath projects an input polyline onto a terrain image.
     HOW TO USE: at the moment, as vtkProjectedTerrainPath takes vtkImageData as input, we need to import
     DEM file also as OrthoImage (--> as vtkImageData) and to use this entity as source data for the
     projection"""
-    print("Vertical Projection: project target lines onto a terrain image")
+    self.parent.TextTerminal.appendPlainText("Vertical Projection: project target lines onto a terrain image")
     if self.shown_table != "tabGeology":
-        print(" -- Only geological objects can be interpolated -- ")
+        self.parent.TextTerminal.appendPlainText(" -- Only geological objects can be interpolated -- ")
         return
     """Check if some vtkPolyData is selected"""
     if not self.selected_uids:
-        print("No input data selected.")
+        self.parent.TextTerminal.appendPlainText("No input data selected.")
         return
     else:
         input_uids = deepcopy(self.selected_uids)
@@ -1609,7 +1617,7 @@ def project_2_dem(self):
             if obj_dict["vtk_obj"].points_number > 0:
                 self.geol_coll.add_entity_from_dict(obj_dict)
             else:
-                print(" -- empty object -- ")
+                self.parent.TextTerminal.appendPlainText(" -- empty object -- ")
         else:
             self.geol_coll.replace_vtk(uid=uid, vtk_object=obj_dict["vtk_obj"])
             self.geol_coll.set_uid_name(uid=uid, name=obj_dict["name"])
@@ -1620,16 +1628,17 @@ def project_2_dem(self):
         prgs_bar.add_one()
 
 
+@freeze_gui
 def project_2_xs(self):
     """Projection of a copy of point and polyline geological entities to a planar cross section, along an axis specified with plunge/trend."""
-    print("Projection to cross section")
+    self.parent.TextTerminal.appendPlainText("Projection to cross section")
     """Get input objects - points and polylines at the moment."""
     if self.shown_table != "tabGeology":
-        print(" -- Only geological objects can be projected -- ")
+        self.parent.TextTerminal.appendPlainText(" -- Only geological objects can be projected -- ")
         return
     """Check if some vtkPolyData is selected"""
     if not self.selected_uids:
-        print("No input data selected.")
+        self.parent.TextTerminal.appendPlainText("No input data selected.")
         return
     else:
         """Deep copy list of selected uids needed otherwise problems can arise if the main geology table is deseselcted while the dataframe is being built"""
@@ -1678,7 +1687,7 @@ def project_2_xs(self):
         abs(self.xsect_coll.get_uid_azimuth(xs_uid) - proj_trend) < 10.0
         or abs(self.xsect_coll.get_uid_azimuth(xs_uid) - 180.0 - proj_trend) < 10.0
     ):
-        print("Plunge too close to being parallel to XSection (angle < 10°)")
+        self.parent.TextTerminal.appendPlainText("Plunge too close to being parallel to XSection (angle < 10°)")
         return
     """Get cross section start and end points (float64 needed for "t" afterwards)."""
     xa = np_float64(self.xsect_coll.get_uid_base_x(xs_uid))
@@ -1765,7 +1774,7 @@ def project_2_xs(self):
                         entity_dict=entity_dict
                     )
                 else:
-                    print(
+                    self.parent.TextTerminal.appendPlainText(
                         f'No measure found for group {entity_dict["name"]}, try to extend the maximum distance'
                     )
 
@@ -1817,16 +1826,17 @@ def project_2_xs(self):
                         entity_dict=entity_dict
                     )
                 else:
-                    print(" -- empty object -- ")
+                    self.parent.TextTerminal.appendPlainText(" -- empty object -- ")
 
 
+@freeze_gui
 def split_surf(self):
     """Split two surfaces. This should be integrated with intersection_xs in one function since is the same thing"""
     if self.shown_table != "tabGeology":
-        print(" -- Only surface objects can be intersected -- ")
+        self.parent.TextTerminal.appendPlainText(" -- Only surface objects can be intersected -- ")
         return
     if not self.selected_uids:
-        print("No input data selected.")
+        self.parent.TextTerminal.appendPlainText("No input data selected.")
         return
     else:
         """Deep copy list of selected uids needed otherwise problems can arise if the main geology table
@@ -1955,6 +1965,7 @@ def split_surf(self):
         # 1. Calculate the implicit distance of the target surface[1,2,3,4,..] from the reference surface[0]
 
 
+@freeze_gui
 def retopo(self, mode=0, dec_int=0.2, n_iter=40, rel_fac=0.1):
     """[Gabriele] Function used to retopologize a given surface. This is useful in the case of
     semplifying irregular triangulated meshes for CAD exporting or aesthetic reasons.
@@ -1967,10 +1978,10 @@ def retopo(self, mode=0, dec_int=0.2, n_iter=40, rel_fac=0.1):
     in the future it would be nicer to have an adaptive method (maybe using vtkMeshQuality?)
     """
     if self.shown_table != "tabGeology":
-        print(" -- Only geological objects can be retopologized -- ")
+        self.parent.TextTerminal.appendPlainText(" -- Only geological objects can be retopologized -- ")
         return
     if not self.selected_uids:
-        print("No input data selected.")
+        self.parent.TextTerminal.appendPlainText("No input data selected.")
         return
     else:
         """Deep copy list of selected uids needed otherwise problems can arise if the main geology table is deseselcted while the dataframe is being built"""
@@ -2021,7 +2032,7 @@ def retopo(self, mode=0, dec_int=0.2, n_iter=40, rel_fac=0.1):
                     if surf_dict["vtk_obj"].points_number > 0:
                         self.geol_coll.add_entity_from_dict(surf_dict)
                     else:
-                        print(" -- empty object -- ")
+                        self.parent.TextTerminal.appendPlainText(" -- empty object -- ")
             else:
-                print(" -- Error input type: only TriSurf type -- ")
+                self.parent.TextTerminal.appendPlainText(" -- Error input type: only TriSurf type -- ")
                 return

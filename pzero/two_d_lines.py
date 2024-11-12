@@ -113,7 +113,7 @@ def edit_line(self):
         self.enable_actions()
 
     if not self.selected_uids:
-        print(" -- No input data selected -- ")
+        self.parent.TextTerminal.appendPlainText(" -- No input data selected -- ")
         return
     self.disable_actions()
     sel_uid = self.selected_uids[0]
@@ -133,7 +133,7 @@ def edit_line(self):
 @freeze_gui
 def sort_line_nodes(self):
     """Sort line nodes."""
-    print("Sort line nodes according to cell order.")
+    self.parent.TextTerminal.appendPlainText("Sort line nodes according to cell order.")
     # """Terminate running event loops"""
     # self.stop_event_loops()
     """Check if a line is selected"""
@@ -169,9 +169,9 @@ def move_line(self, vector):
         self.parent.TextTerminal.appendPlainText(" -- No input data selected -- ")
         return
 
-    print("Move Line. Move the whole line by rigid-body translation.")
+    self.parent.TextTerminal.appendPlainText("Move Line. Move the whole line by rigid-body translation.")
     if vector.length == 0:
-        print("Zero-length vector")
+        self.parent.TextTerminal.appendPlainText("Zero-length vector")
         return
 
     for current_uid in self.selected_uids:
@@ -292,7 +292,7 @@ def extend_line(self):
         self.enable_actions()
 
     """Extend selected line."""
-    print("Extend Line. Press k to change end of line to extend.")
+    self.parent.TextTerminal.appendPlainText("Extend Line. Press k to change end of line to extend.")
     """Terminate running event loops"""
     # self.stop_event_loops()
     """Check if a line is selected"""
