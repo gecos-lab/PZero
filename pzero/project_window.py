@@ -9,6 +9,7 @@ from datetime import datetime
 
 from PySide6.QtCore import Signal as pyqtSignal
 from PySide6.QtWidgets import QMainWindow, QMessageBox
+from PySide6.QtGui import QAction
 
 from pandas import DataFrame as pd_DataFrame
 from pandas import read_csv as pd_read_csv
@@ -134,9 +135,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.actionQuit.triggered.connect(self.close)
 
         """Welcome message"""
-        self.TextTerminal.appendPlainText(
-            "Welcome to PZero!\n3D modelling application by Andrea Bistacchi, started June 3rd 2020."
-        )
+        self.print_terminal("Welcome to PZero!\n3D modelling application by Andrea Bistacchi, started June 3rd 2020.")
 
         """Initialize empty project."""
         self.create_empty()
@@ -170,7 +169,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.actionMergeEntities.triggered.connect(self.entities_merge)
         self.actionSplitMultipart.triggered.connect(self.split_multipart)
         self.actionDecimatePointCloud.triggered.connect(self.decimate_pc_dialog)
-        """______________________________________ ADD TOOL TO PRINT VTK INFO self.TextTerminal.appendPlainText( -- vtk object as text -- )"""
+        """______________________________________ ADD TOOL TO PRINT VTK INFO self.print_terminal( -- vtk object as text -- )"""
         self.actionAddTexture.triggered.connect(self.texture_add)
         self.actionRemoveTexture.triggered.connect(self.texture_remove)
         self.actionAddProperty.triggered.connect(self.property_add)
@@ -229,6 +228,33 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             event.accept()
         else:
             event.ignore()
+
+    def disable_actions(self):
+        """Freeze all actions while doing something."""
+        # self.parent.findChildren(QAction) returns a list of all actions in the application.
+        for action in self.findChildren(QAction):
+            try:
+                # try - except added to catch an inexplicable bug with an action with text=""
+                action.setDisabled(True)
+            except:
+                pass
+
+    def enable_actions(self):
+        """Un-freeze all actions after having done something."""
+        # self.parent.findChildren(QAction) returns a list of all actions in the application.
+        for action in self.findChildren(QAction):
+            try:
+                # try - except added for symmetry with disable_actions (bug with an action with text="")
+                action.setEnabled(True)
+            except:
+                pass
+
+    def print_terminal(self, string=None):
+        """Show string in terminal."""
+        try:
+            self.TextTerminal.appendPlainText(string)
+        except:
+            self.parent.TextTerminal.appendPlainText("error printing in terminal")
 
     """Methods used to manage the entities shown in tables."""
 
@@ -1002,12 +1028,8 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         if not self.out_file_name:
             return
         out_dir_name = self.out_file_name[:-3] + "_p0/rev_" + now
-        self.TextTerminal.appendPlainText(
-            (
-                "Saving project as VTK files and csv tables with metada and legend.\n"
-                + "In file/folder: "
-                "" + self.out_file_name + " / " + out_dir_name + "\n"
-            )
+        self.print_terminal(
+        f"Saving project as VTK files and csv tables with metada and legend.\nIn file/folder: {self.out_file_name}/{out_dir_name}\n"
         )
         """Create the folder if it does not exist already."""
         if not os.path.isdir(self.out_file_name[:-3] + "_p0"):
@@ -1323,9 +1345,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         rev_name = fin.readlines()[2].strip()
         fin.close()
         in_dir_name = in_file_name[:-3] + "_p0/" + rev_name
-        self.TextTerminal.appendPlainText(
-            ("Opening project/revision : " + in_file_name + "/" + rev_name + "\n")
-        )
+        self.print_terminal(f"Opening project/revision : {in_file_name}/{rev_name}\n")
         if not os.path.isdir(in_dir_name):
             print(in_dir_name)
             print("error: missing folder")
@@ -2013,8 +2033,8 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
 
     def import_gocad(self):
         """Import Gocad ASCII file and update geological collection."""
-        self.TextTerminal.appendPlainText("Importing Gocad ASCII format")
-        self.TextTerminal.appendPlainText(
+        self.print_terminal("Importing Gocad ASCII format")
+        self.print_terminal(
             "Properties are discarded if they are not 1D, 2D, 3D, 4D, 6D or 9D (due to VTK limitations)"
         )
         """Select and open input file"""
@@ -2024,14 +2044,14 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             filter="Gocad ASCII (*.*)",
         )
         if in_file_name:
-            self.TextTerminal.appendPlainText("in_file_name: " + in_file_name)
+            self.print_terminal("in_file_name: " + in_file_name)
             gocad2vtk(self=self, in_file_name=in_file_name, uid_from_name=False)
             self.prop_legend.update_widget(parent=self)
 
     def import_gocad_sections(self):
         """Import cross-section saved as Gocad ASCII file and update geological collection."""
-        self.TextTerminal.appendPlainText("Importing Gocad ASCII format")
-        self.TextTerminal.appendPlainText(
+        self.print_terminal("Importing Gocad ASCII format")
+        self.print_terminal(
             "Properties are discarded if they are not 1D, 2D, 3D, 4D, 6D or 9D (due to VTK limitations)"
         )
         # Select input files.
@@ -2075,7 +2095,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             reject_role=None)
         # Process files.
         for in_file_name in in_file_names:
-            self.TextTerminal.appendPlainText("in_file_name: " + in_file_name)
+            self.print_terminal("in_file_name: " + in_file_name)
             # Get x-section name from file.
             x_section_name = os.path.splitext(os.path.basename(in_file_name))[0]
             if x_section_name in self.xsect_coll.df["name"].to_list():
@@ -2104,8 +2124,8 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
 
     def import_gocad_boundary(self):
         """Import Gocad ASCII file and update boundary collection."""
-        self.TextTerminal.appendPlainText("Importing Gocad ASCII format as boundary")
-        self.TextTerminal.appendPlainText(
+        self.print_terminal("Importing Gocad ASCII format as boundary")
+        self.print_terminal(
             "Properties are discarded - only mesh imported."
         )
         """Select and open input file"""
@@ -2115,7 +2135,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             filter="Gocad ASCII (*.*)",
         )
         if in_file_name:
-            self.TextTerminal.appendPlainText("in_file_name: " + in_file_name)
+            self.print_terminal("in_file_name: " + in_file_name)
             gocad2vtk_boundary(
                 self=self,
                 in_file_name=in_file_name,
@@ -2159,7 +2179,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         ).args
         if args:
             in_file_name, col_names, row_range, index_list, delimiter, origin = args
-            self.TextTerminal.appendPlainText("in_file_name: " + in_file_name)
+            self.print_terminal("in_file_name: " + in_file_name)
             pc2vtk(
                 in_file_name=in_file_name,
                 col_names=col_names,
@@ -2173,7 +2193,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
     def import_SHP(self):
         # __________________________________________________________________ UPDATE IN shp2vtk.py OR DUPLICATE THIS TO IMPORT SHP GEOLOGY OR BOUNDARY
         """Import SHP file and update geological collection."""
-        self.TextTerminal.appendPlainText("Importing SHP file")
+        self.print_terminal("Importing SHP file")
         list = ["Geology", "Fluid contacts", "Background data"]
         """Select and open input file"""
         in_file_name = open_file_dialog(
@@ -2183,12 +2203,12 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             parent=self, title="Collection", label="Assign collection", choice_list=list
         )
         if in_file_name:
-            self.TextTerminal.appendPlainText("in_file_name: " + in_file_name)
+            self.print_terminal("in_file_name: " + in_file_name)
             shp2vtk(self=self, in_file_name=in_file_name, collection=coll)
 
     def import_DEM(self):
         """Import DEM file and update DEM collection."""
-        self.TextTerminal.appendPlainText("Importing DEM in supported format (geotiff)")
+        self.print_terminal("Importing DEM in supported format (geotiff)")
         list = ["DEMs and DOMs", "Fluid contacts"]
 
         """Select and open input file"""
@@ -2199,12 +2219,12 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             parent=self, title="Collection", label="Assign collection", choice_list=list
         )
         if in_file_name:
-            self.TextTerminal.appendPlainText("in_file_name: " + in_file_name)
+            self.print_terminal("in_file_name: " + in_file_name)
             dem2vtk(self=self, in_file_name=in_file_name, collection="DEMs and DOMs")
 
     def import_mapimage(self):
         """Import map image and update image collection."""
-        self.TextTerminal.appendPlainText(
+        self.print_terminal(
             "Importing image from supported format (GDAL)"
         )
         """Select and open input file"""
@@ -2214,12 +2234,12 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             filter="Image (*.tif *.jpg *.png *.bmp)",
         )
         if in_file_name:
-            self.TextTerminal.appendPlainText("in_file_name: " + in_file_name)
+            self.print_terminal("in_file_name: " + in_file_name)
             geo_image2vtk(self=self, in_file_name=in_file_name)
 
     def import_xsimage(self):
         """Import XSimage and update image collection."""
-        self.TextTerminal.appendPlainText(
+        self.print_terminal(
             "Importing image from supported format (GDAL)"
         )
         """Select and open input file"""
@@ -2229,7 +2249,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             filter="Image (*.tif *.jpg *.png *.bmp)",
         )
         if in_file_name:
-            self.TextTerminal.appendPlainText("in_file_name: " + in_file_name)
+            self.print_terminal("in_file_name: " + in_file_name)
             """Select the Xsection"""
             if self.xsect_coll.get_uids:
                 x_section_name = input_combo_dialog(
@@ -2277,19 +2297,19 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         #     index_list = [locargs[3],dataargs[3]]
         #     delimiter = [locargs[4],dataargs[4]]
         #     origin = [locargs[5],dataargs[5]]
-        #     # self.TextTerminal.appendPlainText('in_file_name: ' + in_file_name)
+        #     # self.print_terminal('in_file_name: ' + in_file_name)
         #     well2vtk(in_file_name=in_file_name, col_names=col_names, usecols=index_list, delimiter=delimiter, self=self, header_row=0)
 
     def import_SEGY(self):
         # ___________________________________________________________ TO BE REVIEWED AND UPDATED IN MODULE segy2vtk
         """Import SEGY file and update Mesh3D collection."""
-        self.TextTerminal.appendPlainText("Importing SEGY seismics file.")
+        self.print_terminal("Importing SEGY seismics file.")
         """Select and open input file"""
         in_file_name = open_file_dialog(
             parent=self, caption="Import SEGY from file", filter="SEGY (*.sgy *.segy)"
         )
         if in_file_name:
-            self.TextTerminal.appendPlainText("in_file_name: " + in_file_name)
+            self.print_terminal("in_file_name: " + in_file_name)
             segy2vtk(self=self, in_file_name=in_file_name)
 
     """Methods used to export entities to other file formats."""
@@ -2318,7 +2338,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         )
         if not out_dir_name:
             return
-        self.TextTerminal.appendPlainText(
+        self.print_terminal(
             ("Saving CAD surfaces in folder: " + out_dir_name)
         )
         """Create the folder if it does not exist already."""

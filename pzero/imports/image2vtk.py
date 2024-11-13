@@ -116,7 +116,7 @@ def geo_image2vtk(self=None, in_file_name=None):
         del curr_obj_dict
         del vtk_image
     except:
-        self.TextTerminal.appendPlainText("Image file not recognized ERROR.")
+        self.print_terminal("Image file not recognized ERROR.")
 
 
 def xs_image2vtk(self=None, in_file_name=None, x_section_uid=None):
@@ -237,4 +237,4 @@ def xs_image2vtk(self=None, in_file_name=None, x_section_uid=None):
     del curr_obj_dict
     del vtk_image
     # except:
-    #     self.TextTerminal.appendPlainText("Image file not recognized ERROR.")
+    #     self.print_terminal("Image file not recognized ERROR.")

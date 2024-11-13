@@ -15,8 +15,8 @@ def pyvista2vtk(self):
     surface and tetrahedral meshes as VTK polydata entities.
     <self> is the calling ProjectWindow() instance.
     """
-    self.TextTerminal.appendPlainText("Importing PyVista-supported format")
-    self.TextTerminal.appendPlainText(
+    self.print_terminal("Importing PyVista-supported format")
+    self.print_terminal(
         "Properties are discarded if they are not 1D, 2D, 3D, 4D, 6D or 9D (due to VTK limitations)"
     )
 
@@ -44,7 +44,7 @@ def pyvista2vtk(self):
         self, "Import entities from PyVista-supported file"
     )[0]
     if in_file_name:
-        self.TextTerminal.appendPlainText("in_file_name: " + in_file_name)
+        self.print_terminal(f"in_file_name: {in_file_name}")
         # Initialize
         cell_type = -1
 
@@ -55,9 +55,7 @@ def pyvista2vtk(self):
             # Get topology (CellType) of first cell in object
             cell_type = curr_obj.GetCellType(0)
         except Exception as e:
-            self.TextTerminal.appendPlainText(
-                f"pyvista2vtk - entity topology not recognized ERROR: {e}"
-            )
+            self.print_terminal(f"pyvista2vtk - entity topology not recognized ERROR: {e}")
             return  # Exit the function if reading fails
 
         # If curr_obj is a recognized topology, assign to PZero class
@@ -74,9 +72,7 @@ def pyvista2vtk(self):
             curr_obj.__class__ = TetraSolid
             topology = "TetraSolid"
         else:
-            self.TextTerminal.appendPlainText(
-                "pyvista2vtk - unrecognized cell type."
-            )
+            self.print_terminal("pyvista2vtk - unrecognized cell type.")
             return  # Exit if cell type is not recognized
 
         # Create the entity dictionary similar to dem2vtk.py

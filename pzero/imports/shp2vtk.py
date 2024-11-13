@@ -174,7 +174,7 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
                 print("Incomplete data. At least the feature property must be present")
         else:
             print("Only Point and Line geometries can be imported - aborting.")
-            return  # except:  #     self.TextTerminal.appendPlainText("SHP file not recognized ERROR.")
+            return  # except:  #     self.print_terminal("SHP file not recognized ERROR.")
     elif collection == "Fluid contacts":
         print(gdf.geom_type[0])
         if (gdf.geom_type[0] == "LineString") or (gdf.geom_type[0] == "MultiLineString"):
@@ -289,7 +289,7 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
                 )
         else:
             print("Only Point and Line geometries can be imported - aborting.")
-            return  # except:  #     self.TextTerminal.appendPlainText("SHP file not recognized ERROR.")
+            return  # except:  #     self.print_terminal("SHP file not recognized ERROR.")
     elif collection == "Background data":
         if (gdf.geom_type[0] == "LineString") or (gdf.geom_type[0] == "MultiLineString"):
             for row in range(gdf.shape[0]):
@@ -411,4 +411,4 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
                 )
         else:
             print("Only Point and Line geometries can be imported - aborting.")
-            return  # except:  #     self.TextTerminal.appendPlainText("SHP file not recognized ERROR.")
+            return  # except:  #     self.print_terminal("SHP file not recognized ERROR.")

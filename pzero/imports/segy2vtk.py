@@ -43,4 +43,4 @@ def segy2vtk(self=None, in_file_name=None):
         del curr_object
         del curr_obj_attributes
     except:
-        self.TextTerminal.appendPlainText("SEGY file not recognized ERROR.")
+        self.print_terminal("SEGY file not recognized ERROR.")

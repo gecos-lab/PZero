@@ -212,16 +212,6 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         # _____________________________________________________________________________
         self.setAttribute(Qt.WA_DeleteOnClose, True)
         self.parent = parent
-        # Connect actionQuit.triggered SIGNAL to self.close SLOT
-        # self.actionClose.triggered.connect(self.close)
-        # Connect signal to delete window when the project is closed (and a new one is opened)
-        # self.parent.project_close_signal.connect(self.close)
-        # Create empty Pandas dataframe with actor's with columns:
-        # uid = actor's uid -> the same as the original object's uid
-        # actor = the actor
-        # show = a boolean to show (True) or hide (false) the actor
-        # collection = the original collection of the actor, e.g. geol_coll, xsect_coll, etc.
-        # show_property = currently shown property
 
         self.actors_df = pd_DataFrame(columns=["uid", "actor", "show", "collection", "show_property"])
 
@@ -1438,6 +1428,14 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                 action.setEnabled(True)
             except:
                 pass
+
+    def print_terminal(self, string=None):
+        """Show string in terminal."""
+        try:
+            self.parent.TextTerminal.appendPlainText(string)
+        except:
+            self.parent.TextTerminal.appendPlainText("error printing in terminal")
+
 
 
 class VTKView(BaseView):

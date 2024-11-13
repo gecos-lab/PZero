@@ -174,9 +174,7 @@ def gocad2vtk(self=None, in_file_name=None, uid_from_name=None):
                 This must be reimplementende in sucha way that, is non-valid objects are found,
                 the file reader jumps to the next line starting with the 'GOCAD' keyword (if any).
                 """
-                self.TextTerminal.appendPlainText(
-                    "gocad2vtk - entity type not recognized ERROR."
-                )
+                self.print_terminal("gocad2vtk - entity type not recognized ERROR.")
 
             """Create empty arrays for coordinates and topology and a counter for properties."""
             curr_obj_points = vtkPoints()
@@ -392,9 +390,8 @@ def gocad2vtk(self=None, in_file_name=None, uid_from_name=None):
 
             """Write points and cells TO VTK OBJECT"""
             if curr_obj_dict["topology"] == "VertexSet":
-                self.TextTerminal.appendPlainText(
-                    "Importing Gocad VSet (VertexSet) as a PolyData 0D in VTK with name: "
-                    + curr_obj_dict["name"]
+                self.print_terminal(
+                    f"Importing Gocad VSet (VertexSet) as a PolyData 0D in VTK with name: {curr_obj_dict["name"]}"
                 )
                 curr_obj_dict["vtk_obj"].SetPoints(curr_obj_points)
                 """Vertex cells, one for each point, are added here."""
@@ -405,17 +402,15 @@ def gocad2vtk(self=None, in_file_name=None, uid_from_name=None):
                 curr_obj_dict["vtk_obj"].SetVerts(curr_obj_cells)
 
             elif curr_obj_dict["topology"] == "PolyLine":
-                self.TextTerminal.appendPlainText(
-                    "Importing GOCAD PLine (PolyLine) as a PolyData 1D in VTK with name: "
-                    + curr_obj_dict["name"]
+                self.print_terminal(
+                    f"Importing GOCAD PLine (PolyLine) as a PolyData 1D in VTK with name: {curr_obj_dict["name"]}"
                 )
                 curr_obj_dict["vtk_obj"].SetPoints(curr_obj_points)
                 curr_obj_dict["vtk_obj"].SetLines(curr_obj_cells)
 
             elif curr_obj_dict["topology"] == "TriSurf":
-                self.TextTerminal.appendPlainText(
-                    "Importing GOCAD TSurf (TriSurf) as a PolyData 2D in VTK with name: "
-                    + curr_obj_dict["name"]
+                self.print_terminal(
+                f"Importing GOCAD TSurf (TriSurf) as a PolyData 2D in VTK with name: {curr_obj_dict["name"]}"
                 )
                 curr_obj_dict["vtk_obj"].SetPoints(curr_obj_points)
                 curr_obj_dict["vtk_obj"].SetPolys(curr_obj_cells)
@@ -448,18 +443,18 @@ def gocad2vtk(self=None, in_file_name=None, uid_from_name=None):
             del curr_obj_dict
 
             """Closing message"""
-            self.TextTerminal.appendPlainText(
-                "Object n. " + str(entity_counter) + " saved"
+            self.print_terminal(
+            f"Object n. {str(entity_counter)} saved"
             )
 
     n_entities_after = self.geol_coll.get_number_of_entities
-    self.TextTerminal.appendPlainText(
-        "Entities before importing: " + str(n_entities_before)
+    self.print_terminal(
+    f"Entities before importing: {str(n_entities_before)}"
     )
-    self.TextTerminal.appendPlainText(
-        "Entities after importing: " + str(n_entities_after)
+    self.print_terminal(
+    f"Entities after importing: {str(n_entities_after)}"
     )
-    self.TextTerminal.appendPlainText("Entities imported: " + str(entity_counter))
+    self.print_terminal(f"Entities imported: {str(entity_counter)}")
 
 
 def gocad2vtk_section(self=None,
@@ -520,9 +515,7 @@ def gocad2vtk_section(self=None,
                 This must be reimplementende in sucha way that, is non-valid objects are found,
                 the file reader jumps to the next line starting with the 'GOCAD' keyword (if any).
                 """
-                self.TextTerminal.appendPlainText(
-                    "gocad2vtk - entity type not recognized ERROR."
-                )
+                self.print_terminal("gocad2vtk - entity type not recognized ERROR.")
             # Create empty arrays for coordinates and topology and a counter for properties.
             curr_obj_points = vtkPoints()
             curr_obj_cells = vtkCellArray()
@@ -698,9 +691,8 @@ def gocad2vtk_section(self=None,
 
             """Write points and cells TO VTK OBJECT"""
             if curr_obj_dict["topology"] == "XsVertexSet":
-                self.TextTerminal.appendPlainText(
-                    "Importing Gocad VSet (VertexSet) as a PolyData 0D in VTK with name: "
-                    + curr_obj_dict["name"]
+                self.print_terminal(
+                f"Importing Gocad VSet (VertexSet) as a PolyData 0D in VTK with name:\n{curr_obj_dict["name"]}"
                 )
                 curr_obj_dict["vtk_obj"].SetPoints(curr_obj_points)
                 """Vertex cells, one for each point, are added here."""
@@ -711,9 +703,8 @@ def gocad2vtk_section(self=None,
                 curr_obj_dict["vtk_obj"].SetVerts(curr_obj_cells)
 
             elif curr_obj_dict["topology"] == "XsPolyLine":
-                self.TextTerminal.appendPlainText(
-                    "Importing GOCAD PLine (PolyLine) as a PolyData 1D in VTK with name: "
-                    + curr_obj_dict["name"]
+                self.print_terminal(
+                f"Importing GOCAD PLine (PolyLine) as a PolyData 1D in VTK with name: {curr_obj_dict["name"]}"
                 )
                 curr_obj_dict["vtk_obj"].SetPoints(curr_obj_points)
                 curr_obj_dict["vtk_obj"].SetLines(curr_obj_cells)
@@ -732,18 +723,12 @@ def gocad2vtk_section(self=None,
             del curr_obj_dict
 
             """Closing message"""
-            self.TextTerminal.appendPlainText(
-                "Object n. " + str(entity_counter) + " saved"
-            )
+            self.print_terminal(f"Object n. {str(entity_counter)} saved")
 
     n_entities_after = self.geol_coll.get_number_of_entities
-    self.TextTerminal.appendPlainText(
-        "Entities before importing: " + str(n_entities_before)
-    )
-    self.TextTerminal.appendPlainText(
-        "Entities after importing: " + str(n_entities_after)
-    )
-    self.TextTerminal.appendPlainText("Entities imported: " + str(entity_counter))
+    self.print_terminal(f"Entities before importing: {str(n_entities_before)}")
+    self.print_terminal(f"Entities after importing: {str(n_entities_after)}")
+    self.print_terminal(f"Entities imported: {str(entity_counter)}")
 
     if not append_opt:
         # Re-orient XSection only if it is a new one.
@@ -883,9 +868,7 @@ def gocad2vtk_boundary(self=None, in_file_name=None, uid_from_name=None):
                 This must be reimplementende in sucha way that, is non-valid objects are found,
                 the file reader jumps to the next line starting with the 'GOCAD' keyword (if any).
                 """
-                self.TextTerminal.appendPlainText(
-                    "gocad2vtk - entity type not recognized ERROR."
-                )
+                self.print_terminal("gocad2vtk - entity type not recognized ERROR.")
 
             """Create empty arrays for coordinates and topology and a counter for properties."""
             curr_obj_points = vtkPoints()
@@ -1051,7 +1034,7 @@ def gocad2vtk_boundary(self=None, in_file_name=None, uid_from_name=None):
 
             """Write points and cells TO VTK OBJECT"""
             # if curr_obj_dict['topology'] == 'VertexSet':
-            #     self.TextTerminal.appendPlainText("Importing Gocad VSet (VertexSet) as a PolyData 0D in VTK with name: " + curr_obj_dict['name'])
+            #     self.print_terminal("Importing Gocad VSet (VertexSet) as a PolyData 0D in VTK with name: " + curr_obj_dict['name'])
             #     curr_obj_dict['vtk_obj'].SetPoints(curr_obj_points)
             #     """Vertex cells, one for each point, are added here."""
             #     for pid in range(curr_obj_dict['vtk_obj'].GetNumberOfPoints()):
@@ -1061,18 +1044,12 @@ def gocad2vtk_boundary(self=None, in_file_name=None, uid_from_name=None):
             #     curr_obj_dict['vtk_obj'].SetVerts(curr_obj_cells)
             #
             if curr_obj_dict["topology"] == "PolyLine":
-                self.TextTerminal.appendPlainText(
-                    "Importing GOCAD PLine (PolyLine) as a PolyData 1D in VTK with name: "
-                    + curr_obj_dict["name"]
-                )
+                self.print_terminal(f"Importing GOCAD PLine (PolyLine) as a PolyData 1D in VTK with name: {curr_obj_dict["name"]}")
                 curr_obj_dict["vtk_obj"].SetPoints(curr_obj_points)
                 curr_obj_dict["vtk_obj"].SetLines(curr_obj_cells)
 
             elif curr_obj_dict["topology"] == "TriSurf":
-                self.TextTerminal.appendPlainText(
-                    "Importing GOCAD TSurf (TriSurf) as a PolyData 2D in VTK with name: "
-                    + curr_obj_dict["name"]
-                )
+                self.print_terminal(f"Importing GOCAD TSurf (TriSurf) as a PolyData 2D in VTK with name: {curr_obj_dict["name"]}")
                 curr_obj_dict["vtk_obj"].SetPoints(curr_obj_points)
                 curr_obj_dict["vtk_obj"].SetPolys(curr_obj_cells)
 
@@ -1088,18 +1065,12 @@ def gocad2vtk_boundary(self=None, in_file_name=None, uid_from_name=None):
             del curr_obj_dict
 
             """Closing message"""
-            self.TextTerminal.appendPlainText(
-                "Object n. " + str(entity_counter) + " saved"
-            )
+            self.print_terminal(f"Object n. {str(entity_counter)} saved")
 
     n_entities_after = self.boundary_coll.get_number_of_entities
-    self.TextTerminal.appendPlainText(
-        "Entities before importing: " + str(n_entities_before)
-    )
-    self.TextTerminal.appendPlainText(
-        "Entities after importing: " + str(n_entities_after)
-    )
-    self.TextTerminal.appendPlainText("Entities imported: " + str(entity_counter))
+    self.print_terminal(f"Entities before importing: {str(n_entities_before)}")
+    self.print_terminal(f"Entities after importing: {str(n_entities_after)}")
+    self.print_terminal(f"Entities imported: {str(entity_counter)}")
 
 
 def vtk2gocad(self=None, out_file_name=None):
