@@ -107,6 +107,7 @@ from .three_d_surfaces import (
 # from .windows_factory import View3D
 # from .windows_factory import ViewStereoplot
 from .windows_factory import DockWindow
+from .processing.CRS import CRS_list, CRS_transform_selected
 
 
 class ProjectWindow(QMainWindow, Ui_ProjectWindow):
@@ -136,6 +137,19 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
 
         """Welcome message"""
         self.print_terminal("Welcome to PZero!\n3D modelling application by Andrea Bistacchi, started June 3rd 2020.")
+
+        # list of collections
+        self.tab_collection_dict = {
+            "tabGeology": "geol_coll",
+            "tabXSections": "xsect_coll",
+            "tabDOMs": "dom_coll",
+            "tabImages": "image_coll",
+            "tabMeshes3D": "mesh3d_coll",
+            "tabBoundaries": "boundary_coll",
+            "tabWells": "well_coll",
+            "tabFluids": "fluid_coll",
+            "tabBackgrounds": "backgrnd_coll",
+        }
 
         """Initialize empty project."""
         self.create_empty()
@@ -204,6 +218,10 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.actionXSectionView.triggered.connect(lambda: DockWindow(parent=self, window_type='ViewXsection'))
         self.actionStereoplotView.triggered.connect(lambda: DockWindow(parent=self, window_type='ViewStereoplot'))
 
+        """File>CRS actions -> slots"""
+        self.actionTransformSelectedCRS.triggered.connect(lambda: CRS_transform_selected(self))
+        self.actionListCRS.triggered.connect(lambda: CRS_list(self))
+
 
     def closeEvent(self, event):
         """Re-implement the standard closeEvent method of QWidget and ask (1) to save project, and (2) for confirmation to quit."""
@@ -254,14 +272,19 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         try:
             self.TextTerminal.appendPlainText(string)
         except:
-            self.parent.TextTerminal.appendPlainText("error printing in terminal")
+            self.TextTerminal.appendPlainText("error printing in terminal")
 
     """Methods used to manage the entities shown in tables."""
 
     @property
     def shown_table(self):
-        """Returns which collection table tab is shown (if any)."""
+        """Returns which collection table tab is shown."""
         return self.tabWidgetTopLeft.currentWidget().objectName()
+
+    @property
+    def selected_collection(self):
+        """Returns which collection is shown, based on shown_table."""
+        return self.tab_collection_dict[self.shown_table]
 
     @property
     def selected_uids(self):

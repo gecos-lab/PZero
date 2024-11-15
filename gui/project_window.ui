@@ -6,7 +6,7 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>800</width>
+    <width>900</width>
     <height>600</height>
    </rect>
   </property>
@@ -165,7 +165,7 @@
     <rect>
      <x>0</x>
      <y>0</y>
-     <width>800</width>
+     <width>900</width>
      <height>33</height>
     </rect>
    </property>
@@ -318,6 +318,13 @@
     <addaction name="actionAddTexture"/>
     <addaction name="actionRemoveTexture"/>
    </widget>
+   <widget class="QMenu" name="menuCRS">
+    <property name="title">
+     <string>CRS</string>
+    </property>
+    <addaction name="actionTransformSelectedCRS"/>
+    <addaction name="actionListCRS"/>
+   </widget>
    <addaction name="menuFile"/>
    <addaction name="menuEntities"/>
    <addaction name="menuPointClouds"/>
@@ -326,6 +333,7 @@
    <addaction name="menuProjection"/>
    <addaction name="menuInterpolation"/>
    <addaction name="menuProperties"/>
+   <addaction name="menuCRS"/>
    <addaction name="menuWindows"/>
    <addaction name="menuHelp"/>
   </widget>
@@ -628,6 +636,16 @@
   <action name="actionCalculate_Plunge_Trend">
    <property name="text">
     <string>Calculate Plunge/Trend</string>
+   </property>
+  </action>
+  <action name="actionTransformSelectedCRS">
+   <property name="text">
+    <string>Transform Entities CRS</string>
+   </property>
+  </action>
+  <action name="actionListCRS">
+   <property name="text">
+    <string>List CRS</string>
    </property>
   </action>
  </widget>

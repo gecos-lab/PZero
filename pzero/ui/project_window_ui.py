@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 ################################################################################
-## Form generated from reading UI file 'project_windowhATilY.ui'
+## Form generated from reading UI file 'project_windowucwMIE.ui'
 ##
 ## Created by: Qt User Interface Compiler version 6.7.3
 ##
@@ -26,7 +26,7 @@ class Ui_ProjectWindow(object):
     def setupUi(self, ProjectWindow):
         if not ProjectWindow.objectName():
             ProjectWindow.setObjectName(u"ProjectWindow")
-        ProjectWindow.resize(800, 600)
+        ProjectWindow.resize(900, 600)
         self.actionProjectNew = QAction(ProjectWindow)
         self.actionProjectNew.setObjectName(u"actionProjectNew")
         self.actionProjectOpen = QAction(ProjectWindow)
@@ -147,6 +147,10 @@ class Ui_ProjectWindow(object):
         self.actionCalculate_Dip_Direction.setObjectName(u"actionCalculate_Dip_Direction")
         self.actionCalculate_Plunge_Trend = QAction(ProjectWindow)
         self.actionCalculate_Plunge_Trend.setObjectName(u"actionCalculate_Plunge_Trend")
+        self.actionTransformSelectedCRS = QAction(ProjectWindow)
+        self.actionTransformSelectedCRS.setObjectName(u"actionTransformSelectedCRS")
+        self.actionListCRS = QAction(ProjectWindow)
+        self.actionListCRS.setObjectName(u"actionListCRS")
         self.centralwidget = QWidget(ProjectWindow)
         self.centralwidget.setObjectName(u"centralwidget")
         self.horizontalLayout = QHBoxLayout(self.centralwidget)
@@ -289,7 +293,7 @@ class Ui_ProjectWindow(object):
         ProjectWindow.setCentralWidget(self.centralwidget)
         self.menubar = QMenuBar(ProjectWindow)
         self.menubar.setObjectName(u"menubar")
-        self.menubar.setGeometry(QRect(0, 0, 800, 33))
+        self.menubar.setGeometry(QRect(0, 0, 900, 33))
         self.menuFile = QMenu(self.menubar)
         self.menuFile.setObjectName(u"menuFile")
         self.menuFile.setTearOffEnabled(True)
@@ -320,6 +324,8 @@ class Ui_ProjectWindow(object):
         self.menuProperties = QMenu(self.menubar)
         self.menuProperties.setObjectName(u"menuProperties")
         self.menuProperties.setTearOffEnabled(True)
+        self.menuCRS = QMenu(self.menubar)
+        self.menuCRS.setObjectName(u"menuCRS")
         ProjectWindow.setMenuBar(self.menubar)
         self.statusbar = QStatusBar(ProjectWindow)
         self.statusbar.setObjectName(u"statusbar")
@@ -333,6 +339,7 @@ class Ui_ProjectWindow(object):
         self.menubar.addAction(self.menuProjection.menuAction())
         self.menubar.addAction(self.menuInterpolation.menuAction())
         self.menubar.addAction(self.menuProperties.menuAction())
+        self.menubar.addAction(self.menuCRS.menuAction())
         self.menubar.addAction(self.menuWindows.menuAction())
         self.menubar.addAction(self.menuHelp.menuAction())
         self.menuFile.addAction(self.actionProjectNew)
@@ -404,6 +411,8 @@ class Ui_ProjectWindow(object):
         self.menuProperties.addSeparator()
         self.menuProperties.addAction(self.actionAddTexture)
         self.menuProperties.addAction(self.actionRemoveTexture)
+        self.menuCRS.addAction(self.actionTransformSelectedCRS)
+        self.menuCRS.addAction(self.actionListCRS)
 
         self.retranslateUi(ProjectWindow)
 
@@ -476,6 +485,8 @@ class Ui_ProjectWindow(object):
         self.actionThreshold.setText(QCoreApplication.translate("ProjectWindow", u"Threshold", None))
         self.actionCalculate_Dip_Direction.setText(QCoreApplication.translate("ProjectWindow", u"Calculate Dip/Direction", None))
         self.actionCalculate_Plunge_Trend.setText(QCoreApplication.translate("ProjectWindow", u"Calculate Plunge/Trend", None))
+        self.actionTransformSelectedCRS.setText(QCoreApplication.translate("ProjectWindow", u"Transform Entities CRS", None))
+        self.actionListCRS.setText(QCoreApplication.translate("ProjectWindow", u"List CRS", None))
         self.tabWidgetTopLeft.setTabText(self.tabWidgetTopLeft.indexOf(self.tabGeology), QCoreApplication.translate("ProjectWindow", u"Geology", None))
         self.tabWidgetTopLeft.setTabText(self.tabWidgetTopLeft.indexOf(self.tabFluids), QCoreApplication.translate("ProjectWindow", u"Fluids", None))
         self.tabWidgetTopLeft.setTabText(self.tabWidgetTopLeft.indexOf(self.tabBackgrounds), QCoreApplication.translate("ProjectWindow", u"Background", None))
@@ -498,5 +509,6 @@ class Ui_ProjectWindow(object):
         self.menuLines.setTitle(QCoreApplication.translate("ProjectWindow", u"Lines", None))
         self.menuProjection.setTitle(QCoreApplication.translate("ProjectWindow", u"Projection", None))
         self.menuProperties.setTitle(QCoreApplication.translate("ProjectWindow", u"Properties", None))
+        self.menuCRS.setTitle(QCoreApplication.translate("ProjectWindow", u"CRS", None))
     # retranslateUi
 

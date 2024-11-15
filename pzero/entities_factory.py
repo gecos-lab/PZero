@@ -1300,7 +1300,7 @@ class Voxet(vtkImageData):
     @spacing.setter
     def spacing(self, array=None):
         """Get/set the spacing (width,height,length) of the cubical cells that compose the data set."""
-        return self.SetSpacing(array)
+        self.SetSpacing(array)
 
     @property
     def dimensions(self):
@@ -1314,7 +1314,7 @@ class Voxet(vtkImageData):
         """Get/set dimensions of this structured points dataset. This is the number
         of points on each axis. Dimensions are computed from Extents during this call.
         """
-        return self.SetDimensions(array)
+        self.SetDimensions(array)
 
     @property
     def U_n(self):
