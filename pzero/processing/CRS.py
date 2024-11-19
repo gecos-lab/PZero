@@ -2,7 +2,11 @@
 PZero© Andrea Bistacchi"""
 
 from numpy import column_stack as np_column_stack
+from numpy import asarray as np_asarray
 from pyproj import Transformer
+from vtk import vtkLandmarkTransform, vtkPoints
+from vtkmodules.util.numpy_support import numpy_to_vtk
+from vtkmodules.vtkFiltersGeneral import vtkTransformFilter
 
 from pzero.entities_factory import (VertexSet,
                                     PolyLine,
@@ -60,24 +64,65 @@ def CRS_transform_uid_accurate(self, uid=None, collection=None, from_CRS=None, t
     """Function used to transform CRS of a single entity."""
     self.print_terminal(f"Transforming entity {uid} from {from_CRS} to {to_CRS}")
     in_entity = collection.get_uid_vtk_obj(uid)
-    self.print_terminal(f"from in_entity.bounds = {in_entity.bounds}")
-    # create transformer with always_xy option ensuring that coordinate order is always easting, northing.
+    # create PROJ transformer with always_xy option ensuring that coordinate order is always easting, northing.
     transformer = Transformer.from_crs(from_CRS, to_CRS, always_xy=True)
     points_X, points_Y = transformer.transform(in_entity.points_X, in_entity.points_Y)
     in_entity.points = np_column_stack((points_X, points_Y, in_entity.points_Z))
     in_entity.Modified()
     collection.signals.geom_modified.emit([uid])
-    self.print_terminal(f"to in_entity.bounds = {in_entity.bounds}")
+
+
+def CRS_fit_transformation(uid=None, collection=None, from_CRS=None, to_CRS=None):
+    """Calculate transformation_matrix with PROJ from object bounds."""
+    from_points = np_asarray(collection.get_uid_vtk_obj(uid).bounds).reshape((3, 2)).transpose()
+    # create PROJ transformer with always_xy option ensuring that coordinate order is always easting, northing.
+    transformer = Transformer.from_crs(from_CRS, to_CRS, always_xy=True)
+    to_points_X, to_points_Y = transformer.transform(from_points[:,0], from_points[:,1])
+    to_points = np_column_stack((to_points_X, to_points_Y, from_points[:,2]))
+    from_points_vtk = vtkPoints()
+    from_points_vtk.SetData(numpy_to_vtk(from_points))
+    to_points_vtk = vtkPoints()
+    to_points_vtk.SetData(numpy_to_vtk(to_points))
+    # create VTK transformer.
+    transformation_matrix = vtkLandmarkTransform()
+    transformation_matrix.SetSourceLandmarks(from_points_vtk)
+    transformation_matrix.SetTargetLandmarks(to_points_vtk)
+    transformation_matrix.Update()
+    return transformation_matrix
+
+
+def CRS_apply_transformation(uid=None, collection=None, transformation_matrix=None):
+    """Apply VTK generic linear transformation defined by transformation_matrix."""
+    in_entity = collection.get_uid_vtk_obj(uid)
+    # print("in_entity:\n", in_entity)
+    in_entity_topology = collection.get_uid_topology(uid)
+    # print("in_entity_topology:\n", in_entity_topology)
+    transform_filter = vtkTransformFilter()
+    transform_filter.SetTransform(transformation_matrix)
+    transform_filter.SetInputData(in_entity)
+    transform_filter.Update()
+    # print("transform_filter.GetTransform():\n", transform_filter.GetTransform())
+    # print("transform_filter.GetOutput():\n", transform_filter.GetOutput())
+    out_entity = eval(f'{in_entity_topology}()')
+    # print("out_entity:\n", out_entity)
+    out_entity = out_entity.ShallowCopy(transform_filter.GetOutput())
+    # print("out_entity:\n", out_entity)
+    collection.replace_vtk(uid=uid, vtk_object=out_entity)
+    # print("out vtk bounds:\n", collection.get_uid_vtk_obj(uid).bounds)
+
 
 @freeze_gui
 def CRS_transform_selected(self):
     """Function used to transform CRS of selected entities.
     Only the transformation of entities exposing the .points property is accurate.
-    Objects with a regular grid, such as images, are transformed with a simple rototranslation best-fit on corners."""
+    Objects with a regular grid, such as images, are transformed with a simple roto-translation best-fit on corners."""
     if not self.selected_uids:
         self.print_terminal("No input data selected.")
         return
-    self.print_terminal("Transform CRS of selected entities.\nOnly the transformation of entities exposing the .points property is accurate.\nObjects with a regular grid, such as images, are transformed with a simple rototranslation best-fit on corners.")
+    self.print_terminal("Transform CRS of selected entities.\n"
+                        "Only the transformation of entities exposing the .points property is accurate.\n"
+                        "Objects with a regular grid, such as images, are transformed with a simple "
+                        "roto-translation best-fit on corners.")
     # select CRSs
     CRS_select = general_input_dialog(
         title="Select CRSs",
@@ -94,10 +139,30 @@ def CRS_transform_selected(self):
     collection = eval(f"self.{self.selected_collection}")
     for uid in self.selected_uids:
         if self.selected_collection == "xsect_coll":
-            # affine transformation of the frame
-            pass
-        elif isinstance(self.geol_coll.get_uid_vtk_obj(uid), (Voxet, XsVoxet, MapImage, XsImage, Image3D)):
-            # affine transformation of the regular grid
-            pass
+            # # affine transformation of a cross-section and all its child entities
+            # transformation_matrix = CRS_fit_transformation(uid=uid,
+            #                                                collection=collection,
+            #                                                from_CRS=from_CRS,
+            #                                                to_CRS=to_CRS)
+            # all_entities= collection.get_all_xsect_entities(xuid=uid)
+            # for entity_coll_name, uid_list in all_entities.items():
+            #     print(entity_coll_name, uid_list)
+            #     for entity_uid in uid_list:
+            #         print(entity_uid)
+            #         entity_coll = eval(f"self.{entity_coll_name}")
+            #         print("coll__: ", entity_coll)
+            #         CRS_apply_transformation(uid=entity_uid,
+            #                                  collection=entity_coll,
+            #                                  transformation_matrix=transformation_matrix)
+            return
         else:
-            CRS_transform_uid_accurate(self=self, uid=uid, collection=collection, from_CRS=from_CRS, to_CRS=to_CRS)
+            # transformation of individual entities.
+            if collection.get_uid_topology(uid) in ["Voxet", "MapImage", "Image3D"]:
+                # # affine transformation of the regular grid
+                # transformation_matrix = CRS_fit_transformation(uid=uid, collection=collection, from_CRS=from_CRS, to_CRS=to_CRS)
+                # CRS_apply_transformation(uid=uid, collection=collection, transformation_matrix=transformation_matrix)
+                return
+            else:
+                # precise transformation of entities exposing point coordinates, excluding entities
+                # belonging to cross-sections and image-like entities
+                CRS_transform_uid_accurate(self=self, uid=uid, collection=collection, from_CRS=from_CRS, to_CRS=to_CRS)

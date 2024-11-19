@@ -670,3 +670,12 @@ class XSectionCollection(BaseCollection):
 
     def set_width(self, uid=None):
         self.df.loc[self.df["uid"] == uid, "width"] = self.df.loc[self.df["uid"] == uid, "top"] - self.df.loc[self.df["uid"] == uid, "bottom"]
+
+    def get_all_xsect_entities(self, xuid=None):
+        """Get all entities belonging to the uid cross-section, in a dictionary sorted by collection."""
+        all_entities = {}
+        for coll_name in self.parent.tab_collection_dict.values():
+            coll = eval(f"self.parent.{coll_name}")
+            if coll_name != "xsect_coll":
+                all_entities[coll_name] = coll.get_xuid_uid(xuid=xuid)
+        return all_entities
