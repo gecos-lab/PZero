@@ -32,37 +32,13 @@ conda config --env --add channels anaconda
 
 5) Install packages (from within ./PZero/envs directory):
 
+conda env create -n pzero -f ./pzero-env.yml
+
+or
+
 conda env create -n pzero -f ./pzero-env-from-history.yml
 
-This includes:
-
-  - conda-forge::blackd[version='>=23.7.0']
-  - conda-forge::cmocean
-  - conda-forge::colorcet
-  - conda-forge::pyside6[version='>=6.7.3']
-  - conda-forge::ezdxf[version='>=1.0.3']
-  - conda-forge::geopandas[version='>=1.0.1']
-  - conda-forge::laspy[version='>=2.5.4']
-  - loop3d::loopstructural[version='>=v1.6.3']
-  - conda-forge::lxml[version='>=5.3.0']
-  - conda-forge::mplstereonet[version='>=0.6.3']
-  - openpyxl
-  - pandas[version='>=2.2.2']
-  - pyinstaller[version='>=6']
-  - pytest[version='>=7']
-  - python[version='>=3.9']
-  - conda-forge::pyvista[version='>=0.44.1']
-  - conda-forge::pyvistaqt[version='>=0.11.1']
-  - qtpy
-  - conda-forge::rasterio[version='>=1.3.6']
-  - conda-forge::seaborn
-  - conda-forge::shapely[version='>=2.0.6']
-  - conda-forge::sphinx[version='>=5']
-  - conda-forge::sphinx_rtd_theme[version='>=2']
-  - conda-forge::vtk-base[version='>=9.3.1']
-  - conda-forge::vtk[version='>=9.3.1']
-  - conda-forge::xarray[version='>=2023.1.0']
-  - conda-forge::rioxarray[version='>=0.17.0']
+This includes requirements listed in pzero-env-from-history.yml.
 
 The logic in any case is to have the most recent versions as possible, or at least well proven ones (>=), with excetions (strictly =) motivated in the issues.
 
@@ -83,6 +59,9 @@ conda info
 6) Finally record the environment in .yml files (from within ./PZero/envs directory):
 
 conda env export --from-history > ./pzero-env-from-history.yml
+
+and
+
 conda env export > ./pzero-env.yml
 
 This allows a quick installation with (from within ./PZero/envs directory):
