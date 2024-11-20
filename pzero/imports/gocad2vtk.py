@@ -1082,45 +1082,18 @@ def vtk2gocad(self=None, out_file_name=None):
     """Write entities"""
     for uid in self.geol_coll.df["uid"].to_list():
         """Loop over uids"""
-        topology = self.geol_coll.df.loc[
-            self.geol_coll.df["uid"] == uid, "topology"
-        ].values[0]
+        topology = self.geol_coll.df.loc[self.geol_coll.df["uid"] == uid, "topology"].values[0]
         """Check if this uid is compatible with Gocad Ascii"""
-        if topology in [
-            "VertexSet",
-            "PolyLine",
-            "TriSurf",
-            "TetraSolid",
-            "XsVertexSet",
-            "XsPolyLine",
-        ]:
+        if topology in self.geol_coll.valid_topologies:
             """Get properties and convert to properly formatted strings"""
             color_R = self.geol_coll.get_uid_legend(uid=uid)["color_R"] / 255
             color_G = self.geol_coll.get_uid_legend(uid=uid)["color_G"] / 255
             color_B = self.geol_coll.get_uid_legend(uid=uid)["color_B"] / 255
-            feature = self.geol_coll.df.loc[
-                self.geol_coll.df["uid"] == uid, "feature"
-            ].values[0]
-            role = self.geol_coll.df.loc[
-                self.geol_coll.df["uid"] == uid, "role"
-            ].values[0]
-            time = self.a_t_df.loc[
-                self.a_t_df["uid"] == uid, "time"
-            ].values[0]
-            properties_names = self.a_t_df.loc[
-                self.a_t_df["uid"] == uid, "properties_names"
-            ].values[0]
-            if properties_names != "":
-                properties_names = str(properties_names).split(";")
-            else:
-                properties_names = []
-            properties_components = self.a_t_df.loc[
-                self.a_t_df["uid"] == uid, "properties_components"
-            ].values[0]
-            if properties_components != "":
-                properties_components = str(properties_components).split(";")
-            else:
-                properties_components = []
+            feature = self.geol_coll.df.loc[self.geol_coll.df["uid"] == uid, "feature"].values[0]
+            role = self.geol_coll.df.loc[self.geol_coll.df["uid"] == uid, "role"].values[0]
+            # time = self.a_t_df.loc[self.a_t_df["uid"] == uid, "time"].values[0]
+            properties_names = self.geol_coll.df.loc[self.geol_coll.df["uid"] == uid, "properties_names"].values[0]
+            properties_components = self.geol_coll.df.loc[self.geol_coll.df["uid"] == uid, "properties_components"].values[0]
             """Write header for each uid"""
             fout.write("GOCAD " + topology + " 1\n")
             fout.write("HEADER {\n")
@@ -1135,9 +1108,9 @@ def vtk2gocad(self=None, out_file_name=None):
             fout.write("}\n")
             fout.write("GEOLOGICAL_FEATURE " + feature + "\n")
             fout.write("GEOLOGICAL_TYPE " + role + "\n")
-            fout.write("STRATIGRAPHIC_POSITION " + str(time) + "\n")
+            # fout.write("STRATIGRAPHIC_POSITION " + str(time) + "\n")
             """Options for properties"""
-            if properties_names:
+            if properties_names != []:
                 fout.write(
                     "PROPERTIES " + (" ".join(map(str, properties_names))) + "\n"
                 )
@@ -1148,6 +1121,7 @@ def vtk2gocad(self=None, out_file_name=None):
                 """_____________Check if there is an error here with vector properties_________________________________________________"""
                 pvrtx_mtx = self.geol_coll.get_uid_vtk_obj(uid).points
                 for property_name in properties_names:
+                    print("property_name: ", property_name)
                     pvrtx_mtx = np_column_stack(
                         [
                             pvrtx_mtx,
@@ -1171,12 +1145,12 @@ def vtk2gocad(self=None, out_file_name=None):
                 fout.write("TFACE\n")
                 """Build connectivity matrix here."""
                 connectivity = self.geol_coll.get_uid_vtk_obj(uid).cells
-            elif topology in ["TetraSolid"]:
-                fout.write("TVOLUME\n")
-                """Build connectivity matrix here."""
-                connectivity = self.geol_coll.get_uid_vtk_obj(uid).cells
+            # elif topology in ["TetraSolid"]:
+            #     fout.write("TVOLUME\n")
+            #     """Build connectivity matrix here."""
+            #     connectivity = self.geol_coll.get_uid_vtk_obj(uid).cells
             """Write VRTX or PVRTX"""
-            if properties_names:
+            if properties_names != []:
                 for row in range(np_shape(pvrtx_mtx)[0]):
                     data_row = " ".join(
                         ["{}".format(cell) for cell in pvrtx_mtx[row, :]]
@@ -1211,13 +1185,13 @@ def vtk2gocad(self=None, out_file_name=None):
                     )  # cell+1 since indexes in Gocad Ascii start from 1 - do not alter connectivity that is a shallow copy
                     fout.write("TRGL " + data_row + "\n")
                 del connectivity
-            elif topology in ["TetraSolid"]:
-                for row in range(np_shape(connectivity)[0]):
-                    data_row = " ".join(
-                        ["{}".format(cell + 1) for cell in connectivity[row, :]]
-                    )  # cell+1 since indexes in Gocad Ascii start from 1 - do not alter connectivity that is a shallow copy
-                    fout.write("TETRA " + data_row + "\n")
-                del connectivity
+            # elif topology in ["TetraSolid"]:
+            #     for row in range(np_shape(connectivity)[0]):
+            #         data_row = " ".join(
+            #             ["{}".format(cell + 1) for cell in connectivity[row, :]]
+            #         )  # cell+1 since indexes in Gocad Ascii start from 1 - do not alter connectivity that is a shallow copy
+            #         fout.write("TETRA " + data_row + "\n")
+            #     del connectivity
             fout.write("END\n")
         else:
             print("Entity ", uid, "not supported in Gocad Ascii")

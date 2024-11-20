@@ -54,7 +54,7 @@ from pzero.imports.cesium2vtk import vtk2cesium
 from pzero.imports.dem2vtk import dem2vtk
 from pzero.imports.dxf2vtk import vtk2dxf
 from pzero.imports.gltf2vtk import vtk2gltf
-from pzero.imports.gocad2vtk import gocad2vtk, gocad2vtk_section, gocad2vtk_boundary
+from pzero.imports.gocad2vtk import gocad2vtk, gocad2vtk_section, gocad2vtk_boundary, vtk2gocad
 from pzero.imports.image2vtk import geo_image2vtk, xs_image2vtk
 from pzero.imports.lxml2vtk import vtk2lxml
 from pzero.imports.obj2vtk import vtk2obj
@@ -1370,8 +1370,8 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         in_dir_name = in_file_name[:-3] + "_p0/" + rev_name
         self.print_terminal(f"Opening project/revision : {in_file_name}/{rev_name}\n")
         if not os.path.isdir(in_dir_name):
-            print(in_dir_name)
-            print("error: missing folder")
+            self.print_terminal(in_dir_name)
+            self.print_terminal("-- ERROR: missing folder --")
             return
 
         #  In the following it is still possible to open old projects with metadata stored
@@ -2373,8 +2373,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             os.mkdir(f"{out_dir_name}/dxf")
             vtk2dxf(self=self, out_dir_name=out_dir_name)
         elif cad_format == "GOCAD":
-            # vtk2gocad(self=self, out_file_name=(out_dir_name + '/gocad_ascii.gp'))
-            pass
+            vtk2gocad(self=self, out_file_name=(out_dir_name + '/gocad_ascii.gp'))
         elif cad_format == "GLTF":
             vtk2gltf(self=self, out_dir_name=out_dir_name)
         elif cad_format == "CESIUM":
