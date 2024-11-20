@@ -2469,7 +2469,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.well_coll.df[out_cols].to_csv(
             out_dir_name + "/well_table.csv", encoding="utf-8", index=False
         )
-        print("All files saved.")
+        self.print_terminal("All files saved.")
 
     def export_vtk(self):
         """[Gabriele] Function used to export selected objects as vtk files"""

@@ -1198,6 +1198,7 @@ def vtk2gocad(self=None, out_file_name=None):
             #         fout.write("TETRA " + data_row + "\n")
             #     del connectivity
             fout.write("END\n")
+            self.print_terminal(f"Written entity {uid} to file {out_file_name}")
         else:
             print("Entity ", uid, "not supported in Gocad Ascii")
     fout.close()
