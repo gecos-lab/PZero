@@ -1095,7 +1095,12 @@ def vtk2gocad(self=None, out_file_name=None):
             properties_names = self.geol_coll.df.loc[self.geol_coll.df["uid"] == uid, "properties_names"].values[0]
             properties_components = self.geol_coll.df.loc[self.geol_coll.df["uid"] == uid, "properties_components"].values[0]
             """Write header for each uid"""
-            fout.write("GOCAD " + topology + " 1\n")
+            if topology in ["VertexSet", "XsVertexSet"]:
+                fout.write("GOCAD VSet 1\n")
+            elif topology in topology in ["PolyLine", "XsPolyLine"]:
+                fout.write("GOCAD PLine 1\n")
+            elif topology in ["TriSurf"]:
+                fout.write("GOCAD TSurf 1\n")
             fout.write("HEADER {\n")
             fout.write(
                 "*solid*color: "
