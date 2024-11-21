@@ -1107,13 +1107,24 @@ def vtk2gocad(self=None, out_file_name=None):
                 + (f"{color_R:.3f}" + " " + f"{color_G:.3f}" + " " + f"{color_B:.3f}")
                 + " 1\n"
             )
-            fout.write(
-                "name: " + uid + "\n"
-            )  # IMPORTANT: 'name' is uid, not the 'name' shown as a text label that is not unique
+            fout.write("name: " + uid + "\n")  # IMPORTANT: 'name' is uid, not the 'name' shown as a text label that is not unique
             fout.write("}\n")
             fout.write("GEOLOGICAL_FEATURE " + feature + "\n")
-            fout.write("GEOLOGICAL_TYPE " + role + "\n")
-            # fout.write("STRATIGRAPHIC_POSITION " + str(time) + "\n")
+            if role in ["tectonic"]:
+                # "tectonic" -> fault
+                fout.write("GEOLOGICAL_TYPE fault\n")
+            elif role in ["bedding", "foliation"]:
+                # "bedding", "foliation" -> intraformational
+                fout.write("GEOLOGICAL_TYPE intraformational\n")
+            elif role in ["fault", "intrusive", "unconformity", "top"]:
+                # these are the same as in GOCAD
+                fout.write("GEOLOGICAL_TYPE " + role + "\n")
+            elif role in ["undef", "base",  "lineation", "axial_surface", "fold_axis"]:
+                # these are not implemented in GOCAD
+                pass
+            # not yet implemented in PZero, but implemented in GOCAD: topography, boundary, ghost
+            time = self.geol_coll.get_uid_legend(uid=uid)["time"]
+            fout.write("STRATIGRAPHIC_POSITION " + str(time) + "\n")
             """Options for properties"""
             if properties_names != []:
                 fout.write(
