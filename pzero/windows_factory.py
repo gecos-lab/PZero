@@ -2159,18 +2159,17 @@ class VTKView(BaseView):
         the layout of an empty frame generated with Qt Designer"""
         # print(self.ViewFrame)
         self.plotter = pvQtInteractor(self.ViewFrame)
-        self.plotter.set_background(
-            "black"
-        )  # background color - could be made interactive in the future
+        # background color - could be made interactive in the future
+        self.plotter.set_background("black")
         self.ViewFrameLayout.addWidget(self.plotter.interactor)
         # self.plotter.show_axes_all()
-        """Set orientation widget (turned on after the qt canvas is shown)"""
+        # Set orientation widget (turned on after the qt canvas is shown)
         self.cam_orient_widget = vtkCameraOrientationWidget()
         self.cam_orient_widget.SetParentRenderer(self.plotter.renderer)
-        """Set default orientation horizontal because vertical colorbars interfere with the camera widget."""
+        # Set default orientation horizontal because vertical colorbars interfere with the camera widget.
         pv_global_theme.colorbar_orientation = "horizontal"
 
-        """Manage home view"""
+        # Manage home view
         self.default_view = self.plotter.camera_position
         # self.plotter.track_click_position(
         #    lambda pos: self.plotter.camera.SetFocalPoint(pos), side="left", double=True
