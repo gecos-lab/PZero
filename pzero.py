@@ -19,11 +19,13 @@ app = QApplication(argv)
 # Use Fusion style: this is a uniform style for all platforms, but the
 # real reason to use it is that the standard Windows 11 style has some bug
 # in Qt 6.7.2, including one related to tear-off submenus.
-if platform is 'darwin':
-    app.setStyle('Fusion')
+# if platform == 'darwin':
+# elif platform == 'win32':
+# elif platform == 'linux':
+app.setStyle('Fusion')
 # app.setStyle('windows11')
 # app.setStyle('windowsvista')
-# app.setStyle('windowsvista')
+# app.setStyle('windows')
 
 # Display splash screen before doing anything else
 splash_image = QPixmap("./images/splash_image.jpg")
