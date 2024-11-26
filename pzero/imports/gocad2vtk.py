@@ -188,9 +188,13 @@ def gocad2vtk(self=None, in_file_name=None, uid_from_name=None):
             curr_obj_color_b = None
 
         elif "*solid*color:" in clean_line[0]:
-            curr_obj_color_r = float(round(float(clean_line[1]) * 255))
-            curr_obj_color_g = float(round(float(clean_line[2]) * 255))
-            curr_obj_color_b = float(round(float(clean_line[3]) * 255))
+            try:
+                curr_obj_color_r = float(round(float(clean_line[1]) * 255))
+                curr_obj_color_g = float(round(float(clean_line[2]) * 255))
+                curr_obj_color_b = float(round(float(clean_line[3]) * 255))
+            except:
+                pass
+
 
         elif "name:" in clean_line[0]:
             if clean_line[0] == "name:":
