@@ -51,7 +51,7 @@ pd_set_option("display.max_colwidth", pd_max_colwidth)
 
 def section_from_azimuth(self, vector):
     """Create cross section from one point and azimuth."""
-    section_dict = deepcopy(self.parent.xsect_coll.section_dict)
+    section_dict = deepcopy(self.parent.xsect_coll.entity_dict)
     self.plotter.untrack_click_position(side="left")
 
     # points = np.array([vector.p1, vector.p2])
@@ -171,7 +171,7 @@ def sections_from_file(self):
     # OR CREATE A METHOD TO FILL MISSING PARAMETERS IN THE COLLECTION??
 
     from os.path import splitext
-    section_dict = deepcopy(self.parent.xsect_coll.section_dict)
+    section_dict = deepcopy(self.parent.xsect_coll.entity_dict)
     section_dict_updt = {
         "name": "",
         "base_x": 0,
