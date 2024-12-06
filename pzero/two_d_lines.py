@@ -1,4 +1,4 @@
-"""three_d_surfaces.py
+"""two_d_lines.py
 PZero© Andrea Bistacchi"""
 
 from copy import deepcopy
@@ -1123,7 +1123,7 @@ def copy_parallel(
 
     """Check if a line is selected"""
     if not self.selected_uids:
-        self.parent.TextTerminal.appendPlainText(" -- No input data selected -- ")
+        self.print_terminal(" -- No input data selected -- ")
         return
     if (
             self.parent.geol_coll.get_uid_topology(self.selected_uids[0])
@@ -1132,7 +1132,7 @@ def copy_parallel(
             self.parent.geol_coll.get_uid_topology(self.selected_uids[0])
             != "XsPolyLine"
     ):
-        self.parent.TextTerminal.appendPlainText(" -- Selected data is not a line -- ")
+        self.print_terminal(" -- Selected data is not a line -- ")
         return
     """If more than one line is selected, keep the first."""
     input_uid = self.selected_uids[0]
@@ -1199,7 +1199,7 @@ def copy_parallel(
         outU = outUV[:, 0]
         outV = outUV[:, 1]
     else:
-        self.parent.TextTerminal.appendPlainText("Polyline is not simple, it self-intersects")
+        self.print_terminal("Polyline is not simple, it self-intersects")
         for action in self.findChildren(QAction):
             return
     if isinstance(self, ViewMap):
@@ -1213,7 +1213,7 @@ def copy_parallel(
             self.this_x_section_uid, outU, outV
         )
     """Stack coordinates in two-columns matrix and write to vtk object."""
-    self.parent.TextTerminal.appendPlainText("outXYZ = np_column_stack((outX, outY, outZ))")
+    self.print_terminal("outXYZ = np_column_stack((outX, outY, outZ))")
     outXYZ = np_column_stack((outX, outY, outZ))
 
     line_dict["vtk_obj"].points = outXYZ
@@ -1223,7 +1223,7 @@ def copy_parallel(
         output_uid = self.parent.geol_coll.add_entity_from_dict(line_dict)
         left_right(output_uid)
     else:
-        self.parent.TextTerminal.appendPlainText("Empty object")
+        self.print_terminal("Empty object")
 
 
 @freeze_gui
@@ -1233,11 +1233,11 @@ def copy_kink(
     """Kink folding. Create a line copied and translated from a template line using Shapely.
     Since lines are oriented left-to-right and bottom-to-top, and here we copy a line to the left,
     a positive distance creates a line shifted upwards and to the left."""
-    self.parent.TextTerminal.appendPlainText("Copy Kink. Create a line copied and translated.")
+    self.print_terminal("Copy Kink. Create a line copied and translated.")
     """Terminate running event loops"""
     """Check if a line is selected"""
     if not self.selected_uids:
-        self.parent.TextTerminal.appendPlainText(" -- No input data selected -- ")
+        self.print_terminal(" -- No input data selected -- ")
         return
     if (
             self.parent.geol_coll.get_uid_topology(self.selected_uids[0])
@@ -1246,7 +1246,7 @@ def copy_kink(
             self.parent.geol_coll.get_uid_topology(self.selected_uids[0])
             != "XsPolyLine"
     ):
-        self.parent.TextTerminal.appendPlainText(" -- Selected data is not a line -- ")
+        self.print_terminal(" -- Selected data is not a line -- ")
         return
     """If more than one line is selected, keep the first."""
     input_uid = self.selected_uids[0]
@@ -1310,7 +1310,7 @@ def copy_kink(
         outU = outUV[:, 0]
         outV = outUV[:, 1]
     else:
-        self.parent.TextTerminal.appendPlainText("Polyline is not simple, it self-intersects")
+        self.print_terminal("Polyline is not simple, it self-intersects")
         return
     if isinstance(self, ViewMap):
         # if isinstance(self, (ViewMap, ViewMap)):
@@ -1331,7 +1331,7 @@ def copy_kink(
         output_uid = self.parent.geol_coll.add_entity_from_dict(line_dict)
         left_right(output_uid)
     else:
-        self.parent.TextTerminal.appendPlainText("Empty object")
+        self.print_terminal("Empty object")
 
 
 @freeze_gui
@@ -1341,12 +1341,12 @@ def copy_similar(
     """Similar folding. Create a line copied and translated from a template line.
     Does not need U,V coordinates since the translation vector is already in world coords
     """
-    self.parent.TextTerminal.appendPlainText("Copy Similar. Create a line copied and translated.")
+    self.print_terminal("Copy Similar. Create a line copied and translated.")
     """Terminate running event loops"""
     # self.stop_event_loops()
     """Check if a line is selected"""
     if not self.selected_uids:
-        self.parent.TextTerminal.appendPlainText(" -- No input data selected -- ")
+        self.print_terminal(" -- No input data selected -- ")
         return
     if (
             self.parent.geol_coll.get_uid_topology(self.selected_uids[0])
@@ -1355,7 +1355,7 @@ def copy_similar(
             self.parent.geol_coll.get_uid_topology(self.selected_uids[0])
             != "XsPolyLine"
     ):
-        self.parent.TextTerminal.appendPlainText(" -- Selected data is not a line -- ")
+        self.print_terminal(" -- Selected data is not a line -- ")
         return
     """If more than one line is selected, keep the first."""
     input_uid = self.selected_uids[0]
@@ -1385,7 +1385,7 @@ def copy_similar(
     inZ = self.parent.geol_coll.get_uid_vtk_obj(input_uid).points_Z
     """Get similar folding vector."""
     if vector.length == 0:
-        self.parent.TextTerminal.appendPlainText("Zero-length vector")
+        self.print_terminal("Zero-length vector")
         return
 
     """Create output line."""
@@ -1412,13 +1412,13 @@ def copy_similar(
         self.clear_selection()
         # self.parent.geol_coll.signals.geom_modified.emit([input_uid])  # emit uid as list to force redraw()
     else:
-        self.parent.TextTerminal.appendPlainText("Empty object")
+        self.print_terminal("Empty object")
 
 
 
 def measure_distance(self, vector):
     """Tool to measure distance between two points. Draw a vector_by_mouse and obtain length and azimuth"""
-    self.parent.TextTerminal.appendPlainText("Measure Distance between two points by drawing a vector by mouse")
+    self.print_terminal("Measure Distance between two points by drawing a vector by mouse")
 
     def end_measure(event=None):
         """Cleanup function to properly end the measurement tool"""
@@ -1429,7 +1429,7 @@ def measure_distance(self, vector):
     self.disable_actions()
 
     if vector.length == 0:
-        self.parent.TextTerminal.appendPlainText("Zero-length vector")
+        self.print_terminal("Zero-length vector")
         end_measure()
         return
 

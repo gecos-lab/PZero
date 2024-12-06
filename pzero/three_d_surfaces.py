@@ -1004,11 +1004,11 @@ def decimation_quadric_resampling(self):
         "Decimation Quadric: resample target surface and reduce number of triangles of the mesh"
     )
     if self.shown_table != "tabGeology":
-        self.parent.TextTerminal.appendPlainText(" -- Only geological objects can be resampled -- ")
+        self.print_terminal(" -- Only geological objects can be resampled -- ")
         return
     """Check if some vtkPolyData is selected"""
     if not self.selected_uids:
-        self.parent.TextTerminal.appendPlainText("No input data selected.")
+        self.print_terminal("No input data selected.")
         return
     else:
         """Deep copy list of selected uids needed otherwise problems can arise if the main geology table is deseselcted while the dataframe is being built"""
@@ -1017,7 +1017,7 @@ def decimation_quadric_resampling(self):
         if isinstance(self.geol_coll.get_uid_vtk_obj(uid), TriSurf):
             pass
         else:
-            self.parent.TextTerminal.appendPlainText(" -- Error input type: only TriSurf type -- ")
+            self.print_terminal(" -- Error input type: only TriSurf type -- ")
             return
     """Create deepcopy of the geological entity dictionary."""
     surf_dict = deepcopy(self.geol_coll.entity_dict)
@@ -1050,7 +1050,7 @@ def decimation_quadric_resampling(self):
     if surf_dict["vtk_obj"].points_number > 0:
         self.geol_coll.add_entity_from_dict(surf_dict)
     else:
-        self.parent.TextTerminal.appendPlainText(" -- empty object -- ")
+        self.print_terminal(" -- empty object -- ")
 
 
 @freeze_gui
@@ -1060,15 +1060,15 @@ def subdivision_resampling(self, mode=0, type="linear", n_subd=2):
     1. vtkLinearSubdivisionFilter (shape preserving)
     2. vtkButterflySubdivisionFilter  (not shape preserving)
     3. vtkLoopSubdivisionFilter (not shape preserving)"""
-    self.parent.TextTerminal.appendPlainText(
+    self.print_terminal(
         "Subdivision resampling: resample target surface and increase number of triangles of the mesh"
     )
     if self.shown_table != "tabGeology":
-        self.parent.TextTerminal.appendPlainText(" -- Only geological objects can be resampled -- ")
+        self.print_terminal(" -- Only geological objects can be resampled -- ")
         return
     """Check if some vtkPolyData is selected"""
     if not self.selected_uids:
-        self.parent.TextTerminal.appendPlainText("No input data selected.")
+        self.print_terminal("No input data selected.")
         return
     else:
         """Deep copy list of selected uids needed otherwise problems can arise if the main geology table is
@@ -1112,9 +1112,9 @@ def subdivision_resampling(self, mode=0, type="linear", n_subd=2):
                 if surf_dict["vtk_obj"].points_number > 0:
                     self.geol_coll.add_entity_from_dict(surf_dict)
                 else:
-                    self.parent.TextTerminal.appendPlainText(" -- empty object -- ")
+                    self.print_terminal(" -- empty object -- ")
         else:
-            self.parent.TextTerminal.appendPlainText(" -- Error input type: only TriSurf type -- ")
+            self.print_terminal(" -- Error input type: only TriSurf type -- ")
             return
 
 @freeze_gui
@@ -1122,13 +1122,12 @@ def intersection_xs(self):
     """vtkCutter is a filter to cut through data using any subclass of vtkImplicitFunction.
     HOW TO USE: select one or more Geological objects, DOMs or 3D Meshes (Source data), then function asks for XSection
     (input data) for the filter."""
-    self.parent.TextTerminal.appendPlainText(
-        "Intersection with XSection: intersect Geological entities, 3D Meshes and DEM & DOMs"
-    )
-
+    self.print_terminal(
+    "Intersection with XSection: intersect Geological entities, 3D Meshes and DEM & DOMs"
     """Check if some vtkPolyData is selected"""
+    )
     if not self.selected_uids:
-        self.parent.TextTerminal.appendPlainText("No input data selected.")
+        self.print_terminal("No input data selected.")
         return
     else:
         """Deep copy list of selected uids needed otherwise problems can arise if the
@@ -1195,9 +1194,9 @@ def intersection_xs(self):
                                     obj_dict["vtk_obj"].remove_point_data(data_key)
                             self.geol_coll.add_entity_from_dict(obj_dict)
                         else:
-                            self.parent.TextTerminal.appendPlainText(" -- empty object from cutter -- ")
+                            self.print_terminal(" -- empty object from cutter -- ")
                     else:
-                        self.parent.TextTerminal.appendPlainText(
+                        self.print_terminal(
                             " -- no intersection of XsPolyLine with its own XSection -- "
                         )
                 elif self.geol_coll.get_uid_topology(uid) == "TriSurf":
@@ -1298,9 +1297,9 @@ def intersection_xs(self):
                                         obj_dict["vtk_obj"].remove_point_data(data_key)
                                 self.geol_coll.add_entity_from_dict(obj_dict)
                             else:
-                                self.parent.TextTerminal.appendPlainText(" -- empty object from connectivity_clean-- ")
+                                self.print_terminal(" -- empty object from connectivity_clean-- ")
                     else:
-                        self.parent.TextTerminal.appendPlainText(
+                        self.print_terminal(
                             " -- empty object from cutter_clean_strips_clean_triangle -- "
                         )
         elif self.shown_table == "tabMeshes3D":
@@ -1458,9 +1457,9 @@ def intersection_xs(self):
                         if obj_dict["vtk_obj"].points_number > 0:
                             self.mesh3d_coll.add_entity_from_dict(obj_dict)
                         else:
-                            self.parent.TextTerminal.appendPlainText(" -- empty object -- ")
+                            self.print_terminal(" -- empty object -- ")
                     else:
-                        self.parent.TextTerminal.appendPlainText(" -- empty object -- ")
+                        self.print_terminal(" -- empty object -- ")
         elif self.shown_table == "tabDOMs":
             for uid in input_uids:
                 if self.dom_coll.get_uid_topology(uid) == "DEM":
@@ -1484,19 +1483,19 @@ def intersection_xs(self):
                         x_section_uid=xsect_uid, parent=self
                     )
                     obj_dict["vtk_obj"].DeepCopy(cutter.GetOutput())
-                    self.parent.TextTerminal.appendPlainText("obj_dict['vtk_obj']:\n", obj_dict["vtk_obj"])
+                    self.print_terminal("obj_dict['vtk_obj']:\n", obj_dict["vtk_obj"])
                     if obj_dict["vtk_obj"].points_number > 0:
                         for data_key in obj_dict["vtk_obj"].point_data_keys:
                             if not data_key in obj_dict["properties_names"]:
                                 obj_dict["vtk_obj"].remove_point_data(data_key)
                         self.dom_coll.add_entity_from_dict(obj_dict)
                     else:
-                        self.parent.TextTerminal.appendPlainText(" -- empty object -- ")
+                        self.print_terminal(" -- empty object -- ")
         else:
-            print(
+            self.print_terminal(
                 " -- Only Geological objects, 3D Meshes and DEM & DOMs can be intersected with XSection -- "
             )
-            self.parent.TextTerminal.appendPlainText
+
 
 
 @freeze_gui
@@ -1505,13 +1504,13 @@ def project_2_dem(self):
     HOW TO USE: at the moment, as vtkProjectedTerrainPath takes vtkImageData as input, we need to import
     DEM file also as OrthoImage (--> as vtkImageData) and to use this entity as source data for the
     projection"""
-    self.parent.TextTerminal.appendPlainText("Vertical Projection: project target lines onto a terrain image")
+    #self.print_terminal("Vertical Projection: project target lines onto a terrain image")
     if self.shown_table != "tabGeology":
-        self.parent.TextTerminal.appendPlainText(" -- Only geological objects can be interpolated -- ")
+        self.print_terminal(" -- Only geological objects can be interpolated -- ")
         return
     """Check if some vtkPolyData is selected"""
     if not self.selected_uids:
-        self.parent.TextTerminal.appendPlainText("No input data selected.")
+        self.print_terminal("No input data selected.")
         return
     else:
         input_uids = deepcopy(self.selected_uids)
@@ -1617,7 +1616,7 @@ def project_2_dem(self):
             if obj_dict["vtk_obj"].points_number > 0:
                 self.geol_coll.add_entity_from_dict(obj_dict)
             else:
-                self.parent.TextTerminal.appendPlainText(" -- empty object -- ")
+                self.print_terminal(" -- empty object -- ")
         else:
             self.geol_coll.replace_vtk(uid=uid, vtk_object=obj_dict["vtk_obj"])
             self.geol_coll.set_uid_name(uid=uid, name=obj_dict["name"])
@@ -1631,14 +1630,14 @@ def project_2_dem(self):
 @freeze_gui
 def project_2_xs(self):
     """Projection of a copy of point and polyline geological entities to a planar cross section, along an axis specified with plunge/trend."""
-    self.parent.TextTerminal.appendPlainText("Projection to cross section")
+    #self.print_terminal("Projection to cross section")
     """Get input objects - points and polylines at the moment."""
     if self.shown_table != "tabGeology":
-        self.parent.TextTerminal.appendPlainText(" -- Only geological objects can be projected -- ")
+        self.print_terminal(" -- Only geological objects can be projected -- ")
         return
     """Check if some vtkPolyData is selected"""
     if not self.selected_uids:
-        self.parent.TextTerminal.appendPlainText("No input data selected.")
+        self.print_terminal("No input data selected.")
         return
     else:
         """Deep copy list of selected uids needed otherwise problems can arise if the main geology table is deseselcted while the dataframe is being built"""
@@ -1687,7 +1686,7 @@ def project_2_xs(self):
         abs(self.xsect_coll.get_uid_azimuth(xs_uid) - proj_trend) < 10.0
         or abs(self.xsect_coll.get_uid_azimuth(xs_uid) - 180.0 - proj_trend) < 10.0
     ):
-        self.parent.TextTerminal.appendPlainText("Plunge too close to being parallel to XSection (angle < 10°)")
+        self.print_terminal("Plunge too close to being parallel to XSection (angle < 10°)")
         return
     """Get cross section start and end points (float64 needed for "t" afterwards)."""
     xa = np_float64(self.xsect_coll.get_uid_base_x(xs_uid))
@@ -1774,7 +1773,7 @@ def project_2_xs(self):
                         entity_dict=entity_dict
                     )
                 else:
-                    self.parent.TextTerminal.appendPlainText(
+                    self.print_terminal(
                         f'No measure found for group {entity_dict["name"]}, try to extend the maximum distance'
                     )
 
@@ -1826,17 +1825,17 @@ def project_2_xs(self):
                         entity_dict=entity_dict
                     )
                 else:
-                    self.parent.TextTerminal.appendPlainText(" -- empty object -- ")
+                    self.print_terminal(" -- empty object -- ")
 
 
 @freeze_gui
 def split_surf(self):
     """Split two surfaces. This should be integrated with intersection_xs in one function since is the same thing"""
     if self.shown_table != "tabGeology":
-        self.parent.TextTerminal.appendPlainText(" -- Only surface objects can be intersected -- ")
+        self.print_terminal(" -- Only surface objects can be intersected -- ")
         return
     if not self.selected_uids:
-        self.parent.TextTerminal.appendPlainText("No input data selected.")
+        self.print_terminal("No input data selected.")
         return
     else:
         """Deep copy list of selected uids needed otherwise problems can arise if the main geology table
@@ -1978,10 +1977,10 @@ def retopo(self, mode=0, dec_int=0.2, n_iter=40, rel_fac=0.1):
     in the future it would be nicer to have an adaptive method (maybe using vtkMeshQuality?)
     """
     if self.shown_table != "tabGeology":
-        self.parent.TextTerminal.appendPlainText(" -- Only geological objects can be retopologized -- ")
+        self.print_terminal(" -- Only geological objects can be retopologized -- ")
         return
     if not self.selected_uids:
-        self.parent.TextTerminal.appendPlainText("No input data selected.")
+        self.print_terminal("No input data selected.")
         return
     else:
         """Deep copy list of selected uids needed otherwise problems can arise if the main geology table is deseselcted while the dataframe is being built"""
@@ -2032,7 +2031,7 @@ def retopo(self, mode=0, dec_int=0.2, n_iter=40, rel_fac=0.1):
                     if surf_dict["vtk_obj"].points_number > 0:
                         self.geol_coll.add_entity_from_dict(surf_dict)
                     else:
-                        self.parent.TextTerminal.appendPlainText(" -- empty object -- ")
+                        self.print_terminal(" -- empty object -- ")
             else:
-                self.parent.TextTerminal.appendPlainText(" -- Error input type: only TriSurf type -- ")
+                self.print_terminal(" -- Error input type: only TriSurf type -- ")
                 return
