@@ -214,7 +214,7 @@ def move_line(self, vector):
 def rotate_line(self):
     """Rotate lines by rigid-body rotation using Shapely."""
     self.print_terminal(
-        "Rotate Line. Rotate the whole line by rigid-body rotation. Please insert angle of anticlockwise rotation."
+        "Rotate Line. Rotate the whole line by rigid-body rotation. Please insert angle of clockwise rotation."
     )
     # Check if at least a line is selected.
     if not self.selected_uids:
@@ -224,7 +224,7 @@ def rotate_line(self):
     angle = input_one_value_dialog(
         parent=self,
         title="Rotate Line",
-        label="Insert rotation angle in degrees, anticlockwise",
+        label="Insert rotation angle in degrees, clockwise",
         default_value=10,
     )
     if angle is None:

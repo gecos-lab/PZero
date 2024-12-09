@@ -442,11 +442,31 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 self.backgrnd_coll.remove_entity(uid=uid)
 
     def entities_merge(self):
-        # ____________________________________________________ CHECK (1) HOW PROPERTIES AND TEXTURES ARE AFFECTED BY MERGING, (2) HOW IT WORKS FOR DOMs
         """Merge entities of the same topology - VertexSet, PolyLine, TriSurf, ..."""
         if not self.selected_uids:
             return
-        """Check if a suitable collection is selected."""
+        if self.shown_table == "tabGeology":
+            collection = self.geol_coll
+        elif self.shown_table == "tabDOMs":
+            collection = self.dom_coll
+        else:
+            return
+        xsect_list = []
+
+        for uid in self.selected_uids:
+            xsect_value = collection.get_uid_x_section(uid)
+            xsect_list.append(xsect_value)
+        unique_xsect_uids = set(xsect_list)
+        if len(unique_xsect_uids) == 1 and "undef" not in unique_xsect_uids:
+            xsect_uid_common = unique_xsect_uids.pop()
+            self.print_terminal(f"All selected entities share the same xsection_uid: {xsect_uid_common}")
+        elif "undef" in unique_xsect_uids and len(unique_xsect_uids - {"undef"}) == 0:
+            self.print_terminal("All selected entities have no xsection_uid assigned.")
+        else:
+            self.print_terminal("Selected entities have mixed xsection_uids. Please select entities with the same xsection_uid or that don't belong to any x_section.")
+            return
+
+        """Proceed with existing logic to collect properties and merge."""
         if self.shown_table == "tabGeology":
             collection = self.geol_coll
             """Create deepcopy of the geological entity dictionary."""
@@ -463,7 +483,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 role_list.append(collection.get_uid_role(uid))
                 feature_list.append(collection.get_uid_feature(uid))
                 scenario_list.append(collection.get_uid_scenario(uid))
-                xsect_list.append(collection.get_uid_scenario(uid))
+                xsect_list.append(collection.get_uid_x_section(uid))
             name_list = list(set(name_list))
             topology_list = list(set(topology_list))
             role_list = list(set(role_list))
@@ -488,7 +508,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             for uid in self.selected_uids:
                 name_list.append(collection.get_uid_name(uid))
                 topology_list.append(collection.get_uid_topology(uid))
-                xsect_list.append(collection.get_uid_scenario(uid))
+                xsect_list.append(collection.get_uid_xsect(uid))
             name_list = list(set(name_list))
             topology_list = list(set(topology_list))
             xsect_list = list(set(xsect_list))
