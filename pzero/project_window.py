@@ -458,7 +458,6 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             xsect_list.append(xsect_value)
         unique_xsect_uids = set(xsect_list)
         if len(unique_xsect_uids) == 1:
-            #xsect_uid_common = unique_xsect_uids.pop()
             self.print_terminal("All selected entities share the same xsection_uid or have no xsection_uid assigned")
         else:
             self.print_terminal("Selected entities have mixed xsection_uids. Please select entities with the same xsection_uid or that don't belong to any x_section.")
