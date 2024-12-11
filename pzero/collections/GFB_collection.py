@@ -200,34 +200,19 @@ class GFBCollection(BaseCollection):
         """Replace the vtk object of a given uid with another vtkobject."""
         # ============ CAN BE UNIFIED AS COMMON METHOD OF THE ABSTRACT COLLECTION WHEN SIGNALS WILL BE UNIFIED ==========
         if isinstance(vtk_object, type(self.df.loc[self.df["uid"] == uid, "vtk_obj"].values[0])):
-            index = self.df.index[self.df["uid"] == uid].tolist()
-            if not index:
-                return
-            row_index = index[0]
             # Replace old properties names and components with new ones
             keys = vtk_object.point_data_keys
-            new_properties_names = []
-            new_properties_components = []
+            self.df.loc[self.df["uid"] == uid, "properties_names"].values[0] = []
+            self.df.loc[self.df["uid"] == uid, "properties_components"].values[0] = []
             for key in keys:
                 components = vtk_object.get_point_data_shape(key)[1]
-                new_properties_names.append(str(key))
-                new_properties_components.append(components)
-            existing_names = self.df.at[row_index, "properties_names"]
-            if not isinstance(existing_names, list):
-                existing_names = []
-            existing_components = self.df.at[row_index, "properties_components"]
-            if not isinstance(existing_components, list):
-                existing_components = []
-            existing_names = [str(name) for name in existing_names if name is not None]
-            new_properties_names = [str(name) for name in new_properties_names if name is not None]
-            self.df.at[row_index, "properties_names"] = pd_concat([
-                pd_DataFrame([existing_names]),
-                pd_DataFrame([new_properties_names])
-            ], ignore_index=True).iloc[0].tolist()
-            self.df.at[row_index, "properties_components"] = pd_concat([
-                pd_DataFrame([existing_components]),pd_DataFrame([new_properties_components])], ignore_index=True).iloc[0].tolist()
-            self.df.at[row_index, "properties_names"] = [str(name) for name in self.df.at[row_index, "properties_names"]]
-            self.df.at[row_index, "vtk_obj"] = vtk_object
+                current_names = pd_DataFrame(self.df.loc[self.df["uid"] == uid, "properties_names"].values[0])
+                current_names = pd_concat([current_names, pd_DataFrame([key])], ignore_index=True)
+                self.df.loc[self.df["uid"] == uid, "properties_names"].values[0] = current_names[0].tolist()
+                current_components = pd_DataFrame(self.df.loc[self.df["uid"] == uid, "properties_components"].values[0])
+                current_components = pd_concat([current_components, pd_DataFrame([components])], ignore_index=True)
+                self.df.loc[self.df["uid"] == uid, "properties_components"].values[0] = current_components[0].tolist()
+            self.df.loc[self.df["uid"] == uid, "vtk_obj"] = vtk_object
             self.parent.prop_legend.update_widget(self.parent)
             self.signals.data_keys_modified.emit([uid])
             self.signals.geom_modified.emit([uid])
