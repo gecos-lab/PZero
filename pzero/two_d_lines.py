@@ -79,7 +79,7 @@ def draw_line(self):
         line_dict[key] = line_dict_updt[key]
     if isinstance(self, ViewMap):
         line_dict["topology"] = "PolyLine"
-        line_dict["x_section"] = None
+        line_dict["x_section"] = ""
         line_dict["vtk_obj"] = PolyLine()
     elif isinstance(self, ViewXsection):
         line_dict["topology"] = "XsPolyLine"
