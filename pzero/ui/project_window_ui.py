@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 ################################################################################
-## Form generated from reading UI file 'project_windowucwMIE.ui'
+## Form generated from reading UI file 'project_windowfNntSM.ui'
 ##
 ## Created by: Qt User Interface Compiler version 6.7.3
 ##
@@ -166,6 +166,7 @@ class Ui_ProjectWindow(object):
         self.horizontalLayout_2.setObjectName(u"horizontalLayout_2")
         self.GeologyTableView = QTableView(self.tabGeology)
         self.GeologyTableView.setObjectName(u"GeologyTableView")
+        self.GeologyTableView.setSortingEnabled(True)
 
         self.horizontalLayout_2.addWidget(self.GeologyTableView)
 
@@ -176,6 +177,7 @@ class Ui_ProjectWindow(object):
         self.horizontalLayout_3.setObjectName(u"horizontalLayout_3")
         self.FluidsTableView = QTableView(self.tabFluids)
         self.FluidsTableView.setObjectName(u"FluidsTableView")
+        self.FluidsTableView.setSortingEnabled(True)
 
         self.horizontalLayout_3.addWidget(self.FluidsTableView)
 
@@ -186,6 +188,7 @@ class Ui_ProjectWindow(object):
         self.horizontalLayout_4.setObjectName(u"horizontalLayout_4")
         self.BackgroundsTableView = QTableView(self.tabBackgrounds)
         self.BackgroundsTableView.setObjectName(u"BackgroundsTableView")
+        self.BackgroundsTableView.setSortingEnabled(True)
 
         self.horizontalLayout_4.addWidget(self.BackgroundsTableView)
 
@@ -196,6 +199,7 @@ class Ui_ProjectWindow(object):
         self.horizontalLayout_5.setObjectName(u"horizontalLayout_5")
         self.DOMsTableView = QTableView(self.tabDOMs)
         self.DOMsTableView.setObjectName(u"DOMsTableView")
+        self.DOMsTableView.setSortingEnabled(True)
 
         self.horizontalLayout_5.addWidget(self.DOMsTableView)
 
@@ -206,6 +210,7 @@ class Ui_ProjectWindow(object):
         self.horizontalLayout_6.setObjectName(u"horizontalLayout_6")
         self.ImagesTableView = QTableView(self.tabImages)
         self.ImagesTableView.setObjectName(u"ImagesTableView")
+        self.ImagesTableView.setSortingEnabled(True)
 
         self.horizontalLayout_6.addWidget(self.ImagesTableView)
 
@@ -216,6 +221,7 @@ class Ui_ProjectWindow(object):
         self.horizontalLayout_7.setObjectName(u"horizontalLayout_7")
         self.Meshes3DTableView = QTableView(self.tabMeshes)
         self.Meshes3DTableView.setObjectName(u"Meshes3DTableView")
+        self.Meshes3DTableView.setSortingEnabled(True)
 
         self.horizontalLayout_7.addWidget(self.Meshes3DTableView)
 
@@ -226,6 +232,7 @@ class Ui_ProjectWindow(object):
         self.horizontalLayout_8.setObjectName(u"horizontalLayout_8")
         self.BoundariesTableView = QTableView(self.tabBoundaries)
         self.BoundariesTableView.setObjectName(u"BoundariesTableView")
+        self.BoundariesTableView.setSortingEnabled(True)
 
         self.horizontalLayout_8.addWidget(self.BoundariesTableView)
 
@@ -236,6 +243,7 @@ class Ui_ProjectWindow(object):
         self.horizontalLayout_9.setObjectName(u"horizontalLayout_9")
         self.XSectionsTableView = QTableView(self.tabXSections)
         self.XSectionsTableView.setObjectName(u"XSectionsTableView")
+        self.XSectionsTableView.setSortingEnabled(True)
 
         self.horizontalLayout_9.addWidget(self.XSectionsTableView)
 
@@ -246,6 +254,7 @@ class Ui_ProjectWindow(object):
         self.horizontalLayout_10.setObjectName(u"horizontalLayout_10")
         self.WellsTableView = QTableView(self.tabWells)
         self.WellsTableView.setObjectName(u"WellsTableView")
+        self.WellsTableView.setSortingEnabled(True)
 
         self.horizontalLayout_10.addWidget(self.WellsTableView)
 

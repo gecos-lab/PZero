@@ -30,7 +30,11 @@
         </attribute>
         <layout class="QHBoxLayout" name="horizontalLayout_2">
          <item>
-          <widget class="QTableView" name="GeologyTableView"/>
+          <widget class="QTableView" name="GeologyTableView">
+           <property name="sortingEnabled">
+            <bool>true</bool>
+           </property>
+          </widget>
          </item>
         </layout>
        </widget>
@@ -40,7 +44,11 @@
         </attribute>
         <layout class="QHBoxLayout" name="horizontalLayout_3">
          <item>
-          <widget class="QTableView" name="FluidsTableView"/>
+          <widget class="QTableView" name="FluidsTableView">
+           <property name="sortingEnabled">
+            <bool>true</bool>
+           </property>
+          </widget>
          </item>
         </layout>
        </widget>
@@ -50,7 +58,11 @@
         </attribute>
         <layout class="QHBoxLayout" name="horizontalLayout_4">
          <item>
-          <widget class="QTableView" name="BackgroundsTableView"/>
+          <widget class="QTableView" name="BackgroundsTableView">
+           <property name="sortingEnabled">
+            <bool>true</bool>
+           </property>
+          </widget>
          </item>
         </layout>
        </widget>
@@ -60,7 +72,11 @@
         </attribute>
         <layout class="QHBoxLayout" name="horizontalLayout_5">
          <item>
-          <widget class="QTableView" name="DOMsTableView"/>
+          <widget class="QTableView" name="DOMsTableView">
+           <property name="sortingEnabled">
+            <bool>true</bool>
+           </property>
+          </widget>
          </item>
         </layout>
        </widget>
@@ -70,7 +86,11 @@
         </attribute>
         <layout class="QHBoxLayout" name="horizontalLayout_6">
          <item>
-          <widget class="QTableView" name="ImagesTableView"/>
+          <widget class="QTableView" name="ImagesTableView">
+           <property name="sortingEnabled">
+            <bool>true</bool>
+           </property>
+          </widget>
          </item>
         </layout>
        </widget>
@@ -80,7 +100,11 @@
         </attribute>
         <layout class="QHBoxLayout" name="horizontalLayout_7">
          <item>
-          <widget class="QTableView" name="Meshes3DTableView"/>
+          <widget class="QTableView" name="Meshes3DTableView">
+           <property name="sortingEnabled">
+            <bool>true</bool>
+           </property>
+          </widget>
          </item>
         </layout>
        </widget>
@@ -90,7 +114,11 @@
         </attribute>
         <layout class="QHBoxLayout" name="horizontalLayout_8">
          <item>
-          <widget class="QTableView" name="BoundariesTableView"/>
+          <widget class="QTableView" name="BoundariesTableView">
+           <property name="sortingEnabled">
+            <bool>true</bool>
+           </property>
+          </widget>
          </item>
         </layout>
        </widget>
@@ -100,7 +128,11 @@
         </attribute>
         <layout class="QHBoxLayout" name="horizontalLayout_9">
          <item>
-          <widget class="QTableView" name="XSectionsTableView"/>
+          <widget class="QTableView" name="XSectionsTableView">
+           <property name="sortingEnabled">
+            <bool>true</bool>
+           </property>
+          </widget>
          </item>
         </layout>
        </widget>
@@ -110,7 +142,11 @@
         </attribute>
         <layout class="QHBoxLayout" name="horizontalLayout_10">
          <item>
-          <widget class="QTableView" name="WellsTableView"/>
+          <widget class="QTableView" name="WellsTableView">
+           <property name="sortingEnabled">
+            <bool>true</bool>
+           </property>
+          </widget>
          </item>
         </layout>
        </widget>
