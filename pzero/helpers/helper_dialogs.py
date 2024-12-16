@@ -510,24 +510,25 @@ def general_input_dialog(title="title", input_dict=None):
     return output_dict
 
 
-def tic():
+def tic(parent=None):
     """Homemade version of Matlab tic and toc functions inspired by
     https://stackoverflow.com/questions/5849800/what-is-the-python-equivalent-of-matlabs-tic-and-toc-functions
     """
     import time
-
     global startTime_for_tictoc
     startTime_for_tictoc = time.time()
-    print("Tic...")
+    parent.print_terminal("Tic...")
 
 
-def toc():
+def toc(parent=None):
+    """Homemade version of Matlab tic and toc functions inspired by
+    https://stackoverflow.com/questions/5849800/what-is-the-python-equivalent-of-matlabs-tic-and-toc-functions
+    """
     import time
-
     if "startTime_for_tictoc" in globals():
-        print("...Toc: Elapsed time [s]: " + str(time.time() - startTime_for_tictoc))
+        parent.print_terminal("...Toc: Elapsed time [s]: " + str(time.time() - startTime_for_tictoc))
     else:
-        print("Tic-Toc start time not set")
+        parent.print_terminal("Tic-Toc start time not set")
 
 
 class progress_dialog(QProgressDialog):

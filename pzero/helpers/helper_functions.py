@@ -288,8 +288,11 @@ def freeze_gui(func):
     def wrapper(self, *args, **kwargs):
         # Disable GUI before function is called.
         self.disable_actions()
-        # the wrapped function goes here
-        func(self, *args, **kwargs)
+        # the wrapped function goes here, with try-except to avoid crashes
+        try:
+            func(self, *args, **kwargs)
+        except:
+            self.print_terminal(f'Function {func} ended without output.')
         # Enable GUI after function is called.
         self.enable_actions()
     return wrapper

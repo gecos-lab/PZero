@@ -357,7 +357,7 @@ def implicit_model_loop_structural(self):
     }
     """Create empty dataframe to collect all input data."""
     self.print_terminal("-> creating input dataframe...")
-    tic()
+    tic(parent=self)
     all_input_data_df = pd_DataFrame(columns=list(loop_input_dict.keys()))
     """For every selected item extract interesting data: XYZ, feature_name, val, etc."""
     prgs_bar = progress_dialog(
@@ -372,37 +372,21 @@ def implicit_model_loop_structural(self):
         entity_input_data_df = pd_DataFrame(columns=list(loop_input_dict.keys()))
         """XYZ data for every selected entity.
         Adding all columns at once is about 10% faster than adding them separately, but still slow."""
-        entity_input_data_df[["X", "Y", "Z"]] = self.geol_coll.get_uid_vtk_obj(
-            uid
-        ).points
+        entity_input_data_df[["X", "Y", "Z"]] = self.geol_coll.get_uid_vtk_obj(uid).points
         if "Normals" in self.geol_coll.get_uid_properties_names(uid):
-            entity_input_data_df[["nx", "ny", "nz"]] = self.geol_coll.get_uid_property(
-                uid=uid, property_name="Normals"
-            )
+            entity_input_data_df[["nx", "ny", "nz"]] = self.geol_coll.get_uid_property(uid=uid, property_name="Normals")
         """feature_name value"""
         featname_single = self.geol_coll.legend_df.loc[
-            (
-                self.geol_coll.legend_df["role"]
-                == self.geol_coll.get_uid_role(uid)
-            )
-            & (
-                self.geol_coll.legend_df["feature"]
-                == self.geol_coll.get_uid_feature(uid)
-            )
+            (self.geol_coll.legend_df["role"] == self.geol_coll.get_uid_role(uid))
+            & (self.geol_coll.legend_df["feature"] == self.geol_coll.get_uid_feature(uid))
             & (self.geol_coll.legend_df["scenario"] == self.geol_coll.get_uid_scenario(uid)),
             "sequence",
         ].values[0]
         entity_input_data_df["feature_name"] = featname_single
         """val value"""
         val_single = self.geol_coll.legend_df.loc[
-            (
-                self.geol_coll.legend_df["role"]
-                == self.geol_coll.get_uid_role(uid)
-            )
-            & (
-                self.geol_coll.legend_df["feature"]
-                == self.geol_coll.get_uid_feature(uid)
-            )
+            (self.geol_coll.legend_df["role"] == self.geol_coll.get_uid_role(uid))
+            & (self.geol_coll.legend_df["feature"] == self.geol_coll.get_uid_feature(uid))
             & (self.geol_coll.legend_df["scenario"] == self.geol_coll.get_uid_scenario(uid)),
             "time",
         ].values[0]
@@ -417,33 +401,26 @@ def implicit_model_loop_structural(self):
         #     entity_input_data_df, ignore_index=True
         # )
         # New Pandas >= 2.0.0
-        all_input_data_df = pd_concat([
-            all_input_data_df,
-            entity_input_data_df
-        ], ignore_index=True)
+        all_input_data_df = pd_concat([all_input_data_df, entity_input_data_df], ignore_index=True)
         prgs_bar.add_one()
-    toc()
+    toc(parent=self)
     prgs_bar.close()
     """Drop columns with no valid value (i.e. all NaNs)."""
     self.print_terminal("-> drop empty columns...")
-    tic()
+    tic(parent=self)
     all_input_data_df.dropna(axis=1, how="all", inplace=True)
-    toc()
+    toc(parent=self)
     self.print_terminal(f"all_input_data_df:\n{all_input_data_df}")
     """Ask for bounding box for the model"""
     input_dict = {
         "boundary": ["Boundary: ", self.boundary_coll.get_names],
         "method": ["Interpolation method: ", ["PLI", "FDI", "surfe"]],
     }
-    options_dict = multiple_input_dialog(
-        title="Implicit Modelling - LoopStructural algorithms", input_dict=input_dict
-    )
+    options_dict = multiple_input_dialog(title="Implicit Modelling - LoopStructural algorithms", input_dict=input_dict)
     if options_dict is None:
         options_dict["boundary"] = self.boundary_coll.get_names[0]
         options_dict["method"] = "PLI"
-    boundary_uid = self.boundary_coll.df.loc[
-        self.boundary_coll.df["name"] == options_dict["boundary"], "uid"
-    ].values[0]
+    boundary_uid = self.boundary_coll.df.loc[self.boundary_coll.df["name"] == options_dict["boundary"], "uid"].values[0]
     origin_x = self.boundary_coll.get_uid_vtk_obj(boundary_uid).GetBounds()[0]
     origin_y = self.boundary_coll.get_uid_vtk_obj(boundary_uid).GetBounds()[2]
     maximum_x = self.boundary_coll.get_uid_vtk_obj(boundary_uid).GetBounds()[1]
@@ -538,22 +515,23 @@ def implicit_model_loop_structural(self):
     * ``solver`` - the algorithm to solve the least squares problem e.g. ``lu`` for lower upper decomposition, ``cg`` for conjugate gradient, ``pyamg`` for an algorithmic multigrid solver
     * ``damp - bool`` - whether to add a small number to the diagonal of the interpolation matrix for discrete interpolators - this can help speed up the solver and makes the solution more stable for some interpolators"""
     self.print_terminal("-> create model...")
-    tic()
+    tic(parent=self)
     model = GeologicalModel(origin, maximum)
-    toc()
+    toc(parent=self)
     """Link the input data dataframe to the model."""
     self.print_terminal("-> set_model_data...")
-    tic()
+    tic(parent=self)
     model.set_model_data(all_input_data_df)
-    toc()
+    toc(parent=self)
     """Add a foliation to the model"""
     self.print_terminal("-> create_and_add_foliation...")
-    tic()
+    tic(parent=self)
+    # interpolator_type can be 'PLI', 'FDI' or 'surfe'
     model.create_and_add_foliation(
         "strati_0",
         interpolator_type=options_dict["method"],
         nelements=(dimensions[0] * dimensions[1] * dimensions[2]),
-    )  # interpolator_type can be 'PLI', 'FDI' or 'surfe'
+    )
     """In version 1.1+ the implicit function representing a geological feature does not have to be solved to generate the model object.
     The scalar field is solved on demand when the geological features are evaluated. This means that parts of the geological model
     can be modified and only the older (features lower in the feature list) are updated.
@@ -567,13 +545,12 @@ def implicit_model_loop_structural(self):
     - rescale defines whether the returned points should be in model coordinates or real world coordinates."""
     """Set calculation grid resolution. Default resolution is set as to obtain a model close to 10000 cells.
     FOR THE FUTURE: anisotropic resolution?"""
-    regular_grid = model.regular_grid(
-        nsteps=dimensions, shuffle=False, rescale=False
-    )  # rescale is True by default
-    toc()
+    # rescale is True by default
+    regular_grid = model.regular_grid(nsteps=dimensions, shuffle=False, rescale=False)
+    toc(parent=self)
     """Evaluate scalar field."""
     self.print_terminal("-> evaluate_feature_value...")
-    tic()
+    tic(parent=self)
     scalar_field = model.evaluate_feature_value("strati_0", regular_grid, scale=False)
     scalar_field = scalar_field.reshape((dimension_x, dimension_y, dimension_z))
     """VTK image data is ordered (z,y,x) in memory, while the Loop Structural output
@@ -587,10 +564,10 @@ def implicit_model_loop_structural(self):
     # """Evaluate scalar field gradient."""
     # print("-> evaluate_feature_gradient...")
     # scalar_field_gradient = model.evaluate_feature_gradient("strati_0", regular_grid, scale=False)
-    toc()
+    toc(parent=self)
     """Create deepcopy of the Mesh3D entity dictionary."""
     self.print_terminal("-> create Voxet...")
-    tic()
+    tic(parent=self)
     voxet_dict = deepcopy(self.mesh3d_coll.entity_dict)
     """Get output Voxet name."""
     model_name = input_text_dialog(
@@ -616,13 +593,11 @@ def implicit_model_loop_structural(self):
     voxet_dict["vtk_obj"].dimensions = dimensions
     voxet_dict["vtk_obj"].spacing = spacing
     print(voxet_dict)
-    toc()
+    toc(parent=self)
     """Pass calculated values of the LoopStructural model to the Voxet, as scalar fields"""
     self.print_terminal("-> populate Voxet...")
-    tic()
-    voxet_dict["vtk_obj"].set_point_data(
-        data_key="strati_0", attribute_matrix=scalar_field
-    )
+    tic(parent=self)
+    voxet_dict["vtk_obj"].set_point_data(data_key="strati_0", attribute_matrix=scalar_field)
     """Create new entity in mesh3d_coll from the populated voxet dictionary"""
     if voxet_dict["vtk_obj"].points_number > 0:
         self.mesh3d_coll.add_entity_from_dict(voxet_dict)
@@ -630,12 +605,12 @@ def implicit_model_loop_structural(self):
         self.print_terminal(" -- empty object -- ")
         return
     voxet_dict["vtk_obj"].Modified()
-    toc()
+    toc(parent=self)
     """Extract isosurfaces with vtkFlyingEdges3D. Documentation in:
     https://vtk.org/doc/nightly/html/classvtkFlyingEdges3D.html
     https://python.hotexamples.com/examples/vtk/-/vtkFlyingEdges3D/python-vtkflyingedges3d-function-examples.html"""
     self.print_terminal("-> extract isosurfaces...")
-    tic()
+    tic(parent=self)
     for value in all_input_data_df["val"].dropna().unique():
         value = float(value)
         voxet_dict["vtk_obj"].GetPointData().SetActiveScalars("strati_0")
@@ -679,7 +654,7 @@ def implicit_model_loop_structural(self):
                 self.print_terminal(f"-> iso-surface at value = {value} has been created")
             else:
                 self.print_terminal(" -- empty object -- ")
-    toc()
+    toc(parent=self)
     self.print_terminal("Loop interpolation completed.")
 
 
