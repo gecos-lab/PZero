@@ -2166,6 +2166,7 @@ class VTKView(BaseView):
         # Set orientation widget (turned on after the qt canvas is shown)
         self.cam_orient_widget = vtkCameraOrientationWidget()
         self.cam_orient_widget.SetParentRenderer(self.plotter.renderer)
+        self.cam_orient_widget.On()
         # Set default orientation horizontal because vertical colorbars interfere with the camera widget.
         pv_global_theme.colorbar_orientation = "horizontal"
 
