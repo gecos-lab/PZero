@@ -553,12 +553,18 @@ def implicit_model_loop_structural(self):
     tic(parent=self)
     scalar_field = model.evaluate_feature_value("strati_0", regular_grid, scale=False)
     scalar_field = scalar_field.reshape((dimension_x, dimension_y, dimension_z))
-    """VTK image data is ordered (z,y,x) in memory, while the Loop Structural output
-    Numpy array is ordered as regular_grid, so (x,y,-z). See explanations on VTK here:
-    https://discourse.vtk.org/t/numpy-tensor-to-vtkimagedata/5154/3
-    https://discourse.vtk.org/t/the-direction-of-vtkimagedata-make-something-wrong/4997"""
+    # OLD ----------------
+    # VTK image data is ordered (z,y,x) in memory, while the Loop Structural output
+    # Numpy array is ordered as regular_grid, so (x,y,-z). See explanations on VTK here:
+    # https://discourse.vtk.org/t/numpy-tensor-to-vtkimagedata/5154/3
+    # https://discourse.vtk.org/t/the-direction-of-vtkimagedata-make-something-wrong/4997
     # scalar_field = scalar_field[:, :, ::-1]
-    scalar_field = np_flip(scalar_field, 2)
+    # scalar_field = np_flip(scalar_field, 2)
+    # OLD ----------------
+    # NEW ----------------
+    # It looks like that the Numpy output from LoopStructural now is
+    # ordered as (x,y,z), so inverting the 'z' is no more required.
+    # NEW ----------------
     scalar_field = scalar_field.transpose(2, 1, 0)
     scalar_field = scalar_field.ravel()  # flatten returns a copy
     # """Evaluate scalar field gradient."""
