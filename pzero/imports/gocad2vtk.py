@@ -1085,6 +1085,7 @@ def vtk2gocad(self=None, out_file_name=None):
     fout = open(out_file_name, "w")
     """Write entities"""
     for uid in self.geol_coll.df["uid"].to_list():
+        print(f"--> Exporting {uid}")
         """Loop over uids"""
         topology = self.geol_coll.df.loc[self.geol_coll.df["uid"] == uid, "topology"].values[0]
         """Check if this uid is compatible with Gocad Ascii"""
@@ -1159,6 +1160,9 @@ def vtk2gocad(self=None, out_file_name=None):
                 """No connectivity matrix in this case."""
             elif topology in ["PolyLine", "XsPolyLine"]:
                 fout.write("ILINE\n")
+                # ensure that PolyLine is composed of properly ordered two-node segments
+                # ------------------- very slow to be solved in a different way -----------------------
+                self.geol_coll.get_uid_vtk_obj(uid).sort_nodes()
                 """Build connectivity matrix here."""
                 connectivity = self.geol_coll.get_uid_vtk_obj(uid).cells
             elif topology in ["TriSurf"]:
@@ -1215,5 +1219,5 @@ def vtk2gocad(self=None, out_file_name=None):
             fout.write("END\n")
             self.print_terminal(f"Written entity {uid} to file {out_file_name}")
         else:
-            print("Entity ", uid, "not supported in Gocad Ascii")
+            self.print_terminal("Entity ", uid, "not supported in Gocad Ascii")
     fout.close()
