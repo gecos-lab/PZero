@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 ################################################################################
-## Form generated from reading UI file 'project_windowfNntSM.ui'
+## Form generated from reading UI file 'project_windowswFJil.ui'
 ##
 ## Created by: Qt User Interface Compiler version 6.7.3
 ##
@@ -303,6 +303,7 @@ class Ui_ProjectWindow(object):
         self.menubar = QMenuBar(ProjectWindow)
         self.menubar.setObjectName(u"menubar")
         self.menubar.setGeometry(QRect(0, 0, 900, 33))
+        self.menubar.setNativeMenuBar(False)
         self.menuFile = QMenu(self.menubar)
         self.menuFile.setObjectName(u"menuFile")
         self.menuFile.setTearOffEnabled(True)
