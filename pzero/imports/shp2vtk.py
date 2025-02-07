@@ -119,7 +119,7 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
                     curr_obj_dict["topology"] = "VertexSet"
                     curr_obj_dict["vtk_obj"] = vtk_obj
                     # Add a coordinate column in the gdf_index dataframe
-                    gdf_index["coords"] = gdf_index.geometry.apply(lambda x: np_array(x))
+                    gdf_index["coords"] = gdf_index.geometry.apply(lambda x: np_array([x.x, x.y]))
                     outXYZ = np_array([p for p in gdf_index.loc[i, "coords"]])
                     if outXYZ.ndim == 1:
                         outXYZ = outXYZ.reshape(-1, np_shape(outXYZ)[0])
