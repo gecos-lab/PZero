@@ -146,30 +146,41 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
                             curr_obj_dict["vtk_obj"].get_point_data("dip_dir"),
                         )
                         curr_obj_dict["vtk_obj"].set_point_data("Normals", normals)
-                    if curr_obj_dict["vtk_obj"].points_number > 1:
-                        curr_obj_dict["vtk_obj"].auto_cells()
-                        # print(curr_obj_dict["vtk_obj"].point_data_keys)
-                        properties_names = curr_obj_dict["vtk_obj"].point_data_keys
-                        properties_components = [
-                            curr_obj_dict["vtk_obj"].get_point_data_shape(key)[1]
-                            for key in properties_names
-                        ]
-                        curr_obj_dict["properties_names"] = properties_names
-                        curr_obj_dict["properties_components"] = properties_components
-                        self.geol_coll.add_entity_from_dict(curr_obj_dict)
-                        del curr_obj_dict
-                    elif curr_obj_dict["vtk_obj"].points_number > 0:
-                        curr_obj_dict["vtk_obj"].auto_cells()
-                        # print(curr_obj_dict["vtk_obj"].point_data_keys)
-                        properties_names = curr_obj_dict["vtk_obj"].point_data_keys
-                        properties_components = [
-                            curr_obj_dict["vtk_obj"].get_point_data_shape(key)[1]
-                            for key in properties_names
-                        ]
-                        curr_obj_dict["properties_names"] = properties_names
-                        curr_obj_dict["properties_components"] = properties_components
-                        self.geol_coll.add_entity_from_dict(curr_obj_dict)
-                        del curr_obj_dict
+                    # if curr_obj_dict["vtk_obj"].points_number > 1:
+                    #     curr_obj_dict["vtk_obj"].auto_cells()
+                    #     # print(curr_obj_dict["vtk_obj"].point_data_keys)
+                    #     properties_names = curr_obj_dict["vtk_obj"].point_data_keys
+                    #     properties_components = [
+                    #         curr_obj_dict["vtk_obj"].get_point_data_shape(key)[1]
+                    #         for key in properties_names
+                    #     ]
+                    #     curr_obj_dict["properties_names"] = properties_names
+                    #     curr_obj_dict["properties_components"] = properties_components
+                    #     self.geol_coll.add_entity_from_dict(curr_obj_dict)
+                    #     del curr_obj_dict
+                    # elif curr_obj_dict["vtk_obj"].points_number > 0:
+                    #     curr_obj_dict["vtk_obj"].auto_cells()
+                    #     # print(curr_obj_dict["vtk_obj"].point_data_keys)
+                    #     properties_names = curr_obj_dict["vtk_obj"].point_data_keys
+                    #     properties_components = [
+                    #         curr_obj_dict["vtk_obj"].get_point_data_shape(key)[1]
+                    #         for key in properties_names
+                    #     ]
+                    #     curr_obj_dict["properties_names"] = properties_names
+                    #     curr_obj_dict["properties_components"] = properties_components
+                    #     self.geol_coll.add_entity_from_dict(curr_obj_dict)
+                    #     del curr_obj_dict
+                    curr_obj_dict["vtk_obj"].auto_cells()
+                    # print(curr_obj_dict["vtk_obj"].point_data_keys)
+                    properties_names = curr_obj_dict["vtk_obj"].point_data_keys
+                    properties_components = [
+                        curr_obj_dict["vtk_obj"].get_point_data_shape(key)[1]
+                        for key in properties_names
+                    ]
+                    curr_obj_dict["properties_names"] = properties_names
+                    curr_obj_dict["properties_components"] = properties_components
+                    self.geol_coll.add_entity_from_dict(curr_obj_dict)
+                    del curr_obj_dict
             else:
                 print("Incomplete data. At least the feature property must be present")
         else:
