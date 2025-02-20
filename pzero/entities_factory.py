@@ -71,6 +71,10 @@ from vtkmodules.vtkFiltersCore import vtkThresholdPoints
 from vtkmodules.vtkFiltersPoints import vtkConvertToPointCloud
 
 from .orientation_analysis import get_dip_dir_vectors
+import segyio
+import numpy as np
+import pandas as pd
+import pyvista as pv
 
 """
 Some notes on the way we derive our classes from VTK.
@@ -1851,7 +1855,74 @@ class Seismics(vtkStructuredGrid):
         )
         frame = pv_PolyData(points, lines)
         return frame
+    def process_segy_file(self, in_file_name):
+        # Use segyio to read the SEG-Y file
+        with segyio.open(in_file_name, "r", strict= False) as segyfile:
+            inlines = segyfile.ilines
+            crosslines = segyfile.xlines
+            times = segyfile.samples
+            num_samples = len(times)
+            sample_interval = segyfile.bin[segyio.BinField.Interval]
 
+            xcoords = segyfile.attributes(segyio.TraceField.CDP_X)[:]
+            ycoords = segyfile.attributes(segyio.TraceField.CDP_Y)[:]
+
+            inlines_index = segyfile.attributes(segyio.TraceField.INLINE_3D)[:]
+            try:
+                # Your existing code that might raise the TypeError
+                inline_index_list = np.where(inlines_index == inlines[0])[0]
+            except TypeError:
+                # Raise custom error message when TypeError is caught
+                raise Exception("The SEGYFILE is non-standard, PZero closing.")
+            inline_index_list = np.where(inlines_index == inlines[0])[0]
+            inline_dim = len(segyfile.attributes(segyio.TraceField.CDP_X)[inline_index_list])
+
+            crosslines_index = segyfile.attributes(segyio.TraceField.CROSSLINE_3D)[:]
+            crossline_index_list = np.where(crosslines_index == crosslines[0])[0]
+            crossline_dim = len(segyfile.attributes(segyio.TraceField.CDP_X)[crossline_index_list])
+
+            i_xcoords = segyfile.attributes(segyio.TraceField.CDP_X)[inline_index_list]
+            i_ycoords = segyfile.attributes(segyio.TraceField.CDP_Y)[inline_index_list]
+            i_zcoords = np.zeros_like(i_xcoords)
+
+            i_xyz = np.column_stack((i_xcoords, i_ycoords, i_zcoords)).reshape(-1, 3)
+
+            i_length = np.linalg.norm(i_xyz[0] - i_xyz[-1])
+            depth = num_samples * sample_interval
+
+            slices = np.linspace(-depth, 0, num_samples)
+            volume_points = np.empty((num_samples, inline_dim * crossline_dim, 3))
+
+            data_shape = np.shape(np.array(list(segyfile.xline[:])))
+            data = np.empty(data_shape)
+
+            for i, index in enumerate(crosslines):
+                data[i, :, :] = np.array(list(segyfile.xline[index]))
+
+            flip_data = np.flip(data, axis=2)
+
+            # print(np.shape(np.array(list(segyfile.iline[inlines[0]]))))
+            # aaa
+
+            for i, value in enumerate(slices):
+                zcoords = np.repeat(value/6, len(xcoords))
+
+                points = np.column_stack((xcoords, ycoords, zcoords)).astype(float)
+
+                volume_points[i, :, :] = points
+
+            volume_points = volume_points.reshape(-1, 3)
+
+            seismic_grid = pv.StructuredGrid()
+            seismic_grid.points = volume_points
+            seismic_grid.dimensions = (inline_dim, crossline_dim, num_samples)
+            seismic_grid['intensity'] = flip_data.ravel(order='F')
+
+            # Now, set the points and point data of self (Seismics instance)
+            self.DeepCopy(seismic_grid)
+            #self.points = volume_points
+            #self.init_point_data(data_key='intensity', dimension=1)
+            #self.set_point_data(data_key='intensity', attribute_matrix=flip_data.ravel(order='F'))
 
 class DEM(vtkStructuredGrid):
     """DEM is a Digital Elevation Model derived from vtkStructuredGrid,
