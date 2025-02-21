@@ -350,7 +350,8 @@ class PolyData(vtkPolyData):
         closed surfaces. Instead we use ConsistencyOn() and NonManifoldTraversalOff()
         to prevent problems where the consistency of polygonal ordering is corrupted
         due to topological loops. See details in Chapter 9 of VTK textbook.
-        vtkPolyDataNormals works only on polygons and triangle strips to calculate normals. For point clouds we can implement the vtkPCANormalEstimation filter (see vtk_set_normals in the PCDom class)
+        vtkPolyDataNormals works only on polygons and triangle strips to calculate normals.
+        For point clouds we can implement the vtkPCANormalEstimation filter (see vtk_set_normals in the PCDom class)
         """
         """Run the filter."""
         normals_filter = vtkPolyDataNormals()
