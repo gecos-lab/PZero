@@ -797,7 +797,7 @@ def linear_extrusion(self):
         ],
         "role": [
             "Role: ",
-            self.parent.geol_coll.valid_roles,
+            self.geol_coll.valid_roles,
         ],
         "feature": [
             "Feature: ",
