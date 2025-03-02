@@ -1078,16 +1078,19 @@ def vtk2gocad(self=None, out_file_name=None):
     """Export a GOCAD ASCII file with all the pointsets, polylines, and triangulated surfaces included, as VTK entities,
     in the self.geol_coll GeologicalCollection(), where <self> is the calling ProjectWindow() instance.
     """
-    """Open file"""
+    # At the moment only entities in the geological collection can be exported.
+    if self.shown_table != "tabGeology":
+        return
+    # Open file.
     fout = open(out_file_name, "w")
-    """Write entities"""
-    for uid in self.geol_coll.df["uid"].to_list():
+    # Export selected entities.
+    for uid in self.selected_uids:
         print(f"--> Exporting {uid}")
-        """Loop over uids"""
+        # Loop over uids
         topology = self.geol_coll.df.loc[self.geol_coll.df["uid"] == uid, "topology"].values[0]
-        """Check if this uid is compatible with Gocad Ascii"""
+        # Check if this uid is compatible with Gocad Ascii
         if topology in self.geol_coll.valid_topologies:
-            """Get properties and convert to properly formatted strings"""
+            # Get properties and convert to properly formatted strings
             color_R = self.geol_coll.get_uid_legend(uid=uid)["color_R"] / 255
             color_G = self.geol_coll.get_uid_legend(uid=uid)["color_G"] / 255
             color_B = self.geol_coll.get_uid_legend(uid=uid)["color_B"] / 255
@@ -1096,7 +1099,7 @@ def vtk2gocad(self=None, out_file_name=None):
             # time = self.a_t_df.loc[self.a_t_df["uid"] == uid, "time"].values[0]
             properties_names = self.geol_coll.df.loc[self.geol_coll.df["uid"] == uid, "properties_names"].values[0]
             properties_components = self.geol_coll.df.loc[self.geol_coll.df["uid"] == uid, "properties_components"].values[0]
-            """Write header for each uid"""
+            # Write header for each uid
             if topology in ["VertexSet", "XsVertexSet"]:
                 fout.write("GOCAD VSet 1\n")
             elif topology in topology in ["PolyLine", "XsPolyLine"]:
@@ -1127,7 +1130,7 @@ def vtk2gocad(self=None, out_file_name=None):
             # not yet implemented in PZero, but implemented in GOCAD: topography, boundary, ghost
             time = self.geol_coll.get_uid_legend(uid=uid)["time"]
             fout.write("STRATIGRAPHIC_POSITION " + str(time) + "\n")
-            """Options for properties"""
+            # Options for properties
             if properties_names != []:
                 fout.write(
                     "PROPERTIES " + (" ".join(map(str, properties_names))) + "\n"
@@ -1149,28 +1152,28 @@ def vtk2gocad(self=None, out_file_name=None):
                         ]
                     )
             else:
-                """Build VRTX matrix here"""
+                # Build VRTX matrix here
                 vrtx_mtx = self.geol_coll.get_uid_vtk_obj(uid).points
-            """Options for different topological types"""
+            # Options for different topological types
             if topology in ["VertexSet", "XsVertexSet"]:
                 fout.write("SUBVSET\n")
-                """No connectivity matrix in this case."""
+                # No connectivity matrix in this case.
             elif topology in ["PolyLine", "XsPolyLine"]:
                 fout.write("ILINE\n")
                 # ensure that PolyLine is composed of properly ordered two-node segments
                 # ------------------- very slow to be solved in a different way -----------------------
                 self.geol_coll.get_uid_vtk_obj(uid).sort_nodes()
-                """Build connectivity matrix here."""
+                # Build connectivity matrix here.
                 connectivity = self.geol_coll.get_uid_vtk_obj(uid).cells
             elif topology in ["TriSurf"]:
                 fout.write("TFACE\n")
-                """Build connectivity matrix here."""
+                # Build connectivity matrix here
                 connectivity = self.geol_coll.get_uid_vtk_obj(uid).cells
             # elif topology in ["TetraSolid"]:
             #     fout.write("TVOLUME\n")
             #     """Build connectivity matrix here."""
             #     connectivity = self.geol_coll.get_uid_vtk_obj(uid).cells
-            """Write VRTX or PVRTX"""
+            # Write VRTX or PVRTX
             if properties_names != []:
                 for row in range(np_shape(pvrtx_mtx)[0]):
                     data_row = " ".join(
@@ -1189,7 +1192,7 @@ def vtk2gocad(self=None, out_file_name=None):
                         "VRTX " + str(row + 1) + " " + data_row + "\n"
                     )  # row+1 since indexes in Gocad Ascii start from 1
                 del vrtx_mtx
-            """Write connectivity"""
+            # Write connectivity
             if topology in ["VertexSet", "XsVertexSet"]:
                 pass
             elif topology in ["PolyLine", "XsPolyLine"]:
