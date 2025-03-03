@@ -342,35 +342,8 @@ class PolyData(vtkPolyData):
 
     def vtk_set_normals(self):
         """Calculate point and cell normals with vtkPolyDataNormals.
-        The name of the arrays is "Normals", so they can be retrieved either with
-        normals_filter.GetOutput().GetPointData().GetNormals() or with
-        normals_filter.GetOutput().GetPointData().GetArray("Normals")
-        Point normals are computed by averaging neighbor polygon cell normals.
-        Note that we use AutoOrientNormalsOff() since this would assume completely
-        closed surfaces. Instead we use ConsistencyOn() and NonManifoldTraversalOff()
-        to prevent problems where the consistency of polygonal ordering is corrupted
-        due to topological loops. See details in Chapter 9 of VTK textbook.
-        vtkPolyDataNormals works only on polygons and triangle strips to calculate normals.
-        For point clouds we can implement the vtkPCANormalEstimation filter (see vtk_set_normals in the PCDom class)
-        """
-        """Run the filter."""
-        normals_filter = vtkPolyDataNormals()
-        normals_filter.SetInputData(self)
-        normals_filter.ComputePointNormalsOn()
-        normals_filter.ComputeCellNormalsOn()
-        normals_filter.SplittingOff()
-        normals_filter.ConsistencyOn()
-        normals_filter.AutoOrientNormalsOff()
-        normals_filter.NonManifoldTraversalOff()
-        normals_filter.Update()
-        """Update the input polydata "self" with the new normals."""
-        self.GetPointData().SetNormals(
-            normals_filter.GetOutput().GetPointData().GetNormals()
-        )
-        self.GetCellData().SetNormals(
-            normals_filter.GetOutput().GetCellData().GetNormals()
-        )
-        self.Modified()
+        Must be implemented for different topology"""
+        pass
 
     @property
     def points_map_dip_azimuth(self):
@@ -836,6 +809,38 @@ class TriSurf(PolyData):
             (self.GetNumberOfPolys(), 4)
         )[:, 1:4]
 
+    def vtk_set_normals(self):
+        """Calculate point and cell normals with vtkPolyDataNormals.
+        The name of the arrays is "Normals", so they can be retrieved either with
+        normals_filter.GetOutput().GetPointData().GetNormals() or with
+        normals_filter.GetOutput().GetPointData().GetArray("Normals")
+        Point normals are computed by averaging neighbor polygon cell normals.
+        Note that we use AutoOrientNormalsOff() since this would assume completely
+        closed surfaces. Instead we use ConsistencyOn() and NonManifoldTraversalOff()
+        to prevent problems where the consistency of polygonal ordering is corrupted
+        due to topological loops. See details in Chapter 9 of VTK textbook.
+        vtkPolyDataNormals works only on polygons and triangle strips to calculate normals.
+        For point clouds we can implement the vtkPCANormalEstimation filter (see vtk_set_normals in the PCDom class)
+        """
+        """Run the filter."""
+        normals_filter = vtkPolyDataNormals()
+        normals_filter.SetInputData(self)
+        normals_filter.ComputePointNormalsOn()
+        normals_filter.ComputeCellNormalsOn()
+        normals_filter.SplittingOff()
+        normals_filter.ConsistencyOn()
+        normals_filter.AutoOrientNormalsOff()
+        normals_filter.NonManifoldTraversalOff()
+        normals_filter.Update()
+        """Update the input polydata "self" with the new normals."""
+        self.GetPointData().SetNormals(
+            normals_filter.GetOutput().GetPointData().GetNormals()
+        )
+        self.GetCellData().SetNormals(
+            normals_filter.GetOutput().GetCellData().GetNormals()
+        )
+        self.Modified()
+
     def append_cell(self, cell_array=None):
         """Appends a single simplicial cell from Numpy. The element size is inferred from the array size:
         2 > line, 3 > triangle, 4 > tetrahedron."""
@@ -1185,6 +1190,88 @@ class XsPolyLine(PolyLine, XSectionBaseEntity):
         xpline_copy.DeepCopy(self)
         return xpline_copy
 
+    def vtk_set_normals(self):
+        """Calculate point and cell normals for the XsPolyLine, assuming
+        that the normal to each segment lies in the cross section plane.
+        Sort lines nodes before calculating normals is raccomented.
+        """
+        import vtk
+        import numpy as np
+
+        # Get the normal to the cross-section plane
+        plane = self.parent.xsect_coll.get_uid_vtk_plane(self.x_section_uid)
+        normal = np.array([plane.GetNormal()])
+
+        # Initialize normal arrays
+        cell_normals = vtk.vtkFloatArray()
+        cell_normals.SetNumberOfComponents(3)
+        cell_normals.SetNumberOfTuples(self.cells_number)
+
+        # Loop over line segments in polyline
+        for i in range(self.cells_number):
+            #print(f'Debug Segment {i}: {self.cells[i]}')
+            try:
+                if i == self.cells_number - 1:
+                    # For the last point, use the previous segment
+                    p1_idx = self.cells[i][0]  # Last point
+                    p0_idx = self.cells[i - 1][0]  # Previous point
+                else:
+                    p0_idx = self.cells[i][0]
+                    p1_idx = self.cells[i][1]
+
+                p0 = np.array(self.GetPoint(p0_idx))
+                p1 = np.array(self.GetPoint(p1_idx))
+
+                # Compute segment vector and normal
+                seg_vector = p1 - p0
+                normal_vector = normal[0] if normal.shape[0] == 1 else normal
+                seg_normal = np.cross(seg_vector, normal_vector)
+
+                # Normalize the normal
+                norm = np.linalg.norm(seg_normal)
+                if norm > 0:
+                    seg_normal = seg_normal / norm
+                else:
+                    print(f"Error: setting a default vector for segment {i}")
+                    seg_normal = np.array([0, 0, 1])
+
+                # Set the normal to the cell
+                cell_normals.SetTuple3(i, *seg_normal)
+            except Exception as e:
+                self.print_terminal(f"Error in segment {i}: {e}")
+                continue
+
+        self.GetCellData().SetNormals(cell_normals)
+        self.Modified()
+
+        # Compute point normals as the average of cell normals
+        point_normals = vtk.vtkFloatArray()
+        point_normals.SetNumberOfComponents(3)
+        point_normals.SetNumberOfTuples(self.points_number)
+
+        for i in range(self.points_number):
+            try:
+                cell_list = vtk.vtkIdList()
+                self.GetPointCells(i, cell_list)
+                point_normal = np.zeros(3)
+
+                for j in range(cell_list.GetNumberOfIds()):
+                    cell_id = cell_list.GetId(j)
+                    cell_normal = np.array(cell_normals.GetTuple3(cell_id))
+                    point_normal += cell_normal
+
+                if cell_list.GetNumberOfIds() > 0:
+                    point_normal /= cell_list.GetNumberOfIds()
+
+                print(f'Normals in point {i}: {point_normal}')
+
+                point_normals.SetTuple3(i, *point_normal)
+            except Exception as e:
+                print(f"Error in point {i}: {e}")
+                continue
+
+        self.GetPointData().SetNormals(point_normals)
+        self.Modified()
 
 class XsTriSurf(TriSurf, XSectionBaseEntity):
     # ______________________________________ NOT YET USED - SEE IF THIS IS USEFUL
