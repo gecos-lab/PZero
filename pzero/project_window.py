@@ -2390,13 +2390,19 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             os.mkdir(f"{out_dir_name}/dxf")
             vtk2dxf(self=self, out_dir_name=out_dir_name)
         elif cad_format == "GOCAD":
-            vtk2gocad(self=self, out_file_name=(out_dir_name + '/gocad_ascii.gp'))
+            if not self.selected_uids:
+                return
+            else:
+                vtk2gocad(self=self, out_file_name=(out_dir_name + '/gocad_ascii.gp'))
         elif cad_format == "GLTF":
             vtk2gltf(self=self, out_dir_name=out_dir_name)
         elif cad_format == "CESIUM":
             vtk2cesium(self=self, out_dir_name=out_dir_name)
         elif cad_format == "OBJ":
-            vtk2obj(self=self, out_dir_name=out_dir_name)
+            if not self.selected_uids:
+                return
+            else:
+                vtk2obj(self=self, out_dir_name=out_dir_name)
         elif cad_format == "PLY":
             vtk2ply(self=self, out_dir_name=out_dir_name)
         elif cad_format == "STL":
@@ -2492,17 +2498,12 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         """[Gabriele] Function used to export selected objects as vtk files"""
         if not self.selected_uids:
             return
-
         else:
             self.out_dir_name = save_file_dialog(
                 parent=self, caption="Select save directory.", directory=True
             )
             # print(self.out_file_name)
-            for (
-                uid
-            ) in (
-                self.selected_uids
-            ):  # [gabriele] this could be generalized with a helper function
+            for uid in self.selected_uids:  # [gabriele] this could be generalized with a helper function
                 if self.shown_table == "tabGeology":
                     entity = self.geol_coll.get_uid_vtk_obj(uid)
 
