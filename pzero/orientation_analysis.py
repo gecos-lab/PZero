@@ -15,6 +15,8 @@ from numpy import squeeze as np_squeeze
 
 from pzero.helpers.helper_dialogs import multiple_input_dialog
 
+from .helpers.helper_functions import freeze_gui
+
 """IN THE FUTURE add functions for orientation analysis."""
 
 
@@ -109,28 +111,29 @@ def vset_set_normals(VertexSet=None, dip_name=None, dir_name=None):
     VertexSet.set_point_data(data_key="Normals", attribute_matrix=normals)
 
 
+@freeze_gui
 def set_normals(self):
-    from .entities_factory import TriSurf, VertexSet, XsVertexSet
-
-    """General function to set normals on different entities.
+    """
+    General function to set normals on different entities.
     It branches to other functions depending on the selected entity
-    and aborts if the input entities are not homogeneous."""
-    """Check if some vtkPolyData is selected"""
+    and aborts if the input entities are not homogeneous.
+    """
+    from .entities_factory import TriSurf, VertexSet, XsVertexSet, XsPolyLine
+    # Check if some vtkPolyData is selected.
     if self.selected_uids:
         if self.shown_table == "tabGeology":
+            # Case for VertexSet and XsVertexSet that alreadz have Dip and Direction properties.
             if isinstance(
                 self.geol_coll.get_uid_vtk_obj(self.selected_uids[0]),
                 (VertexSet, XsVertexSet),
             ):
-                """Case for VertexSet and XsVertexSet.
-                First make sure all entities are VertexSet or XsVertexSet."""
                 for uid in self.selected_uids:
                     if not isinstance(
                         self.geol_coll.get_uid_vtk_obj(uid), (VertexSet, XsVertexSet)
                     ):
-                        print("All entities must be of the same type.")
+                        self.print_terminal("Setting normals failed: all entities must be of the same type.")
                         return
-                """Choose Dip/Direction property names. If list is empty return."""
+                # Choose Dip/Direction property names. If list is empty return.
                 property_name_list = self.geol_coll.get_uid_properties_names(
                     uid=self.selected_uids[0]
                 )
@@ -151,7 +154,7 @@ def set_normals(self):
                 )
                 if updt_dict is None:
                     return
-                """Now calculate Normals on each VTK object and append Normals to properties_names list."""
+                # Now calculate Normals on each VTK object and append Normals to properties_names list.
                 for uid in self.selected_uids:
                     self.geol_coll.append_uid_property(
                         uid=uid, property_name="Normals", property_components=3
@@ -162,17 +165,17 @@ def set_normals(self):
                         dir_name=updt_dict["dir_name"],
                     )
                     self.prop_legend.update_widget(self)
-                    print("Normals set on TriSurf ", uid)
-                print("All Normals set.")
+                    self.print_terminal("Normals set on vertex set ", uid)
+                self.print_terminal("All Normals set.")
+            # Case for TriSurf and XsPolyLine where Normal are calculated from geometry
             elif isinstance(
-                self.geol_coll.get_uid_vtk_obj(self.selected_uids[0]), TriSurf
+                    self.geol_coll.get_uid_vtk_obj(self.selected_uids[0]),
+                    (TriSurf, XsPolyLine),
             ):
-                """Case for TriSurf.
-                First make sure all entities are TriSurf."""
-                print("Normals on TriSurf.")
+                self.print_terminal("Normals on TriSurf or XsPolyLine.")
                 for uid in self.selected_uids:
-                    if not isinstance(self.geol_coll.get_uid_vtk_obj(uid), TriSurf):
-                        print("All entities must be of the same type.")
+                    if not isinstance(self.geol_coll.get_uid_vtk_obj(uid), (TriSurf, XsPolyLine)):
+                        self.print_terminal("Setting normals failed: all entities must be of the same type.")
                         return
                 for uid in self.selected_uids:
                     self.geol_coll.append_uid_property(
@@ -180,11 +183,18 @@ def set_normals(self):
                     )
                     self.geol_coll.get_uid_vtk_obj(uid).vtk_set_normals()
                     self.prop_legend.update_widget(self)
-                    print("Normals set on TriSurf ", uid)
-                print("All Normals set.")
+                    self.print_terminal("Normals set on TriSurf or XsPolyLine", uid)
+                    obj = self.geol_coll.get_uid_vtk_obj(uid)
+                    normals = obj.get_property("Normals")
+                    print(f"UID {uid}:")
+                    print('getproperties', normals)
+                    for n in normals:
+                        print("Normals: X={0}, Y={1}, Z={2}".format(n[0], n[1], n[2]))
+
+                self.print_terminal("All Normals set.")
             else:
                 print(
-                    "Only VertexSet, XsVertexSet and TriSurf entities can be processed."
+                    "Only VertexSet, XsVertexSet, XsPolyLine and TriSurf entities can be processed."
                 )
 
         elif self.shown_table == "tabDOMs":
