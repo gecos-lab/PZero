@@ -5,7 +5,7 @@ THIS DOCUMENT MUST BE KEPT UPDATED!
 ===================================
 
 _______________________
-Last updated 2025-03-07
+Last updated 2025-03-08
 
 
 1) To build a clean pzero environment, start updating the conda base environment:
@@ -20,17 +20,7 @@ conda update --all
 
 conda remove --name pzero --all
 
-4) Create a new empty environment.
-
-conda create -n pzero
-
-4) Activate channels (this must be done for each new environment):
-
-conda config --env --add channels conda-forge
-conda config --env --add channels loop3d
-conda config --env --add channels anaconda
-
-5) Install packages (from within ./PZero/envs directory):
+4) Install packages (from within ./PZero/envs directory):
 
 conda env create -n pzero -f ./pzero-env.yml
 
@@ -56,7 +46,7 @@ Then the value of __osx can be checked with:
 
 conda info
 
-6) Finally, when the environment has been created, the full list of modules can be recorded in .yml files (from within ./PZero/envs directory):
+5) Finally, when the environment has been created, the full list of modules can be recorded in .yml files (from within ./PZero/envs directory):
 
 conda env export --from-history > ./pzero-env-from-history.yml
 
@@ -67,3 +57,16 @@ conda env export > ./pzero-env.yml
 This allows a quick installation with (from within ./PZero/envs directory):
 
 conda env create -n pzero -f ./pzero-env.yml
+
+Other useful commands:
+
+- Create a new empty environment.
+
+conda create -n pzero
+
+- Activate channels (this must be done for each new environment):
+
+conda config --env --add channels conda-forge
+conda config --env --add channels loop3d
+conda config --env --add channels anaconda
+
