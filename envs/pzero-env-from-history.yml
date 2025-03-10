@@ -22,7 +22,7 @@ dependencies:
   - conda-forge::sphinx[version='>=5']
   - conda-forge::sphinx_rtd_theme[version='>=2']
   - conda-forge::vtk-base[version='>=9.4.1']
-  - conda-forge::vtk[version='>=9.4.1']
+  - conda-forge::vtk[version='=9.3.1']
   - conda-forge::xarray[version='>=2023.1.0']
   - loop3d::loopstructural[version='>=v1.6.3']
   - openpyxl[version='>=3']
