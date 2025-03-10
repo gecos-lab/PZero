@@ -19,8 +19,6 @@ from vtk import (
     vtkTriangle,
     vtkVertex,
     vtkAppendPolyData,
-    reference,
-    vtkProjectPointsToPlane,
 )
 from vtkmodules.numpy_interface.dataset_adapter import WrapDataObject
 
@@ -393,7 +391,7 @@ def gocad2vtk(self=None, in_file_name=None, uid_from_name=None):
             # Write points and cells TO VTK OBJECT
             if curr_obj_dict["topology"] == "VertexSet":
                 self.print_terminal(
-                    f"Importing Gocad VSet (VertexSet) as a PolyData 0D in VTK with name: {curr_obj_dict["name"]}"
+                    f"Importing Gocad VSet (VertexSet) as a PolyData 0D in VTK with name: {curr_obj_dict['name']}"
                 )
                 curr_obj_dict["vtk_obj"].SetPoints(curr_obj_points)
 
@@ -406,14 +404,14 @@ def gocad2vtk(self=None, in_file_name=None, uid_from_name=None):
 
             elif curr_obj_dict["topology"] == "PolyLine":
                 self.print_terminal(
-                    f"Importing GOCAD PLine (PolyLine) as a PolyData 1D in VTK with name: {curr_obj_dict["name"]}"
+                    f"Importing GOCAD PLine (PolyLine) as a PolyData 1D in VTK with name: {curr_obj_dict['name']}"
                 )
                 curr_obj_dict["vtk_obj"].SetPoints(curr_obj_points)
                 curr_obj_dict["vtk_obj"].SetLines(curr_obj_cells)
 
             elif curr_obj_dict["topology"] == "TriSurf":
                 self.print_terminal(
-                f"Importing GOCAD TSurf (TriSurf) as a PolyData 2D in VTK with name: {curr_obj_dict["name"]}"
+                f"Importing GOCAD TSurf (TriSurf) as a PolyData 2D in VTK with name: {curr_obj_dict['name']}"
                 )
                 curr_obj_dict["vtk_obj"].SetPoints(curr_obj_points)
                 curr_obj_dict["vtk_obj"].SetPolys(curr_obj_cells)
@@ -693,7 +691,7 @@ def gocad2vtk_section(self=None,
             """Write points and cells TO VTK OBJECT"""
             if curr_obj_dict["topology"] == "XsVertexSet":
                 self.print_terminal(
-                f"Importing Gocad VSet (VertexSet) as a PolyData 0D in VTK with name:\n{curr_obj_dict["name"]}"
+                f"Importing Gocad VSet (VertexSet) as a PolyData 0D in VTK with name:\n{curr_obj_dict['name']}"
                 )
                 curr_obj_dict["vtk_obj"].SetPoints(curr_obj_points)
                 """Vertex cells, one for each point, are added here."""
@@ -705,7 +703,7 @@ def gocad2vtk_section(self=None,
 
             elif curr_obj_dict["topology"] == "XsPolyLine":
                 self.print_terminal(
-                f"Importing GOCAD PLine (PolyLine) as a PolyData 1D in VTK with name: {curr_obj_dict["name"]}"
+                f"Importing GOCAD PLine (PolyLine) as a PolyData 1D in VTK with name: {curr_obj_dict['name']}"
                 )
                 curr_obj_dict["vtk_obj"].SetPoints(curr_obj_points)
                 curr_obj_dict["vtk_obj"].SetLines(curr_obj_cells)
@@ -1045,12 +1043,12 @@ def gocad2vtk_boundary(self=None, in_file_name=None, uid_from_name=None):
             #     curr_obj_dict['vtk_obj'].SetVerts(curr_obj_cells)
             #
             if curr_obj_dict["topology"] == "PolyLine":
-                self.print_terminal(f"Importing GOCAD PLine (PolyLine) as a PolyData 1D in VTK with name: {curr_obj_dict["name"]}")
+                self.print_terminal(f"Importing GOCAD PLine (PolyLine) as a PolyData 1D in VTK with name: {curr_obj_dict['name']}")
                 curr_obj_dict["vtk_obj"].SetPoints(curr_obj_points)
                 curr_obj_dict["vtk_obj"].SetLines(curr_obj_cells)
 
             elif curr_obj_dict["topology"] == "TriSurf":
-                self.print_terminal(f"Importing GOCAD TSurf (TriSurf) as a PolyData 2D in VTK with name: {curr_obj_dict["name"]}")
+                self.print_terminal(f"Importing GOCAD TSurf (TriSurf) as a PolyData 2D in VTK with name: {curr_obj_dict['name']}")
                 curr_obj_dict["vtk_obj"].SetPoints(curr_obj_points)
                 curr_obj_dict["vtk_obj"].SetPolys(curr_obj_cells)
 
