@@ -31,4 +31,4 @@ dependencies:
   - pytest[version='>=7']
   - python[version='>=3.11']
   - qtpy[version='>=2']
-prefix: C:\Users\bistek\anaconda3\envs\pzero
+
