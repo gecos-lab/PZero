@@ -54,7 +54,12 @@ from pzero.imports.cesium2vtk import vtk2cesium
 from pzero.imports.dem2vtk import dem2vtk
 from pzero.imports.dxf2vtk import vtk2dxf
 from pzero.imports.gltf2vtk import vtk2gltf
-from pzero.imports.gocad2vtk import gocad2vtk, gocad2vtk_section, gocad2vtk_boundary, vtk2gocad
+from pzero.imports.gocad2vtk import (
+    gocad2vtk,
+    gocad2vtk_section,
+    gocad2vtk_boundary,
+    vtk2gocad,
+)
 from pzero.imports.image2vtk import geo_image2vtk, xs_image2vtk
 from pzero.imports.lxml2vtk import vtk2lxml
 from pzero.imports.obj2vtk import vtk2obj
@@ -102,6 +107,7 @@ from .three_d_surfaces import (
     split_surf,
     retopo,
 )
+
 # from .windows_factory import ViewMap
 # from .windows_factory import ViewXsection
 # from .windows_factory import View3D
@@ -117,7 +123,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
     # instead of functions that will act within a single view only. They all pass a list of uid's.
 
     # This is used to delete open windows when the current project is closed (and a new one is opened).
-    project_close_signal = (pyqtSignal())
+    project_close_signal = pyqtSignal()
 
     # Maybe also this one could be moved to collections?
     prop_legend_cmap_modified_signal = pyqtSignal(str)
@@ -221,7 +227,6 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         """File>CRS actions -> slots"""
         self.actionTransformSelectedCRS.triggered.connect(lambda: CRS_transform_selected(self))
         self.actionListCRS.triggered.connect(lambda: CRS_list(self))
-
 
     def closeEvent(self, event):
         """Re-implement the standard closeEvent method of QWidget and ask (1) to save project, and (2) for confirmation to quit."""
@@ -1614,8 +1619,8 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 if not "scenario" in new_dom_coll_df:
                     new_dom_coll_df.insert(3, "scenario", "undef")
                 self.dom_coll.df = new_dom_coll_df
-            if 'topology' in self.dom_coll.df.columns:
-                self.dom_coll.df.rename(columns={'topology': 'topology'}, inplace=True)
+            if "topology" in self.dom_coll.df.columns:
+                self.dom_coll.df.rename(columns={"topology": "topology"}, inplace=True)
             prgs_bar = progress_dialog(
                 max_value=self.dom_coll.df.shape[0],
                 title_txt="Open DOM",
@@ -2132,7 +2137,8 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             message=f"Append entities to XSections?\nSection will NOT be re-oriented.",
             yes_role="Cancel",
             no_role="OK",
-            reject_role=None)
+            reject_role=None,
+        )
         # Process files.
         for in_file_name in in_file_names:
             self.print_terminal("in_file_name: " + in_file_name)
@@ -2165,9 +2171,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
     def import_gocad_boundary(self):
         """Import Gocad ASCII file and update boundary collection."""
         self.print_terminal("Importing Gocad ASCII format as boundary")
-        self.print_terminal(
-            "Properties are discarded - only mesh imported."
-        )
+        self.print_terminal("Properties are discarded - only mesh imported.")
         """Select and open input file"""
         in_file_name = open_file_dialog(
             parent=self,
