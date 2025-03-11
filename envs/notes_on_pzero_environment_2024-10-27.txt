@@ -5,7 +5,7 @@ THIS DOCUMENT MUST BE KEPT UPDATED!
 ===================================
 
 _______________________
-Last updated 2025-03-08
+Last updated 2024-10-28
 
 
 1) To build a clean pzero environment, start updating the conda base environment:
@@ -20,7 +20,17 @@ conda update --all
 
 conda remove --name pzero --all
 
-4) Install packages (from within ./PZero/envs directory):
+4) Create a new empty environment.
+
+conda create -n pzero
+
+4) Activate channels (this must be done for each new environment):
+
+conda config --env --add channels conda-forge
+conda config --env --add channels loop3d
+conda config --env --add channels anaconda
+
+5) Install packages (from within ./PZero/envs directory):
 
 conda env create -n pzero -f ./pzero-env.yml
 
@@ -30,13 +40,13 @@ conda env create -n pzero -f ./pzero-env-from-history.yml
 
 This includes requirements listed in pzero-env-from-history.yml.
 
-The logic in any case is to have the most recent versions as possible, or at least well proven ones (>=), with exceptions (strictly =) motivated in the issues.
+The logic in any case is to have the most recent versions as possible, or at least well proven ones (>=), with excetions (strictly =) motivated in the issues.
 
 Note that version requirements are easily recorded/updated in the pzero-env-from-history.yml file.
 
-For some strange reason, openpyxl (used to import Excel files) is required by pandas but not automatically added with its dependencies, so we have to add it explicitly to the environment.
+For some strange reason, openpyxl (used to import Excel files) is required by pandas but not automatically added with its dependencies, so we have to add it eplicitly to the environment.
 
-Additional modules that where explicitly required in the past, but apparently not now, are pillow>=9.5.0, pythreejs>=2.4.2, and vedo. We removed them from the pzero-env-from-history.yml file.
+Additional modules that where explicitly required in the past, but apparently not now, are pillow>=9.5.0, pythreejs>=2.4.2, and vedo.
 
 This has been tested on Windows 11 and macOS 15 so far. On macOS it is possible that conda fails to detect the right version of the OS. In this case it is necessary to force the __osx variable with:
 
@@ -46,7 +56,7 @@ Then the value of __osx can be checked with:
 
 conda info
 
-5) Finally, when the environment has been created, the full list of modules can be recorded in .yml files (from within ./PZero/envs directory):
+6) Finally record the environment in .yml files (from within ./PZero/envs directory):
 
 conda env export --from-history > ./pzero-env-from-history.yml
 
@@ -57,16 +67,3 @@ conda env export > ./pzero-env.yml
 This allows a quick installation with (from within ./PZero/envs directory):
 
 conda env create -n pzero -f ./pzero-env.yml
-
-Other useful commands:
-
-- Create a new empty environment.
-
-conda create -n pzero
-
-- Activate channels (this must be done for each new environment):
-
-conda config --env --add channels conda-forge
-conda config --env --add channels loop3d
-conda config --env --add channels anaconda
-
