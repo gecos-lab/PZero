@@ -25,6 +25,7 @@ from pzero.helpers.helper_functions import freeze_gui
 from pzero.processing.segy_standardizer import convert_to_standard_segy
 import os
 import numpy as np
+
 @freeze_gui
 def segy2vtk(self, in_file_name):
     """Import SEG-Y data from file and add it to the image collection."""
@@ -50,40 +51,8 @@ def segy2vtk(self, in_file_name):
                     
                 self.print_terminal("Standardization successful, importing file...")
                 
-                # Read the standardized file using segyio
-                with segyio_open(standardized_file, "r", strict=False) as segyfile:
-                    # Get dimensions
-                    num_traces = len(segyfile.trace)
-                    num_samples = len(segyfile.samples)
-                    grid_size = int(np.sqrt(num_traces))
-                    
-                    # Initialize arrays
-                    data = np_empty((grid_size, grid_size, num_samples))
-                    xcoords = np_empty(grid_size * grid_size)
-                    ycoords = np_empty(grid_size * grid_size)
-                    
-                    # Read trace data
-                    for i in range(grid_size * grid_size):
-                        inline = i // grid_size
-                        xline = i % grid_size
-                        data[inline, xline, :] = segyfile.trace[i]
-                        xcoords[i] = inline   # Use generated coordinates
-                        ycoords[i] = xline 
-                    
-                    # Create volume points
-                    slices = np_linspace(-num_samples, 0, num_samples)
-                    volume_points = np_empty((num_samples, grid_size * grid_size, 3))
-                    
-                    for i, z in enumerate(slices):
-                        zcoords = np_repeat(z/6, grid_size * grid_size)
-                        points = np_column_stack((xcoords, ycoords, zcoords))
-                        volume_points[i, :, :] = points
-                    
-                    # Create VTK grid
-                    pv_seismic_grid = pv_StructuredGrid()
-                    pv_seismic_grid.points = volume_points.reshape(-1, 3)
-                    pv_seismic_grid.dimensions = (grid_size, grid_size, num_samples)
-                    pv_seismic_grid['intensity'] = np_flip(data, axis=2).ravel(order='F')
+                # Read the standardized file using the same function
+                pv_seismic_grid = read_segy_file(in_file_name=standardized_file)
                 
             finally:
                 # Clean up temporary file
