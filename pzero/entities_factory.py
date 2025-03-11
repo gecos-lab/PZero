@@ -245,9 +245,9 @@ class PolyData(vtkPolyData):
 
     def append_point(self, point_vector=None):
         """Appends a single point from Numpy point_vector at the end of the VTK point array."""
-        """Check that point_vector is a row vector."""
+        #Check that point_vector is a row vector.
         point_vector = point_vector.flat[:]
-        """Then add the point, also in case the object is still empty."""
+        #Then add the point, also in case the object is still empty.
         if self.GetNumberOfPoints() == 0:
             points = vtkPoints()
             points.InsertPoint(0, point_vector[0], point_vector[1], point_vector[2])
@@ -257,10 +257,10 @@ class PolyData(vtkPolyData):
                 point_vector[0], point_vector[1], point_vector[2]
             )
 
-    """Methods get_cells(self) and append_cell(self, cell_array=None) must be implemented in specific classes,
-    depending on topology. In any case cells are returned as connectivity matrices with n_rows = n_cells
-    and n_columns = n_points in cell (= topological dimension for simplicial cells). The first index indicating
-    the cell dimension in VTK is omitted, e.g n_ columns = 2 for PolyLine, and 3 for TriSurf."""
+    #-----Methods get_cells(self) and append_cell(self, cell_array=None) must be implemented in specific classes,
+    #depending on topology. In any case cells are returned as connectivity matrices with n_rows = n_cells
+    #and n_columns = n_points in cell (= topological dimension for simplicial cells). The first index indicating
+    #the cell dimension in VTK is omitted, e.g n_ columns = 2 for PolyLine, and 3 for TriSurf.-----
 
     @property
     def cells_number(self):
@@ -305,13 +305,13 @@ class PolyData(vtkPolyData):
         in theory this could be changed with SetPointIdsArrayName(<new_name>) and
         SetCellIdsArrayName(<new_name>). In this case also the last lines must be modified accordingly.
         """
-        """Run the filter."""
+        #Run the filter.
         id_filter = vtkIdFilter()
         id_filter.SetInputData(self)
         id_filter.PointIdsOn()
         id_filter.CellIdsOn()
         id_filter.Update()
-        """Update the input polydata "self" with the new scalars."""
+        #Update the input polydata "self" with the new scalars.
         self.GetPointData().SetScalars(
             id_filter.GetOutput().GetPointData().GetArray("vtkIdFilter_Ids")
         )
@@ -325,7 +325,7 @@ class PolyData(vtkPolyData):
         The filter is set up in order to DO NOT transform degenerate cells into
         lower order ones (e.g. triangle into a line if two points are merged), and to
         use tolerance = 0.0 which is faster."""
-        """Run the filter."""
+        #Run the filter.
         clean_filter = vtkCleanPolyData()
         clean_filter.SetInputData(self)
         clean_filter.ConvertLinesToPointsOff()
@@ -446,9 +446,9 @@ class PolyData(vtkPolyData):
         """Returns a point data attribute as Numpy array. This cannot be converted to
         a property method since the key of the attribute must be specified."""
         # if isinstance(self, (VertexSet, PolyLine, TriSurf, XsVertexSet, XsPolyLine)):
-        """For vector entities return a n-by-m-dimensional array where n is the
-        number of points and m is the number of components of the attribute.
-        Reshape is needed since the Numpy array returned by dsa is "flat" as a standard VTK array."""
+        #For vector entities return a n-by-m-dimensional array where n is the
+        #number of points and m is the number of components of the attribute.
+        #Reshape is needed since the Numpy array returned by dsa is "flat" as a standard VTK array.
         print("point_data:\n", WrapDataObject(self).PointData[data_key])
         point_data = (
             WrapDataObject(self)
@@ -463,17 +463,17 @@ class PolyData(vtkPolyData):
         # elif isinstance(self, PolyData):
         #     """For point entities we don't need to reshape"""
         #     point_data = WrapDataObject(self).PointData[data_key]
-        """We use np_squeeze to remove axes with length 1, so a 1D array will be returned with shape (n, ) and not with shape (n, 1)."""
+        #We use np_squeeze to remove axes with length 1, so a 1D array will be returned with shape (n, ) and not with shape (n, 1).
         # The np_array is sometimes necessary. Without it in some cases this error occures: ndarray subclass __array_wrap__ method returned an object which was not an instance of an ndarray subclass
         return np_squeeze(np_array(point_data))
 
     def get_point_data_shape(self, data_key=None):
         """Returns the shape of a point data attribute matrix."""
         # if isinstance(self, (VertexSet, PolyLine, TriSurf, XsVertexSet, XsPolyLine, PCDom)):
-        """For vector entities we have attribute arrays of the same length as the number of points.
-        This method yields the number of points and the number of components of the attribute."""
+        #For vector entities we have attribute arrays of the same length as the number of points.
+        #This method yields the number of points and the number of components of the attribute.
         n_points = np_shape(WrapDataObject(self).PointData[data_key])[0]
-        """The following solves the problem of Numpy returning just the length for 1D arrays."""
+        #The following solves the problem of Numpy returning just the length for 1D arrays.
         try:
             n_components = np_shape(WrapDataObject(self).PointData[data_key])[1]
         except:
@@ -544,7 +544,7 @@ class PolyData(vtkPolyData):
     # ==================== FIELD DATA ====================
 
     def set_field_data(self, name=None, data=None):
-        """[Gabriele] for field data pv_helpers is useful since we can have arrays of strings
+        """For field data pv_helpers is useful since we can have arrays of strings
         that are not well managed by dsa"""
 
         arr = pv_convert_array(data, name=name)
@@ -628,7 +628,7 @@ class PolyData(vtkPolyData):
                 vtk_out_list.append(vtk_out_obj)
             return vtk_out_list
 
-    """The locator property can be used to set and retrieve different vtkPointLocator (e.g. octree) types to use in vtkAlgorithms"""
+    #The locator property can be used to set and retrieve different vtkPointLocator (e.g. octree) types to use in vtkAlgorithms
 
     @property
     def locator(self):
@@ -686,8 +686,8 @@ class VertexSet(PolyData):
         """Set cells automatically assuming that the vertexes are in the correct order,
         from first to last, and that the polyline is a single part."""
         if self.GetNumberOfCells() != 0:
-            """Remove all cells. This is obtained calling DeleteCells without any
-            argument and in this case RemoveDeletedCells() is not necessary."""
+            #Remove all cells. This is obtained calling DeleteCells without any
+            #argument and in this case RemoveDeletedCells() is not necessary.
             self.DeleteCells()
             self.GetVerts().Modified()
 
@@ -742,8 +742,8 @@ class PolyLine(PolyData):
         """Set cells automatically assuming that the vertexes are in the correct order,
         from first to last, and that the polyline is a single part."""
         if self.GetNumberOfCells() != 0:
-            """Remove all cells. This is obtained calling DeleteCells without any
-            argument and in this case RemoveDeletedCells() is not necessary."""
+            #Remove all cells. This is obtained calling DeleteCells without any
+            #argument and in this case RemoveDeletedCells() is not necessary.
             self.DeleteCells()
             self.GetLines().Modified()
         pline_cells = vtkCellArray()
@@ -759,11 +759,11 @@ class PolyLine(PolyData):
     def sort_nodes(self):
         """Sort nodes from the first node in the first cell to the last node in the last cell."""
         if self.GetNumberOfCells() != 0:
-            """First ensure cells are simple two-point-lines with poly2lines."""
+            #First ensure cells are simple two-point-lines with poly2lines.
             self.poly2lines()
-            """Then do the sorting. This works defining an empty list of point ids,
-            that is filled for every line, and then only the first point is used,
-            except for the last step, after the end of the for loop."""
+            #Then do the sorting. This works defining an empty list of point ids,
+            #that is filled for every line, and then only the first point is used,
+            #except for the last step, after the end of the for loop.
             new_points = vtkPoints()
             for line_id in range(self.cells_number):
                 line_points_list = vtkIdList()
@@ -822,7 +822,7 @@ class TriSurf(PolyData):
         vtkPolyDataNormals works only on polygons and triangle strips to calculate normals.
         For point clouds we can implement the vtkPCANormalEstimation filter (see vtk_set_normals in the PCDom class)
         """
-        """Run the filter."""
+        #Run the filter.
         normals_filter = vtkPolyDataNormals()
         normals_filter.SetInputData(self)
         normals_filter.ComputePointNormalsOn()
@@ -832,7 +832,7 @@ class TriSurf(PolyData):
         normals_filter.AutoOrientNormalsOff()
         normals_filter.NonManifoldTraversalOff()
         normals_filter.Update()
-        """Update the input polydata "self" with the new normals."""
+        #Update the input polydata "self" with the new normals.
         self.GetPointData().SetNormals(
             normals_filter.GetOutput().GetPointData().GetNormals()
         )
@@ -858,7 +858,7 @@ class TriSurf(PolyData):
 
     def get_clean_boundary(self):
         """Gets the clean boundary both in case of single- and multi-part TriSurf's."""
-        """Find edges"""
+        #Find edges
         edges = vtkFeatureEdges()
         edges.BoundaryEdgesOn()
         edges.NonManifoldEdgesOff()
@@ -866,7 +866,7 @@ class TriSurf(PolyData):
         edges.ManifoldEdgesOff()
         edges.SetInputData(self)
         edges.Update()
-        """Clean edges"""
+        #Clean edges
         edges_clean = vtkCleanPolyData()
         edges_clean.ConvertLinesToPointsOff()
         edges_clean.ConvertPolysToLinesOff()
@@ -874,12 +874,12 @@ class TriSurf(PolyData):
         edges_clean.SetTolerance(0.0)
         edges_clean.SetInputConnection(edges.GetOutputPort())
         edges_clean.Update()
-        """Strips clean edges"""
+        #Strips clean edges
         edges_clean_strips = vtkStripper()
         edges_clean_strips.JoinContiguousSegmentsOn()
         edges_clean_strips.SetInputConnection(edges_clean.GetOutputPort())
         edges_clean_strips.Update()
-        """Double cleaning before and after stripper reduces errors and problems."""
+        #Double cleaning before and after stripper reduces errors and problems.
         edges_clean_strips_clean = vtkCleanPolyData()
         edges_clean_strips_clean.ConvertLinesToPointsOff()
         edges_clean_strips_clean.ConvertPolysToLinesOff()
@@ -887,7 +887,7 @@ class TriSurf(PolyData):
         edges_clean_strips_clean.SetTolerance(0.0)
         edges_clean_strips_clean.SetInputConnection(edges_clean_strips.GetOutputPort())
         edges_clean_strips_clean.Update()
-        """Assemble borders."""
+        #Assemble borders.
         border_polygons = vtkCellArray()
         border_polygons.SetNumberOfCells(
             edges_clean_strips_clean.GetOutput().GetNumberOfCells()
@@ -943,7 +943,7 @@ class TriSurf(PolyData):
         trisurf_copy.BuildCells()
         trisurf_copy.BuildLinks()
         trisurf_copy.ids_to_scalar()
-        """Extract boundary cells from the trisurf_copy painted with vtkIdFilter_Ids"""
+        #Extract boundary cells from the trisurf_copy painted with vtkIdFilter_Ids
         edges_filter = vtkFeatureEdges()
         edges_filter.BoundaryEdgesOn()
         edges_filter.NonManifoldEdgesOff()
@@ -952,76 +952,76 @@ class TriSurf(PolyData):
         edges_filter.SetInputData(trisurf_copy)
         edges_filter.Update()
         edges = edges_filter.GetOutput()
-        """Extract a Numpy array of boundary point ids, and use it to build a vtkIdList.
-        Use the for loop to insert ids since the SetArray VTK method does not work."""
+        #Extract a Numpy array of boundary point ids, and use it to build a vtkIdList.
+        #Use the for loop to insert ids since the SetArray VTK method does not work.
         bnd_pt_ids_narray = WrapDataObject(edges).PointData["vtkIdFilter_Ids"]
         edges_points_n = len(bnd_pt_ids_narray)
         bnd_pt_ids = vtkIdList()
         for bnd_pt_id in bnd_pt_ids_narray:
             bnd_pt_ids.InsertNextId(bnd_pt_id)
-        """For each point, find the cells and edges, then calculate the dilation vector from each
-        pair of edge and center-to-edge unit vectors, and normalize the dilation vector to have norm = tol.
-        The transformation is applied at the end with displace_boundary_points_array in order not to alter
-        point coordinates within the loop. In early attempts I used the VTK methods ComputeCentroid() and Normals()
-        but the first does not return the true center of the triangle, and the second results in uncertainties
-        if pointing upwards or downwards."""
+        #For each point, find the cells and edges, then calculate the dilation vector from each
+        #pair of edge and center-to-edge unit vectors, and normalize the dilation vector to have norm = tol.
+        #The transformation is applied at the end with displace_boundary_points_array in order not to alter
+        #point coordinates within the loop. In early attempts I used the VTK methods ComputeCentroid() and Normals()
+        #but the first does not return the true center of the triangle, and the second results in uncertainties
+        #if pointing upwards or downwards.
         displace_boundary_points_array = np_empty((0, 4), dtype=float)
         for p_i in range(edges_points_n):
-            """Loop over edge points."""
+            #Loop over edge points.
             point_id = bnd_pt_ids.GetId(p_i)
             point_displ = np_zeros(3)
-            """Get list of cells that share the point as vtkIdList."""
+            #Get list of cells that share the point as vtkIdList.
             point_cells_ids = vtkIdList()
             trisurf_copy.GetPointCells(point_id, point_cells_ids)
             n_point_cells = point_cells_ids.GetNumberOfIds()
             for c_i in range(n_point_cells):
-                """Loop over cells (triangles)."""
+                #Loop over cells (triangles).
                 cell_id = point_cells_ids.GetId(c_i)
-                """Get the other two points in this triangle."""
+                #Get the other two points in this triangle.
                 trgl_point_ids = vtkIdList()
                 trisurf_copy.GetCellPoints(cell_id, trgl_point_ids)
-                """Use the mean value of vertex coordinates to calculate the triangle center. The ComputeCentroid() VTK method yields incorrect centres not contained in the triangle plane."""
+                #Use the mean value of vertex coordinates to calculate the triangle center. The ComputeCentroid() VTK method yields incorrect centres not contained in the triangle plane.
                 trgl_ctr = (
                     np_asarray(trisurf_copy.GetPoint(trgl_point_ids.GetId(0)))
                     + np_asarray(trisurf_copy.GetPoint(trgl_point_ids.GetId(1)))
                     + np_asarray(trisurf_copy.GetPoint(trgl_point_ids.GetId(2)))
                 ) / 3
                 for e_i in range(3):
-                    """Loop over edge points."""
+                    #Loop over edge points.
                     edge_point_id = trgl_point_ids.GetId(e_i)
                     if edge_point_id != point_id:
-                        """Exclude the cell points excluding the point to be displaced itself."""
+                        #Exclude the cell points excluding the point to be displaced itself.
                         edge_cells_ids = vtkIdList()
                         trisurf_copy.GetCellEdgeNeighbors(
                             cell_id, point_id, edge_point_id, edge_cells_ids
                         )
                         if edge_cells_ids.GetNumberOfIds() == 0:
-                            """Process only points on a boundary edge."""
-                            """Coordinates of the point to be displaced."""
+                            #Process only points on a boundary edge.
+                            #Coordinates of the point to be displaced.
                             point_xyz = np_asarray(trisurf_copy.GetPoint(point_id))
-                            """Coordinates of the point at the other end of the edge."""
+                            #Coordinates of the point at the other end of the edge.
                             edge_point = np_asarray(
                                 trisurf_copy.GetPoint(edge_point_id)
                             )
-                            """Unit vector oriented as the edge."""
+                            #Unit vector oriented as the edge.
                             edge_vector = edge_point - point_xyz
                             edge_vector = edge_vector / np_linalg_norm(edge_vector)
-                            """Center of the edge."""
+                            #Center of the edge.
                             edge_ctr = (edge_point + point_xyz) / 2
-                            """Vector connecting the center of the triangle with the center of the edge, normalized to unit vector."""
+                            #Vector connecting the center of the triangle with the center of the edge, normalized to unit vector.
                             center2edge_vector = edge_ctr - trgl_ctr
                             center2edge_vector = center2edge_vector / np_linalg_norm(
                                 center2edge_vector
                             )
-                            """Unit vector perpendicular to the edge and the triangle plane."""
+                            #Unit vector perpendicular to the edge and the triangle plane.
                             trgl_normal = np_cross(edge_vector, center2edge_vector)
                             trgl_normal = trgl_normal / np_linalg_norm(trgl_normal)
-                            """Unit vector perpendicular to the edge and parallel to the triangle plane, pointing outwards."""
+                            #Unit vector perpendicular to the edge and parallel to the triangle plane, pointing outwards."""
                             edge_displ = np_cross(trgl_normal, edge_vector)
                             edge_displ = edge_displ / np_linalg_norm(edge_displ)
-                            """Add this vector to the total displacement to be applied to this point."""
+                            #Add this vector to the total displacement to be applied to this point.
                             point_displ = point_displ + edge_displ
-            """Normalize the displacement, scale by tol, and record all in an array to be used later on."""
+            #Normalize the displacement, scale by tol, and record all in an array to be used later on.
             point_displ = point_displ / np_linalg_norm(point_displ) * tol
             displace_boundary_points_array = np_append(
                 displace_boundary_points_array,
@@ -1029,9 +1029,9 @@ class TriSurf(PolyData):
                 axis=0,
             )
         for row in displace_boundary_points_array:
-            """Here we perform the dilation, on the points and with the vectors stored in displace_boundary_points_array.
-            Converting the first column to integer is needed since Numpy arrays store homogeneous objects, hence the point
-            indexes are stored in the array as floats."""
+            #Here we perform the dilation, on the points and with the vectors stored in displace_boundary_points_array.
+            #Converting the first column to integer is needed since Numpy arrays store homogeneous objects, hence the point
+            #indexes are stored in the array as floats.
             point_idx = int(row[0])
             trisurf_copy.points_X[point_idx] = trisurf_copy.points_X[point_idx] + row[1]
             trisurf_copy.points_Y[point_idx] = trisurf_copy.points_Y[point_idx] + row[2]
@@ -1338,7 +1338,7 @@ class Voxet(vtkImageData):
     # _______________________________________________ SEE IF POINT METHODS MAKE SENSE HERE - NOW COMMENTED
     """Voxet is a 3D image, derived from BaseEntity and vtkImageData"""
 
-    """Add methods similar to PolyData for points."""
+   #Add methods similar to PolyData for points.
 
     def __init__(self, *args, **kwargs):
         super(Voxet, self).__init__(*args, **kwargs)
@@ -1514,8 +1514,8 @@ class Voxet(vtkImageData):
 
     def get_point_data(self, data_key=None):
         """Returns a point data attribute as Numpy array. This cannot be converted to
-        a property method since the key of the attribute must be specified."""
-        """For 2D raster entities return a n-by-m-by-o-dimensional array where n-by-m
+        a property method since the key of the attribute must be specified.
+        For 2D raster entities return a n-by-m-by-o-dimensional array where n-by-m
         is the shape of the raster and o is the number of components of the attribute."""
         point_data = (
             WrapDataObject(self)
@@ -1528,7 +1528,7 @@ class Voxet(vtkImageData):
                 )
             )
         )
-        """We use np_squeeze to remove axes with length 1, so a 1D array will be returned with shape (n, ) and not with shape (n, 1)."""
+        #We use np_squeeze to remove axes with length 1, so a 1D array will be returned with shape (n, ) and not with shape (n, 1).
         return np_squeeze(point_data)
 
     def get_point_data_shape(self, data_key=None):
@@ -1610,7 +1610,7 @@ class Voxet(vtkImageData):
                 [self.bounds[0], self.bounds[3], self.bounds[5]],
             ]
         )
-        """Create edges of frame."""
+        #Create edges of frame.
         lines = np_hstack(
             [
                 [2, 0, 1],
@@ -1859,8 +1859,8 @@ class Seismics(vtkStructuredGrid):
 
     def get_point_data(self, data_key=None):
         """Returns a point data attribute as Numpy array. This cannot be converted to
-        a property method since the key of the attribute must be specified."""
-        """For 2D raster entities return a n-by-m-by-o-dimensional array where n-by-m
+        a property method since the key of the attribute must be specified.
+        For 2D raster entities return a n-by-m-by-o-dimensional array where n-by-m
         is the shape of the raster and o is the number of components of the attribute."""
         point_data = (
             WrapDataObject(self)
@@ -1873,7 +1873,7 @@ class Seismics(vtkStructuredGrid):
                 )
             )
         )
-        """We use np_squeeze to remove axes with length 1, so a 1D array will be returned with shape (n, ) and not with shape (n, 1)."""
+        #We use np_squeeze to remove axes with length 1, so a 1D array will be returned with shape (n, ) and not with shape (n, 1).
         return np_squeeze(point_data)
 
     def set_point_data(self, data_key=None, attribute_matrix=None):
@@ -1939,7 +1939,7 @@ class Seismics(vtkStructuredGrid):
                 [self.bounds[0], self.bounds[3], self.bounds[5]],
             ]
         )
-        """Create edges of frame."""
+        #Create edges of frame.
         lines = np_hstack(
             [
                 [2, 0, 1],
@@ -2042,8 +2042,8 @@ class DEM(vtkStructuredGrid):
 
     def get_point_data(self, data_key=None):
         """Returns a point data attribute as Numpy array. This cannot be converted to
-        a property method since the key of the attribute must be specified."""
-        """For 2D raster entities return a n-by-m-by-o-dimensional array where n-by-m
+        a property method since the key of the attribute must be specified.
+        For 2D raster entities return a n-by-m-by-o-dimensional array where n-by-m
         is the shape of the raster and o is the number of components of the attribute."""
         point_data = (
             WrapDataObject(self)
@@ -2056,13 +2056,13 @@ class DEM(vtkStructuredGrid):
                 )
             )
         )
-        """We use np_squeeze to remove axes with length 1, so a 1D array will be returned with shape (n, ) and not with shape (n, 1)."""
+        #We use np_squeeze to remove axes with length 1, so a 1D array will be returned with shape (n, ) and not with shape (n, 1).
         return np_squeeze(point_data)
 
     def get_point_data_shape(self, data_key=None):
         """Returns the shape of a point data attribute matrix."""
-        """For 2D matrices we get the shape of the matrix and the number of components of
-        the attribute. The third shape parameter, that for 2D images is 1, is omitted."""
+        #For 2D matrices we get the shape of the matrix and the number of components of
+        #the attribute. The third shape parameter, that for 2D images is 1, is omitted.
         extent = self.GetExtent()
         n_components = self.GetPointData().GetArray(data_key).GetNumberOfComponents()
         return [extent[1] + 1, extent[3] + 1, n_components]
@@ -2139,7 +2139,7 @@ class DEM(vtkStructuredGrid):
             * np_where(self.points_Y <= Y1, np_NaN, 1)
         )
         UV = np_column_stack((U, V))
-        """Set point data on object. Do not initialize the array before this line."""
+        #Set point data on object. Do not initialize the array before this line.
         self.set_point_data(data_key=map_image_uid, attribute_matrix=UV)
 
     def remove_texture(self, map_image_uid=None):
@@ -2250,7 +2250,7 @@ class PCDom(PolyData):
         normals_filter.SetNormalOrientationToGraphTraversal()
 
         normals_filter.Update()
-        """Update the input polydata "self" with the new normals."""
+        #Update the input polydata "self" with the new normals.
         normals = vtk_to_numpy(normals_filter.GetOutput().GetPointData().GetNormals())
         print("Flipping to negative")
         normals_flipped = np_where(normals[:, 2:] > 0, normals * -1, normals)
@@ -2421,10 +2421,10 @@ class MapImage(Image):
                 [self.bounds[0], self.bounds[2], self.bounds[4]],
             ]
         )
-        """Rectangular face and frame."""
+        #Rectangular face and frame.
         frame = Frame()
         frame.points = points
-        """Apply texture coordinates."""
+        #Apply texture coordinates.
         t_coords = np_array([[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]])
         frame.set_point_data(data_key="t_coords", attribute_matrix=t_coords)
         frame.GetPointData().SetActiveTCoords("t_coords")
@@ -2559,7 +2559,7 @@ class XsImage(Image):
             right_y = self.bounds[3]
         bottom = self.bounds[4]
         top = self.bounds[5]
-        """Points"""
+        #Points
         points = np_array(
             [
                 [left_x, left_y, bottom],
@@ -2568,10 +2568,10 @@ class XsImage(Image):
                 [right_x, right_y, bottom],
             ]
         )
-        """Rectangular face and frame."""
+        #Rectangular face and frame.
         frame = Frame()
         frame.points = points
-        """Apply texture coordinates."""
+        #Apply texture coordinates.
         t_coords = np_array([[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]])
         frame.set_point_data(data_key="t_coords", attribute_matrix=t_coords)
         frame.GetPointData().SetActiveTCoords("t_coords")
@@ -2607,10 +2607,10 @@ class Image3D(Image):
                 [self.bounds[0], self.bounds[2], self.bounds[4]],
             ]
         )
-        """Rectangular face and frame."""
+        #Rectangular face and frame.
         face = np_hstack([[4, 0, 1, 2, 3]])
         frame = pv_PolyData(points, face)
-        """Apply texture coordinates."""
+        #Apply texture coordinates.
         frame.t_coords = np_array([[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]])
         return frame
 
