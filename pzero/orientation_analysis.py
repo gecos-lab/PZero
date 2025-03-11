@@ -17,7 +17,7 @@ from pzero.helpers.helper_dialogs import multiple_input_dialog
 
 from .helpers.helper_functions import freeze_gui
 
-"""IN THE FUTURE add functions for orientation analysis."""
+#-----IN THE FUTURE add functions for orientation analysis.-----
 
 
 def strikes2dip_directions(strikes=None):

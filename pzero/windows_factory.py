@@ -1628,8 +1628,8 @@ class VTKView(BaseView):
 
     def remove_actor_in_view(self, uid=None, redraw=False):
         """"Remove actor from plotter"""
-        """plotter.remove_actor can remove a single entity or a list of entities as actors -> 
-        here we remove a single entity"""
+        #plotter.remove_actor can remove a single entity or a list of entities as actors ->
+        #here we remove a single entity
         if not self.actors_df.loc[self.actors_df["uid"] == uid].empty:
             this_actor = self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[0]
             success = self.plotter.remove_actor(this_actor)
@@ -1790,7 +1790,7 @@ class VTKView(BaseView):
             else:
                 this_actor = None
         elif isinstance(plot_entity, DEM):
-            """Show texture specified in show_property"""
+            #Show texture specified in show_property
             if (
                     show_property
                     in self.parent.dom_coll.df.loc[
@@ -1847,8 +1847,8 @@ class VTKView(BaseView):
                 self.parent.dom_coll.df["uid"] == uid, "name"
             ].values[0]
             if isinstance(plot_entity.points, np_ndarray):
-                """This check is needed to avoid errors when trying to plot an empty
-                PolyData, just created at the beginning of a digitizing session."""
+                #This check is needed to avoid errors when trying to plot an empty
+                #PolyData, just created at the beginning of a digitizing session.
                 if show_property == "none" or show_property is None:
                     show_property_value = None
                 elif show_property == "X":
@@ -1897,8 +1897,8 @@ class VTKView(BaseView):
             )
 
         elif isinstance(plot_entity, (MapImage, XsImage)):
-            """Do not plot directly image - it is much slower.
-            Texture options according to type."""
+            #Do not plot directly image - it is much slower.
+            #Texture options according to type.
             if show_property == "none" or show_property is None:
                 plot_texture_option = None
             else:
@@ -2184,7 +2184,7 @@ class VTKView(BaseView):
             # CHECK THIS ZOOM SETTING
             # ________________________
             self.init_zoom = self.plotter.camera.distance
-            """Turn on the orientation widget AFTER the canvas is shown."""
+            #Turn on the orientation widget AFTER the canvas is shown.
             self.cam_orient_widget.On()
             # self.picker = self.plotter.enable_mesh_picking(callback= self.pkd_mesh,show_message=False)
 
@@ -2266,7 +2266,7 @@ class VTKView(BaseView):
         if not visible:
             this_actor.SetVisibility(False)
         if not self.actors_df.empty:
-            """See above."""
+            #See above.
             self.plotter.camera_position = camera_position
         return this_actor
 
@@ -2658,7 +2658,7 @@ class View3D(VTKView):
             curr_obj_dict["properties_names"] = properties_name
             curr_obj_dict["properties_components"] = properties_components
             curr_obj_dict["vtk_obj"] = att_point
-            """Add to entity collection."""
+            #Add to entity collection.
             self.parent.geol_coll.add_entity_from_dict(entity_dict=curr_obj_dict)
 
             del extr
@@ -2674,12 +2674,12 @@ class View3D(VTKView):
             camera_position = self.plotter.camera_position
         this_actor = self.plotter.add_volume(plot_entity, name=uid)
         if not self.actors_df.empty:
-            """See above."""
+            #See above.
             self.plotter.camera_position = camera_position
         return this_actor
 
-    """Implementation of functions specific to this view (e.g. particular editing or visualization functions)"""
-    """NONE AT THE MOMENT"""
+    #Implementation of functions specific to this view (e.g. particular editing or visualization functions)
+    #NONE AT THE MOMENT
 
     def plot_PC_3D(
             self,
@@ -2695,7 +2695,7 @@ class View3D(VTKView):
             points_as_spheres=True,
             opacity=1.0,
     ):
-        """[Gabriele]  Plot the point cloud"""
+        #Plot the point cloud
         if not self.actors_df.empty:
             """This stores the camera position before redrawing the actor.
             Added to avoid a bug that sometimes sends the scene to a very distant place.
@@ -2732,7 +2732,7 @@ class View3D(VTKView):
         if not visible:
             this_actor.SetVisibility(False)
         if not self.actors_df.empty:
-            """See above."""
+            #See above.
             self.plotter.camera_position = camera_position
         return this_actor
 
@@ -2786,7 +2786,7 @@ class View3D(VTKView):
 
             self.toggle_bore_litho *= -1
 
-    """[Gabriele] Orbit object ----------------------------------------------------"""
+    #Orbit object ----------------------------------------------------
 
     def orbit_entity(self):
         uid_list = list(self.actors_df["uid"].values)
@@ -2885,7 +2885,7 @@ class View2D(VTKView):
         self.plotter.enable_image_style()
         self.plotter.enable_parallel_projection()
 
-    """Re-implementations of functions that appear in all views - see placeholders in BaseView()"""
+    #Re-implementations of functions that appear in all views - see placeholders in BaseView()
 
     def initialize_menu_tools(self):
         from .two_d_lines import (
@@ -2909,8 +2909,8 @@ class View2D(VTKView):
             clean_intersection,
         )
 
-        """Imports for this view."""
-        """Customize menus and tools for this view"""
+        #Imports for this view.
+        #Customize menus and tools for this view
         super().initialize_menu_tools()
         # self.menuBaseView.setTitle("Edit")
         # self.actionBase_Tool.setText("Edit")
@@ -3010,8 +3010,8 @@ class ViewMap(View2D):
         from pzero.collections.xsection_collection import section_from_azimuth
         from pzero.collections.boundary_collection import boundary_from_points
 
-        """Imports for this view."""
-        """Customize menus and tools for this view"""
+        #Imports for this view.
+        #Customize menus and tools for this view
         super().initialize_menu_tools()
         self.sectionFromAzimuthButton = QAction("Section from azimuth", self)
         self.sectionFromAzimuthButton.triggered.connect(lambda: self.vector_by_mouse(section_from_azimuth))
@@ -3167,7 +3167,7 @@ class ViewMap(View2D):
             else:
                 this_actor = None
         elif isinstance(plot_entity, DEM):
-            """Show texture specified in show_property"""
+            #Show texture specified in show_property
             if (
                     show_property
                     in self.parent.dom_coll.df.loc[
@@ -3224,8 +3224,8 @@ class ViewMap(View2D):
                 self.parent.dom_coll.df["uid"] == uid, "name"
             ].values[0]
             if isinstance(plot_entity.points, np_ndarray):
-                """This check is needed to avoid errors when trying to plot an empty
-                PolyData, just created at the beginning of a digitizing session."""
+                #This check is needed to avoid errors when trying to plot an empty
+                #PolyData, just created at the beginning of a digitizing session.
                 if show_property == "none" or show_property is None:
                     show_property_value = None
                 elif show_property == "X":
@@ -3253,7 +3253,7 @@ class ViewMap(View2D):
                             show_property
                         )
                     ]
-                    """[Gabriele] Get the n of components for the given property. If it's > 1 then do stuff depending on the type of property (e.g. show_rgb_option -> True if the property is RGB)"""
+                    #Get the n of components for the given property. If it's > 1 then do stuff depending on the type of property (e.g. show_rgb_option -> True if the property is RGB)
                     if n_comp > 1:
                         show_property_value = plot_entity.get_point_data(show_property)
                         plot_rgb_option = True
@@ -3273,8 +3273,8 @@ class ViewMap(View2D):
             )
 
         elif isinstance(plot_entity, (MapImage, XsImage)):
-            """Do not plot directly image - it is much slower.
-            Texture options according to type."""
+            #Do not plot directly image - it is much slower.
+            #Texture options according to type.
             if show_property == "none" or show_property is None:
                 plot_texture_option = None
             else:
@@ -3485,12 +3485,12 @@ class ViewStereoplot(MPLView):
             self.figure
         )  # get a reference to the canvas that contains the figure
         # print("dir(self.canvas):\n", dir(self.canvas))
-        """https://doc.qt.io/qt-5/qsizepolicy.html"""
+        #https://doc.qt.io/qt-5/qsizepolicy.html
         self.navi_toolbar = NavigationToolbar(
             self.figure.canvas, self
         )  # create a navi_toolbar with the matplotlib.backends.backend_qt5agg method NavigationToolbar
 
-        """Create Qt layout andNone add Matplotlib canvas, figure and navi_toolbar"""
+        #Create Qt layout andNone add Matplotlib canvas, figure and navi_toolbar"""
         # canvas_widget = self.figure.canvas
         # canvas_widget.setAutoFillBackground(True)
         self.ViewFrameLayout.addWidget(
@@ -3594,8 +3594,8 @@ class ViewStereoplot(MPLView):
                             self.actors_df["uid"] == uid, "show"
                         ].values[0]:
                             glevel_4.setCheckState(0, Qt.Unchecked)
-        """Send messages. Note that with tristate several signals are emitted in a sequence, one for each
-        changed item, but upper levels do not broadcast uid's so they are filtered in the toggle method."""
+        #Send messages. Note that with tristate several signals are emitted in a sequence, one for each
+        #changed item, but upper levels do not broadcast uid's so they are filtered in the toggle method.
         self.GeologyTreeWidget.itemChanged.connect(
             self.toggle_geology_visibility 
         )
@@ -3673,8 +3673,8 @@ class ViewStereoplot(MPLView):
                         self.actors_df["uid"] == uid, "show"
                     ].values[0]:
                         tlevel_3.setCheckState(0, Qt.Unchecked)
-        """Send messages. Note that with tristate several signals are emitted in a sequence, one for each
-        changed item, but upper levels do not broadcast uid's so they are filtered in the toggle method."""
+        #Send messages. Note that with tristate several signals are emitted in a sequence, one for each
+        #changed item, but upper levels do not broadcast uid's so they are filtered in the toggle method.
         self.GeologyTopologyTreeWidget.itemChanged.connect(
             self.toggle_geology_visibility 
         )
@@ -3692,7 +3692,7 @@ class ViewStereoplot(MPLView):
                     )
                     != []
             ):
-                """Already exists a TreeItem (1 level) for the geological type"""
+                #Already exists a TreeItem (1 level) for the geological type
                 counter_1 = 0
                 for child_1 in range(
                         self.GeologyTreeWidget.findItems(
@@ -3701,7 +3701,7 @@ class ViewStereoplot(MPLView):
                             0,
                         )[0].childCount()
                 ):
-                    """for cycle that loops n times as the number of subItems in the specific geological type branch"""
+                    #for cycle that loops n times as the number of subItems in the specific geological type branch
                     if self.GeologyTreeWidget.findItems(
                             self.parent.geol_coll.get_uid_role(uid),
                             Qt.MatchExactly,
@@ -3729,7 +3729,7 @@ class ViewStereoplot(MPLView):
                         ) == self.parent.geol_coll.get_uid_feature(
                             uid
                         ):
-                            """Already exists a TreeItem (2 level) for the geological feature"""
+                            #Already exists a TreeItem (2 level) for the geological feature
                             counter_2 = 0
                             for child_2 in range(
                                     self.GeologyTreeWidget.itemBelow(
@@ -3783,7 +3783,7 @@ class ViewStereoplot(MPLView):
                                     ) == self.parent.geol_coll.get_uid_scenario(
                                         uid
                                     ):
-                                        """Same geological type, geological feature and scenario"""
+                                        #Same geological type, geological feature and scenario
                                         property_combo = QComboBox()
                                         property_combo.uid = uid
                                         # property_combo.addItem("Planes")
@@ -3829,7 +3829,7 @@ class ViewStereoplot(MPLView):
                                         )
                                         break
                             else:
-                                """Same geological type and geological feature, different scenario"""
+                                #Same geological type and geological feature, different scenario
                                 glevel_3 = QTreeWidgetItem(
                                     self.GeologyTreeWidget.findItems(
                                         self.parent.geol_coll.get_uid_role(
@@ -3878,7 +3878,7 @@ class ViewStereoplot(MPLView):
                                 self.GeologyTreeWidget.insertTopLevelItem(0, glevel_4)
                                 break
                 else:
-                    """Same geological type, different geological feature and scenario"""
+                    #Same geological type, different geological feature and scenario
                     glevel_2 = QTreeWidgetItem(
                         self.GeologyTreeWidget.findItems(
                             self.parent.geol_coll.get_uid_role(uid),
@@ -3922,7 +3922,7 @@ class ViewStereoplot(MPLView):
                     self.GeologyTreeWidget.insertTopLevelItem(0, glevel_4)
                     break
             else:
-                """Different geological type, geological feature and scenario"""
+                #Different geological type, geological feature and scenario
                 glevel_1 = QTreeWidgetItem(
                     self.GeologyTreeWidget,
                     [self.parent.geol_coll.get_uid_role(uid)],
@@ -3983,7 +3983,7 @@ class ViewStereoplot(MPLView):
                     )
                     != []
             ):
-                """Already exists a TreeItem (1 level) for the topological type"""
+                #Already exists a TreeItem (1 level) for the topological type
                 counter_1 = 0
                 for child_1 in range(
                         self.GeologyTopologyTreeWidget.findItems(
@@ -3992,7 +3992,7 @@ class ViewStereoplot(MPLView):
                             0,
                         )[0].childCount()
                 ):
-                    """for cycle that loops n times as the number of subItems in the specific topological type branch"""
+                    #for cycle that loops n times as the number of subItems in the specific topological type branch
                     if self.GeologyTopologyTreeWidget.findItems(
                             self.parent.geol_coll.get_uid_topology(uid),
                             Qt.MatchExactly,
@@ -4020,7 +4020,7 @@ class ViewStereoplot(MPLView):
                         ) == self.parent.geol_coll.get_uid_scenario(
                             uid
                         ):
-                            """Same topological type and scenario"""
+                            #Same topological type and scenario
                             property_combo = QComboBox()
                             property_combo.uid = uid
                             # property_combo.addItem("Planes")
@@ -4056,7 +4056,7 @@ class ViewStereoplot(MPLView):
                             self.GeologyTopologyTreeWidget.insertTopLevelItem(0, tlevel_3)
                             break
                 else:
-                    """Same topological type, different scenario"""
+                    #Same topological type, different scenario
                     tlevel_2 = QTreeWidgetItem(
                         self.GeologyTopologyTreeWidget.findItems(
                             self.parent.geol_coll.get_uid_topology(uid),
@@ -4093,7 +4093,7 @@ class ViewStereoplot(MPLView):
                     self.GeologyTopologyTreeWidget.insertTopLevelItem(0, tlevel_3)
                     break
             else:
-                """Different topological type and scenario"""
+                #Different topological type and scenario
                 tlevel_1 = QTreeWidgetItem(
                     self.GeologyTopologyTreeWidget,
                     [self.parent.geol_coll.get_uid_topology(uid)],
@@ -4165,7 +4165,7 @@ class ViewStereoplot(MPLView):
                 AxesImage,
         ):
             "Case for AxesImage (i.e. images)"
-            """Hide other images if (1) they are shown and (2) you are showing another one."""
+            #Hide other images if (1) they are shown and (2) you are showing another one.
             for hide_uid in self.actors_df.loc[
                 (self.actors_df["collection"] == "image_coll")
                 & (self.actors_df["show"])
@@ -4180,7 +4180,7 @@ class ViewStereoplot(MPLView):
                     0
                 ].row()
                 self.ImagesTableWidget.item(row, 0).setCheckState(Qt.Unchecked)
-            """Then show this one."""
+            #Then show this one.
             self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[
                 0
             ].set_visible(visible)
@@ -4193,7 +4193,7 @@ class ViewStereoplot(MPLView):
 
     def remove_actor_in_view(self, uid=None, redraw=False):
         """ "Remove actor from plotter"""
-        """Can remove a single entity or a list of entities as actors - here we remove a single entity"""
+        #Can remove a single entity or a list of entities as actors - here we remove a single entity"
 
         if not self.actors_df.loc[self.actors_df["uid"] == uid].empty:
             if self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[0]:
@@ -4206,7 +4206,7 @@ class ViewStereoplot(MPLView):
                     self.actors_df[self.actors_df["uid"] == uid].index, inplace=True
                 )
             if redraw:
-                """IN THE FUTURE check if there is a way to redraw just the actor that has just been removed."""
+                #IN THE FUTURE check if there is a way to redraw just the actor that has just been removed.
                 self.figure.canvas.draw()
                 print("redraw all - a more efficient alternative should be found")
 
@@ -4220,8 +4220,8 @@ class ViewStereoplot(MPLView):
     ):
         if show_property is None:
             show_property = "Poles"
-        """Show actor with scalar property (default None)
-        https://github.com/pyvista/pyvista/blob/140b15be1d4021b81ded46b1c212c70e86a98ee7/pyvista/plotting/plotting.py#L1045"""
+        #Show actor with scalar property (default None)
+        #https://github.com/pyvista/pyvista/blob/140b15be1d4021b81ded46b1c212c70e86a98ee7/pyvista/plotting/plotting.py#L1045
         # First get the vtk object from its collection.
         show_property_title = show_property
         this_coll = eval("self.parent."+collection)
@@ -4375,8 +4375,8 @@ class ViewStereoplot(MPLView):
                                        )
 
     def toggle_contours(self, filled=False):
-        """[Gabriele] This is not the best way, but for now will do.
-        It's a toggle switch that display kamb contours for visible poles in
+        #This is not the best way, but for now will do.
+        """It's a toggle switch that display kamb contours for visible poles in
         the stereoplot."""
 
         self.ViewFrameLayout.removeWidget(self.canvas)
