@@ -43,7 +43,7 @@ def segy2vtk(self, in_file_name):
                                            "standardized_" + os_path.basename(in_file_name))
             
             try:
-                success = convert_to_standard_segy(in_file_name, standardized_file)
+                success = convert_to_standard_segy(in_file_name, standardized_file, print_fn=self.print_terminal)
                 
                 if not success:
                     self.print_terminal("Failed to standardize SEG-Y file.")

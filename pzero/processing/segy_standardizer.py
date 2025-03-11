@@ -62,7 +62,7 @@ def update_to_rev2(binary_header, trace_count, samples_per_trace):
     
     return header
 
-def standardize_segy_for_pzero(input_file, output_file):
+def standardize_segy_for_pzero(input_file, output_file, print_fn=print):
     """Standardize SEGY file specifically for PZero compatibility"""
     try:
         with open(input_file, 'rb') as infile:
@@ -136,21 +136,21 @@ def standardize_segy_for_pzero(input_file, output_file):
                         trace_count += 1
                         
                         if trace_count % 1000 == 0:
-                            print(f"Processed {trace_count}/{actual_traces} traces")
+                            print_fn(f"Processed {trace_count}/{actual_traces} traces")
                 
-                print(f"\nStandardization completed:")
-                print(f"- Total traces: {trace_count}")
-                print(f"- Grid size: {grid_size}x{grid_size}")
-                print(f"- Samples per trace: {num_samples}")
+                print_fn(f"\nStandardization completed:")
+                print_fn(f"- Total traces: {trace_count}")
+                print_fn(f"- Grid size: {grid_size}x{grid_size}")
+                print_fn(f"- Samples per trace: {num_samples}")
                 return True
                 
     except Exception as e:
-        print(f"Standardization error: {str(e)}")
+        print_fn(f"Standardization error: {str(e)}")
         return False
 
-def convert_to_standard_segy(input_file, output_file):
+def convert_to_standard_segy(input_file, output_file, print_fn=print):
     """Main conversion function"""
     try:
-        return standardize_segy_for_pzero(input_file, output_file)
+        return standardize_segy_for_pzero(input_file, output_file, print_fn)
     except Exception as e:
         raise Exception(f"Error during conversion: {str(e)}") 
