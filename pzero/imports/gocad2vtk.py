@@ -198,7 +198,7 @@ def gocad2vtk(self=None, in_file_name=None, uid_from_name=None):
                     if feature_from_name:
                         curr_obj_dict["feature"] = curr_obj_dict["name"]
                 else:
-                    # solves a bug in Move that does not add a space after name:
+                    # solves a bug in some other software that does not add a space after name:
                     curr_obj_dict["name"] = "_".join(clean_line[:])
                     curr_obj_dict["name"] = curr_obj_dict["name"][5:]  # this removes 'name:'
                     if feature_from_name:
@@ -530,7 +530,7 @@ def gocad2vtk_section(self=None,
                 if feature_from_name:
                     curr_obj_dict["feature"] = curr_obj_dict["name"]
             else:
-                """solves a bug in Move that does not add a space after name:"""
+                # solves a bug in some other software that does not add a space after name:
                 curr_obj_dict["name"] = "_".join(clean_line[:])
                 curr_obj_dict["name"] = curr_obj_dict["name"][
                     5:
@@ -884,7 +884,7 @@ def gocad2vtk_boundary(self=None, in_file_name=None, uid_from_name=None):
                 # if feature_from_name:
                 #     curr_obj_dict['feature'] = curr_obj_dict['name']
             else:
-                """solves a bug in Move that does not add a space after name:"""
+                # solves a bug in some other software that does not add a space after name:
                 curr_obj_dict["name"] = "_".join(clean_line[:])
                 curr_obj_dict["name"] = curr_obj_dict["name"][
                     5:
