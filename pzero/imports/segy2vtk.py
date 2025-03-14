@@ -43,7 +43,7 @@ def segy2vtk(self, in_file_name):
                                            "standardized_" + os_path.basename(in_file_name))
             
             try:
-                success = convert_to_standard_segy(in_file_name, standardized_file)
+                success = convert_to_standard_segy(in_file_name, standardized_file, print_fn=self.print_terminal)
                 
                 if not success:
                     self.print_terminal("Failed to standardize SEG-Y file.")
@@ -79,7 +79,7 @@ def segy2vtk(self, in_file_name):
 
 def read_segy_file(in_file_name=None):
     """Read SEG-Y data from file with SegyIo."""
-    with segyio_open(in_file_name, "r", strict= False) as segyfile:
+    with segyio_open(in_file_name, "r", strict=False) as segyfile:
         inlines = segyfile.ilines
         crosslines = segyfile.xlines
         times = segyfile.samples
@@ -110,7 +110,7 @@ def read_segy_file(in_file_name=None):
         i_xyz = np_column_stack((i_xcoords, i_ycoords, i_zcoords)).reshape(-1, 3)
 
         i_length = np_linalg.norm(i_xyz[0] - i_xyz[-1])
-        depth = num_samples * sample_interval
+        depth = num_samples * sample_interval / 1000.0  # Convert to milliseconds
 
         slices = np_linspace(-depth, 0, num_samples)
         volume_points = np_empty((num_samples, inline_dim * crossline_dim, 3))
@@ -121,10 +121,11 @@ def read_segy_file(in_file_name=None):
         for i, index in enumerate(crosslines):
             data[i, :, :] = np_array(list(segyfile.xline[index]))
 
+        # Preserve amplitude information
         flip_data = np_flip(data, axis=2)
 
         for i, value in enumerate(slices):
-            zcoords = np_repeat(value/6, len(xcoords))
+            zcoords = np_repeat(value, len(xcoords))
             points = np_column_stack((xcoords, ycoords, zcoords)).astype(float)
             volume_points[i, :, :] = points
 
