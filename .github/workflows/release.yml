@@ -32,28 +32,18 @@ jobs:
             - name: Checkout Repo
               uses: actions/checkout@v3
 
-            - name: Install Conda Env for Linux or Windows
-              if: ${{ matrix.os != 'macos-latest' }}
+            - name: Install Conda Env
+              # Use the following if condition to generate os-specific envs
+              # if: ${{ matrix.os == 'macos-latest' }}
+              # if: ${{ matrix.os != 'macos-latest' }}
               uses: conda-incubator/setup-miniconda@v2
               with:
                 mamba-version: "*"
                 channels: conda-forge,defaults
                 channel-priority: true
                 activate-environment: pzero
-                environment-file: envs/std-environment.yml
-                python-version: 3.8.16
-                auto-activate-base: false
-
-            - name: Install Conda Env for MacOS
-              if: ${{ matrix.os == 'macos-latest' }}
-              uses: conda-incubator/setup-miniconda@v2
-              with:
-                mamba-version: "*"
-                channels: conda-forge,defaults
-                channel-priority: true
-                activate-environment: pzero
-                environment-file: envs/macos-environment.yml
-                python-version: 3.8.16
+                environment-file: envs/pzero-env-from-history.yml
+                python-version: 3.11
                 auto-activate-base: false
 
             - name: Check Conda Dependencies
@@ -64,8 +54,7 @@ jobs:
             - name: Make executable - Windows
               if: ${{ matrix.os == 'windows-latest' }}
               run: |
-                python3 -m pip install install rasterio
-                python3 -m pip install install pyinstaller
+                conda activate pzero
                 pyinstaller pzero-windows.spec
                 ls
 
@@ -73,8 +62,6 @@ jobs:
               if: ${{ matrix.os == 'ubuntu-latest' }}
               run: |
                 conda activate pzero
-                python3 -m pip install shapely
-                python3 -m pip install rasterio
                 pyinstaller pzero-linux.spec
                 ls
 
@@ -82,8 +69,6 @@ jobs:
               if: ${{ matrix.os == 'macos-latest' }}
               run: |
                 conda activate pzero
-                python3 -m pip install shapely
-                python3 -m pip install rasterio
                 pyinstaller pzero-macos.spec
                 ls
 
