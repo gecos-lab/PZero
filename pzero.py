@@ -5,7 +5,7 @@ from sys import argv, exit, platform
 
 from PySide6.QtWidgets import QApplication, QSplashScreen
 from PySide6.QtGui import QPixmap
-from PySide6.QtCore import Qt
+# from PySide6.QtCore import Qt
 
 # if hasattr(Qt, 'AA_EnableHighDpiScaling'):
 #     QApplication.setAttribute(Qt.AA_EnableHighDpiScaling, True)
