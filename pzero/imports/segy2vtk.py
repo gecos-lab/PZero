@@ -124,7 +124,7 @@ def read_segy_file(in_file_name=None):
         flip_data = np_flip(data, axis=2)
 
         for i, value in enumerate(slices):
-            zcoords = np_repeat(value/6, len(xcoords))
+            zcoords = np_repeat(value/8, len(xcoords))
             points = np_column_stack((xcoords, ycoords, zcoords)).astype(float)
             volume_points[i, :, :] = points
 
