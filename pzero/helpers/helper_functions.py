@@ -34,7 +34,7 @@ def auto_sep(filename):
 
 
 def profiler(path, iter):
-    """[Gabriele] Function used to profile the time needed to run a given function.
+    """Function used to profile the time needed to run a given function.
 
     The output is a text file in which each row corresponds the mean run time and std of functions.
     As a secondary output the profiler saves the raw differences in a separate csv file.
@@ -106,14 +106,14 @@ def profiler(path, iter):
 
 
 def angle_wrapper(angle):
-    """[Gabriele] Simple function to wrap a [pi;-pi] angle in [0;2pi]"""
+    """Simple function to wrap a [pi;-pi] angle in [0;2pi]"""
 
     return angle % (2 * np_pi)
 
 
 def PCA(data, correlation=False, sort=True):
-    """PCA code taken from https://stackoverflow.com/a/38770513/19331382"""
-    """ Applies Principal Component Analysis to the data
+    """PCA code taken from https://stackoverflow.com/a/38770513/19331382
+    Applies Principal Component Analysis to the data
 
     Parameters
     ----------
@@ -173,8 +173,8 @@ def PCA(data, correlation=False, sort=True):
 
 
 def best_fitting_plane(points, equation=False):
-    """code from https://stackoverflow.com/a/38770513/19331382"""
-    """ Computes the best fitting plane of the given points
+    """code from https://stackoverflow.com/a/38770513/19331382
+       Computes the best fitting plane of the given points
 
     Parameters
     ----------
@@ -221,7 +221,7 @@ def best_fitting_plane(points, equation=False):
 
 
 def gen_frame(arr):
-    """[Gabriele] Function used to generate transparent PIL frames to create gifs.
+    """Function used to generate transparent PIL frames to create gifs.
     Code modified from https://stackoverflow.com/questions/46850318/transparent-background-in-gif-using-python-imageio
     """
     im = Image.fromarray(arr)
