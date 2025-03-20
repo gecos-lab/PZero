@@ -297,7 +297,7 @@ def poisson_interpolation(self):
     #ShallowCopy is the way to copy the new interpolated surface into the TriSurf instance created at the beginning
     surf_dict["vtk_obj"].ShallowCopy(contour_surface.GetOutput())
     surf_dict["vtk_obj"].Modified()
-    #Add new entity from surf_dict. Function add_entity_from_dict creates a new uid"""
+    #Add new entity from surf_dict. Function add_entity_from_dict creates a new uid
     if surf_dict["vtk_obj"].points_number > 0:
         self.geol_coll.add_entity_from_dict(surf_dict)
     else:
@@ -542,7 +542,7 @@ def implicit_model_loop_structural(self):
     #- nsteps defines how many points in x, y and z
     #- shuffle defines whether the points should be ordered by axis x, y, z (False?) or random (True?).
     #- rescale defines whether the returned points should be in model coordinates or real world coordinates.
-    #"""Set calculation grid resolution. Default resolution is set as to obtain a model close to 10000 cells.
+    #Set calculation grid resolution. Default resolution is set as to obtain a model close to 10000 cells.
     #FOR THE FUTURE: anisotropic resolution?
     # rescale is True by default
     regular_grid = model.regular_grid(nsteps=dimensions, shuffle=False, rescale=False)
@@ -566,7 +566,7 @@ def implicit_model_loop_structural(self):
     # NEW ----------------
     scalar_field = scalar_field.transpose(2, 1, 0)
     scalar_field = scalar_field.ravel()  # flatten returns a copy
-    # """Evaluate scalar field gradient."""
+    # Evaluate scalar field gradient.
     # print("-> evaluate_feature_gradient...")
     # scalar_field_gradient = model.evaluate_feature_gradient("strati_0", regular_grid, scale=False)
     toc(parent=self)
@@ -715,28 +715,28 @@ def surface_smoothing(
         else:
             self.print_terminal(" -- Error input type: only TriSurf type -- ")
             return
-    # """Create deepcopy of the geological entity dictionary."""
+    # Create deepcopy of the geological entity dictionary.
     # surf_dict = deepcopy(self.geol_coll.entity_dict)
     # input_dict = {'name': ['TriSurf name: ', self.geol_coll.get_uid_name(input_uids[0]) + '_smooth'], 'role': ['Role: ', self.parent.geol_coll.valid_roles], 'feature': ['Feature: ', self.geol_coll.get_uid_feature(input_uids[0])], 'scenario': ['Scenario: ', self.geol_coll.get_uid_scenario(input_uids[0])]}
     # surf_dict_updt = multiple_input_dialog(title='Surface smoothing', input_dict=input_dict)
-    # """Check if the output of the widget is empty or not. If the Cancel button was clicked, the tool quits"""
+    # Check if the output of the widget is empty or not. If the Cancel button was clicked, the tool quits
     # if surf_dict_updt is None:
     #     return
-    # """Getting the values that have been typed by the user through the multiple input widget"""
+    # Getting the values that have been typed by the user through the multiple input widget
     # for key in surf_dict_updt:
     #     surf_dict[key] = surf_dict_updt[key]
     # surf_dict['topology'] = 'TriSurf'
     # surf_dict['vtk_obj'] = TriSurf()
-    # """Create a new instance of the interpolation class"""
+    # Create a new instance of the interpolation class
     # smoother = vtkSmoothPolyDataFilter()
     # smoother.SetInputData(self.geol_coll.get_uid_vtk_obj(input_uids[0]))
-    # """Ask for the Convergence value (smaller numbers result in more smoothing iterations)."""
+    # Ask for the Convergence value (smaller numbers result in more smoothing iterations).
     # convergence_value = input_one_value_dialog(title='Surface smoothing parameters', label='Convergence Value (small values result in more smoothing)', default_value=1)
     # if convergence_value is None:
     #     convergence_value = 1
     # smoother.SetConvergence(convergence_value)
-    # """Ask for BoundarySmoothing (smoothing of vertices on the boundary of the mesh) and FeatureEdgeSmoothing
-    # (smoothing along sharp interior edges)."""
+    # Ask for BoundarySmoothing (smoothing of vertices on the boundary of the mesh) and FeatureEdgeSmoothing
+    # (smoothing along sharp interior edges).
     # boundary_smoothing = input_text_dialog(title='Surface smoothing parameters', label='Boundary Smoothing (ON/OFF)', default_text='OFF')
     # if boundary_smoothing is None:
     #     pass
@@ -752,10 +752,10 @@ def surface_smoothing(
     # elif edge_smooth_switch == 'OFF' or edge_smooth_switch == 'off':
     #     smoother.SetFeatureEdgeSmoothing(False)
     # smoother.Update()
-    # """ShallowCopy is the way to copy the new interpolated surface into the TriSurf instance created at the beginning"""
+    # ShallowCopy is the way to copy the new interpolated surface into the TriSurf instance created at the beginning
     # surf_dict['vtk_obj'].ShallowCopy(smoother.GetOutput())
     # surf_dict['vtk_obj'].Modified()
-    # """Add new entity from surf_dict. Function add_entity_from_dict creates a new uid"""
+    # Add new entity from surf_dict. Function add_entity_from_dict creates a new uid
     # if surf_dict['vtk_obj'].points_number > 0:
     #     self.geol_coll.add_entity_from_dict(surf_dict)
     # else:
@@ -1111,7 +1111,7 @@ def intersection_xs(self):
         return
     else:
         #Deep copy list of selected uids needed otherwise problems can arise if the
-        #main geology table is deseselcted while the dataframe is being built"""
+        #main geology table is deseselcted while the dataframe is being built
         input_uids = deepcopy(self.selected_uids)
 
     #Input selection dialog"
@@ -1242,7 +1242,7 @@ def intersection_xs(self):
                             connectivity_clean.Update()
                             #Check if polyline really exists then create entity
                             if connectivity_clean.GetOutput().GetNumberOfPoints() > 0:
-                                """Create new dict for the new XsPolyLine"""
+                                #Create new dict for the new XsPolyLine
                                 obj_dict = deepcopy(
                                     self.geol_coll.entity_dict
                                 )
@@ -1531,13 +1531,13 @@ def project_2_dem(self):
         0
     ]
     #     print("dom_uid ", dom_uid)
-    #     """Convert DEM (vtkStructuredGrid) in vtkImageData to perform the projection with vtkProjectedTerrainPath"""
+    #     Convert DEM (vtkStructuredGrid) in vtkImageData to perform the projection with vtkProjectedTerrainPath
     #     dem_to_image = vtkDEMReader()
     #     dem_to_image.SetInputData(self.dom_coll.get_uid_vtk_obj(dom_uid))
     #     dem_to_image.Update()
     #     print("dem_to_image ", dem_to_image)
     #     print("dem_to_image.GetOutput() ", dem_to_image.GetOutput())
-    #     """Ask for the Orthoimage, source of the projection"""
+    #     Ask for the Orthoimage, source of the projection
     #     image_list_uids = self.image_coll.get_uids()
     #     image_list_names = []
     #     for uid in image_list_uids:
@@ -1771,7 +1771,7 @@ def project_2_xs(self):
                 connectivity.InitializeSpecifiedRegionList()
                 connectivity.AddSpecifiedRegion(region)
                 connectivity.Update()
-                #connectivity_clean, used to remove orphan points left behind by connectivity"""
+                #connectivity_clean, used to remove orphan points left behind by connectivity
                 connectivity_clean = vtkCleanPolyData()
                 connectivity_clean.SetInputConnection(connectivity.GetOutputPort())
                 connectivity_clean.Update()

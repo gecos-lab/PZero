@@ -185,10 +185,10 @@ def cut_pc(self, method="both"):
     if not self.selected_uids:
         print(" -- No input data selected -- ")
         return
-    """Freeze QT interface"""
+    #Freeze QT interface
     self.disable_actions()
 
-    """Getting the values that have been typed by the user through the widget"""
+    #Getting the values that have been typed by the user through the widget
 
     scissors = Scissors(self)
     scissors.EnabledOn()
@@ -329,7 +329,7 @@ def segment_pc(self):
         curr_obj_dict["properties_names"] = properties_name
         curr_obj_dict["properties_components"] = properties_components
         curr_obj_dict["vtk_obj"] = seg_pc
-        """Add to entity collection."""
+        # Add to entity collection.
         self.parent.dom_coll.add_entity_from_dict(entity_dict=curr_obj_dict)
 
         del f1
@@ -429,7 +429,7 @@ def facets_pc(self):
     curr_obj_dict["properties_names"] = properties_name
     curr_obj_dict["properties_components"] = properties_components
     curr_obj_dict["vtk_obj"] = facets
-    """Add to entity collection."""
+    #Add to entity collection.
     self.parent.geol_coll.add_entity_from_dict(entity_dict=curr_obj_dict)
     self.clear_selection()
 
@@ -551,7 +551,7 @@ def auto_pick(self):
     self.clear_selection()
 
 
-"""[Gabriele] PC Filters ----------------------------------------------------"""
+#[Gabriele] PC Filters ----------------------------------------------------
 
 
 def thresh_filt(self):

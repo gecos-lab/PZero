@@ -548,7 +548,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             new_dict["vtk_obj"] = PCDom()
         else:
             return
-        """Ask whether to keep or removed merged entities."""
+        #Ask whether to keep or removed merged entities.
         remove_merged_option = options_dialog(
             title="Remove merged entities?",
             message="Do you want to keep or remove merged entities?",
@@ -558,23 +558,23 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         )
         if not (remove_merged_option == 0 or remove_merged_option == 1):
             return
-        """Create a vtkAppendPolyData filter to merge all input vtk objects"""
+        #Create a vtkAppendPolyData filter to merge all input vtk objects
         vtkappend = vtkAppendPolyData()
-        """Loop that collects all selected items to create the merge. Only entities of the same
-        topology as chosen in the widget are merged, others are discarded."""
+        #Loop that collects all selected items to create the merge. Only entities of the same
+        #topology as chosen in the widget are merged, others are discarded.
         for uid in self.selected_uids:
             if new_dict["topology"] == collection.get_uid_topology(uid):
                 vtkappend.AddInputData(collection.get_uid_vtk_obj(uid))
                 if remove_merged_option == 1:
                     collection.remove_entity(uid=uid)
         vtkappend.Update()
-        """ShallowCopy is the way to copy the new vtk object into the empty instance created above."""
+       #ShallowCopy is the way to copy the new vtk object into the empty instance created above.
         new_dict["vtk_obj"].ShallowCopy(vtkappend.GetOutput())
         new_dict["vtk_obj"].Modified()
-        """Test if the merged object is not empty."""
+        #Test if the merged object is not empty.
         if new_dict["vtk_obj"].points_number == 0:
             return
-        """Add new entity from surf_dict. Function add_entity_from_dict creates a new uid"""
+        #Add new entity from surf_dict. Function add_entity_from_dict creates a new uid
         uid_new = collection.add_entity_from_dict(new_dict)
 
     def texture_add(self):
@@ -583,7 +583,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             return
         if not self.selected_uids:
             return
-        """Map Image selection dialog."""
+        #Map Image selection dialog.
         map_image_names = self.image_coll.df.loc[
             self.image_coll.df["topology"] == "MapImage", "name"
         ].to_list()
@@ -600,7 +600,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         ].values[0]
         if map_image_uid not in self.image_coll.get_uids:
             return
-        """Add textures."""
+        #Add textures.
         dom_uids = self.selected_uids
         for dom_uid in dom_uids:
             if isinstance(self.dom_coll.get_uid_vtk_obj(dom_uid), DEM):
@@ -614,7 +614,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             return
         if not self.selected_uids:
             return
-        """Map Image selection dialog."""
+        #Map Image selection dialog.
         map_image_names = self.image_coll.df.loc[
             self.image_coll.df["topology"] == "MapImage", "name"
         ].to_list()
@@ -631,7 +631,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         ].values[0]
         if map_image_uid not in self.image_coll.get_uids:
             return
-        """Remove textures."""
+        #Remove textures.
         if map_image_uid in self.image_coll.get_uids:
             dom_uids = self.selected_uids
             for dom_uid in dom_uids:
@@ -679,7 +679,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                         property_name=updt_dict["property_name"],
                         property_components=updt_dict["property_components"],
                     )
-        """Finally update properties legend."""
+        #Finally update properties legend.
         self.prop_legend.update_widget(self)
 
     def property_remove(self):
@@ -750,7 +750,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             )
             for uid in self.selected_uids:
                 self.dom_coll.remove_uid_property(uid=uid, property_name=property_name)
-        """Finally update properties legend."""
+        #Finally update properties legend.
         self.prop_legend.update_widget(self)
 
     def normals_calculate(self):
@@ -976,70 +976,70 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
 
             self.prop_legend.update_widget(self)
 
-    """Methods used to save/open/create new projects."""
+    #Methods used to save/open/create new projects.
 
     def create_empty(self):
         """Create empty containers for a new empty project."""
         # this is used to delete open windows when the current project is closed (and a new one is opened)
         self.project_close_signal.emit()
 
-        """Create the geol_coll GeologicalCollection (a Qt QAbstractTableModel with a Pandas dataframe as attribute)
-        and connect the model to GeologyTableView (a Qt QTableView created with QTDesigner and provided by
-        Ui_ProjectWindow). Setting the model also updates the view."""
+        #Create the geol_coll GeologicalCollection (a Qt QAbstractTableModel with a Pandas dataframe as attribute)
+        #and connect the model to GeologyTableView (a Qt QTableView created with QTDesigner and provided by
+        #Ui_ProjectWindow). Setting the model also updates the view.
         self.geol_coll = GeologicalCollection(parent=self)
         self.GeologyTableView.setModel(self.geol_coll.proxy_table_model)
 
-        """Create the xsect_coll XSectionCollection (a Qt QAbstractTableModel with a Pandas dataframe as attribute)
-        and connect the model to XSectionsTableView (a Qt QTableView created with QTDesigner and provided by
-        Ui_ProjectWindow). Setting the model also updates the view."""
+        #Create the xsect_coll XSectionCollection (a Qt QAbstractTableModel with a Pandas dataframe as attribute)
+        #and connect the model to XSectionsTableView (a Qt QTableView created with QTDesigner and provided by
+        #Ui_ProjectWindow). Setting the model also updates the view.
         self.xsect_coll = XSectionCollection(parent=self)
         self.XSectionsTableView.setModel(self.xsect_coll.proxy_table_model)
 
-        """Create the dom_coll DomCollection (a Qt QAbstractTableModel with a Pandas dataframe as attribute)
-        and connect the model to DOMsTableView (a Qt QTableView created with QTDesigner and provided by
-        Ui_ProjectWindow). Setting the model also updates the view."""
+        #Create the dom_coll DomCollection (a Qt QAbstractTableModel with a Pandas dataframe as attribute)
+        #and connect the model to DOMsTableView (a Qt QTableView created with QTDesigner and provided by
+        #Ui_ProjectWindow). Setting the model also updates the view.
         self.dom_coll = DomCollection(parent=self)
         self.DOMsTableView.setModel(self.dom_coll.proxy_table_model)
 
-        """Create the image_coll ImageCollection (a Qt QAbstractTableModel with a Pandas dataframe as attribute)
-        and connect the model to ImagesTableView (a Qt QTableView created with QTDesigner and provided by
-        Ui_ProjectWindow). Setting the model also updates the view."""
+        #Create the image_coll ImageCollection (a Qt QAbstractTableModel with a Pandas dataframe as attribute)
+        #and connect the model to ImagesTableView (a Qt QTableView created with QTDesigner and provided by
+        #Ui_ProjectWindow). Setting the model also updates the view.
         self.image_coll = ImageCollection(parent=self)
         self.ImagesTableView.setModel(self.image_coll.proxy_table_model)
 
-        """Create the mesh3d_coll Mesh3DCollection (a Qt QAbstractTableModel with a Pandas dataframe as attribute)
-        and connect the model to Meshes3DTableView (a Qt QTableView created with QTDesigner and provided by
-        Ui_ProjectWindow). Setting the model also updates the view."""
+        #Create the mesh3d_coll Mesh3DCollection (a Qt QAbstractTableModel with a Pandas dataframe as attribute)
+        #and connect the model to Meshes3DTableView (a Qt QTableView created with QTDesigner and provided by
+        #Ui_ProjectWindow). Setting the model also updates the view.
         self.mesh3d_coll = Mesh3DCollection(parent=self)
         self.Meshes3DTableView.setModel(self.mesh3d_coll.proxy_table_model)
 
-        """Create the boundary_coll BoundaryCollection (a Qt QAbstractTableModel with a Pandas dataframe as attribute)
-        and connect the model to BoundaryTableView (a Qt QTableView created with QTDesigner and provided by
-        Ui_ProjectWindow). Setting the model also updates the view."""
+        #Create the boundary_coll BoundaryCollection (a Qt QAbstractTableModel with a Pandas dataframe as attribute)
+        #and connect the model to BoundaryTableView (a Qt QTableView created with QTDesigner and provided by
+        #Ui_ProjectWindow). Setting the model also updates the view.
         self.boundary_coll = BoundaryCollection(parent=self)
         self.BoundariesTableView.setModel(self.boundary_coll.proxy_table_model)
 
-        """[Gabriele]  Create the weel_coll WellCollection (a Qt QAbstractTableModel with a Pandas dataframe as attribute)
-        and connect the model to WellTableView (a Qt QTableView created with QTDesigner and provided by
-        Ui_ProjectWindow). Setting the model also updates the view."""
+        #[Gabriele]  Create the weel_coll WellCollection (a Qt QAbstractTableModel with a Pandas dataframe as attribute)
+        #and connect the model to WellTableView (a Qt QTableView created with QTDesigner and provided by
+        #Ui_ProjectWindow). Setting the model also updates the view.
         self.well_coll = WellCollection(parent=self)
         self.WellsTableView.setModel(self.well_coll.proxy_table_model)
 
-        """[Gabriele]  Create the fluid_coll FluidCollection (a Qt QAbstractTableModel with a Pandas dataframe as attribute)
-        and connect the model to FluidTableView (a Qt QTableView created with QTDesigner and provided by
-        Ui_ProjectWindow). Setting the model also updates the view."""
+        #[Gabriele]  Create the fluid_coll FluidCollection (a Qt QAbstractTableModel with a Pandas dataframe as attribute)
+        #and connect the model to FluidTableView (a Qt QTableView created with QTDesigner and provided by
+        #Ui_ProjectWindow). Setting the model also updates the view.
         self.fluid_coll = FluidCollection(parent=self)
         self.FluidsTableView.setModel(self.fluid_coll.proxy_table_model)
 
-        """[Gabriele]  Create the backgrnd_coll BackgroundCollection (a Qt QAbstractTableModel with a Pandas dataframe as attribute)
-        and connect the model to FluidTableView (a Qt QTableView created with QTDesigner and provided by
-        Ui_ProjectWindow). Setting the model also updates the view."""
+        #[Gabriele]  Create the backgrnd_coll BackgroundCollection (a Qt QAbstractTableModel with a Pandas dataframe as attribute)
+        #and connect the model to FluidTableView (a Qt QTableView created with QTDesigner and provided by
+        #Ui_ProjectWindow). Setting the model also updates the view.
         self.backgrnd_coll = BackgroundCollection(parent=self)
         self.BackgroundsTableView.setModel(self.backgrnd_coll.proxy_table_model)
 
-        """Create the geol_coll.legend_df legend table (a Pandas dataframe), create the corresponding QT
-        Legend self.legend (a Qt QTreeWidget that is internally connected to its data source),
-        and update the widget."""
+        #Create the geol_coll.legend_df legend table (a Pandas dataframe), create the corresponding QT
+        #Legend self.legend (a Qt QTreeWidget that is internally connected to its data source),
+        #and update the widget.
         self.geol_coll.legend_df = pd_DataFrame(columns=list(Legend.geol_legend_dict.keys()))
         self.well_legend_df = pd_DataFrame(columns=list(Legend.well_legend_dict.keys()))
         self.fluid_coll.legend_df = pd_DataFrame(
@@ -1053,9 +1053,10 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.legend = Legend()
         self.legend.update_widget(parent=self)
 
-        """Create the prop_legend_df table (a Pandas dataframe), create the corresponding QT
-        PropertiesCMaps table widget self.prop_legend (a Qt QTableWidget that is internally connected to its data source),
-        and update the widget."""  # ____________________________________________________________________________________ UPDATE THIS TO ALLOW SORTING BY PROPERTY NAME
+        #Create the prop_legend_df table (a Pandas dataframe), create the corresponding QT
+        #PropertiesCMaps table widget self.prop_legend (a Qt QTableWidget that is internally connected to its data source),
+        #and update the widget.
+        # ____________________________________________________________________________________ UPDATE THIS TO ALLOW SORTING BY PROPERTY NAME
         self.prop_legend_df = pd_DataFrame(PropertiesCMaps.prop_cmap_dict)
         self.prop_legend = PropertiesCMaps()
         self.prop_legend.update_widget(parent=self)
@@ -1063,10 +1064,10 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
     def save_project(self):
         # ________________________________________WRITERS TO BE MOVED TO COLLECTIONS
         """Save project to file and folder"""
-        """Get date and time, used to save incremental revisions."""
+        #Get date and time, used to save incremental revisions.
         now = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
-        """Select and open output file and folder. Saving always performs a complete backup since the output folder
-        is named with the present date and time "rev_<now>"."""
+        #Select and open output file and folder. Saving always performs a complete backup since the output folder
+        #is named with the present date and time "rev_<now>".
         self.out_file_name = save_file_dialog(
             parent=self, caption="Save project.", filter="PZero (*.p0)"
         )
@@ -1076,11 +1077,11 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.print_terminal(
         f"Saving project as VTK files and csv tables with metada and legend.\nIn file/folder: {self.out_file_name}/{out_dir_name}\n"
         )
-        """Create the folder if it does not exist already."""
+        #Create the folder if it does not exist already.
         if not os.path.isdir(self.out_file_name[:-3] + "_p0"):
             os.mkdir(self.out_file_name[:-3] + "_p0")
         os.mkdir(out_dir_name)
-        """Save the root file pointing to the folder."""
+        #Save the root file pointing to the folder.
         fout = open(self.out_file_name, "w")
         fout.write(
             "PZero project file saved in folder with the same name, including VTK files and CSV tables.\n"
@@ -1089,19 +1090,19 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         fout.write("rev_" + now)
         fout.close()
 
-        """--------------------- SAVE LEGENDS ---------------------"""
+        #--------------------- SAVE LEGENDS ---------------------
 
-        """Save geological legend table to JSON file. Keep old CSV table format here in comments, in case it might be useful in the future."""
+        #Save geological legend table to JSON file. Keep old CSV table format here in comments, in case it might be useful in the future.
         self.geol_coll.legend_df.to_json(
             out_dir_name + "/geol_legend_table.json", orient="index"
         )
         # self.geol_coll.legend_df.to_csv(out_dir_name + '/geol_legend_table.csv', encoding='utf-8', index=False)
-        """Save others legend table to JSON file."""
+        #Save others legend table to JSON file.
         self.others_legend_df.to_json(
             out_dir_name + "/others_legend_table.json", orient="index"
         )
         # self.others_legend_df.to_csv(out_dir_name + '/others_legend_table.csv', encoding='utf-8', index=False)
-        """Save properties legend table to JSON file."""
+        #Save properties legend table to JSON file.
         self.prop_legend_df.to_json(
             out_dir_name + "/prop_legend_df.json", orient="index"
         )
@@ -1119,9 +1120,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             out_dir_name + "/backgrounds_legend_table.json", orient="index"
         )
 
-        """--------------------- SAVE tables ---------------------"""
+        #--------------------- SAVE tables ---------------------
 
-        """Save x_section table to JSON file."""
+        #Save x_section table to JSON file.
         out_cols = list(self.xsect_coll.df.columns)
         out_cols.remove("vtk_plane")
         out_cols.remove("vtk_frame")
@@ -1130,7 +1131,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         )
         # self.xsect_coll.df[out_cols].to_csv(out_dir_name + '/xsection_table.csv', encoding='utf-8', index=False)
 
-        """Save geological collection table to JSON file and entities as VTK."""
+        #Save geological collection table to JSON file and entities as VTK.
         out_cols = list(self.geol_coll.df.columns)
         out_cols.remove("vtk_obj")
         self.geol_coll.df[out_cols].to_json(
@@ -1151,7 +1152,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             pd_writer.Write()
             prgs_bar.add_one()
 
-        """Save DOM collection table to JSON file and entities as VTK."""
+        #Save DOM collection table to JSON file and entities as VTK.
         out_cols = list(self.dom_coll.df.columns)
         out_cols.remove("vtk_obj")
         self.dom_coll.df[out_cols].to_json(
@@ -1194,14 +1195,14 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 ]
                 == "PCDom"
             ):  # _____________ PROBABLY THE SAME WILL WORK FOR TSDOMs
-                """Save PCDOm collection entities as VTK"""
+                #Save PCDOm collection entities as VTK.
                 pd_writer = vtkXMLPolyDataWriter()
                 pd_writer.SetFileName(out_dir_name + "/" + uid + ".vtp")
                 pd_writer.SetInputData(self.dom_coll.get_uid_vtk_obj(uid))
                 pd_writer.Write()
                 prgs_bar.add_one()
 
-        """Save image collection table to JSON file and entities as VTK."""
+        #Save image collection table to JSON file and entities as VTK.
         out_cols = list(self.image_coll.df.columns)
         out_cols.remove("vtk_obj")
         self.image_coll.df[out_cols].to_json(
@@ -1232,7 +1233,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 sg_writer.SetInputData(self.image_coll.get_uid_vtk_obj(uid))
                 sg_writer.Write()
 
-        """Save mesh3d collection table to JSON file and entities as VTK."""
+        #Save mesh3d collection table to JSON file and entities as VTK.
         out_cols = list(self.mesh3d_coll.df.columns)
         out_cols.remove("vtk_obj")
         self.mesh3d_coll.df[out_cols].to_json(
@@ -1256,7 +1257,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 im_writer.Write()
             prgs_bar.add_one()
 
-        """Save boundaries collection table to JSON file and entities as VTK."""
+        #Save boundaries collection table to JSON file and entities as VTK.
         out_cols = list(self.boundary_coll.df.columns)
         out_cols.remove("vtk_obj")
         self.boundary_coll.df[out_cols].to_json(
@@ -1277,7 +1278,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             pd_writer.Write()
             prgs_bar.add_one()
 
-        """Save wells collection table to JSON file and entities as VTK."""
+        #Save wells collection table to JSON file and entities as VTK.
 
         out_cols = list(self.well_coll.df.columns)
         out_cols.remove("vtk_obj")
@@ -1299,7 +1300,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             pd_writer.Write()
             prgs_bar.add_one()
 
-        """Save fluids collection table to JSON file and entities as VTK."""
+        #Save fluids collection table to JSON file and entities as VTK.
         out_cols = list(self.fluid_coll.df.columns)
         out_cols.remove("vtk_obj")
         self.fluid_coll.df[out_cols].to_json(
@@ -1320,7 +1321,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             pd_writer.Write()
             prgs_bar.add_one()
 
-        """Save Backgrounds collection table to JSON file and entities as VTK."""
+        #Save Backgrounds collection table to JSON file and entities as VTK.
         out_cols = list(self.backgrnd_coll.df.columns)
         out_cols.remove("vtk_obj")
         self.backgrnd_coll.df[out_cols].to_json(
@@ -1343,7 +1344,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
 
     def new_project(self):
         """Creates a new empty project, after having cleared all variables."""
-        """Ask confirmation if the project already contains entities in the geological collection."""
+        #Ask confirmation if the project already contains entities in the geological collection.
         if self.geol_coll.get_number_of_entities > 0:
             confirm_new = QMessageBox.question(
                 self,
@@ -1354,7 +1355,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             )
             if confirm_new == QMessageBox.No:
                 return
-        """Create empty containers."""
+        #Create empty containers.
         self.create_empty()
         # """Save a new empty project to file"""
         # self.save_project()
@@ -1653,7 +1654,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     ].values[0]
                     == "TSDom"
                 ):
-                    """Add code to read TSDOM here__________"""
+                    #Add code to read TSDOM here__________"""
                     vtk_object = TSDom()
                 elif (
                     self.dom_coll.df.loc[
@@ -1661,7 +1662,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     ].values[0]
                     == "PCDom"
                 ):
-                    """Open saved PCDoms data"""
+                    #Open saved PCDoms data
                     vtk_object = PCDom()
                     pd_reader = vtkXMLPolyDataReader()
                     pd_reader.SetFileName(in_dir_name + "/" + uid + ".vtp")
@@ -2082,7 +2083,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.print_terminal(
             "Properties are discarded if they are not 1D, 2D, 3D, 4D, 6D or 9D (due to VTK limitations)"
         )
-        """Select and open input file"""
+        #Select and open input file
         in_file_name = open_file_dialog(
             parent=self,
             caption="Import entities from Gocad ASCII file",
@@ -2172,7 +2173,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         """Import Gocad ASCII file and update boundary collection."""
         self.print_terminal("Importing Gocad ASCII format as boundary")
         self.print_terminal("Properties are discarded - only mesh imported.")
-        """Select and open input file"""
+        #Select and open input file
         in_file_name = open_file_dialog(
             parent=self,
             caption="Import entities from Gocad ASCII file",
@@ -2239,7 +2240,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         """Import SHP file and update geological collection."""
         self.print_terminal("Importing SHP file")
         list = ["Geology", "Fluid contacts", "Background data"]
-        """Select and open input file"""
+        #Select and open input file
         in_file_name = open_file_dialog(
             parent=self, caption="Import SHP file", filter="shp (*.shp)"
         )
@@ -2255,7 +2256,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.print_terminal("Importing DEM in supported format (geotiff)")
         list = ["DEMs and DOMs", "Fluid contacts"]
 
-        """Select and open input file"""
+        #Select and open input file
         in_file_name = open_file_dialog(
             parent=self, caption="Import DEM from file", filter="Geotiff (*.tif)"
         )
@@ -2271,7 +2272,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.print_terminal(
             "Importing image from supported format (GDAL)"
         )
-        """Select and open input file"""
+        #Select and open input file
         in_file_name = open_file_dialog(
             parent=self,
             caption="Import image from file",
@@ -2286,7 +2287,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.print_terminal(
             "Importing image from supported format (GDAL)"
         )
-        """Select and open input file"""
+        #Select and open input file
         in_file_name = open_file_dialog(
             parent=self,
             caption="Import image from file",
@@ -2294,7 +2295,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         )
         if in_file_name:
             self.print_terminal("in_file_name: " + in_file_name)
-            """Select the Xsection"""
+            #Select the Xsection
             if self.xsect_coll.get_uids:
                 x_section_name = input_combo_dialog(
                     parent=None,
@@ -2348,7 +2349,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         # ___________________________________________________________ TO BE REVIEWED AND UPDATED IN MODULE segy2vtk
         """Import SEGY file and update Mesh3D collection."""
         self.print_terminal("Importing SEGY seismics file.")
-        """Select and open input file"""
+        #Select and open input file
         in_file_name = open_file_dialog(
             parent=self, caption="Import SEGY from file", filter="SEGY (*.sgy *.segy)"
         )
@@ -2356,7 +2357,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             self.print_terminal("in_file_name: " + in_file_name)
             segy2vtk(self=self, in_file_name=in_file_name)
 
-    """Methods used to export entities to other file formats."""
+    #Methods used to export entities to other file formats.
 
     def export_cad(self):
         # ________________________________________________________________ IMPLEMENT GOCAD EXPORT
@@ -2385,7 +2386,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.print_terminal(
             ("Saving CAD surfaces in folder: " + out_dir_name)
         )
-        """Create the folder if it does not exist already."""
+        #Create the folder if it does not exist already.
         if not os.path.isdir(out_dir_name):
             os.mkdir(out_dir_name)
         if cad_format == "DXF":
@@ -2417,21 +2418,21 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             vtk2lxml(self=self, out_dir_name=out_dir_name)
         else:
             return
-        """Save geological legend table to CSV and JSON files."""
+        #Save geological legend table to CSV and JSON files.
         self.geol_coll.legend_df.to_csv(
             out_dir_name + "/geol_legend_table.csv", encoding="utf-8", index=False
         )
         self.geol_coll.legend_df.to_json(
             out_dir_name + "/geol_legend_table.json", orient="index"
         )
-        """Save others legend table to CSV and JSON files."""
+        #Save others legend table to CSV and JSON files.
         self.others_legend_df.to_csv(
             out_dir_name + "/others_legend_table.csv", encoding="utf-8", index=False
         )
         self.others_legend_df.to_json(
             out_dir_name + "/others_legend_table.json", orient="index"
         )
-        """Save x_section table to CSV and JSON files."""
+        #Save x_section table to CSV and JSON files.
         out_cols = list(self.xsect_coll.df.columns)
         out_cols.remove("vtk_plane")
         out_cols.remove("vtk_frame")
@@ -2441,7 +2442,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.xsect_coll.df[out_cols].to_json(
             out_dir_name + "/xsection_table.json", orient="index"
         )
-        """Save geological collection table to CSV and JSON files."""
+        #Save geological collection table to CSV and JSON files.
         out_cols = list(self.geol_coll.df.columns)
         out_cols.remove("vtk_obj")
         self.geol_coll.df[out_cols].to_csv(
@@ -2450,7 +2451,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.geol_coll.df[out_cols].to_json(
             out_dir_name + "/geological_table.json", orient="index"
         )
-        """Save DOM collection table to CSV and JSON files."""
+        #Save DOM collection table to CSV and JSON files.
         out_cols = list(self.dom_coll.df.columns)
         out_cols.remove("vtk_obj")
         self.dom_coll.df[out_cols].to_csv(
@@ -2459,7 +2460,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.dom_coll.df[out_cols].to_json(
             out_dir_name + "/dom_table.json", orient="index"
         )
-        """Save image collection table to CSV and JSON files."""
+        #Save image collection table to CSV and JSON files.
         out_cols = list(self.image_coll.df.columns)
         out_cols.remove("vtk_obj")
         self.image_coll.df[out_cols].to_csv(
@@ -2468,7 +2469,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.image_coll.df[out_cols].to_json(
             out_dir_name + "/image_table.json", orient="index"
         )
-        """Save mesh3d collection table to CSV and JSON files."""
+        #Save mesh3d collection table to CSV and JSON files.
         out_cols = list(self.mesh3d_coll.df.columns)
         out_cols.remove("vtk_obj")
         self.mesh3d_coll.df[out_cols].to_csv(
@@ -2477,7 +2478,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.mesh3d_coll.df[out_cols].to_json(
             out_dir_name + "/mesh3d_table.json", orient="index"
         )
-        """Save boundary collection table to CSV and JSON files."""
+        #Save boundary collection table to CSV and JSON files.
         out_cols = list(self.boundary_coll.df.columns)
         out_cols.remove("vtk_obj")
         self.boundary_coll.df[out_cols].to_csv(
@@ -2487,7 +2488,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             out_dir_name + "/boundary_table.json", orient="index"
         )
 
-        """Save well collection table to CSV and JSON files."""
+        #Save well collection table to CSV and JSON files.
         out_cols = list(self.well_coll.df.columns)
         out_cols.remove("vtk_obj")
         self.well_coll.df[out_cols].to_json(
@@ -2499,7 +2500,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.print_terminal("All files saved.")
 
     def export_vtk(self):
-        """[Gabriele] Function used to export selected objects as vtk files"""
+        """Function used to export selected objects as vtk files"""
         if not self.selected_uids:
             return
         else:
