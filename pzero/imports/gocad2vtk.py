@@ -29,62 +29,62 @@ from pzero.helpers.helper_dialogs import input_text_dialog, input_combo_dialog, 
 from pzero.helpers.helper_functions import best_fitting_plane
 from pzero.collections.xsection_collection import XSectionCollection
 
-"""We import only come Gocad object attributes.
-Other Gocad ASCII properties/fields/keys not implemented in PZero are:
-    CRS-related -> we use a single homogeneous CRS in every
-    project and conversions must be performed before importing data.
-    'CRS_name'
-    'CRS_projection'
-    'CRS_datum'
-    'CRS_axis_name'
-    'CRS_axis_unit'
-    'CRS_z_positive'
-    STRATIGRAPHIC_POSITION -> this in Gocad includes geological age (string) and time
-    (number), but in PZero these are defined in the legend for each geological feature. 
-    Properties -> some of these can be retrieved from properties stored in VTK
-    arrays, and for units the same as for CRS applies (generally we use SI units).
-    'properties_no_data_values'
-    'properties_components_sum': int(0),
-    'properties_units': []
-    Properties-related keywords, probably redundant.
-     'PROP_LEGAL_RANGES'
-     'PROPERTY_CLASSES'
-     'PROPERTY_KINDS'
-     'PROPERTY_SUBCLASSES'
-     'INTERPOLATION_METHODS'
-     'PROPERTY_CLASS_HEADER'
-     'kind:'
-     'unit:'
-     'is_z:'
-     Cosmetic rendering- or legend-related properties/keywords.
-    '*atoms*size:'
-    '*atoms*color:'
-    'use_feature_color:'
-    'atoms:'
-    '*painted*variable:'
-    '*painted:'
-    '*atoms*symbol:'
-    'last_selected_folder:'
-    '*vectors3d*variable:'
-    '*tensors3d*variable:'
-    'vectors3d:'
-    '*vectors3d*color:'
-    '*vectors3d*arrow_size:'
-    '*vectors3d*rescale:'
-    '*vectors3d*mode:'
-    '*vectors3d*arrow:'
-     '*solid*color:'
-     'mesh:'
-     'parts:'
-     'pclip:'
-     'low_clip:'
-     'high_clip:'
-     'colormap:'
-     When importing we do not consider the following
-     keywords that could be important.
-     'BSTONE'
-     'BORDER'
-"""
+#"""We import only come Gocad object attributes.
+#Other Gocad ASCII properties/fields/keys not implemented in PZero are:
+#    CRS-related -> we use a single homogeneous CRS in every
+#    project and conversions must be performed before importing data.
+#    'CRS_name'
+#    'CRS_projection'
+#    'CRS_datum'
+#    'CRS_axis_name'
+#    'CRS_axis_unit'
+#    'CRS_z_positive'
+#    STRATIGRAPHIC_POSITION -> this in Gocad includes geological age (string) and time
+#    (number), but in PZero these are defined in the legend for each geological feature.
+#    Properties -> some of these can be retrieved from properties stored in VTK
+#    arrays, and for units the same as for CRS applies (generally we use SI units).
+#    'properties_no_data_values'
+#    'properties_components_sum': int(0),
+#    'properties_units': []
+#    Properties-related keywords, probably redundant.
+#     'PROP_LEGAL_RANGES'
+#     'PROPERTY_CLASSES'
+#     'PROPERTY_KINDS'
+#     'PROPERTY_SUBCLASSES'
+#     'INTERPOLATION_METHODS'
+#     'PROPERTY_CLASS_HEADER'
+#     'kind:'
+#     'unit:'
+#     'is_z:'
+#    Cosmetic rendering- or legend-related properties/keywords.
+#    '*atoms*size:'
+#    '*atoms*color:'
+#    'use_feature_color:'
+#    'atoms:'
+#    '*painted*variable:'
+#    '*painted:'
+#    '*atoms*symbol:'
+#    'last_selected_folder:'
+#    '*vectors3d*variable:'
+#    '*tensors3d*variable:'
+#    'vectors3d:'
+#    '*vectors3d*color:'
+#    '*vectors3d*arrow_size:'
+#    '*vectors3d*rescale:'
+#   '*vectors3d*mode:'
+#    '*vectors3d*arrow:'
+#     '*solid*color:'
+#     'mesh:'
+#     'parts:'
+#     'pclip:'
+#     'low_clip:'
+#     'high_clip:'
+#     'colormap:'
+#     When importing we do not consider the following
+#     keywords that could be important.
+#     'BSTONE'
+#     'BORDER'
+
 
 
 def gocad2vtk(self=None, in_file_name=None, uid_from_name=None):
@@ -509,11 +509,10 @@ def gocad2vtk_section(self=None,
                 curr_obj_dict["topology"] = "XsPolyLine"
                 curr_obj_dict["role"] = role_default
             else:
-                """Here topological types different from the allowed ones are handled.
-                At the moment THIS WILL CAUSE ERRORS - KEEP THIS MESSAGE JUST FOR DEBUGGING.
-                This must be reimplementende in sucha way that, is non-valid objects are found,
-                the file reader jumps to the next line starting with the 'GOCAD' keyword (if any).
-                """
+                #Here topological types different from the allowed ones are handled.
+                #At the moment THIS WILL CAUSE ERRORS - KEEP THIS MESSAGE JUST FOR DEBUGGING.
+                #This must be reimplementende in sucha way that, is non-valid objects are found,
+                #the file reader jumps to the next line starting with the 'GOCAD' keyword (if any).
                 self.print_terminal("gocad2vtk - entity type not recognized ERROR.")
             # Create empty arrays for coordinates and topology and a counter for properties.
             curr_obj_points = vtkPoints()
@@ -523,7 +522,7 @@ def gocad2vtk_section(self=None,
 
         elif "name:" in clean_line[0]:
             if clean_line[0] == "name:":
-                """standard import"""
+                #standard import
                 curr_obj_dict["name"] = "_".join(
                     clean_line[1:]
                 )  # see if a suffix must be added to split multipart
@@ -559,7 +558,7 @@ def gocad2vtk_section(self=None,
             curr_obj_dict["feature"] = "_".join(clean_line[1:])
 
         elif clean_line[0] == "PROPERTIES":
-            """Populate the list of property names, the properties number, and initialize the VTK arrays."""
+            #Populate the list of property names, the properties number, and initialize the VTK arrays.
             for prop in clean_line[1:]:
                 curr_obj_dict["properties_names"].append(prop)
             properties_number = len(curr_obj_dict["properties_names"])
@@ -602,8 +601,8 @@ def gocad2vtk_section(self=None,
                 float(clean_line[4]),
             )  # vtkPoint with ID, X, Y Z, "-1" since first vertex has index 0 in VTK
             if properties_number > 0:
-                """Now we set values in the properties float arrays"""
-                """_____________Check if all is OK here with vector properties_________________________________________________"""
+                #Now we set values in the properties float arrays
+                #_____________Check if all is OK here with vector properties_________________________________________________
                 i = 5  # i = 5 since the first five elements have already been read: PVRTX, id, X, Y, Z
                 for j in range(properties_number):
                     this_prop = curr_obj_properties_collection.GetItem(j)
@@ -662,7 +661,7 @@ def gocad2vtk_section(self=None,
                         )
                         i = i + 9
                     else:
-                        """Discard property if it is not 1D, 2D, 3D, 4D, 6D or 9D"""
+                        #Discard property if it is not 1D, 2D, 3D, 4D, 6D or 9D
                         i = i + curr_obj_dict["properties_components"][j]
                         curr_obj_dict["properties_names"] = curr_obj_dict[
                             "properties_names"
@@ -685,16 +684,16 @@ def gocad2vtk_section(self=None,
             curr_obj_cells.InsertNextCell(line)
 
         elif clean_line[0] == "END":
-            """When END reached, process the arrays and write the VTK entity with properties to the project geol_coll"""
+            #When END reached, process the arrays and write the VTK entity with properties to the project geol_coll
             entity_counter += 1  # update entity counter
 
-            """Write points and cells TO VTK OBJECT"""
+            #Write points and cells TO VTK OBJECT
             if curr_obj_dict["topology"] == "XsVertexSet":
                 self.print_terminal(
                 f"Importing Gocad VSet (VertexSet) as a PolyData 0D in VTK with name:\n{curr_obj_dict['name']}"
                 )
                 curr_obj_dict["vtk_obj"].SetPoints(curr_obj_points)
-                """Vertex cells, one for each point, are added here."""
+                #Vertex cells, one for each point, are added here.
                 for pid in range(curr_obj_dict["vtk_obj"].GetNumberOfPoints()):
                     vertex = vtkVertex()
                     vertex.GetPointIds().SetId(0, pid)
@@ -714,14 +713,14 @@ def gocad2vtk_section(self=None,
                         curr_obj_properties_collection.GetItem(i)
                     )
 
-            """Add current_entity to entities collection"""
+            #Add current_entity to entities collection
             self.geol_coll.add_entity_from_dict(entity_dict=curr_obj_dict)
             del curr_obj_points
             del curr_obj_cells
             del curr_obj_properties_collection
             del curr_obj_dict
 
-            """Closing message"""
+            #Closing message
             self.print_terminal(f"Object n. {str(entity_counter)} saved")
 
     n_entities_after = self.geol_coll.get_number_of_entities
@@ -825,30 +824,30 @@ def gocad2vtk_boundary(self=None, in_file_name=None, uid_from_name=None):
     #     feature_from_name = True
     # else:
     #     feature_from_name = False
-    """Open input file"""
+    #Open input file
     fin = open(in_file_name, "rt")
-    """Number of entities before importing________________________________"""
+    #Number of entities before importing________________________________
     n_entities_before = self.boundary_coll.get_number_of_entities
-    """Initialize entity_counter"""
+    #Initialize entity_counter
     entity_counter = 0
-    """Parse fin file"""
+    #Parse fin file
     for line in fin:
-        """Read one line from file."""
+        #Read one line from file.
         clean_line = line.strip().split()
 
-        """The effect of the following if/elif cascade is to loop for every single object marked by
-        the GOCAD keyword, reading the lines that we want to import and skipping the others."""
+        #The effect of the following if/elif cascade is to loop for every single object marked by
+        #the GOCAD keyword, reading the lines that we want to import and skipping the others.
         if clean_line[0] == "GOCAD":
-            """A new entity starts here in a GOCAD file, so here we create a new empty dictionary,
-            then we will fill its components in the next lines. Use deepcopy otherwise the
-            original dictionary would be altered."""
+            #A new entity starts here in a GOCAD file, so here we create a new empty dictionary,
+            #then we will fill its components in the next lines. Use deepcopy otherwise the
+            #original dictionary would be altered.
             curr_obj_dict = deepcopy(BoundaryCollection.entity_dict)
             # curr_obj_dict['scenario'] = scenario_default
 
-            """Store uid and topological type of new entity."""
+            #Store uid and topological type of new entity.
             curr_obj_dict["uid"] = str(uuid4())
 
-            """Create the empty vtk object with class = topology."""
+            #Create the empty vtk object with class = topology.
             # if clean_line[1] == 'VSet':
             #     curr_obj_dict['topology'] = 'VertexSet'
             #     curr_obj_dict['vtk_obj'] = VertexSet()
@@ -862,14 +861,13 @@ def gocad2vtk_boundary(self=None, in_file_name=None, uid_from_name=None):
                 curr_obj_dict["vtk_obj"] = TriSurf()
                 # curr_obj_dict['role'] = role_default 
             else:
-                """Here topological types different from the allowed ones are handled.
-                At the moment THIS WILL CAUSE ERRORS - KEEP THIS MESSAGE JUST FOR DEBUGGING.
-                This must be reimplementende in sucha way that, is non-valid objects are found,
-                the file reader jumps to the next line starting with the 'GOCAD' keyword (if any).
-                """
+                #Here topological types different from the allowed ones are handled.
+                #At the moment THIS WILL CAUSE ERRORS - KEEP THIS MESSAGE JUST FOR DEBUGGING.
+                #This must be reimplementende in sucha way that, is non-valid objects are found,
+                #the file reader jumps to the next line starting with the 'GOCAD' keyword (if any).
                 self.print_terminal("gocad2vtk - entity type not recognized ERROR.")
 
-            """Create empty arrays for coordinates and topology and a counter for properties."""
+            #Create empty arrays for coordinates and topology and a counter for properties.
             curr_obj_points = vtkPoints()
             curr_obj_cells = vtkCellArray()
             # curr_obj_properties_collection = vtkDataArrayCollection()
@@ -877,7 +875,7 @@ def gocad2vtk_boundary(self=None, in_file_name=None, uid_from_name=None):
 
         elif "name:" in clean_line[0]:
             if clean_line[0] == "name:":
-                """standard import"""
+                #standard import
                 curr_obj_dict["name"] = "_".join(
                     clean_line[1:]
                 )  # see if a suffix must be added to split multipart
@@ -937,7 +935,7 @@ def gocad2vtk_boundary(self=None, in_file_name=None, uid_from_name=None):
             pass
 
         elif (clean_line[0] == "VRTX") or (clean_line[0] == "PVRTX"):
-            """VRTX or PVRTX is the same here since properties are not imported."""
+            #VRTX or PVRTX is the same here since properties are not imported.
             curr_obj_points.InsertPoint(
                 int(clean_line[1]) - 1,
                 float(clean_line[2]),
@@ -1005,7 +1003,7 @@ def gocad2vtk_boundary(self=None, in_file_name=None, uid_from_name=None):
         #                 curr_obj_properties_collection.RemoveItem(j)
 
         elif clean_line[0] == "ATOM":
-            """NOT YET IMPLEMENTED"""
+            #NOT YET IMPLEMENTED
             # atom_id = int(clean_line[1]) - 1
             # vrtx_id = int(clean_line[2]) - 1
             pass
@@ -1028,10 +1026,10 @@ def gocad2vtk_boundary(self=None, in_file_name=None, uid_from_name=None):
             curr_obj_cells.InsertNextCell(triangle)
 
         elif clean_line[0] == "END":
-            """When END reached, process the arrays and write the VTK entity with properties to the project geol_coll"""
+            #When END reached, process the arrays and write the VTK entity with properties to the project geol_coll
             entity_counter += 1  # update entity counter
 
-            """Write points and cells TO VTK OBJECT"""
+            #Write points and cells TO VTK OBJECT
             # if curr_obj_dict['topology'] == 'VertexSet':
             #     self.print_terminal("Importing Gocad VSet (VertexSet) as a PolyData 0D in VTK with name: " + curr_obj_dict['name'])
             #     curr_obj_dict['vtk_obj'].SetPoints(curr_obj_points)
@@ -1056,14 +1054,14 @@ def gocad2vtk_boundary(self=None, in_file_name=None, uid_from_name=None):
             #     for i in range(properties_number):
             #         curr_obj_dict['vtk_obj'].GetPointData().AddArray(curr_obj_properties_collection.GetItem(i))
 
-            """Add current_entity to entities collection"""
+            #Add current_entity to entities collection
             self.boundary_coll.add_entity_from_dict(entity_dict=curr_obj_dict)
             del curr_obj_points
             del curr_obj_cells
             # del curr_obj_properties_collection
             del curr_obj_dict
 
-            """Closing message"""
+            #Closing message
             self.print_terminal(f"Object n. {str(entity_counter)} saved")
 
     n_entities_after = self.boundary_coll.get_number_of_entities
@@ -1136,8 +1134,8 @@ def vtk2gocad(self=None, out_file_name=None):
                 fout.write(
                     "ESIZES " + (" ".join(map(str, properties_components))) + "\n"
                 )
-                """Build PVRTX matrix here"""
-                """_____________Check if there is an error here with vector properties_________________________________________________"""
+                #Build PVRTX matrix here
+                #_____________Check if there is an error here with vector properties_________________________________________________
                 pvrtx_mtx = self.geol_coll.get_uid_vtk_obj(uid).points
                 for property_name in properties_names:
                     print("property_name: ", property_name)
