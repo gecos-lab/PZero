@@ -1441,7 +1441,6 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             self.parent.TextTerminal.appendPlainText("error printing in terminal")
 
 
-
 class VTKView(BaseView):
     """Abstract class used as a base for all classes using the VTK/PyVista plotting canvas."""
 
