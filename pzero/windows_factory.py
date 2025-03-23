@@ -192,6 +192,7 @@ class DockWindow(QDockWidget):
             return
         # Case to actually close/delete a window, disconnecting all signals
         # of BaseView(), then cleanly close the VTK plotter.
+        self.canvas.enable_actions()
         self.canvas.disconnect_all_signals()
         if isinstance(self.canvas, VTKView):
             self.canvas.plotter.close()
@@ -1403,6 +1404,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
     def closeEvent(self, event):
         """Override the standard closeEvent method by (i) disconnecting all signals and,
         (ii) closing the plotter for vtk windows."""
+        self.enable_actions()
         self.disconnect_all_signals()
         if isinstance(self, VTKView):
             self.plotter.close()  # needed to cleanly close the vtk plotter
@@ -1423,11 +1425,13 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         """Un-freeze all actions after having done something."""
         # self.parent.findChildren(QAction) returns a list of all actions in the application.
         for action in self.parent.findChildren(QAction):
-            try:
-                # try - except added for symmetry with disable_actions (bug with an action with text="")
-                action.setEnabled(True)
-            except:
-                pass
+            action.setEnabled(True)
+            # try:
+            #     # try - except added for symmetry with disable_actions (bug with an action with text="")
+            #     action.setEnabled(True)
+            #     print("enable: ", action)
+            # except:
+            #     pass
 
     def print_terminal(self, string=None):
         """Show string in terminal."""
