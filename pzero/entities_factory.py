@@ -1292,6 +1292,7 @@ class XsPolyLine(PolyLine):
         self.GetPointData().SetNormals(point_normals)
         self.Modified()
 
+
 class XsTriSurf(TriSurf):
     # ______________________________________ NOT YET USED - SEE IF THIS IS USEFUL
     """XsTriSurf is a triangulated surface belonging to a unique XSection, derived from XSectionBaseEntity and TriSurf"""
