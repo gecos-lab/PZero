@@ -64,6 +64,7 @@ from vtk import (
     vtkActor,
     vtkLocator,
     vtkQuad,
+    vtkFloatArray,
 )
 from vtkmodules.numpy_interface.dataset_adapter import WrapDataObject, vtkDataArrayToVTKArray
 from vtkmodules.util.numpy_support import vtk_to_numpy
@@ -1089,61 +1090,34 @@ class Frame(PolyData):
         return uv
 
 
-class XSectionBaseEntity:
-    """This abstract class is used just to implement the method to calculate the W coordinate for all geometrical/topological entities belonging to a XSection.
-    We store a reference to parent - the project, and to the x_section_uid in order to be able to use property methods below.
-    """
-
+class XsVertexSet(VertexSet):
+    """XsVertexSet is a set of points, e.g. a point cloud, belonging to a unique XSection, derived from XSectionBaseEntity and VertexSet"""
     def __init__(self, x_section_uid=None, parent=None, *args, **kwargs):
+        super(XsVertexSet, self).__init__(*args, **kwargs)
         self.x_section_uid = x_section_uid
         self.parent = parent
 
-    def world2plane(self, normal=None):
-        if normal is None:
-            plane = self.parent.xsect_coll.get_uid_vtk_plane(self.x_section_uid)
-            normal = np_array([plane.GetNormal()])
-        dip_vec, dir_vec = get_dip_dir_vectors(normal)
-        uv = np_zeros((self.GetNumberOfPoints(), 2))
-
-        for i, point in enumerate(self.points):
-            uv[i, 0] = np_dot(dir_vec[0], point)  # u
-            uv[i, 1] = -np_dot(
-                dip_vec[0], point
-            )  # v is negative because of the right hand rule
-
-        return uv[:, 0], uv[:, 1]
+    def deep_copy(self):
+        xvset_copy = XsVertexSet()
+        xvset_copy.DeepCopy(self)
+        return xvset_copy
 
     @property
     def points_W(self):
         """Returns W coordinate (distance along the Xsection horizontal axis) from X and Y coordinates of the entity."""
-        x_section_base_x = self.parent.xsect_coll.get_uid_base_x(self.x_section_uid)
-        x_section_base_y = self.parent.xsect_coll.get_uid_base_y(self.x_section_uid)
-        x_section_end_x = self.parent.xsect_coll.get_uid_end_x(self.x_section_uid)
-        x_section_end_y = self.parent.xsect_coll.get_uid_end_y(self.x_section_uid)
-        sense = np_sign(
-            (self.points_X - x_section_base_x) * (x_section_end_x - x_section_base_x)
-            + (self.points_Y - x_section_base_y) * (x_section_end_y - x_section_base_y)
-        )
-        return (
-            np_sqrt(
-                (self.points_X - x_section_base_x) ** 2
-                + (self.points_Y - x_section_base_y) ** 2
-            )
-            * sense
-        )
+        return self.parent.xsect_coll.get_W_from_XY(section_uid=self.x_section_uid,
+                                                    X=self.points_X,
+                                                    Y=self.points_Y)
 
     @property
     def points_xs_app_dip(self):
         """Returns apparent dip as Numpy array for map plotting if points have Normals property."""
         if "Normals" in self.point_data_keys:
             xs_azimuth = self.parent.xsect_coll.get_uid_azimuth(self.x_section_uid)
-            app_dip = (
-                np_arctan(
-                    np_tan(self.points_map_dip * np_pi / 180)
-                    * np_cos((self.points_map_dip_azimuth - xs_azimuth) * np_pi / 180)
-                )
-                * 180
-                / np_pi
+            app_dip = np_arctan(
+                np_tan(self.points_map_dip * np_pi / 180)
+                * np_cos((self.points_map_dip_azimuth - xs_azimuth) * np_pi / 180)
+                * 180 / np_pi
             )
             return app_dip
         else:
@@ -1154,45 +1128,92 @@ class XSectionBaseEntity:
         """Returns apparent plunge as Numpy array for map plotting if points have Lineations property."""
         if "Lineations" in self.point_data_keys:
             xs_azimuth = self.parent.xsect_coll.get_uid_azimuth(self.x_section_uid)
-            app_plunge = (
-                np_arctan(
-                    np_tan(self.points_map_plunge * np_pi / 180)
-                    * np_cos((self.points_map_trend - xs_azimuth) * np_pi / 180)
-                )
-                * 180
-                / np_pi
+            app_plunge = np_arctan(
+                np_tan(self.points_map_plunge * np_pi / 180)
+                * np_cos((self.points_map_trend - xs_azimuth) * np_pi / 180)
+                * 180 / np_pi
             )
             return app_plunge
         else:
             return None
 
+    def world2plane(self, normal=None):
+        if normal is None:
+            plane = self.parent.xsect_coll.get_uid_vtk_plane(self.x_section_uid)
+            normal = np_array([plane.GetNormal()])
+        dip_vec, dir_vec = get_dip_dir_vectors(normal)
+        uv = np_zeros((self.GetNumberOfPoints(), 2))
+        for i, point in enumerate(self.points):
+            uv[i, 0] = np_dot(dir_vec[0], point)  # u
+            uv[i, 1] = -np_dot(
+                dip_vec[0], point
+            )  # v is negative because of the right hand rule
+        return uv[:, 0], uv[:, 1]
 
-class XsVertexSet(VertexSet, XSectionBaseEntity):
-    """XsVertexSet is a set of points, e.g. a point cloud, belonging to a unique XSection, derived from XSectionBaseEntity and VertexSet"""
 
-    def __init__(self, *args, **kwargs):
-        super(XsVertexSet, self).__init__(*args, **kwargs)
-
-    def deep_copy(self):
-        xvset_copy = XsVertexSet()
-        xvset_copy.DeepCopy(self)
-        return xvset_copy
-
-
-class XsPolyLine(PolyLine, XSectionBaseEntity):
+class XsPolyLine(PolyLine):
     """XsPolyLine is a polyline belonging to a unique XSection, derived from XSectionBaseEntity and PolyLine"""
-
-    def __init__(self, *args, **kwargs):
+    def __init__(self, x_section_uid=None, parent=None, *args, **kwargs):
         super(XsPolyLine, self).__init__(*args, **kwargs)
+        self.x_section_uid = x_section_uid
+        self.parent = parent
 
     def deep_copy(self):
         xpline_copy = XsPolyLine()
         xpline_copy.DeepCopy(self)
         return xpline_copy
 
+    @property
+    def points_W(self):
+        """Returns W coordinate (distance along the Xsection horizontal axis) from X and Y coordinates of the entity."""
+        return self.parent.xsect_coll.get_W_from_XY(section_uid=self.x_section_uid,
+                                                    X=self.points_X,
+                                                    Y=self.points_Y)
+
+    @property
+    def points_xs_app_dip(self):
+        """Returns apparent dip as Numpy array for map plotting if points have Normals property."""
+        if "Normals" in self.point_data_keys:
+            xs_azimuth = self.parent.xsect_coll.get_uid_azimuth(self.x_section_uid)
+            app_dip = np_arctan(
+                np_tan(self.points_map_dip * np_pi / 180)
+                * np_cos((self.points_map_dip_azimuth - xs_azimuth) * np_pi / 180)
+                * 180 / np_pi
+            )
+            return app_dip
+        else:
+            return None
+
+    @property
+    def points_xs_app_plunge(self):
+        """Returns apparent plunge as Numpy array for map plotting if points have Lineations property."""
+        if "Lineations" in self.point_data_keys:
+            xs_azimuth = self.parent.xsect_coll.get_uid_azimuth(self.x_section_uid)
+            app_plunge = np_arctan(
+                np_tan(self.points_map_plunge * np_pi / 180)
+                * np_cos((self.points_map_trend - xs_azimuth) * np_pi / 180)
+                * 180 / np_pi
+            )
+            return app_plunge
+        else:
+            return None
+
+    def world2plane(self, normal=None):
+        if normal is None:
+            plane = self.parent.xsect_coll.get_uid_vtk_plane(self.x_section_uid)
+            normal = np_array([plane.GetNormal()])
+        dip_vec, dir_vec = get_dip_dir_vectors(normal)
+        uv = np_zeros((self.GetNumberOfPoints(), 2))
+        for i, point in enumerate(self.points):
+            uv[i, 0] = np_dot(dir_vec[0], point)  # u
+            uv[i, 1] = -np_dot(
+                dip_vec[0], point
+            )  # v is negative because of the right hand rule
+        return uv[:, 0], uv[:, 1]
+
     def vtk_set_normals(self):
         """Calculate point and cell normals for the XsPolyLine, assuming
-        that the normal to each segment lies in the cross section plane.
+        that the normal to each segment lies in the cross-section plane.
         Sort lines nodes before calculating normals is raccomented.
         """
         import vtk
@@ -1200,10 +1221,10 @@ class XsPolyLine(PolyLine, XSectionBaseEntity):
 
         # Get the normal to the cross-section plane
         plane = self.parent.xsect_coll.get_uid_vtk_plane(self.x_section_uid)
-        normal = np.array([plane.GetNormal()])
+        normal = np_array([plane.GetNormal()])
 
         # Initialize normal arrays
-        cell_normals = vtk.vtkFloatArray()
+        cell_normals = vtkFloatArray()
         cell_normals.SetNumberOfComponents(3)
         cell_normals.SetNumberOfTuples(self.cells_number)
 
@@ -1218,7 +1239,6 @@ class XsPolyLine(PolyLine, XSectionBaseEntity):
                 else:
                     p0_idx = self.cells[i][0]
                     p1_idx = self.cells[i][1]
-
                 p0 = np.array(self.GetPoint(p0_idx))
                 p1 = np.array(self.GetPoint(p1_idx))
 
@@ -1240,7 +1260,6 @@ class XsPolyLine(PolyLine, XSectionBaseEntity):
             except Exception as e:
                 self.print_terminal(f"Error in segment {i}: {e}")
                 continue
-
         self.GetCellData().SetNormals(cell_normals)
         self.Modified()
 
@@ -1273,17 +1292,66 @@ class XsPolyLine(PolyLine, XSectionBaseEntity):
         self.GetPointData().SetNormals(point_normals)
         self.Modified()
 
-class XsTriSurf(TriSurf, XSectionBaseEntity):
+class XsTriSurf(TriSurf):
     # ______________________________________ NOT YET USED - SEE IF THIS IS USEFUL
     """XsTriSurf is a triangulated surface belonging to a unique XSection, derived from XSectionBaseEntity and TriSurf"""
-
-    def __init__(self, *args, **kwargs):
+    def __init__(self, x_section_uid=None, parent=None, *args, **kwargs):
         super(XsTriSurf, self).__init__(*args, **kwargs)
+        self.x_section_uid = x_section_uid
+        self.parent = parent
 
     def deep_copy(self):
         xtsurf_copy = XsTriSurf()
         xtsurf_copy.DeepCopy(self)
         return xtsurf_copy
+
+    @property
+    def points_W(self):
+        """Returns W coordinate (distance along the Xsection horizontal axis) from X and Y coordinates of the entity."""
+        return self.parent.xsect_coll.get_W_from_XY(section_uid=self.x_section_uid,
+                                                    X=self.points_X,
+                                                    Y=self.points_Y)
+
+    @property
+    def points_xs_app_dip(self):
+        """Returns apparent dip as Numpy array for map plotting if points have Normals property."""
+        if "Normals" in self.point_data_keys:
+            xs_azimuth = self.parent.xsect_coll.get_uid_azimuth(self.x_section_uid)
+            app_dip = np_arctan(
+                np_tan(self.points_map_dip * np_pi / 180)
+                * np_cos((self.points_map_dip_azimuth - xs_azimuth) * np_pi / 180)
+                * 180 / np_pi
+            )
+            return app_dip
+        else:
+            return None
+
+    @property
+    def points_xs_app_plunge(self):
+        """Returns apparent plunge as Numpy array for map plotting if points have Lineations property."""
+        if "Lineations" in self.point_data_keys:
+            xs_azimuth = self.parent.xsect_coll.get_uid_azimuth(self.x_section_uid)
+            app_plunge = np_arctan(
+                np_tan(self.points_map_plunge * np_pi / 180)
+                * np_cos((self.points_map_trend - xs_azimuth) * np_pi / 180)
+                * 180 / np_pi
+            )
+            return app_plunge
+        else:
+            return None
+
+    def world2plane(self, normal=None):
+        if normal is None:
+            plane = self.parent.xsect_coll.get_uid_vtk_plane(self.x_section_uid)
+            normal = np_array([plane.GetNormal()])
+        dip_vec, dir_vec = get_dip_dir_vectors(normal)
+        uv = np_zeros((self.GetNumberOfPoints(), 2))
+        for i, point in enumerate(self.points):
+            uv[i, 0] = np_dot(dir_vec[0], point)  # u
+            uv[i, 1] = -np_dot(
+                dip_vec[0], point
+            )  # v is negative because of the right hand rule
+        return uv[:, 0], uv[:, 1]
 
 
 class TetraSolid(vtkUnstructuredGrid):

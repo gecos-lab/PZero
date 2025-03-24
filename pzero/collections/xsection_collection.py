@@ -16,6 +16,7 @@ from numpy import repeat as np_repeat
 from numpy import set_printoptions as np_set_printoptions
 from numpy import sin as np_sin
 from numpy import sqrt as np_sqrt
+from numpy import sign as np_sign
 from numpy.linalg import inv as np_linalg_inv
 
 from pandas import DataFrame as pd_DataFrame
@@ -563,13 +564,28 @@ class XSectionCollection(BaseCollection):
         self.set_geometry(uid=uid)
 
     def get_XY_from_W(self, section_uid=None, W=None):
-        """Gets X, Y coordinates from W coordinate (distance along the Xsection horizontal axis)"""
+        """Gets X, Y coordinates from W coordinate (distance along the Xsection horizontal axis).
+        Should work for a single W value or for an array, in which case should return X, Y as arrays.
+        """
         azimuth = self.df.loc[self.df["uid"] == section_uid, "azimuth"].values[0]
         base_x = self.df.loc[self.df["uid"] == section_uid, "base_x"].values[0]
         base_y = self.df.loc[self.df["uid"] == section_uid, "base_y"].values[0]
         X = W * np_sin(azimuth * np_pi / 180) + base_x
         Y = W * np_cos(azimuth * np_pi / 180) + base_y
         return X, Y
+
+
+    def get_W_from_XY(self, section_uid=None, X=None, Y=None):
+        """Gets W coordinate (distance along the Xsection horizontal axis) from X, Y coordinates.
+        Should work for a single W value or for an array, in which case should return X, Y as arrays.
+        """
+        base_x = self.df.loc[self.df["uid"] == section_uid, "base_x"].values[0]
+        base_y = self.df.loc[self.df["uid"] == section_uid, "base_y"].values[0]
+        end_x = self.df.loc[self.df["uid"] == section_uid, "end_x"].values[0]
+        end_y = self.df.loc[self.df["uid"] == section_uid, "end_y"].values[0]
+        sense = np_sign((X - base_x) * (end_x - base_x) + (Y - base_y) * (end_y - base_y))
+        W = np_sqrt((X - base_x) ** 2 + (Y - base_y) ** 2) * sense
+        return W
 
     def get_deltaXY_from_deltaW(self, section_uid=None, deltaW=None):
         """Gets X, Y coordinates from W coordinate (distance along the Xsection horizontal axis)"""
