@@ -37,7 +37,7 @@ from pandas import DataFrame as pd_DataFrame
 from pandas import unique as pd_unique
 
 # VTK imports incl. VTK-Numpy interface____
-from vtkmodules.vtkRenderingCore import vtkPropPicker
+from vtkmodules.vtkRenderingCore import vtkPropPicker, vtkCellPicker
 # import vtk.numpy_interface.dataset_adapter as dsa
 from vtkmodules.util import numpy_support
 from vtkmodules.vtkInteractionWidgets import vtkCameraOrientationWidget
@@ -192,6 +192,7 @@ class DockWindow(QDockWidget):
             return
         # Case to actually close/delete a window, disconnecting all signals
         # of BaseView(), then cleanly close the VTK plotter.
+        self.canvas.enable_actions()
         self.canvas.disconnect_all_signals()
         if isinstance(self.canvas, VTKView):
             self.canvas.plotter.close()
@@ -1403,6 +1404,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
     def closeEvent(self, event):
         """Override the standard closeEvent method by (i) disconnecting all signals and,
         (ii) closing the plotter for vtk windows."""
+        self.enable_actions()
         self.disconnect_all_signals()
         if isinstance(self, VTKView):
             self.plotter.close()  # needed to cleanly close the vtk plotter
@@ -1423,11 +1425,13 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         """Un-freeze all actions after having done something."""
         # self.parent.findChildren(QAction) returns a list of all actions in the application.
         for action in self.parent.findChildren(QAction):
-            try:
-                # try - except added for symmetry with disable_actions (bug with an action with text="")
-                action.setEnabled(True)
-            except:
-                pass
+            action.setEnabled(True)
+            # try:
+            #     # try - except added for symmetry with disable_actions (bug with an action with text="")
+            #     action.setEnabled(True)
+            #     print("enable: ", action)
+            # except:
+            #     pass
 
     def print_terminal(self, string=None):
         """Show string in terminal."""
@@ -1435,7 +1439,6 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             self.parent.TextTerminal.appendPlainText(string)
         except:
             self.parent.TextTerminal.appendPlainText("error printing in terminal")
-
 
 
 class VTKView(BaseView):
@@ -2371,36 +2374,53 @@ class VTKView(BaseView):
         self.actor_in_table()
 
     def select_actor(self, obj, event):
+        """Select actor with VTK picking.
+        """
+        # initialize selction sets
+        name_list = set()
+        actors = set(self.plotter.renderer.actors)
+
+        # initialize render interaction
         style = obj.GetInteractorStyle()
         style.SetDefaultRenderer(self.plotter.renderer)
         pos = obj.GetEventPosition()
         shift = obj.GetShiftKey()
-        name_list = set()
-        # end_pos = style.GetEndPosition()
 
-        picker = vtkPropPicker()
-        picker_output = picker.PickProp(pos[0], pos[1], style.GetDefaultRenderer())
-
-        actors = set(self.plotter.renderer.actors)
-
+        # create picker
+        # Note that https://discourse.vtk.org/t/get-picked-vtk-actor/3474 says vtkPropPicker() is problematic
+        # picker = vtkPropPicker()
+        # picker_output = picker.PickProp(pos[0], pos[1], style.GetDefaultRenderer())
+        # on the other hand vtkCellPicker() allows setting the tolerance for picking
+        picker = vtkCellPicker()
+        picker.SetTolerance(0.01)
+        picker_output = picker.Pick(pos[0], pos[1], 0, style.GetDefaultRenderer())
         actor = picker.GetActor()
 
-        if not self.actors_df.loc[self.actors_df["actor"] == actor, "uid"].empty:
+        # show messages in terminal
+        self.print_terminal(f"Picker tolerance: {picker.GetTolerance()}")
+        self.print_terminal(f"Picker output: {picker_output}")
+        # self.print_terminal(f"Picker actor: {actor}")
+
+        # proceed if an actor is selected
+        # if not self.actors_df.loc[self.actors_df["actor"] == actor, "uid"].empty:
+        if picker_output:
+            # Get uid of picked actor
             sel_uid = self.actors_df.loc[
                 self.actors_df["actor"] == actor, "uid"
             ].values[0]
+            self.print_terminal(f"Picked uid: {sel_uid}")
+
+            # Add uid of picked actor to selected_uids list, with SHIFT-SELECT option
             if shift:
                 self.selected_uids.append(sel_uid)
             else:
                 self.selected_uids = [sel_uid]
+            self.print_terminal(f"Selected uids: {self.selected_uids}")
 
+            # Show selected actors in yellow
             for sel_uid in self.selected_uids:
-                sel_actor = self.actors_df.loc[
-                    self.actors_df["uid"] == sel_uid, "actor"
-                ].values[0]
-                collection = self.actors_df.loc[
-                    self.actors_df["uid"] == sel_uid, "collection"
-                ].values[0]
+                sel_actor = self.actors_df.loc[self.actors_df["uid"] == sel_uid, "actor"].values[0]
+                collection = self.actors_df.loc[self.actors_df["uid"] == sel_uid, "collection"].values[0]
                 mesh = sel_actor.GetMapper().GetInput()
                 name = f"{sel_uid}_silh"
                 name_list.add(name)
@@ -2416,11 +2436,13 @@ class VTKView(BaseView):
                     style="wireframe",
                     line_width=5,
                 )
+
                 for av_actor in actors.difference(name_list):
                     if "_silh" in av_actor:
                         self.plotter.remove_actor(av_actor)
 
             self.actor_in_table(self.selected_uids)
+
         else:
             return None
 

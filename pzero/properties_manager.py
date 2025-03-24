@@ -134,7 +134,7 @@ class PropertiesCMaps(QObject):
         # The remove old ones no more used.
         for prop in parent.prop_legend_df["property_name"].to_list():
             if not prop in all_props:
-                """Get index of row to be removed, then remove it in place with .drop()."""
+                #Get index of row to be removed, then remove it in place with .drop().
                 idx_remove = parent.prop_legend_df[
                     parent.prop_legend_df["property_name"] == prop
                 ].index

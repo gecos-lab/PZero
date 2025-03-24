@@ -16,14 +16,14 @@ def vtk2cesium(self=None, out_dir_name=None):
     https://github.com/Kitware/Danesfield/blob/master/tools/tiler-test.sh
 
     IN THE FUTURE extend to other entity classes such as DEM, polyline, etc."""
-    """File name"""
+    #File name
     out_file_name = str(out_dir_name) + "/" + "multi_block_dataset" + ".glb"
-    """Create GLTF writer."""
+    #Create GLTF writer.
     multi_block = vtkMultiBlockDataSet()
     print("multi_block: ", multi_block)
     writer = vtkCesium3DTilesWriter()
     print("writer: ", writer)
-    """Loop for each entity."""
+    #Loop for each entity.
     i = 0
     for uid in self.geol_coll.df["uid"]:
         if isinstance(self.geol_coll.get_uid_vtk_obj(uid), TriSurf):

@@ -231,29 +231,29 @@ def multiple_input_dialog(title="title", input_dict=None, return_widget=False):
         i += 1
 
     if not return_widget:
-        """Create OK Button, add it to the grid layout an set name and state."""
+        #Create OK Button, add it to the grid layout an set name and state.
         button_ok = QPushButton(widget)
         gridLayout.addWidget(button_ok, i + 2, 1)
         button_ok.setAutoDefault(True)
         button_ok.setText("OK")
-        """Cancel Button, add it to the grid layout an set name and state."""
+        #Cancel Button, add it to the grid layout an set name and state.
         button_cancel = QPushButton(widget)
         gridLayout.addWidget(button_cancel, i + 2, 2)
         button_cancel.setAutoDefault(True)
         button_cancel.setText("Cancel")
-        """Show the widget."""
+        #Show the widget.
         widget.show()
     else:
         return widget
 
     def cancel_option():
         """Clear the objects_qt dictionary if Cancel button is clicked"""
-        """This function has to be implemented before creating and calling the QEventLoop"""
+        #This function has to be implemented before creating and calling the QEventLoop
         objects_qt.clear()
         return
 
-    """A QEventLoop is created. Signals and connections are created. QEventLoop is executed. When button is clicked,
-    the QEventLoop.quit() will be called to close the widget and the loop. Attention: it's not a linear path in the code"""
+    #A QEventLoop is created. Signals and connections are created. QEventLoop is executed. When button is clicked,
+    #the QEventLoop.quit() will be called to close the widget and the loop. Attention: it's not a linear path in the code
     loop = QEventLoop()  # Create a QEventLoop necessary to stop the main loop
     button_ok.clicked.connect(
         loop.quit
@@ -266,9 +266,9 @@ def multiple_input_dialog(title="title", input_dict=None, return_widget=False):
     )  # Response to clicking the Cancel PushButton. End the QEventLoop
     loop.exec_()  # Execute the QEventLoop
 
-    """When the QEventLoop is closed, the typed text is collected"""
+    #When the QEventLoop is closed, the typed text is collected
     if not objects_qt:
-        """Return None if Cancel is pressed."""
+        #Return None if Cancel is pressed.
         return
     else:
         output_dict = {}
@@ -296,44 +296,44 @@ def input_checkbox_dialog(title="title", label="label", choice_list=None):
     """Open a dialog with a text line explaining the widget, followed by a list of non-exclusive checkboxes."""
     widget = QWidget()
     widget.setWindowTitle(title)
-    """Define a grid layout"""
+    #Define a grid layout
     gridLayout = QGridLayout(widget)
     objects_qt = {}
     i = 0
-    """Insert QLabel to explain the reason of the choice"""
+    #Insert QLabel to explain the reason of the choice
     label_line = QLabel(widget)
     label_line.setText(label)
     gridLayout.addWidget(label_line, 1, 1)
-    """FOR loop that builds checkboxes according to the choice_list"""
+    #FOR loop that builds checkboxes according to the choice_list
     for element in choice_list:
-        """Create dynamic variables."""
+        #Create dynamic variables.
         objects_qt[element] = [None, None]
-        """Create QCheckBoxes."""
+        #Create QCheckBoxes.
         objects_qt[element][0] = QCheckBox(widget)
         objects_qt[element][0].setText(element)  # set text for the checkbox
         gridLayout.addWidget(objects_qt[element][0], i + 2, 1)
         i += 1
-    """Create OK Button, add it to the grid layout an set name and state"""
+    #Create OK Button, add it to the grid layout an set name and state
     button_ok = QPushButton(widget)
     gridLayout.addWidget(button_ok, i + 3, 1)
     button_ok.setAutoDefault(True)
     button_ok.setText("OK")
-    """Cancel Button, add it to the grid layout an set name and state"""
+    #Cancel Button, add it to the grid layout an set name and state
     button_cancel = QPushButton(widget)
     gridLayout.addWidget(button_cancel, i + 3, 2)
     button_cancel.setAutoDefault(True)
     button_cancel.setText("Cancel")
-    """Show the widget."""
+    #Show the widget.
     widget.show()
 
     def cancel_option():
         """Clear the objects_qt dictionary if Cancel button is clicked"""
-        """This function has to be implemented before creating and calling the QEventLoop"""
+        #This function has to be implemented before creating and calling the QEventLoop
         objects_qt.clear()
         return
 
-    """A QEventLoop is created. Signals and connections are created. QEventLoop is executed. When button is clicked,
-    the QEventLoop.quit() will be called to close the widget and the loop. Attention: it's not a linear path in the code"""
+    #A QEventLoop is created. Signals and connections are created. QEventLoop is executed. When button is clicked,
+    #the QEventLoop.quit() will be called to close the widget and the loop. Attention: it's not a linear path in the code
     loop = QEventLoop()  # Create a QEventLoop necessary to stop the main loop
     button_ok.clicked.connect(
         loop.quit
@@ -344,7 +344,7 @@ def input_checkbox_dialog(title="title", label="label", choice_list=None):
     )  # Response to clicking the Cancel PushButton. End the QEventLoop
     loop.exec_()  # Execute the QEventLoop
 
-    """When the QEventLoop is closed, the typed text is collected"""
+    #When the QEventLoop is closed, the typed text is collected
     if not objects_qt:
         return
     else:
@@ -375,12 +375,12 @@ def general_input_dialog(title="title", input_dict=None):
     objects_qt = {}
     i = 0
 
-    """FOR loop that builds labels and boxes according to the input_dict."""
+    #FOR loop that builds labels and boxes according to the input_dict.
     for key in input_dict:
-        """Create dynamic variables."""
+        #Create dynamic variables.
         objects_qt[key] = [None, None]
         if input_dict[key][2] == "QLabel":
-            """Create QLabels, assign them to the grid layout, and set the text."""
+            #Create QLabels, assign them to the grid layout, and set the text.
             objects_qt[key][0] = QLabel(widget)
             objects_qt[key][0].setText(
                 input_dict[key][1]
@@ -388,38 +388,38 @@ def general_input_dialog(title="title", input_dict=None):
             gridLayout.addWidget(objects_qt[key][0], i + 1, 1)
         elif input_dict[key][2] == "QLineEdit":
             if isinstance(input_dict[key][1], int):
-                """Create QLabels, assign them to the grid layout, and set the text."""
+                #Create QLabels, assign them to the grid layout, and set the text.
                 objects_qt[key][0] = QLabel(widget)
                 objects_qt[key][0].setText(input_dict[key][0])
                 gridLayout.addWidget(objects_qt[key][0], i + 1, 1)
-                """Create QLineEdit"""
+                #Create QLineEdit
                 objects_qt[key][1] = QLineEdit(widget)
                 objects_qt[key][1].setText(str(input_dict[key][1]))
                 gridLayout.addWidget(objects_qt[key][1], i + 1, 2)
             elif isinstance(input_dict[key][1], float):
-                """Create QLabels, assign them to the grid layout, and set the text."""
+                #Create QLabels, assign them to the grid layout, and set the text.
                 objects_qt[key][0] = QLabel(widget)
                 objects_qt[key][0].setText(input_dict[key][0])
                 gridLayout.addWidget(objects_qt[key][0], i + 1, 1)
-                """Create QLineEdit"""
+                #Create QLineEdit
                 objects_qt[key][1] = QLineEdit(widget)
                 objects_qt[key][1].setText(str(input_dict[key][1]))
                 gridLayout.addWidget(objects_qt[key][1], i + 1, 2)
             else:
-                """Create QLabels, assign them to the grid layout, and set the text."""
+                #Create QLabels, assign them to the grid layout, and set the text.
                 objects_qt[key][0] = QLabel(widget)
                 objects_qt[key][0].setText(input_dict[key][0])
                 gridLayout.addWidget(objects_qt[key][0], i + 1, 1)
-                """Create QLineEdit"""
+                #Create QLineEdit
                 objects_qt[key][1] = QLineEdit(widget)
                 objects_qt[key][1].setText(input_dict[key][1])
                 gridLayout.addWidget(objects_qt[key][1], i + 1, 2)
         elif input_dict[key][2] == "QComboBox":
-            """Create QLabels, assign them to the grid layout, and set the text."""
+            #Create QLabels, assign them to the grid layout, and set the text.
             objects_qt[key][0] = QLabel(widget)
             objects_qt[key][0].setText(input_dict[key][0])
             gridLayout.addWidget(objects_qt[key][0], i + 1, 1)
-            """Create QComboBox"""
+            #Create QComboBox
             objects_qt[key][1] = QComboBox(widget)
             objects_qt[key][1].addItems(input_dict[key][1])
             objects_qt[key][1].setEditable(True)
@@ -431,7 +431,7 @@ def general_input_dialog(title="title", input_dict=None):
             )  # use second column to set the label
             gridLayout.addWidget(objects_qt[key][0], i + 1, 1)
         elif input_dict[key][2] == "QSpinBox":
-            """---- to be implemented ----"""
+            #---- to be implemented ----
             return
         elif input_dict[key][2] == "QPushButton":
             # func = input_dict[key][3]
@@ -442,27 +442,27 @@ def general_input_dialog(title="title", input_dict=None):
             gridLayout.addWidget(objects_qt[key][0], i + 1, 1)
         i += 1
 
-    """Create OK Button, add it to the grid layout an set name and state."""
+    #Create OK Button, add it to the grid layout an set name and state.
     button_ok = QPushButton(widget)
     gridLayout.addWidget(button_ok, i + 2, 1)
     button_ok.setAutoDefault(True)
     button_ok.setText("OK")
-    """Cancel Button, add it to the grid layout an set name and state."""
+    #Cancel Button, add it to the grid layout an set name and state.
     button_cancel = QPushButton(widget)
     gridLayout.addWidget(button_cancel, i + 2, 2)
     button_cancel.setAutoDefault(True)
     button_cancel.setText("Cancel")
-    """Show the widget."""
+    #Show the widget.
     widget.show()
 
     def cancel_option():
         """Clear the objects_qt dictionary if Cancel button is clicked"""
-        """This function has to be implemented before creating and calling the QEventLoop"""
+        #This function has to be implemented before creating and calling the QEventLoop
         objects_qt.clear()
         return
 
-    """A QEventLoop is created. Signals and connections are created. QEventLoop is executed. When button is clicked,
-    the QEventLoop.quit() will be called to close the widget and the loop. Attention: it's not a linear path in the code"""
+    #A QEventLoop is created. Signals and connections are created. QEventLoop is executed. When button is clicked,
+    #the QEventLoop.quit() will be called to close the widget and the loop. Attention: it's not a linear path in the code
     loop = QEventLoop()  # Create a QEventLoop necessary to stop the main loop
     button_ok.clicked.connect(
         loop.quit
@@ -475,9 +475,9 @@ def general_input_dialog(title="title", input_dict=None):
     )  # Response to clicking the Cancel PushButton. End the QEventLoop
     loop.exec_()  # Execute the QEventLoop
 
-    """When the QEventLoop is closed, the typed text is collected"""
+    #When the QEventLoop is closed, the typed text is collected
     if not objects_qt:
-        """Return None if Cancel is pressed."""
+        #Return None if Cancel is pressed.
         return
     else:
         output_dict = {}
@@ -505,7 +505,7 @@ def general_input_dialog(title="title", input_dict=None):
                 else:
                     output_dict[key] = "uncheck"
             elif input_dict[key][2] == "QSpinBox":
-                """---- to be implemented ----"""
+                #---- to be implemented ----
                 pass
     return output_dict
 
@@ -565,7 +565,7 @@ class progress_dialog(QProgressDialog):
 
 
 class PCDataModel(QAbstractTableModel):
-    """[Gabriele]  Abstract table model that can be used to quickly display imported pc files data  from a pandas df. Taken from this stack overflow post https://stackoverflow.com/questions/31475965/fastest-way-to-populate-qtableview-from-pandas-data-frame"""
+    """Abstract table model that can be used to quickly display imported pc files data  from a pandas df. Taken from this stack overflow post https://stackoverflow.com/questions/31475965/fastest-way-to-populate-qtableview-from-pandas-data-frame"""
 
     def __init__(self, data, index_list, parent=None, *args, **kwargs):
         super(PCDataModel, self).__init__(*args, **kwargs)
@@ -594,7 +594,7 @@ class PCDataModel(QAbstractTableModel):
                 return QColor(Qt.green)  # [Gabriele] Set the color
         return None
 
-    """[Gabriele] Set header and index If the "container" is horizontal (orientation index 1) and has a display qt_role (index 0) (-> is the header of the table). If the "container" is vertical (orientation index 2) and has a display qt_role (index 0) (-> is the index of the table)."""
+    #Set header and index If the "container" is horizontal (orientation index 1) and has a display qt_role (index 0) (-> is the header of the table). If the "container" is vertical (orientation index 2) and has a display qt_role (index 0) (-> is the index of the table)."""
 
     def headerData(self, col, orientation, qt_role):
         if orientation == Qt.Horizontal and qt_role == Qt.DisplayRole:
@@ -605,16 +605,16 @@ class PCDataModel(QAbstractTableModel):
 
 
 class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
-    """[Gabriele]  New window class used to display import options and data preview."""
+    """New window class used to display import options and data preview."""
 
-    """[Gabriele]  Different options that can be changed in the import menu:
-        + in_path -> input file path
-        + StartColspinBox -> Start import from column number
-        + EndColspinBox -> End import on column number
-        + HeaderspinBox -> Row index with header dataset
-        + StartRowspinBox -> Start import from row number
-        + EndRowspinBox -> End import on row number
-        + Separator -> Role of separtor in the data set"""
+    #    [Gabriele]  Different options that can be changed in the import menu:
+    #    + in_path -> input file path
+    #    + StartColspinBox -> Start import from column number
+    #    + EndColspinBox -> End import on column number
+    #    + HeaderspinBox -> Row index with header dataset
+    #    + StartRowspinBox -> Start import from row number
+    #    + EndRowspinBox -> End import on row number
+    #    + Separator -> Role of separtor in the data set
 
     import_options_dict = {
         "in_path": "",
@@ -623,7 +623,7 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
         "SeparatorcomboBox": " ",
     }
 
-    """[Gabriele]  Different types of separators. By writing not using the symbol as a display we can avoid possible confusion between similar separators (e.g tab and space)-> the separator is auto assigned with the auto_sep function"""
+    #[Gabriele]  Different types of separators. By writing not using the symbol as a display we can avoid possible confusion between similar separators (e.g tab and space)-> the separator is auto assigned with the auto_sep function
     sep_dict = {"<space>": " ", "<comma>": ",", "<semi-col>": ";", "<tab>": "   "}
 
     def __init__(
@@ -648,7 +648,7 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
         self.caption = caption
 
         self.setWindowTitle(caption)
-        """[Gabriele]  Different types of signals depending on the field in the import options"""
+        # Different types of signals depending on the field in the import options
         self.PathtoolButton.clicked.connect(lambda: self.import_file(multiple=multiple))
         self.PathlineEdit.editingFinished.connect(
             lambda: self.import_file(path=self.PathlineEdit.text())
@@ -666,7 +666,7 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
             )
         )
 
-        ''' [Gabriele] The text separator value is confronted with the dict values and then assigned the correct symbol. <comma> --> ","'''
+        #The text separator value is confronted with the dict values and then assigned the correct symbol. <comma> --> "
 
         self.SeparatorcomboBox.currentTextChanged.connect(
             lambda: self.import_options(
@@ -702,7 +702,7 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
         self.show_qt_canvas()
 
     def import_options(self, origin, value):
-        """[Gabriele]  Single function that manages all of the signals by adding to the import_options_dict a key,value pair corresponding to the origin object name and the set value."""
+        """Single function that manages all of the signals by adding to the import_options_dict a key,value pair corresponding to the origin object name and the set value."""
         self.import_options_dict[origin] = value
 
     def show_qt_canvas(self):
@@ -711,7 +711,7 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
         self.loop.exec_()  # Execute the QEventLoop
 
     def import_file(self, path=None, multiple=False):
-        """[Gabriele] Function used to read and preview a PC data file. The open_file_dialog function is used to obtain the file path. Once the file is chosen a different parser is used depending on the extension. Once the file is read the properties are autoassigned (where possible)"""
+        """Function used to read and preview a PC data file. The open_file_dialog function is used to obtain the file path. Once the file is chosen a different parser is used depending on the extension. Once the file is read the properties are autoassigned (where possible)"""
         if path == None:
             self.import_options_dict["in_path"] = open_file_dialog(
                 parent=self,
@@ -745,13 +745,13 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
             else:
                 self.input_data_df = self.csv2df(path)
 
-            """[Gabriele]  Auto-assign values using the difflib library (internal). If there is no match then the column is not imported (N.a.). In this step the rename_dict dictionary is compiled where:
-            - the keys correspond to the column index of the input df
-            - the items correspond to the matched attribute (match score >0.8).
-            If there is no match, the item will correspond to the original input column name.
+            #Auto-assign values using the difflib library (internal). If there is no match then the column is not imported (N.a.). In this step the rename_dict dictionary is compiled where:
+            #- the keys correspond to the column index of the input df
+            #- the items correspond to the matched attribute (match score >0.8).
+            #If there is no match, the item will correspond to the original input column name.
 
-            This dict is then used in the assign_data menu window to fill the corresponding values in each comboBox.
-            """
+            #This dict is then used in the assign_data menu window to fill the corresponding values in each comboBox.
+
 
             col_names = list(self.input_data_df.columns)
             self.rename_dict = {}
@@ -790,14 +790,14 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
             self.dataView.setModel(None)
 
     def preview_file(self, input_data_df):
-        """[Gabriele]  Function used to preview the data using the PCDataModel. The column and row ranges are obtained to properly slice the preview table."""
+        """Function used to preview the data using the PCDataModel. The column and row ranges are obtained to properly slice the preview table."""
         value_dict = {k: v for k, v in list(self.rename_dict.items()) if v != "N.a."}
         index_list = list(value_dict.keys())
         self.model = PCDataModel(self.input_data_df, index_list)
         self.dataView.setModel(self.model)
 
     def export_data(self):
-        """[Gabriele]  Import the pc data in PZero. Here the information needed to read and properly import the whole file is prepared:
+        """Import the pc data in PZero. Here the information needed to read and properly import the whole file is prepared:
         - path: file path
         - row_range: range of needed rows
         - delimiter: delimiter type
@@ -821,7 +821,7 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
         col_names = list(clean_dict.values())
         index_list = list(clean_dict.keys())
 
-        """ [Gabriele] X and Y are not always called exactly like this and they can occupy other positions. The clean_dict is reverse searched (get the key using a given valdue) to obtain the index positions of the X Y columns in the raw df."""
+        #X and Y are not always called exactly like this and they can occupy other positions. The clean_dict is reverse searched (get the key using a given valdue) to obtain the index positions of the X Y columns in the raw df.
 
         self.args = [path, col_names, row_range, index_list, delimiter, self]
         self.close()
@@ -830,7 +830,7 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
         # pc2vtk(in_file_name=path, col_names=col_names, row_range=row_range, usecols=index_list, delimiter=delimiter, offset=offset, self=self, header_row=0)
 
     def las2df(self, path):
-        """[Gabriele]  LAS/LAZ file parser.
+        """LAS/LAZ file parser.
         Reads .las and .laz file using the laspy package. The whole file is read and then processed in a dict cycling through the dim_names list. The dict then is converted in a pandas dataframe using the from_dict function.
         --------------------------------------------------------
         Inputs:
@@ -858,7 +858,7 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
         return df
 
     def csv2df(self, path):
-        """[Gabriele]  csv file parser.
+        """csv file parser.
         It reads the specified csv file using pd_read_csv. Wrapped in a function so that it can be profiled.
         --------------------------------------------------------
         Inputs:
@@ -877,7 +877,7 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
         return df
 
     def ply2df(self, path):
-        """[Gabriele]  PLY file parser.
+        """PLY file parser.
         It reads the first header lines to search for properties such as XYZ, RGB etcetc. When the "end_header" line is reached the file is read as a normal .csv file and parsed with pandas.read_csv skipping the header lines.
         --------------------------------------------------------
         Inputs:
@@ -918,7 +918,7 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
         self.AssignTable.setRowCount(len(col_names))
 
         for i, col in enumerate(col_names):
-            """[Gabriele]  To create the assign menu we cicle through the column names and assign the comboBox text to the corresponding rename_dict item if the item is contained in the default_attr_list"""
+            #To create the assign menu we cicle through the column names and assign the comboBox text to the corresponding rename_dict item if the item is contained in the default_attr_list
             self.ColnameItem = QTableWidgetItem()
             self.ColnameItem.setText(str(col_names[i]))
             self.AttrcomboBox = QComboBox(self)
@@ -953,13 +953,13 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
         # self.resize(750, 600) #[Gabriele] Set appropriate window size
 
         def ass_value(attr):
-            """[Gabriele] Get column and row of clicked widget in table"""
+            """Get column and row of clicked widget in table"""
             # sel_combo = self.sender()  # [Gabriele] Combobox @ row and column
             sel_combo = attr  # [Gabriele] Combobox @ row and column
             row = int(sel_combo.objectName().split("_")[1])
             print(row)
 
-            """[Gabriele] Use a dict to rename the columns. The keys are the column index of the original df while the values are the new names. """
+            #Use a dict to rename the columns. The keys are the column index of the original df while the values are the new names.
 
             if sel_combo.currentText() == "User defined":
                 self.AssignTable.cellWidget(row, 2).setEnabled(True)
@@ -987,7 +987,7 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
             index = self.AssignTable.indexAt(clicked)
             col = index.column()
             row = index.row()
-            """[Gabriele]  This is the only way to choose the QLineEdit otherwise self.AssignTable.cellWidget(row,2) returns somehow a QWidget instad than a QLineEdit"""
+            #This is the only way to choose the QLineEdit otherwise self.AssignTable.cellWidget(row,2) returns somehow a QWidget instad than a QLineEdit"""
             sel_line = LineList[row]
             scal_name = f"user_{sel_line.text()}"
             self.rename_dict[row] = scal_name

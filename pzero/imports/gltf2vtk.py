@@ -10,12 +10,12 @@ def vtk2gltf(self=None, out_dir_name=None):
     """Exports all triangulated surfaces to a collection of GLTF binary surfaces (extension .glb).
     Note that saving in binary format is automatically set by using the .glb extension.
     IN THE FUTURE extendo to other entity classes such as DEM, polyline, etc."""
-    """File name"""
+    #File name
     out_file_name = str(out_dir_name) + "/" + "multi_block_dataset" + ".glb"
-    """Create GLTF writer."""
+    #Create GLTF writer.
     multi_block = vtkMultiBlockDataSet()
     writer = vtkGLTFWriter()
-    """Loop for each entity."""
+    #Loop for each entity.
     i = 0
     for uid in self.geol_coll.df["uid"]:
         if isinstance(self.geol_coll.get_uid_vtk_obj(uid), TriSurf):

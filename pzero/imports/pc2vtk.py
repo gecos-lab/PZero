@@ -103,7 +103,7 @@ def pc2vtk(
     else:
         print("3. Creating PointCloud")
 
-        """ [Gabriele] Correcting input data by subtracting an equal value approximated to the hundreds (53932.4325 -> 53932.4325 - 53900.0000 = 32.4325). Can be always applied since for numbers < 100 the approximation is always 0."""
+        # Correcting input data by subtracting an equal value approximated to the hundreds (53932.4325 -> 53932.4325 - 53900.0000 = 32.4325). Can be always applied since for numbers < 100 the approximation is always 0.
 
         offset = input_df.loc[0, ["X", "Y"]].round(-2)
 
@@ -123,7 +123,7 @@ def pc2vtk(
         point_cloud.generate_cells()
 
         # pv_PD = PointSet(XYZ)
-        """ [Gabriele] Set properties (exclude XYZ data) and add properties names and components in the appropriate lists (properties_names and properties_components)."""
+        # Set properties (exclude XYZ data) and add properties names and components in the appropriate lists (properties_names and properties_components).
         input_df.drop(["X", "Y", "Z"], axis=1, inplace=True)
 
         if not input_df.empty:
@@ -176,7 +176,7 @@ def pc2vtk(
 
         # point_cloud.generate_point_set()
 
-        """Create dictionary."""
+        #Create dictionary.
         curr_obj_attributes = deepcopy(DomCollection.entity_dict)
         curr_obj_attributes["uid"] = str(uuid4())
         point_cloud.Modified()
@@ -187,9 +187,9 @@ def pc2vtk(
         curr_obj_attributes["properties_components"] = properties_components
         curr_obj_attributes["properties_types"] = properties_types
         curr_obj_attributes["vtk_obj"] = point_cloud
-        """Add to entity collection."""
+        #Add to entity collection.
         self.parent.dom_coll.add_entity_from_dict(entity_dict=curr_obj_attributes)
-        """Cleaning."""
+        #Cleaning.
         del input_df
         del point_cloud
         print("Done!")

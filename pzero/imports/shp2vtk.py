@@ -21,9 +21,9 @@ from pzero.collections.geological_collection import GeologicalCollection
 from pzero.entities_factory import PolyLine, VertexSet, Attitude
 from pzero.orientation_analysis import dip_directions2normals
 
-"""Importer for SHP files and other GIS formats, to be improved IN THE FUTURE.
-Known bugs for multi-part polylines.
-Points not handled correctly."""
+#Importer for SHP files and other GIS formats, to be improved IN THE FUTURE.
+#Known bugs for multi-part polylines.
+#Points not handled correctly.
 
 
 def shp2vtk(self=None, in_file_name=None, collection=None):
@@ -89,7 +89,7 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
                         vtkappend.AddInputData(temp_vtk)
                     vtkappend.Update()
                     curr_obj_dict["vtk_obj"].ShallowCopy(vtkappend.GetOutput())
-                """Create entity from the dictionary and run left_right."""
+                #Create entity from the dictionary and run left_right.
                 if curr_obj_dict["vtk_obj"].points_number > 0:
                     output_uid = self.geol_coll.add_entity_from_dict(curr_obj_dict)
                 else:
@@ -230,7 +230,7 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
                         vtkappend.AddInputData(temp_vtk)
                     vtkappend.Update()
                     curr_obj_dict["vtk_obj"].ShallowCopy(vtkappend.GetOutput())
-                """Create entity from the dictionary and run left_right."""
+                #Create entity from the dictionary and run left_right.
                 if curr_obj_dict["vtk_obj"].points_number > 0:
                     output_uid = self.fluid_coll.add_entity_from_dict(curr_obj_dict)
                 else:
@@ -351,7 +351,7 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
                         curr_obj_dict["vtk_obj"].ShallowCopy(out_vtk)
                     else:
                         curr_obj_dict["vtk_obj"].ShallowCopy(vtkappend.GetOutput())
-                """Create entity from the dictionary and run left_right."""
+                #Create entity from the dictionary and run left_right.
                 if curr_obj_dict["vtk_obj"].points_number > 0:
                     self.backgrnd_coll.add_entity_from_dict(curr_obj_dict)
                 else:

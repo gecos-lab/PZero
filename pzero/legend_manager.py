@@ -713,7 +713,7 @@ class Legend(QObject):
         role = sender.role
         feature = sender.feature
         scenario = sender.scenario
-        """Here we use the same query as above to GET the color from the legend"""
+        #Here we use the same query as above to GET the color from the legend
         old_color_R = parent.geol_coll.legend_df.loc[
             (parent.geol_coll.legend_df["role"] == role)
             & (parent.geol_coll.legend_df["feature"] == feature)
@@ -743,7 +743,7 @@ class Legend(QObject):
         new_color_R = color_out.red()
         new_color_G = color_out.green()
         new_color_B = color_out.blue()
-        """Here the query is reversed and modified, dropping the values() method, to allow SETTING the color in the legend."""
+        #Here the query is reversed and modified, dropping the values() method, to allow SETTING the color in the legend.
         parent.geol_coll.legend_df.loc[
             (parent.geol_coll.legend_df["role"] == role)
             & (parent.geol_coll.legend_df["feature"] == feature)
@@ -762,7 +762,7 @@ class Legend(QObject):
             & (parent.geol_coll.legend_df["scenario"] == scenario),
             "color_B",
         ] = new_color_B
-        """Update sender color."""
+        #Update sender color.
         # self.sender().setStyleSheet(
         #     "background-color:rgb({},{},{})".format(
         #         new_color_R, new_color_G, new_color_B
@@ -773,7 +773,7 @@ class Legend(QObject):
                 new_color_R, new_color_G, new_color_B
             )
         )
-        """Signal to update actors in windows. This is emitted only for the modified uid under the 'color' key."""
+        #Signal to update actors in windows. This is emitted only for the modified uid under the 'color' key.
         updated_list = parent.geol_coll.df.loc[
             (parent.geol_coll.df["role"] == role)
             & (parent.geol_coll.df["feature"] == feature)
@@ -799,7 +799,7 @@ class Legend(QObject):
             & (parent.geol_coll.legend_df["scenario"] == scenario),
             "line_thick",
         ] = line_thick
-        """Signal to update actors in windows. This is emitted only for the modified uid under the 'line_thick' key."""
+        #Signal to update actors in windows. This is emitted only for the modified uid under the 'line_thick' key.
         updated_list = parent.geol_coll.df.loc[
             (parent.geol_coll.df["role"] == role)
             & (parent.geol_coll.df["feature"] == feature)
@@ -817,14 +817,14 @@ class Legend(QObject):
         feature = sender.feature
         scenario = sender.scenario
         point_size = sender.value()
-        "Here the query is reversed and modified, dropping the values() method, to allow SETTING the line thickness in the legend"
+        #Here the query is reversed and modified, dropping the values() method, to allow SETTING the line thickness in the legend
         parent.geol_coll.legend_df.loc[
             (parent.geol_coll.legend_df["role"] == role)
             & (parent.geol_coll.legend_df["feature"] == feature)
             & (parent.geol_coll.legend_df["scenario"] == scenario),
             "point_size",
         ] = point_size
-        """Signal to update actors in windows. This is emitted only for the modified uid under the 'line_thick' key."""
+        #Signal to update actors in windows. This is emitted only for the modified uid under the 'line_thick' key.
         updated_list = parent.geol_coll.df.loc[
             (parent.geol_coll.df["role"] == role)
             & (parent.geol_coll.df["feature"] == feature)
@@ -842,14 +842,14 @@ class Legend(QObject):
         feature = sender.feature
         scenario = sender.scenario
         opacity = sender.value()
-        "Here the query is reversed and modified, dropping the values() method, to allow SETTING the line thickness in the legend"
+        #Here the query is reversed and modified, dropping the values() method, to allow SETTING the line thickness in the legend
         parent.geol_coll.legend_df.loc[
             (parent.geol_coll.legend_df["role"] == role)
             & (parent.geol_coll.legend_df["feature"] == feature)
             & (parent.geol_coll.legend_df["scenario"] == scenario),
             "opacity",
         ] = opacity
-        """Signal to update actors in windows. This is emitted only for the modified uid under the 'opacity' key."""
+        #Signal to update actors in windows. This is emitted only for the modified uid under the 'opacity' key.
         updated_list = parent.geol_coll.df.loc[
             (parent.geol_coll.df["role"] == role)
             & (parent.geol_coll.df["feature"] == feature)
@@ -873,12 +873,12 @@ class Legend(QObject):
             & (parent.geol_coll.legend_df["scenario"] == scenario),
             "time",
         ] = time
-        """Order geological legend entities with descending time values"""
+        #Order geological legend entities with descending time values
         parent.geol_coll.legend_df.sort_values(
             by="time", ascending=True, inplace=True
         )
-        """THE FOLLOWING MUST BE CHANGED IN A SORT COMMAND
-        UPDATE AT THE MOMENT DOES NOT WORK PROPERLY"""
+        #THE FOLLOWING MUST BE CHANGED IN A SORT COMMAND
+        #UPDATE AT THE MOMENT DOES NOT WORK PROPERLY
         # parent.LegendTreeWidget.setSortingEnabled(True)
         # parent.LegendTreeWidget.sortByColumn(7, Qt.AscendingOrder)
         # parent.LegendTreeWidget.setSortingEnabled(False)
@@ -906,15 +906,15 @@ class Legend(QObject):
             & (parent.geol_coll.legend_df["scenario"] == scenario),
             "sequence",
         ] = geol_seqn
-        """THE FOLLOWING MUST BE CHANGED IN A FOR LOOP OVER ALL ITEMS IN COLUMN 7
-        parent.LegendTreeWidget.setItemWidget(llevel_3, 7, geol_sequence_combo)
-        UPDATING THE VALUES AS IN
-        geol_sequence_combo.addItems(parent.geol_coll.legend_df['sequence'].unique())"""
+        #THE FOLLOWING MUST BE CHANGED IN A FOR LOOP OVER ALL ITEMS IN COLUMN 7
+        #parent.LegendTreeWidget.setItemWidget(llevel_3, 7, geol_sequence_combo)
+        #UPDATING THE VALUES AS IN
+        #geol_sequence_combo.addItems(parent.geol_coll.legend_df['sequence'].unique())
 
     def change_other_feature_color(self, sender=None, parent=None):
         # other_collection = self.sender().other_collection
         other_collection = sender.other_collection
-        """Here we use the same query as above to GET the color from the legend"""
+        #Here we use the same query as above to GET the color from the legend
         old_color_R = parent.others_legend_df.loc[
             (parent.others_legend_df["other_collection"] == other_collection), "color_R"
         ].values[0]
@@ -935,7 +935,7 @@ class Legend(QObject):
         new_color_R = color_out.red()
         new_color_G = color_out.green()
         new_color_B = color_out.blue()
-        """Here the query is reversed and modified, dropping the values() method, to allow SETTING the color in the legend."""
+        #Here the query is reversed and modified, dropping the values() method, to allow SETTING the color in the legend.
         parent.others_legend_df.loc[
             (parent.others_legend_df["other_collection"] == other_collection), "color_R"
         ] = new_color_R
@@ -945,7 +945,7 @@ class Legend(QObject):
         parent.others_legend_df.loc[
             (parent.others_legend_df["other_collection"] == other_collection), "color_B"
         ] = new_color_B
-        """Update sender color."""
+        #Update sender color.
         # self.sender().setStyleSheet(
         #     "background-color:rgb({},{},{})".format(
         #         new_color_R, new_color_G, new_color_B
@@ -956,7 +956,7 @@ class Legend(QObject):
                 new_color_R, new_color_G, new_color_B
             )
         )
-        """Signals to update actors in windows. This is emitted only for the modified uid under the 'color' key."""
+        #Signals to update actors in windows. This is emitted only for the modified uid under the 'color' key.
         if other_collection == "XSection":
             parent.xsect_coll.signals.legend_color_modified.emit(
                 parent.xsect_coll.df["uid"].tolist()
@@ -979,11 +979,11 @@ class Legend(QObject):
         # line_thick = self.sender().value()
         other_collection = sender.other_collection
         line_thick = sender.value()
-        "Here the query is reversed and modified, dropping the values() method, to allow SETTING the line thickness in the legend"
+        #Here the query is reversed and modified, dropping the values() method, to allow SETTING the line thickness in the legend
         parent.others_legend_df.loc[
             (parent.others_legend_df["other_collection"] == other_collection), "line_thick"
         ] = line_thick
-        """Signals to update actors in windows. This is emitted only for the modified uid under the 'color' key."""
+        #Signals to update actors in windows. This is emitted only for the modified uid under the 'color' key.
         if other_collection == "XSection":
             parent.xsect_coll.signals.legend_thick_modified.emit(
                 parent.xsect_coll.df["uid"].tolist()
@@ -1006,11 +1006,11 @@ class Legend(QObject):
         # point_size = self.sender().value()
         other_collection = sender.other_collection
         point_size = sender.value()
-        "Here the query is reversed and modified, dropping the values() method, to allow SETTING the line thickness in the legend"
+        #Here the query is reversed and modified, dropping the values() method, to allow SETTING the line thickness in the legend
         parent.others_legend_df.loc[
             (parent.others_legend_df["other_collection"] == other_collection), "point_size"
         ] = point_size
-        """Signals to update actors in windows. This is emitted only for the modified uid under the 'color' key."""
+        #Signals to update actors in windows. This is emitted only for the modified uid under the 'color' key.
         # if other_collection == "XSection":
         #     parent.xsect_legend_point_size_modified_signal.emit(parent.xsect_coll.df['uid'].tolist())
         if other_collection == "DOM":
@@ -1027,11 +1027,11 @@ class Legend(QObject):
         # opacity = self.sender().value()
         other_collection = sender.other_collection
         opacity = sender.value()
-        "Here the query is reversed and modified, dropping the values() method, to allow SETTING the line thickness in the legend"
+        #Here the query is reversed and modified, dropping the values() method, to allow SETTING the line thickness in the legend
         parent.others_legend_df.loc[
             (parent.others_legend_df["other_collection"] == other_collection), "opacity"
         ] = opacity
-        """Signals to update actors in windows. This is emitted only for the modified uid under the 'color' key."""
+        #Signals to update actors in windows. This is emitted only for the modified uid under the 'color' key.
         if other_collection == "XSection":
             parent.xsect_coll.signals.legend_opacity_modified.emit(
                 parent.xsect_coll.df["uid"].tolist()
@@ -1112,11 +1112,11 @@ class Legend(QObject):
         # line_thick = self.sender().value()
         locid = sender.locid
         line_thick = sender.value()
-        "Here the query is reversed and modified, dropping the values() method, to allow SETTING the line thickness in the legend"
+        #Here the query is reversed and modified, dropping the values() method, to allow SETTING the line thickness in the legend
         parent.well_legend_df.loc[
             parent.well_legend_df["Loc ID"] == locid, "line_thick"
         ] = line_thick
-        """Signal to update actors in windows. This is emitted only for the modified uid under the 'line_thick' key."""
+        #Signal to update actors in windows. This is emitted only for the modified uid under the 'line_thick' key.
         updated_list = parent.well_coll.df.loc[
             parent.well_coll.df["Loc ID"] == locid, "uid"
         ].to_list()
@@ -1128,11 +1128,11 @@ class Legend(QObject):
         # opacity = self.sender().value()
         locid = sender.locid
         opacity = sender.value()
-        "Here the query is reversed and modified, dropping the values() method, to allow SETTING the line thickness in the legend"
+        #Here the query is reversed and modified, dropping the values() method, to allow SETTING the line thickness in the legend
         parent.well_legend_df.loc[
             parent.well_legend_df["Loc ID"] == locid, "opacity"
         ] = opacity
-        """Signal to update actors in windows. This is emitted only for the modified uid under the 'line_thick' key."""
+        #Signal to update actors in windows. This is emitted only for the modified uid under the 'line_thick' key.
         updated_list = parent.well_coll.df.loc[
             parent.well_coll.df["Loc ID"] == locid, "uid"
         ].to_list()
@@ -1146,7 +1146,7 @@ class Legend(QObject):
         role = sender.role
         feature = sender.feature
         scenario = sender.scenario
-        """Here we use the same query as above to GET the color from the legend"""
+        #Here we use the same query as above to GET the color from the legend
         old_color_R = parent.fluid_coll.legend_df.loc[
             (parent.fluid_coll.legend_df["role"] == role)
             & (parent.fluid_coll.legend_df["feature"] == feature)
@@ -1176,7 +1176,7 @@ class Legend(QObject):
         new_color_R = color_out.red()
         new_color_G = color_out.green()
         new_color_B = color_out.blue()
-        """Here the query is reversed and modified, dropping the values() method, to allow SETTING the color in the legend."""
+        #Here the query is reversed and modified, dropping the values() method, to allow SETTING the color in the legend.
         parent.fluid_coll.legend_df.loc[
             (parent.fluid_coll.legend_df["role"] == role)
             & (parent.fluid_coll.legend_df["feature"] == feature)
@@ -1195,14 +1195,14 @@ class Legend(QObject):
             & (parent.fluid_coll.legend_df["scenario"] == scenario),
             "color_B",
         ] = new_color_B
-        """Update sender color."""
+        #Update sender color.
         # self.sender().setStyleSheet(
         sender.setStyleSheet(
             "background-color:rgb({},{},{})".format(
                 new_color_R, new_color_G, new_color_B
             )
         )
-        """Signal to update actors in windows. This is emitted only for the modified uid under the 'color' key."""
+        #Signal to update actors in windows. This is emitted only for the modified uid under the 'color' key.
         updated_list = parent.fluid_coll.df.loc[
             (parent.fluid_coll.df["role"] == role)
             & (parent.fluid_coll.df["feature"] == feature)
@@ -1221,14 +1221,14 @@ class Legend(QObject):
         feature = sender.feature
         scenario = sender.scenario
         line_thick = sender.value()
-        "Here the query is reversed and modified, dropping the values() method, to allow SETTING the line thickness in the legend"
+        #Here the query is reversed and modified, dropping the values() method, to allow SETTING the line thickness in the legend
         parent.fluid_coll.legend_df.loc[
             (parent.fluid_coll.legend_df["role"] == role)
             & (parent.fluid_coll.legend_df["feature"] == feature)
             & (parent.fluid_coll.legend_df["scenario"] == scenario),
             "line_thick",
         ] = line_thick
-        """Signal to update actors in windows. This is emitted only for the modified uid under the 'line_thick' key."""
+        #Signal to update actors in windows. This is emitted only for the modified uid under the 'line_thick' key.
         updated_list = parent.fluid_coll.df.loc[
             (parent.fluid_coll.df["role"] == role)
             & (parent.fluid_coll.df["feature"] == feature)
@@ -1246,14 +1246,14 @@ class Legend(QObject):
         feature = sender.feature
         scenario = sender.scenario
         point_size = sender.value()
-        "Here the query is reversed and modified, dropping the values() method, to allow SETTING the line thickness in the legend"
+        #Here the query is reversed and modified, dropping the values() method, to allow SETTING the line thickness in the legend
         parent.fluid_coll.legend_df.loc[
             (parent.fluid_coll.legend_df["role"] == role)
             & (parent.fluid_coll.legend_df["feature"] == feature)
             & (parent.fluid_coll.legend_df["scenario"] == scenario),
             "point_size",
         ] = point_size
-        """Signal to update actors in windows. This is emitted only for the modified uid under the 'line_thick' key."""
+        #Signal to update actors in windows. This is emitted only for the modified uid under the 'line_thick' key.
         updated_list = parent.fluid_coll.df.loc[
             (parent.fluid_coll.df["role"] == role)
             & (parent.fluid_coll.df["feature"] == feature)
@@ -1271,14 +1271,14 @@ class Legend(QObject):
         feature = sender.feature
         scenario = sender.scenario
         opacity = sender.value()
-        "Here the query is reversed and modified, dropping the values() method, to allow SETTING the line thickness in the legend"
+        #Here the query is reversed and modified, dropping the values() method, to allow SETTING the line thickness in the legend
         parent.fluid_coll.legend_df.loc[
             (parent.fluid_coll.legend_df["role"] == role)
             & (parent.fluid_coll.legend_df["feature"] == feature)
             & (parent.fluid_coll.legend_df["scenario"] == scenario),
             "opacity",
         ] = opacity
-        """Signal to update actors in windows. This is emitted only for the modified uid under the 'line_thick' key."""
+        #Signal to update actors in windows. This is emitted only for the modified uid under the 'line_thick' key.
         updated_list = parent.fluid_coll.df.loc[
             (parent.fluid_coll.df["role"] == role)
             & (parent.fluid_coll.df["feature"] == feature)
@@ -1302,12 +1302,12 @@ class Legend(QObject):
             & (parent.fluid_coll.legend_df["scenario"] == scenario),
             "time",
         ] = time
-        """Order geological legend entities with descending time values"""
+        #Order geological legend entities with descending time values
         parent.fluid_coll.legend_df.sort_values(
             by="time", ascending=True, inplace=True
         )
-        """THE FOLLOWING MUST BE CHANGED IN A SORT COMMAND
-        UPDATE AT THE MOMENT DOES NOT WORK PROPERLY"""
+        #THE FOLLOWING MUST BE CHANGED IN A SORT COMMAND
+        #UPDATE AT THE MOMENT DOES NOT WORK PROPERLY#
         # parent.LegendTreeWidget.setSortingEnabled(True)
         # parent.LegendTreeWidget.sortByColumn(7, Qt.AscendingOrder)
         # parent.LegendTreeWidget.setSortingEnabled(False)
@@ -1325,7 +1325,7 @@ class Legend(QObject):
         # feature = self.sender().feature
         role = sender.role
         feature = sender.feature
-        """Here we use the same query as above to GET the color from the legend"""
+        #Here we use the same query as above to GET the color from the legend
         old_color_R = parent.backgrnd_coll.legend_df.loc[
             (parent.backgrnd_coll.legend_df["role"] == role)
             & (parent.backgrnd_coll.legend_df["feature"] == feature),
@@ -1352,7 +1352,7 @@ class Legend(QObject):
         new_color_R = color_out.red()
         new_color_G = color_out.green()
         new_color_B = color_out.blue()
-        """Here the query is reversed and modified, dropping the values() method, to allow SETTING the color in the legend."""
+        #Here the query is reversed and modified, dropping the values() method, to allow SETTING the color in the legend.
         parent.backgrnd_coll.legend_df.loc[
             (parent.backgrnd_coll.legend_df["role"] == role)
             & (parent.backgrnd_coll.legend_df["feature"] == feature),
@@ -1368,7 +1368,7 @@ class Legend(QObject):
             & (parent.backgrnd_coll.legend_df["feature"] == feature),
             "color_B",
         ] = new_color_B
-        """Update sender color."""
+        #Update sender color.
         # self.sender().setStyleSheet(
         #     "background-color:rgb({},{},{})".format(
         #         new_color_R, new_color_G, new_color_B
@@ -1379,7 +1379,7 @@ class Legend(QObject):
                 new_color_R, new_color_G, new_color_B
             )
         )
-        """Signal to update actors in windows. This is emitted only for the modified uid under the 'color' key."""
+        #Signal to update actors in windows. This is emitted only for the modified uid under the 'color' key.
         updated_list = parent.backgrnd_coll.df.loc[
             (parent.backgrnd_coll.df["role"] == role)
             & (parent.backgrnd_coll.df["feature"] == feature),
@@ -1394,13 +1394,13 @@ class Legend(QObject):
         role = sender.role
         feature = sender.feature
         line_thick = sender.value()
-        "Here the query is reversed and modified, dropping the values() method, to allow SETTING the line thickness in the legend"
+        #Here the query is reversed and modified, dropping the values() method, to allow SETTING the line thickness in the legend
         parent.backgrnd_coll.legend_df.loc[
             (parent.backgrnd_coll.legend_df["role"] == role)
             & (parent.backgrnd_coll.legend_df["feature"] == feature),
             "line_thick",
         ] = line_thick
-        """Signal to update actors in windows. This is emitted only for the modified uid under the 'line_thick' key."""
+        #Signal to update actors in windows. This is emitted only for the modified uid under the 'line_thick' key.
         updated_list = parent.backgrnd_coll.df.loc[
             (parent.backgrnd_coll.df["role"] == role)
             & (parent.backgrnd_coll.df["feature"] == feature),
@@ -1415,13 +1415,13 @@ class Legend(QObject):
         role = sender.role
         feature = sender.feature
         point_size = sender.value()
-        "Here the query is reversed and modified, dropping the values() method, to allow SETTING the line thickness in the legend"
+        #Here the query is reversed and modified, dropping the values() method, to allow SETTING the line thickness in the legend
         parent.backgrnd_coll.legend_df.loc[
             (parent.backgrnd_coll.legend_df["role"] == role)
             & (parent.backgrnd_coll.legend_df["feature"] == feature),
             "point_size",
         ] = point_size
-        """Signal to update actors in windows. This is emitted only for the modified uid under the 'line_thick' key."""
+        #Signal to update actors in windows. This is emitted only for the modified uid under the 'line_thick' key.
         updated_list = parent.backgrnd_coll.df.loc[
             (parent.backgrnd_coll.df["role"] == role)
             & (parent.backgrnd_coll.df["feature"] == feature),
@@ -1436,13 +1436,13 @@ class Legend(QObject):
         role = sender.role
         feature = sender.feature
         opacity = sender.value()
-        "Here the query is reversed and modified, dropping the values() method, to allow SETTING the opacity in the legend"
+        #Here the query is reversed and modified, dropping the values() method, to allow SETTING the opacity in the legend
         parent.backgrnd_coll.legend_df.loc[
             (parent.backgrnd_coll.legend_df["role"] == role)
             & (parent.backgrnd_coll.legend_df["feature"] == feature),
             "opacity",
         ] = opacity
-        """Signal to update actors in windows. This is emitted only for the modified uid under the 'line_thick' key."""
+        #Signal to update actors in windows. This is emitted only for the modified uid under the 'line_thick' key.
         updated_list = parent.backgrnd_coll.df.loc[
             (parent.backgrnd_coll.df["role"] == role)
             & (parent.backgrnd_coll.df["feature"] == feature),
