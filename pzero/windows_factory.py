@@ -51,6 +51,7 @@ from pyvista import Line as pv_Line
 from pyvista import Disc as pv_Disc
 from pyvista import PointSet as pvPointSet
 from pyvista import Plotter as pv_plot
+from pyvista import Arrow as pv_Arrow
 
 # Matplotlib imports____
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
@@ -2166,10 +2167,19 @@ class VTKView(BaseView):
         self.plotter.set_background("black")
         self.ViewFrameLayout.addWidget(self.plotter.interactor)
         # self.plotter.show_axes_all()
-        # Set orientation widget (turned on after the qt canvas is shown)
-        self.cam_orient_widget = vtkCameraOrientationWidget()
-        self.cam_orient_widget.SetParentRenderer(self.plotter.renderer)
-        self.cam_orient_widget.On()
+
+        # Set orientation widget
+        # In an old version it was turned on after the qt canvas was shown, but this does not seem necessary
+        if isinstance(self, View3D):
+            self.plotter.add_camera_orientation_widget()
+            # self.cam_orient_widget = vtkCameraOrientationWidget()
+            # self.cam_orient_widget.SetParentRenderer(self.plotter.renderer)
+            # self.cam_orient_widget.On()
+        elif isinstance(self, ViewXsection):
+            self.plotter.add_orientation_widget(pv_Arrow(direction=(0.0, 1.0, 0.0), scale=0.3), interactive=None, color='gold')
+        elif isinstance(self, ViewMap):
+            self.plotter.add_north_arrow_widget(interactive=None, color='gold')
+
         # Set default orientation horizontal because vertical colorbars interfere with the camera widget.
         pv_global_theme.colorbar_orientation = "horizontal"
 
@@ -2187,8 +2197,7 @@ class VTKView(BaseView):
             # CHECK THIS ZOOM SETTING
             # ________________________
             self.init_zoom = self.plotter.camera.distance
-            #Turn on the orientation widget AFTER the canvas is shown.
-            self.cam_orient_widget.On()
+
             # self.picker = self.plotter.enable_mesh_picking(callback= self.pkd_mesh,show_message=False)
 
     def plot_mesh(
