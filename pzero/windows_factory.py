@@ -2139,11 +2139,11 @@ class VTKView(BaseView):
         self.removeEntityButton.triggered.connect(self.remove_entity)
         self.menuModify.addAction(self.removeEntityButton)
 
-        self.vertExagButton = QAction("Vertical exaggeration", self)
+        self.vertExagButton = QAction('Vertical exaggeration', self)
         self.vertExagButton.triggered.connect(self.vert_exag)
         self.menuView.addAction(self.vertExagButton)
 
-        self.actionExportScreen = QAction("Take screenshot", self)
+        self.actionExportScreen = QAction('Take screenshot', self)
         self.actionExportScreen.triggered.connect(self.export_screen)
         self.menuView.addAction(self.actionExportScreen)
 
@@ -2402,8 +2402,8 @@ class VTKView(BaseView):
         # self.print_terminal(f"Picker actor: {actor}")
 
         # proceed if an actor is selected
-        # if not self.actors_df.loc[self.actors_df["actor"] == actor, "uid"].empty:
-        if picker_output:
+        if not self.actors_df.loc[self.actors_df["actor"] == actor, "uid"].empty:
+        # if picker_output:
             # Get uid of picked actor
             sel_uid = self.actors_df.loc[
                 self.actors_df["actor"] == actor, "uid"
@@ -3444,18 +3444,39 @@ class ViewXsection(View2D):
         # Rename Base View, Menu and Tool
         self.setWindowTitle(f"Xsection View: {self.this_x_section_name}")
 
+        # Store center and direction in internal variables of this view
         section_plane = parent.xsect_coll.get_uid_vtk_plane(self.this_x_section_uid)
-        center = np_array(section_plane.GetOrigin())
-        # direction = -np_array(section_plane.GetNormal())
-        direction = np_array(section_plane.GetNormal())
-
-        self.plotter.camera.focal_point = center
-        self.plotter.camera.position = center + direction
+        self.center = np_array(section_plane.GetOrigin())
+        self.direction = np_array(section_plane.GetNormal())
+        # Apply to plotter
+        self.plotter.camera.focal_point = self.center
+        self.plotter.camera.position = self.center + self.direction
         self.plotter.reset_camera()
 
     # Update the views depending on the sec_uid. We need to redefine the functions to use
     # the sec_uid parameter for the update_dom_list_added func. We just need the x_added_x
     # functions because the x_removed_x works on an already built/modified tree.
+
+    def initialize_menu_tools(self):
+        """This is the intermediate method of the VTKView() abstract class, used to add menu tools used by all VTK windows.
+        The code appearing here is appended in subclasses using super().initialize_menu_tools() in their first line."""
+        # append code from BaseView()
+        super().initialize_menu_tools()
+
+        self.horizMirrorButton = QAction('Mirror horizontal axes', self)
+        self.horizMirrorButton.triggered.connect(self.horizontal_mirror)
+        self.menuView.addAction(self.horizMirrorButton)
+
+    def horizontal_mirror(self):
+        """Mirror horizontal axes.
+        """
+        self.print_terminal("Mirroring horizontal axes.")
+        # Mirror internal variable used to store direction
+        self.direction = -self.direction
+        # Apply to plotter
+        self.plotter.camera.focal_point = self.center
+        self.plotter.camera.position = self.center + self.direction
+        self.plotter.reset_camera()
 
 
 class ViewStereoplot(MPLView):
