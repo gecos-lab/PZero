@@ -2467,7 +2467,12 @@ class View3D(VTKView):
     Parent is the QT object that is launching this one, hence the ProjectWindow() instance in this case."""
 
     def __init__(self, *args, **kwargs):
-        super(View3D, self).__init__(*args, **kwargs)
+        VTKView.__init__(self, *args, **kwargs)
+        
+        # Make sure to connect to the property change signal
+        if hasattr(self.parent, 'prop_legend_cmap_modified_signal'):
+            self.parent.prop_legend_cmap_modified_signal.connect(self.update_slices_for_property_change)
+            print("Connected to property change signal")
 
         self.plotter.enable_trackball_style()
         self.plotter.disable_parallel_projection()
@@ -3030,7 +3035,8 @@ class View3D(VTKView):
                 pv_entity = pv.wrap(entity)
                 bounds = pv_entity.bounds
                 
-                # Get scalar and colormap
+                # IMPORTANT: Always get fresh scalar and colormap data
+                # This ensures we pick up any colormap changes
                 scalar_array, cmap = get_scalar_and_cmap(pv_entity)
                 
                 # Calculate the position in world coordinates
@@ -3049,32 +3055,25 @@ class View3D(VTKView):
                 if slice_uid in self.slice_actors:
                     current_visibility = self.slice_actors[slice_uid].GetVisibility()
                     
-                # Update an existing slice or create a new one
-                if fast_update and slice_uid in self.slice_actors:
-                    # Fast update just changes the mapper's input data
-                    actor = self.slice_actors[slice_uid]
-                    mapper = actor.GetMapper()
-                    mapper.SetInputData(slice_data)
-                    mapper.Update()
-                else:
-                    # Remove the existing actor if it exists
-                    if slice_uid in self.slice_actors:
-                        self.plotter.remove_actor(self.slice_actors[slice_uid])
-                    
-                    # Create a new actor with the scalar properties
-                    self.slice_actors[slice_uid] = self.plotter.add_mesh(
-                        slice_data,
-                        name=slice_uid,
-                        scalars=scalar_array,
-                        cmap=cmap,
-                        clim=pv_entity.get_data_range(scalar_array) if scalar_array else None,
-                        show_scalar_bar=False,
-                        opacity=1.0,
-                        interpolate_before_map=True,
-                    )
-                    
-                    # Restore visibility
-                    self.slice_actors[slice_uid].SetVisibility(current_visibility)
+                # Never use fast_update when colormap might have changed
+                # This ensures we recreate the slice with the new colormap
+                if slice_uid in self.slice_actors:
+                    self.plotter.remove_actor(self.slice_actors[slice_uid])
+                
+                # Create a new actor with the latest scalar properties
+                self.slice_actors[slice_uid] = self.plotter.add_mesh(
+                    slice_data,
+                    name=slice_uid,
+                    scalars=scalar_array,
+                    cmap=cmap,
+                    clim=pv_entity.get_data_range(scalar_array) if scalar_array else None,
+                    show_scalar_bar=False,
+                    opacity=1.0,
+                    interpolate_before_map=True,
+                )
+                
+                # Restore visibility
+                self.slice_actors[slice_uid].SetVisibility(current_visibility)
                 
                 self.plotter.render()
                 
@@ -3643,6 +3642,81 @@ class View3D(VTKView):
         """Remove this method as it's now redundant"""
         # This method is redundant as we calculate positions directly in toggle_mesh_manipulation
         pass
+
+    # Add this method to the View3D class
+    def update_slices_for_property_change(self, property_name):
+        """Update all slices when a property's colormap changes"""
+        if not hasattr(self, 'slice_actors') or not self.slice_actors:
+            return
+        
+        print(f"Updating slice visualizations for property '{property_name}'")
+        
+        # Update all slices
+        for slice_uid in list(self.slice_actors.keys()):
+            # Parse entity name and slice type
+            parts = slice_uid.split('_')
+            if len(parts) >= 2:
+                entity_name = '_'.join(parts[:-1])
+                slice_type = parts[-1]
+                
+                # Get entity
+                entity = self.get_entity_by_name(entity_name)
+                if entity:
+                    pv_entity = pv.wrap(entity)
+                    
+                    # Check if entity contains the property
+                    if property_name in pv_entity.array_names:
+                        print(f"Updating slice {slice_uid} for property {property_name}")
+                        
+                        # Get current position
+                        actor = self.slice_actors[slice_uid]
+                        visible = actor.GetVisibility()
+                        
+                        # Get bounds
+                        bounds = pv_entity.bounds
+                        
+                        # Create new slice data
+                        if slice_type == 'X':
+                            # Get origin (halfway point)
+                            origin = actor.GetCenter()
+                            normalized_pos = (origin[0] - bounds[0]) / (bounds[1] - bounds[0]) if bounds[1] > bounds[0] else 0.5
+                            slice_data = pv_entity.slice(normal=[1,0,0], origin=[bounds[0] + normalized_pos*(bounds[1]-bounds[0]), 0, 0])
+                        elif slice_type == 'Y':
+                            origin = actor.GetCenter()
+                            normalized_pos = (origin[1] - bounds[2]) / (bounds[3] - bounds[2]) if bounds[3] > bounds[2] else 0.5
+                            slice_data = pv_entity.slice(normal=[0,1,0], origin=[0, bounds[2] + normalized_pos*(bounds[3]-bounds[2]), 0])
+                        else:  # Z
+                            origin = actor.GetCenter()
+                            normalized_pos = (origin[2] - bounds[4]) / (bounds[5] - bounds[4]) if bounds[5] > bounds[4] else 0.5
+                            slice_data = pv_entity.slice(normal=[0,0,1], origin=[0, 0, bounds[4] + normalized_pos*(bounds[5]-bounds[4])])
+                        
+                        # Get new colormap
+                        scalar_array = property_name
+                        cmap = None
+                        if hasattr(self, 'parent') and hasattr(self.parent, 'prop_legend_df'):
+                            prop_row = self.parent.prop_legend_df[
+                                self.parent.prop_legend_df['property_name'] == property_name]
+                            if not prop_row.empty:
+                                cmap = prop_row['colormap'].iloc[0]
+                        
+                        # Remove old actor and create new one
+                        self.plotter.remove_actor(actor)
+                        self.slice_actors[slice_uid] = self.plotter.add_mesh(
+                            slice_data,
+                            name=slice_uid,
+                            scalars=scalar_array,
+                            cmap=cmap,
+                            clim=pv_entity.get_data_range(scalar_array) if scalar_array else None,
+                            show_scalar_bar=False,
+                            opacity=1.0,
+                            interpolate_before_map=True,
+                        )
+                        
+                        # Restore visibility
+                        self.slice_actors[slice_uid].SetVisibility(visible)
+        
+        # Force render
+        self.plotter.render()
 
 
 class View2D(VTKView):
