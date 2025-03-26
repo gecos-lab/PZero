@@ -28,6 +28,8 @@ from PySide6.QtWidgets import (
     QLabel,
     QPushButton,
     QSpinBox,
+    QInputDialog,
+    QApplication,
 )
 from PySide6.QtGui import QAction
 from PySide6.QtCore import Qt
@@ -77,7 +79,7 @@ from matplotlib.collections import PathCollection
 from matplotlib.tri import TriContourSet
 import matplotlib.style as mplstyle
 # from matplotlib.backend_bases import FigureCanvasBase
-
+import vtk
 # mplstereonet import____
 import mplstereonet
 
@@ -2455,6 +2457,7 @@ class VTKView(BaseView):
         self.plotter.set_scale(zscale=exag_value)
 
 
+
 class MPLView(BaseView):
     """Abstract class used as a base for all classes using the Matplotlib plotting canvas."""
 
@@ -2468,6 +2471,9 @@ class View3D(VTKView):
 
     def __init__(self, *args, **kwargs):
         VTKView.__init__(self, *args, **kwargs)
+        
+        # Initialize vertical exaggeration
+        self.v_exaggeration = 1.0
         
         # Make sure to connect to the property change signal
         if hasattr(self.parent, 'prop_legend_cmap_modified_signal'):
@@ -3496,109 +3502,126 @@ class View3D(VTKView):
                                x_value, y_value, z_value,
                                entity_combo, x_slice_check, y_slice_check, z_slice_check,
                                update_slice_func=None):
-        """Handle toggling of mesh manipulation mode"""
-        print(f"toggle_mesh_manipulation called with enabled={enabled}")
+        """Toggle mesh manipulation mode."""
+        print(f"Toggle mesh manipulation called with enabled={enabled}")
         
-        # Update slider states
+        # Initialize plane_widgets as a list if it doesn't exist
+        if not hasattr(self, 'plane_widgets'):
+            self.plane_widgets = []
+        
+        # Define the callback creator function FIRST (before using it)
+        def create_callback(slice_type, slider, value_label):
+            def callback(normal, origin):
+                # Get entity bounds
+                entity_name = entity_combo.currentText()
+                entity = self.get_entity_by_name(entity_name)
+                if not entity:
+                    return
+                    
+                pv_entity = pv.wrap(entity)
+                bounds = pv_entity.bounds
+                
+                # Calculate normalized position based on current origin
+                normalized_pos = 0
+                if slice_type == 'X':
+                    normalized_pos = (origin[0] - bounds[0]) / (bounds[1] - bounds[0]) if bounds[1] > bounds[0] else 0.5
+                elif slice_type == 'Y':
+                    normalized_pos = (origin[1] - bounds[2]) / (bounds[3] - bounds[2]) if bounds[3] > bounds[2] else 0.5
+                elif slice_type == 'Z':
+                    # For Z slices with vertical exaggeration, adjust calculation
+                    if hasattr(self, 'v_exaggeration') and self.v_exaggeration != 1.0:
+                        z_mid = (bounds[4] + bounds[5]) / 2
+                        # Adjust for vertical exaggeration
+                        adjusted_pos = z_mid + (origin[2] - z_mid) / self.v_exaggeration
+                        normalized_pos = (adjusted_pos - bounds[4]) / (bounds[5] - bounds[4])
+                    else:
+                        normalized_pos = (origin[2] - bounds[4]) / (bounds[5] - bounds[4]) if bounds[5] > bounds[4] else 0.5
+                
+                # Clamp position to 0-1 range
+                normalized_pos = max(0, min(1, normalized_pos))
+                
+                # Update slider and label with new position
+                slider_value = int(normalized_pos * 100)
+                slider.setValue(slider_value)
+                value_label.setText(f"{slider_value/100:.2f}")
+                
+                # Update the slice visualization
+                if update_slice_func:
+                    update_slice_func(entity_name, slice_type, normalized_pos, True)
+                    
+            return callback
+        
+        # Update slider states based on manipulation mode
         self.update_slider_states(enabled, x_slider, y_slider, z_slider)
         
-        # Clean up existing plane widgets before doing anything else
-        self.cleanup_plane_widgets()
-        
+        # Clean up existing plane widgets when disabling
         if not enabled:
+            self.cleanup_plane_widgets()
             return
         
-        # Get the entity and make sure it exists
-        entity_name = entity_combo.currentText()
+        # Get the selected entity
+        entity_name = entity_combo.currentText() if entity_combo.currentText() else None
         if not entity_name:
             print("No entity selected")
             return
     
+        # Get the entity object
         entity = self.get_entity_by_name(entity_name)
         if not entity:
-            print(f"Could not find entity: {entity_name}")
+            print(f"Entity {entity_name} not found")
             return
     
-        # Convert to PyVista object and get bounds
         try:
-            print(f"Setting up manipulation for entity: {entity_name}")
-            entity = pv.wrap(entity)
-            bounds = entity.bounds
-            x_min, x_max, y_min, y_max, z_min, z_max = bounds
+            # Convert to PyVista object and get bounds
+            pv_entity = pv.wrap(entity)
+            bounds = pv_entity.bounds
             
-            # Get current slider values (normalized to [0,1])
-            x_pos = x_slider.value() / 100.0
-            y_pos = y_slider.value() / 100.0
-            z_pos = z_slider.value() / 100.0
+            # Get current slider values as normalized positions
+            normalized_positions = {
+                'X': x_slider.value() / 100.0,
+                'Y': y_slider.value() / 100.0,
+                'Z': z_slider.value() / 100.0
+            }
             
-            # Calculate world positions
-            x_world = x_min + x_pos * (x_max - x_min)
-            y_world = y_min + y_pos * (y_max - y_min)
-            z_world = z_min + z_pos * (z_max - z_min)
+            # Clean up any existing plane widgets
+            self.cleanup_plane_widgets()
             
-            print(f"World positions: X={x_world}, Y={y_world}, Z={z_world}")
-            
-            # Create plane widgets for checked slices
-            self.plane_widgets = []
-            
-            def create_callback(slice_type, slider, value_label):
-                """Create a callback closure for the given slice type"""
-                def callback(normal, origin):
-                    # Calculate normalized position based on current origin
-                    if slice_type == 'X':
-                        pos = origin[0]
-                        normalized_pos = (pos - x_min) / (x_max - x_min) if x_max > x_min else 0.5
-                    elif slice_type == 'Y':
-                        pos = origin[1]
-                        normalized_pos = (pos - y_min) / (y_max - y_min) if y_max > y_min else 0.5
-                    else:  # Z
-                        pos = origin[2]
-                        normalized_pos = (pos - z_min) / (z_max - z_min) if z_max > z_min else 0.5
-                    
-                    # Update slider and label
-                    slider_pos = int(normalized_pos * 100)
-                    slider.setValue(slider_pos)
-                    value_label.setText(f"{normalized_pos:.2f}")
-                    
-                    # Update visualization
-                    if update_slice_func:
-                        update_slice_func(entity_name, slice_type, normalized_pos)
+            # Create plane widgets for each checked slice direction
+            if x_slice_check.isChecked():
+                # Use the local create_callback function (not self.create_callback)
+                callback_func = create_callback('X', x_slider, x_value)
                 
-                return callback
+                # Create plane widget for X slice
+                widget = self.create_single_plane_widget('X', normalized_positions['X'], bounds, callback_func)
+                if widget:
+                    self.plane_widgets.append(widget)
+                    print(f"Added X plane widget, total widgets: {len(self.plane_widgets)}")
             
-            # Create plane widgets for checked slices using a more compact approach
-            widget_configs = [
-                ('X', x_slice_check, 'x', [x_world, (y_min + y_max)/2, (z_min + z_max)/2], x_slider, x_value),
-                ('Y', y_slice_check, 'y', [(x_min + x_max)/2, y_world, (z_min + z_max)/2], y_slider, y_value),
-                ('Z', z_slice_check, 'z', [(x_min + x_max)/2, (y_min + y_max)/2, z_world], z_slider, z_value)
-            ]
+            if y_slice_check.isChecked():
+                # Use the local create_callback function
+                callback_func = create_callback('Y', y_slider, y_value)
+                
+                # Create plane widget for Y slice
+                widget = self.create_single_plane_widget('Y', normalized_positions['Y'], bounds, callback_func)
+                if widget:
+                    self.plane_widgets.append(widget)
+                    print(f"Added Y plane widget, total widgets: {len(self.plane_widgets)}")
             
-            for slice_type, check, normal, origin, slider, value_label in widget_configs:
-                if check.isChecked():
-                    print(f"Creating {slice_type} plane widget")
-                    plane = self.plotter.add_plane_widget(
-                        callback=create_callback(slice_type, slider, value_label),
-                        normal=normal,
-                        origin=origin,
-                        bounds=bounds,
-                        factor=1.0,
-                        normal_rotation=False
-                    )
-                    
-                    # Ensure the widget is visible and active
-                    plane.On()
-                    slice_uid = f"{entity_name}_{slice_type}"
-                    if slice_uid in self.slice_actors:
-                        plane.SetEnabled(self.slice_actors[slice_uid].GetVisibility())
-                    self.plane_widgets.append(plane)
+            if z_slice_check.isChecked():
+                # Use the local create_callback function
+                callback_func = create_callback('Z', z_slider, z_value)
+                
+                # Create plane widget for Z slice
+                widget = self.create_single_plane_widget('Z', normalized_positions['Z'], bounds, callback_func)
+                if widget:
+                    self.plane_widgets.append(widget)
+                    print(f"Added Z plane widget, total widgets: {len(self.plane_widgets)}")
             
-            print(f"Created {len(self.plane_widgets)} plane widgets")
-            
-            # Force a render to ensure widgets appear
+            # Render the scene to show the widgets
             self.plotter.render()
-            
+        
         except Exception as e:
-            print(f"Error in toggle_mesh_manipulation: {e}")
+            print(f"Error toggling mesh manipulation: {e}")
             import traceback
             traceback.print_exc()
 
@@ -3616,26 +3639,34 @@ class View3D(VTKView):
         z_slider.setStyleSheet(style)
 
     def cleanup_plane_widgets(self):
-        """Clean up existing plane widgets"""
-        if not hasattr(self, 'plane_widgets') or not self.plane_widgets:
+        """Clean up all plane widgets"""
+        if not hasattr(self, 'plane_widgets'):
+            self.plane_widgets = []
             return
         
-        print(f"Cleaning up {len(self.plane_widgets)} plane widgets")
-        
-        for widget in self.plane_widgets:
+        num_widgets = len(self.plane_widgets)
+        if num_widgets > 0:
+            print(f"Cleaning up {num_widgets} plane widgets")
+            
+        # Remove each plane widget - plane_widgets is a list, not a dict
+        for widget in list(self.plane_widgets):
             try:
-                if widget:
-                    widget.SetEnabled(False)
-                    widget.Off()
-                    if hasattr(widget, 'GetRepresentation'):
-                        rep = widget.GetRepresentation()
-                        if rep:
-                            self.plotter.renderer.RemoveViewProp(rep)
-                    self.plotter.remove_widget(widget)
+                if widget is not None:
+                    # Try to disable the widget
+                    if hasattr(widget, 'SetEnabled'):
+                        widget.SetEnabled(0)
+                    # Try to remove from plotter
+                    if hasattr(self.plotter, 'remove_widget'):
+                        self.plotter.remove_widget(widget)
+                    elif hasattr(self.plotter, 'clear_widgets'):
+                        self.plotter.clear_widgets()
             except Exception as e:
                 print(f"Error cleaning up widget: {e}")
-        
+            
+        # Clear the list
         self.plane_widgets = []
+        
+        # Force render to update display
         self.plotter.render()
 
     def get_world_positions(self, normalized_positions, bounds):
@@ -3716,6 +3747,146 @@ class View3D(VTKView):
                         self.slice_actors[slice_uid].SetVisibility(visible)
         
         # Force render
+        self.plotter.render()
+
+    def create_single_plane_widget(self, slice_type, normalized_position, bounds, update_callback):
+        """Create a single plane widget for the given slice type and position."""
+        try:
+            # Get current vertical exaggeration value
+            v_exag = 1.0
+            if hasattr(self, 'v_exaggeration'):
+                v_exag = self.v_exaggeration
+                
+            print(f"Creating plane widget for {slice_type} slice with vertical exaggeration: {v_exag}")
+            
+            # Calculate world position
+            if slice_type == 'X':
+                position = bounds[0] + normalized_position * (bounds[1] - bounds[0])
+                normal = [1, 0, 0]
+                origin = [position, 0, 0]
+            elif slice_type == 'Y':
+                position = bounds[2] + normalized_position * (bounds[3] - bounds[2])
+                normal = [0, 1, 0]
+                origin = [0, position, 0]
+            else:  # Z
+                position = bounds[4] + normalized_position * (bounds[5] - bounds[4])
+                normal = [0, 0, 1]
+                
+                # For Z planes, adjust the origin position for vertical exaggeration
+                if v_exag != 1.0:
+                    z_mid = (bounds[4] + bounds[5]) / 2
+                    # Apply vertical exaggeration from the middle
+                    adjusted_pos = z_mid + (position - z_mid) * v_exag
+                    origin = [0, 0, adjusted_pos]
+                else:
+                    origin = [0, 0, position]
+            
+            # Create the plane widget with minimal required parameters
+            try:
+                plane_widget = self.plotter.add_plane_widget(
+                    update_callback,
+                    normal=normal,
+                    origin=origin
+                )
+                return plane_widget
+            except Exception as e:
+                print(f"Error creating plane widget with PyVista: {e}")
+                # Try one more approach with different parameters
+                try:
+                    plane_widget = self.plotter.add_plane_widget(
+                        update_callback,
+                        normal=normal,
+                        origin=origin,
+                        bounds=bounds
+                    )
+                    return plane_widget
+                except:
+                    print("Failed with alternate parameters too")
+                    return None
+            
+        except Exception as e:
+            print(f"Error creating plane widget for {slice_type} slice: {e}")
+            import traceback
+            traceback.print_exc()
+            return None
+
+    def update_slices_for_vertical_exaggeration(self):
+        """Update all slices and plane widgets when vertical exaggeration changes"""
+        if not hasattr(self, 'slice_actors') or not self.slice_actors:
+            return
+        
+        print("Updating slices for vertical exaggeration...")
+        
+        # Remember which slices have manipulation enabled
+        has_manipulation = False
+        entity_name = None
+        x_checked = False
+        y_checked = False
+        z_checked = False
+        
+        # Find the mesh slicer dialog if it's open
+        for child in self.findChildren(QDialog):
+            if hasattr(child, 'windowTitle') and child.windowTitle() == "Mesh Slicer":
+                # Find the manipulation checkbox
+                enable_manipulation = child.findChild(QCheckBox, "enable_manipulation")
+                if enable_manipulation and enable_manipulation.isChecked():
+                    has_manipulation = True
+                    
+                    # Get entity and which slices are checked
+                    entity_combo = child.findChild(QComboBox, "entity_combo")
+                    if entity_combo:
+                        entity_name = entity_combo.currentText()
+                        
+                    x_check = child.findChild(QCheckBox, "x_slice_check")
+                    y_check = child.findChild(QCheckBox, "y_slice_check")
+                    z_check = child.findChild(QCheckBox, "z_slice_check")
+                    
+                    if x_check:
+                        x_checked = x_check.isChecked()
+                    if y_check:
+                        y_checked = y_check.isChecked()
+                    if z_check:
+                        z_checked = z_check.isChecked()
+                    
+                    # Temporarily disable manipulation
+                    enable_manipulation.setChecked(False)
+                    QApplication.processEvents()  # Process UI events
+                break
+        
+        # Clean up existing plane widgets
+        self.cleanup_plane_widgets()
+        
+        # Update all slice positions with the new exaggeration
+        for slice_uid in list(self.slice_actors.keys()):
+            parts = slice_uid.split('_')
+            if len(parts) >= 2:
+                entity_name_from_slice = '_'.join(parts[:-1])
+                slice_type = parts[-1]
+                
+                # Get the entity
+                entity = self.get_entity_by_name(entity_name_from_slice)
+                if entity:
+                    # Get current slider positions
+                    normalized_position = 0.5  # Default position
+                    
+                    # Force update the visualization
+                    if hasattr(self, 'update_slice_visualization'):
+                        self.update_slice_visualization(entity_name_from_slice, slice_type, normalized_position, False)
+                    elif 'update_slice_visualization' in locals() or 'update_slice_visualization' in globals():
+                        update_slice_visualization(entity_name_from_slice, slice_type, normalized_position, False)
+        
+        # Re-enable manipulation if it was on before
+        if has_manipulation and entity_name:
+            # Find the dialog again to ensure it's still open
+            for child in self.findChildren(QDialog):
+                if hasattr(child, 'windowTitle') and child.windowTitle() == "Mesh Slicer":
+                    enable_manipulation = child.findChild(QCheckBox, "enable_manipulation")
+                    if enable_manipulation:
+                        print("Re-enabling manipulation with new vertical exaggeration")
+                        enable_manipulation.setChecked(True)
+                    break
+        
+        # Force a final render
         self.plotter.render()
 
 
