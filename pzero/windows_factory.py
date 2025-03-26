@@ -2965,6 +2965,30 @@ class View3D(VTKView):
         x_value, y_value, z_value = value_labels["X"], value_labels["Y"], value_labels["Z"]
         
         # Helper function to get scalar and colormap
+        # Add this function inside show_mesh_slicer_dialog, with the other local functions
+        def cleanup_on_close():
+            """Clean up all slices and plane widgets when dialog closes"""
+            print("Cleaning up mesh slicer resources...")
+            
+            # Disable manipulation to remove plane widgets
+            if enable_manipulation.isChecked():
+                enable_manipulation.setChecked(False)
+                self.toggle_mesh_manipulation(False, x_slider, y_slider, z_slider,
+                                        x_value, y_value, z_value,
+                                        entity_combo, x_slice_check, y_slice_check, z_slice_check,
+                                        update_slice_visualization)
+            
+            # Remove all slice actors
+            for slice_uid, actor in list(self.slice_actors.items()):
+                try:
+                    print(f"Removing slice {slice_uid}")
+                    self.plotter.remove_actor(actor)
+                except Exception as e:
+                    print(f"Error removing slice {slice_uid}: {e}")
+            self.slice_actors = {}
+            
+            # Force a final render
+            self.plotter.render()
         def get_scalar_and_cmap(pv_object):
             """Get the scalar array and colormap for a PyVista object."""
             scalar_array = None
@@ -3205,6 +3229,9 @@ class View3D(VTKView):
         # Set up dialog
         control_panel.setLayout(layout)
         control_panel.show()
+
+        # Add this after creating the control_panel
+        control_panel.finished.connect(cleanup_on_close)
 
     def create_grid_diagram(self, entity_name):
         """Create a grid diagram control panel and visualization for any entity."""
