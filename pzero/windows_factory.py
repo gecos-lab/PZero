@@ -2358,7 +2358,7 @@ class VTKView(BaseView):
         )  # Remove the right click observer
         self.plotter.untrack_click_position(
             side="left"
-        )  # Remove the left click observer
+ )  # Remove the left click observer
         # self.plotter.track_click_position(
         #    lambda pos: self.plotter.camera.SetFocalPoint(pos), side="left", double=True
         # )
@@ -2887,357 +2887,260 @@ class View3D(VTKView):
         # off_screen_plot.close()
 
     def show_mesh_slicer_dialog(self):
-        """Create and show a control panel for mesh/grid slicing visualization."""
+        """Create and show a control panel for mesh slicing."""
         # Create the control panel window
         control_panel = QDialog(self)
-        control_panel.setWindowTitle("Mesh Slicer Control Panel")
+        control_panel.setWindowTitle("Mesh Slicer")
         layout = QVBoxLayout()
 
-        # Initialize slice actors dictionary if not exists
+        # Initialize slice actors dictionary if it doesn't exist
         if not hasattr(self, 'slice_actors'):
             self.slice_actors = {}
         
-        # Initialize manipulation widgets list
+        # Initialize plane widgets list if it doesn't exist
         if not hasattr(self, 'plane_widgets'):
             self.plane_widgets = []
-
+        
+        # Initialize throttle time for UI updates
+        self.last_slider_update = time.time()
+        slider_throttle = 1/30.0
+        
         # Entity selection group
         entity_group = QGroupBox("Entity Selection")
         entity_layout = QVBoxLayout()
-
-        # Combobox for selecting meshes/grids
-        entity_label = QLabel("Available Entities:")
+        
+        entity_label = QLabel("Select Entity:")
         entity_combo = QComboBox()
         entity_combo.addItems(self.getSliceableEntities())
-
-        # Add Grid Section Manager button
-        grid_manager_btn = QPushButton("Grid Section Manager")
-        grid_manager_btn.clicked.connect(lambda: self.create_grid_diagram(entity_combo.currentText()))
-        entity_layout.addWidget(grid_manager_btn)
-
-        # Add widgets to entity layout
+        
         entity_layout.addWidget(entity_label)
         entity_layout.addWidget(entity_combo)
         entity_group.setLayout(entity_layout)
-
-        # Slice visibility group
+        
+        # Slice toggle group
         slice_toggle_group = QGroupBox("Slice Visibility")
         slice_toggle_layout = QVBoxLayout()
-
-        # Create checkboxes for each slice direction
-        x_slice_check = QCheckBox("Show X Slice")
-        y_slice_check = QCheckBox("Show Y Slice")
-        z_slice_check = QCheckBox("Show Z Slice")
-
-        # Add checkboxes to layout
+        
+        x_slice_check = QCheckBox("X Slice")
+        y_slice_check = QCheckBox("Y Slice")
+        z_slice_check = QCheckBox("Z Slice")
+        
         slice_toggle_layout.addWidget(x_slice_check)
         slice_toggle_layout.addWidget(y_slice_check)
         slice_toggle_layout.addWidget(z_slice_check)
         slice_toggle_group.setLayout(slice_toggle_layout)
-
-        # Slice position control group
-        position_group = QGroupBox("Slice Position Control")
+        
+        # Position control group - create sliders, labels and values
+        position_group = QGroupBox("Position Control")
         position_layout = QVBoxLayout()
-
-        # Create sliders for each direction
-        x_slider = QSlider(Qt.Horizontal)
-        y_slider = QSlider(Qt.Horizontal)
-        z_slider = QSlider(Qt.Horizontal)
-
-        # Set slider ranges (0-100 for normalized positions)
-        for slider in (x_slider, y_slider, z_slider):
+        
+        # Create UI components using a more compact approach
+        sliders = {}
+        value_labels = {}
+        
+        for label_text, slice_type in [("X Position:", "X"), ("Y Position:", "Y"), ("Z Position:", "Z")]:
+            slider = QSlider(Qt.Horizontal)
             slider.setMinimum(0)
             slider.setMaximum(100)
             slider.setValue(50)
-
-        # Add labels and value displays
-        x_label = QLabel("X Position:")
-        y_label = QLabel("Y Position:")
-        z_label = QLabel("Z Position:")
-
-        x_value = QLabel("0.50")
-        y_value = QLabel("0.50")
-        z_value = QLabel("0.50")
-
-        def create_slider_layout(label, slider, value):
-            layout = QHBoxLayout()
-            layout.addWidget(label)
-            layout.addWidget(slider)
-            layout.addWidget(value)
-            return layout
-
-        # Add slider layouts to position group
-        position_layout.addLayout(create_slider_layout(x_label, x_slider, x_value))
-        position_layout.addLayout(create_slider_layout(y_label, y_slider, y_value))
-        position_layout.addLayout(create_slider_layout(z_label, z_slider, z_value))
+            
+            label = QLabel(label_text)
+            value_label = QLabel("0.50")
+            
+            # Store references
+            sliders[slice_type] = slider
+            value_labels[slice_type] = value_label
+            
+            # Create layout
+            slider_layout = QHBoxLayout()
+            slider_layout.addWidget(label)
+            slider_layout.addWidget(slider)
+            slider_layout.addWidget(value_label)
+            position_layout.addLayout(slider_layout)
+        
         position_group.setLayout(position_layout)
         
-        # Add manipulation control group
-        manipulation_group = QGroupBox("Manipulation Control")
-        manipulation_layout = QVBoxLayout()
-
-        enable_manipulation = QCheckBox("Enable Direct Manipulation")
-        enable_manipulation.setChecked(False)  # Default to disabled
+        # Assign variables for easier reference
+        x_slider, y_slider, z_slider = sliders["X"], sliders["Y"], sliders["Z"]
+        x_value, y_value, z_value = value_labels["X"], value_labels["Y"], value_labels["Z"]
         
-        manipulation_layout.addWidget(enable_manipulation)
-        manipulation_group.setLayout(manipulation_layout)
-
-        # Add all groups to main layout
-        layout.addWidget(entity_group)
-        layout.addWidget(slice_toggle_group)
-        layout.addWidget(position_group)
-        layout.addWidget(manipulation_group)
-
-        # Get slider throttling for smoother updates
-        self.last_slider_update = time.time()
-        slider_throttle = 1/30.0  # Limit to 30 FPS
-
-        def update_slice_visualization(entity, slice_type, normalized_position, fast_update=False):
-            """Update slice visualization for the given entity and direction."""
-            if not entity:
-                return
-
-            # Convert to PyVista object if needed
-            if not isinstance(entity, pv.DataSet):
-                entity = pv.wrap(entity)
-
-            # Get entity name and create slice_uid
-            entity_name = entity_combo.currentText()
-            slice_uid = f"{entity_name}_{slice_type}_slice"
-            
-            # Store current visibility if slice exists
-            current_visibility = True
-            if slice_uid in self.slice_actors:
-                current_visibility = self.slice_actors[slice_uid].GetVisibility()
-
-            # Calculate slice position and create slice
-            bounds = entity.bounds
-            if slice_type == 'X':
-                position = bounds[0] + (bounds[1] - bounds[0]) * normalized_position
-                slice_data = entity.slice(normal='x', origin=[position, 0, 0])
-            elif slice_type == 'Y':
-                position = bounds[2] + (bounds[3] - bounds[2]) * normalized_position
-                slice_data = entity.slice(normal='y', origin=[0, position, 0])
-            else:  # Z Slice
-                position = bounds[4] + (bounds[5] - bounds[4]) * normalized_position
-                slice_data = entity.slice(normal='z', origin=[0, 0, position])
-
-            # Get scalar data for coloring
+        # Helper function to get scalar and colormap
+        def get_scalar_and_cmap(pv_object):
+            """Get the scalar array and colormap for a PyVista object."""
             scalar_array = None
-            scalar_range = None
             cmap = None
             
-            if entity.point_data:
-                if len(entity.point_data.keys()) > 0:
-                    scalar_array = entity.point_data.keys()[0]
-                    if scalar_array:
-                        scalar_range = entity.get_data_range(scalar_array)
-                        
-                        # Get colormap from legend if available
-                        prop_row = self.parent.prop_legend_df[
-                            self.parent.prop_legend_df['property_name'] == scalar_array]
-                        if not prop_row.empty:
-                            cmap = prop_row['colormap'].iloc[0]
-                        else:
-                            cmap = 'rainbow'  # Default colormap
+            # Try to find a scalar array
+            if hasattr(pv_object, 'point_data') and len(pv_object.point_data) > 0:
+                for name in pv_object.point_data.keys():
+                    scalar_array = name
+                    break
+                    
+            # Try to find a colormap
+            if scalar_array and hasattr(self, 'parent') and hasattr(self.parent, 'prop_legend_df'):
+                if self.parent.prop_legend_df is not None:
+                    prop_row = self.parent.prop_legend_df[
+                        self.parent.prop_legend_df['property_name'] == scalar_array]
+                    if not prop_row.empty:
+                        cmap = prop_row['colormap'].iloc[0]
             
-            # Update or create the slice actor
-            if fast_update and slice_uid in self.slice_actors:
-                actor = self.slice_actors[slice_uid]
-                mapper = actor.GetMapper()
-                mapper.SetInputData(slice_data)
-                mapper.Update()
-            else:
+            return scalar_array, cmap
+        
+        # Event handlers
+        def update_slice_visualization(entity_name, slice_type, normalized_position, fast_update=False):
+            """Update the slice visualization."""
+            if not entity_name:
+                return
+                
+            # Create a unique identifier for this slice
+            slice_uid = f"{entity_name}_{slice_type}"
+            
+            # Get the entity
+            entity = self.get_entity_by_name(entity_name)
+            if not entity:
+                print(f"Entity {entity_name} not found")
+                return
+                
+            try:
+                # Convert to PyVista object
+                pv_entity = pv.wrap(entity)
+                bounds = pv_entity.bounds
+                
+                # Get scalar and colormap
+                scalar_array, cmap = get_scalar_and_cmap(pv_entity)
+                
+                # Calculate the position in world coordinates
+                if slice_type == 'X':
+                    position = bounds[0] + normalized_position * (bounds[1] - bounds[0])
+                    slice_data = pv_entity.slice(normal=[1,0,0], origin=[position, 0, 0])
+                elif slice_type == 'Y':
+                    position = bounds[2] + normalized_position * (bounds[3] - bounds[2])
+                    slice_data = pv_entity.slice(normal=[0,1,0], origin=[0, position, 0])
+                else:  # Z
+                    position = bounds[4] + normalized_position * (bounds[5] - bounds[4])
+                    slice_data = pv_entity.slice(normal=[0,0,1], origin=[0, 0, position])
+                
+                # Store current visibility if the slice exists
+                current_visibility = True
                 if slice_uid in self.slice_actors:
-                    self.plotter.remove_actor(self.slice_actors[slice_uid])
+                    current_visibility = self.slice_actors[slice_uid].GetVisibility()
+                    
+                # Update an existing slice or create a new one
+                if fast_update and slice_uid in self.slice_actors:
+                    # Fast update just changes the mapper's input data
+                    actor = self.slice_actors[slice_uid]
+                    mapper = actor.GetMapper()
+                    mapper.SetInputData(slice_data)
+                    mapper.Update()
+                else:
+                    # Remove the existing actor if it exists
+                    if slice_uid in self.slice_actors:
+                        self.plotter.remove_actor(self.slice_actors[slice_uid])
+                    
+                    # Create a new actor with the scalar properties
+                    self.slice_actors[slice_uid] = self.plotter.add_mesh(
+                        slice_data,
+                        name=slice_uid,
+                        scalars=scalar_array,
+                        cmap=cmap,
+                        clim=pv_entity.get_data_range(scalar_array) if scalar_array else None,
+                        show_scalar_bar=False,
+                        opacity=1.0,
+                        interpolate_before_map=True,
+                    )
+                    
+                    # Restore visibility
+                    self.slice_actors[slice_uid].SetVisibility(current_visibility)
                 
-                slice_actor = self.plotter.add_mesh(
-                    slice_data,
-                    name=slice_uid,
-                    scalars=scalar_array,
-                    cmap=cmap,
-                    clim=scalar_range,
-                    show_scalar_bar=False,
-                    opacity=1.0,
-                    interpolate_before_map=True,
-                )
+                self.plotter.render()
                 
-                self.slice_actors[slice_uid] = slice_actor
-                slice_actor.SetVisibility(current_visibility)
+            except Exception as e:
+                print(f"Error updating slice: {e}")
+                import traceback
+                traceback.print_exc()
+        
+        # Event handler functions
+        def on_manipulation_toggled(state):
+            """Handle manipulation toggle state changes"""
+            print(f"Manipulation toggle state changed: {state}")
+            is_checked = (state == 2)  # Qt.Checked equals 2
+            print(f"Enabling direct manipulation: {is_checked}")
             
-            # Render the scene
-            self.plotter.render()
-
-        def on_slider_changed(slider_type):
-            """Handle slider value changes."""
+            # Toggle manipulation
+            self.toggle_mesh_manipulation(
+                is_checked, 
+                x_slider, y_slider, z_slider,
+                x_value, y_value, z_value,
+                entity_combo, 
+                x_slice_check, y_slice_check, z_slice_check,
+                update_slice_visualization
+            )
+        
+        def on_check_changed(check_box, slice_type):
+            """Handle slice visibility checkbox changes"""
             entity_name = entity_combo.currentText()
             if not entity_name:
                 return
-
+                
+            checked = check_box.isChecked()
+            
+            # Update slice visibility
+            slice_uid = f"{entity_name}_{slice_type}"
+            if slice_uid in self.slice_actors:
+                # Update existing slice
+                self.slice_actors[slice_uid].SetVisibility(checked)
+            elif checked:
+                # Create new slice
+                norm_pos = None
+                if slice_type == 'X':
+                    norm_pos = x_slider.value() / 100.0
+                elif slice_type == 'Y':
+                    norm_pos = y_slider.value() / 100.0
+                else:  # Z
+                    norm_pos = z_slider.value() / 100.0
+                
+                update_slice_visualization(entity_name, slice_type, norm_pos)
+            
+            self.plotter.render()
+        
+        def on_slider_changed(slider_type):
+            """Handle slider value changes."""
+            if hasattr(self, '_updating_visualization') and self._updating_visualization:
+                return
+                
+            entity_name = entity_combo.currentText()
+            if not entity_name:
+                return
+                
             # Throttle updates for smoother performance
             current_time = time.time()
             if current_time - self.last_slider_update < slider_throttle:
                 return
-            
-            entity = self.get_entity_by_name(entity_name)
-            if not entity:
-                return
-
-            normalized_pos = slider_type.value() / 100.0
-            if slider_type == x_slider:
-                if x_slice_check.isChecked():
-                    update_slice_visualization(entity, 'X', normalized_pos, fast_update=True)
-                x_value.setText(f"{normalized_pos:.2f}")
-            elif slider_type == y_slider:
-                if y_slice_check.isChecked():
-                    update_slice_visualization(entity, 'Y', normalized_pos, fast_update=True)
-                y_value.setText(f"{normalized_pos:.2f}")
-            else:  # z_slider
-                if z_slice_check.isChecked():
-                    update_slice_visualization(entity, 'Z', normalized_pos, fast_update=True)
-                z_value.setText(f"{normalized_pos:.2f}")
-            
-            self.last_slider_update = current_time
-
-        def on_check_changed(check_box, slice_type):
-            """Handle checkbox state changes."""
-            entity_name = entity_combo.currentText()
-            if not entity_name:
-                return
-
-            slice_uid = f"{entity_name}_{slice_type}_slice"
-            if slice_uid in self.slice_actors:
-                self.slice_actors[slice_uid].SetVisibility(check_box.isChecked())
-                self.plotter.render()
-            elif check_box.isChecked():
-                # Create new slice if checked and doesn't exist
-                entity = self.get_entity_by_name(entity_name)
-                if entity:
-                    if slice_type == 'X':
-                        normalized_pos = x_slider.value() / 100.0
-                    elif slice_type == 'Y':
-                        normalized_pos = y_slider.value() / 100.0
-                    else:
-                        normalized_pos = z_slider.value() / 100.0
-                    update_slice_visualization(entity, slice_type, normalized_pos)
-
-        def toggle_direct_manipulation(enabled):
-            """Enable or disable direct manipulation of slice planes using plane widgets"""
-            # Update UI state
-            x_slider.setEnabled(not enabled)
-            y_slider.setEnabled(not enabled)
-            z_slider.setEnabled(not enabled)
-            
-            # Apply visual feedback for disabled sliders
-            if enabled:
-                x_slider.setStyleSheet("QSlider::groove:horizontal {background-color: #cccccc;}")
-                y_slider.setStyleSheet("QSlider::groove:horizontal {background-color: #cccccc;}")
-                z_slider.setStyleSheet("QSlider::groove:horizontal {background-color: #cccccc;}")
-            else:
-                x_slider.setStyleSheet("")
-                y_slider.setStyleSheet("")
-                z_slider.setStyleSheet("")
-
-            # Clean up any existing plane widgets
-            if hasattr(self, 'plane_widgets'):
-                for widget in self.plane_widgets:
-                    widget.SetEnabled(False)
-                    if hasattr(widget, 'GetRepresentation'):
-                        rep = widget.GetRepresentation()
-                        if rep:
-                            self.plotter.renderer.RemoveViewProp(rep)
-                    widget.Off()
-                self.plane_widgets = []
                 
-            # Create new plane widgets if enabled
-            if enabled:
-                entity_name = entity_combo.currentText()
-                if entity_name:
-                    entity = self.get_entity_by_name(entity_name)
-                    if entity:
-                        # Convert to PyVista object if needed
-                        if not isinstance(entity, pv.DataSet):
-                            entity = pv.wrap(entity)
-                        
-                        bounds = entity.bounds
-                        x_min, x_max, y_min, y_max, z_min, z_max = bounds
-                        
-                        # Get current slider positions
-                        x_pos = x_slider.value() / 100.0
-                        y_pos = y_slider.value() / 100.0
-                        z_pos = z_slider.value() / 100.0
-                        
-                        # Calculate actual positions in world coordinates
-                        x_world = x_min + x_pos * (x_max - x_min)
-                        y_world = y_min + y_pos * (y_max - y_min)
-                        z_world = z_min + z_pos * (z_max - z_min)
-                        
-                        # Define callback for plane movement
-                        def plane_callback(normal, origin, slice_type):
-                            # Extract relevant coordinate based on slice type
-                            if slice_type == 'X':
-                                pos = origin[0]
-                                normalized_pos = (pos - x_min) / (x_max - x_min) if x_max > x_min else 0.5
-                                # Update slider
-                                x_slider.blockSignals(True)
-                                x_slider.setValue(int(normalized_pos * 100))
-                                x_slider.blockSignals(False)
-                                x_value.setText(f"{normalized_pos:.2f}")
-                            elif slice_type == 'Y':
-                                pos = origin[1]
-                                normalized_pos = (pos - y_min) / (y_max - y_min) if y_max > y_min else 0.5
-                                # Update slider
-                                y_slider.blockSignals(True)
-                                y_slider.setValue(int(normalized_pos * 100))
-                                y_slider.blockSignals(False)
-                                y_value.setText(f"{normalized_pos:.2f}")
-                            else:  # Z Slice
-                                pos = origin[2]
-                                normalized_pos = (pos - z_min) / (z_max - z_min) if z_max > z_min else 0.5
-                                # Update slider
-                                z_slider.blockSignals(True)
-                                z_slider.setValue(int(normalized_pos * 100))
-                                z_slider.blockSignals(False)
-                                z_value.setText(f"{normalized_pos:.2f}")
-                            
-                            # Update slice visualization
-                            if slice_type == 'X' and x_slice_check.isChecked():
-                                update_slice_visualization(entity, slice_type, normalized_pos)
-                            elif slice_type == 'Y' and y_slice_check.isChecked():
-                                update_slice_visualization(entity, slice_type, normalized_pos)
-                            elif slice_type == 'Z' and z_slice_check.isChecked():
-                                update_slice_visualization(entity, slice_type, normalized_pos)
-                        
-                        # Create plane widgets with correct initial positions
-                        slice_configs = [
-                            ('X', 'x', [x_world, (y_min + y_max)/2, (z_min + z_max)/2]),
-                            ('Y', 'y', [(x_min + x_max)/2, y_world, (z_min + z_max)/2]),
-                            ('Z', 'z', [(x_min + x_max)/2, (y_min + y_max)/2, z_world])
-                        ]
-                        
-                        for slice_type, normal, pos in slice_configs:
-                            plane = self.plotter.add_plane_widget(
-                                callback=lambda normal, origin, st=slice_type: 
-                                    plane_callback(normal, origin, st),
-                                normal=normal,
-                                origin=pos,
-                                normal_rotation=False,
-                            )
-                            self.plane_widgets.append(plane)
-                            
-                            # Only enable if the corresponding slice is visible
-                            slice_uid = f"{entity_name}_{slice_type}_slice"
-                            if slice_uid in self.slice_actors:
-                                visible = self.slice_actors[slice_uid].GetVisibility()
-                            else:
-                                visible = (slice_type == 'X' and x_slice_check.isChecked() or
-                                           slice_type == 'Y' and y_slice_check.isChecked() or
-                                           slice_type == 'Z' and z_slice_check.isChecked())
-                            plane.SetEnabled(visible)
-            
-            # Render the scene
-            self.plotter.render()
-
+            try:
+                self._updating_visualization = True
+                
+                normalized_pos = slider_type.value() / 100.0
+                
+                # Update the corresponding value label
+                if slider_type == x_slider:
+                    x_value.setText(f"{normalized_pos:.2f}")
+                    if x_slice_check.isChecked():
+                        update_slice_visualization(entity_name, 'X', normalized_pos, fast_update=True)
+                elif slider_type == y_slider:
+                    y_value.setText(f"{normalized_pos:.2f}")
+                    if y_slice_check.isChecked():
+                        update_slice_visualization(entity_name, 'Y', normalized_pos, fast_update=True)
+                else:  # z_slider
+                    z_value.setText(f"{normalized_pos:.2f}")
+                    if z_slice_check.isChecked():
+                        update_slice_visualization(entity_name, 'Z', normalized_pos, fast_update=True)
+                    
+                self.last_slider_update = current_time
+                
+            finally:
+                self._updating_visualization = False
+        
         def initialize_entity_controls(entity_name):
             """Initialize controls when a new entity is selected."""
             if not entity_name:
@@ -3247,43 +3150,59 @@ class View3D(VTKView):
             if not entity:
                 return
                 
-            # Reset checkboxes and hide any existing slices
-            for check_box, slice_type in [
-                (x_slice_check, 'X'),
-                (y_slice_check, 'Y'),
-                (z_slice_check, 'Z')
-            ]:
-                check_box.blockSignals(True)
-                check_box.setChecked(False)
-                check_box.blockSignals(False)
-                
-                slice_uid = f"{entity_name}_{slice_type}_slice"
+            # Uncheck all checkboxes
+            x_slice_check.setChecked(False)
+            y_slice_check.setChecked(False)
+            z_slice_check.setChecked(False)
+            
+            # Hide existing slices
+            for slice_type in ['X', 'Y', 'Z']:
+                slice_uid = f"{entity_name}_{slice_type}"
                 if slice_uid in self.slice_actors:
                     self.slice_actors[slice_uid].SetVisibility(False)
             
-            # Update slider ranges if entity changes
             # Reset manipulation
             if enable_manipulation.isChecked():
                 enable_manipulation.setChecked(False)
-                toggle_direct_manipulation(False)
+                self.toggle_mesh_manipulation(False, x_slider, y_slider, z_slider,
+                                           x_value, y_value, z_value,
+                                           entity_combo, x_slice_check, y_slice_check, z_slice_check,
+                                           update_slice_visualization)
                 
             self.plotter.render()
-
+        
+        # Add manipulation control group
+        manipulation_group = QGroupBox("Manipulation Control")
+        manipulation_layout = QVBoxLayout()
+        
+        enable_manipulation = QCheckBox("Enable Direct Manipulation")
+        enable_manipulation.setChecked(False)  # Default to disabled
+        
+        # Connect the manipulation toggle
+        enable_manipulation.stateChanged.connect(on_manipulation_toggled)
+        
+        manipulation_layout.addWidget(enable_manipulation)
+        manipulation_group.setLayout(manipulation_layout)
+        layout.addWidget(manipulation_group)
+        
+        # Add all groups to main layout in a logical order
+        layout.addWidget(entity_group)
+        layout.addWidget(slice_toggle_group)
+        layout.addWidget(position_group)
+        layout.addWidget(manipulation_group)
+        
         # Connect signals
         x_slider.valueChanged.connect(lambda: on_slider_changed(x_slider))
         y_slider.valueChanged.connect(lambda: on_slider_changed(y_slider))
         z_slider.valueChanged.connect(lambda: on_slider_changed(z_slider))
-
+        
         x_slice_check.toggled.connect(lambda checked: on_check_changed(x_slice_check, 'X'))
         y_slice_check.toggled.connect(lambda checked: on_check_changed(y_slice_check, 'Y'))
         z_slice_check.toggled.connect(lambda checked: on_check_changed(z_slice_check, 'Z'))
         
         entity_combo.currentTextChanged.connect(initialize_entity_controls)
-        enable_manipulation.stateChanged.connect(
-            lambda state: toggle_direct_manipulation(state == Qt.Checked)
-        )
-
-        # Set the layout and show the dialog
+        
+        # Set up dialog
         control_panel.setLayout(layout)
         control_panel.show()
 
@@ -3540,17 +3459,163 @@ class View3D(VTKView):
             self.menuMeshTools = QMenu("Mesh Tools", self)
             self.menuBar().addMenu(self.menuMeshTools)
         
-        # Create toolbar if it doesn't exist
-        if not hasattr(self, 'toolBarBase'):
-            self.toolBarBase = self.addToolBar("Base Tools")
-        
-        # Add mesh slicer action
+        # Add mesh slicer action - only add it once
         self.actionMeshSlicer = QAction("Mesh Slicer", self)
         self.actionMeshSlicer.triggered.connect(self.show_mesh_slicer_dialog)
         
-        # Add to both menu and toolbar
+        # Add to menu only - remove from toolbar to avoid duplication
         self.menuMeshTools.addAction(self.actionMeshSlicer)
-        self.toolBarBase.addAction(self.actionMeshSlicer)
+
+    def toggle_mesh_manipulation(self, enabled, x_slider, y_slider, z_slider, 
+                               x_value, y_value, z_value,
+                               entity_combo, x_slice_check, y_slice_check, z_slice_check,
+                               update_slice_func=None):
+        """Handle toggling of mesh manipulation mode"""
+        print(f"toggle_mesh_manipulation called with enabled={enabled}")
+        
+        # Update slider states
+        self.update_slider_states(enabled, x_slider, y_slider, z_slider)
+        
+        # Clean up existing plane widgets before doing anything else
+        self.cleanup_plane_widgets()
+        
+        if not enabled:
+            return
+        
+        # Get the entity and make sure it exists
+        entity_name = entity_combo.currentText()
+        if not entity_name:
+            print("No entity selected")
+            return
+    
+        entity = self.get_entity_by_name(entity_name)
+        if not entity:
+            print(f"Could not find entity: {entity_name}")
+            return
+    
+        # Convert to PyVista object and get bounds
+        try:
+            print(f"Setting up manipulation for entity: {entity_name}")
+            entity = pv.wrap(entity)
+            bounds = entity.bounds
+            x_min, x_max, y_min, y_max, z_min, z_max = bounds
+            
+            # Get current slider values (normalized to [0,1])
+            x_pos = x_slider.value() / 100.0
+            y_pos = y_slider.value() / 100.0
+            z_pos = z_slider.value() / 100.0
+            
+            # Calculate world positions
+            x_world = x_min + x_pos * (x_max - x_min)
+            y_world = y_min + y_pos * (y_max - y_min)
+            z_world = z_min + z_pos * (z_max - z_min)
+            
+            print(f"World positions: X={x_world}, Y={y_world}, Z={z_world}")
+            
+            # Create plane widgets for checked slices
+            self.plane_widgets = []
+            
+            def create_callback(slice_type, slider, value_label):
+                """Create a callback closure for the given slice type"""
+                def callback(normal, origin):
+                    # Calculate normalized position based on current origin
+                    if slice_type == 'X':
+                        pos = origin[0]
+                        normalized_pos = (pos - x_min) / (x_max - x_min) if x_max > x_min else 0.5
+                    elif slice_type == 'Y':
+                        pos = origin[1]
+                        normalized_pos = (pos - y_min) / (y_max - y_min) if y_max > y_min else 0.5
+                    else:  # Z
+                        pos = origin[2]
+                        normalized_pos = (pos - z_min) / (z_max - z_min) if z_max > z_min else 0.5
+                    
+                    # Update slider and label
+                    slider_pos = int(normalized_pos * 100)
+                    slider.setValue(slider_pos)
+                    value_label.setText(f"{normalized_pos:.2f}")
+                    
+                    # Update visualization
+                    if update_slice_func:
+                        update_slice_func(entity_name, slice_type, normalized_pos)
+                
+                return callback
+            
+            # Create plane widgets for checked slices using a more compact approach
+            widget_configs = [
+                ('X', x_slice_check, 'x', [x_world, (y_min + y_max)/2, (z_min + z_max)/2], x_slider, x_value),
+                ('Y', y_slice_check, 'y', [(x_min + x_max)/2, y_world, (z_min + z_max)/2], y_slider, y_value),
+                ('Z', z_slice_check, 'z', [(x_min + x_max)/2, (y_min + y_max)/2, z_world], z_slider, z_value)
+            ]
+            
+            for slice_type, check, normal, origin, slider, value_label in widget_configs:
+                if check.isChecked():
+                    print(f"Creating {slice_type} plane widget")
+                    plane = self.plotter.add_plane_widget(
+                        callback=create_callback(slice_type, slider, value_label),
+                        normal=normal,
+                        origin=origin,
+                        bounds=bounds,
+                        factor=1.0,
+                        normal_rotation=False
+                    )
+                    
+                    # Ensure the widget is visible and active
+                    plane.On()
+                    slice_uid = f"{entity_name}_{slice_type}"
+                    if slice_uid in self.slice_actors:
+                        plane.SetEnabled(self.slice_actors[slice_uid].GetVisibility())
+                    self.plane_widgets.append(plane)
+            
+            print(f"Created {len(self.plane_widgets)} plane widgets")
+            
+            # Force a render to ensure widgets appear
+            self.plotter.render()
+            
+        except Exception as e:
+            print(f"Error in toggle_mesh_manipulation: {e}")
+            import traceback
+            traceback.print_exc()
+
+    def update_slider_states(self, enabled, x_slider, y_slider, z_slider):
+        """Update slider states based on manipulation mode"""
+        print(f"Updating slider states: enabled={enabled}")
+        x_slider.setEnabled(not enabled) 
+        y_slider.setEnabled(not enabled)
+        z_slider.setEnabled(not enabled)
+        
+        # Apply visual indication of disabled state
+        style = "QSlider::groove:horizontal {background-color: #cccccc;}" if enabled else ""
+        x_slider.setStyleSheet(style)
+        y_slider.setStyleSheet(style)
+        z_slider.setStyleSheet(style)
+
+    def cleanup_plane_widgets(self):
+        """Clean up existing plane widgets"""
+        if not hasattr(self, 'plane_widgets') or not self.plane_widgets:
+            return
+        
+        print(f"Cleaning up {len(self.plane_widgets)} plane widgets")
+        
+        for widget in self.plane_widgets:
+            try:
+                if widget:
+                    widget.SetEnabled(False)
+                    widget.Off()
+                    if hasattr(widget, 'GetRepresentation'):
+                        rep = widget.GetRepresentation()
+                        if rep:
+                            self.plotter.renderer.RemoveViewProp(rep)
+                    self.plotter.remove_widget(widget)
+            except Exception as e:
+                print(f"Error cleaning up widget: {e}")
+        
+        self.plane_widgets = []
+        self.plotter.render()
+
+    def get_world_positions(self, normalized_positions, bounds):
+        """Remove this method as it's now redundant"""
+        # This method is redundant as we calculate positions directly in toggle_mesh_manipulation
+        pass
 
 
 class View2D(VTKView):
@@ -4636,7 +4701,9 @@ class ViewStereoplot(MPLView):
                     lambda *, sender=property_combo: self.toggle_property(sender=sender)
                 )
                 glevel_4.setFlags(glevel_4.flags() | Qt.ItemIsUserCheckable)
-                if self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]:
+                if self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[
+                    0
+                ]:
                     glevel_4.setCheckState(0, Qt.Checked)
                 elif not self.actors_df.loc[
                     self.actors_df["uid"] == uid, "show"
@@ -5140,669 +5207,3 @@ class ViewStereoplot(MPLView):
 
     def change_actor_point_size(self, uid=None, collection=None):
         return
-
-    def show_mesh_slicer_dialog(self):
-        """Create and show a control panel for mesh/grid slicing visualization."""
-        # Create the control panel window
-        control_panel = QDialog(self)
-        control_panel.setWindowTitle("Mesh Slicer Control Panel")
-        layout = QVBoxLayout()
-
-        # Initialize slice actors dictionary if not exists
-        if not hasattr(self, 'slice_actors'):
-            self.slice_actors = {}
-        
-        # Initialize manipulation widgets list
-        if not hasattr(self, 'plane_widgets'):
-            self.plane_widgets = []
-
-        # Entity selection group
-        entity_group = QGroupBox("Entity Selection")
-        entity_layout = QVBoxLayout()
-
-        # Combobox for selecting meshes/grids
-        entity_label = QLabel("Available Entities:")
-        entity_combo = QComboBox()
-        entity_combo.addItems(self.getSliceableEntities())
-
-        # Add Grid Section Manager button
-        grid_manager_btn = QPushButton("Grid Section Manager")
-        grid_manager_btn.clicked.connect(lambda: self.create_grid_diagram(entity_combo.currentText()))
-        entity_layout.addWidget(grid_manager_btn)
-
-        # Add widgets to entity layout
-        entity_layout.addWidget(entity_label)
-        entity_layout.addWidget(entity_combo)
-        entity_group.setLayout(entity_layout)
-
-        # Slice visibility group
-        slice_toggle_group = QGroupBox("Slice Visibility")
-        slice_toggle_layout = QVBoxLayout()
-
-        # Create checkboxes for each slice direction
-        x_slice_check = QCheckBox("Show X Slice")
-        y_slice_check = QCheckBox("Show Y Slice")
-        z_slice_check = QCheckBox("Show Z Slice")
-
-        # Add checkboxes to layout
-        slice_toggle_layout.addWidget(x_slice_check)
-        slice_toggle_layout.addWidget(y_slice_check)
-        slice_toggle_layout.addWidget(z_slice_check)
-        slice_toggle_group.setLayout(slice_toggle_layout)
-
-        # Slice position control group
-        position_group = QGroupBox("Slice Position Control")
-        position_layout = QVBoxLayout()
-
-        # Create sliders for each direction
-        x_slider = QSlider(Qt.Horizontal)
-        y_slider = QSlider(Qt.Horizontal)
-        z_slider = QSlider(Qt.Horizontal)
-
-        # Set slider ranges (0-100 for normalized positions)
-        for slider in (x_slider, y_slider, z_slider):
-            slider.setMinimum(0)
-            slider.setMaximum(100)
-            slider.setValue(50)
-
-        # Add labels and value displays
-        x_label = QLabel("X Position:")
-        y_label = QLabel("Y Position:")
-        z_label = QLabel("Z Position:")
-
-        x_value = QLabel("0.50")
-        y_value = QLabel("0.50")
-        z_value = QLabel("0.50")
-
-        def create_slider_layout(label, slider, value):
-            layout = QHBoxLayout()
-            layout.addWidget(label)
-            layout.addWidget(slider)
-            layout.addWidget(value)
-            return layout
-
-        # Add slider layouts to position group
-        position_layout.addLayout(create_slider_layout(x_label, x_slider, x_value))
-        position_layout.addLayout(create_slider_layout(y_label, y_slider, y_value))
-        position_layout.addLayout(create_slider_layout(z_label, z_slider, z_value))
-        position_group.setLayout(position_layout)
-        
-        # Add manipulation control group
-        manipulation_group = QGroupBox("Manipulation Control")
-        manipulation_layout = QVBoxLayout()
-
-        enable_manipulation = QCheckBox("Enable Direct Manipulation")
-        enable_manipulation.setChecked(False)  # Default to disabled
-        
-        manipulation_layout.addWidget(enable_manipulation)
-        manipulation_group.setLayout(manipulation_layout)
-
-        # Add all groups to main layout
-        layout.addWidget(entity_group)
-        layout.addWidget(slice_toggle_group)
-        layout.addWidget(position_group)
-        layout.addWidget(manipulation_group)
-
-        # Get slider throttling for smoother updates
-        self.last_slider_update = time.time()
-        slider_throttle = 1/30.0  # Limit to 30 FPS
-
-        def update_slice_visualization(entity, slice_type, normalized_position, fast_update=False):
-            """Update slice visualization for the given entity and direction."""
-            if not entity:
-                return
-
-            # Convert to PyVista object if needed
-            if not isinstance(entity, pv.DataSet):
-                entity = pv.wrap(entity)
-
-            # Get entity name and create slice_uid
-            entity_name = entity_combo.currentText()
-            slice_uid = f"{entity_name}_{slice_type}_slice"
-            
-            # Store current visibility if slice exists
-            current_visibility = True
-            if slice_uid in self.slice_actors:
-                current_visibility = self.slice_actors[slice_uid].GetVisibility()
-
-            # Calculate slice position and create slice
-            bounds = entity.bounds
-            if slice_type == 'X':
-                position = bounds[0] + (bounds[1] - bounds[0]) * normalized_position
-                slice_data = entity.slice(normal='x', origin=[position, 0, 0])
-            elif slice_type == 'Y':
-                position = bounds[2] + (bounds[3] - bounds[2]) * normalized_position
-                slice_data = entity.slice(normal='y', origin=[0, position, 0])
-            else:  # Z Slice
-                position = bounds[4] + (bounds[5] - bounds[4]) * normalized_position
-                slice_data = entity.slice(normal='z', origin=[0, 0, position])
-
-            # Get scalar data for coloring
-            scalar_array = None
-            scalar_range = None
-            cmap = None
-            
-            if entity.point_data:
-                if len(entity.point_data.keys()) > 0:
-                    scalar_array = entity.point_data.keys()[0]
-                    if scalar_array:
-                        scalar_range = entity.get_data_range(scalar_array)
-                        
-                        # Get colormap from legend if available
-                        prop_row = self.parent.prop_legend_df[
-                            self.parent.prop_legend_df['property_name'] == scalar_array]
-                        if not prop_row.empty:
-                            cmap = prop_row['colormap'].iloc[0]
-                        else:
-                            cmap = 'rainbow'  # Default colormap
-            
-            # Update or create the slice actor
-            if fast_update and slice_uid in self.slice_actors:
-                actor = self.slice_actors[slice_uid]
-                mapper = actor.GetMapper()
-                mapper.SetInputData(slice_data)
-                mapper.Update()
-            else:
-                if slice_uid in self.slice_actors:
-                    self.plotter.remove_actor(self.slice_actors[slice_uid])
-                
-                slice_actor = self.plotter.add_mesh(
-                    slice_data,
-                    name=slice_uid,
-                    scalars=scalar_array,
-                    cmap=cmap,
-                    clim=scalar_range,
-                    show_scalar_bar=False,
-                    opacity=1.0,
-                    interpolate_before_map=True,
-                )
-                
-                self.slice_actors[slice_uid] = slice_actor
-                slice_actor.SetVisibility(current_visibility)
-            
-            # Render the scene
-            self.plotter.render()
-
-        def on_slider_changed(slider_type):
-            """Handle slider value changes."""
-            entity_name = entity_combo.currentText()
-            if not entity_name:
-                return
-
-            # Throttle updates for smoother performance
-            current_time = time.time()
-            if current_time - self.last_slider_update < slider_throttle:
-                return
-            
-            entity = self.get_entity_by_name(entity_name)
-            if not entity:
-                return
-
-            normalized_pos = slider_type.value() / 100.0
-            if slider_type == x_slider:
-                if x_slice_check.isChecked():
-                    update_slice_visualization(entity, 'X', normalized_pos, fast_update=True)
-                x_value.setText(f"{normalized_pos:.2f}")
-            elif slider_type == y_slider:
-                if y_slice_check.isChecked():
-                    update_slice_visualization(entity, 'Y', normalized_pos, fast_update=True)
-                y_value.setText(f"{normalized_pos:.2f}")
-            else:  # z_slider
-                if z_slice_check.isChecked():
-                    update_slice_visualization(entity, 'Z', normalized_pos, fast_update=True)
-                z_value.setText(f"{normalized_pos:.2f}")
-            
-            self.last_slider_update = current_time
-
-        def on_check_changed(check_box, slice_type):
-            """Handle checkbox state changes."""
-            entity_name = entity_combo.currentText()
-            if not entity_name:
-                return
-
-            slice_uid = f"{entity_name}_{slice_type}_slice"
-            if slice_uid in self.slice_actors:
-                self.slice_actors[slice_uid].SetVisibility(check_box.isChecked())
-                self.plotter.render()
-            elif check_box.isChecked():
-                # Create new slice if checked and doesn't exist
-                entity = self.get_entity_by_name(entity_name)
-                if entity:
-                    if slice_type == 'X':
-                        normalized_pos = x_slider.value() / 100.0
-                    elif slice_type == 'Y':
-                        normalized_pos = y_slider.value() / 100.0
-                    else:
-                        normalized_pos = z_slider.value() / 100.0
-                    update_slice_visualization(entity, slice_type, normalized_pos)
-
-        def toggle_direct_manipulation(enabled):
-            """Enable or disable direct manipulation of slice planes using plane widgets"""
-            # Update UI state
-            x_slider.setEnabled(not enabled)
-            y_slider.setEnabled(not enabled)
-            z_slider.setEnabled(not enabled)
-            
-            # Apply visual feedback for disabled sliders
-            if enabled:
-                x_slider.setStyleSheet("QSlider::groove:horizontal {background-color: #cccccc;}")
-                y_slider.setStyleSheet("QSlider::groove:horizontal {background-color: #cccccc;}")
-                z_slider.setStyleSheet("QSlider::groove:horizontal {background-color: #cccccc;}")
-            else:
-                x_slider.setStyleSheet("")
-                y_slider.setStyleSheet("")
-                z_slider.setStyleSheet("")
-
-            # Clean up any existing plane widgets
-            if hasattr(self, 'plane_widgets'):
-                for widget in self.plane_widgets:
-                    widget.SetEnabled(False)
-                    if hasattr(widget, 'GetRepresentation'):
-                        rep = widget.GetRepresentation()
-                        if rep:
-                            self.plotter.renderer.RemoveViewProp(rep)
-                    widget.Off()
-                self.plane_widgets = []
-                
-            # Create new plane widgets if enabled
-            if enabled:
-                entity_name = entity_combo.currentText()
-                if entity_name:
-                    entity = self.get_entity_by_name(entity_name)
-                    if entity:
-                        # Convert to PyVista object if needed
-                        if not isinstance(entity, pv.DataSet):
-                            entity = pv.wrap(entity)
-                        
-                        bounds = entity.bounds
-                        x_min, x_max, y_min, y_max, z_min, z_max = bounds
-                        
-                        # Get current slider positions
-                        x_pos = x_slider.value() / 100.0
-                        y_pos = y_slider.value() / 100.0
-                        z_pos = z_slider.value() / 100.0
-                        
-                        # Calculate actual positions in world coordinates
-                        x_world = x_min + x_pos * (x_max - x_min)
-                        y_world = y_min + y_pos * (y_max - y_min)
-                        z_world = z_min + z_pos * (z_max - z_min)
-                        
-                        # Define callback for plane movement
-                        def plane_callback(normal, origin, slice_type):
-                            # Extract relevant coordinate based on slice type
-                            if slice_type == 'X':
-                                pos = origin[0]
-                                normalized_pos = (pos - x_min) / (x_max - x_min) if x_max > x_min else 0.5
-                                # Update slider
-                                x_slider.blockSignals(True)
-                                x_slider.setValue(int(normalized_pos * 100))
-                                x_slider.blockSignals(False)
-                                x_value.setText(f"{normalized_pos:.2f}")
-                            elif slice_type == 'Y':
-                                pos = origin[1]
-                                normalized_pos = (pos - y_min) / (y_max - y_min) if y_max > y_min else 0.5
-                                # Update slider
-                                y_slider.blockSignals(True)
-                                y_slider.setValue(int(normalized_pos * 100))
-                                y_slider.blockSignals(False)
-                                y_value.setText(f"{normalized_pos:.2f}")
-                            else:  # Z Slice
-                                pos = origin[2]
-                                normalized_pos = (pos - z_min) / (z_max - z_min) if z_max > z_min else 0.5
-                                # Update slider
-                                z_slider.blockSignals(True)
-                                z_slider.setValue(int(normalized_pos * 100))
-                                z_slider.blockSignals(False)
-                                z_value.setText(f"{normalized_pos:.2f}")
-                            
-                            # Update slice visualization
-                            if slice_type == 'X' and x_slice_check.isChecked():
-                                update_slice_visualization(entity, slice_type, normalized_pos)
-                            elif slice_type == 'Y' and y_slice_check.isChecked():
-                                update_slice_visualization(entity, slice_type, normalized_pos)
-                            elif slice_type == 'Z' and z_slice_check.isChecked():
-                                update_slice_visualization(entity, slice_type, normalized_pos)
-                        
-                        # Create plane widgets with correct initial positions
-                        slice_configs = [
-                            ('X', 'x', [x_world, (y_min + y_max)/2, (z_min + z_max)/2]),
-                            ('Y', 'y', [(x_min + x_max)/2, y_world, (z_min + z_max)/2]),
-                            ('Z', 'z', [(x_min + x_max)/2, (y_min + y_max)/2, z_world])
-                        ]
-                        
-                        for slice_type, normal, pos in slice_configs:
-                            plane = self.plotter.add_plane_widget(
-                                callback=lambda normal, origin, st=slice_type: 
-                                    plane_callback(normal, origin, st),
-                                normal=normal,
-                                origin=pos,
-                                normal_rotation=False,
-                            )
-                            self.plane_widgets.append(plane)
-                            
-                            # Only enable if the corresponding slice is visible
-                            slice_uid = f"{entity_name}_{slice_type}_slice"
-                            if slice_uid in self.slice_actors:
-                                visible = self.slice_actors[slice_uid].GetVisibility()
-                            else:
-                                visible = (slice_type == 'X' and x_slice_check.isChecked() or
-                                           slice_type == 'Y' and y_slice_check.isChecked() or
-                                           slice_type == 'Z' and z_slice_check.isChecked())
-                            plane.SetEnabled(visible)
-                    
-                    # Render the scene
-                    self.plotter.render()
-
-        def initialize_entity_controls(entity_name):
-            """Initialize controls when a new entity is selected."""
-            if not entity_name:
-                return
-                
-            entity = self.get_entity_by_name(entity_name)
-            if not entity:
-                return
-                
-            # Reset checkboxes and hide any existing slices
-            for check_box, slice_type in [
-                (x_slice_check, 'X'),
-                (y_slice_check, 'Y'),
-                (z_slice_check, 'Z')
-            ]:
-                check_box.blockSignals(True)
-                check_box.setChecked(False)
-                check_box.blockSignals(False)
-                
-                slice_uid = f"{entity_name}_{slice_type}_slice"
-                if slice_uid in self.slice_actors:
-                    self.slice_actors[slice_uid].SetVisibility(False)
-            
-            # Update slider ranges if entity changes
-            # Reset manipulation
-            if enable_manipulation.isChecked():
-                enable_manipulation.setChecked(False)
-                toggle_direct_manipulation(False)
-                
-            self.plotter.render()
-
-        # Connect signals
-        x_slider.valueChanged.connect(lambda: on_slider_changed(x_slider))
-        y_slider.valueChanged.connect(lambda: on_slider_changed(y_slider))
-        z_slider.valueChanged.connect(lambda: on_slider_changed(z_slider))
-
-        x_slice_check.toggled.connect(lambda checked: on_check_changed(x_slice_check, 'X'))
-        y_slice_check.toggled.connect(lambda checked: on_check_changed(y_slice_check, 'Y'))
-        z_slice_check.toggled.connect(lambda checked: on_check_changed(z_slice_check, 'Z'))
-        
-        entity_combo.currentTextChanged.connect(initialize_entity_controls)
-        enable_manipulation.stateChanged.connect(
-            lambda state: toggle_direct_manipulation(state == Qt.Checked)
-        )
-
-        # Set the layout and show the dialog
-        control_panel.setLayout(layout)
-        control_panel.show()
-
-    def create_grid_diagram(self, entity_name):
-        """Create a grid diagram control panel and visualization for any entity."""
-        import numpy as np
-        
-        if not entity_name:
-            return
-            
-        entity = self.get_entity_by_name(entity_name)
-        if not entity:
-            return
-            
-        # Convert to PyVista object if needed
-        if not isinstance(entity, pv.DataSet):
-            entity = pv.wrap(entity)
-        
-        grid_panel = QDialog(self)
-        grid_panel.setWindowTitle(f"Create Grid Diagram - {entity_name}")
-        layout = QVBoxLayout()
-
-        # Direction selection
-        direction_layout = QHBoxLayout()
-        direction_layout.addWidget(QLabel("Direction:"))
-        direction_combo = QComboBox()
-        direction_combo.addItems(["X", "Y", "Z"])
-        direction_layout.addWidget(direction_combo)
-        layout.addLayout(direction_layout)
-
-        # Number of slices
-        slices_layout = QHBoxLayout()
-        slices_layout.addWidget(QLabel("Number of slices:"))
-        slices_spin = QSpinBox()
-        slices_spin.setRange(2, 50)
-        slices_spin.setValue(7)
-        slices_layout.addWidget(slices_spin)
-        layout.addLayout(slices_layout)
-
-        # Create buttons
-        create_btn = QPushButton("Create Grid")
-        remove_btn = QPushButton("Remove Grid")
-
-        # Add buttons to a horizontal layout
-        buttons_layout = QHBoxLayout()
-        buttons_layout.addWidget(create_btn)
-        buttons_layout.addWidget(remove_btn)
-        layout.addLayout(buttons_layout)
-
-        def create_grid():
-            direction = direction_combo.currentText()
-            n_slices = slices_spin.value()
-
-            # Get axis and bounds based on direction
-            if direction == 'X':
-                axis = 'x'
-                min_val, max_val = entity.bounds[0], entity.bounds[1]
-            elif direction == 'Y':
-                axis = 'y'
-                min_val, max_val = entity.bounds[2], entity.bounds[3]
-            else:  # Z
-                axis = 'z'
-                min_val, max_val = entity.bounds[4], entity.bounds[5]
-
-            # Generate evenly spaced positions
-            positions = np.linspace(min_val, max_val, n_slices)
-
-            # Create slices
-            for i, pos in enumerate(positions):
-                slice_uid = f"{entity_name}_{direction}_grid_{i}"
-                
-                # Skip if slice already exists
-                if slice_uid in self.slice_actors:
-                    continue
-
-                try:
-                    origin = [0, 0, 0]
-                    origin[['x', 'y', 'z'].index(axis)] = pos
-                    slice_data = entity.slice(normal=axis, origin=origin)
-
-                    if slice_data.n_points > 0:
-                        # Get scalar data for coloring
-                        scalar_array = None
-                        scalar_range = None
-                        cmap = None
-                        
-                        if entity.point_data:
-                            if len(entity.point_data.keys()) > 0:
-                                scalar_array = entity.point_data.keys()[0]
-                                if scalar_array:
-                                    scalar_range = entity.get_data_range(scalar_array)
-                                    
-                                    # Get colormap from legend if available
-                                    prop_row = self.parent.prop_legend_df[
-                                        self.parent.prop_legend_df['property_name'] == scalar_array]
-                                    if not prop_row.empty:
-                                        cmap = prop_row['colormap'].iloc[0]
-                                    else:
-                                        cmap = 'rainbow'  # Default colormap
-                    
-                    actor = self.plotter.add_mesh(
-                        slice_data,
-                        name=slice_uid,
-                        scalars=scalar_array,
-                        cmap=cmap,
-                        clim=scalar_range,
-                        show_scalar_bar=False,
-                        opacity=1.0,
-                        interpolate_before_map=True
-                    )
-                    self.slice_actors[slice_uid] = actor
-
-                except Exception as e:
-                    print(f"Error creating slice at position {pos}: {e}")
-                    continue
-
-            self.plotter.render()
-
-        def remove_grid():
-            """Remove grid slices of the selected direction only."""
-            direction = direction_combo.currentText()
-            # Get list of grid slice UIDs for current entity and direction
-            grid_slices = [uid for uid in list(self.slice_actors.keys()) 
-                        if f'{entity_name}_{direction}_grid_' in uid]
-            
-            for uid in grid_slices:
-                if uid in self.slice_actors:
-                    actor = self.slice_actors[uid]
-                    self.plotter.remove_actor(actor)
-                    del self.slice_actors[uid]
-            
-            self.plotter.render()
-
-        # Connect buttons
-        create_btn.clicked.connect(create_grid)
-        remove_btn.clicked.connect(remove_grid)
-
-        grid_panel.setLayout(layout)
-        grid_panel.show()
-
-    def getSliceableEntities(self):
-        """Get list of entities that can be sliced from all collections."""
-        sliceable_entities = []
-        
-        # Define sliceable topologies
-        sliceable_topologies = [
-            'Seismics',          # For seismic data
-            'TetraSolid',        # For volumetric meshes
-            'Voxet',            # For voxel data
-            'XsVoxet',          # For cross-section voxel data
-            'Image3D'           # For 3D image data
-        ]
-        
-        # Directly access parent's collections if they exist
-        try:
-            # Try image collection first - most likely to have Seismics
-            if hasattr(self.parent, 'image_coll'):
-                for _, row in self.parent.image_coll.df.iterrows():
-                    if row['topology'] in sliceable_topologies:
-                        sliceable_entities.append(f"Image: {row['name']}")
-            
-            # Try mesh3d collection
-            if hasattr(self.parent, 'mesh3d_coll'):
-                for _, row in self.parent.mesh3d_coll.df.iterrows():
-                    if row['topology'] in sliceable_topologies:
-                        sliceable_entities.append(f"Mesh: {row['name']}")
-            
-            # Try other collections
-            for coll_name, prefix in [
-                ('geol_coll', 'Geological'),
-                ('dom_coll', 'DOM'),
-                ('xsect_coll', 'Cross-section'),
-                ('boundary_coll', 'Boundary'),
-                ('fluid_coll', 'Fluid'),
-                ('well_coll', 'Well'),
-                ('backgrnd_coll', 'Background')
-            ]:
-                if hasattr(self.parent, coll_name):
-                    collection = getattr(self.parent, coll_name)
-                    if hasattr(collection, 'df'):
-                        for _, row in collection.df.iterrows():
-                            if 'topology' in row and row['topology'] in sliceable_topologies:
-                                sliceable_entities.append(f"{prefix}: {row['name']}")
-        
-        except Exception as e:
-            self.print_terminal(f"Error getting sliceable entities: {str(e)}")
-            print(f"Error getting sliceable entities: {str(e)}")
-        
-        return sliceable_entities
-
-    def get_entity_by_name(self, name):
-        """Get entity object by name from any collection."""
-        try:
-            # Split the prefix and actual name
-            if ":" not in name:
-                print("Error: Name doesn't contain a prefix")
-                return None
-                
-            prefix, entity_name = name.split(": ", 1)
-            print(f"Looking for entity: {entity_name} in {prefix} collection")
-            
-            # Map prefix to collection attribute name
-            collection_map = {
-                'Mesh': 'mesh3d_coll',
-                'Geological': 'geol_coll',
-                'Cross-section': 'xsect_coll',
-                'Boundary': 'boundary_coll',
-                'DOM': 'dom_coll',
-                'Image': 'image_coll',
-                'Well': 'well_coll',
-                'Fluid': 'fluid_coll',
-                'Background': 'backgrnd_coll'
-            }
-            
-            coll_name = collection_map.get(prefix)
-            if not coll_name:
-                print(f"Error: Unknown prefix '{prefix}'")
-                return None
-            
-            # Get the collection and entity
-            if hasattr(self.parent, coll_name):
-                collection = getattr(self.parent, coll_name)
-                
-                # Handle different method names in different collections
-                if hasattr(collection, 'get_uid_by_name'):
-                    uid = collection.get_uid_by_name(entity_name)
-                elif hasattr(collection, 'get_name_uid'):
-                    uid_list = collection.get_name_uid(entity_name)
-                    uid = uid_list[0] if uid_list else None
-                else:
-                    # Try direct lookup in the dataframe
-                    matching_rows = collection.df[collection.df['name'] == entity_name]
-                    if not matching_rows.empty:
-                        uid = matching_rows.iloc[0]['uid']
-                    else:
-                        uid = None
-                
-                if uid:
-                    vtk_obj = collection.get_uid_vtk_obj(uid)
-                    return vtk_obj
-        except Exception as e:
-            self.print_terminal(f"Error getting entity: {str(e)}")
-            print(f"Error getting entity: {str(e)}")
-        
-        return None
-
-    def initialize_menu_tools(self):
-        """Add mesh slicer to the menu tools."""
-        # Call parent's initialize_menu_tools first to ensure menus and toolbars are created
-        super().initialize_menu_tools()
-        
-        # Create Mesh Tools menu if it doesn't exist
-        if not hasattr(self, 'menuMeshTools'):
-            self.menuMeshTools = QMenu("Mesh Tools", self)
-            self.menuBar().addMenu(self.menuMeshTools)
-        
-        # Create toolbar if it doesn't exist
-        if not hasattr(self, 'toolBarBase'):
-            self.toolBarBase = self.addToolBar("Base Tools")
-        
-        # Add mesh slicer action
-        self.actionMeshSlicer = QAction("Mesh Slicer", self)
-        self.actionMeshSlicer.triggered.connect(self.show_mesh_slicer_dialog)
-        
-        # Add to both menu and toolbar
-        self.menuMeshTools.addAction(self.actionMeshSlicer)
-        self.toolBarBase.addAction(self.actionMeshSlicer)
