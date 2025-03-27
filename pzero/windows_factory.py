@@ -2925,6 +2925,11 @@ class View3D(VTKView):
         entity_combo = QComboBox()
         entity_combo.addItems(self.getSliceableEntities())
         
+        # Add Grid Section Manager button
+        grid_section_btn = QPushButton("Grid Section Manager")
+        grid_section_btn.clicked.connect(self.create_grid_section_manager)
+        entity_layout.addWidget(grid_section_btn)
+        
         entity_layout.addWidget(entity_label)
         entity_layout.addWidget(entity_combo)
         entity_group.setLayout(entity_layout)
@@ -4246,6 +4251,184 @@ class View3D(VTKView):
         
         # Force a final render
         self.plotter.render()
+
+    def create_grid_section_manager(self):
+        """Create a grid section manager dialog for creating multiple slices."""
+        import numpy as np
+        
+        # Create the control panel
+        grid_panel = QDialog(self)
+        grid_panel.setWindowTitle("Grid Section Manager (UVW)")
+        layout = QVBoxLayout()
+
+        # Entity selection
+        entity_layout = QHBoxLayout()
+        entity_layout.addWidget(QLabel("Entity:"))
+        entity_combo = QComboBox()
+        entity_combo.addItems(self.getSliceableEntities())
+        entity_layout.addWidget(entity_combo)
+        layout.addLayout(entity_layout)
+
+        # Direction selection
+        direction_layout = QHBoxLayout()
+        direction_layout.addWidget(QLabel("Direction:"))
+        direction_combo = QComboBox()
+        direction_combo.addItems(["U Direction", "V Direction", "W Direction"])
+        direction_layout.addWidget(direction_combo)
+        layout.addLayout(direction_layout)
+
+        # Number of slices
+        slices_layout = QHBoxLayout()
+        slices_layout.addWidget(QLabel("Number of slices:"))
+        slices_spin = QSpinBox()
+        slices_spin.setRange(2, 50)
+        slices_spin.setValue(7)
+        slices_layout.addWidget(slices_spin)
+        layout.addLayout(slices_layout)
+
+        # Create buttons
+        create_btn = QPushButton("Create Slices")
+        remove_btn = QPushButton("Remove Slices")
+
+        # Add buttons to layout
+        buttons_layout = QHBoxLayout()
+        buttons_layout.addWidget(create_btn)
+        buttons_layout.addWidget(remove_btn)
+        layout.addLayout(buttons_layout)
+
+        # Helper method to convert direction name to slice type
+        def direction_to_slice_type(direction):
+            mapping = {
+                "U Direction": "X",
+                "V Direction": "Y",
+                "W Direction": "Z"
+            }
+            return mapping.get(direction, "X")
+
+        def create_grid_slices():
+            """Create multiple slices along the selected direction"""
+            entity_name = entity_combo.currentText()
+            direction = direction_combo.currentText()
+            n_slices = slices_spin.value()
+            
+            if not entity_name:
+                return
+                
+            # Get entity
+            entity = self.get_entity_by_name(entity_name)
+            if not entity:
+                return
+                
+            # Convert to PyVista dataset
+            if not isinstance(entity, pv.DataSet):
+                entity = pv.wrap(entity)
+                
+            # Get bounds and slice type
+            bounds = entity.bounds
+            slice_type = direction_to_slice_type(direction)
+            
+            # Calculate positions along the axis
+            if slice_type == 'X':  # U direction
+                min_val, max_val = bounds[0], bounds[1]
+            elif slice_type == 'Y':  # V direction
+                min_val, max_val = bounds[2], bounds[3]
+            else:  # Z (W direction)
+                min_val, max_val = bounds[4], bounds[5]
+                
+            # Generate evenly spaced positions
+            positions = np.linspace(0, 1, n_slices)  # Normalized positions
+            
+            # Create slices
+            for i, normalized_pos in enumerate(positions):
+                slice_id = f"{entity_name}_{slice_type}_grid_{i}"
+                
+                # Skip if already exists
+                if slice_id in getattr(self, 'slice_actors', {}):
+                    continue
+                    
+                try:
+                    # Calculate actual position
+                    if slice_type == 'X':  # U direction
+                        pos = min_val + normalized_pos * (max_val - min_val)
+                        slice_data = entity.slice(normal='x', origin=[pos, 0, 0])
+                    elif slice_type == 'Y':  # V direction
+                        pos = min_val + normalized_pos * (max_val - min_val)
+                        slice_data = entity.slice(normal='y', origin=[0, pos, 0])
+                    else:  # Z (W direction)
+                        pos = min_val + normalized_pos * (max_val - min_val)
+                        slice_data = entity.slice(normal='z', origin=[0, 0, pos])
+                    
+                    # Get scalar and colormap
+                    scalar_array = None
+                    cmap = None
+                    
+                    # Try to find a scalar array
+                    if hasattr(entity, 'point_data') and len(entity.point_data) > 0:
+                        for name in entity.point_data.keys():
+                            scalar_array = name
+                            break
+                            
+                    # Try to find a colormap
+                    if scalar_array and hasattr(self, 'parent') and hasattr(self.parent, 'prop_legend_df'):
+                        if self.parent.prop_legend_df is not None:
+                            prop_row = self.parent.prop_legend_df[
+                                self.parent.prop_legend_df['property_name'] == scalar_array]
+                            if not prop_row.empty:
+                                cmap = prop_row['colormap'].iloc[0]
+                    
+                    # Add slice to visualization
+                    if slice_data.n_points > 0:
+                        actor = self.plotter.add_mesh(
+                            slice_data,
+                            name=slice_id,
+                            scalars=scalar_array,
+                            cmap=cmap,
+                            clim=entity.get_data_range(scalar_array) if scalar_array else None,
+                            show_scalar_bar=False,
+                            opacity=1.0
+                        )
+                        
+                        if not hasattr(self, 'slice_actors'):
+                            self.slice_actors = {}
+                            
+                        self.slice_actors[slice_id] = actor
+                    
+                except Exception as e:
+                    print(f"Error creating grid slice: {e}")
+                    continue
+            
+            self.plotter.render()
+            
+        def remove_grid_slices():
+            """Remove all grid slices for the selected direction"""
+            entity_name = entity_combo.currentText()
+            direction = direction_combo.currentText()
+            slice_type = direction_to_slice_type(direction)
+            
+            if not hasattr(self, 'slice_actors'):
+                return
+                
+            # Get all grid slices for this direction and entity
+            grid_slices = [uid for uid in list(self.slice_actors.keys()) 
+                          if f"{entity_name}_{slice_type}_grid_" in uid]
+            
+            for uid in grid_slices:
+                if uid in self.slice_actors:
+                    actor = self.slice_actors[uid]
+                    self.plotter.remove_actor(actor)
+                    del self.slice_actors[uid]
+            
+            self.plotter.render()
+        
+        # Connect button signals
+        create_btn.clicked.connect(create_grid_slices)
+        remove_btn.clicked.connect(remove_grid_slices)
+        
+        # Set layout and show dialog
+        grid_panel.setLayout(layout)
+        grid_panel.show()
+        
+        return grid_panel
 
 
 class View2D(VTKView):
