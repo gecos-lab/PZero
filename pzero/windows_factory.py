@@ -30,6 +30,7 @@ from PySide6.QtWidgets import (
     QSpinBox,
     QInputDialog,
     QApplication,
+    QLineEdit,
 )
 from PySide6.QtGui import QAction
 from PySide6.QtCore import Qt
@@ -2928,6 +2929,17 @@ class View3D(VTKView):
         entity_layout.addWidget(entity_combo)
         entity_group.setLayout(entity_layout)
         
+        # Initialize entity controls if there's at least one entity
+        if entity_combo.count() > 0:
+            entity_combo.setCurrentIndex(0)
+            first_entity_name = entity_combo.currentText()
+            if first_entity_name:
+                # Get the entity to initialize sliders properly
+                entity = self.get_entity_by_name(first_entity_name)
+                if entity:
+                    # We'll call initialize_entity_controls later after all UI elements are set up
+                    pass
+        
         # Slice toggle group
         slice_toggle_group = QGroupBox("Slice Visibility")
         slice_toggle_layout = QVBoxLayout()
@@ -2948,6 +2960,7 @@ class View3D(VTKView):
         # Create UI components using a more compact approach
         sliders = {}
         value_labels = {}
+        value_inputs = {}
         
         for label_text, slice_type in [("X Position:", "X"), ("Y Position:", "Y"), ("Z Position:", "Z")]:
             slider = QSlider(Qt.Horizontal)
@@ -2957,16 +2970,21 @@ class View3D(VTKView):
             
             label = QLabel(label_text)
             value_label = QLabel("0.50")
+            value_input = QLineEdit()
+            value_input.setFixedWidth(80)
+            value_input.setText("50")  # Default value (normalized percentage or slice number will be updated later)
             
             # Store references
             sliders[slice_type] = slider
             value_labels[slice_type] = value_label
+            value_inputs[slice_type] = value_input
             
             # Create layout
             slider_layout = QHBoxLayout()
             slider_layout.addWidget(label)
             slider_layout.addWidget(slider)
             slider_layout.addWidget(value_label)
+            slider_layout.addWidget(value_input)
             position_layout.addLayout(slider_layout)
         
         position_group.setLayout(position_layout)
@@ -2974,6 +2992,7 @@ class View3D(VTKView):
         # Assign variables for easier reference
         x_slider, y_slider, z_slider = sliders["X"], sliders["Y"], sliders["Z"]
         x_value, y_value, z_value = value_labels["X"], value_labels["Y"], value_labels["Z"]
+        x_input, y_input, z_input = value_inputs["X"], value_inputs["Y"], value_inputs["Z"]
         
         # Helper function to get scalar and colormap
         # Add this function inside show_mesh_slicer_dialog, with the other local functions
@@ -3000,6 +3019,7 @@ class View3D(VTKView):
             
             # Force a final render
             self.plotter.render()
+        
         def get_scalar_and_cmap(pv_object):
             """Get the scalar array and colormap for a PyVista object."""
             scalar_array = None
@@ -3021,6 +3041,206 @@ class View3D(VTKView):
             
             return scalar_array, cmap
         
+        def get_dimension_info(entity, slice_type):
+            """Get dimension information like real inline/xline numbers if available"""
+            try:
+                # Convert to PyVista object if needed
+                pv_entity = pv.wrap(entity)
+                bounds = pv_entity.bounds
+                
+                # Get dimensions based on entity type
+                dim_size = None
+                step_size = None
+                
+                # Check if it's a seismic mesh with dimensions property
+                if hasattr(pv_entity, 'dimensions'):
+                    dims = pv_entity.dimensions
+                    
+                    # For seismic data, use dimension sizes directly
+                    if slice_type == 'X':
+                        min_val, max_val = bounds[0], bounds[1]
+                        dim_size = dims[0]  # inline dimension
+                        step_size = (max_val - min_val) / (dim_size - 1) if dim_size > 1 else 1
+                    elif slice_type == 'Y':
+                        min_val, max_val = bounds[2], bounds[3]
+                        dim_size = dims[1]  # crossline dimension
+                        step_size = (max_val - min_val) / (dim_size - 1) if dim_size > 1 else 1
+                    else:  # Z
+                        min_val, max_val = bounds[4], bounds[5]
+                        dim_size = dims[2]  # z/time/depth dimension
+                        step_size = (max_val - min_val) / (dim_size - 1) if dim_size > 1 else 1
+                else:
+                    # Handle different slice types for non-seismic entities
+                    if slice_type == 'X':
+                        min_val, max_val = bounds[0], bounds[1]
+                        
+                        # Try to get real dimensions if available
+                        if hasattr(entity, 'U_n') and hasattr(entity, 'U_step'):
+                            dim_size = entity.U_n
+                            step_size = entity.U_step
+                    elif slice_type == 'Y':
+                        min_val, max_val = bounds[2], bounds[3]
+                        
+                        # Try to get real dimensions if available
+                        if hasattr(entity, 'V_n') and hasattr(entity, 'V_step'):
+                            dim_size = entity.V_n
+                            step_size = entity.V_step
+                    else:  # Z
+                        min_val, max_val = bounds[4], bounds[5]
+                        
+                        # Try to get real dimensions if available
+                        if hasattr(entity, 'W_n') and hasattr(entity, 'W_step'):
+                            dim_size = entity.W_n
+                            step_size = entity.W_step
+                        
+                return {
+                    'min_val': min_val, 
+                    'max_val': max_val,
+                    'dim_size': dim_size,
+                    'step_size': step_size
+                }
+            except Exception as e:
+                print(f"Error getting dimension info: {e}")
+                return {
+                    'min_val': 0, 
+                    'max_val': 1,
+                    'dim_size': None,
+                    'step_size': None
+                }
+                
+        def calculate_real_position(entity, slice_type, normalized_pos):
+            """Calculate real position (inline/xline/zslice) from normalized position"""
+            info = get_dimension_info(entity, slice_type)
+            
+            if info['dim_size'] is not None:
+                # For seismic data or mesh with dimensions, calculate real slice number
+                # For seismic data, slice numbers typically start from 1
+                if hasattr(entity, 'dimensions'):
+                    # Calculate real inline/xline/zslice number starting from 1
+                    real_pos = int(1 + normalized_pos * (info['dim_size'] - 1))
+                else:
+                    # For non-seismic data with dimensions
+                    real_pos = int(normalized_pos * (info['dim_size'] - 1))
+                return real_pos
+            else:
+                # Fall back to showing percentage
+                return normalized_pos
+                
+        def calculate_normalized_from_real(entity, slice_type, real_pos):
+            """Calculate normalized position from real slice number"""
+            info = get_dimension_info(entity, slice_type)
+            
+            if info['dim_size'] is not None:
+                try:
+                    # Convert to number
+                    real_pos = int(float(real_pos))
+                    
+                    # For seismic data, adjust calculation since slice numbers typically start from 1
+                    if hasattr(entity, 'dimensions'):
+                        # Ensure it's within valid range (1 to dim_size)
+                        real_pos = max(1, min(info['dim_size'], real_pos))
+                        # Calculate normalized position (accounting for 1-based indexing)
+                        normalized_pos = (real_pos - 1) / (info['dim_size'] - 1)
+                    else:
+                        # For regular data (0-based indexing)
+                        real_pos = max(0, min(info['dim_size'] - 1, real_pos))
+                        normalized_pos = real_pos / (info['dim_size'] - 1)
+                    
+                    return normalized_pos
+                except ValueError:
+                    return 0.5
+            else:
+                # Try to interpret as a float between 0-1
+                try:
+                    normalized_pos = float(real_pos)
+                    return max(0, min(1, normalized_pos))
+                except ValueError:
+                    return 0.5
+                    
+        def update_value_displays(entity_name, slice_type, normalized_pos):
+            """Update both the normalized value label and the real position input"""
+            if not entity_name:
+                return
+                
+            entity = self.get_entity_by_name(entity_name)
+            if not entity:
+                return
+                
+            # Get the right input field and value label
+            input_field = None
+            value_label = None
+            if slice_type == 'X':
+                input_field = x_input
+                value_label = x_value
+            elif slice_type == 'Y':
+                input_field = y_input
+                value_label = y_value
+            else:  # Z
+                input_field = z_input
+                value_label = z_value
+                
+            # Update the normalized value label
+            value_label.setText(f"{normalized_pos:.2f}")
+            
+            # Calculate and display real position
+            real_pos = calculate_real_position(entity, slice_type, normalized_pos)
+            if isinstance(real_pos, int):
+                input_field.setText(str(real_pos))
+            else:
+                input_field.setText(f"{real_pos:.2f}")
+                
+        # Create separate handlers for each input field for more explicit connections
+        def on_x_input_entered():
+            entity_name = entity_combo.currentText()
+            if not entity_name or not x_slice_check.isChecked():
+                return
+                
+            entity = self.get_entity_by_name(entity_name)
+            if not entity:
+                return
+            
+            try:
+                normalized_pos = calculate_normalized_from_real(entity, 'X', x_input.text())
+                x_slider.setValue(int(normalized_pos * 100))
+                update_slice_visualization(entity_name, 'X', normalized_pos)
+                x_value.setText(f"{normalized_pos:.2f}")
+            except Exception as e:
+                print(f"Error processing X input: {e}")
+                
+        def on_y_input_entered():
+            entity_name = entity_combo.currentText()
+            if not entity_name or not y_slice_check.isChecked():
+                return
+                
+            entity = self.get_entity_by_name(entity_name)
+            if not entity:
+                return
+            
+            try:
+                normalized_pos = calculate_normalized_from_real(entity, 'Y', y_input.text())
+                y_slider.setValue(int(normalized_pos * 100))
+                update_slice_visualization(entity_name, 'Y', normalized_pos)
+                y_value.setText(f"{normalized_pos:.2f}")
+            except Exception as e:
+                print(f"Error processing Y input: {e}")
+                
+        def on_z_input_entered():
+            entity_name = entity_combo.currentText()
+            if not entity_name or not z_slice_check.isChecked():
+                return
+                
+            entity = self.get_entity_by_name(entity_name)
+            if not entity:
+                return
+            
+            try:
+                normalized_pos = calculate_normalized_from_real(entity, 'Z', z_input.text())
+                z_slider.setValue(int(normalized_pos * 100))
+                update_slice_visualization(entity_name, 'Z', normalized_pos)
+                z_value.setText(f"{normalized_pos:.2f}")
+            except Exception as e:
+                print(f"Error processing Z input: {e}")
+                
         # Event handlers
         def update_slice_visualization(entity_name, slice_type, normalized_position, fast_update=False):
             """Update the slice visualization."""
@@ -3102,7 +3322,8 @@ class View3D(VTKView):
                 x_value, y_value, z_value,
                 entity_combo, 
                 x_slice_check, y_slice_check, z_slice_check,
-                update_slice_visualization
+                update_slice_visualization,
+                x_input, y_input, z_input
             )
         
         def on_check_changed(check_box, slice_type):
@@ -3151,17 +3372,17 @@ class View3D(VTKView):
                 
                 normalized_pos = slider_type.value() / 100.0
                 
-                # Update the corresponding value label
+                # Update the value displays (both normalized and real)
                 if slider_type == x_slider:
-                    x_value.setText(f"{normalized_pos:.2f}")
+                    update_value_displays(entity_name, 'X', normalized_pos)
                     if x_slice_check.isChecked():
                         update_slice_visualization(entity_name, 'X', normalized_pos, fast_update=True)
                 elif slider_type == y_slider:
-                    y_value.setText(f"{normalized_pos:.2f}")
+                    update_value_displays(entity_name, 'Y', normalized_pos)
                     if y_slice_check.isChecked():
                         update_slice_visualization(entity_name, 'Y', normalized_pos, fast_update=True)
                 else:  # z_slider
-                    z_value.setText(f"{normalized_pos:.2f}")
+                    update_value_displays(entity_name, 'Z', normalized_pos)
                     if z_slice_check.isChecked():
                         update_slice_visualization(entity_name, 'Z', normalized_pos, fast_update=True)
                     
@@ -3190,13 +3411,24 @@ class View3D(VTKView):
                 if slice_uid in self.slice_actors:
                     self.slice_actors[slice_uid].SetVisibility(False)
             
+            # Set default slider positions (middle)
+            x_slider.setValue(50)
+            y_slider.setValue(50)
+            z_slider.setValue(50)
+            
+            # Update value displays with default positions
+            update_value_displays(entity_name, 'X', 0.5)
+            update_value_displays(entity_name, 'Y', 0.5)
+            update_value_displays(entity_name, 'Z', 0.5)
+            
             # Reset manipulation
             if enable_manipulation.isChecked():
                 enable_manipulation.setChecked(False)
                 self.toggle_mesh_manipulation(False, x_slider, y_slider, z_slider,
                                            x_value, y_value, z_value,
                                            entity_combo, x_slice_check, y_slice_check, z_slice_check,
-                                           update_slice_visualization)
+                                           update_slice_visualization,
+                                           x_input, y_input, z_input)
                 
             self.plotter.render()
         
@@ -3225,6 +3457,16 @@ class View3D(VTKView):
         y_slider.valueChanged.connect(lambda: on_slider_changed(y_slider))
         z_slider.valueChanged.connect(lambda: on_slider_changed(z_slider))
         
+        # Connect text input events to their specific handlers
+        x_input.returnPressed.connect(on_x_input_entered)
+        x_input.editingFinished.connect(on_x_input_entered)
+        
+        y_input.returnPressed.connect(on_y_input_entered)
+        y_input.editingFinished.connect(on_y_input_entered)
+        
+        z_input.returnPressed.connect(on_z_input_entered)
+        z_input.editingFinished.connect(on_z_input_entered)
+        
         x_slice_check.toggled.connect(lambda checked: on_check_changed(x_slice_check, 'X'))
         y_slice_check.toggled.connect(lambda checked: on_check_changed(y_slice_check, 'Y'))
         z_slice_check.toggled.connect(lambda checked: on_check_changed(z_slice_check, 'Z'))
@@ -3237,6 +3479,10 @@ class View3D(VTKView):
 
         # Add this after creating the control_panel
         control_panel.finished.connect(cleanup_on_close)
+        
+        # Initialize controls for the current entity
+        if entity_combo.count() > 0:
+            initialize_entity_controls(entity_combo.currentText())
 
     def create_grid_diagram(self, entity_name):
         """Create a grid diagram control panel and visualization for any entity."""
@@ -3501,7 +3747,7 @@ class View3D(VTKView):
     def toggle_mesh_manipulation(self, enabled, x_slider, y_slider, z_slider, 
                                x_value, y_value, z_value,
                                entity_combo, x_slice_check, y_slice_check, z_slice_check,
-                               update_slice_func=None):
+                               update_slice_func=None, x_input=None, y_input=None, z_input=None):
         """Toggle mesh manipulation mode."""
         print(f"Toggle mesh manipulation called with enabled={enabled}")
         
@@ -3510,7 +3756,7 @@ class View3D(VTKView):
             self.plane_widgets = []
         
         # Define the callback creator function FIRST (before using it)
-        def create_callback(slice_type, slider, value_label):
+        def create_callback(slice_type, slider, value_label, value_input):
             def callback(normal, origin):
                 # Get entity bounds
                 entity_name = entity_combo.currentText()
@@ -3543,7 +3789,21 @@ class View3D(VTKView):
                 # Update slider and label with new position
                 slider_value = int(normalized_pos * 100)
                 slider.setValue(slider_value)
-                value_label.setText(f"{slider_value/100:.2f}")
+                value_label.setText(f"{normalized_pos:.2f}")
+                
+                # Update the text input with real position if available
+                if value_input:
+                    # Try to get real position (inline/xline/zslice)
+                    try:
+                        # Calculate and display real position based on entity type
+                        real_pos = calculate_real_position(entity, slice_type, normalized_pos)
+                        if isinstance(real_pos, int):
+                            value_input.setText(str(real_pos))
+                        else:
+                            value_input.setText(f"{real_pos:.2f}")
+                    except Exception as e:
+                        print(f"Error updating text input: {e}")
+                        value_input.setText(f"{normalized_pos:.2f}")
                 
                 # Update the slice visualization
                 if update_slice_func:
@@ -3551,8 +3811,8 @@ class View3D(VTKView):
                     
             return callback
         
-        # Update slider states based on manipulation mode
-        self.update_slider_states(enabled, x_slider, y_slider, z_slider)
+        # Update slider and input states based on manipulation mode
+        self.update_slider_states(enabled, x_slider, y_slider, z_slider, x_input, y_input, z_input)
         
         # Clean up existing plane widgets when disabling
         if not enabled:
@@ -3588,8 +3848,18 @@ class View3D(VTKView):
             
             # Create plane widgets for each checked slice direction
             if x_slice_check.isChecked():
-                # Use the local create_callback function (not self.create_callback)
-                callback_func = create_callback('X', x_slider, x_value)
+                # Update the real position value for X direction before creating widget
+                try:
+                    real_pos = calculate_real_position(entity, 'X', normalized_positions['X'])
+                    if isinstance(real_pos, int):
+                        x_input.setText(str(real_pos))
+                    else:
+                        x_input.setText(f"{real_pos:.2f}")
+                except Exception as e:
+                    print(f"Error updating X input: {e}")
+                
+                # Use the local create_callback function with text input field
+                callback_func = create_callback('X', x_slider, x_value, x_input)
                 
                 # Create plane widget for X slice
                 widget = self.create_single_plane_widget('X', normalized_positions['X'], bounds, callback_func)
@@ -3598,8 +3868,18 @@ class View3D(VTKView):
                     print(f"Added X plane widget, total widgets: {len(self.plane_widgets)}")
             
             if y_slice_check.isChecked():
-                # Use the local create_callback function
-                callback_func = create_callback('Y', y_slider, y_value)
+                # Update the real position value for Y direction before creating widget
+                try:
+                    real_pos = calculate_real_position(entity, 'Y', normalized_positions['Y'])
+                    if isinstance(real_pos, int):
+                        y_input.setText(str(real_pos))
+                    else:
+                        y_input.setText(f"{real_pos:.2f}")
+                except Exception as e:
+                    print(f"Error updating Y input: {e}")
+                
+                # Use the local create_callback function with text input field
+                callback_func = create_callback('Y', y_slider, y_value, y_input)
                 
                 # Create plane widget for Y slice
                 widget = self.create_single_plane_widget('Y', normalized_positions['Y'], bounds, callback_func)
@@ -3608,8 +3888,18 @@ class View3D(VTKView):
                     print(f"Added Y plane widget, total widgets: {len(self.plane_widgets)}")
             
             if z_slice_check.isChecked():
-                # Use the local create_callback function
-                callback_func = create_callback('Z', z_slider, z_value)
+                # Update the real position value for Z direction before creating widget
+                try:
+                    real_pos = calculate_real_position(entity, 'Z', normalized_positions['Z'])
+                    if isinstance(real_pos, int):
+                        z_input.setText(str(real_pos))
+                    else:
+                        z_input.setText(f"{real_pos:.2f}")
+                except Exception as e:
+                    print(f"Error updating Z input: {e}")
+                
+                # Use the local create_callback function with text input field
+                callback_func = create_callback('Z', z_slider, z_value, z_input)
                 
                 # Create plane widget for Z slice
                 widget = self.create_single_plane_widget('Z', normalized_positions['Z'], bounds, callback_func)
@@ -3625,12 +3915,20 @@ class View3D(VTKView):
             import traceback
             traceback.print_exc()
 
-    def update_slider_states(self, enabled, x_slider, y_slider, z_slider):
-        """Update slider states based on manipulation mode"""
+    def update_slider_states(self, enabled, x_slider, y_slider, z_slider, x_input=None, y_input=None, z_input=None):
+        """Update slider and input field states based on manipulation mode"""
         print(f"Updating slider states: enabled={enabled}")
         x_slider.setEnabled(not enabled) 
         y_slider.setEnabled(not enabled)
         z_slider.setEnabled(not enabled)
+        
+        # Also disable text input fields when in manipulation mode
+        if x_input:
+            x_input.setEnabled(not enabled)
+        if y_input:
+            y_input.setEnabled(not enabled)
+        if z_input:
+            z_input.setEnabled(not enabled)
         
         # Apply visual indication of disabled state
         style = "QSlider::groove:horizontal {background-color: #cccccc;}" if enabled else ""
