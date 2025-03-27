@@ -3243,7 +3243,14 @@ class View3D(VTKView):
                 
         # Event handlers
         def update_slice_visualization(entity_name, slice_type, normalized_position, fast_update=False):
-            """Update the slice visualization."""
+            """Update the slice visualization.
+            
+            When fast_update=True (during slider dragging or direct manipulation),
+            this function directly updates the existing actor's mapper input data
+            rather than removing and recreating the actor. This prevents the 
+            flashing effect that occurs when an actor is removed and then immediately
+            recreated in the scene.
+            """
             if not entity_name:
                 return
                 
@@ -3261,10 +3268,6 @@ class View3D(VTKView):
                 pv_entity = pv.wrap(entity)
                 bounds = pv_entity.bounds
                 
-                # IMPORTANT: Always get fresh scalar and colormap data
-                # This ensures we pick up any colormap changes
-                scalar_array, cmap = get_scalar_and_cmap(pv_entity)
-                
                 # Calculate the position in world coordinates
                 if slice_type == 'X':
                     position = bounds[0] + normalized_position * (bounds[1] - bounds[0])
@@ -3280,26 +3283,38 @@ class View3D(VTKView):
                 current_visibility = True
                 if slice_uid in self.slice_actors:
                     current_visibility = self.slice_actors[slice_uid].GetVisibility()
+                
+                if fast_update and slice_uid in self.slice_actors:
+                    # For fast updates (like slider dragging), just update the existing actor's geometry
+                    # This avoids the flashing effect by not removing and re-adding the actor
+                    mapper = self.slice_actors[slice_uid].GetMapper()
+                    if mapper:
+                        # Update the mapper's input data directly
+                        mapper.SetInputData(slice_data)
+                        mapper.Update()
+                else:
+                    # For non-fast updates or when the actor doesn't exist yet,
+                    # get fresh scalar and colormap data
+                    scalar_array, cmap = get_scalar_and_cmap(pv_entity)
                     
-                # Never use fast_update when colormap might have changed
-                # This ensures we recreate the slice with the new colormap
-                if slice_uid in self.slice_actors:
-                    self.plotter.remove_actor(self.slice_actors[slice_uid])
-                
-                # Create a new actor with the latest scalar properties
-                self.slice_actors[slice_uid] = self.plotter.add_mesh(
-                    slice_data,
-                    name=slice_uid,
-                    scalars=scalar_array,
-                    cmap=cmap,
-                    clim=pv_entity.get_data_range(scalar_array) if scalar_array else None,
-                    show_scalar_bar=False,
-                    opacity=1.0,
-                    interpolate_before_map=True,
-                )
-                
-                # Restore visibility
-                self.slice_actors[slice_uid].SetVisibility(current_visibility)
+                    # Remove existing actor if it exists
+                    if slice_uid in self.slice_actors:
+                        self.plotter.remove_actor(self.slice_actors[slice_uid])
+                    
+                    # Create a new actor with the latest scalar properties
+                    self.slice_actors[slice_uid] = self.plotter.add_mesh(
+                        slice_data,
+                        name=slice_uid,
+                        scalars=scalar_array,
+                        cmap=cmap,
+                        clim=pv_entity.get_data_range(scalar_array) if scalar_array else None,
+                        show_scalar_bar=False,
+                        opacity=1.0,
+                        interpolate_before_map=True,
+                    )
+                    
+                    # Restore visibility
+                    self.slice_actors[slice_uid].SetVisibility(current_visibility)
                 
                 self.plotter.render()
                 
@@ -3786,9 +3801,12 @@ class View3D(VTKView):
                 # Clamp position to 0-1 range
                 normalized_pos = max(0, min(1, normalized_pos))
                 
-                # Update slider and label with new position
+                # Update slider and label with new position without triggering value changed events
+                # This prevents double rendering
+                slider.blockSignals(True)
                 slider_value = int(normalized_pos * 100)
                 slider.setValue(slider_value)
+                slider.blockSignals(False)
                 value_label.setText(f"{normalized_pos:.2f}")
                 
                 # Update the text input with real position if available
@@ -3805,7 +3823,7 @@ class View3D(VTKView):
                         print(f"Error updating text input: {e}")
                         value_input.setText(f"{normalized_pos:.2f}")
                 
-                # Update the slice visualization
+                # Update the slice visualization (always use fast_update for direct manipulation)
                 if update_slice_func:
                     update_slice_func(entity_name, slice_type, normalized_pos, True)
                     
