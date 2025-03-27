@@ -179,6 +179,9 @@ class DockWindow(QDockWidget):
         # Make all dock widgets tabbed if more than one is open.
         if n_docks > 1:
             parent.tabifyDockWidget(parent.findChildren(QDockWidget)[0], self)
+        else:
+            if window_type == 'View3D':
+                print("Warning: we have to add some code here to solve the orientation widget problem.")
 
     def closeEvent(self, event):
         """Override the standard closeEvent method in two cases:
