@@ -3338,7 +3338,8 @@ class View3D(VTKView):
                 entity_combo, 
                 u_slice_check, v_slice_check, w_slice_check,
                 update_slice_visualization,
-                u_input, v_input, w_input
+                u_input, v_input, w_input,
+                calculate_real_position=calculate_real_position
             )
         
         def on_check_changed(check_box, slice_type):
@@ -3377,7 +3378,8 @@ class View3D(VTKView):
                     u_slice_check, v_slice_check, w_slice_check,
                     update_slice_visualization,
                     u_input, v_input, w_input,
-                    is_refresh=True
+                    is_refresh=True,
+                    calculate_real_position=calculate_real_position
                 )
             
             self.plotter.render()
@@ -3459,7 +3461,8 @@ class View3D(VTKView):
                                            entity_combo, u_slice_check, v_slice_check, w_slice_check,
                                            update_slice_visualization,
                                            u_input, v_input, w_input,
-                                           is_refresh=True)
+                                           is_refresh=True,
+                                           calculate_real_position=calculate_real_position)
                 
             self.plotter.render()
         
@@ -3787,7 +3790,7 @@ class View3D(VTKView):
                                u_value, v_value, w_value,
                                entity_combo, u_slice_check, v_slice_check, w_slice_check,
                                update_slice_func=None, u_input=None, v_input=None, w_input=None,
-                               is_refresh=False):
+                               is_refresh=False, calculate_real_position=None):
         """Toggle mesh manipulation mode."""
         print(f"Toggle mesh manipulation called with enabled={enabled}, is_refresh={is_refresh}")
         
@@ -3839,11 +3842,15 @@ class View3D(VTKView):
                     # Try to get real position (inline/xline/zslice)
                     try:
                         # Calculate and display real position based on entity type
-                        real_pos = calculate_real_position(entity, slice_type, normalized_pos)
-                        if isinstance(real_pos, int):
-                            value_input.setText(str(real_pos))
+                        if calculate_real_position:
+                            real_pos = calculate_real_position(entity, slice_type, normalized_pos)
+                            if isinstance(real_pos, int):
+                                value_input.setText(str(real_pos))
+                            else:
+                                value_input.setText(f"{real_pos:.2f}")
                         else:
-                            value_input.setText(f"{real_pos:.2f}")
+                            # Fallback if function not found
+                            value_input.setText(f"{normalized_pos:.2f}")
                     except Exception as e:
                         print(f"Error updating text input for {slice_type_to_uvw(slice_type)} direction: {e}")
                         value_input.setText(f"{normalized_pos:.2f}")
