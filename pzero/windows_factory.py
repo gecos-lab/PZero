@@ -3366,6 +3366,20 @@ class View3D(VTKView):
                 
                 update_slice_visualization(entity_name, slice_type, norm_pos)
             
+            # If direct manipulation is enabled, update plane widgets to match currently checked slices
+            if enable_manipulation.isChecked():
+                # Toggle manipulation on to refresh the widgets with all currently checked slices
+                self.toggle_mesh_manipulation(
+                    True,
+                    x_slider, y_slider, z_slider,
+                    x_value, y_value, z_value,
+                    entity_combo, 
+                    x_slice_check, y_slice_check, z_slice_check,
+                    update_slice_visualization,
+                    x_input, y_input, z_input,
+                    is_refresh=True
+                )
+            
             self.plotter.render()
         
         def on_slider_changed(slider_type):
@@ -3443,7 +3457,8 @@ class View3D(VTKView):
                                            x_value, y_value, z_value,
                                            entity_combo, x_slice_check, y_slice_check, z_slice_check,
                                            update_slice_visualization,
-                                           x_input, y_input, z_input)
+                                           x_input, y_input, z_input,
+                                           is_refresh=True)
                 
             self.plotter.render()
         
@@ -3762,9 +3777,10 @@ class View3D(VTKView):
     def toggle_mesh_manipulation(self, enabled, x_slider, y_slider, z_slider, 
                                x_value, y_value, z_value,
                                entity_combo, x_slice_check, y_slice_check, z_slice_check,
-                               update_slice_func=None, x_input=None, y_input=None, z_input=None):
+                               update_slice_func=None, x_input=None, y_input=None, z_input=None,
+                               is_refresh=False):
         """Toggle mesh manipulation mode."""
-        print(f"Toggle mesh manipulation called with enabled={enabled}")
+        print(f"Toggle mesh manipulation called with enabled={enabled}, is_refresh={is_refresh}")
         
         # Initialize plane_widgets as a list if it doesn't exist
         if not hasattr(self, 'plane_widgets'):
@@ -3830,7 +3846,8 @@ class View3D(VTKView):
             return callback
         
         # Update slider and input states based on manipulation mode
-        self.update_slider_states(enabled, x_slider, y_slider, z_slider, x_input, y_input, z_input)
+        if not is_refresh:
+            self.update_slider_states(enabled, x_slider, y_slider, z_slider, x_input, y_input, z_input)
         
         # Clean up existing plane widgets when disabling
         if not enabled:
