@@ -2944,13 +2944,13 @@ class View3D(VTKView):
         slice_toggle_group = QGroupBox("Slice Visibility")
         slice_toggle_layout = QVBoxLayout()
         
-        x_slice_check = QCheckBox("X Slice")
-        y_slice_check = QCheckBox("Y Slice")
-        z_slice_check = QCheckBox("Z Slice")
+        u_slice_check = QCheckBox("U Slice")
+        v_slice_check = QCheckBox("V Slice")
+        w_slice_check = QCheckBox("W Slice")
         
-        slice_toggle_layout.addWidget(x_slice_check)
-        slice_toggle_layout.addWidget(y_slice_check)
-        slice_toggle_layout.addWidget(z_slice_check)
+        slice_toggle_layout.addWidget(u_slice_check)
+        slice_toggle_layout.addWidget(v_slice_check)
+        slice_toggle_layout.addWidget(w_slice_check)
         slice_toggle_group.setLayout(slice_toggle_layout)
         
         # Position control group - create sliders, labels and values
@@ -2962,7 +2962,7 @@ class View3D(VTKView):
         value_labels = {}
         value_inputs = {}
         
-        for label_text, slice_type in [("X Position:", "X"), ("Y Position:", "Y"), ("Z Position:", "Z")]:
+        for label_text, slice_type in [("U Position:", "X"), ("V Position:", "Y"), ("W Position:", "Z")]:
             slider = QSlider(Qt.Horizontal)
             slider.setMinimum(0)
             slider.setMaximum(100)
@@ -2990,9 +2990,9 @@ class View3D(VTKView):
         position_group.setLayout(position_layout)
         
         # Assign variables for easier reference
-        x_slider, y_slider, z_slider = sliders["X"], sliders["Y"], sliders["Z"]
-        x_value, y_value, z_value = value_labels["X"], value_labels["Y"], value_labels["Z"]
-        x_input, y_input, z_input = value_inputs["X"], value_inputs["Y"], value_inputs["Z"]
+        u_slider, v_slider, w_slider = sliders["X"], sliders["Y"], sliders["Z"]
+        u_value, v_value, w_value = value_labels["X"], value_labels["Y"], value_labels["Z"]
+        u_input, v_input, w_input = value_inputs["X"], value_inputs["Y"], value_inputs["Z"]
         
         # Helper function to get scalar and colormap
         # Add this function inside show_mesh_slicer_dialog, with the other local functions
@@ -3003,9 +3003,9 @@ class View3D(VTKView):
             # Disable manipulation to remove plane widgets
             if enable_manipulation.isChecked():
                 enable_manipulation.setChecked(False)
-                self.toggle_mesh_manipulation(False, x_slider, y_slider, z_slider,
-                                        x_value, y_value, z_value,
-                                        entity_combo, x_slice_check, y_slice_check, z_slice_check,
+                self.toggle_mesh_manipulation(False, u_slider, v_slider, w_slider,
+                                        u_value, v_value, w_value,
+                                        entity_combo, u_slice_check, v_slice_check, w_slice_check,
                                         update_slice_visualization)
             
             # Remove all slice actors
@@ -3170,14 +3170,14 @@ class View3D(VTKView):
             input_field = None
             value_label = None
             if slice_type == 'X':
-                input_field = x_input
-                value_label = x_value
+                input_field = u_input
+                value_label = u_value
             elif slice_type == 'Y':
-                input_field = y_input
-                value_label = y_value
+                input_field = v_input
+                value_label = v_value
             else:  # Z
-                input_field = z_input
-                value_label = z_value
+                input_field = w_input
+                value_label = w_value
                 
             # Update the normalized value label
             value_label.setText(f"{normalized_pos:.2f}")
@@ -3190,9 +3190,9 @@ class View3D(VTKView):
                 input_field.setText(f"{real_pos:.2f}")
                 
         # Create separate handlers for each input field for more explicit connections
-        def on_x_input_entered():
+        def on_u_input_entered():
             entity_name = entity_combo.currentText()
-            if not entity_name or not x_slice_check.isChecked():
+            if not entity_name or not u_slice_check.isChecked():
                 return
                 
             entity = self.get_entity_by_name(entity_name)
@@ -3200,16 +3200,16 @@ class View3D(VTKView):
                 return
             
             try:
-                normalized_pos = calculate_normalized_from_real(entity, 'X', x_input.text())
-                x_slider.setValue(int(normalized_pos * 100))
+                normalized_pos = calculate_normalized_from_real(entity, 'X', u_input.text())
+                u_slider.setValue(int(normalized_pos * 100))
                 update_slice_visualization(entity_name, 'X', normalized_pos)
-                x_value.setText(f"{normalized_pos:.2f}")
+                u_value.setText(f"{normalized_pos:.2f}")
             except Exception as e:
-                print(f"Error processing X input: {e}")
+                print(f"Error processing U input: {e}")
                 
-        def on_y_input_entered():
+        def on_v_input_entered():
             entity_name = entity_combo.currentText()
-            if not entity_name or not y_slice_check.isChecked():
+            if not entity_name or not v_slice_check.isChecked():
                 return
                 
             entity = self.get_entity_by_name(entity_name)
@@ -3217,16 +3217,16 @@ class View3D(VTKView):
                 return
             
             try:
-                normalized_pos = calculate_normalized_from_real(entity, 'Y', y_input.text())
-                y_slider.setValue(int(normalized_pos * 100))
+                normalized_pos = calculate_normalized_from_real(entity, 'Y', v_input.text())
+                v_slider.setValue(int(normalized_pos * 100))
                 update_slice_visualization(entity_name, 'Y', normalized_pos)
-                y_value.setText(f"{normalized_pos:.2f}")
+                v_value.setText(f"{normalized_pos:.2f}")
             except Exception as e:
-                print(f"Error processing Y input: {e}")
+                print(f"Error processing V input: {e}")
                 
-        def on_z_input_entered():
+        def on_w_input_entered():
             entity_name = entity_combo.currentText()
-            if not entity_name or not z_slice_check.isChecked():
+            if not entity_name or not w_slice_check.isChecked():
                 return
                 
             entity = self.get_entity_by_name(entity_name)
@@ -3234,12 +3234,12 @@ class View3D(VTKView):
                 return
             
             try:
-                normalized_pos = calculate_normalized_from_real(entity, 'Z', z_input.text())
-                z_slider.setValue(int(normalized_pos * 100))
+                normalized_pos = calculate_normalized_from_real(entity, 'Z', w_input.text())
+                w_slider.setValue(int(normalized_pos * 100))
                 update_slice_visualization(entity_name, 'Z', normalized_pos)
-                z_value.setText(f"{normalized_pos:.2f}")
+                w_value.setText(f"{normalized_pos:.2f}")
             except Exception as e:
-                print(f"Error processing Z input: {e}")
+                print(f"Error processing W input: {e}")
                 
         # Event handlers
         def update_slice_visualization(entity_name, slice_type, normalized_position, fast_update=False):
@@ -3333,12 +3333,12 @@ class View3D(VTKView):
             # Toggle manipulation
             self.toggle_mesh_manipulation(
                 is_checked, 
-                x_slider, y_slider, z_slider,
-                x_value, y_value, z_value,
+                u_slider, v_slider, w_slider,
+                u_value, v_value, w_value,
                 entity_combo, 
-                x_slice_check, y_slice_check, z_slice_check,
+                u_slice_check, v_slice_check, w_slice_check,
                 update_slice_visualization,
-                x_input, y_input, z_input
+                u_input, v_input, w_input
             )
         
         def on_check_changed(check_box, slice_type):
@@ -3358,11 +3358,11 @@ class View3D(VTKView):
                 # Create new slice
                 norm_pos = None
                 if slice_type == 'X':
-                    norm_pos = x_slider.value() / 100.0
+                    norm_pos = u_slider.value() / 100.0
                 elif slice_type == 'Y':
-                    norm_pos = y_slider.value() / 100.0
+                    norm_pos = v_slider.value() / 100.0
                 else:  # Z
-                    norm_pos = z_slider.value() / 100.0
+                    norm_pos = w_slider.value() / 100.0
                 
                 update_slice_visualization(entity_name, slice_type, norm_pos)
             
@@ -3371,12 +3371,12 @@ class View3D(VTKView):
                 # Toggle manipulation on to refresh the widgets with all currently checked slices
                 self.toggle_mesh_manipulation(
                     True,
-                    x_slider, y_slider, z_slider,
-                    x_value, y_value, z_value,
+                    u_slider, v_slider, w_slider,
+                    u_value, v_value, w_value,
                     entity_combo, 
-                    x_slice_check, y_slice_check, z_slice_check,
+                    u_slice_check, v_slice_check, w_slice_check,
                     update_slice_visualization,
-                    x_input, y_input, z_input,
+                    u_input, v_input, w_input,
                     is_refresh=True
                 )
             
@@ -3402,17 +3402,17 @@ class View3D(VTKView):
                 normalized_pos = slider_type.value() / 100.0
                 
                 # Update the value displays (both normalized and real)
-                if slider_type == x_slider:
+                if slider_type == u_slider:
                     update_value_displays(entity_name, 'X', normalized_pos)
-                    if x_slice_check.isChecked():
+                    if u_slice_check.isChecked():
                         update_slice_visualization(entity_name, 'X', normalized_pos, fast_update=True)
-                elif slider_type == y_slider:
+                elif slider_type == v_slider:
                     update_value_displays(entity_name, 'Y', normalized_pos)
-                    if y_slice_check.isChecked():
+                    if v_slice_check.isChecked():
                         update_slice_visualization(entity_name, 'Y', normalized_pos, fast_update=True)
-                else:  # z_slider
+                else:  # w_slider
                     update_value_displays(entity_name, 'Z', normalized_pos)
-                    if z_slice_check.isChecked():
+                    if w_slice_check.isChecked():
                         update_slice_visualization(entity_name, 'Z', normalized_pos, fast_update=True)
                     
                 self.last_slider_update = current_time
@@ -3430,34 +3430,35 @@ class View3D(VTKView):
                 return
                 
             # Uncheck all checkboxes
-            x_slice_check.setChecked(False)
-            y_slice_check.setChecked(False)
-            z_slice_check.setChecked(False)
+            u_slice_check.setChecked(False)
+            v_slice_check.setChecked(False)
+            w_slice_check.setChecked(False)
             
-            # Hide existing slices
+            # Hide existing slices (still using X, Y, Z for internal identifiers)
             for slice_type in ['X', 'Y', 'Z']:
                 slice_uid = f"{entity_name}_{slice_type}"
                 if slice_uid in self.slice_actors:
                     self.slice_actors[slice_uid].SetVisibility(False)
             
             # Set default slider positions (middle)
-            x_slider.setValue(50)
-            y_slider.setValue(50)
-            z_slider.setValue(50)
+            u_slider.setValue(50)
+            v_slider.setValue(50)
+            w_slider.setValue(50)
             
             # Update value displays with default positions
-            update_value_displays(entity_name, 'X', 0.5)
-            update_value_displays(entity_name, 'Y', 0.5)
-            update_value_displays(entity_name, 'Z', 0.5)
+            # Note: using X, Y, Z for internal mapping to U, V, W
+            update_value_displays(entity_name, 'X', 0.5)  # U direction
+            update_value_displays(entity_name, 'Y', 0.5)  # V direction
+            update_value_displays(entity_name, 'Z', 0.5)  # W direction
             
             # Reset manipulation
             if enable_manipulation.isChecked():
                 enable_manipulation.setChecked(False)
-                self.toggle_mesh_manipulation(False, x_slider, y_slider, z_slider,
-                                           x_value, y_value, z_value,
-                                           entity_combo, x_slice_check, y_slice_check, z_slice_check,
+                self.toggle_mesh_manipulation(False, u_slider, v_slider, w_slider,
+                                           u_value, v_value, w_value,
+                                           entity_combo, u_slice_check, v_slice_check, w_slice_check,
                                            update_slice_visualization,
-                                           x_input, y_input, z_input,
+                                           u_input, v_input, w_input,
                                            is_refresh=True)
                 
             self.plotter.render()
@@ -3483,23 +3484,23 @@ class View3D(VTKView):
         layout.addWidget(manipulation_group)
         
         # Connect signals
-        x_slider.valueChanged.connect(lambda: on_slider_changed(x_slider))
-        y_slider.valueChanged.connect(lambda: on_slider_changed(y_slider))
-        z_slider.valueChanged.connect(lambda: on_slider_changed(z_slider))
+        u_slider.valueChanged.connect(lambda: on_slider_changed(u_slider))
+        v_slider.valueChanged.connect(lambda: on_slider_changed(v_slider))
+        w_slider.valueChanged.connect(lambda: on_slider_changed(w_slider))
         
         # Connect text input events to their specific handlers
-        x_input.returnPressed.connect(on_x_input_entered)
-        x_input.editingFinished.connect(on_x_input_entered)
+        u_input.returnPressed.connect(on_u_input_entered)
+        u_input.editingFinished.connect(on_u_input_entered)
         
-        y_input.returnPressed.connect(on_y_input_entered)
-        y_input.editingFinished.connect(on_y_input_entered)
+        v_input.returnPressed.connect(on_v_input_entered)
+        v_input.editingFinished.connect(on_v_input_entered)
         
-        z_input.returnPressed.connect(on_z_input_entered)
-        z_input.editingFinished.connect(on_z_input_entered)
+        w_input.returnPressed.connect(on_w_input_entered)
+        w_input.editingFinished.connect(on_w_input_entered)
         
-        x_slice_check.toggled.connect(lambda checked: on_check_changed(x_slice_check, 'X'))
-        y_slice_check.toggled.connect(lambda checked: on_check_changed(y_slice_check, 'Y'))
-        z_slice_check.toggled.connect(lambda checked: on_check_changed(z_slice_check, 'Z'))
+        u_slice_check.toggled.connect(lambda checked: on_check_changed(u_slice_check, 'X'))
+        v_slice_check.toggled.connect(lambda checked: on_check_changed(v_slice_check, 'Y'))
+        w_slice_check.toggled.connect(lambda checked: on_check_changed(w_slice_check, 'Z'))
         
         entity_combo.currentTextChanged.connect(initialize_entity_controls)
         
@@ -3537,7 +3538,7 @@ class View3D(VTKView):
         direction_layout = QHBoxLayout()
         direction_layout.addWidget(QLabel("Direction:"))
         direction_combo = QComboBox()
-        direction_combo.addItems(["X", "Y", "Z"])
+        direction_combo.addItems(["U (X)", "V (Y)", "W (Z)"])
         direction_layout.addWidget(direction_combo)
         layout.addLayout(direction_layout)
 
@@ -3561,8 +3562,13 @@ class View3D(VTKView):
         layout.addLayout(buttons_layout)
 
         def create_grid():
-            direction = direction_combo.currentText()
+            direction_text = direction_combo.currentText()
+            # Extract just the X, Y, Z part from the direction text (e.g., "U (X)" -> "X")
+            direction = direction_text.split('(')[1].split(')')[0]
             n_slices = slices_spin.value()
+            
+            # Get the UVW part of the direction (for slice naming)
+            uvw_direction = direction_text.split(' ')[0]
 
             # Get axis and bounds based on direction
             if direction == 'X':
@@ -3580,7 +3586,7 @@ class View3D(VTKView):
 
             # Create slices
             for i, pos in enumerate(positions):
-                slice_uid = f"{entity_name}_{direction}_grid_{i}"
+                slice_uid = f"{entity_name}_{uvw_direction}_grid_{i}"
                 
                 # Skip if slice already exists
                 if slice_uid in self.slice_actors:
@@ -3631,10 +3637,13 @@ class View3D(VTKView):
 
         def remove_grid():
             """Remove grid slices of the selected direction only."""
-            direction = direction_combo.currentText()
+            direction_text = direction_combo.currentText()
+            # Get the UVW part of the direction (for slice identification)
+            uvw_direction = direction_text.split(' ')[0]
+            
             # Get list of grid slice UIDs for current entity and direction
             grid_slices = [uid for uid in list(self.slice_actors.keys()) 
-                        if f'{entity_name}_{direction}_grid_' in uid]
+                        if f'{entity_name}_{uvw_direction}_grid_' in uid]
             
             for uid in grid_slices:
                 if uid in self.slice_actors:
@@ -3774,10 +3783,10 @@ class View3D(VTKView):
         # Add to menu only - remove from toolbar to avoid duplication
         self.menuMeshTools.addAction(self.actionMeshSlicer)
 
-    def toggle_mesh_manipulation(self, enabled, x_slider, y_slider, z_slider, 
-                               x_value, y_value, z_value,
-                               entity_combo, x_slice_check, y_slice_check, z_slice_check,
-                               update_slice_func=None, x_input=None, y_input=None, z_input=None,
+    def toggle_mesh_manipulation(self, enabled, u_slider, v_slider, w_slider, 
+                               u_value, v_value, w_value,
+                               entity_combo, u_slice_check, v_slice_check, w_slice_check,
+                               update_slice_func=None, u_input=None, v_input=None, w_input=None,
                                is_refresh=False):
         """Toggle mesh manipulation mode."""
         print(f"Toggle mesh manipulation called with enabled={enabled}, is_refresh={is_refresh}")
@@ -3800,12 +3809,12 @@ class View3D(VTKView):
                 
                 # Calculate normalized position based on current origin
                 normalized_pos = 0
-                if slice_type == 'X':
+                if slice_type == 'X':  # U direction
                     normalized_pos = (origin[0] - bounds[0]) / (bounds[1] - bounds[0]) if bounds[1] > bounds[0] else 0.5
-                elif slice_type == 'Y':
+                elif slice_type == 'Y':  # V direction
                     normalized_pos = (origin[1] - bounds[2]) / (bounds[3] - bounds[2]) if bounds[3] > bounds[2] else 0.5
-                elif slice_type == 'Z':
-                    # For Z slices with vertical exaggeration, adjust calculation
+                elif slice_type == 'Z':  # W direction
+                    # For W slices with vertical exaggeration, adjust calculation
                     if hasattr(self, 'v_exaggeration') and self.v_exaggeration != 1.0:
                         z_mid = (bounds[4] + bounds[5]) / 2
                         # Adjust for vertical exaggeration
@@ -3836,7 +3845,7 @@ class View3D(VTKView):
                         else:
                             value_input.setText(f"{real_pos:.2f}")
                     except Exception as e:
-                        print(f"Error updating text input: {e}")
+                        print(f"Error updating text input for {slice_type_to_uvw(slice_type)} direction: {e}")
                         value_input.setText(f"{normalized_pos:.2f}")
                 
                 # Update the slice visualization (always use fast_update for direct manipulation)
@@ -3845,9 +3854,18 @@ class View3D(VTKView):
                     
             return callback
         
+        # Helper to convert slice type to UVW label
+        def slice_type_to_uvw(slice_type):
+            if slice_type == 'X':
+                return 'U'
+            elif slice_type == 'Y':
+                return 'V'
+            else:  # Z
+                return 'W'
+        
         # Update slider and input states based on manipulation mode
         if not is_refresh:
-            self.update_slider_states(enabled, x_slider, y_slider, z_slider, x_input, y_input, z_input)
+            self.update_slider_states(enabled, u_slider, v_slider, w_slider, u_input, v_input, w_input)
         
         # Clean up existing plane widgets when disabling
         if not enabled:
@@ -3873,74 +3891,74 @@ class View3D(VTKView):
             
             # Get current slider values as normalized positions
             normalized_positions = {
-                'X': x_slider.value() / 100.0,
-                'Y': y_slider.value() / 100.0,
-                'Z': z_slider.value() / 100.0
+                'X': u_slider.value() / 100.0,
+                'Y': v_slider.value() / 100.0,
+                'Z': w_slider.value() / 100.0
             }
             
             # Clean up any existing plane widgets
             self.cleanup_plane_widgets()
             
             # Create plane widgets for each checked slice direction
-            if x_slice_check.isChecked():
-                # Update the real position value for X direction before creating widget
+            if u_slice_check.isChecked():
+                # Update the real position value for U direction before creating widget
                 try:
                     real_pos = calculate_real_position(entity, 'X', normalized_positions['X'])
                     if isinstance(real_pos, int):
-                        x_input.setText(str(real_pos))
+                        u_input.setText(str(real_pos))
                     else:
-                        x_input.setText(f"{real_pos:.2f}")
+                        u_input.setText(f"{real_pos:.2f}")
                 except Exception as e:
-                    print(f"Error updating X input: {e}")
+                    print(f"Error updating U input: {e}")
                 
                 # Use the local create_callback function with text input field
-                callback_func = create_callback('X', x_slider, x_value, x_input)
+                callback_func = create_callback('X', u_slider, u_value, u_input)
                 
-                # Create plane widget for X slice
+                # Create plane widget for U slice
                 widget = self.create_single_plane_widget('X', normalized_positions['X'], bounds, callback_func)
                 if widget:
                     self.plane_widgets.append(widget)
-                    print(f"Added X plane widget, total widgets: {len(self.plane_widgets)}")
+                    print(f"Added U plane widget, total widgets: {len(self.plane_widgets)}")
             
-            if y_slice_check.isChecked():
-                # Update the real position value for Y direction before creating widget
+            if v_slice_check.isChecked():
+                # Update the real position value for V direction before creating widget
                 try:
                     real_pos = calculate_real_position(entity, 'Y', normalized_positions['Y'])
                     if isinstance(real_pos, int):
-                        y_input.setText(str(real_pos))
+                        v_input.setText(str(real_pos))
                     else:
-                        y_input.setText(f"{real_pos:.2f}")
+                        v_input.setText(f"{real_pos:.2f}")
                 except Exception as e:
-                    print(f"Error updating Y input: {e}")
+                    print(f"Error updating V input: {e}")
                 
                 # Use the local create_callback function with text input field
-                callback_func = create_callback('Y', y_slider, y_value, y_input)
+                callback_func = create_callback('Y', v_slider, v_value, v_input)
                 
-                # Create plane widget for Y slice
+                # Create plane widget for V slice
                 widget = self.create_single_plane_widget('Y', normalized_positions['Y'], bounds, callback_func)
                 if widget:
                     self.plane_widgets.append(widget)
-                    print(f"Added Y plane widget, total widgets: {len(self.plane_widgets)}")
+                    print(f"Added V plane widget, total widgets: {len(self.plane_widgets)}")
             
-            if z_slice_check.isChecked():
-                # Update the real position value for Z direction before creating widget
+            if w_slice_check.isChecked():
+                # Update the real position value for W direction before creating widget
                 try:
                     real_pos = calculate_real_position(entity, 'Z', normalized_positions['Z'])
                     if isinstance(real_pos, int):
-                        z_input.setText(str(real_pos))
+                        w_input.setText(str(real_pos))
                     else:
-                        z_input.setText(f"{real_pos:.2f}")
+                        w_input.setText(f"{real_pos:.2f}")
                 except Exception as e:
-                    print(f"Error updating Z input: {e}")
+                    print(f"Error updating W input: {e}")
                 
                 # Use the local create_callback function with text input field
-                callback_func = create_callback('Z', z_slider, z_value, z_input)
+                callback_func = create_callback('Z', w_slider, w_value, w_input)
                 
-                # Create plane widget for Z slice
+                # Create plane widget for W slice
                 widget = self.create_single_plane_widget('Z', normalized_positions['Z'], bounds, callback_func)
                 if widget:
                     self.plane_widgets.append(widget)
-                    print(f"Added Z plane widget, total widgets: {len(self.plane_widgets)}")
+                    print(f"Added W plane widget, total widgets: {len(self.plane_widgets)}")
             
             # Render the scene to show the widgets
             self.plotter.render()
@@ -3950,26 +3968,26 @@ class View3D(VTKView):
             import traceback
             traceback.print_exc()
 
-    def update_slider_states(self, enabled, x_slider, y_slider, z_slider, x_input=None, y_input=None, z_input=None):
+    def update_slider_states(self, enabled, u_slider, v_slider, w_slider, u_input=None, v_input=None, w_input=None):
         """Update slider and input field states based on manipulation mode"""
         print(f"Updating slider states: enabled={enabled}")
-        x_slider.setEnabled(not enabled) 
-        y_slider.setEnabled(not enabled)
-        z_slider.setEnabled(not enabled)
+        u_slider.setEnabled(not enabled) 
+        v_slider.setEnabled(not enabled)
+        w_slider.setEnabled(not enabled)
         
         # Also disable text input fields when in manipulation mode
-        if x_input:
-            x_input.setEnabled(not enabled)
-        if y_input:
-            y_input.setEnabled(not enabled)
-        if z_input:
-            z_input.setEnabled(not enabled)
+        if u_input:
+            u_input.setEnabled(not enabled)
+        if v_input:
+            v_input.setEnabled(not enabled)
+        if w_input:
+            w_input.setEnabled(not enabled)
         
         # Apply visual indication of disabled state
         style = "QSlider::groove:horizontal {background-color: #cccccc;}" if enabled else ""
-        x_slider.setStyleSheet(style)
-        y_slider.setStyleSheet(style)
-        z_slider.setStyleSheet(style)
+        u_slider.setStyleSheet(style)
+        v_slider.setStyleSheet(style)
+        w_slider.setStyleSheet(style)
 
     def cleanup_plane_widgets(self):
         """Clean up all plane widgets"""
@@ -4153,9 +4171,9 @@ class View3D(VTKView):
         # Remember which slices have manipulation enabled
         has_manipulation = False
         entity_name = None
-        x_checked = False
-        y_checked = False
-        z_checked = False
+        u_checked = False
+        v_checked = False
+        w_checked = False
         
         # Find the mesh slicer dialog if it's open
         for child in self.findChildren(QDialog):
@@ -4170,21 +4188,21 @@ class View3D(VTKView):
                     if entity_combo:
                         entity_name = entity_combo.currentText()
                         
-                    x_check = child.findChild(QCheckBox, "x_slice_check")
-                    y_check = child.findChild(QCheckBox, "y_slice_check")
-                    z_check = child.findChild(QCheckBox, "z_slice_check")
+                    u_check = child.findChild(QCheckBox, "u_slice_check")
+                    v_check = child.findChild(QCheckBox, "v_slice_check")
+                    w_check = child.findChild(QCheckBox, "w_slice_check")
                     
-                    if x_check:
-                        x_checked = x_check.isChecked()
-                    if y_check:
-                        y_checked = y_check.isChecked()
-                    if z_check:
-                        z_checked = z_check.isChecked()
+                    if u_check:
+                        u_checked = u_check.isChecked()
+                    if v_check:
+                        v_checked = v_check.isChecked()
+                    if w_check:
+                        w_checked = w_check.isChecked()
                     
                     # Temporarily disable manipulation
                     enable_manipulation.setChecked(False)
                     QApplication.processEvents()  # Process UI events
-                break
+                    break
         
         # Clean up existing plane widgets
         self.cleanup_plane_widgets()
