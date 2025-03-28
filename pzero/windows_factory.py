@@ -2903,8 +2903,23 @@ class View3D(VTKView):
         # Create the control panel window
         control_panel = QDialog(self)
         control_panel.setWindowTitle("Mesh Slicer")
+        # Set dialog flags to prevent default Enter key behavior
+        control_panel.setWindowFlags(control_panel.windowFlags() | Qt.WindowType.CustomizeWindowHint)
+        # Disable default button behavior
+        control_panel.setModal(False)
         layout = QVBoxLayout()
 
+        # Create custom line edit class to handle Enter key properly
+        class SlicerLineEdit(QLineEdit):
+            def keyPressEvent(self, event):
+                if event.key() == Qt.Key.Key_Return or event.key() == Qt.Key.Key_Enter:
+                    # Handle Enter key internally - don't propagate to dialog
+                    self.editingFinished.emit()
+                    event.accept()
+                else:
+                    # Handle other keys normally
+                    super().keyPressEvent(event)
+        
         # Initialize slice actors dictionary if it doesn't exist
         if not hasattr(self, 'slice_actors'):
             self.slice_actors = {}
@@ -2928,6 +2943,7 @@ class View3D(VTKView):
         # Add Grid Section Manager button
         grid_section_btn = QPushButton("Grid Section Manager")
         grid_section_btn.clicked.connect(self.create_grid_section_manager)
+        grid_section_btn.setAutoDefault(False)  # Prevent it from being the default button
         entity_layout.addWidget(grid_section_btn)
         
         entity_layout.addWidget(entity_label)
@@ -2975,7 +2991,7 @@ class View3D(VTKView):
             
             label = QLabel(label_text)
             value_label = QLabel("0.50")
-            value_input = QLineEdit()
+            value_input = SlicerLineEdit()  # Use our custom line edit class
             value_input.setFixedWidth(80)
             value_input.setText("50")  # Default value (normalized percentage or slice number will be updated later)
             
