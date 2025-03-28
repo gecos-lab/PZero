@@ -3137,8 +3137,8 @@ class View3D(VTKView):
             
             if info['dim_size'] is not None:
                 try:
-                    # Convert to number
-                    real_pos = int(float(real_pos))
+                    # Convert to float instead of int to preserve precision
+                    real_pos = float(real_pos)
                     
                     # For seismic data, adjust calculation since slice numbers typically start from 1
                     if hasattr(entity, 'dimensions'):
@@ -3177,22 +3177,31 @@ class View3D(VTKView):
             if slice_type == 'X':
                 input_field = u_input
                 value_label = u_value
+                if hasattr(self, '_updating_u_input') and self._updating_u_input:
+                    return
             elif slice_type == 'Y':
                 input_field = v_input
                 value_label = v_value
+                if hasattr(self, '_updating_v_input') and self._updating_v_input:
+                    return
             else:  # Z
                 input_field = w_input
                 value_label = w_value
+                if hasattr(self, '_updating_w_input') and self._updating_w_input:
+                    return
                 
             # Update the normalized value label
             value_label.setText(f"{normalized_pos:.2f}")
             
-            # Calculate and display real position
+            # Calculate real position
             real_pos = calculate_real_position(entity, slice_type, normalized_pos)
-            if isinstance(real_pos, int):
-                input_field.setText(str(real_pos))
-            else:
-                input_field.setText(f"{real_pos:.2f}")
+            
+            # Only update the input field if it doesn't have focus
+            if not input_field.hasFocus():
+                if isinstance(real_pos, int):
+                    input_field.setText(str(real_pos))
+                else:
+                    input_field.setText(f"{real_pos:.2f}")
                 
         # Create separate handlers for each input field for more explicit connections
         def on_u_input_entered():
@@ -3205,10 +3214,24 @@ class View3D(VTKView):
                 return
             
             try:
-                normalized_pos = calculate_normalized_from_real(entity, 'X', u_input.text())
-                u_slider.setValue(int(normalized_pos * 100))
-                update_slice_visualization(entity_name, 'X', normalized_pos)
-                u_value.setText(f"{normalized_pos:.2f}")
+                # Store the original user input to preserve it
+                original_input = u_input.text()
+                
+                # Set flag to prevent recursive updates
+                if hasattr(self, '_updating_u_input') and self._updating_u_input:
+                    return
+                self._updating_u_input = True
+                
+                try:
+                    normalized_pos = calculate_normalized_from_real(entity, 'X', original_input)
+                    u_slider.setValue(int(normalized_pos * 100))
+                    update_slice_visualization(entity_name, 'X', normalized_pos)
+                    u_value.setText(f"{normalized_pos:.2f}")
+                    
+                    # Keep the original user input in the text field
+                    u_input.setText(original_input)
+                finally:
+                    self._updating_u_input = False
             except Exception as e:
                 print(f"Error processing U input: {e}")
                 
@@ -3222,10 +3245,24 @@ class View3D(VTKView):
                 return
             
             try:
-                normalized_pos = calculate_normalized_from_real(entity, 'Y', v_input.text())
-                v_slider.setValue(int(normalized_pos * 100))
-                update_slice_visualization(entity_name, 'Y', normalized_pos)
-                v_value.setText(f"{normalized_pos:.2f}")
+                # Store the original user input to preserve it
+                original_input = v_input.text()
+                
+                # Set flag to prevent recursive updates
+                if hasattr(self, '_updating_v_input') and self._updating_v_input:
+                    return
+                self._updating_v_input = True
+                
+                try:
+                    normalized_pos = calculate_normalized_from_real(entity, 'Y', original_input)
+                    v_slider.setValue(int(normalized_pos * 100))
+                    update_slice_visualization(entity_name, 'Y', normalized_pos)
+                    v_value.setText(f"{normalized_pos:.2f}")
+                    
+                    # Keep the original user input in the text field
+                    v_input.setText(original_input)
+                finally:
+                    self._updating_v_input = False
             except Exception as e:
                 print(f"Error processing V input: {e}")
                 
@@ -3239,10 +3276,24 @@ class View3D(VTKView):
                 return
             
             try:
-                normalized_pos = calculate_normalized_from_real(entity, 'Z', w_input.text())
-                w_slider.setValue(int(normalized_pos * 100))
-                update_slice_visualization(entity_name, 'Z', normalized_pos)
-                w_value.setText(f"{normalized_pos:.2f}")
+                # Store the original user input to preserve it
+                original_input = w_input.text()
+                
+                # Set flag to prevent recursive updates
+                if hasattr(self, '_updating_w_input') and self._updating_w_input:
+                    return
+                self._updating_w_input = True
+                
+                try:
+                    normalized_pos = calculate_normalized_from_real(entity, 'Z', original_input)
+                    w_slider.setValue(int(normalized_pos * 100))
+                    update_slice_visualization(entity_name, 'Z', normalized_pos)
+                    w_value.setText(f"{normalized_pos:.2f}")
+                    
+                    # Keep the original user input in the text field
+                    w_input.setText(original_input)
+                finally:
+                    self._updating_w_input = False
             except Exception as e:
                 print(f"Error processing W input: {e}")
                 
@@ -3497,13 +3548,10 @@ class View3D(VTKView):
         w_slider.valueChanged.connect(lambda: on_slider_changed(w_slider))
         
         # Connect text input events to their specific handlers
-        u_input.returnPressed.connect(on_u_input_entered)
         u_input.editingFinished.connect(on_u_input_entered)
         
-        v_input.returnPressed.connect(on_v_input_entered)
         v_input.editingFinished.connect(on_v_input_entered)
         
-        w_input.returnPressed.connect(on_w_input_entered)
         w_input.editingFinished.connect(on_w_input_entered)
         
         u_slice_check.toggled.connect(lambda checked: on_check_changed(u_slice_check, 'X'))
@@ -4187,7 +4235,7 @@ class View3D(VTKView):
         v_checked = False
         w_checked = False
         
-        # Find the mesh slicer dialog if it's open
+        # Find the mesh slicer dialog if it's openss
         for child in self.findChildren(QDialog):
             if hasattr(child, 'windowTitle') and child.windowTitle() == "Mesh Slicer":
                 # Find the manipulation checkbox
