@@ -51,6 +51,7 @@ from pyvista import Line as pv_Line
 from pyvista import Disc as pv_Disc
 from pyvista import PointSet as pvPointSet
 from pyvista import Plotter as pv_plot
+from pyvista import Arrow as pv_Arrow
 
 # Matplotlib imports____
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
@@ -178,6 +179,9 @@ class DockWindow(QDockWidget):
         # Make all dock widgets tabbed if more than one is open.
         if n_docks > 1:
             parent.tabifyDockWidget(parent.findChildren(QDockWidget)[0], self)
+        else:
+            if window_type == 'View3D':
+                print("Warning: we have to add some code here to solve the orientation widget problem.")
 
     def closeEvent(self, event):
         """Override the standard closeEvent method in two cases:
@@ -2139,11 +2143,11 @@ class VTKView(BaseView):
         self.removeEntityButton.triggered.connect(self.remove_entity)
         self.menuModify.addAction(self.removeEntityButton)
 
-        self.vertExagButton = QAction("Vertical exaggeration", self)
+        self.vertExagButton = QAction('Vertical exaggeration', self)
         self.vertExagButton.triggered.connect(self.vert_exag)
         self.menuView.addAction(self.vertExagButton)
 
-        self.actionExportScreen = QAction("Take screenshot", self)
+        self.actionExportScreen = QAction('Take screenshot', self)
         self.actionExportScreen.triggered.connect(self.export_screen)
         self.menuView.addAction(self.actionExportScreen)
 
@@ -2166,10 +2170,19 @@ class VTKView(BaseView):
         self.plotter.set_background("black")
         self.ViewFrameLayout.addWidget(self.plotter.interactor)
         # self.plotter.show_axes_all()
-        # Set orientation widget (turned on after the qt canvas is shown)
-        self.cam_orient_widget = vtkCameraOrientationWidget()
-        self.cam_orient_widget.SetParentRenderer(self.plotter.renderer)
-        self.cam_orient_widget.On()
+
+        # Set orientation widget
+        # In an old version it was turned on after the qt canvas was shown, but this does not seem necessary
+        if isinstance(self, View3D):
+            self.plotter.add_camera_orientation_widget()
+            # self.cam_orient_widget = vtkCameraOrientationWidget()
+            # self.cam_orient_widget.SetParentRenderer(self.plotter.renderer)
+            # self.cam_orient_widget.On()
+        elif isinstance(self, ViewXsection):
+            self.plotter.add_orientation_widget(pv_Arrow(direction=(0.0, 1.0, 0.0), scale=0.3), interactive=None, color='gold')
+        elif isinstance(self, ViewMap):
+            self.plotter.add_north_arrow_widget(interactive=None, color='gold')
+
         # Set default orientation horizontal because vertical colorbars interfere with the camera widget.
         pv_global_theme.colorbar_orientation = "horizontal"
 
@@ -2187,8 +2200,7 @@ class VTKView(BaseView):
             # CHECK THIS ZOOM SETTING
             # ________________________
             self.init_zoom = self.plotter.camera.distance
-            #Turn on the orientation widget AFTER the canvas is shown.
-            self.cam_orient_widget.On()
+
             # self.picker = self.plotter.enable_mesh_picking(callback= self.pkd_mesh,show_message=False)
 
     def plot_mesh(
@@ -2402,8 +2414,8 @@ class VTKView(BaseView):
         # self.print_terminal(f"Picker actor: {actor}")
 
         # proceed if an actor is selected
-        # if not self.actors_df.loc[self.actors_df["actor"] == actor, "uid"].empty:
-        if picker_output:
+        if not self.actors_df.loc[self.actors_df["actor"] == actor, "uid"].empty:
+        # if picker_output:
             # Get uid of picked actor
             sel_uid = self.actors_df.loc[
                 self.actors_df["actor"] == actor, "uid"
@@ -3444,18 +3456,39 @@ class ViewXsection(View2D):
         # Rename Base View, Menu and Tool
         self.setWindowTitle(f"Xsection View: {self.this_x_section_name}")
 
+        # Store center and direction in internal variables of this view
         section_plane = parent.xsect_coll.get_uid_vtk_plane(self.this_x_section_uid)
-        center = np_array(section_plane.GetOrigin())
-        # direction = -np_array(section_plane.GetNormal())
-        direction = np_array(section_plane.GetNormal())
-
-        self.plotter.camera.focal_point = center
-        self.plotter.camera.position = center + direction
+        self.center = np_array(section_plane.GetOrigin())
+        self.direction = np_array(section_plane.GetNormal())
+        # Apply to plotter
+        self.plotter.camera.focal_point = self.center
+        self.plotter.camera.position = self.center + self.direction
         self.plotter.reset_camera()
 
     # Update the views depending on the sec_uid. We need to redefine the functions to use
     # the sec_uid parameter for the update_dom_list_added func. We just need the x_added_x
     # functions because the x_removed_x works on an already built/modified tree.
+
+    def initialize_menu_tools(self):
+        """This is the intermediate method of the VTKView() abstract class, used to add menu tools used by all VTK windows.
+        The code appearing here is appended in subclasses using super().initialize_menu_tools() in their first line."""
+        # append code from BaseView()
+        super().initialize_menu_tools()
+
+        self.horizMirrorButton = QAction('Mirror horizontal axes', self)
+        self.horizMirrorButton.triggered.connect(self.horizontal_mirror)
+        self.menuView.addAction(self.horizMirrorButton)
+
+    def horizontal_mirror(self):
+        """Mirror horizontal axes.
+        """
+        self.print_terminal("Mirroring horizontal axes.")
+        # Mirror internal variable used to store direction
+        self.direction = -self.direction
+        # Apply to plotter
+        self.plotter.camera.focal_point = self.center
+        self.plotter.camera.position = self.center + self.direction
+        self.plotter.reset_camera()
 
 
 class ViewStereoplot(MPLView):
