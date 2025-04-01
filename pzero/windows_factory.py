@@ -3483,13 +3483,27 @@ class View3D(VTKView):
             """Clean up all slices and plane widgets when dialog closes"""
             print("Cleaning up mesh slicer resources...")
             
-            # Disable manipulation to remove plane widgets
+            # Disable single-slice manipulation to remove plane widgets
             if enable_manipulation.isChecked():
                 enable_manipulation.setChecked(False)
                 self.toggle_mesh_manipulation(False, u_slider, v_slider, w_slider,
                                         u_value, v_value, w_value,
                                         entity_combo, u_slice_check, v_slice_check, w_slice_check,
                                         update_slice_visualization)
+            
+            # Disable multi-slice manipulation to remove plane widgets
+            if multi_direct_manip.isChecked():
+                multi_direct_manip.setChecked(False)
+                # Clean up multi-slice manipulation widgets
+                if hasattr(self, 'multi_plane_widgets'):
+                    for widget in self.multi_plane_widgets:
+                        try:
+                            if hasattr(widget, 'SetEnabled'): widget.SetEnabled(0)
+                            if hasattr(self.plotter, 'remove_widget'): self.plotter.remove_widget(widget)
+                            elif hasattr(self.plotter.iren, 'remove_widget'): self.plotter.iren.remove_widget(widget)
+                        except Exception as e:
+                            print(f"Warning: Error removing widget: {e}")
+                    self.multi_plane_widgets = []
             
             # Remove all slice actors
             for slice_uid, actor in list(self.slice_actors.items()):
@@ -4061,6 +4075,21 @@ class View3D(VTKView):
         def on_mode_switch(mode_index):
             """Handle switching between single and multi slice modes."""
             if mode_index == 0:  # Single slice mode
+                # Disable multi-slice manipulation if enabled
+                if multi_direct_manip.isChecked():
+                    multi_direct_manip.setChecked(False)
+                    # Clean up manipulation widgets for multi-slice
+                    if hasattr(self, 'multi_plane_widgets'):
+                        for widget in self.multi_plane_widgets:
+                            try:
+                                if hasattr(widget, 'SetEnabled'): widget.SetEnabled(0)
+                                if hasattr(self.plotter, 'remove_widget'): self.plotter.remove_widget(widget)
+                                elif hasattr(self.plotter.iren, 'remove_widget'): self.plotter.iren.remove_widget(widget)
+                            except Exception as e:
+                                print(f"Warning: Error removing widget: {e}")
+                        self.multi_plane_widgets = []
+                        self.plotter.render()
+                
                 # Hide all multi-slice actors when switching back to single mode
                 if hasattr(self, 'slice_actors'):
                     for uid, actor in list(self.slice_actors.items()):
@@ -4076,6 +4105,20 @@ class View3D(VTKView):
                             self.slice_actors[slice_uid].SetVisibility(True)
             
             else:  # Multi-slice mode
+                # Disable single-slice manipulation if enabled
+                if enable_manipulation.isChecked():
+                    enable_manipulation.setChecked(False)
+                    self.toggle_mesh_manipulation(
+                        False, 
+                        u_slider, v_slider, w_slider,
+                        u_value, v_value, w_value,
+                        entity_combo, 
+                        u_slice_check, v_slice_check, w_slice_check,
+                        update_slice_visualization,
+                        u_input, v_input, w_input,
+                        calculate_real_position=calculate_real_position
+                    )
+                
                 # Hide all single slice actors when switching to multi-slice mode
                 entity_name = entity_combo.currentText()
                 if entity_name and hasattr(self, 'slice_actors'):
