@@ -4584,7 +4584,8 @@ class View3D(VTKView):
                 plane_widget = self.plotter.add_plane_widget(
                     update_callback,
                     normal=normal,
-                    origin=origin
+                    origin=origin,
+                    normal_rotation=False  # Disable normal rotation on manipulator
                 )
                 return plane_widget
             except Exception as e:
@@ -4595,7 +4596,8 @@ class View3D(VTKView):
                         update_callback,
                         normal=normal,
                         origin=origin,
-                        bounds=bounds
+                        bounds=bounds,
+                        normal_rotation=False  # Disable normal rotation on manipulator
                     )
                     return plane_widget
                 except:
