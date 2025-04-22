@@ -14,10 +14,15 @@ from vtkmodules.vtkInteractionWidgets import vtkContourWidget, vtkLinearContourL
 
 
 class Tracer(vtkContourWidget):
-    def __init__(self, parent=None, pass_func=None, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.parent = parent
-        self.SetInteractor(self.parent.plotter.iren.interactor)
+    def __init__(self, parent):
+        super().__init__()
+        # Store original parent reference
+        self._window = parent
+        
+        # Access the plotter directly from the parent window
+        # The plotter is created in initialize_interactor() in the parent window
+        self.SetInteractor(parent.plotter.iren.interactor)
+        
         head = pv_wrap(self.GetContourRepresentation().GetActiveCursorShape())
         self.GetContourRepresentation().SetCursorShape(head)
         self.GetContourRepresentation().SetLineInterpolator(
@@ -29,8 +34,9 @@ class Tracer(vtkContourWidget):
 
         self.ContinuousDrawOff()
         self.FollowCursorOn()
-        self.event_translator = self.GetEventTranslator()
-        self.event_translator.RemoveTranslation(vtkCommand.RightButtonPressEvent)
+        # Store event translator in a separate variable instead of assigning
+        event_translator = self.GetEventTranslator()
+        event_translator.RemoveTranslation(vtkCommand.RightButtonPressEvent)
 
 
 class Vector(vtkContourWidget):
