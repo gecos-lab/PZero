@@ -8,7 +8,7 @@ on:
 jobs:
     # Specify the reusable workflow
     testing:
-      uses: ./.github/workflows/release-testing.yml
+      uses: ./.github/old_workflow/release-testing.yml
 
     deploy:
         strategy:
@@ -24,7 +24,7 @@ jobs:
           pull-requests: write
 
         runs-on: ${{ matrix.os }}
-        # Requiring one or more reusable workflows in needs
+        # Requiring one or more reusable old_workflow in needs
         needs: [testing]
 
         # Steps for deploying a release
