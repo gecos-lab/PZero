@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v0.1.7 (2025-05-15)
+
+### Bug Fixes
+
+- **Actions**: One file option
+  ([`8693278`](https://github.com/gecos-lab/PZero/commit/8693278331c84e0913164ea9fe72ecdf6e89c9eb))
+
+
 ## v0.1.6 (2025-05-15)
 
 ### Bug Fixes
