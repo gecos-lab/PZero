@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v0.1.6 (2025-05-15)
+
+### Bug Fixes
+
+- **Actions**: Change pzero name using os
+  ([`2d57d72`](https://github.com/gecos-lab/PZero/commit/2d57d72be32eab30d880ae3524e082a805bd2232))
+
+
 ## v0.1.5 (2025-05-15)
 
 ### Bug Fixes
