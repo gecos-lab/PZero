@@ -62,7 +62,7 @@ jobs:
         run: |
           pip install -r requirements.txt
           pip install pyinstaller
-          pyinstaller --collect-all rasterio pzero.py
+          pyinstaller --collect-all rasterio pzero.py --name pzero-${{ runner.os }}
       - name: Upload executable
         run: |
           files="dist/pzero/pzero*"
