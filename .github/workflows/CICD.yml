@@ -10,6 +10,12 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
     steps:
+      - name: Install dependencies
+        run: |
+          if [ "${{ matrix.os }}" == "ubuntu-latest" ]; then
+            sudo apt-get update
+            sudo apt-get install -y libegl1
+          fi
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
