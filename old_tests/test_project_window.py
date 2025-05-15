@@ -3,8 +3,8 @@ import pytest
 from pzero.entities_factory import VertexSet
 from pzero.project_window import ProjectWindow
 
-from PyQt5.QtWidgets import QWidget, QFileDialog
-from PyQt5.QtCore import QSize
+from PySide6.QtWidgets import QWidget, QFileDialog
+from PySide6.QtCore import QSize
 
 # Global Var to set if the test are automatic or not
 automatic_test = True

@@ -2,7 +2,7 @@ from pzero.collections.background_collection import BackgroundCollection
 from pzero.legend_manager import Legend
 
 from pandas import DataFrame as pd_DataFrame
-from PyQt5.QtWidgets import QMainWindow
+from PySide6.QtWidgets import QMainWindow
 
 # Global Variable
 entity_dict = {'uid': "53",

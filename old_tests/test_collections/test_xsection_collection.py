@@ -1,5 +1,5 @@
 from pzero.collections.xsection_collection import XSectionCollection
-from PyQt5.QtWidgets import QMainWindow
+from PySide6.QtWidgets import QMainWindow
 
 
 # Class used as a substitute of pyqt-signals/emit

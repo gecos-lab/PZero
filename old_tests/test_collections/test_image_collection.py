@@ -1,7 +1,7 @@
 from pzero.collections.image_collection import ImageCollection
 from pzero.collections.dom_collection import DomCollection
 
-from PyQt5.QtWidgets import QMainWindow
+from PySide6.QtWidgets import QMainWindow
 
 
 # Class used as a substitute of pyqt-signals/emit

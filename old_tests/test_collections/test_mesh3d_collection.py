@@ -1,6 +1,6 @@
 from pzero.collections.mesh3d_collection import Mesh3DCollection
 
-from PyQt5.QtWidgets import QMainWindow
+from PySide6.QtWidgets import QMainWindow
 
 
 # Class used as a substitute of pyqt-signals/emit

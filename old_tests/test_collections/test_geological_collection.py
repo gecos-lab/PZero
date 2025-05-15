@@ -2,7 +2,7 @@ from pzero.collections.geological_collection import GeologicalCollection
 from pzero.legend_manager import Legend
 
 from pandas import DataFrame as pd_DataFrame
-from PyQt5.QtWidgets import QMainWindow
+from PySide6.QtWidgets import QMainWindow
 
 
 # Class used as a substitute of pyqt-signals/emit

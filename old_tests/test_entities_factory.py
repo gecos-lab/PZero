@@ -365,13 +365,13 @@ class TestVoxet:
         assert self.voxet_instance.point_data_components == []
 
     # Testing setting point data name and dimensions
-    # def test_init_point_data(self):
-    #     test_name = "Test_Name"
-    #     test_dimensions = 9
-    #     self.voxet_instance.init_point_data(data_key=test_name, dimension=test_dimensions)
-    #
-    #     assert self.voxet_instance.point_data_components == [test_dimensions]
-    #     assert self.voxet_instance.point_data_keys == [test_name]
+    def test_init_point_data(self):
+        test_name = "Test_Name"
+        test_dimensions = 9
+        self.voxet_instance.init_point_data(data_key=test_name, dimension=test_dimensions)
+
+        assert self.voxet_instance.point_data_components == [test_dimensions]
+        assert self.voxet_instance.point_data_keys == [test_name]
 
     # Testing removing point data by name
     def test_remove_point_data(self):
@@ -386,13 +386,13 @@ class TestVoxet:
         assert self.voxet_instance2.point_data_keys == []
 
     # Testing get point data/shape of the vtkarray
-    # def test_get_point_data(self):
-    #     test_name = "Test_Name"
-    #     test_dimensions = 4
-    #     shape = (0, 0, 4)
-    #     self.voxet_instance2.init_point_data(data_key=test_name, dimension=test_dimensions)
-    #
-    #     assert self.voxet_instance2.get_point_data(test_name).shape == shape
+    def test_get_point_data(self):
+        test_name = "Test_Name"
+        test_dimensions = 4
+        shape = (0, 0, 4)
+        self.voxet_instance2.init_point_data(data_key=test_name, dimension=test_dimensions)
+
+        assert self.voxet_instance2.get_point_data(test_name).shape == shape
 
     # Testing range of a point data
     def test_get_point_data_range(self):

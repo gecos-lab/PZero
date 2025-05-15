@@ -1,4 +1,4 @@
-from PyQt5.QtWidgets import QMainWindow
+from PySide6.QtWidgets import QMainWindow
 from pzero.collections.boundary_collection import BoundaryCollection
 from pzero.entities_factory import DEM, VertexSet, TetraSolid
 

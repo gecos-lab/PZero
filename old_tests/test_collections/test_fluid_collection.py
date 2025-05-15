@@ -3,7 +3,7 @@ from pzero.legend_manager import Legend
 from pzero.entities_factory import DEM
 
 from pandas import DataFrame as pd_DataFrame
-from PyQt5.QtWidgets import QMainWindow
+from PySide6.QtWidgets import QMainWindow
 
 
 # Class used as a substitute of pyqt-signals/emit
