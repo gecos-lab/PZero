@@ -1,5 +1,6 @@
 """properties_manager.py
 PZero© Andrea Bistacchi"""
+
 from operator import index
 
 import cmocean as cmo
@@ -46,6 +47,7 @@ def cmap2qpixmap(cmap=None, steps=50):
 
 class PropertiesCMaps(QObject):
     """Properties legend manager."""
+
     # Dictionaries used to define types of legend columns.
     prop_cmap_dict = {
         "property_name": ["X", "Y", "Z"],
@@ -114,7 +116,9 @@ class PropertiesCMaps(QObject):
         if parent.well_coll.df["properties_names"].to_list():
             add_props.append("MD")
 
-        add_props = list(set(add_props))  # a set is composed of unique values from a list
+        add_props = list(
+            set(add_props)
+        )  # a set is composed of unique values from a list
         add_props = list(filter(None, add_props))  # eliminate empty elements
         all_props = all_props + add_props
 
@@ -126,15 +130,17 @@ class PropertiesCMaps(QObject):
                 #     {"property_name": prop, "colormap": "rainbow"}, ignore_index=True
                 # )
                 # New Pandas >= 2.0.0
-                parent.prop_legend_df = pd_concat([
-                    parent.prop_legend_df,
-                    pd_DataFrame([{"property_name": prop, "colormap": "rainbow"}])
+                parent.prop_legend_df = pd_concat(
+                    [
+                        parent.prop_legend_df,
+                        pd_DataFrame([{"property_name": prop, "colormap": "rainbow"}]),
                     ],
-                    ignore_index=True)
+                    ignore_index=True,
+                )
         # The remove old ones no more used.
         for prop in parent.prop_legend_df["property_name"].to_list():
             if not prop in all_props:
-                #Get index of row to be removed, then remove it in place with .drop().
+                # Get index of row to be removed, then remove it in place with .drop().
                 idx_remove = parent.prop_legend_df[
                     parent.prop_legend_df["property_name"] == prop
                 ].index
@@ -174,7 +180,9 @@ class PropertiesCMaps(QObject):
             )
 
         # Squeeze column width to fit content
-        parent.PropertiesTableWidget.horizontalHeader().ResizeMode(QHeaderView.ResizeToContents)
+        parent.PropertiesTableWidget.horizontalHeader().ResizeMode(
+            QHeaderView.ResizeToContents
+        )
 
     def change_property_cmap(self, sender=None, parent=None):
         # new_cmap = str(self.sender().currentText())
@@ -186,8 +194,7 @@ class PropertiesCMaps(QObject):
         # Here the query is reversed and modified, dropping the values() method,
         # to allow SETTING the line thickness in the legend"
         parent.prop_legend_df.loc[
-            parent.prop_legend_df["property_name"] == this_property,
-            "colormap"
+            parent.prop_legend_df["property_name"] == this_property, "colormap"
         ] = new_cmap
 
         ## old solution

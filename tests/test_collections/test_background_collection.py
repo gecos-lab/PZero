@@ -5,16 +5,18 @@ from pandas import DataFrame as pd_DataFrame
 from PyQt5.QtWidgets import QMainWindow
 
 # Global Variable
-entity_dict = {'uid': "53",
-                          'name': "background-test",
-                          'topology': "undef",
-                          'role': "undef",
-                          'feature': "undef",
-                          'properties_names': [],
-                          'properties_components': [],
-                          'x_section': "",
-                          'borehole': "",
-                          'vtk_obj': None}
+entity_dict = {
+    "uid": "53",
+    "name": "background-test",
+    "topology": "undef",
+    "role": "undef",
+    "feature": "undef",
+    "properties_names": [],
+    "properties_components": [],
+    "x_section": "",
+    "borehole": "",
+    "vtk_obj": None,
+}
 
 
 # Class used as a substitute of pyqt-signals/emit
@@ -39,7 +41,9 @@ class FakeWindow(QMainWindow):
     def __init__(self):
         super(FakeWindow, self).__init__()
 
-    backgrnd_coll.legend_df = pd_DataFrame(columns=list(Legend.backgrounds_legend_dict.keys()))
+    backgrnd_coll.legend_df = pd_DataFrame(
+        columns=list(Legend.backgrounds_legend_dict.keys())
+    )
     backgrnd_coll = FakeBGCollection()
 
     legend = FakeLegend()
@@ -58,6 +62,7 @@ class TestBackgroundCollection:
 
         # check if the entities number is equal to the add_entity calls
         # and if the uid inserted is in the uids of the collection
-        assert self.background_coll_istance.get_number_of_entities() == 1 \
-               and entity_dict['uid'] in self.background_coll_istance.get_uids()
-
+        assert (
+            self.background_coll_istance.get_number_of_entities() == 1
+            and entity_dict["uid"] in self.background_coll_istance.get_uids()
+        )

@@ -3,6 +3,7 @@ from PySide6.QtCore import Qt
 
 """Methods used to build and update the X-SECTION table."""
 
+
 def create_xsections_tree(self):
     """Create XSection tree with checkboxes and properties"""
     self.XSectionTreeWidget.clear()
@@ -12,9 +13,7 @@ def create_xsections_tree(self):
     self.XSectionTreeWidget.setItemsExpandable(True)
     name_xslevel1 = ["All XSections"]
     # self.XSectionTreeWidget as parent -> top level
-    xslevel_1 = QTreeWidgetItem(
-        self.XSectionTreeWidget, name_xslevel1
-    )
+    xslevel_1 = QTreeWidgetItem(self.XSectionTreeWidget, name_xslevel1)
     xslevel_1.setFlags(
         xslevel_1.flags() | Qt.ItemIsUserTristate | Qt.ItemIsUserCheckable
     )
@@ -29,9 +28,7 @@ def create_xsections_tree(self):
             self.parent.xsect_coll.df["uid"] == uid, "name"
         ].values[0]
         # xslevel_2 as parent -> lower level
-        xslevel_2 = QTreeWidgetItem(
-            xslevel_1, [name, uid]
-        )
+        xslevel_2 = QTreeWidgetItem(xslevel_1, [name, uid])
         xslevel_2.setFlags(xslevel_2.flags() | Qt.ItemIsUserCheckable)
         if self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]:
             xslevel_2.setCheckState(0, Qt.Checked)
@@ -45,6 +42,7 @@ def create_xsections_tree(self):
         self.XSectionTreeWidget.resizeColumnToContents(col)
     self.XSectionTreeWidget.expandAll()
 
+
 def update_xsections_tree_added(self, new_list=None, sec_uid=None):
     """Update XSection tree without creating a new model"""
     uid_list = list(new_list["uid"])
@@ -55,9 +53,7 @@ def update_xsections_tree_added(self, new_list=None, sec_uid=None):
     for uid in uid_list:
         name = self.parent.xsect_coll.get_uid_name(uid)
         xslevel_2 = QTreeWidgetItem(
-            self.XSectionTreeWidget.findItems("All XSections", Qt.MatchExactly, 0)[
-                0
-            ],
+            self.XSectionTreeWidget.findItems("All XSections", Qt.MatchExactly, 0)[0],
             [name, uid],
         )
         xslevel_2.setFlags(xslevel_2.flags() | Qt.ItemIsUserCheckable)
@@ -71,6 +67,7 @@ def update_xsections_tree_added(self, new_list=None, sec_uid=None):
         self.XSectionTreeWidget.resizeColumnToContents(col)
     self.XSectionTreeWidget.expandAll()
 
+
 def update_xsections_tree_removed(self, removed_list=None):
     """Update XSection tree without creating a new model"""
     success = 0
@@ -78,25 +75,24 @@ def update_xsections_tree_removed(self, removed_list=None):
         for top_box in range(self.XSectionTreeWidget.topLevelItemCount()):
             """Iterate through every Collection top level"""
             for child_xsect in range(
-                    self.XSectionTreeWidget.topLevelItem(top_box).childCount()
+                self.XSectionTreeWidget.topLevelItem(top_box).childCount()
             ):
                 """Iterate through every XSection"""
                 if (
-                        self.XSectionTreeWidget.topLevelItem(top_box)
-                                .child(child_xsect)
-                                .text(1)
-                        == uid
+                    self.XSectionTreeWidget.topLevelItem(top_box)
+                    .child(child_xsect)
+                    .text(1)
+                    == uid
                 ):
                     """Complete check: entity found has the uid of the entity we need to remove. Delete child"""
                     success = 1
                     self.XSectionTreeWidget.topLevelItem(top_box).removeChild(
-                        self.XSectionTreeWidget.topLevelItem(top_box).child(
-                            child_xsect
-                        )
+                        self.XSectionTreeWidget.topLevelItem(top_box).child(child_xsect)
                     )
                     break
             if success == 1:
                 break
+
 
 def update_xsection_checkboxes(self, uid=None, uid_checkState=None):
     """Update checkboxes in XSection tree, called when state changed in xsection tree."""
@@ -108,18 +104,17 @@ def update_xsection_checkboxes(self, uid=None, uid_checkState=None):
     elif uid_checkState == Qt.Unchecked:
         item.setCheckState(0, Qt.Unchecked)
 
+
 def toggle_xsection_visibility(self, item):
     """Called by self.XSectionTreeWidget.itemChanged.connect(self.toggle_xsection_visibility)."""
     name = item.text(0)  # not used
     uid = item.text(1)
     uid_checkState = item.checkState(0)
     if (
-            uid
+        uid
     ):  # needed to skip messages from upper levels of tree that do not broadcast uid's
         if uid_checkState == Qt.Checked:
-            if not self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[
-                0
-            ]:
+            if not self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]:
                 self.actors_df.loc[self.actors_df["uid"] == uid, "show"] = True
                 self.set_actor_visible(uid=uid, visible=True)
         elif uid_checkState == Qt.Unchecked:

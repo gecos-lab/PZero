@@ -127,5 +127,4 @@ def vtk2lxml(self, out_dir_name=None):
     )
 
 
-def lxml2vtk(self, input_path=None):
-    ...
+def lxml2vtk(self, input_path=None): ...

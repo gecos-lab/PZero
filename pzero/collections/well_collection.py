@@ -18,6 +18,7 @@ from .AbstractCollection import BaseCollection
 
 class WellCollection(BaseCollection):
     """Collection for all wells and their metadata."""
+
     def __init__(self, parent=None, *args, **kwargs):
         super(WellCollection, self).__init__(parent, *args, **kwargs)
         # Initialize properties required by the abstract superclass.
@@ -29,7 +30,7 @@ class WellCollection(BaseCollection):
             "properties_components": [],
             "properties_types": [],
             "markers": [],
-            "x_section": [], # this is the uid of the cross section for "XsVertexSet", "XsPolyLine", and "XsImage", empty for all others
+            "x_section": [],  # this is the uid of the cross section for "XsVertexSet", "XsPolyLine", and "XsImage", empty for all others
             "vtk_obj": None,
         }
 
@@ -54,11 +55,13 @@ class WellCollection(BaseCollection):
 
         self.editable_columns_names = ["name", "scenario"]
 
-        self.collection_name = 'wells'
+        self.collection_name = "wells"
 
         self.initialize_df()
 
-    def add_entity_from_dict(self, entity_dict: pd_DataFrame = None, color: np_ndarray = None):
+    def add_entity_from_dict(
+        self, entity_dict: pd_DataFrame = None, color: np_ndarray = None
+    ):
         """Add an entity from a dictionary shaped as self.entity_dict."""
         # Create a new uid if it is not included in the dictionary.
         if not entity_dict["uid"]:
@@ -80,30 +83,37 @@ class WellCollection(BaseCollection):
             self.parent.well_legend_df["Loc ID"] == locid
         ].empty:
             R, G, B = np_round(np_random.random(3) * 255)
-        # Old Pandas <= 1.5.3
-        #     self.parent.well_legend_df = self.parent.well_legend_df.append(
-        #         {
-        #             "Loc ID": locid,
-        #             "color_R": R,
-        #             "color_G": G,
-        #             "color_B": B,
-        #             "line_thick": 2.0,
-        #             "opacity": 100,
-        #         },
-        #         ignore_index=True,
-        #     )
-        # New Pandas >= 2.0.0
-            self.parent.well_legend_df = pd_concat([self.parent.well_legend_df,
-                                                    pd_DataFrame([{
-                                                        "Loc ID": locid,
-                                                        "color_R": R,
-                                                        "color_G": G,
-                                                        "color_B": B,
-                                                        "line_thick": 2.0,
-                                                        "opacity": 100,
-                                                    }])],
-                                                   ignore_index=True,
-                                                   )
+            # Old Pandas <= 1.5.3
+            #     self.parent.well_legend_df = self.parent.well_legend_df.append(
+            #         {
+            #             "Loc ID": locid,
+            #             "color_R": R,
+            #             "color_G": G,
+            #             "color_B": B,
+            #             "line_thick": 2.0,
+            #             "opacity": 100,
+            #         },
+            #         ignore_index=True,
+            #     )
+            # New Pandas >= 2.0.0
+            self.parent.well_legend_df = pd_concat(
+                [
+                    self.parent.well_legend_df,
+                    pd_DataFrame(
+                        [
+                            {
+                                "Loc ID": locid,
+                                "color_R": R,
+                                "color_G": G,
+                                "color_B": B,
+                                "line_thick": 2.0,
+                                "opacity": 100,
+                            }
+                        ]
+                    ),
+                ],
+                ignore_index=True,
+            )
             self.parent.legend.update_widget(self.parent)
             self.parent.prop_legend.update_widget(self.parent)
         # Then emit signal to update the views. A list of uids is emitted, even if the entity is just one.
@@ -160,17 +170,24 @@ class WellCollection(BaseCollection):
                 #     ignore_index=True,
                 # )
                 # New Pandas >= 2.0.0
-                self.parent.well_legend_df = pd_concat([self.parent.well_legend_df,
-                                                        pd_DataFrame([{
-                                                            "Loc ID": locid,
-                                                            "feature": feature,
-                                                            "color_R": round(np_random.random() * 255),
-                                                            "color_G": round(np_random.random() * 255),
-                                                            "color_B": round(np_random.random() * 255),
-                                                            "line_thick": 2.0,
-                                                        }])],
-                                                       ignore_index=True,
-                                                       )
+                self.parent.well_legend_df = pd_concat(
+                    [
+                        self.parent.well_legend_df,
+                        pd_DataFrame(
+                            [
+                                {
+                                    "Loc ID": locid,
+                                    "feature": feature,
+                                    "color_R": round(np_random.random() * 255),
+                                    "color_G": round(np_random.random() * 255),
+                                    "color_B": round(np_random.random() * 255),
+                                    "line_thick": 2.0,
+                                }
+                            ]
+                        ),
+                    ],
+                    ignore_index=True,
+                )
                 legend_updated = legend_updated or True
         # When done, if the table was updated, update the widget. No signal is sent here to the views.
         if legend_updated:
@@ -188,7 +205,7 @@ class WellCollection(BaseCollection):
                 # Get index of row to be removed, then remove it in place with .drop().
                 idx_remove = self.parent.well_legend_df[
                     self.parent.well_legend_df["Loc ID"] == loc_id
-                    ].index
+                ].index
                 self.parent.well_legend_df.drop(idx_remove, inplace=True)
                 legend_updated = legend_updated or True
             for feature in features_in_legend:
@@ -200,7 +217,7 @@ class WellCollection(BaseCollection):
                     idx_remove = self.parent.well_legend_df[
                         (self.parent.well_legend_df["Loc ID"] == loc_id)
                         & (self.parent.well_legend_df["feature"] == feature)
-                        ].index
+                    ].index
                     self.parent.well_legend_df.drop(idx_remove, inplace=True)
                     legend_updated = legend_updated or True
         for feature in features_in_legend:
@@ -210,7 +227,7 @@ class WellCollection(BaseCollection):
                 # Get index of row to be removed, then remove it in place with .drop().
                 idx_remove = self.parent.well_legend_df[
                     self.parent.well_legend_df["feature"] == feature
-                    ].index
+                ].index
                 self.parent.well_legend_df.drop(idx_remove, inplace=True)
                 legend_updated = legend_updated or True
         return legend_updated
@@ -220,11 +237,19 @@ class WellCollection(BaseCollection):
         locid = self.df.loc[self.df["uid"] == uid, "Loc ID"].values[0]
         legend_dict = self.parent.well_legend_df.loc[
             self.parent.well_legend_df["Loc ID"] == locid
-            ].to_dict("records")
+        ].to_dict("records")
         return legend_dict[0]
 
-    def set_uid_legend(self, uid: str = None, color_R: float = None, color_G: float = None, color_B: float = None,
-                       line_thick: float = None, point_size: float = None, opacity: float = None):
+    def set_uid_legend(
+        self,
+        uid: str = None,
+        color_R: float = None,
+        color_G: float = None,
+        color_B: float = None,
+        line_thick: float = None,
+        point_size: float = None,
+        opacity: float = None,
+    ):
         """Set the legend for a particular uid."""
         # Not implemented for this collection, but required by the abstract superclass.
         pass

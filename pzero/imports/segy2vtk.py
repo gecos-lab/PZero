@@ -26,39 +26,44 @@ from pzero.processing.segy_standardizer import convert_to_standard_segy
 import os
 import numpy as np
 
+
 @freeze_gui
 def segy2vtk(self, in_file_name):
     """Import SEG-Y data from file and add it to the image collection."""
     this_uid = str(uuid_uuid4())
-    
+
     try:
         # First try direct reading
         try:
             pv_seismic_grid = read_segy_file(in_file_name=in_file_name)
         except Exception as e:
             self.print_terminal("Standard reading failed, attempting conversion...")
-            
+
             # Create a standardized version of the file
-            standardized_file = os_path.join(os_path.dirname(in_file_name), 
-                                           "standardized_" + os_path.basename(in_file_name))
-            
+            standardized_file = os_path.join(
+                os_path.dirname(in_file_name),
+                "standardized_" + os_path.basename(in_file_name),
+            )
+
             try:
-                success = convert_to_standard_segy(in_file_name, standardized_file, print_fn=self.print_terminal)
-                
+                success = convert_to_standard_segy(
+                    in_file_name, standardized_file, print_fn=self.print_terminal
+                )
+
                 if not success:
                     self.print_terminal("Failed to standardize SEG-Y file.")
                     return
-                    
+
                 self.print_terminal("Standardization successful, importing file...")
-                
+
                 # Read the standardized file using the same function
                 pv_seismic_grid = read_segy_file(in_file_name=standardized_file)
-                
+
             finally:
                 # Clean up temporary file
                 if os_path.exists(standardized_file):
                     os.remove(standardized_file)
-        
+
         # Create entity dictionary and add to collection
         curr_obj_dict = deepcopy(self.image_coll.entity_dict)
         curr_obj_dict["uid"] = this_uid
@@ -67,19 +72,21 @@ def segy2vtk(self, in_file_name):
         curr_obj_dict["vtk_obj"] = Seismics()
         curr_obj_dict["vtk_obj"].DeepCopy(pv_seismic_grid)
         curr_obj_dict["properties_names"] = curr_obj_dict["vtk_obj"].point_data_keys
-        curr_obj_dict["properties_components"] = curr_obj_dict["vtk_obj"].point_data_components
+        curr_obj_dict["properties_components"] = curr_obj_dict[
+            "vtk_obj"
+        ].point_data_components
         curr_obj_dict["properties_types"] = curr_obj_dict["vtk_obj"].point_data_types
-        
+
         self.image_coll.add_entity_from_dict(entity_dict=curr_obj_dict)
         self.print_terminal("Import successful.")
-        
+
     except Exception as e:
         self.print_terminal(f"Error during import: {str(e)}")
 
 
 def read_segy_file(in_file_name=None):
     """Read SEG-Y data from file with SegyIo."""
-    with segyio_open(in_file_name, "r", strict= False) as segyfile:
+    with segyio_open(in_file_name, "r", strict=False) as segyfile:
         inlines = segyfile.ilines
         crosslines = segyfile.xlines
         times = segyfile.samples
@@ -97,11 +104,15 @@ def read_segy_file(in_file_name=None):
             # Raise custom error message when TypeError is caught
             raise Exception("The SEGYFILE is non-standard, PZero closing.")
         inline_index_list = np_where(inlines_index == inlines[0])[0]
-        inline_dim = len(segyfile.attributes(segyio_TraceField.CDP_X)[inline_index_list])
+        inline_dim = len(
+            segyfile.attributes(segyio_TraceField.CDP_X)[inline_index_list]
+        )
 
         crosslines_index = segyfile.attributes(segyio_TraceField.CROSSLINE_3D)[:]
         crossline_index_list = np_where(crosslines_index == crosslines[0])[0]
-        crossline_dim = len(segyfile.attributes(segyio_TraceField.CDP_X)[crossline_index_list])
+        crossline_dim = len(
+            segyfile.attributes(segyio_TraceField.CDP_X)[crossline_index_list]
+        )
 
         i_xcoords = segyfile.attributes(segyio_TraceField.CDP_X)[inline_index_list]
         i_ycoords = segyfile.attributes(segyio_TraceField.CDP_Y)[inline_index_list]
@@ -124,7 +135,7 @@ def read_segy_file(in_file_name=None):
         flip_data = np_flip(data, axis=2)
 
         for i, value in enumerate(slices):
-            zcoords = np_repeat(value/8, len(xcoords))
+            zcoords = np_repeat(value / 8, len(xcoords))
             points = np_column_stack((xcoords, ycoords, zcoords)).astype(float)
             volume_points[i, :, :] = points
 
@@ -133,6 +144,6 @@ def read_segy_file(in_file_name=None):
         pv_seismic_grid = pv_StructuredGrid()
         pv_seismic_grid.points = volume_points
         pv_seismic_grid.dimensions = (inline_dim, crossline_dim, num_samples)
-        pv_seismic_grid['intensity'] = flip_data.ravel(order='F')
+        pv_seismic_grid["intensity"] = flip_data.ravel(order="F")
 
         return pv_seismic_grid

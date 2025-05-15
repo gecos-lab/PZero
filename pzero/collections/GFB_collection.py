@@ -33,6 +33,7 @@ pd_set_option("display.max_colwidth", pd_max_colwidth)
 
 class GFBCollection(BaseCollection):
     """Intermediate abstract class used as a base for geological, fluid and background collections."""
+
     def __init__(self, parent=None, *args, **kwargs):
         super(GFBCollection, self).__init__(parent, *args, **kwargs)
         # Initialize properties required by the abstract superclass.
@@ -74,15 +75,17 @@ class GFBCollection(BaseCollection):
 
         self.editable_columns_names = ["name", "role", "feature", "scenario"]
 
-        self.collection_name = ''
+        self.collection_name = ""
 
-        self.default_sequence = ''
+        self.default_sequence = ""
 
         self.initialize_df()
 
     # =================================== Obligatory methods ===========================================
 
-    def add_entity_from_dict(self, entity_dict: pd_DataFrame = None, color: np_ndarray = None):
+    def add_entity_from_dict(
+        self, entity_dict: pd_DataFrame = None, color: np_ndarray = None
+    ):
         """Add an entity from a dictionary shaped as self.entity_dict."""
         # Create a new uid if it is not included in the dictionary.
         if not entity_dict["uid"]:
@@ -129,29 +132,34 @@ class GFBCollection(BaseCollection):
             #     ignore_index=True,
             # )
             # New Pandas >= 2.0.0
-            self.legend_df = pd_concat([self.legend_df,
-                                        pd_DataFrame([{
-                                            "role": role,
-                                            "feature": feature,
-                                            "time": 0.0,
-                                            "sequence": self.default_sequence,
-                                            "scenario": scenario,
-                                            "color_R": R,
-                                            "color_G": G,
-                                            "color_B": B,
-                                            "line_thick": 5.0,
-                                            "point_size": 10.0,
-                                            "opacity": 100,
-                                        }])],
-                                       ignore_index=True,
-                                       )
+            self.legend_df = pd_concat(
+                [
+                    self.legend_df,
+                    pd_DataFrame(
+                        [
+                            {
+                                "role": role,
+                                "feature": feature,
+                                "time": 0.0,
+                                "sequence": self.default_sequence,
+                                "scenario": scenario,
+                                "color_R": R,
+                                "color_G": G,
+                                "color_B": B,
+                                "line_thick": 5.0,
+                                "point_size": 10.0,
+                                "opacity": 100,
+                            }
+                        ]
+                    ),
+                ],
+                ignore_index=True,
+            )
             self.parent.legend.update_widget(self.parent)
             self.parent.prop_legend.update_widget(self.parent)
         # Then emit signal to update the views. A list of uids is emitted, even if the
         # entity is just one, for future compatibility
-        self.signals.added.emit(
-            [entity_dict["uid"]]
-        )
+        self.signals.added.emit([entity_dict["uid"]])
         return entity_dict["uid"]
 
     def remove_entity(self, uid: str = None) -> str:
@@ -159,7 +167,7 @@ class GFBCollection(BaseCollection):
         # Remove row from dataframe and reset data model.
         if uid not in self.get_uids:
             return
-        self.df.drop(self.df[self.df["uid"] == uid].index,inplace=True)
+        self.df.drop(self.df[self.df["uid"] == uid].index, inplace=True)
         self.modelReset.emit()  # is this really necessary?
         # Then remove role / feature / scenario from legend if needed.
         # legend_updated is used to record if the table is updated or not.
@@ -199,19 +207,35 @@ class GFBCollection(BaseCollection):
     def replace_vtk(self, uid: str = None, vtk_object: vtkDataObject = None):
         """Replace the vtk object of a given uid with another vtkobject."""
         # ============ CAN BE UNIFIED AS COMMON METHOD OF THE ABSTRACT COLLECTION WHEN SIGNALS WILL BE UNIFIED ==========
-        if isinstance(vtk_object, type(self.df.loc[self.df["uid"] == uid, "vtk_obj"].values[0])):
+        if isinstance(
+            vtk_object, type(self.df.loc[self.df["uid"] == uid, "vtk_obj"].values[0])
+        ):
             # Replace old properties names and components with new ones
             keys = vtk_object.point_data_keys
             self.df.loc[self.df["uid"] == uid, "properties_names"].values[0] = []
             self.df.loc[self.df["uid"] == uid, "properties_components"].values[0] = []
             for key in keys:
                 components = vtk_object.get_point_data_shape(key)[1]
-                current_names = pd_DataFrame(self.df.loc[self.df["uid"] == uid, "properties_names"].values[0])
-                current_names = pd_concat([current_names, pd_DataFrame([key])], ignore_index=True)
-                self.df.loc[self.df["uid"] == uid, "properties_names"].values[0] = current_names[0].tolist()
-                current_components = pd_DataFrame(self.df.loc[self.df["uid"] == uid, "properties_components"].values[0])
-                current_components = pd_concat([current_components, pd_DataFrame([components])], ignore_index=True)
-                self.df.loc[self.df["uid"] == uid, "properties_components"].values[0] = current_components[0].tolist()
+                current_names = pd_DataFrame(
+                    self.df.loc[self.df["uid"] == uid, "properties_names"].values[0]
+                )
+                current_names = pd_concat(
+                    [current_names, pd_DataFrame([key])], ignore_index=True
+                )
+                self.df.loc[self.df["uid"] == uid, "properties_names"].values[0] = (
+                    current_names[0].tolist()
+                )
+                current_components = pd_DataFrame(
+                    self.df.loc[self.df["uid"] == uid, "properties_components"].values[
+                        0
+                    ]
+                )
+                current_components = pd_concat(
+                    [current_components, pd_DataFrame([components])], ignore_index=True
+                )
+                self.df.loc[self.df["uid"] == uid, "properties_components"].values[
+                    0
+                ] = current_components[0].tolist()
             self.df.loc[self.df["uid"] == uid, "vtk_obj"] = vtk_object
             self.parent.prop_legend.update_widget(self.parent)
             self.signals.data_keys_modified.emit([uid])
@@ -250,20 +274,27 @@ class GFBCollection(BaseCollection):
                 #     ignore_index=True,
                 # )
                 # New Pandas >= 2.0.0
-                self.legend_df = pd_concat([self.legend_df,
-                                            pd_DataFrame([{
-                                                "role": role,
-                                                "feature": feature,
-                                                "time": 0.0,
-                                                "sequence": self.default_sequence,
-                                                "scenario": scenario,
-                                                "color_R": round(np_random.random() * 255),
-                                                "color_G": round(np_random.random() * 255),
-                                                "color_B": round(np_random.random() * 255),
-                                                "line_thick": 2.0,
-                                            }])],
-                                           ignore_index=True,
-                                           )
+                self.legend_df = pd_concat(
+                    [
+                        self.legend_df,
+                        pd_DataFrame(
+                            [
+                                {
+                                    "role": role,
+                                    "feature": feature,
+                                    "time": 0.0,
+                                    "sequence": self.default_sequence,
+                                    "scenario": scenario,
+                                    "color_R": round(np_random.random() * 255),
+                                    "color_G": round(np_random.random() * 255),
+                                    "color_B": round(np_random.random() * 255),
+                                    "line_thick": 2.0,
+                                }
+                            ]
+                        ),
+                    ],
+                    ignore_index=True,
+                )
                 legend_updated = legend_updated or True
         # When done, if the table was updated, update the widget. No signal is sent here to the views.
         if legend_updated:
@@ -279,21 +310,18 @@ class GFBCollection(BaseCollection):
         for role in roles_in_legend:
             if self.df.loc[self.df["role"] == role].empty:
                 # Get index of row to be removed, then remove it in place with .drop().
-                idx_remove = self.legend_df[
-                    self.legend_df["role"] == role
-                    ].index
+                idx_remove = self.legend_df[self.legend_df["role"] == role].index
                 self.legend_df.drop(idx_remove, inplace=True)
                 legend_updated = legend_updated or True
             for feature in features_in_legend:
                 if self.df.loc[
-                    (self.df["role"] == role)
-                    & (self.df["feature"] == feature)
+                    (self.df["role"] == role) & (self.df["feature"] == feature)
                 ].empty:
                     # Get index of row to be removed, then remove it in place with .drop().
                     idx_remove = self.legend_df[
                         (self.legend_df["role"] == role)
                         & (self.legend_df["feature"] == feature)
-                        ].index
+                    ].index
                     self.legend_df.drop(idx_remove, inplace=True)
                     legend_updated = legend_updated or True
                 for scenario in scenarios_in_legend:
@@ -307,27 +335,24 @@ class GFBCollection(BaseCollection):
                             (self.legend_df["role"] == role)
                             & (self.legend_df["feature"] == feature)
                             & (self.legend_df["scenario"] == scenario)
-                            ].index
+                        ].index
                         self.legend_df.drop(idx_remove, inplace=True)
                         legend_updated = legend_updated or True
         for feature in features_in_legend:
             if self.df.loc[self.df["feature"] == feature].empty:
                 # Get index of row to be removed, then remove it in place with .drop().
-                idx_remove = self.legend_df[
-                    self.legend_df["feature"] == feature
-                    ].index
+                idx_remove = self.legend_df[self.legend_df["feature"] == feature].index
                 self.legend_df.drop(idx_remove, inplace=True)
                 legend_updated = legend_updated or True
             for scenario in scenarios_in_legend:
                 if self.df.loc[
-                    (self.df["feature"] == feature)
-                    & (self.df["scenario"] == scenario)
+                    (self.df["feature"] == feature) & (self.df["scenario"] == scenario)
                 ].empty:
                     # Get index of row to be removed, then remove it in place with .drop().
                     idx_remove = self.legend_df[
                         (self.legend_df["feature"] == feature)
                         & (self.legend_df["scenario"] == scenario)
-                        ].index
+                    ].index
                     self.legend_df.drop(idx_remove, inplace=True)
                     legend_updated = legend_updated or True
         for scenario in scenarios_in_legend:
@@ -335,7 +360,7 @@ class GFBCollection(BaseCollection):
                 # Get index of row to be removed, then remove it in place with .drop().
                 idx_remove = self.legend_df[
                     self.legend_df["scenario"] == scenario
-                    ].index
+                ].index
                 self.legend_df.drop(idx_remove, inplace=True)
                 legend_updated = legend_updated or True
         return legend_updated
@@ -349,11 +374,21 @@ class GFBCollection(BaseCollection):
             (self.legend_df["role"] == role)
             & (self.legend_df["feature"] == feature)
             & (self.legend_df["scenario"] == scenario)
-            ].to_dict("records")
-        return legend_dict[0]  # the '[0]' is needed since .to_dict('records') returns a list of dictionaries (with just one element in this case)
+        ].to_dict("records")
+        return legend_dict[
+            0
+        ]  # the '[0]' is needed since .to_dict('records') returns a list of dictionaries (with just one element in this case)
 
-    def set_uid_legend(self, uid: str = None, color_R: float = None, color_G: float = None, color_B: float = None,
-                       line_thick: float = None, point_size: float = None, opacity: float = None):
+    def set_uid_legend(
+        self,
+        uid: str = None,
+        color_R: float = None,
+        color_G: float = None,
+        color_B: float = None,
+        line_thick: float = None,
+        point_size: float = None,
+        opacity: float = None,
+    ):
         """Set the legend for a particular uid."""
         # ==== AT THE MOEMENT THIS IS USED JUST WHEN IMPORTING GOCAD ASCII FILES WITH A RECORDED LEGEND. ==========
         # ==== IN THE FUTURE SEE IF IT IS POSSIBLE TO USE THIS IN add_entity_from_dict ============================
@@ -410,25 +445,25 @@ class GFBCollection(BaseCollection):
     def get_role_uids(self, role: str = None) -> list:
         """Get list of uids with a given role in a given collection."""
         # ====== in the future use the query method? ========================================
-        return self.df.loc[self.df['role'] == role, "uid"].to_list()
+        return self.df.loc[self.df["role"] == role, "uid"].to_list()
 
     def get_uid_role(self, uid: str = None):
         """Get role of a given uid."""
-        return self.df.loc[self.df["uid"] == uid, 'role'].values[0]
+        return self.df.loc[self.df["uid"] == uid, "role"].values[0]
 
     def set_uid_role(self, uid=None, role=None):
         """Set role of a given uid."""
-        self.df.loc[self.df["uid"] == uid, 'role'] = role
+        self.df.loc[self.df["uid"] == uid, "role"] = role
 
     def get_feature_uids(self, coll_feature: str = None) -> list:
         """Get list of uids of a given collection feature."""
         # ====== in the future use the query method? ========================================
-        return self.df.loc[self.df['feature'] == coll_feature, "uid"].to_list()
+        return self.df.loc[self.df["feature"] == coll_feature, "uid"].to_list()
 
     def get_uid_feature(self, uid: str = None):
         """Get collection type from uid."""
-        return self.df.loc[self.df["uid"] == uid, 'feature'].values[0]
+        return self.df.loc[self.df["uid"] == uid, "feature"].values[0]
 
     def set_uid_feature(self, uid=None, feature=None):
         """Set collection type from uid."""
-        self.df.loc[self.df["uid"] == uid, 'feature'] = feature
+        self.df.loc[self.df["uid"] == uid, "feature"] = feature

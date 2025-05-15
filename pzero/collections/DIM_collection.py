@@ -28,6 +28,7 @@ pd_set_option("display.max_colwidth", pd_max_colwidth)
 
 class DIMCollection(BaseCollection):
     """Collection for all mesh entities and their metadata."""
+
     def __init__(self, parent=None, *args, **kwargs):
         super(DIMCollection, self).__init__(parent, *args, **kwargs)
         # Initialize properties required by the abstract superclass.
@@ -39,7 +40,7 @@ class DIMCollection(BaseCollection):
             "properties_names": [],
             "properties_components": [],
             "properties_types": [],
-            "x_section": "", # this is the uid of the cross section for "XsVertexSet", "XsPolyLine", and "XsImage", empty for all others
+            "x_section": "",  # this is the uid of the cross section for "XsVertexSet", "XsPolyLine", and "XsImage", empty for all others
             "vtk_obj": None,
         }
 
@@ -59,15 +60,17 @@ class DIMCollection(BaseCollection):
 
         self.editable_columns_names = ["name", "scenario"]
 
-        self.collection_name = ''
+        self.collection_name = ""
 
-        self.default_colormap = ''
+        self.default_colormap = ""
 
         self.initialize_df()
 
     # =================================== Obligatory methods ===========================================
 
-    def add_entity_from_dict(self, entity_dict: pd_DataFrame = None, color: np_ndarray = None):
+    def add_entity_from_dict(
+        self, entity_dict: pd_DataFrame = None, color: np_ndarray = None
+    ):
         """Add an entity from a dictionary shaped as self.entity_dict."""
         # Create a new uid if it is not included in the dictionary.
         if not entity_dict["uid"]:
@@ -94,13 +97,20 @@ class DIMCollection(BaseCollection):
                     #     ignore_index=True,
                     # )
                     # New Pandas >= 2.0.0
-                    self.parent.prop_legend_df = pd_concat([
-                                    self.parent.prop_legend_df,
-                                    pd_DataFrame([{
-                                            "property_name": property_name,
-                                            "colormap": self.default_colormap,
-                                    }])],
-                                    ignore_index=True)
+                    self.parent.prop_legend_df = pd_concat(
+                        [
+                            self.parent.prop_legend_df,
+                            pd_DataFrame(
+                                [
+                                    {
+                                        "property_name": property_name,
+                                        "colormap": self.default_colormap,
+                                    }
+                                ]
+                            ),
+                        ],
+                        ignore_index=True,
+                    )
                     self.parent.prop_legend.update_widget(self.parent)
         # Then emit signal to update the views. A list of uids is emitted, even if the
         # entity is just one, for future compatibility
@@ -113,7 +123,9 @@ class DIMCollection(BaseCollection):
         # but it is worth adding it here for a more general behaviour with no relevant computational cost.
         for dom_uid in self.parent.dom_coll.get_uids:
             if uid in self.parent.dom_coll.get_uid_texture_uids(dom_uid):
-                self.parent.dom_coll.remove_map_texture_from_dom(dom_uid=dom_uid, map_image_uid=uid)
+                self.parent.dom_coll.remove_map_texture_from_dom(
+                    dom_uid=dom_uid, map_image_uid=uid
+                )
         # Remove row from dataframe and reset data model.
         if uid not in self.get_uids:
             return
@@ -149,15 +161,16 @@ class DIMCollection(BaseCollection):
         """Get legend for a particular uid."""
         pass
 
-    def set_uid_legend(self,
-                       uid: str = None,
-                       color_R: float = None,
-                       color_G: float = None,
-                       color_B: float = None,
-                       line_thick: float = None,
-                       point_size: float = None,
-                       opacity: float = None,
-                       ):
+    def set_uid_legend(
+        self,
+        uid: str = None,
+        color_R: float = None,
+        color_G: float = None,
+        color_B: float = None,
+        line_thick: float = None,
+        point_size: float = None,
+        opacity: float = None,
+    ):
         """Set the legend for a particular uid."""
         # Not implemented for this collection, but required by the abstract superclass.
         pass

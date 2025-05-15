@@ -24,16 +24,18 @@ class FakeWindow(QMainWindow):
 
 
 class TestXSectionCollection:
-    entity_dict = {'uid': "0",
-                              'name': "geoname",
-                              'topology': "topol",
-                              'role': "undef",
-                              'feature': "undef",
-                              'scenario': "sc1",
-                              'properties_names': [],
-                              'properties_components': [],
-                              'x_section': "",
-                              'vtk_obj': None}
+    entity_dict = {
+        "uid": "0",
+        "name": "geoname",
+        "topology": "topol",
+        "role": "undef",
+        "feature": "undef",
+        "scenario": "sc1",
+        "properties_names": [],
+        "properties_components": [],
+        "x_section": "",
+        "vtk_obj": None,
+    }
 
     x_section_coll_istance = XSectionCollection(FakeWindow)
 
@@ -43,28 +45,42 @@ class TestXSectionCollection:
 
         # check if the entities number is equal to the add_entity calls
         # and if the uid inserted is in the uids of the collection
-        assert self.x_section_coll_istance.get_number_of_entities() == 1 \
-               and self.entity_dict['uid'] in self.x_section_coll_istance.get_uids()
+        assert (
+            self.x_section_coll_istance.get_number_of_entities() == 1
+            and self.entity_dict["uid"] in self.x_section_coll_istance.get_uids()
+        )
 
     def test_remove_entity(self):
         # add an entity
         self.x_section_coll_istance.add_entity_from_dict(self.entity_dict)
 
         # remove an entity
-        self.x_section_coll_istance.remove_entity(self.entity_dict['uid'])
+        self.x_section_coll_istance.remove_entity(self.entity_dict["uid"])
 
         # check if the entities number is equal to the add_entity calls minus the remove_entity calls
         # and if the uid inserted and then removed is not in the uids of the collection
-        assert self.x_section_coll_istance.get_number_of_entities() == 0 \
-               and self.entity_dict['uid'] not in self.x_section_coll_istance.get_uids()
+        assert (
+            self.x_section_coll_istance.get_number_of_entities() == 0
+            and self.entity_dict["uid"] not in self.x_section_coll_istance.get_uids()
+        )
 
     def test_set_parameters_in_table(self):
         # add an entity
         self.x_section_coll_istance.add_entity_from_dict(self.entity_dict)
 
-        self.x_section_coll_istance.set_parameters_in_table(uid="2", name="name-test", base_point=[0, 1, 10],
-                                                            end_point=[0, 1, 2], normal=[0, 1, 2],
-                                                            azimuth=None, length=None, top=None, bottom=None)
+        self.x_section_coll_istance.set_parameters_in_table(
+            uid="2",
+            name="name-test",
+            base_point=[0, 1, 10],
+            end_point=[0, 1, 2],
+            normal=[0, 1, 2],
+            azimuth=None,
+            length=None,
+            top=None,
+            bottom=None,
+        )
 
-        assert self.x_section_coll_istance.get_number_of_entities() == 1 \
-            and self.entity_dict['uid'] in self.x_section_coll_istance.get_uids()
+        assert (
+            self.x_section_coll_istance.get_number_of_entities() == 1
+            and self.entity_dict["uid"] in self.x_section_coll_istance.get_uids()
+        )

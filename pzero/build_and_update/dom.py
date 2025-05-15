@@ -3,6 +3,7 @@ from PySide6.QtCore import Qt
 
 """Methods used to build and update the DOM table."""
 
+
 def create_dom_list(self, sec_uid=None):
     """Create cross-sections list with checkboxes."""
     self.DOMsTableWidget.clear()
@@ -32,14 +33,14 @@ def create_dom_list(self, sec_uid=None):
         """[Gabriele] To add support to multi components properties (e.g. RGB) we can add a component check (if components > 1). If this statement is True we can iterate over the n components and set the new n properties using the template prop[n_component]. These properties do not point to actual data (the "RGB[0]" property is not present) but to a slice of the original property (RGB[:,0])."""
 
         for prop, components in zip(
-                self.parent.dom_coll.get_uid_properties_names(uid),
-                self.parent.dom_coll.get_uid_properties_components(uid),
+            self.parent.dom_coll.get_uid_properties_names(uid),
+            self.parent.dom_coll.get_uid_properties_components(uid),
         ):
             if (
-                    prop
-                    not in self.parent.dom_coll.df.loc[
-                self.parent.dom_coll.df["uid"] == uid, "texture_uids"
-            ].values[0]
+                prop
+                not in self.parent.dom_coll.df.loc[
+                    self.parent.dom_coll.df["uid"] == uid, "texture_uids"
+                ].values[0]
             ):
                 property_texture_combo.addItem(prop)
                 property_texture_combo.texture_uid_list.append(prop)
@@ -65,7 +66,9 @@ def create_dom_list(self, sec_uid=None):
         self.DOMsTableWidget.setItem(row, 1, uid_item)
         self.DOMsTableWidget.setCellWidget(row, 2, property_texture_combo)
         property_texture_combo.currentIndexChanged.connect(
-            lambda *, sender=property_texture_combo: toggle_property_texture(self=self, sender=sender)
+            lambda *, sender=property_texture_combo: toggle_property_texture(
+                self=self, sender=sender
+            )
         )
         if self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]:
             name_item.setCheckState(Qt.Checked)
@@ -77,6 +80,7 @@ def create_dom_list(self, sec_uid=None):
     # Squeeze column width to fit content
     self.DOMsTableWidget.horizontalHeader().ResizeMode(QHeaderView.ResizeToContents)
 
+
 def update_dom_list_added(self, new_list=None, sec_uid=None):
     """Update DOM list without creating a new model"""
     # print('update_dom_list_added')
@@ -85,10 +89,10 @@ def update_dom_list_added(self, new_list=None, sec_uid=None):
     if sec_uid:
         for i, uid in enumerate(new_list["uid"]):
             if (
-                    sec_uid
-                    != self.parent.dom_coll.df.loc[
-                self.parent.dom_coll.df["uid"] == uid, "x_section"
-            ].values[0]
+                sec_uid
+                != self.parent.dom_coll.df.loc[
+                    self.parent.dom_coll.df["uid"] == uid, "x_section"
+                ].values[0]
             ):
                 del uid_list[i]
     for uid in uid_list:
@@ -111,14 +115,14 @@ def update_dom_list_added(self, new_list=None, sec_uid=None):
         """[Gabriele] See function above for explanation"""
 
         for prop, components in zip(
-                self.parent.dom_coll.get_uid_properties_names(uid),
-                self.parent.dom_coll.get_uid_properties_components(uid),
+            self.parent.dom_coll.get_uid_properties_names(uid),
+            self.parent.dom_coll.get_uid_properties_components(uid),
         ):
             if (
-                    prop
-                    not in self.parent.dom_coll.df.loc[
-                self.parent.dom_coll.df["uid"] == uid, "texture_uids"
-            ].values[0]
+                prop
+                not in self.parent.dom_coll.df.loc[
+                    self.parent.dom_coll.df["uid"] == uid, "texture_uids"
+                ].values[0]
             ):
                 property_texture_combo.addItem(prop)
                 property_texture_combo.texture_uid_list.append(prop)
@@ -142,7 +146,9 @@ def update_dom_list_added(self, new_list=None, sec_uid=None):
         self.DOMsTableWidget.setItem(row, 1, uid_item)
         self.DOMsTableWidget.setCellWidget(row, 2, property_texture_combo)
         property_texture_combo.currentIndexChanged.connect(
-            lambda *, sender=property_texture_combo: toggle_property_texture(self=self, sender=sender)
+            lambda *, sender=property_texture_combo: toggle_property_texture(
+                self=self, sender=sender
+            )
         )
         if self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]:
             name_item.setCheckState(Qt.Checked)
@@ -153,6 +159,7 @@ def update_dom_list_added(self, new_list=None, sec_uid=None):
     self.DOMsTableWidget.itemChanged.connect(self.toggle_dom_visibility)
     # Squeeze column width to fit content
     self.DOMsTableWidget.horizontalHeader().ResizeMode(QHeaderView.ResizeToContents)
+
 
 def update_dom_list_removed(self, removed_list=None):
     """Update DOM list without creating a new model"""
@@ -166,6 +173,7 @@ def update_dom_list_removed(self, removed_list=None):
                 break
     """Send message with argument = the cell being checked/unchecked."""
     self.DOMsTableWidget.itemChanged.connect(self.toggle_dom_visibility)
+
 
 def toggle_dom_visibility(self, cell):
     """Called by self.DOMsTableWidget.itemChanged.connect(self.toggle_dom_visibility)."""
@@ -189,19 +197,28 @@ def toggle_dom_visibility(self, cell):
             self.actors_df.loc[self.actors_df["uid"] == uid, "show"] = False
             self.set_actor_visible(uid=uid, visible=False)
 
+
 def toggle_property_texture(self, sender=None):
     """Method to toggle the texture shown by a DEM that is already present in the view."""
     # Collect values from combo box and actor's dataframe.
     uid = sender.uid
     show = self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]
-    collection = self.actors_df.loc[self.actors_df["uid"] == uid, "collection"].values[0]
+    collection = self.actors_df.loc[self.actors_df["uid"] == uid, "collection"].values[
+        0
+    ]
     property_texture_id = sender.currentIndex()  # 0 means "none"
     property_texture_list = sender.texture_uid_list
     property_texture_uid = property_texture_list[property_texture_id]
     # Set the active texture coordinates.
-    if property_texture_uid in \
-            self.parent.dom_coll.df.loc[self.parent.dom_coll.df["uid"] == uid, "texture_uids"].values[0]:
-        self.parent.dom_coll.set_active_texture_on_dom(dom_uid=uid, map_image_uid=property_texture_uid)
+    if (
+        property_texture_uid
+        in self.parent.dom_coll.df.loc[
+            self.parent.dom_coll.df["uid"] == uid, "texture_uids"
+        ].values[0]
+    ):
+        self.parent.dom_coll.set_active_texture_on_dom(
+            dom_uid=uid, map_image_uid=property_texture_uid
+        )
     # Remove the previous scalar bar if present
     if hasattr(self, "plotter"):
         try:
@@ -211,6 +228,9 @@ def toggle_property_texture(self, sender=None):
             pass
     # This replaces the previous copy of the actor with the same uid, and updates the actors dataframe.
     # See issue #33 for a discussion on actors replacement by the PyVista add_mesh and add_volume methods.
-    this_actor = self.show_actor_with_property(uid=uid, collection=collection, show_property=property_texture_uid,
-                                               visible=show)
-    self.actors_df.loc[self.actors_df["uid"] == uid, ["show_property"]] = property_texture_uid
+    this_actor = self.show_actor_with_property(
+        uid=uid, collection=collection, show_property=property_texture_uid, visible=show
+    )
+    self.actors_df.loc[self.actors_df["uid"] == uid, ["show_property"]] = (
+        property_texture_uid
+    )

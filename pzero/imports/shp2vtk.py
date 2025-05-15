@@ -21,9 +21,9 @@ from pzero.collections.geological_collection import GeologicalCollection
 from pzero.entities_factory import PolyLine, VertexSet, Attitude
 from pzero.orientation_analysis import dip_directions2normals
 
-#Importer for SHP files and other GIS formats, to be improved IN THE FUTURE.
-#Known bugs for multi-part polylines.
-#Points not handled correctly.
+# Importer for SHP files and other GIS formats, to be improved IN THE FUTURE.
+# Known bugs for multi-part polylines.
+# Points not handled correctly.
 
 
 def shp2vtk(self=None, in_file_name=None, collection=None):
@@ -47,7 +47,9 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
     # [Gabriele] This is horroble, we should rewrite to accept
     # different types of collection without repeating the code
     if collection == "Geology":
-        if (gdf.geom_type[0] == "LineString") or (gdf.geom_type[0] == "MultiLineString"):
+        if (gdf.geom_type[0] == "LineString") or (
+            gdf.geom_type[0] == "MultiLineString"
+        ):
             for row in range(gdf.shape[0]):
                 # print("____ROW: ", row)
                 # print("geometry type: ", gdf.geom_type[row])
@@ -89,7 +91,7 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
                         vtkappend.AddInputData(temp_vtk)
                     vtkappend.Update()
                     curr_obj_dict["vtk_obj"].ShallowCopy(vtkappend.GetOutput())
-                #Create entity from the dictionary and run left_right.
+                # Create entity from the dictionary and run left_right.
                 if curr_obj_dict["vtk_obj"].points_number > 0:
                     output_uid = self.geol_coll.add_entity_from_dict(curr_obj_dict)
                 else:
@@ -115,11 +117,15 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
                     if "feature" in column_names:
                         curr_obj_dict["feature"] = i
                     if "scenario" in column_names:
-                        curr_obj_dict["scenario"] = pd_series(gdf_index.loc[i, "scenario"])[0]
+                        curr_obj_dict["scenario"] = pd_series(
+                            gdf_index.loc[i, "scenario"]
+                        )[0]
                     curr_obj_dict["topology"] = "VertexSet"
                     curr_obj_dict["vtk_obj"] = vtk_obj
                     # Add a coordinate column in the gdf_index dataframe
-                    gdf_index["coords"] = gdf_index.geometry.apply(lambda x: np_array(x.coords[0]))
+                    gdf_index["coords"] = gdf_index.geometry.apply(
+                        lambda x: np_array(x.coords[0])
+                    )
                     outXYZ = np_array([p for p in gdf_index.loc[i, "coords"]])
                     if outXYZ.ndim == 1:
                         outXYZ = outXYZ.reshape(-1, np_shape(outXYZ)[0])
@@ -131,15 +137,20 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
                     curr_obj_dict["vtk_obj"].points = outXYZ
                     if "dir" in column_names:
                         direction = pd_series((gdf_index.loc[i, "dir"] + 90) % 360)
-                        curr_obj_dict["vtk_obj"].set_point_data("dip_dir",
-                                                                direction.values)
+                        curr_obj_dict["vtk_obj"].set_point_data(
+                            "dip_dir", direction.values
+                        )
                     if "dip_dir" in column_names:
-                        curr_obj_dict["vtk_obj"].set_point_data("dip_dir",
-                                                                pd_series(gdf_index.loc[i, "dip_dir"]).values)
+                        curr_obj_dict["vtk_obj"].set_point_data(
+                            "dip_dir", pd_series(gdf_index.loc[i, "dip_dir"]).values
+                        )
                     if "dip":
-                        curr_obj_dict["vtk_obj"].set_point_data("dip",
-                                                                pd_series(gdf_index.loc[i, "dip"]).values)
-                    if "dip" in column_names and ("dir" in column_names or "dip_dir" in column_names):
+                        curr_obj_dict["vtk_obj"].set_point_data(
+                            "dip", pd_series(gdf_index.loc[i, "dip"]).values
+                        )
+                    if "dip" in column_names and (
+                        "dir" in column_names or "dip_dir" in column_names
+                    ):
                         # print(type(curr_obj_dict["vtk_obj"].get_point_data('dip')))
                         normals = dip_directions2normals(
                             curr_obj_dict["vtk_obj"].get_point_data("dip"),
@@ -188,7 +199,9 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
             return  # except:  #     self.print_terminal("SHP file not recognized ERROR.")
     elif collection == "Fluid contacts":
         print(gdf.geom_type[0])
-        if (gdf.geom_type[0] == "LineString") or (gdf.geom_type[0] == "MultiLineString"):
+        if (gdf.geom_type[0] == "LineString") or (
+            gdf.geom_type[0] == "MultiLineString"
+        ):
             for row in range(gdf.shape[0]):
                 # print("____ROW: ", row)
                 # print("geometry type: ", gdf.geom_type[row])
@@ -230,7 +243,7 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
                         vtkappend.AddInputData(temp_vtk)
                     vtkappend.Update()
                     curr_obj_dict["vtk_obj"].ShallowCopy(vtkappend.GetOutput())
-                #Create entity from the dictionary and run left_right.
+                # Create entity from the dictionary and run left_right.
                 if curr_obj_dict["vtk_obj"].points_number > 0:
                     output_uid = self.fluid_coll.add_entity_from_dict(curr_obj_dict)
                 else:
@@ -256,11 +269,15 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
                     if "feature" in column_names:
                         curr_obj_dict["feature"] = i
                     if "scenario" in column_names:
-                        curr_obj_dict["scenario"] = pd_series(gdf_index.loc[i, "scenario"])[0]
+                        curr_obj_dict["scenario"] = pd_series(
+                            gdf_index.loc[i, "scenario"]
+                        )[0]
                     curr_obj_dict["topology"] = "VertexSet"
                     curr_obj_dict["vtk_obj"] = vtk_obj
                     # Add a coordinate column in the gdf_index dataframe
-                    gdf_index["coords"] = gdf_index.geometry.apply(lambda x: np_array(x))
+                    gdf_index["coords"] = gdf_index.geometry.apply(
+                        lambda x: np_array(x)
+                    )
                     outXYZ = np_array([p for p in gdf_index.loc[i, "coords"]])
                     if outXYZ.ndim == 1:
                         outXYZ = outXYZ.reshape(-1, np_shape(outXYZ)[0])
@@ -295,14 +312,14 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
                         self.fluid_coll.add_entity_from_dict(curr_obj_dict)
                         del curr_obj_dict
             else:
-                print(
-                    "Incomplete data. At least the feature property must be present"
-                )
+                print("Incomplete data. At least the feature property must be present")
         else:
             print("Only Point and Line geometries can be imported - aborting.")
             return  # except:  #     self.print_terminal("SHP file not recognized ERROR.")
     elif collection == "Background data":
-        if (gdf.geom_type[0] == "LineString") or (gdf.geom_type[0] == "MultiLineString"):
+        if (gdf.geom_type[0] == "LineString") or (
+            gdf.geom_type[0] == "MultiLineString"
+        ):
             for row in range(gdf.shape[0]):
                 # print("____ROW: ", row)
                 # print("geometry type: ", gdf.geom_type[row])
@@ -327,7 +344,9 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
                     # print("outXYZ:\n", outXYZ)
                     curr_obj_dict["vtk_obj"].points = outXYZ
                     curr_obj_dict["vtk_obj"].auto_cells()
-                    curr_obj_dict["vtk_obj"].set_field_data(name="name", data=gdf["label"].values)
+                    curr_obj_dict["vtk_obj"].set_field_data(
+                        name="name", data=gdf["label"].values
+                    )
                 elif gdf.geom_type[row] == "MultiLineString":
                     outXYZ_list = np_array(gdf.loc[row].geometry)
                     vtkappend = vtkAppendPolyData()
@@ -351,7 +370,7 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
                         curr_obj_dict["vtk_obj"].ShallowCopy(out_vtk)
                     else:
                         curr_obj_dict["vtk_obj"].ShallowCopy(vtkappend.GetOutput())
-                #Create entity from the dictionary and run left_right.
+                # Create entity from the dictionary and run left_right.
                 if curr_obj_dict["vtk_obj"].points_number > 0:
                     self.backgrnd_coll.add_entity_from_dict(curr_obj_dict)
                 else:
@@ -376,7 +395,9 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
                     curr_obj_dict["topology"] = "VertexSet"
                     curr_obj_dict["vtk_obj"] = vtk_obj
                     # Add a coordinate column in the gdf_index dataframe
-                    gdf_index["coords"] = gdf_index.geometry.apply(lambda x: np_array(x))
+                    gdf_index["coords"] = gdf_index.geometry.apply(
+                        lambda x: np_array(x)
+                    )
                     outXYZ = np_array([p for p in gdf_index.loc[i, "coords"]])
                     if outXYZ.ndim == 1:
                         outXYZ = outXYZ.reshape(-1, np_shape(outXYZ)[0])
@@ -417,9 +438,7 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
                         self.backgrnd_coll.add_entity_from_dict(curr_obj_dict)
                         del curr_obj_dict
             else:
-                print(
-                    "Incomplete data. At least the feature property must be present"
-                )
+                print("Incomplete data. At least the feature property must be present")
         else:
             print("Only Point and Line geometries can be imported - aborting.")
             return  # except:  #     self.print_terminal("SHP file not recognized ERROR.")

@@ -23,6 +23,7 @@ pd_set_option("display.max_colwidth", pd_max_colwidth)
 
 class ImageCollection(DIMCollection):
     """Collection for all image entities and their metadata."""
+
     def __init__(self, parent=None, *args, **kwargs):
         super(ImageCollection, self).__init__(parent, *args, **kwargs)
         # Initialize properties required by the abstract superclass.
@@ -33,9 +34,9 @@ class ImageCollection(DIMCollection):
             "Image3D",
         ]
 
-        self.collection_name = 'image'
+        self.collection_name = "image"
 
-        self.default_colormap = 'gray'
+        self.default_colormap = "gray"
 
         self.initialize_df()
 

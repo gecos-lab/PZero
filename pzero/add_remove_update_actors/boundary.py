@@ -6,6 +6,7 @@ from pzero.build_and_update.boundary import *
 
 # Methods used to add, remove, and update actors from the BOUNDARY collection
 
+
 def boundary_added_update_views(self, updated_list=None):
     """This is called when a boundary is added to the boundary collection.
     Disconnect signals to boundary list, if they are set, then they are
@@ -40,26 +41,40 @@ def boundary_added_update_views(self, updated_list=None):
         #     ignore_index=True,
         # )
         # New Pandas >= 2.0.0
-        self.actors_df = pd_concat([self.actors_df,
-                                    pd_DataFrame([{
-                                        "uid": uid,
-                                        "actor": this_actor,
-                                        "show": False,
-                                        "collection": "boundary_coll",
-                                        "show_property": None,
-                                    }])],
-                                   ignore_index=True,
-                                   )
-        actors_df_new = pd_concat([actors_df_new,
-                                   pd_DataFrame([{
-                                       "uid": uid,
-                                       "actor": this_actor,
-                                       "show": False,
-                                       "collection": "boundary_coll",
-                                       "show_property": None,
-                                   }])],
-                                  ignore_index=True,
-                                  )
+        self.actors_df = pd_concat(
+            [
+                self.actors_df,
+                pd_DataFrame(
+                    [
+                        {
+                            "uid": uid,
+                            "actor": this_actor,
+                            "show": False,
+                            "collection": "boundary_coll",
+                            "show_property": None,
+                        }
+                    ]
+                ),
+            ],
+            ignore_index=True,
+        )
+        actors_df_new = pd_concat(
+            [
+                actors_df_new,
+                pd_DataFrame(
+                    [
+                        {
+                            "uid": uid,
+                            "actor": this_actor,
+                            "show": False,
+                            "collection": "boundary_coll",
+                            "show_property": None,
+                        }
+                    ]
+                ),
+            ],
+            ignore_index=True,
+        )
         update_boundary_list_added(self, actors_df_new)
     """Re-connect signals."""
     self.BoundariesTableWidget.itemChanged.connect(self.toggle_boundary_visibility)
@@ -83,8 +98,9 @@ def boundary_geom_modified_update_views(self, updated_list=None):
         show = self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]
         # This replaces the previous copy of the actor with the same uid, and updates the actors dataframe.
         # See issue #33 for a discussion on actors replacement by the PyVista add_mesh and add_volume methods.
-        this_actor = self.show_actor_with_property(uid=uid, collection="boundary_coll", show_property=None,
-                                                   visible=show)
+        this_actor = self.show_actor_with_property(
+            uid=uid, collection="boundary_coll", show_property=None, visible=show
+        )
 
 
 def boundary_metadata_modified_update_views(self, updated_list=None):

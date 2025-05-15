@@ -33,39 +33,51 @@ class FakeWindow(QMainWindow):
 class TestGeologicalCollection:
     geo_coll_istance = GeologicalCollection(FakeWindow)
 
-    geological_entity_dict1 = {'uid': "0",
-                               'name': "geoname",
-                               'topology': "topol",
-                               'role': "undef",
-                               'feature': "undef",
-                               'scenario': "sc1",
-                               'properties_names': [],
-                               'properties_components': [],
-                               'x_section': "",
-                               'vtk_obj': None}
+    geological_entity_dict1 = {
+        "uid": "0",
+        "name": "geoname",
+        "topology": "topol",
+        "role": "undef",
+        "feature": "undef",
+        "scenario": "sc1",
+        "properties_names": [],
+        "properties_components": [],
+        "x_section": "",
+        "vtk_obj": None,
+    }
 
-    geological_entity_dict2 = {'uid': "2",
-                               'name': "geoname2",
-                               'topology': "topol2",
-                               'role': "undef",
-                               'feature': "undef",
-                               'scenario': "sc2",
-                               'properties_names': [],
-                               'properties_components': [],
-                               'x_section': "",
-                               'vtk_obj': None}
+    geological_entity_dict2 = {
+        "uid": "2",
+        "name": "geoname2",
+        "topology": "topol2",
+        "role": "undef",
+        "feature": "undef",
+        "scenario": "sc2",
+        "properties_names": [],
+        "properties_components": [],
+        "x_section": "",
+        "vtk_obj": None,
+    }
 
     # Test the add_entity_from_dict() method from geological_collection.py
     def test_add_entity_from_dict(self):
         # Add two entities
-        self.geo_coll_istance.add_entity_from_dict(entity_dict=self.geological_entity_dict1)
-        self.geo_coll_istance.add_entity_from_dict(entity_dict=self.geological_entity_dict2)
+        self.geo_coll_istance.add_entity_from_dict(
+            entity_dict=self.geological_entity_dict1
+        )
+        self.geo_coll_istance.add_entity_from_dict(
+            entity_dict=self.geological_entity_dict2
+        )
 
         # This print should be the same as the entity_dict
         # print(geo_coll_istance.df)
 
-        assert self.geo_coll_istance.get_number_of_entities() == 2 \
-               and (self.geological_entity_dict1['uid'] in self.geo_coll_istance.get_uids()) \
-               and (self.geological_entity_dict2['uid'] in self.geo_coll_istance.get_uids())
-
-
+        assert (
+            self.geo_coll_istance.get_number_of_entities() == 2
+            and (
+                self.geological_entity_dict1["uid"] in self.geo_coll_istance.get_uids()
+            )
+            and (
+                self.geological_entity_dict2["uid"] in self.geo_coll_istance.get_uids()
+            )
+        )
