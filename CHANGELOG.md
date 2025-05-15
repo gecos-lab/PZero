@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v0.1.3 (2025-05-15)
+
+### Bug Fixes
+
+- **Actions**: Try to upload executable
+  ([`cbfd176`](https://github.com/gecos-lab/PZero/commit/cbfd17684457dba7a55c926213f4b7f310cf270e))
+
+
 ## v0.1.2 (2025-05-15)
 
 
