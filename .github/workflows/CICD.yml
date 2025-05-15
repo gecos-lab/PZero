@@ -24,7 +24,7 @@ jobs:
           pip install -r requirements.txt
           pip install pytest
           pytest
-  deploy:
+  release:
     runs-on: ubuntu-latest
     needs: test
     if: github.ref == 'refs/heads/main'
@@ -39,3 +39,20 @@ jobs:
         id: semantic-release
         with:
           github_token: ${{ secrets.TOKEN }}
+  deploy:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    needs: release
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.TOKEN }}
+      - name: Building executable
+        run: |
+          pip install -r requirements.txt
+          pip install pyinstaller
+          pyinstaller --collect-all rasterio pzero.py
