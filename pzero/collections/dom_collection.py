@@ -23,18 +23,15 @@ pd_set_option("display.max_colwidth", pd_max_colwidth)
 
 class DomCollection(DIMCollection):
     """Collection for all DOM entities and their metadata."""
+
     def __init__(self, parent=None, *args, **kwargs):
         super(DomCollection, self).__init__(parent, *args, **kwargs)
         # Initialize properties required by the abstract superclass.
-        self.valid_topologies = [
-            "DEM",
-            "TSDom",
-            "PCDom"
-        ]
+        self.valid_topologies = ["DEM", "TSDom", "PCDom"]
 
-        self.collection_name = 'dom'
+        self.collection_name = "dom"
 
-        self.default_colormap = 'terrain'
+        self.default_colormap = "terrain"
 
         self.initialize_df()
 
@@ -44,7 +41,7 @@ class DomCollection(DIMCollection):
         """Get legend for a particular uid."""
         legend_dict = self.parent.others_legend_df.loc[
             self.parent.others_legend_df["other_collection"] == "DOM"
-            ].to_dict("records")
+        ].to_dict("records")
         return legend_dict[0]
 
     # =================================== Additional methods ===========================================

@@ -31,6 +31,7 @@ pd_set_option("display.max_columns", pd_max_columns)
 pd_set_option("display.precision", pd_show_precision)
 pd_set_option("display.max_colwidth", pd_max_colwidth)
 
+
 def boundary_from_points(self, vector):
     """Create a new Boundary from a vector"""
     boundary_dict = deepcopy(self.parent.boundary_coll.entity_dict)
@@ -166,6 +167,7 @@ def boundary_from_points(self, vector):
 
 class BoundaryCollection(BaseCollection):
     """Collection for all boundaries and their metadata."""
+
     def __init__(self, parent=None, *args, **kwargs):
         super(BoundaryCollection, self).__init__(parent, *args, **kwargs)
         # Initialize properties required by the abstract superclass.
@@ -174,7 +176,7 @@ class BoundaryCollection(BaseCollection):
             "name": "undef",
             "topology": "undef",
             "scenario": "undef",
-            "x_section": "", # this is the uid of the cross section for "XsVertexSet", "XsPolyLine", and "XsImage", empty for all others
+            "x_section": "",  # this is the uid of the cross section for "XsVertexSet", "XsPolyLine", and "XsImage", empty for all others
             "vtk_obj": None,
         }
 
@@ -191,13 +193,15 @@ class BoundaryCollection(BaseCollection):
 
         self.editable_columns_names = ["name", "scenario"]
 
-        self.collection_name = 'boundary'
+        self.collection_name = "boundary"
 
         self.initialize_df()
 
     # =================================== Obligatory methods ===========================================
 
-    def add_entity_from_dict(self, entity_dict: pd_DataFrame = None, color: np_ndarray = None):
+    def add_entity_from_dict(
+        self, entity_dict: pd_DataFrame = None, color: np_ndarray = None
+    ):
         """Add an entity from a dictionary shaped as self.entity_dict."""
         # Create a new uid if it is not included in the dictionary.
         if not entity_dict["uid"]:
@@ -231,7 +235,9 @@ class BoundaryCollection(BaseCollection):
     def replace_vtk(self, uid: str = None, vtk_object: vtkDataObject = None):
         """Replace the vtk object of a given uid with another vtkobject."""
         # ============ CAN BE UNIFIED AS COMMON METHOD OF THE ABSTRACT COLLECTION WHEN SIGNALS WILL BE UNIFIED ==========
-        if isinstance(vtk_object, type(self.df.loc[self.df["uid"] == uid, "vtk_obj"].values[0])):
+        if isinstance(
+            vtk_object, type(self.df.loc[self.df["uid"] == uid, "vtk_obj"].values[0])
+        ):
             self.df.loc[self.df["uid"] == uid, "vtk_obj"] = vtk_object
             self.signals.geom_modified.emit([uid])
         else:
@@ -252,8 +258,16 @@ class BoundaryCollection(BaseCollection):
         # Not implemented for this collection, but required by the abstract superclass.
         pass
 
-    def set_uid_legend(self, uid: str = None, color_R: float = None, color_G: float = None, color_B: float = None,
-                       line_thick: float = None, point_size: float = None, opacity: float = None):
+    def set_uid_legend(
+        self,
+        uid: str = None,
+        color_R: float = None,
+        color_G: float = None,
+        color_B: float = None,
+        line_thick: float = None,
+        point_size: float = None,
+        opacity: float = None,
+    ):
         """Set the legend for a particular uid."""
         # Not implemented for this collection, but required by the abstract superclass.
         pass

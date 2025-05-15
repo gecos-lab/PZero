@@ -9,11 +9,11 @@ from pzero.entities_factory import TriSurf
 def vtk2ply(self=None, out_dir_name=None):
     """Exports all triangulated surfaces to a collection of PLY surfaces.
     IN THE FUTURE extend to other entity classes such as DEM, polyline, etc."""
-    #Create STL writer.
+    # Create STL writer.
     ply_writer = vtkPLYWriter()
     ply_writer.SetFileTypeToBinary()
     ply_writer.SetColorModeToUniformCellColor()
-    #Loop for each entity.
+    # Loop for each entity.
     for uid in self.geol_coll.df["uid"]:
         if isinstance(self.geol_coll.get_uid_vtk_obj(uid), TriSurf):
             out_file_name = (

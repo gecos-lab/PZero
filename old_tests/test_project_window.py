@@ -3,8 +3,8 @@ import pytest
 from pzero.entities_factory import VertexSet
 from pzero.project_window import ProjectWindow
 
-from PyQt5.QtWidgets import QWidget, QFileDialog
-from PyQt5.QtCore import QSize
+from PySide6.QtWidgets import QWidget, QFileDialog
+from PySide6.QtCore import QSize
 
 # Global Var to set if the test are automatic or not
 automatic_test = True
@@ -15,27 +15,31 @@ class TestProjectWindow:
     test_vtk_obj = VertexSet()
     test_vtk_obj2 = VertexSet()
 
-    entity_dict = {'uid': "0",
-                              'name': "geoname",
-                              'topology': "VertexSet",
-                              'role': "undef",
-                              'feature': "undef",
-                              'scenario': "sc1",
-                              'properties_names': [],
-                              'properties_components': [],
-                              'x_section': "",
-                              'vtk_obj': test_vtk_obj}
+    entity_dict = {
+        "uid": "0",
+        "name": "geoname",
+        "topology": "VertexSet",
+        "role": "undef",
+        "feature": "undef",
+        "scenario": "sc1",
+        "properties_names": [],
+        "properties_components": [],
+        "x_section": "",
+        "vtk_obj": test_vtk_obj,
+    }
 
-    geological_entity_dict2 = {'uid': "2",
-                               'name': "geoname2",
-                               'topology': "VertexSet",
-                               'role': "undef",
-                               'feature': "undef",
-                               'scenario': "sc2",
-                               'properties_names': [],
-                               'properties_components': [],
-                               'x_section': "",
-                               'vtk_obj': test_vtk_obj2}
+    geological_entity_dict2 = {
+        "uid": "2",
+        "name": "geoname2",
+        "topology": "VertexSet",
+        "role": "undef",
+        "feature": "undef",
+        "scenario": "sc2",
+        "properties_names": [],
+        "properties_components": [],
+        "x_section": "",
+        "vtk_obj": test_vtk_obj2,
+    }
 
     def ignore(self):
         return
@@ -57,8 +61,10 @@ class TestProjectWindow:
     def test_window_name(self, qtbot):
         project_window = ProjectWindow()
 
-        assert project_window.windowTitle() == "PZero" \
+        assert (
+            project_window.windowTitle() == "PZero"
             and project_window.size() == QSize(1418, 800)
+        )
 
     @pytest.fixture
     def test_shown_table(self, qtbot):
@@ -67,13 +73,13 @@ class TestProjectWindow:
         shown_table = project_window.shown_table
         # print(shown_table)
 
-        assert shown_table == 'tabGeology'
+        assert shown_table == "tabGeology"
 
     @pytest.fixture
     def test_shown_table_change(self, qtbot):
         project_window = ProjectWindow()
 
-        tab_img = 'tabImages'
+        tab_img = "tabImages"
 
         page_img = project_window.tabWidgetTopLeft.findChild(QWidget, tab_img)
 
@@ -102,10 +108,10 @@ class TestProjectWindow:
     @pytest.fixture
     def test_entity_remove(self, qtbot, monkeypatch):
         # monkeypatch/mock function
-        def mock_entity_remove():+
+        def mock_entity_remove():
             for uid in project_window.selected_uids:
                 if project_window.shown_table == "tabGeology":
-                    project_window.geol_coll.remove_entity(uid=uid)+
+                    project_window.geol_coll.remove_entity(uid=uid)
 
         project_window = ProjectWindow()
 
@@ -153,8 +159,8 @@ class TestProjectWindow:
 
         project_window.GeologyTableView.selectAll()
 
-        assert self.entity_dict['uid'] in project_window.selected_uids
-        assert self.geological_entity_dict2['uid'] in project_window.selected_uids
+        assert self.entity_dict["uid"] in project_window.selected_uids
+        assert self.geological_entity_dict2["uid"] in project_window.selected_uids
 
     # @pytest.fixture
     # Testing the add property event - running only manually, to try change the var automatic_test to false
@@ -168,7 +174,9 @@ class TestProjectWindow:
 
         project_window.property_add()
 
-        assert project_window.geol_coll.get_uid_properties_names(uid="0") == ["new_property"]
+        assert project_window.geol_coll.get_uid_properties_names(uid="0") == [
+            "new_property"
+        ]
 
     # @pytest.fixture
     # Testing the add and remove property event - running only manually, to try change the var automatic_test to false
@@ -218,7 +226,7 @@ class TestProjectWindow:
         project_window.GeologyTableView.selectAll()
 
         project_window.save_project()
-        
+
         assert project_window.selected_uids == []
 
     @pytest.fixture

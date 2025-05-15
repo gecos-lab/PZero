@@ -38,26 +38,40 @@ def xsect_added_update_views(self, updated_list=None):
         #     ignore_index=True,
         # )
         # New Pandas >= 2.0.0
-        self.actors_df = pd_concat([self.actors_df,
-                                    pd_DataFrame([{
-                                        "uid": uid,
-                                        "actor": this_actor,
-                                        "show": True,
-                                        "collection": "xsect_coll",
-                                        "show_property": None,
-                                    }])],
-                                   ignore_index=True,
-                                   )
-        actors_df_new = pd_concat([actors_df_new,
-                                   pd_DataFrame([{
-                                       "uid": uid,
-                                       "actor": this_actor,
-                                       "show": True,
-                                       "collection": "xsect_coll",
-                                       "show_property": None,
-                                   }])],
-                                  ignore_index=True,
-                                  )
+        self.actors_df = pd_concat(
+            [
+                self.actors_df,
+                pd_DataFrame(
+                    [
+                        {
+                            "uid": uid,
+                            "actor": this_actor,
+                            "show": True,
+                            "collection": "xsect_coll",
+                            "show_property": None,
+                        }
+                    ]
+                ),
+            ],
+            ignore_index=True,
+        )
+        actors_df_new = pd_concat(
+            [
+                actors_df_new,
+                pd_DataFrame(
+                    [
+                        {
+                            "uid": uid,
+                            "actor": this_actor,
+                            "show": True,
+                            "collection": "xsect_coll",
+                            "show_property": None,
+                        }
+                    ]
+                ),
+            ],
+            ignore_index=True,
+        )
         update_xsections_tree_added(self, actors_df_new)
     """Re-connect signals."""
     self.XSectionTreeWidget.itemChanged.connect(self.toggle_xsection_visibility)
@@ -81,8 +95,9 @@ def xsect_geom_modified_update_views(self, updated_list=None):
         show = self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]
         # This replaces the previous copy of the actor with the same uid, and updates the actors dataframe.
         # See issue #33 for a discussion on actors replacement by the PyVista add_mesh and add_volume methods.
-        this_actor = self.show_actor_with_property(uid=uid, collection="xsect_coll", show_property=None,
-                                                   visible=show)
+        this_actor = self.show_actor_with_property(
+            uid=uid, collection="xsect_coll", show_property=None, visible=show
+        )
 
 
 def xsect_metadata_modified_update_views(self, updated_list=None):

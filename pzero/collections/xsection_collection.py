@@ -73,7 +73,11 @@ def section_from_azimuth(self, vector):
         "length": ["Insert length", vector.length, "QLineEdit"],
         "width": ["Insert width", 0.0, "QLineEdit"],
         "bottom": ["Insert bottom", 0.0, "QLineEdit"],
-        "multiple": ["Multiple XSections", "Draw a set of parallel XSections", "QCheckBox",],
+        "multiple": [
+            "Multiple XSections",
+            "Draw a set of parallel XSections",
+            "QCheckBox",
+        ],
         "spacing": ["Spacing", 1000.0, "QLineEdit"],
         "num_xs": ["Number of XSections", 5, "QLineEdit"],
         "along": ["Repeat parallel to:", ["Normal", "Azimuth"], "QComboBox"],
@@ -172,6 +176,7 @@ def sections_from_file(self):
     # OR CREATE A METHOD TO FILL MISSING PARAMETERS IN THE COLLECTION??
 
     from os.path import splitext
+
     section_dict = deepcopy(self.parent.xsect_coll.entity_dict)
     section_dict_updt = {
         "name": "",
@@ -191,9 +196,7 @@ def sections_from_file(self):
     )
     # return file and extension list
     # This could be implemented automatically in open_file_dialog
-    name, extension = splitext(
-        files[0]
-    )
+    name, extension = splitext(files[0])
     section_dict_in = {
         "warning": [
             "XSection from file",
@@ -230,7 +233,9 @@ def sections_from_file(self):
                         section_dict["end_z"] = top_bottom["top"]
                         section_dict["top"] = top_bottom["top"]
                         # UPDATE OTHER PARAMETERS BEFORE CREATING SECTION _______________________________________
-                        uid = self.parent.xsect_coll.add_entity_from_dict(entity_dict=section_dict)
+                        uid = self.parent.xsect_coll.add_entity_from_dict(
+                            entity_dict=section_dict
+                        )
 
         elif extension == ".dat":
             top_bottom = general_input_dialog(
@@ -261,7 +266,9 @@ def sections_from_file(self):
                 section_dict["end_z"] = top_bottom["top"]
                 section_dict["top"] = top_bottom["top"]
                 # UPDATE OTHER PARAMETERS BEFORE CREATING SECTION _______________________________________
-                uid = self.parent.xsect_coll.add_entity_from_dict(entity_dict=section_dict)
+                uid = self.parent.xsect_coll.add_entity_from_dict(
+                    entity_dict=section_dict
+                )
 
         elif extension == ".csv":
             sep = auto_sep(file)
@@ -277,11 +284,14 @@ def sections_from_file(self):
                 section_dict["end_z"] = top_bottom["top"]
                 section_dict["top"] = top_bottom["top"]
                 # UPDATE OTHER PARAMETERS BEFORE CREATING SECTION _______________________________________
-                uid = self.parent.xsect_coll.add_entity_from_dict(entity_dict=section_dict)
+                uid = self.parent.xsect_coll.add_entity_from_dict(
+                    entity_dict=section_dict
+                )
 
 
 class XSectionCollection(BaseCollection):
     """Cross-section collection."""
+
     def __init__(self, parent=None, *args, **kwargs):
         super(XSectionCollection, self).__init__(parent, *args, **kwargs)
 
@@ -330,12 +340,14 @@ class XSectionCollection(BaseCollection):
             "vtk_plane": object,
             "vtk_frame": object,
         }
-        self.valid_topologies = ['']
+        self.valid_topologies = [""]
         self.editable_columns_names = ["name", "scenario"]
-        self.collection_name = 'xsection'
+        self.collection_name = "xsection"
         self.initialize_df()
 
-    def add_entity_from_dict(self, entity_dict: pd_DataFrame = None, color: np_ndarray = None):
+    def add_entity_from_dict(
+        self, entity_dict: pd_DataFrame = None, color: np_ndarray = None
+    ):
         """Add new cross-section from a suitable dictionary shaped like self.entity_dict."""
         # Create a new uid if it is not included in the dictionary.
         if not entity_dict["uid"]:
@@ -385,17 +397,19 @@ class XSectionCollection(BaseCollection):
         """Get legend for a particular uid."""
         legend_dict = self.parent.others_legend_df.loc[
             self.parent.others_legend_df["other_collection"] == "XSection"
-            ].to_dict("records")
+        ].to_dict("records")
         return legend_dict[0]
 
-    def set_uid_legend(self,
-                       uid: str = None,
-                       color_R: float = None,
-                       color_G: float = None,
-                       color_B: float = None,
-                       line_thick: float = None,
-                       point_size: float = None,
-                       opacity: float = None):
+    def set_uid_legend(
+        self,
+        uid: str = None,
+        color_R: float = None,
+        color_G: float = None,
+        color_B: float = None,
+        line_thick: float = None,
+        point_size: float = None,
+        opacity: float = None,
+    ):
         """Not implemented for XSectionCollection, but required by the abstract superclass."""
         pass
 
@@ -574,7 +588,6 @@ class XSectionCollection(BaseCollection):
         Y = W * np_cos(azimuth * np_pi / 180) + base_y
         return X, Y
 
-
     def get_W_from_XY(self, section_uid=None, X=None, Y=None):
         """Gets W coordinate (distance along the Xsection horizontal axis) from X, Y coordinates.
         Should work for a single W value or for an array, in which case should return X, Y as arrays.
@@ -583,7 +596,9 @@ class XSectionCollection(BaseCollection):
         base_y = self.df.loc[self.df["uid"] == section_uid, "base_y"].values[0]
         end_x = self.df.loc[self.df["uid"] == section_uid, "end_x"].values[0]
         end_y = self.df.loc[self.df["uid"] == section_uid, "end_y"].values[0]
-        sense = np_sign((X - base_x) * (end_x - base_x) + (Y - base_y) * (end_y - base_y))
+        sense = np_sign(
+            (X - base_x) * (end_x - base_x) + (Y - base_y) * (end_y - base_y)
+        )
         W = np_sqrt((X - base_x) ** 2 + (Y - base_y) ** 2) * sense
         return W
 
@@ -682,10 +697,24 @@ class XSectionCollection(BaseCollection):
         self.df.loc[self.df["uid"] == uid, "vtk_frame"] = vtk_frame
 
     def set_length(self, uid=None):
-        self.df.loc[self.df["uid"] == uid, "length"] = np_sqrt((self.df.loc[self.df["uid"] == uid, "base_x"] - self.df.loc[self.df["uid"] == uid, "end_x"])**2 + (self.df.loc[self.df["uid"] == uid, "base_y"] - self.df.loc[self.df["uid"] == uid, "end_y"])**2)
+        self.df.loc[self.df["uid"] == uid, "length"] = np_sqrt(
+            (
+                self.df.loc[self.df["uid"] == uid, "base_x"]
+                - self.df.loc[self.df["uid"] == uid, "end_x"]
+            )
+            ** 2
+            + (
+                self.df.loc[self.df["uid"] == uid, "base_y"]
+                - self.df.loc[self.df["uid"] == uid, "end_y"]
+            )
+            ** 2
+        )
 
     def set_width(self, uid=None):
-        self.df.loc[self.df["uid"] == uid, "width"] = self.df.loc[self.df["uid"] == uid, "top"] - self.df.loc[self.df["uid"] == uid, "bottom"]
+        self.df.loc[self.df["uid"] == uid, "width"] = (
+            self.df.loc[self.df["uid"] == uid, "top"]
+            - self.df.loc[self.df["uid"] == uid, "bottom"]
+        )
 
     def get_all_xsect_entities(self, xuid=None):
         """Get all entities belonging to the uid cross-section, in a dictionary sorted by collection."""

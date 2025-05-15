@@ -133,50 +133,48 @@ class Legend(QObject):
 
         for other_collection in pd_unique(parent.others_legend_df["other_collection"]):
             color_R = parent.others_legend_df.loc[
-                parent.others_legend_df["other_collection"] == other_collection, "color_R"
+                parent.others_legend_df["other_collection"] == other_collection,
+                "color_R",
             ].values[0]
             color_G = parent.others_legend_df.loc[
-                parent.others_legend_df["other_collection"] == other_collection, "color_G"
+                parent.others_legend_df["other_collection"] == other_collection,
+                "color_G",
             ].values[0]
             color_B = parent.others_legend_df.loc[
-                parent.others_legend_df["other_collection"] == other_collection, "color_B"
+                parent.others_legend_df["other_collection"] == other_collection,
+                "color_B",
             ].values[0]
             line_thick = parent.others_legend_df.loc[
-                parent.others_legend_df["other_collection"] == other_collection, "line_thick"
+                parent.others_legend_df["other_collection"] == other_collection,
+                "line_thick",
             ].values[0]
             point_size = parent.others_legend_df.loc[
-                parent.others_legend_df["other_collection"] == other_collection, "point_size"
+                parent.others_legend_df["other_collection"] == other_collection,
+                "point_size",
             ].values[0]
             opacity = parent.others_legend_df.loc[
-                parent.others_legend_df["other_collection"] == other_collection, "opacity"
+                parent.others_legend_df["other_collection"] == other_collection,
+                "opacity",
             ].values[0]
 
             "other_color_dialog_btn > QPushButton used to select color"
             other_color_dialog_btn = QPushButton()
-            other_color_dialog_btn.other_collection = (
-                other_collection  # this is to pass these values to the update function below
-            )
+            other_color_dialog_btn.other_collection = other_collection  # this is to pass these values to the update function below
             other_color_dialog_btn.setStyleSheet(
                 "background-color:rgb({},{},{})".format(color_R, color_G, color_B)
             )
             "other_line_thick_spn > QSpinBox used to select line thickness"
             other_line_thick_spn = QSpinBox()
-            other_line_thick_spn.other_collection = (
-                other_collection  # this is to pass these values to the update function below
-            )
+            other_line_thick_spn.other_collection = other_collection  # this is to pass these values to the update function below
             other_line_thick_spn.setValue(line_thick)
             "other_point_size_spn > QSpinBox used to select point size"
             other_point_size_spn = QSpinBox()
-            other_point_size_spn.other_collection = (
-                other_collection  # this is to pass these values to the update function below
-            )
+            other_point_size_spn.other_collection = other_collection  # this is to pass these values to the update function below
             other_point_size_spn.setValue(point_size)
             "other_opacity_spn > QSpinBox used to select opacity"
             other_opacity_spn = QSpinBox()
             other_opacity_spn.setMaximum(100)
-            other_opacity_spn.other_collection = (
-                other_collection  # this is to pass these values to the update function below
-            )
+            other_opacity_spn.other_collection = other_collection  # this is to pass these values to the update function below
             other_opacity_spn.setValue(opacity)
             "IN THE FUTURE add QComboBox() here to show/hide mesh edges___________"
             "IN THE FUTURE add QComboBox() here to show/hide points___________"
@@ -190,18 +188,26 @@ class Legend(QObject):
             if other_collection == "DOM":
                 parent.LegendTreeWidget.setItemWidget(llevel_1, 6, other_point_size_spn)
                 other_point_size_spn.valueChanged.connect(
-                    lambda *, sender=other_point_size_spn: self.change_other_feature_point_size(sender=sender, parent=parent)
+                    lambda *, sender=other_point_size_spn: self.change_other_feature_point_size(
+                        sender=sender, parent=parent
+                    )
                 )
             parent.LegendTreeWidget.setItemWidget(llevel_1, 7, other_opacity_spn)
             "Set signals for the widgets below"
             other_color_dialog_btn.clicked.connect(
-                lambda *, sender=other_color_dialog_btn: self.change_other_feature_color(sender=sender, parent=parent)
+                lambda *, sender=other_color_dialog_btn: self.change_other_feature_color(
+                    sender=sender, parent=parent
+                )
             )
             other_line_thick_spn.valueChanged.connect(
-                lambda *, sender=other_line_thick_spn: self.change_other_feature_line_thick(sender=sender, parent=parent)
+                lambda *, sender=other_line_thick_spn: self.change_other_feature_line_thick(
+                    sender=sender, parent=parent
+                )
             )
             other_opacity_spn.valueChanged.connect(
-                lambda *, sender=other_opacity_spn: self.change_other_feature_opacity(sender=sender, parent=parent)
+                lambda *, sender=other_opacity_spn: self.change_other_feature_opacity(
+                    sender=sender, parent=parent
+                )
             )
 
         for role in pd_unique(parent.geol_coll.legend_df["role"]):
@@ -362,23 +368,35 @@ class Legend(QObject):
                     )
                     "Set signals for the widgets below"
                     geol_color_dialog_btn.clicked.connect(
-                        lambda *, sender=geol_color_dialog_btn: self.change_geology_feature_color(sender=sender, parent=parent)
+                        lambda *, sender=geol_color_dialog_btn: self.change_geology_feature_color(
+                            sender=sender, parent=parent
+                        )
                     )
                     geol_line_thick_spn.valueChanged.connect(
-                        lambda *, sender=geol_line_thick_spn: self.change_geology_feature_line_thick(sender=sender, parent=parent)
+                        lambda *, sender=geol_line_thick_spn: self.change_geology_feature_line_thick(
+                            sender=sender, parent=parent
+                        )
                     )
                     geol_point_size_spn.valueChanged.connect(
-                        lambda *, sender=geol_point_size_spn: self.change_geology_feature_point_size(sender=sender, parent=parent)
+                        lambda *, sender=geol_point_size_spn: self.change_geology_feature_point_size(
+                            sender=sender, parent=parent
+                        )
                     )
                     geol_opacity_spn.valueChanged.connect(
-                        lambda *, sender=geol_opacity_spn: self.change_geology_feature_opacity(sender=sender, parent=parent)
+                        lambda *, sender=geol_opacity_spn: self.change_geology_feature_opacity(
+                            sender=sender, parent=parent
+                        )
                     )
                     geol_time_spn.editingFinished.connect(
-                        lambda *, sender=geol_time_spn: self.change_time(sender=sender, parent=parent)
+                        lambda *, sender=geol_time_spn: self.change_time(
+                            sender=sender, parent=parent
+                        )
                     )
                     # geol_time_combo.currentTextChanged.connect(lambda: self.change_time(parent=parent))
                     geol_sequence_combo.currentTextChanged.connect(
-                        lambda *, sender=geol_sequence_combo: self.change_geological_sequence(sender=sender, parent=parent)
+                        lambda *, sender=geol_sequence_combo: self.change_geological_sequence(
+                            sender=sender, parent=parent
+                        )
                     )
 
         for locid in pd_unique(parent.well_legend_df["Loc ID"]):
@@ -432,13 +450,19 @@ class Legend(QObject):
             parent.LegendTreeWidget.setItemWidget(llevel_2, 7, well_line_opacity_spn)
             "Set signals for the widgets below"
             well_color_dialog_btn.clicked.connect(
-                lambda *, sender=well_color_dialog_btn: self.change_well_color(sender=sender, parent=parent)
+                lambda *, sender=well_color_dialog_btn: self.change_well_color(
+                    sender=sender, parent=parent
+                )
             )
             well_line_thick_spn.valueChanged.connect(
-                lambda *, sender=well_line_thick_spn: self.change_well_line_thick(sender=sender, parent=parent)
+                lambda *, sender=well_line_thick_spn: self.change_well_line_thick(
+                    sender=sender, parent=parent
+                )
             )
             well_line_opacity_spn.valueChanged.connect(
-                lambda *, sender=well_line_opacity_spn: self.change_well_line_opacity(sender=sender, parent=parent)
+                lambda *, sender=well_line_opacity_spn: self.change_well_line_opacity(
+                    sender=sender, parent=parent
+                )
             )
 
         for role in pd_unique(parent.fluid_coll.legend_df["role"]):
@@ -587,26 +611,34 @@ class Legend(QObject):
                     # parent.LegendTreeWidget.setItemWidget(llevel_3, 7, geol_sequence_combo)
                     "Set signals for the widgets below"
                     fluid_color_dialog_btn.clicked.connect(
-                        lambda *, sender=fluid_color_dialog_btn: self.change_fluid_feature_color(sender=sender, parent=parent)
+                        lambda *, sender=fluid_color_dialog_btn: self.change_fluid_feature_color(
+                            sender=sender, parent=parent
+                        )
                     )
                     fluid_line_thick_spn.valueChanged.connect(
-                        lambda *, sender=fluid_line_thick_spn: self.change_fluid_feature_line_thick(sender=sender, parent=parent)
+                        lambda *, sender=fluid_line_thick_spn: self.change_fluid_feature_line_thick(
+                            sender=sender, parent=parent
+                        )
                     )
                     fluid_point_size_spn.valueChanged.connect(
-                        lambda *, sender=fluid_point_size_spn: self.change_fluid_feature_point_size(sender=sender, parent=parent)
+                        lambda *, sender=fluid_point_size_spn: self.change_fluid_feature_point_size(
+                            sender=sender, parent=parent
+                        )
                     )
                     fluid_opacity_spn.valueChanged.connect(
-                        lambda *, sender=fluid_opacity_spn: self.change_fluid_feature_opacity(sender=sender, parent=parent)
+                        lambda *, sender=fluid_opacity_spn: self.change_fluid_feature_opacity(
+                            sender=sender, parent=parent
+                        )
                     )
                     fluid_time_spn.editingFinished.connect(
-                        lambda *, sender=fluid_time_spn: self.change_fluid_time(sender=sender, parent=parent)
+                        lambda *, sender=fluid_time_spn: self.change_fluid_time(
+                            sender=sender, parent=parent
+                        )
                     )
                     # geol_time_combo.currentTextChanged.connect(lambda: self.change_time(parent=parent))
                     # fluid_sequence_combo.currentTextChanged.connect(lambda: self.change_fluid_sequence(parent=parent))
 
-        for role in pd_unique(
-            parent.backgrnd_coll.legend_df["role"]
-        ):
+        for role in pd_unique(parent.backgrnd_coll.legend_df["role"]):
             llevel_1 = QTreeWidgetItem(
                 parent.LegendTreeWidget, [role]
             )  # self.GeologyTreeWidget as parent -> top level
@@ -651,25 +683,33 @@ class Legend(QObject):
                 ].values[0]
                 "geol_color_dialog_btn > QPushButton used to select color"
                 backgrounds_color_dialog_btn = QPushButton()
-                backgrounds_color_dialog_btn.role = role  # this is to pass these values to the update function below
+                backgrounds_color_dialog_btn.role = (
+                    role  # this is to pass these values to the update function below
+                )
                 backgrounds_color_dialog_btn.feature = feature
                 backgrounds_color_dialog_btn.setStyleSheet(
                     "background-color:rgb({},{},{})".format(color_R, color_G, color_B)
                 )
                 "background_line_thick_spn > QSpinBox used to select line thickness"
                 background_line_thick_spn = QSpinBox()
-                background_line_thick_spn.role = role  # this is to pass these values to the update function below
+                background_line_thick_spn.role = (
+                    role  # this is to pass these values to the update function below
+                )
                 background_line_thick_spn.feature = feature
                 background_line_thick_spn.setValue(line_thick)
 
                 "background_point_size_spn > QSpinBox used to select line thickness"
                 background_point_size_spn = QSpinBox()
-                background_point_size_spn.role = role  # this is to pass these values to the update function below
+                background_point_size_spn.role = (
+                    role  # this is to pass these values to the update function below
+                )
                 background_point_size_spn.feature = feature
                 background_point_size_spn.setValue(point_size)
                 "background_opacity_spn > QSpinBox used to select line thickness"
                 background_opacity_spn = QSpinBox()
-                background_opacity_spn.role = role  # this is to pass these values to the update function below
+                background_opacity_spn.role = (
+                    role  # this is to pass these values to the update function below
+                )
                 background_opacity_spn.feature = feature
                 background_opacity_spn.setMaximum(100)
                 background_opacity_spn.setValue(opacity)
@@ -689,16 +729,24 @@ class Legend(QObject):
                 )
                 "Set signals for the widgets below"
                 backgrounds_color_dialog_btn.clicked.connect(
-                    lambda *, sender=backgrounds_color_dialog_btn: self.change_background_feature_color(sender=sender, parent=parent)
+                    lambda *, sender=backgrounds_color_dialog_btn: self.change_background_feature_color(
+                        sender=sender, parent=parent
+                    )
                 )
                 background_line_thick_spn.valueChanged.connect(
-                    lambda *, sender=background_line_thick_spn: self.change_background_feature_line_thick(sender=sender, parent=parent)
+                    lambda *, sender=background_line_thick_spn: self.change_background_feature_line_thick(
+                        sender=sender, parent=parent
+                    )
                 )
                 background_point_size_spn.valueChanged.connect(
-                    lambda *, sender=background_point_size_spn: self.change_background_feature_point_size(sender=sender, parent=parent)
+                    lambda *, sender=background_point_size_spn: self.change_background_feature_point_size(
+                        sender=sender, parent=parent
+                    )
                 )
                 background_opacity_spn.valueChanged.connect(
-                    lambda *, sender=background_opacity_spn: self.change_background_opacity(sender=sender, parent=parent)
+                    lambda *, sender=background_opacity_spn: self.change_background_opacity(
+                        sender=sender, parent=parent
+                    )
                 )
         # Squeeze column width to fit content
         for col in range(parent.LegendTreeWidget.columnCount()):
@@ -713,7 +761,7 @@ class Legend(QObject):
         role = sender.role
         feature = sender.feature
         scenario = sender.scenario
-        #Here we use the same query as above to GET the color from the legend
+        # Here we use the same query as above to GET the color from the legend
         old_color_R = parent.geol_coll.legend_df.loc[
             (parent.geol_coll.legend_df["role"] == role)
             & (parent.geol_coll.legend_df["feature"] == feature)
@@ -743,7 +791,7 @@ class Legend(QObject):
         new_color_R = color_out.red()
         new_color_G = color_out.green()
         new_color_B = color_out.blue()
-        #Here the query is reversed and modified, dropping the values() method, to allow SETTING the color in the legend.
+        # Here the query is reversed and modified, dropping the values() method, to allow SETTING the color in the legend.
         parent.geol_coll.legend_df.loc[
             (parent.geol_coll.legend_df["role"] == role)
             & (parent.geol_coll.legend_df["feature"] == feature)
@@ -762,7 +810,7 @@ class Legend(QObject):
             & (parent.geol_coll.legend_df["scenario"] == scenario),
             "color_B",
         ] = new_color_B
-        #Update sender color.
+        # Update sender color.
         # self.sender().setStyleSheet(
         #     "background-color:rgb({},{},{})".format(
         #         new_color_R, new_color_G, new_color_B
@@ -773,7 +821,7 @@ class Legend(QObject):
                 new_color_R, new_color_G, new_color_B
             )
         )
-        #Signal to update actors in windows. This is emitted only for the modified uid under the 'color' key.
+        # Signal to update actors in windows. This is emitted only for the modified uid under the 'color' key.
         updated_list = parent.geol_coll.df.loc[
             (parent.geol_coll.df["role"] == role)
             & (parent.geol_coll.df["feature"] == feature)
@@ -799,7 +847,7 @@ class Legend(QObject):
             & (parent.geol_coll.legend_df["scenario"] == scenario),
             "line_thick",
         ] = line_thick
-        #Signal to update actors in windows. This is emitted only for the modified uid under the 'line_thick' key.
+        # Signal to update actors in windows. This is emitted only for the modified uid under the 'line_thick' key.
         updated_list = parent.geol_coll.df.loc[
             (parent.geol_coll.df["role"] == role)
             & (parent.geol_coll.df["feature"] == feature)
@@ -817,14 +865,14 @@ class Legend(QObject):
         feature = sender.feature
         scenario = sender.scenario
         point_size = sender.value()
-        #Here the query is reversed and modified, dropping the values() method, to allow SETTING the line thickness in the legend
+        # Here the query is reversed and modified, dropping the values() method, to allow SETTING the line thickness in the legend
         parent.geol_coll.legend_df.loc[
             (parent.geol_coll.legend_df["role"] == role)
             & (parent.geol_coll.legend_df["feature"] == feature)
             & (parent.geol_coll.legend_df["scenario"] == scenario),
             "point_size",
         ] = point_size
-        #Signal to update actors in windows. This is emitted only for the modified uid under the 'line_thick' key.
+        # Signal to update actors in windows. This is emitted only for the modified uid under the 'line_thick' key.
         updated_list = parent.geol_coll.df.loc[
             (parent.geol_coll.df["role"] == role)
             & (parent.geol_coll.df["feature"] == feature)
@@ -842,14 +890,14 @@ class Legend(QObject):
         feature = sender.feature
         scenario = sender.scenario
         opacity = sender.value()
-        #Here the query is reversed and modified, dropping the values() method, to allow SETTING the line thickness in the legend
+        # Here the query is reversed and modified, dropping the values() method, to allow SETTING the line thickness in the legend
         parent.geol_coll.legend_df.loc[
             (parent.geol_coll.legend_df["role"] == role)
             & (parent.geol_coll.legend_df["feature"] == feature)
             & (parent.geol_coll.legend_df["scenario"] == scenario),
             "opacity",
         ] = opacity
-        #Signal to update actors in windows. This is emitted only for the modified uid under the 'opacity' key.
+        # Signal to update actors in windows. This is emitted only for the modified uid under the 'opacity' key.
         updated_list = parent.geol_coll.df.loc[
             (parent.geol_coll.df["role"] == role)
             & (parent.geol_coll.df["feature"] == feature)
@@ -873,12 +921,10 @@ class Legend(QObject):
             & (parent.geol_coll.legend_df["scenario"] == scenario),
             "time",
         ] = time
-        #Order geological legend entities with descending time values
-        parent.geol_coll.legend_df.sort_values(
-            by="time", ascending=True, inplace=True
-        )
-        #THE FOLLOWING MUST BE CHANGED IN A SORT COMMAND
-        #UPDATE AT THE MOMENT DOES NOT WORK PROPERLY
+        # Order geological legend entities with descending time values
+        parent.geol_coll.legend_df.sort_values(by="time", ascending=True, inplace=True)
+        # THE FOLLOWING MUST BE CHANGED IN A SORT COMMAND
+        # UPDATE AT THE MOMENT DOES NOT WORK PROPERLY
         # parent.LegendTreeWidget.setSortingEnabled(True)
         # parent.LegendTreeWidget.sortByColumn(7, Qt.AscendingOrder)
         # parent.LegendTreeWidget.setSortingEnabled(False)
@@ -906,15 +952,15 @@ class Legend(QObject):
             & (parent.geol_coll.legend_df["scenario"] == scenario),
             "sequence",
         ] = geol_seqn
-        #THE FOLLOWING MUST BE CHANGED IN A FOR LOOP OVER ALL ITEMS IN COLUMN 7
-        #parent.LegendTreeWidget.setItemWidget(llevel_3, 7, geol_sequence_combo)
-        #UPDATING THE VALUES AS IN
-        #geol_sequence_combo.addItems(parent.geol_coll.legend_df['sequence'].unique())
+        # THE FOLLOWING MUST BE CHANGED IN A FOR LOOP OVER ALL ITEMS IN COLUMN 7
+        # parent.LegendTreeWidget.setItemWidget(llevel_3, 7, geol_sequence_combo)
+        # UPDATING THE VALUES AS IN
+        # geol_sequence_combo.addItems(parent.geol_coll.legend_df['sequence'].unique())
 
     def change_other_feature_color(self, sender=None, parent=None):
         # other_collection = self.sender().other_collection
         other_collection = sender.other_collection
-        #Here we use the same query as above to GET the color from the legend
+        # Here we use the same query as above to GET the color from the legend
         old_color_R = parent.others_legend_df.loc[
             (parent.others_legend_df["other_collection"] == other_collection), "color_R"
         ].values[0]
@@ -935,7 +981,7 @@ class Legend(QObject):
         new_color_R = color_out.red()
         new_color_G = color_out.green()
         new_color_B = color_out.blue()
-        #Here the query is reversed and modified, dropping the values() method, to allow SETTING the color in the legend.
+        # Here the query is reversed and modified, dropping the values() method, to allow SETTING the color in the legend.
         parent.others_legend_df.loc[
             (parent.others_legend_df["other_collection"] == other_collection), "color_R"
         ] = new_color_R
@@ -945,7 +991,7 @@ class Legend(QObject):
         parent.others_legend_df.loc[
             (parent.others_legend_df["other_collection"] == other_collection), "color_B"
         ] = new_color_B
-        #Update sender color.
+        # Update sender color.
         # self.sender().setStyleSheet(
         #     "background-color:rgb({},{},{})".format(
         #         new_color_R, new_color_G, new_color_B
@@ -956,7 +1002,7 @@ class Legend(QObject):
                 new_color_R, new_color_G, new_color_B
             )
         )
-        #Signals to update actors in windows. This is emitted only for the modified uid under the 'color' key.
+        # Signals to update actors in windows. This is emitted only for the modified uid under the 'color' key.
         if other_collection == "XSection":
             parent.xsect_coll.signals.legend_color_modified.emit(
                 parent.xsect_coll.df["uid"].tolist()
@@ -979,11 +1025,12 @@ class Legend(QObject):
         # line_thick = self.sender().value()
         other_collection = sender.other_collection
         line_thick = sender.value()
-        #Here the query is reversed and modified, dropping the values() method, to allow SETTING the line thickness in the legend
+        # Here the query is reversed and modified, dropping the values() method, to allow SETTING the line thickness in the legend
         parent.others_legend_df.loc[
-            (parent.others_legend_df["other_collection"] == other_collection), "line_thick"
+            (parent.others_legend_df["other_collection"] == other_collection),
+            "line_thick",
         ] = line_thick
-        #Signals to update actors in windows. This is emitted only for the modified uid under the 'color' key.
+        # Signals to update actors in windows. This is emitted only for the modified uid under the 'color' key.
         if other_collection == "XSection":
             parent.xsect_coll.signals.legend_thick_modified.emit(
                 parent.xsect_coll.df["uid"].tolist()
@@ -1006,11 +1053,12 @@ class Legend(QObject):
         # point_size = self.sender().value()
         other_collection = sender.other_collection
         point_size = sender.value()
-        #Here the query is reversed and modified, dropping the values() method, to allow SETTING the line thickness in the legend
+        # Here the query is reversed and modified, dropping the values() method, to allow SETTING the line thickness in the legend
         parent.others_legend_df.loc[
-            (parent.others_legend_df["other_collection"] == other_collection), "point_size"
+            (parent.others_legend_df["other_collection"] == other_collection),
+            "point_size",
         ] = point_size
-        #Signals to update actors in windows. This is emitted only for the modified uid under the 'color' key.
+        # Signals to update actors in windows. This is emitted only for the modified uid under the 'color' key.
         # if other_collection == "XSection":
         #     parent.xsect_legend_point_size_modified_signal.emit(parent.xsect_coll.df['uid'].tolist())
         if other_collection == "DOM":
@@ -1027,11 +1075,11 @@ class Legend(QObject):
         # opacity = self.sender().value()
         other_collection = sender.other_collection
         opacity = sender.value()
-        #Here the query is reversed and modified, dropping the values() method, to allow SETTING the line thickness in the legend
+        # Here the query is reversed and modified, dropping the values() method, to allow SETTING the line thickness in the legend
         parent.others_legend_df.loc[
             (parent.others_legend_df["other_collection"] == other_collection), "opacity"
         ] = opacity
-        #Signals to update actors in windows. This is emitted only for the modified uid under the 'color' key.
+        # Signals to update actors in windows. This is emitted only for the modified uid under the 'color' key.
         if other_collection == "XSection":
             parent.xsect_coll.signals.legend_opacity_modified.emit(
                 parent.xsect_coll.df["uid"].tolist()
@@ -1068,13 +1116,9 @@ class Legend(QObject):
             parent.well_legend_df["Loc ID"] == locid, "color_B"
         ].values[0]
         # https://doc.qt.io/qtforpython/PySide2/QtGui/QColor.html#PySide2.QtGui.QColor
-        color_in = QColor(
-            old_color_R, old_color_G, old_color_B
-        )
+        color_in = QColor(old_color_R, old_color_G, old_color_B)
         # https://doc.qt.io/qtforpython/PySide2/QtWidgets/QColorDialog.html#PySide2.QtWidgets.PySide2.QtWidgets.QColorDialog.getColor
-        color_out = QColorDialog.getColor(
-            initial=color_in, title="Select color"
-        )
+        color_out = QColorDialog.getColor(initial=color_in, title="Select color")
         if not color_out.isValid():
             color_out = color_in
         new_color_R = color_out.red()
@@ -1112,11 +1156,11 @@ class Legend(QObject):
         # line_thick = self.sender().value()
         locid = sender.locid
         line_thick = sender.value()
-        #Here the query is reversed and modified, dropping the values() method, to allow SETTING the line thickness in the legend
+        # Here the query is reversed and modified, dropping the values() method, to allow SETTING the line thickness in the legend
         parent.well_legend_df.loc[
             parent.well_legend_df["Loc ID"] == locid, "line_thick"
         ] = line_thick
-        #Signal to update actors in windows. This is emitted only for the modified uid under the 'line_thick' key.
+        # Signal to update actors in windows. This is emitted only for the modified uid under the 'line_thick' key.
         updated_list = parent.well_coll.df.loc[
             parent.well_coll.df["Loc ID"] == locid, "uid"
         ].to_list()
@@ -1128,11 +1172,11 @@ class Legend(QObject):
         # opacity = self.sender().value()
         locid = sender.locid
         opacity = sender.value()
-        #Here the query is reversed and modified, dropping the values() method, to allow SETTING the line thickness in the legend
+        # Here the query is reversed and modified, dropping the values() method, to allow SETTING the line thickness in the legend
         parent.well_legend_df.loc[
             parent.well_legend_df["Loc ID"] == locid, "opacity"
         ] = opacity
-        #Signal to update actors in windows. This is emitted only for the modified uid under the 'line_thick' key.
+        # Signal to update actors in windows. This is emitted only for the modified uid under the 'line_thick' key.
         updated_list = parent.well_coll.df.loc[
             parent.well_coll.df["Loc ID"] == locid, "uid"
         ].to_list()
@@ -1146,7 +1190,7 @@ class Legend(QObject):
         role = sender.role
         feature = sender.feature
         scenario = sender.scenario
-        #Here we use the same query as above to GET the color from the legend
+        # Here we use the same query as above to GET the color from the legend
         old_color_R = parent.fluid_coll.legend_df.loc[
             (parent.fluid_coll.legend_df["role"] == role)
             & (parent.fluid_coll.legend_df["feature"] == feature)
@@ -1176,7 +1220,7 @@ class Legend(QObject):
         new_color_R = color_out.red()
         new_color_G = color_out.green()
         new_color_B = color_out.blue()
-        #Here the query is reversed and modified, dropping the values() method, to allow SETTING the color in the legend.
+        # Here the query is reversed and modified, dropping the values() method, to allow SETTING the color in the legend.
         parent.fluid_coll.legend_df.loc[
             (parent.fluid_coll.legend_df["role"] == role)
             & (parent.fluid_coll.legend_df["feature"] == feature)
@@ -1195,14 +1239,14 @@ class Legend(QObject):
             & (parent.fluid_coll.legend_df["scenario"] == scenario),
             "color_B",
         ] = new_color_B
-        #Update sender color.
+        # Update sender color.
         # self.sender().setStyleSheet(
         sender.setStyleSheet(
             "background-color:rgb({},{},{})".format(
                 new_color_R, new_color_G, new_color_B
             )
         )
-        #Signal to update actors in windows. This is emitted only for the modified uid under the 'color' key.
+        # Signal to update actors in windows. This is emitted only for the modified uid under the 'color' key.
         updated_list = parent.fluid_coll.df.loc[
             (parent.fluid_coll.df["role"] == role)
             & (parent.fluid_coll.df["feature"] == feature)
@@ -1221,14 +1265,14 @@ class Legend(QObject):
         feature = sender.feature
         scenario = sender.scenario
         line_thick = sender.value()
-        #Here the query is reversed and modified, dropping the values() method, to allow SETTING the line thickness in the legend
+        # Here the query is reversed and modified, dropping the values() method, to allow SETTING the line thickness in the legend
         parent.fluid_coll.legend_df.loc[
             (parent.fluid_coll.legend_df["role"] == role)
             & (parent.fluid_coll.legend_df["feature"] == feature)
             & (parent.fluid_coll.legend_df["scenario"] == scenario),
             "line_thick",
         ] = line_thick
-        #Signal to update actors in windows. This is emitted only for the modified uid under the 'line_thick' key.
+        # Signal to update actors in windows. This is emitted only for the modified uid under the 'line_thick' key.
         updated_list = parent.fluid_coll.df.loc[
             (parent.fluid_coll.df["role"] == role)
             & (parent.fluid_coll.df["feature"] == feature)
@@ -1246,14 +1290,14 @@ class Legend(QObject):
         feature = sender.feature
         scenario = sender.scenario
         point_size = sender.value()
-        #Here the query is reversed and modified, dropping the values() method, to allow SETTING the line thickness in the legend
+        # Here the query is reversed and modified, dropping the values() method, to allow SETTING the line thickness in the legend
         parent.fluid_coll.legend_df.loc[
             (parent.fluid_coll.legend_df["role"] == role)
             & (parent.fluid_coll.legend_df["feature"] == feature)
             & (parent.fluid_coll.legend_df["scenario"] == scenario),
             "point_size",
         ] = point_size
-        #Signal to update actors in windows. This is emitted only for the modified uid under the 'line_thick' key.
+        # Signal to update actors in windows. This is emitted only for the modified uid under the 'line_thick' key.
         updated_list = parent.fluid_coll.df.loc[
             (parent.fluid_coll.df["role"] == role)
             & (parent.fluid_coll.df["feature"] == feature)
@@ -1271,14 +1315,14 @@ class Legend(QObject):
         feature = sender.feature
         scenario = sender.scenario
         opacity = sender.value()
-        #Here the query is reversed and modified, dropping the values() method, to allow SETTING the line thickness in the legend
+        # Here the query is reversed and modified, dropping the values() method, to allow SETTING the line thickness in the legend
         parent.fluid_coll.legend_df.loc[
             (parent.fluid_coll.legend_df["role"] == role)
             & (parent.fluid_coll.legend_df["feature"] == feature)
             & (parent.fluid_coll.legend_df["scenario"] == scenario),
             "opacity",
         ] = opacity
-        #Signal to update actors in windows. This is emitted only for the modified uid under the 'line_thick' key.
+        # Signal to update actors in windows. This is emitted only for the modified uid under the 'line_thick' key.
         updated_list = parent.fluid_coll.df.loc[
             (parent.fluid_coll.df["role"] == role)
             & (parent.fluid_coll.df["feature"] == feature)
@@ -1302,12 +1346,10 @@ class Legend(QObject):
             & (parent.fluid_coll.legend_df["scenario"] == scenario),
             "time",
         ] = time
-        #Order geological legend entities with descending time values
-        parent.fluid_coll.legend_df.sort_values(
-            by="time", ascending=True, inplace=True
-        )
-        #THE FOLLOWING MUST BE CHANGED IN A SORT COMMAND
-        #UPDATE AT THE MOMENT DOES NOT WORK PROPERLY#
+        # Order geological legend entities with descending time values
+        parent.fluid_coll.legend_df.sort_values(by="time", ascending=True, inplace=True)
+        # THE FOLLOWING MUST BE CHANGED IN A SORT COMMAND
+        # UPDATE AT THE MOMENT DOES NOT WORK PROPERLY#
         # parent.LegendTreeWidget.setSortingEnabled(True)
         # parent.LegendTreeWidget.sortByColumn(7, Qt.AscendingOrder)
         # parent.LegendTreeWidget.setSortingEnabled(False)
@@ -1325,7 +1367,7 @@ class Legend(QObject):
         # feature = self.sender().feature
         role = sender.role
         feature = sender.feature
-        #Here we use the same query as above to GET the color from the legend
+        # Here we use the same query as above to GET the color from the legend
         old_color_R = parent.backgrnd_coll.legend_df.loc[
             (parent.backgrnd_coll.legend_df["role"] == role)
             & (parent.backgrnd_coll.legend_df["feature"] == feature),
@@ -1352,7 +1394,7 @@ class Legend(QObject):
         new_color_R = color_out.red()
         new_color_G = color_out.green()
         new_color_B = color_out.blue()
-        #Here the query is reversed and modified, dropping the values() method, to allow SETTING the color in the legend.
+        # Here the query is reversed and modified, dropping the values() method, to allow SETTING the color in the legend.
         parent.backgrnd_coll.legend_df.loc[
             (parent.backgrnd_coll.legend_df["role"] == role)
             & (parent.backgrnd_coll.legend_df["feature"] == feature),
@@ -1368,7 +1410,7 @@ class Legend(QObject):
             & (parent.backgrnd_coll.legend_df["feature"] == feature),
             "color_B",
         ] = new_color_B
-        #Update sender color.
+        # Update sender color.
         # self.sender().setStyleSheet(
         #     "background-color:rgb({},{},{})".format(
         #         new_color_R, new_color_G, new_color_B
@@ -1379,7 +1421,7 @@ class Legend(QObject):
                 new_color_R, new_color_G, new_color_B
             )
         )
-        #Signal to update actors in windows. This is emitted only for the modified uid under the 'color' key.
+        # Signal to update actors in windows. This is emitted only for the modified uid under the 'color' key.
         updated_list = parent.backgrnd_coll.df.loc[
             (parent.backgrnd_coll.df["role"] == role)
             & (parent.backgrnd_coll.df["feature"] == feature),
@@ -1394,13 +1436,13 @@ class Legend(QObject):
         role = sender.role
         feature = sender.feature
         line_thick = sender.value()
-        #Here the query is reversed and modified, dropping the values() method, to allow SETTING the line thickness in the legend
+        # Here the query is reversed and modified, dropping the values() method, to allow SETTING the line thickness in the legend
         parent.backgrnd_coll.legend_df.loc[
             (parent.backgrnd_coll.legend_df["role"] == role)
             & (parent.backgrnd_coll.legend_df["feature"] == feature),
             "line_thick",
         ] = line_thick
-        #Signal to update actors in windows. This is emitted only for the modified uid under the 'line_thick' key.
+        # Signal to update actors in windows. This is emitted only for the modified uid under the 'line_thick' key.
         updated_list = parent.backgrnd_coll.df.loc[
             (parent.backgrnd_coll.df["role"] == role)
             & (parent.backgrnd_coll.df["feature"] == feature),
@@ -1415,13 +1457,13 @@ class Legend(QObject):
         role = sender.role
         feature = sender.feature
         point_size = sender.value()
-        #Here the query is reversed and modified, dropping the values() method, to allow SETTING the line thickness in the legend
+        # Here the query is reversed and modified, dropping the values() method, to allow SETTING the line thickness in the legend
         parent.backgrnd_coll.legend_df.loc[
             (parent.backgrnd_coll.legend_df["role"] == role)
             & (parent.backgrnd_coll.legend_df["feature"] == feature),
             "point_size",
         ] = point_size
-        #Signal to update actors in windows. This is emitted only for the modified uid under the 'line_thick' key.
+        # Signal to update actors in windows. This is emitted only for the modified uid under the 'line_thick' key.
         updated_list = parent.backgrnd_coll.df.loc[
             (parent.backgrnd_coll.df["role"] == role)
             & (parent.backgrnd_coll.df["feature"] == feature),
@@ -1436,13 +1478,13 @@ class Legend(QObject):
         role = sender.role
         feature = sender.feature
         opacity = sender.value()
-        #Here the query is reversed and modified, dropping the values() method, to allow SETTING the opacity in the legend
+        # Here the query is reversed and modified, dropping the values() method, to allow SETTING the opacity in the legend
         parent.backgrnd_coll.legend_df.loc[
             (parent.backgrnd_coll.legend_df["role"] == role)
             & (parent.backgrnd_coll.legend_df["feature"] == feature),
             "opacity",
         ] = opacity
-        #Signal to update actors in windows. This is emitted only for the modified uid under the 'line_thick' key.
+        # Signal to update actors in windows. This is emitted only for the modified uid under the 'line_thick' key.
         updated_list = parent.backgrnd_coll.df.loc[
             (parent.backgrnd_coll.df["role"] == role)
             & (parent.backgrnd_coll.df["feature"] == feature),

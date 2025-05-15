@@ -285,6 +285,7 @@ def srf(vectors):
 
 def freeze_gui(func):
     """Decorator function used to freeze the GUI when some processing, editing etc. is running."""
+
     def wrapper(self, *args, **kwargs):
         # Disable GUI before function is called.
         self.disable_actions()
@@ -292,7 +293,8 @@ def freeze_gui(func):
         try:
             func(self, *args, **kwargs)
         except:
-            self.print_terminal(f'Function {func} ended without output.')
+            self.print_terminal(f"Function {func} ended without output.")
         # Enable GUI after function is called.
         self.enable_actions()
+
     return wrapper

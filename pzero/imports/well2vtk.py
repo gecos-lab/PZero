@@ -11,6 +11,7 @@ from uuid import uuid4
 
 from pandas import read_excel as pd_read_excel
 from pandas import unique as pd_unique
+
 # from pandas import read_csv as pd_read_csv
 # from pandas import isna as pd_isna
 
@@ -197,9 +198,7 @@ def well2vtk(self, path=None):
             components.append(annotation.trace.get_point_data_shape(key)[1])
             types.append(annotation.trace.get_point_data_type(key))
 
-        annotation_obj_attributes = deepcopy(
-            BackgroundCollection().entity_dict
-        )
+        annotation_obj_attributes = deepcopy(BackgroundCollection().entity_dict)
         annotation_obj_attributes["uid"] = str(uuid4())
         annotation_obj_attributes["name"] = name
         annotation_obj_attributes["topology"] = "VertexSet"
@@ -212,9 +211,7 @@ def well2vtk(self, path=None):
         annotation_obj_attributes["borehole"] = bore_obj_attributes["uid"]
 
         annotation_obj_attributes["vtk_obj"] = annotation
-        self.backgrnd_coll.add_entity_from_dict(
-            entity_dict=annotation_obj_attributes
-        )
+        self.backgrnd_coll.add_entity_from_dict(entity_dict=annotation_obj_attributes)
     # paths = in_file_name
 
     # data_paths = paths[1]

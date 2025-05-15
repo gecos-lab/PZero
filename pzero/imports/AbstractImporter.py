@@ -5,8 +5,8 @@ class BaseIO(ABC):
 
     def __init__(self, input_file):
         self._input_file: str = input_file
-        self._output_file: str = ''
-        self._curr_obj:
+        self._output_file: str = ""
+        self._curr_obj = None
 
     @property
     def input_file(self) -> str:

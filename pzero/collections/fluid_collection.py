@@ -21,6 +21,7 @@ pd_set_option("display.max_colwidth", pd_max_colwidth)
 
 class FluidCollection(GFBCollection):
     """Collection for all fluid entities and their metadata."""
+
     def __init__(self, parent=None, *args, **kwargs):
         super(FluidCollection, self).__init__(parent, *args, **kwargs)
         # Initialize properties required by the abstract superclass.
@@ -31,8 +32,8 @@ class FluidCollection(GFBCollection):
             "seal",
         ]
 
-        self.collection_name = 'fluid'
+        self.collection_name = "fluid"
 
-        self.default_sequence = 'fluid_0'
+        self.default_sequence = "fluid_0"
 
         self.initialize_df()

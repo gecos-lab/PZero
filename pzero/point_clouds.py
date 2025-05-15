@@ -5,8 +5,12 @@ from copy import deepcopy
 
 from uuid import uuid4
 
-from matplotlib.pyplot import subplots as plt_subplot  # used for hisotgram in calibration PC
-from matplotlib.style import context as mplstyle_context  # used for hisotgram in calibration PC
+from matplotlib.pyplot import (
+    subplots as plt_subplot,
+)  # used for hisotgram in calibration PC
+from matplotlib.style import (
+    context as mplstyle_context,
+)  # used for hisotgram in calibration PC
 
 import seaborn as sns  # used for hisotgram in calibration PC - should be converted to standard mpl histogram
 
@@ -125,13 +129,13 @@ def cut_pc(self, method="both"):
             entity_dict["name"] = self.parent.dom_coll.get_uid_name(uid) + "_cut_in"
             entity_dict["vtk_obj"] = clip_in
             entity_dict["topology"] = "PCDom"
-            entity_dict[
-                "properties_names"
-            ] = self.parent.dom_coll.get_uid_properties_names(uid)
+            entity_dict["properties_names"] = (
+                self.parent.dom_coll.get_uid_properties_names(uid)
+            )
             entity_dict["topology"] = "PCDom"
-            entity_dict[
-                "properties_components"
-            ] = self.parent.dom_coll.get_uid_properties_components(uid)
+            entity_dict["properties_components"] = (
+                self.parent.dom_coll.get_uid_properties_components(uid)
+            )
             entity_dict["vtk_obj"] = clip_in
             self.parent.dom_coll.add_entity_from_dict(entity_dict)
 
@@ -140,26 +144,26 @@ def cut_pc(self, method="both"):
             entity_dict["name"] = self.parent.dom_coll.get_uid_name(uid) + "_cut_out"
             entity_dict["vtk_obj"] = clip_out
             entity_dict["topology"] = "PCDom"
-            entity_dict[
-                "properties_names"
-            ] = self.parent.dom_coll.get_uid_properties_names(uid)
+            entity_dict["properties_names"] = (
+                self.parent.dom_coll.get_uid_properties_names(uid)
+            )
             entity_dict["topology"] = "PCDom"
-            entity_dict[
-                "properties_components"
-            ] = self.parent.dom_coll.get_uid_properties_components(uid)
+            entity_dict["properties_components"] = (
+                self.parent.dom_coll.get_uid_properties_components(uid)
+            )
             entity_dict["vtk_obj"] = clip_out
             self.parent.dom_coll.add_entity_from_dict(entity_dict)
         elif method == "inner":
             entity_dict["name"] = self.parent.dom_coll.get_uid_name(uid) + "_cut_in"
             entity_dict["vtk_obj"] = clip_in
             entity_dict["topology"] = "PCDom"
-            entity_dict[
-                "properties_names"
-            ] = self.parent.dom_coll.get_uid_properties_names(uid)
+            entity_dict["properties_names"] = (
+                self.parent.dom_coll.get_uid_properties_names(uid)
+            )
             entity_dict["topology"] = "PCDom"
-            entity_dict[
-                "properties_components"
-            ] = self.parent.dom_coll.get_uid_properties_components(uid)
+            entity_dict["properties_components"] = (
+                self.parent.dom_coll.get_uid_properties_components(uid)
+            )
             entity_dict["vtk_obj"] = clip_in
             self.parent.dom_coll.add_entity_from_dict(entity_dict)
         elif method == "outer":
@@ -168,13 +172,13 @@ def cut_pc(self, method="both"):
             entity_dict["name"] = self.parent.dom_coll.get_uid_name(uid) + "_cut_out"
             entity_dict["vtk_obj"] = clip_out
             entity_dict["topology"] = "PCDom"
-            entity_dict[
-                "properties_names"
-            ] = self.parent.dom_coll.get_uid_properties_names(uid)
+            entity_dict["properties_names"] = (
+                self.parent.dom_coll.get_uid_properties_names(uid)
+            )
             entity_dict["topology"] = "PCDom"
-            entity_dict[
-                "properties_components"
-            ] = self.parent.dom_coll.get_uid_properties_components(uid)
+            entity_dict["properties_components"] = (
+                self.parent.dom_coll.get_uid_properties_components(uid)
+            )
             entity_dict["vtk_obj"] = clip_out
             self.parent.dom_coll.add_entity_from_dict(entity_dict)
 
@@ -185,10 +189,10 @@ def cut_pc(self, method="both"):
     if not self.selected_uids:
         print(" -- No input data selected -- ")
         return
-    #Freeze QT interface
+    # Freeze QT interface
     self.disable_actions()
 
-    #Getting the values that have been typed by the user through the widget
+    # Getting the values that have been typed by the user through the widget
 
     scissors = Scissors(self)
     scissors.EnabledOn()
@@ -429,7 +433,7 @@ def facets_pc(self):
     curr_obj_dict["properties_names"] = properties_name
     curr_obj_dict["properties_components"] = properties_components
     curr_obj_dict["vtk_obj"] = facets
-    #Add to entity collection.
+    # Add to entity collection.
     self.parent.geol_coll.add_entity_from_dict(entity_dict=curr_obj_dict)
     self.clear_selection()
 
@@ -551,7 +555,7 @@ def auto_pick(self):
     self.clear_selection()
 
 
-#[Gabriele] PC Filters ----------------------------------------------------
+# [Gabriele] PC Filters ----------------------------------------------------
 
 
 def thresh_filt(self):
@@ -594,9 +598,9 @@ def thresh_filt(self):
             uid
         )
         entity_dict["topology"] = "PCDom"
-        entity_dict[
-            "properties_components"
-        ] = self.parent.dom_coll.get_uid_properties_components(uid)
+        entity_dict["properties_components"] = (
+            self.parent.dom_coll.get_uid_properties_components(uid)
+        )
         entity_dict["vtk_obj"] = out
         self.parent.dom_coll.add_entity_from_dict(entity_dict)
         del out
@@ -606,21 +610,16 @@ def thresh_filt(self):
     self.clear_selection()
 
 
-def radial_filt(self):
-    ...
+def radial_filt(self): ...
 
 
-def surf_den_filt(self):
-    ...
+def surf_den_filt(self): ...
 
 
-def rough_filt(self):
-    ...
+def rough_filt(self): ...
 
 
-def curv_filt(self):
-    ...
+def curv_filt(self): ...
 
 
-def col_filt(self):
-    ...
+def col_filt(self): ...
