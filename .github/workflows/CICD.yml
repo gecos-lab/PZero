@@ -65,7 +65,7 @@ jobs:
           pyinstaller --onefile --collect-all rasterio pzero.py --name pzero-${{ runner.os }}
       - name: Upload executable
         run: |
-          files="dist/pzero/pzero*"
+          files="dist/pzero*"
           for file in $files
           do
             echo $file
