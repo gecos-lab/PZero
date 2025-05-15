@@ -69,6 +69,8 @@ jobs:
           for file in $files
           do
             echo $file
-            gh release upload --clobber --repo $GITHUB_REPOSITORY ${{ needs.release.outputs.version }} $file
+            gh release upload --clobber --repo $GITHUB_REPOSITORY v${{ needs.release.outputs.version }} $file
           done
         shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.TOKEN }}
