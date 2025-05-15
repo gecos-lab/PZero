@@ -1,0 +1,37 @@
+name: Prepare PR
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      changes_detected: ${{ steps.commit.outputs.changes_detected }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.TOKEN }}
+      - name: "Get config files from template repository"
+        run: |
+          curl -H "Accept: application/vnd.github.VERSION.raw" -H "Authorization: token ${{ secrets.TOKEN }}" https://api.github.com/repos/gecos-lab/templatepythonproject/contents/.pylintrc\?ref\=main > .pylintrc
+      - name: Black
+        run: |
+          pip install black
+          black .
+      - uses: stefanzweifel/git-auto-commit-action@v5
+        id: commit
+        with:
+          commit_message: Apply prepare changes
+  pylint:
+    needs: prepare
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dciborow/action-pylint@main
+        with:
+          github_token: ${{ secrets.github_token }}
+          reporter: github-pr-review
+          glob_pattern: "**/*.py"
