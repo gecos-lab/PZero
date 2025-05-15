@@ -2265,8 +2265,8 @@ class VTKView(BaseView):
             diffuse=1.0,
             specular=0.0,
             specular_power=100.0,
-            nan_color=None,  # color to use for all NaN values
-            nan_opacity=1.0,  # opacity to use for all NaN values
+            nan_color=None,  # color to use for all nan values
+            nan_opacity=1.0,  # opacity to use for all nan values
             culling=None,  # 'front', 'back', 'false' (default) > does not render faces that are culled
             rgb=plot_rgb_option,  # True > plot array values as RGB(A) colors
             categories=False,  # True > number of unique values in the scalar used as 'n_colors' argument

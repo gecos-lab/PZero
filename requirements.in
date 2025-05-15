@@ -1,0 +1,26 @@
+loopstructural
+black[d]
+cmocean
+colorcet
+ezdxf
+geopandas
+laspy
+lxml
+mplstereonet
+openpyxl
+pandas
+pyinstaller
+pyside6
+pytest
+pyvista
+pyvistaqt
+qtpy
+rasterio
+rioxarray
+seaborn
+segyio
+shapely
+sphinx
+sphinx_rtd_theme
+vtk>=9.3, <9.4
+xarray
