@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v0.1.8 (2025-05-15)
+
+### Bug Fixes
+
+- **Actions**: One file dist folder path
+  ([`b875c7a`](https://github.com/gecos-lab/PZero/commit/b875c7af29a6feca91ee5a31cd6593c6c68ba298))
+
+
 ## v0.1.7 (2025-05-15)
 
 ### Bug Fixes
