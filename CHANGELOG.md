@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v0.1.1 (2025-05-15)
+
+### Bug Fixes
+
+- **Actions**: Add deploy job
+  ([`7b32e4f`](https://github.com/gecos-lab/PZero/commit/7b32e4fc88374df227532f3856465444d7f58ed6))
+
+
 ## v0.1.0 (2025-05-15)
 
 ### Bug Fixes
