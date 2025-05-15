@@ -24,10 +24,13 @@ jobs:
           pip install -r requirements.txt
           pip install pytest
           pytest
+
   release:
     runs-on: ubuntu-latest
     needs: test
     if: github.ref == 'refs/heads/main'
+    outputs:
+      version: ${{ steps.semantic.outputs.version }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -36,9 +39,10 @@ jobs:
           token: ${{ secrets.TOKEN }}
       - name: Python Semantic Release
         uses: python-semantic-release/python-semantic-release@master
-        id: semantic-release
+        id: semantic
         with:
           github_token: ${{ secrets.TOKEN }}
+
   deploy:
     runs-on: ${{ matrix.os }}
     strategy:
@@ -59,3 +63,12 @@ jobs:
           pip install -r requirements.txt
           pip install pyinstaller
           pyinstaller --collect-all rasterio pzero.py
+      - name: Upload executable
+        run: |
+          files="dist/pzero/*"
+          for file in $files
+          do
+            echo $file
+            gh release upload --clobber --repo $GITHUB_REPOSITORY ${{ needs.release.outputs.version }} $file
+          done
+        shell: bash
