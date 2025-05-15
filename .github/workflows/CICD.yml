@@ -65,7 +65,7 @@ jobs:
           pyinstaller --collect-all rasterio pzero.py
       - name: Upload executable
         run: |
-          files="dist/pzero/*"
+          files="dist/pzero/pzero*"
           for file in $files
           do
             echo $file
