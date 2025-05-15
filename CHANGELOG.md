@@ -1,12 +1,18 @@
 # CHANGELOG
 
 
+## v0.1.2 (2025-05-15)
+
+
 ## v0.1.1 (2025-05-15)
 
 ### Bug Fixes
 
 - **Actions**: Add deploy job
   ([`7b32e4f`](https://github.com/gecos-lab/PZero/commit/7b32e4fc88374df227532f3856465444d7f58ed6))
+
+- **Actions**: Fix python version to 3.12
+  ([`1d4b2cf`](https://github.com/gecos-lab/PZero/commit/1d4b2cf22de5fdfb851e99b9cb59de604dbe180d))
 
 
 ## v0.1.0 (2025-05-15)
