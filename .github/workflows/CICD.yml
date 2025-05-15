@@ -13,8 +13,8 @@ jobs:
       - name: Install dependencies
         if: ${{ matrix.os == 'ubuntu-latest' }}
         run: |
-          apt-get update
-          apt-get install -y libegl1
+          sudo apt-get update
+          sudo apt-get install -y libegl1
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
