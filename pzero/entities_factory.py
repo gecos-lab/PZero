@@ -1,7 +1,7 @@
 """entities_factory.py
 PZero© Andrea Bistacchi"""
 
-from numpy import NaN as np_NaN
+from numpy import nan as np_nan
 from numpy import append as np_append
 from numpy import arcsin as np_arcsin
 from numpy import arctan as np_arctan
@@ -436,7 +436,7 @@ class PolyData(vtkPolyData):
             print("Error - dimension not in [1, 2, 3, 4, 6, 9]")
             return
         nan_array = np_empty((self.points_number, dimension))
-        nan_array[:] = np_NaN
+        nan_array[:] = np_nan
         WrapDataObject(self).PointData.append(nan_array, data_key)
 
     def remove_point_data(self, data_key=None):
@@ -1574,7 +1574,7 @@ class Voxet(vtkImageData):
             print("Error - dimension not in [1, 2, 3, 4, 6, 9]")
             return
         nan_array = np_empty((self.points_number, dimension))
-        nan_array[:] = np_NaN
+        nan_array[:] = np_nan
         WrapDataObject(self).PointData.append(nan_array, data_key)
 
     def remove_point_data(self, data_key=None):
@@ -1919,7 +1919,7 @@ class Seismics(vtkStructuredGrid):
             print("Error - dimension not in [1, 2, 3, 4, 6, 9]")
             return
         nan_array = np_empty((self.points_number, dimension))
-        nan_array[:] = np_NaN
+        nan_array[:] = np_nan
         WrapDataObject(self).PointData.append(nan_array, data_key)
 
     def remove_point_data(self, data_key=None):
@@ -2102,7 +2102,7 @@ class DEM(vtkStructuredGrid):
             print("Error - dimension not in [1, 2, 3, 4, 6, 9]")
             return
         nan_array = np_empty((self.points_number, dimension))
-        nan_array[:] = np_NaN
+        nan_array[:] = np_nan
         WrapDataObject(self).PointData.append(nan_array, data_key)
 
     def remove_point_data(self, data_key=None):
@@ -2198,14 +2198,14 @@ class DEM(vtkStructuredGrid):
         U = (
             (self.points_X - X0)
             / (X1 - X0)
-            * np_where(self.points_X >= X0, 1, np_NaN)
-            * np_where(self.points_X <= X1, 1, np_NaN)
+            * np_where(self.points_X >= X0, 1, np_nan)
+            * np_where(self.points_X <= X1, 1, np_nan)
         )
         V = (
             (self.points_Y - Y0)
             / (Y1 - Y0)
-            * np_where(self.points_Y >= Y0, np_NaN, 1)
-            * np_where(self.points_Y <= Y1, np_NaN, 1)
+            * np_where(self.points_Y >= Y0, np_nan, 1)
+            * np_where(self.points_Y <= Y1, np_nan, 1)
         )
         UV = np_column_stack((U, V))
         #Set point data on object. Do not initialize the array before this line.
