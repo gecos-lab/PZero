@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v0.1.5 (2025-05-15)
+
+### Bug Fixes
+
+- **Actions**: Upload only pzero files
+  ([`6fef293`](https://github.com/gecos-lab/PZero/commit/6fef293d0fb85702f140f3618057e6c547f7bd55))
+
+
 ## v0.1.4 (2025-05-15)
 
 ### Bug Fixes
