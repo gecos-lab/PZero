@@ -102,10 +102,10 @@ class TestProjectWindow:
     @pytest.fixture
     def test_entity_remove(self, qtbot, monkeypatch):
         # monkeypatch/mock function
-        def mock_entity_remove():+
+        def mock_entity_remove():
             for uid in project_window.selected_uids:
                 if project_window.shown_table == "tabGeology":
-                    project_window.geol_coll.remove_entity(uid=uid)+
+                    project_window.geol_coll.remove_entity(uid=uid)
 
         project_window = ProjectWindow()
 
