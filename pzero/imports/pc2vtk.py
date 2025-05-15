@@ -176,7 +176,7 @@ def pc2vtk(
 
         # point_cloud.generate_point_set()
 
-        #Create dictionary.
+        # Create dictionary.
         curr_obj_attributes = deepcopy(DomCollection.entity_dict)
         curr_obj_attributes["uid"] = str(uuid4())
         point_cloud.Modified()
@@ -187,9 +187,9 @@ def pc2vtk(
         curr_obj_attributes["properties_components"] = properties_components
         curr_obj_attributes["properties_types"] = properties_types
         curr_obj_attributes["vtk_obj"] = point_cloud
-        #Add to entity collection.
+        # Add to entity collection.
         self.parent.dom_coll.add_entity_from_dict(entity_dict=curr_obj_attributes)
-        #Cleaning.
+        # Cleaning.
         del input_df
         del point_cloud
         print("Done!")

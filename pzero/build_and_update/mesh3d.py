@@ -34,7 +34,9 @@ def create_mesh3d_list(self):
         self.Mesh3DTableWidget.setItem(row, 0, name_item)
         self.Mesh3DTableWidget.setItem(row, 1, uid_item)
         self.Mesh3DTableWidget.setCellWidget(row, 2, property_combo)
-        property_combo.currentIndexChanged.connect(lambda *, sender=property_combo: toggle_property_mesh3d(self, sender=sender))
+        property_combo.currentIndexChanged.connect(
+            lambda *, sender=property_combo: toggle_property_mesh3d(self, sender=sender)
+        )
         if self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]:
             name_item.setCheckState(Qt.Checked)
         elif not self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]:
@@ -53,10 +55,10 @@ def update_mesh3d_list_added(self, new_list=None, sec_uid=None):
     if sec_uid:
         for i, uid in enumerate(new_list["uid"]):
             if (
-                    sec_uid
-                    != self.parent.mesh3d_coll.df.loc[
-                self.parent.mesh3d_coll.df["uid"] == uid, "x_section"
-            ].values[0]
+                sec_uid
+                != self.parent.mesh3d_coll.df.loc[
+                    self.parent.mesh3d_coll.df["uid"] == uid, "x_section"
+                ].values[0]
             ):
                 del uid_list[i]
     for uid in uid_list:
@@ -80,7 +82,9 @@ def update_mesh3d_list_added(self, new_list=None, sec_uid=None):
         self.Mesh3DTableWidget.setItem(row, 0, name_item)
         self.Mesh3DTableWidget.setItem(row, 1, uid_item)
         self.Mesh3DTableWidget.setCellWidget(row, 2, property_combo)
-        property_combo.currentIndexChanged.connect(lambda *, sender=property_combo: toggle_property_mesh3d(self, sender=sender))
+        property_combo.currentIndexChanged.connect(
+            lambda *, sender=property_combo: toggle_property_mesh3d(self, sender=sender)
+        )
         if self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]:
             name_item.setCheckState(Qt.Checked)
         elif not self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]:
@@ -131,11 +135,12 @@ def toggle_property_mesh3d(self, sender=None):
     show_property = sender.currentText()
     uid = sender.uid
     show = self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]
-    collection = self.actors_df.loc[self.actors_df["uid"] == uid, "collection"].values[0]
+    collection = self.actors_df.loc[self.actors_df["uid"] == uid, "collection"].values[
+        0
+    ]
     # This replaces the previous copy of the actor with the same uid, and updates the actors dataframe.
     # See issue #33 for a discussion on actors replacement by the PyVista add_mesh and add_volume methods.
-    this_actor = self.show_actor_with_property(uid=uid,
-                                               collection=collection,
-                                               show_property=show_property,
-                                               visible=show)
+    this_actor = self.show_actor_with_property(
+        uid=uid, collection=collection, show_property=show_property, visible=show
+    )
     self.actors_df.loc[self.actors_df["uid"] == uid, ["show_property"]] = show_property

@@ -1,33 +1,45 @@
 import pytest
 
-from pzero.windows_factory import BaseView, View3D, View2D, ViewMap, ViewStereoplot, NavigationToolbar, View2D, \
-    ViewMap
+from pzero.windows_factory import (
+    BaseView,
+    View3D,
+    View2D,
+    ViewMap,
+    ViewStereoplot,
+    NavigationToolbar,
+    View2D,
+    ViewMap,
+)
 from pzero.project_window import ProjectWindow
 
 
 # Class for testing the BaseView, qtbot is part of a plugin of pytestQt
 class TestBaseView:
-    geological_entity_dict1 = {'uid': "0",
-                               'name': "geoname",
-                               'topology': "topol",
-                               'role': "undef",
-                               'feature': "undef",
-                               'scenario': "sc1",
-                               'properties_names': [],
-                               'properties_components': [],
-                               'x_section': "",
-                               'vtk_obj': None}
+    geological_entity_dict1 = {
+        "uid": "0",
+        "name": "geoname",
+        "topology": "topol",
+        "role": "undef",
+        "feature": "undef",
+        "scenario": "sc1",
+        "properties_names": [],
+        "properties_components": [],
+        "x_section": "",
+        "vtk_obj": None,
+    }
 
-    geological_entity_dict2 = {'uid': "2",
-                               'name': "geoname2",
-                               'topology': "topol2",
-                               'role': "undef",
-                               'feature': "undef",
-                               'scenario': "sc2",
-                               'properties_names': [],
-                               'properties_components': [],
-                               'x_section': "",
-                               'vtk_obj': None}
+    geological_entity_dict2 = {
+        "uid": "2",
+        "name": "geoname2",
+        "topology": "topol2",
+        "role": "undef",
+        "feature": "undef",
+        "scenario": "sc2",
+        "properties_names": [],
+        "properties_components": [],
+        "x_section": "",
+        "vtk_obj": None,
+    }
 
     @pytest.fixture
     # Testing if the windows is initialized and showed
@@ -36,8 +48,7 @@ class TestBaseView:
         base_view = BaseView(parent=parent)
         base_view.show_qt_canvas()
 
-        assert base_view.isWindow() is True \
-            and base_view.isVisible() is True
+        assert base_view.isWindow() is True and base_view.isVisible() is True
 
     @pytest.fixture
     # Testing create_geology_tree
@@ -194,8 +205,7 @@ class TestView3D:
         view_3d = View3D(parent=parent)
         view_3d.show_qt_canvas()
 
-        assert view_3d.isWindow() is True \
-               and view_3d.isVisible() is True
+        assert view_3d.isWindow() is True and view_3d.isVisible() is True
 
     @pytest.fixture
     # Testing view 3d initialize_menu_tools
@@ -221,8 +231,7 @@ class TestView2D:
         view_2d = View2D(parent=parent)
         view_2d.show_qt_canvas()
 
-        assert view_2d.isWindow() is True \
-               and view_2d.isVisible() is True
+        assert view_2d.isWindow() is True and view_2d.isVisible() is True
 
 
 # Testing ViewMap class
@@ -236,8 +245,7 @@ class TestViewMap:
         view_map = ViewMap(parent=parent)
         view_map.show_qt_canvas()
 
-        assert view_map.isWindow() is True \
-               and view_map.isVisible() is True
+        assert view_map.isWindow() is True and view_map.isVisible() is True
 
     # @pytest.fixture
     # Testing ViewMap initialize_menu_tools
@@ -262,8 +270,9 @@ class TestViewStereoplot:
         view_stereoplot = ViewStereoplot(parent=parent)
         view_stereoplot.show_qt_canvas()
 
-        assert view_stereoplot.isWindow() is True \
-               and view_stereoplot.isVisible() is True
+        assert (
+            view_stereoplot.isWindow() is True and view_stereoplot.isVisible() is True
+        )
 
     @pytest.fixture
     # Testing ViewStereoplot initialize_menu_tools
@@ -300,8 +309,7 @@ class TestView2D:
         new_view_2d = View2D(parent=parent)
         new_view_2d.show_qt_canvas()
 
-        assert new_view_2d.isWindow() is True \
-               and new_view_2d.isVisible() is True
+        assert new_view_2d.isWindow() is True and new_view_2d.isVisible() is True
 
     @pytest.fixture
     # Testing View2D initialize_menu_tools
@@ -341,12 +349,13 @@ class TestViewMap:
         new_view_map = ViewMap(parent=parent)
         new_view_map.show_qt_canvas()
 
-        assert new_view_map.isWindow() is True \
-               and new_view_map.isVisible() is True
+        assert new_view_map.isWindow() is True and new_view_map.isVisible() is True
 
     # @pytest.fixture
     # Testing ViewMap initialize_menu_tools
-    @pytest.mark.skipif(reason="View2D object has no attribute sectionFromAzimuthButton")
+    @pytest.mark.skipif(
+        reason="View2D object has no attribute sectionFromAzimuthButton"
+    )
     def test_initialize_menu_tools(self, qtbot):
         parent = ProjectWindow()
         new_view_map = View2D(parent=parent)
@@ -357,4 +366,3 @@ class TestViewMap:
         assert new_view_map.sectionFromAzimuthButton.isVisible() is True
         assert new_view_map.sectionFromFileButton.isVisible() is True
         assert new_view_map.boundaryFromPointsButton.isVisible() is True
-

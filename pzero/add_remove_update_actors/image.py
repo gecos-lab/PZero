@@ -5,6 +5,7 @@ from pzero.build_and_update.image import *
 
 # Methods used to add, remove, and update actors from the IMAGE collection
 
+
 def image_added_update_views(self, updated_list=None):
     """This is called when an image is added to the image collection.
     Disconnect signals to image list, if they are set, then they are
@@ -39,26 +40,40 @@ def image_added_update_views(self, updated_list=None):
         #     ignore_index=True,
         # )
         # New Pandas >= 2.0.0
-        self.actors_df = pd_concat([self.actors_df,
-                                    pd_DataFrame([{
-                                        "uid": uid,
-                                        "actor": this_actor,
-                                        "show": False,
-                                        "collection": "image_coll",
-                                        "show_property": None,
-                                    }])],
-                                   ignore_index=True,
-                                   )
-        actors_df_new = pd_concat([actors_df_new,
-                                   pd_DataFrame([{
-                                       "uid": uid,
-                                       "actor": this_actor,
-                                       "show": False,
-                                       "collection": "image_coll",
-                                       "show_property": None,
-                                   }])],
-                                  ignore_index=True,
-                                  )
+        self.actors_df = pd_concat(
+            [
+                self.actors_df,
+                pd_DataFrame(
+                    [
+                        {
+                            "uid": uid,
+                            "actor": this_actor,
+                            "show": False,
+                            "collection": "image_coll",
+                            "show_property": None,
+                        }
+                    ]
+                ),
+            ],
+            ignore_index=True,
+        )
+        actors_df_new = pd_concat(
+            [
+                actors_df_new,
+                pd_DataFrame(
+                    [
+                        {
+                            "uid": uid,
+                            "actor": this_actor,
+                            "show": False,
+                            "collection": "image_coll",
+                            "show_property": None,
+                        }
+                    ]
+                ),
+            ],
+            ignore_index=True,
+        )
         update_image_list_added(self, actors_df_new)
     """Re-connect signals."""
     self.ImagesTableWidget.itemChanged.connect(self.toggle_image_visibility)

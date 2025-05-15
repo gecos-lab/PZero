@@ -46,6 +46,7 @@ class CollectionSignals(QObject):
 class BaseCollection(ABC):
     """Abstract class used as a base for all collections, implemented with ABC in order to
     set a mandatory standard for all subclasses with the @abstractmethod decorator."""
+
     def __init__(self, parent=None, *args, **kwargs):
         super(BaseCollection, self).__init__(*args, **kwargs)
         # Import reference to parent = the project, otherwise it is difficult
@@ -57,7 +58,7 @@ class BaseCollection(ABC):
         # because .... _____________EXPLAIN WHY HERE!
 
         self._parent = parent
-        self._collection_name: str = ''
+        self._collection_name: str = ""
 
         self._entity_dict: dict = dict()
         self._entity_dict_types: dict = dict()
@@ -75,7 +76,9 @@ class BaseCollection(ABC):
     # =========================== Abstract (obligatory) methods ================================
 
     @abstractmethod
-    def add_entity_from_dict(self, entity_dict: pd_DataFrame = None, color: np_ndarray = None):
+    def add_entity_from_dict(
+        self, entity_dict: pd_DataFrame = None, color: np_ndarray = None
+    ):
         """Add entity to collection from dictionary."""
         pass
 
@@ -115,15 +118,16 @@ class BaseCollection(ABC):
         pass
 
     @abstractmethod
-    def set_uid_legend(self,
-                       uid: str = None,
-                       color_R: float = None,
-                       color_G: float = None,
-                       color_B: float = None,
-                       line_thick: float = None,
-                       point_size: float = None,
-                       opacity: float = None,
-                       ):
+    def set_uid_legend(
+        self,
+        uid: str = None,
+        color_R: float = None,
+        color_G: float = None,
+        color_B: float = None,
+        line_thick: float = None,
+        point_size: float = None,
+        opacity: float = None,
+    ):
         """Set legend properties from uid. Take care since this resets the legend for all similar objects."""
         pass
 
@@ -329,7 +333,9 @@ class BaseCollection(ABC):
         # Use the query method in the future?
         return self.df.loc[self.df["uid"] == uid, "properties_components"].values[0]
 
-    def set_uid_properties_components(self, uid: str = None, properties_components: list = None):
+    def set_uid_properties_components(
+        self, uid: str = None, properties_components: list = None
+    ):
         """Set properties componentes from uid. This is a LIST and "at" must be used!"""
         row = self.df[self.df["uid"] == uid].index.values[0]
         self.df.at[row, "properties_components"] = properties_components
@@ -357,7 +363,12 @@ class BaseCollection(ABC):
         """Set vtk object from uid."""
         self.df.loc[self.df["uid"] == uid, "vtk_obj"] = vtk_obj
 
-    def append_uid_property(self, uid: str = None, property_name: str = None, property_components: str = None):
+    def append_uid_property(
+        self,
+        uid: str = None,
+        property_name: str = None,
+        property_components: str = None,
+    ):
         """Add property name and components to an uid and create empty property on vtk object.
         For some reason here list.append(new_element) does not work"""
         old_properties_names = self.get_uid_properties_names(uid=uid)
@@ -390,11 +401,15 @@ class BaseCollection(ABC):
         # IN THE FUTURE add cell data.
         self.signals.data_keys_modified([uid])
 
-    def get_uid_property_shape(self, uid: str = None, property_name: str = None) -> tuple:
+    def get_uid_property_shape(
+        self, uid: str = None, property_name: str = None
+    ) -> tuple:
         """Returns the shape of the property data array."""
         return self.get_uid_vtk_obj(uid).get_point_data_shape(property_name)
 
-    def get_uid_property(self, uid: str = None, property_name: str = None) -> np_ndarray:
+    def get_uid_property(
+        self, uid: str = None, property_name: str = None
+    ) -> np_ndarray:
         """Returns an array with property data."""
         return self.get_uid_vtk_obj(uid).get_point_data(property_name)
 
@@ -411,6 +426,7 @@ class BaseCollection(ABC):
 class BaseTableModel(QAbstractTableModel):
     """BaseTableModel inherits from QAbstractTableModel setting a few methods and
     the data connection to the Pandas dataframe self.collection.df."""
+
     def __init__(self, parent=None, collection: BaseCollection = None, *args, **kwargs):
         super().__init__(parent, *args, **kwargs)
         # Initialize just parent (the project) and the collection.
@@ -425,9 +441,9 @@ class BaseTableModel(QAbstractTableModel):
 
     def data(self, index, qt_role):
         """Data is updated on the fly:
-           .row() index points to an entity in the collection
-           .column() index points to an element in the list created on the fly
-           based on the column headers stored in the dictionary."""
+        .row() index points to an entity in the collection
+        .column() index points to an element in the list created on the fly
+        based on the column headers stored in the dictionary."""
         if qt_role == Qt.DisplayRole:
             value = self.collection.df.iloc[index.row(), index.column()]
             return str(value)

@@ -5,6 +5,7 @@ from pandas import unique as pd_unique
 
 """Methods used to build and update the GEOLOGY and TOPOLOGY trees."""
 
+
 def create_geology_tree(self):
     """Create geology tree with checkboxes and properties"""
     self.GeologyTreeWidget.clear()
@@ -18,9 +19,7 @@ def create_geology_tree(self):
     roles = pd_unique(self.parent.geol_coll.df.query(self.view_filter)["role"])
     for role in roles:
         # self.GeologyTreeWidget as parent -> top level
-        glevel_1 = QTreeWidgetItem(
-            self.GeologyTreeWidget, [role]
-        )
+        glevel_1 = QTreeWidgetItem(self.GeologyTreeWidget, [role])
         glevel_1.setFlags(
             glevel_1.flags() | Qt.ItemIsUserTristate | Qt.ItemIsUserCheckable
         )
@@ -32,9 +31,7 @@ def create_geology_tree(self):
         )
         for feature in features:
             # glevel_1 as parent -> 1st middle level
-            glevel_2 = QTreeWidgetItem(
-                glevel_1, [feature]
-            )
+            glevel_2 = QTreeWidgetItem(glevel_1, [feature])
             glevel_2.setFlags(
                 glevel_2.flags() | Qt.ItemIsUserTristate | Qt.ItemIsUserCheckable
             )
@@ -42,29 +39,37 @@ def create_geology_tree(self):
                 self.parent.geol_coll.df.query(self.view_filter).loc[
                     (self.parent.geol_coll.df.query(self.view_filter)["role"] == role)
                     & (
-                            self.parent.geol_coll.df.query(self.view_filter)["feature"]
-                            == feature
+                        self.parent.geol_coll.df.query(self.view_filter)["feature"]
+                        == feature
                     ),
                     "scenario",
                 ]
             )
             for scenario in geo_scenario:
                 # glevel_2 as parent -> 2nd middle level
-                glevel_3 = QTreeWidgetItem(
-                    glevel_2, [scenario]
-                )
+                glevel_3 = QTreeWidgetItem(glevel_2, [scenario])
                 glevel_3.setFlags(
                     glevel_3.flags() | Qt.ItemIsUserTristate | Qt.ItemIsUserCheckable
                 )
-                uids = self.parent.geol_coll.df.query(self.view_filter).loc[
-                    (self.parent.geol_coll.df.query(self.view_filter)["role"] == role)
-                    & (
+                uids = (
+                    self.parent.geol_coll.df.query(self.view_filter)
+                    .loc[
+                        (
+                            self.parent.geol_coll.df.query(self.view_filter)["role"]
+                            == role
+                        )
+                        & (
                             self.parent.geol_coll.df.query(self.view_filter)["feature"]
                             == feature
-                    )
-                    & (self.parent.geol_coll.df.query(self.view_filter)["scenario"] == scenario),
-                    "uid",
-                ].to_list()
+                        )
+                        & (
+                            self.parent.geol_coll.df.query(self.view_filter)["scenario"]
+                            == scenario
+                        ),
+                        "uid",
+                    ]
+                    .to_list()
+                )
                 for uid in uids:
                     property_combo = QComboBox()
                     property_combo.uid = uid
@@ -78,19 +83,17 @@ def create_geology_tree(self):
                         (self.parent.geol_coll.df["uid"] == uid), "name"
                     ].values[0]
                     # glevel_3 as parent -> lower level
-                    glevel_4 = QTreeWidgetItem(
-                        glevel_3, [name, uid]
-                    )
-                    self.GeologyTreeWidget.setItemWidget(
-                        glevel_4, 2, property_combo
-                    )
+                    glevel_4 = QTreeWidgetItem(glevel_3, [name, uid])
+                    self.GeologyTreeWidget.setItemWidget(glevel_4, 2, property_combo)
                     property_combo.currentIndexChanged.connect(
-                        lambda *, sender=property_combo: self.toggle_property(sender=sender)
+                        lambda *, sender=property_combo: self.toggle_property(
+                            sender=sender
+                        )
                     )
                     glevel_4.setFlags(glevel_4.flags() | Qt.ItemIsUserCheckable)
-                    if self.actors_df.loc[
-                        self.actors_df["uid"] == uid, "show"
-                    ].values[0]:
+                    if self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[
+                        0
+                    ]:
                         glevel_4.setCheckState(0, Qt.Checked)
                     elif not self.actors_df.loc[
                         self.actors_df["uid"] == uid, "show"
@@ -98,7 +101,7 @@ def create_geology_tree(self):
                         glevel_4.setCheckState(0, Qt.Unchecked)
     # Send messages. Note that with tristate several signals are emitted in a sequence, one for each
     # changed item, but upper levels do not broadcast uid's so they are filtered in the toggle method.
-    self.GeologyTreeWidget.itemChanged.connect(self.toggle_geology_visibility )
+    self.GeologyTreeWidget.itemChanged.connect(self.toggle_geology_visibility)
     # Squeeze column width to fit content
     for col in range(self.GeologyTreeWidget.columnCount()):
         self.GeologyTreeWidget.resizeColumnToContents(col)
@@ -109,45 +112,43 @@ def update_geology_tree_added(self, uid_list=None):
     """Update geology tree without creating a new model"""
     for uid in uid_list:
         if (
-                self.GeologyTreeWidget.findItems(
-                    self.parent.geol_coll.get_uid_role(uid),
-                    Qt.MatchExactly,
-                    0,
-                )
-                != []
+            self.GeologyTreeWidget.findItems(
+                self.parent.geol_coll.get_uid_role(uid),
+                Qt.MatchExactly,
+                0,
+            )
+            != []
         ):
             # Already exists a TreeItem (1 level) for the geological type
             counter_1 = 0
             for child_1 in range(
-                    self.GeologyTreeWidget.findItems(
-                        self.parent.geol_coll.get_uid_role(uid),
-                        Qt.MatchExactly,
-                        0,
-                    )[0].childCount()
+                self.GeologyTreeWidget.findItems(
+                    self.parent.geol_coll.get_uid_role(uid),
+                    Qt.MatchExactly,
+                    0,
+                )[0].childCount()
             ):
                 # for cycle that loops n times as the number of subItems in the specific geological type branch
                 if self.GeologyTreeWidget.findItems(
-                        self.parent.geol_coll.get_uid_role(uid),
-                        Qt.MatchExactly,
-                        0,
-                )[0].child(child_1).text(
-                    0
-                ) == self.parent.geol_coll.get_uid_feature(
+                    self.parent.geol_coll.get_uid_role(uid),
+                    Qt.MatchExactly,
+                    0,
+                )[0].child(child_1).text(0) == self.parent.geol_coll.get_uid_feature(
                     uid
                 ):
                     counter_1 += 1
             if counter_1 != 0:
                 for child_1 in range(
-                        self.GeologyTreeWidget.findItems(
-                            self.parent.geol_coll.get_uid_role(uid),
-                            Qt.MatchExactly,
-                            0,
-                        )[0].childCount()
+                    self.GeologyTreeWidget.findItems(
+                        self.parent.geol_coll.get_uid_role(uid),
+                        Qt.MatchExactly,
+                        0,
+                    )[0].childCount()
                 ):
                     if self.GeologyTreeWidget.findItems(
-                            self.parent.geol_coll.get_uid_role(uid),
-                            Qt.MatchExactly,
-                            0,
+                        self.parent.geol_coll.get_uid_role(uid),
+                        Qt.MatchExactly,
+                        0,
                     )[0].child(child_1).text(
                         0
                     ) == self.parent.geol_coll.get_uid_feature(
@@ -156,26 +157,22 @@ def update_geology_tree_added(self, uid_list=None):
                         # Already exists a TreeItem (2 level) for the geological feature
                         counter_2 = 0
                         for child_2 in range(
-                                self.GeologyTreeWidget.itemBelow(
-                                    self.GeologyTreeWidget.findItems(
-                                        self.parent.geol_coll.get_uid_role(
-                                            uid
-                                        ),
-                                        Qt.MatchExactly,
-                                        0,
-                                    )[0]
-                                ).childCount()
+                            self.GeologyTreeWidget.itemBelow(
+                                self.GeologyTreeWidget.findItems(
+                                    self.parent.geol_coll.get_uid_role(uid),
+                                    Qt.MatchExactly,
+                                    0,
+                                )[0]
+                            ).childCount()
                         ):
                             # for cycle that loops n times as the number of sub-subItems in the specific geological
                             # type and geological feature branch
                             if self.GeologyTreeWidget.itemBelow(
-                                    self.GeologyTreeWidget.findItems(
-                                        self.parent.geol_coll.get_uid_role(
-                                            uid
-                                        ),
-                                        Qt.MatchExactly,
-                                        0,
-                                    )[0]
+                                self.GeologyTreeWidget.findItems(
+                                    self.parent.geol_coll.get_uid_role(uid),
+                                    Qt.MatchExactly,
+                                    0,
+                                )[0]
                             ).child(child_2).text(
                                 0
                             ) == self.parent.geol_coll.get_uid_scenario(
@@ -184,24 +181,20 @@ def update_geology_tree_added(self, uid_list=None):
                                 counter_2 += 1
                         if counter_2 != 0:
                             for child_2 in range(
-                                    self.GeologyTreeWidget.itemBelow(
-                                        self.GeologyTreeWidget.findItems(
-                                            self.parent.geol_coll.get_uid_role(
-                                                uid
-                                            ),
-                                            Qt.MatchExactly,
-                                            0,
-                                        )[0]
-                                    ).childCount()
+                                self.GeologyTreeWidget.itemBelow(
+                                    self.GeologyTreeWidget.findItems(
+                                        self.parent.geol_coll.get_uid_role(uid),
+                                        Qt.MatchExactly,
+                                        0,
+                                    )[0]
+                                ).childCount()
                             ):
                                 if self.GeologyTreeWidget.itemBelow(
-                                        self.GeologyTreeWidget.findItems(
-                                            self.parent.geol_coll.get_uid_role(
-                                                uid
-                                            ),
-                                            Qt.MatchExactly,
-                                            0,
-                                        )[0]
+                                    self.GeologyTreeWidget.findItems(
+                                        self.parent.geol_coll.get_uid_role(uid),
+                                        Qt.MatchExactly,
+                                        0,
+                                    )[0]
                                 ).child(child_2).text(
                                     0
                                 ) == self.parent.geol_coll.get_uid_scenario(
@@ -215,7 +208,7 @@ def update_geology_tree_added(self, uid_list=None):
                                     property_combo.addItem("Y")
                                     property_combo.addItem("Z")
                                     for (
-                                            prop
+                                        prop
                                     ) in self.parent.geol_coll.get_uid_properties_names(
                                         uid
                                     ):
@@ -223,9 +216,7 @@ def update_geology_tree_added(self, uid_list=None):
                                     name = self.parent.geol_coll.get_uid_name(uid)
                                     glevel_4 = QTreeWidgetItem(
                                         self.GeologyTreeWidget.findItems(
-                                            self.parent.geol_coll.get_uid_role(
-                                                uid
-                                            ),
+                                            self.parent.geol_coll.get_uid_role(uid),
                                             Qt.MatchExactly,
                                             0,
                                         )[0]
@@ -237,7 +228,9 @@ def update_geology_tree_added(self, uid_list=None):
                                         glevel_4, 2, property_combo
                                     )
                                     property_combo.currentIndexChanged.connect(
-                                        lambda *, sender=property_combo: self.toggle_property(sender=sender)
+                                        lambda *, sender=property_combo: self.toggle_property(
+                                            sender=sender
+                                        )
                                     )
                                     glevel_4.setFlags(
                                         glevel_4.flags() | Qt.ItemIsUserCheckable
@@ -258,9 +251,7 @@ def update_geology_tree_added(self, uid_list=None):
                             # Same geological type and geological feature, different scenario
                             glevel_3 = QTreeWidgetItem(
                                 self.GeologyTreeWidget.findItems(
-                                    self.parent.geol_coll.get_uid_role(
-                                        uid
-                                    ),
+                                    self.parent.geol_coll.get_uid_role(uid),
                                     Qt.MatchExactly,
                                     0,
                                 )[0].child(child_1),
@@ -278,9 +269,7 @@ def update_geology_tree_added(self, uid_list=None):
                             property_combo.addItem("X")
                             property_combo.addItem("Y")
                             property_combo.addItem("Z")
-                            for (
-                                    prop
-                            ) in self.parent.geol_coll.get_uid_properties_names(
+                            for prop in self.parent.geol_coll.get_uid_properties_names(
                                 uid
                             ):
                                 property_combo.addItem(prop)
@@ -290,11 +279,11 @@ def update_geology_tree_added(self, uid_list=None):
                                 glevel_4, 2, property_combo
                             )
                             property_combo.currentIndexChanged.connect(
-                                lambda *, sender=property_combo: self.toggle_property(sender=sender)
+                                lambda *, sender=property_combo: self.toggle_property(
+                                    sender=sender
+                                )
                             )
-                            glevel_4.setFlags(
-                                glevel_4.flags() | Qt.ItemIsUserCheckable
-                            )
+                            glevel_4.setFlags(glevel_4.flags() | Qt.ItemIsUserCheckable)
                             if self.actors_df.loc[
                                 self.actors_df["uid"] == uid, "show"
                             ].values[0]:
@@ -341,9 +330,7 @@ def update_geology_tree_added(self, uid_list=None):
                     lambda *, sender=property_combo: self.toggle_property(sender=sender)
                 )
                 glevel_4.setFlags(glevel_4.flags() | Qt.ItemIsUserCheckable)
-                if self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[
-                    0
-                ]:
+                if self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]:
                     glevel_4.setCheckState(0, Qt.Checked)
                 elif not self.actors_df.loc[
                     self.actors_df["uid"] == uid, "show"
@@ -392,9 +379,7 @@ def update_geology_tree_added(self, uid_list=None):
             glevel_4.setFlags(glevel_4.flags() | Qt.ItemIsUserCheckable)
             if self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]:
                 glevel_4.setCheckState(0, Qt.Checked)
-            elif not self.actors_df.loc[
-                self.actors_df["uid"] == uid, "show"
-            ].values[0]:
+            elif not self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]:
                 glevel_4.setCheckState(0, Qt.Unchecked)
             self.GeologyTreeWidget.insertTopLevelItem(0, glevel_4)
             break
@@ -404,6 +389,7 @@ def update_geology_tree_added(self, uid_list=None):
         self.GeologyTreeWidget.resizeColumnToContents(col)
     self.GeologyTreeWidget.expandAll()
 
+
 def update_geology_tree_removed(self, removed_list=None):
     """When geological entity is removed, update Geology Tree without building a new model"""
     success = 0
@@ -411,29 +397,29 @@ def update_geology_tree_removed(self, removed_list=None):
         for top_role in range(self.GeologyTreeWidget.topLevelItemCount()):
             # Iterate through every Geological Role top level
             for child_feature in range(
-                    self.GeologyTreeWidget.topLevelItem(top_role).childCount()
+                self.GeologyTreeWidget.topLevelItem(top_role).childCount()
             ):
                 # Iterate through every Geological Feature child
                 for child_scenario in range(
-                        self.GeologyTreeWidget.topLevelItem(top_role)
-                                .child(child_feature)
-                                .childCount()
+                    self.GeologyTreeWidget.topLevelItem(top_role)
+                    .child(child_feature)
+                    .childCount()
                 ):
                     # Iterate through every Scenario child
                     for child_entity in range(
-                            self.GeologyTreeWidget.topLevelItem(top_role)
-                                    .child(child_feature)
-                                    .child(child_scenario)
-                                    .childCount()
+                        self.GeologyTreeWidget.topLevelItem(top_role)
+                        .child(child_feature)
+                        .child(child_scenario)
+                        .childCount()
                     ):
                         # Iterate through every Entity child
                         if (
-                                self.GeologyTreeWidget.topLevelItem(top_role)
-                                        .child(child_feature)
-                                        .child(child_scenario)
-                                        .child(child_entity)
-                                        .text(1)
-                                == uid
+                            self.GeologyTreeWidget.topLevelItem(top_role)
+                            .child(child_feature)
+                            .child(child_scenario)
+                            .child(child_entity)
+                            .text(1)
+                            == uid
                         ):
                             # Complete check: entity found has the uid of the entity we need to remove. Delete
                             # child, then ensure no Child or Top Level remain empty
@@ -447,28 +433,24 @@ def update_geology_tree_removed(self, removed_list=None):
                                 .child(child_entity)
                             )
                             if (
-                                    self.GeologyTreeWidget.topLevelItem(top_role)
-                                            .child(child_feature)
-                                            .child(child_scenario)
-                                            .childCount()
-                                    == 0
+                                self.GeologyTreeWidget.topLevelItem(top_role)
+                                .child(child_feature)
+                                .child(child_scenario)
+                                .childCount()
+                                == 0
                             ):
-                                self.GeologyTreeWidget.topLevelItem(
-                                    top_role
-                                ).child(child_feature).removeChild(
-                                    self.GeologyTreeWidget.topLevelItem(
-                                        top_role
-                                    )
+                                self.GeologyTreeWidget.topLevelItem(top_role).child(
+                                    child_feature
+                                ).removeChild(
+                                    self.GeologyTreeWidget.topLevelItem(top_role)
                                     .child(child_feature)
                                     .child(child_scenario)
                                 )
                                 if (
-                                        self.GeologyTreeWidget.topLevelItem(
-                                            top_role
-                                        )
-                                                .child(child_feature)
-                                                .childCount()
-                                        == 0
+                                    self.GeologyTreeWidget.topLevelItem(top_role)
+                                    .child(child_feature)
+                                    .childCount()
+                                    == 0
                                 ):
                                     self.GeologyTreeWidget.topLevelItem(
                                         top_role
@@ -478,10 +460,10 @@ def update_geology_tree_removed(self, removed_list=None):
                                         ).child(child_feature)
                                     )
                                     if (
-                                            self.GeologyTreeWidget.topLevelItem(
-                                                top_role
-                                            ).childCount()
-                                            == 0
+                                        self.GeologyTreeWidget.topLevelItem(
+                                            top_role
+                                        ).childCount()
+                                        == 0
                                     ):
                                         self.GeologyTreeWidget.takeTopLevelItem(
                                             top_role
@@ -494,6 +476,7 @@ def update_geology_tree_removed(self, removed_list=None):
             if success == 1:
                 break
 
+
 def update_geology_checkboxes(self, uid=None, uid_checkState=None):
     """Update checkboxes in geology tree, called when state changed in topology tree."""
     item = self.GeologyTreeWidget.findItems(
@@ -503,6 +486,7 @@ def update_geology_checkboxes(self, uid=None, uid_checkState=None):
         item.setCheckState(0, Qt.Checked)
     elif uid_checkState == Qt.Unchecked:
         item.setCheckState(0, Qt.Unchecked)
+
 
 def create_topology_tree(self):
     """Create topology tree with checkboxes and properties"""
@@ -518,30 +502,37 @@ def create_topology_tree(self):
 
     for topo_type in topo_types:
         # self.GeologyTreeWidget as parent -> top level
-        tlevel_1 = QTreeWidgetItem(
-            self.GeologyTopologyTreeWidget, [topo_type]
-        )
+        tlevel_1 = QTreeWidgetItem(self.GeologyTopologyTreeWidget, [topo_type])
         tlevel_1.setFlags(
             tlevel_1.flags() | Qt.ItemIsUserTristate | Qt.ItemIsUserCheckable
         )
         for scenario in pd_unique(
-                self.parent.geol_coll.df.query(self.view_filter).loc[
-                    self.parent.geol_coll.df.query(self.view_filter)["topology"] == topo_type,
-                    "scenario",
-                ]
+            self.parent.geol_coll.df.query(self.view_filter).loc[
+                self.parent.geol_coll.df.query(self.view_filter)["topology"]
+                == topo_type,
+                "scenario",
+            ]
         ):
             # tlevel_1 as parent -> middle level
-            tlevel_2 = QTreeWidgetItem(
-                tlevel_1, [scenario]
-            )
+            tlevel_2 = QTreeWidgetItem(tlevel_1, [scenario])
             tlevel_2.setFlags(
                 tlevel_2.flags() | Qt.ItemIsUserTristate | Qt.ItemIsUserCheckable
             )
-            uids = self.parent.geol_coll.df.query(self.view_filter).loc[
-                (self.parent.geol_coll.df.query(self.view_filter)["topology"] == topo_type)
-                & (self.parent.geol_coll.df.query(self.view_filter)["scenario"] == scenario),
-                "uid",
-            ].to_list()
+            uids = (
+                self.parent.geol_coll.df.query(self.view_filter)
+                .loc[
+                    (
+                        self.parent.geol_coll.df.query(self.view_filter)["topology"]
+                        == topo_type
+                    )
+                    & (
+                        self.parent.geol_coll.df.query(self.view_filter)["scenario"]
+                        == scenario
+                    ),
+                    "uid",
+                ]
+                .to_list()
+            )
             for uid in uids:
                 property_combo = QComboBox()
                 property_combo.uid = uid
@@ -555,17 +546,15 @@ def create_topology_tree(self):
                     self.parent.geol_coll.df["uid"] == uid, "name"
                 ].values[0]
                 # tlevel_2 as parent -> lower level
-                tlevel_3 = QTreeWidgetItem(
-                    tlevel_2, [name, uid]
+                tlevel_3 = QTreeWidgetItem(tlevel_2, [name, uid])
+                self.GeologyTopologyTreeWidget.setItemWidget(
+                    tlevel_3, 2, property_combo
                 )
-                self.GeologyTopologyTreeWidget.setItemWidget(tlevel_3, 2, property_combo)
                 property_combo.currentIndexChanged.connect(
                     lambda *, sender=property_combo: self.toggle_property(sender=sender)
                 )
                 tlevel_3.setFlags(tlevel_3.flags() | Qt.ItemIsUserCheckable)
-                if self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[
-                    0
-                ]:
+                if self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]:
                     tlevel_3.setCheckState(0, Qt.Checked)
                 elif not self.actors_df.loc[
                     self.actors_df["uid"] == uid, "show"
@@ -579,49 +568,48 @@ def create_topology_tree(self):
         self.GeologyTopologyTreeWidget.resizeColumnToContents(col)
     self.GeologyTopologyTreeWidget.expandAll()
 
+
 def update_topology_tree_added(self, uid_list=None):
     """Update topology tree without creating a new model"""
     for uid in uid_list:
         if (
-                self.GeologyTopologyTreeWidget.findItems(
-                    self.parent.geol_coll.get_uid_topology(uid),
-                    Qt.MatchExactly,
-                    0,
-                )
-                != []
+            self.GeologyTopologyTreeWidget.findItems(
+                self.parent.geol_coll.get_uid_topology(uid),
+                Qt.MatchExactly,
+                0,
+            )
+            != []
         ):
             # Already exists a TreeItem (1 level) for the topological type
             counter_1 = 0
             for child_1 in range(
-                    self.GeologyTopologyTreeWidget.findItems(
-                        self.parent.geol_coll.get_uid_topology(uid),
-                        Qt.MatchExactly,
-                        0,
-                    )[0].childCount()
+                self.GeologyTopologyTreeWidget.findItems(
+                    self.parent.geol_coll.get_uid_topology(uid),
+                    Qt.MatchExactly,
+                    0,
+                )[0].childCount()
             ):
                 # for cycle that loops n times as the number of subItems in the specific topological type branch
                 if self.GeologyTopologyTreeWidget.findItems(
-                        self.parent.geol_coll.get_uid_topology(uid),
-                        Qt.MatchExactly,
-                        0,
-                )[0].child(child_1).text(
-                    0
-                ) == self.parent.geol_coll.get_uid_scenario(
+                    self.parent.geol_coll.get_uid_topology(uid),
+                    Qt.MatchExactly,
+                    0,
+                )[0].child(child_1).text(0) == self.parent.geol_coll.get_uid_scenario(
                     uid
                 ):
                     counter_1 += 1
             if counter_1 != 0:
                 for child_1 in range(
-                        self.GeologyTopologyTreeWidget.findItems(
-                            self.parent.geol_coll.get_uid_topology(uid),
-                            Qt.MatchExactly,
-                            0,
-                        )[0].childCount()
+                    self.GeologyTopologyTreeWidget.findItems(
+                        self.parent.geol_coll.get_uid_topology(uid),
+                        Qt.MatchExactly,
+                        0,
+                    )[0].childCount()
                 ):
                     if self.GeologyTopologyTreeWidget.findItems(
-                            self.parent.geol_coll.get_uid_topology(uid),
-                            Qt.MatchExactly,
-                            0,
+                        self.parent.geol_coll.get_uid_topology(uid),
+                        Qt.MatchExactly,
+                        0,
                     )[0].child(child_1).text(
                         0
                     ) == self.parent.geol_coll.get_uid_scenario(
@@ -649,7 +637,9 @@ def update_topology_tree_added(self, uid_list=None):
                             tlevel_3, 2, property_combo
                         )
                         property_combo.currentIndexChanged.connect(
-                            lambda *, sender=property_combo: self.toggle_property(sender=sender)
+                            lambda *, sender=property_combo: self.toggle_property(
+                                sender=sender
+                            )
                         )
                         tlevel_3.setFlags(tlevel_3.flags() | Qt.ItemIsUserCheckable)
                         if self.actors_df.loc[
@@ -686,14 +676,14 @@ def update_topology_tree_added(self, uid_list=None):
                     property_combo.addItem(prop)
                 name = self.parent.geol_coll.get_uid_name(uid)
                 tlevel_3 = QTreeWidgetItem(tlevel_2, [name, uid])
-                self.GeologyTopologyTreeWidget.setItemWidget(tlevel_3, 2, property_combo)
+                self.GeologyTopologyTreeWidget.setItemWidget(
+                    tlevel_3, 2, property_combo
+                )
                 property_combo.currentIndexChanged.connect(
                     lambda *, sender=property_combo: self.toggle_property(sender=sender)
                 )
                 tlevel_3.setFlags(tlevel_3.flags() | Qt.ItemIsUserCheckable)
-                if self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[
-                    0
-                ]:
+                if self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]:
                     tlevel_3.setCheckState(0, Qt.Checked)
                 elif not self.actors_df.loc[
                     self.actors_df["uid"] == uid, "show"
@@ -735,9 +725,7 @@ def update_topology_tree_added(self, uid_list=None):
             tlevel_3.setFlags(tlevel_3.flags() | Qt.ItemIsUserCheckable)
             if self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]:
                 tlevel_3.setCheckState(0, Qt.Checked)
-            elif not self.actors_df.loc[
-                self.actors_df["uid"] == uid, "show"
-            ].values[0]:
+            elif not self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]:
                 tlevel_3.setCheckState(0, Qt.Unchecked)
             self.GeologyTopologyTreeWidget.insertTopLevelItem(0, tlevel_3)
             break
@@ -747,6 +735,7 @@ def update_topology_tree_added(self, uid_list=None):
         self.GeologyTopologyTreeWidget.resizeColumnToContents(col)
     self.GeologyTopologyTreeWidget.expandAll()
 
+
 def update_topology_tree_removed(self, removed_list=None):
     """When geological entity is removed, update Topology Tree without building a new model"""
     success = 0
@@ -754,37 +743,37 @@ def update_topology_tree_removed(self, removed_list=None):
         for top_topo_type in range(self.GeologyTopologyTreeWidget.topLevelItemCount()):
             # Iterate through every Topological Role top level
             for child_scenario in range(
-                    self.GeologyTopologyTreeWidget.topLevelItem(top_topo_type).childCount()
+                self.GeologyTopologyTreeWidget.topLevelItem(top_topo_type).childCount()
             ):
                 # Iterate through every Scenario child
                 for child_entity in range(
-                        self.GeologyTopologyTreeWidget.topLevelItem(top_topo_type)
-                                .child(child_scenario)
-                                .childCount()
+                    self.GeologyTopologyTreeWidget.topLevelItem(top_topo_type)
+                    .child(child_scenario)
+                    .childCount()
                 ):
                     # Iterate through every Entity child
                     if (
-                            self.GeologyTopologyTreeWidget.topLevelItem(top_topo_type)
-                                    .child(child_scenario)
-                                    .child(child_entity)
-                                    .text(1)
-                            == uid
+                        self.GeologyTopologyTreeWidget.topLevelItem(top_topo_type)
+                        .child(child_scenario)
+                        .child(child_entity)
+                        .text(1)
+                        == uid
                     ):
                         # Complete check: entity found has the uid of the entity we need to remove. Delete child,
                         # then ensure no Child or Top Level remain empty
                         success = 1
-                        self.GeologyTopologyTreeWidget.topLevelItem(top_topo_type).child(
-                            child_scenario
-                        ).removeChild(
+                        self.GeologyTopologyTreeWidget.topLevelItem(
+                            top_topo_type
+                        ).child(child_scenario).removeChild(
                             self.GeologyTopologyTreeWidget.topLevelItem(top_topo_type)
                             .child(child_scenario)
                             .child(child_entity)
                         )
                         if (
-                                self.GeologyTopologyTreeWidget.topLevelItem(top_topo_type)
-                                        .child(child_scenario)
-                                        .childCount()
-                                == 0
+                            self.GeologyTopologyTreeWidget.topLevelItem(top_topo_type)
+                            .child(child_scenario)
+                            .childCount()
+                            == 0
                         ):
                             self.GeologyTopologyTreeWidget.topLevelItem(
                                 top_topo_type
@@ -794,10 +783,10 @@ def update_topology_tree_removed(self, removed_list=None):
                                 ).child(child_scenario)
                             )
                             if (
-                                    self.GeologyTopologyTreeWidget.topLevelItem(
-                                        top_topo_type
-                                    ).childCount()
-                                    == 0
+                                self.GeologyTopologyTreeWidget.topLevelItem(
+                                    top_topo_type
+                                ).childCount()
+                                == 0
                             ):
                                 self.GeologyTopologyTreeWidget.takeTopLevelItem(
                                     top_topo_type
@@ -807,6 +796,7 @@ def update_topology_tree_removed(self, removed_list=None):
                     break
             if success == 1:
                 break
+
 
 def update_topology_checkboxes(self, uid=None, uid_checkState=None):
     """Update checkboxes in topology tree, called when state changed in geology tree."""
@@ -818,20 +808,18 @@ def update_topology_checkboxes(self, uid=None, uid_checkState=None):
     elif uid_checkState == Qt.Unchecked:
         item.setCheckState(0, Qt.Unchecked)
 
-def toggle_geology_visibility (self, item):
+
+def toggle_geology_visibility(self, item):
     """Called by self.GeologyTreeWidget.itemChanged.connect(self.toggle_geology_visibility ) and
-    self.GeologyTopologyTreeWidget.itemChanged.connect(self.toggle_geology_visibility )"""
+    self.GeologyTopologyTreeWidget.itemChanged.connect(self.toggle_geology_visibility )
+    """
     # name = item.text(0)  # not used
     uid = item.text(1)
     uid_checkState = item.checkState(0)
     # needed to skip messages from upper levels of tree that do not broadcast uid's
-    if (
-            uid
-    ):
+    if uid:
         if uid_checkState == Qt.Checked:
-            if not self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[
-                0
-            ]:
+            if not self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]:
                 self.actors_df.loc[self.actors_df["uid"] == uid, "show"] = True
                 self.set_actor_visible(uid=uid, visible=True)
         elif uid_checkState == Qt.Unchecked:
@@ -845,9 +833,7 @@ def toggle_geology_visibility (self, item):
         self.GeologyTopologyTreeWidget.itemChanged.disconnect()
         update_geology_checkboxes(self, uid=uid, uid_checkState=uid_checkState)
         update_topology_checkboxes(self, uid=uid, uid_checkState=uid_checkState)
-        self.GeologyTreeWidget.itemChanged.connect(
-            self.toggle_geology_visibility 
-        )
+        self.GeologyTreeWidget.itemChanged.connect(self.toggle_geology_visibility)
         self.GeologyTopologyTreeWidget.itemChanged.connect(
-            self.toggle_geology_visibility 
+            self.toggle_geology_visibility
         )

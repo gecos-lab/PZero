@@ -21,6 +21,7 @@ pd_set_option("display.max_colwidth", pd_max_colwidth)
 
 class GeologicalCollection(GFBCollection):
     """Collection for all geological entities and their metadata."""
+
     def __init__(self, parent=None, *args, **kwargs):
         super(GeologicalCollection, self).__init__(parent, *args, **kwargs)
         # Initialize properties required by the abstract superclass.
@@ -40,11 +41,11 @@ class GeologicalCollection(GFBCollection):
             "TM_unit",
             "TS_unit",
             "INT_unit",
-            "formation"
+            "formation",
         ]
 
-        self.collection_name = 'geological'
+        self.collection_name = "geological"
 
-        self.default_sequence = 'strati_0'
+        self.default_sequence = "strati_0"
 
         self.initialize_df()

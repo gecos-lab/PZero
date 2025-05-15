@@ -5,6 +5,7 @@ from pandas import unique as pd_unique
 
 """Methods used to build and update the WELLS table."""
 
+
 def create_well_tree(self):
     """Create topology tree with checkboxes and properties"""
     self.WellsTreeWidget.clear()
@@ -124,6 +125,7 @@ def create_well_tree(self):
         self.WellsTreeWidget.resizeColumnToContents(col)
     self.WellsTreeWidget.expandAll()
 
+
 def update_well_tree_added(self, new_list=None):
     #############################################################
     # IS IT NECESSARY TO CONSIDER CROSS SEVTION HERE?
@@ -131,19 +133,19 @@ def update_well_tree_added(self, new_list=None):
     """Update well tree without creating a new model"""
     for uid in new_list["uid"]:
         if (
-                self.WellsTreeWidget.findItems(
-                    self.parent.well_coll.get_uid_well_locid(uid), Qt.MatchExactly, 0
-                )
-                != []
+            self.WellsTreeWidget.findItems(
+                self.parent.well_coll.get_uid_well_locid(uid), Qt.MatchExactly, 0
+            )
+            != []
         ):
             """Already exists a TreeItem (1 level) for the geological type"""
             counter_1 = 0
             for child_1 in range(
-                    self.WellsTreeWidget.findItems(
-                        self.parent.well_coll.get_uid_well_locid(uid),
-                        Qt.MatchExactly,
-                        0,
-                    )[0].childCount()
+                self.WellsTreeWidget.findItems(
+                    self.parent.well_coll.get_uid_well_locid(uid),
+                    Qt.MatchExactly,
+                    0,
+                )[0].childCount()
             ):
                 glevel_2 = QTreeWidgetItem(
                     self.WellsTreeWidget.findItems(
@@ -177,9 +179,7 @@ def update_well_tree_added(self, new_list=None):
                     lambda *, sender=property_combo: self.toggle_property(sender=sender)
                 )
                 glevel_2.setFlags(glevel_2.flags() | Qt.ItemIsUserCheckable)
-                if self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[
-                    0
-                ]:
+                if self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]:
                     glevel_2.setCheckState(0, Qt.Checked)
                 elif not self.actors_df.loc[
                     self.actors_df["uid"] == uid, "show"
@@ -238,9 +238,7 @@ def update_well_tree_added(self, new_list=None):
             tlevel_2_trace.setFlags(tlevel_2_trace.flags() | Qt.ItemIsUserCheckable)
             if self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]:
                 tlevel_2_trace.setCheckState(0, Qt.Checked)
-            elif not self.actors_df.loc[
-                self.actors_df["uid"] == uid, "show"
-            ].values[0]:
+            elif not self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]:
                 tlevel_2_trace.setCheckState(0, Qt.Unchecked)
             break
 
@@ -250,6 +248,7 @@ def update_well_tree_added(self, new_list=None):
         self.WellsTreeWidget.resizeColumnToContents(col)
     self.WellsTreeWidget.expandAll()
 
+
 def update_well_tree_removed(self, removed_list=None):
     """When geological entity is removed, update Geology Tree without building a new model"""
     success = 0
@@ -257,14 +256,14 @@ def update_well_tree_removed(self, removed_list=None):
         for well_locid in range(self.WellsTreeWidget.topLevelItemCount()):
             """Iterate through every Geological Role top level"""
             for child_feature in range(
-                    self.WellsTreeWidget.topLevelItem(well_locid).childCount()
+                self.WellsTreeWidget.topLevelItem(well_locid).childCount()
             ):
                 """Iterate through every Geological Feature child"""
                 if (
-                        self.WellsTreeWidget.topLevelItem(well_locid)
-                                .child(child_feature)
-                                .text(1)
-                        == uid
+                    self.WellsTreeWidget.topLevelItem(well_locid)
+                    .child(child_feature)
+                    .text(1)
+                    == uid
                 ):
                     """Complete check: entity found has the uid of the entity we need to remove. Delete child, then ensure no Child or Top Level remain empty"""
                     success = 1
@@ -276,14 +275,12 @@ def update_well_tree_removed(self, removed_list=None):
                         )
                     )
 
-                    if (
-                            self.WellsTreeWidget.topLevelItem(well_locid).childCount()
-                            == 0
-                    ):
+                    if self.WellsTreeWidget.topLevelItem(well_locid).childCount() == 0:
                         self.WellsTreeWidget.takeTopLevelItem(well_locid)
                     break
             if success == 1:
                 break
+
 
 def toggle_well_visibility(self, item):
     """Called by self.WellsTreeWidget.itemChanged.connect(self.toggle_boundary_visibility)."""
@@ -292,12 +289,10 @@ def toggle_well_visibility(self, item):
     uid = item.text(1)
     uid_checkState = item.checkState(0)
     if (
-            uid
+        uid
     ):  # needed to skip messages from upper levels of tree that do not broadcast uid's
         if uid_checkState == Qt.Checked:
-            if not self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[
-                0
-            ]:
+            if not self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]:
                 if name == "Trace":
                     self.actors_df.loc[self.actors_df["uid"] == uid, "show"] = True
             self.set_actor_visible(uid=uid, visible=True, name=name)

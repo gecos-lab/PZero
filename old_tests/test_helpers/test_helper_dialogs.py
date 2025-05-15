@@ -1,4 +1,3 @@
-
 from pzero.helpers.helper_dialogs import progress_dialog
 import pytest
 
@@ -25,13 +24,20 @@ class TestProgressDialog:
         title = "Title_test"
         label = "Saving test"
 
-        progress_dialog_instance = progress_dialog(max_value=max_value, title_txt=title,
-                                                   label_txt=label, cancel_txt=None, parent=self)
+        progress_dialog_instance = progress_dialog(
+            max_value=max_value,
+            title_txt=title,
+            label_txt=label,
+            cancel_txt=None,
+            parent=self,
+        )
 
-        assert progress_dialog_instance.value() == -1 \
-            and progress_dialog_instance.maximum() == max_value \
-            and progress_dialog_instance.windowTitle() == title \
+        assert (
+            progress_dialog_instance.value() == -1
+            and progress_dialog_instance.maximum() == max_value
+            and progress_dialog_instance.windowTitle() == title
             and progress_dialog_instance.labelText() == label
+        )
 
     # Testing the add_one function
     @pytest.fixture
@@ -40,8 +46,13 @@ class TestProgressDialog:
         title = "Title_test"
         label = "Saving test"
 
-        progress_dialog_instance = progress_dialog(max_value=max_value, title_txt=title,
-                                                   label_txt=label, cancel_txt=None, parent=self)
+        progress_dialog_instance = progress_dialog(
+            max_value=max_value,
+            title_txt=title,
+            label_txt=label,
+            cancel_txt=None,
+            parent=self,
+        )
 
         for i in range(max_value):
             progress_dialog_instance.add_one()
@@ -57,8 +68,13 @@ class TestProgressDialog:
         label = "Saving test"
         cancel_button_text = "test delete me"
 
-        progress_dialog_instance = progress_dialog(max_value=max_value, title_txt=title,
-                                                   label_txt=label, cancel_txt=cancel_button_text, parent=self)
+        progress_dialog_instance = progress_dialog(
+            max_value=max_value,
+            title_txt=title,
+            label_txt=label,
+            cancel_txt=cancel_button_text,
+            parent=self,
+        )
 
         assert progress_dialog_instance.wasCanceled() is False
 
@@ -70,8 +86,13 @@ class TestProgressDialog:
         label = "Saving test"
         cancel_button_text = "test delete me"
 
-        progress_dialog_instance = progress_dialog(max_value=max_value, title_txt=title,
-                                                   label_txt=label, cancel_txt=cancel_button_text, parent=self)
+        progress_dialog_instance = progress_dialog(
+            max_value=max_value,
+            title_txt=title,
+            label_txt=label,
+            cancel_txt=cancel_button_text,
+            parent=self,
+        )
         progress_dialog_instance.cancel()
 
         assert progress_dialog_instance.wasCanceled() is True
@@ -84,8 +105,13 @@ class TestProgressDialog:
         label = "Saving test"
         change_label = "new_test_label"
 
-        progress_dialog_instance = progress_dialog(max_value=max_value, title_txt=title,
-                                                   label_txt=label, cancel_txt=None, parent=self)
+        progress_dialog_instance = progress_dialog(
+            max_value=max_value,
+            title_txt=title,
+            label_txt=label,
+            cancel_txt=None,
+            parent=self,
+        )
         progress_dialog_instance.setLabelText(change_label)
 
         assert progress_dialog_instance.labelText() == change_label

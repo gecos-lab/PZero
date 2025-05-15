@@ -41,26 +41,40 @@ def well_added_update_views(self, updated_list=None):
         #     ignore_index=True,
         # )
         # New Pandas >= 2.0.0
-        self.actors_df = pd_concat([self.actors_df,
-                                    pd_DataFrame([{
-                                        "uid": uid,
-                                        "actor": this_actor,
-                                        "show": True,
-                                        "collection": "well_coll",
-                                        "show_property": None,
-                                    }])],
-                                   ignore_index=True,
-                                   )
-        actors_df_new = pd_concat([actors_df_new,
-                                   pd_DataFrame([{
-                                       "uid": uid,
-                                       "actor": this_actor,
-                                       "show": True,
-                                       "collection": "well_coll",
-                                       "show_property": None,
-                                   }])],
-                                  ignore_index=True,
-                                  )
+        self.actors_df = pd_concat(
+            [
+                self.actors_df,
+                pd_DataFrame(
+                    [
+                        {
+                            "uid": uid,
+                            "actor": this_actor,
+                            "show": True,
+                            "collection": "well_coll",
+                            "show_property": None,
+                        }
+                    ]
+                ),
+            ],
+            ignore_index=True,
+        )
+        actors_df_new = pd_concat(
+            [
+                actors_df_new,
+                pd_DataFrame(
+                    [
+                        {
+                            "uid": uid,
+                            "actor": this_actor,
+                            "show": True,
+                            "collection": "well_coll",
+                            "show_property": None,
+                        }
+                    ]
+                ),
+            ],
+            ignore_index=True,
+        )
         update_well_tree_added(self, actors_df_new)
     """Re-connect signals."""
     self.WellsTreeWidget.itemChanged.connect(self.toggle_well_visibility)
@@ -84,21 +98,29 @@ def well_data_keys_modified_update_views(self, updated_list=None):
     that disrupts the trees, then they are reconnected when the trees are rebuilt"""
     self.WellsTreeWidget.itemChanged.disconnect()
     for uid in updated_list:
-        if not self.actors_df.loc[self.actors_df["uid"] == uid, "show_property"].to_list() == []:
-            if not self.actors_df.loc[self.actors_df["uid"] == uid, "show_property"].values[
-                       0] in self.parent.geol_coll.get_uid_properties_names(uid):
-                show = self.actors_df.loc[self.actors_df["uid"] == uid, "show"].to_list()[0]
+        if (
+            not self.actors_df.loc[
+                self.actors_df["uid"] == uid, "show_property"
+            ].to_list()
+            == []
+        ):
+            if not self.actors_df.loc[
+                self.actors_df["uid"] == uid, "show_property"
+            ].values[0] in self.parent.geol_coll.get_uid_properties_names(uid):
+                show = self.actors_df.loc[
+                    self.actors_df["uid"] == uid, "show"
+                ].to_list()[0]
                 # This replaces the previous copy of the actor with the same uid, and updates the actors dataframe.
                 # See issue #33 for a discussion on actors replacement by the PyVista add_mesh and add_volume methods.
-                this_actor = self.show_actor_with_property(uid=uid, collection="geol_coll", show_property=None,
-                                                           visible=show)
+                this_actor = self.show_actor_with_property(
+                    uid=uid, collection="geol_coll", show_property=None, visible=show
+                )
                 create_well_tree(self)
     """Re-connect signals."""
     self.WellsTreeWidget.itemChanged.connect(self.toggle_well_visibility)
 
 
-def well_data_val_modified_update_views(self, updated_list=None):
-    ...
+def well_data_val_modified_update_views(self, updated_list=None): ...
 
 
 def well_metadata_modified_update_views(self, updated_list=None):

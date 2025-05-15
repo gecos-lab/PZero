@@ -10,7 +10,10 @@ from pyvista import lines_from_points as pv_line_from_points
 from pyvista import wrap as pv_wrap
 
 from vtkmodules.vtkCommonCore import vtkCommand
-from vtkmodules.vtkInteractionWidgets import vtkContourWidget, vtkLinearContourLineInterpolator
+from vtkmodules.vtkInteractionWidgets import (
+    vtkContourWidget,
+    vtkLinearContourLineInterpolator,
+)
 
 
 class Tracer(vtkContourWidget):

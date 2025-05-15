@@ -21,6 +21,7 @@ pd_set_option("display.max_colwidth", pd_max_colwidth)
 
 class BackgroundCollection(GFBCollection):
     """Collection for all background entities and their metadata."""
+
     def __init__(self, parent=None, *args, **kwargs):
         super(BackgroundCollection, self).__init__(parent, *args, **kwargs)
         # Initialize properties required by the abstract superclass.
@@ -30,8 +31,8 @@ class BackgroundCollection(GFBCollection):
             "imported",
         ]
 
-        self.collection_name = 'background'
+        self.collection_name = "background"
 
-        self.default_sequence = 'back_0'
+        self.default_sequence = "back_0"
 
         self.initialize_df()
