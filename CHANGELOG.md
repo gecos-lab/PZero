@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v0.1.4 (2025-05-15)
+
+### Bug Fixes
+
+- **Actions**: Add token auth
+  ([`51a4ba7`](https://github.com/gecos-lab/PZero/commit/51a4ba710cd93306bab346890cbaa8b8b9062a83))
+
+
 ## v0.1.3 (2025-05-15)
 
 ### Bug Fixes
