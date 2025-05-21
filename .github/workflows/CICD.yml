@@ -69,9 +69,25 @@ jobs:
         if: runner.os == 'macOS'
         run: |
           if [ "${{ matrix.arch }}" = "x86_64" ]; then
-            # Install x86_64 Python using pyenv
-            brew install pyenv
-            PYTHON_CONFIGURE_OPTS="--with-universal-arch=x86_64" pyenv install 3.12.10
+            # Set Homebrew to use x86_64
+            arch -x86_64 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+            echo 'eval "$(/usr/local/bin/brew shellenv)"' >> ~/.zprofile
+            eval "$(/usr/local/bin/brew shellenv)"
+            
+            # Install dependencies for x86_64 Python build
+            arch -x86_64 brew install openssl readline sqlite3 xz zlib tcl-tk gettext
+            
+            # Install pyenv
+            arch -x86_64 brew install pyenv
+            
+            # Configure build environment
+            export PYTHON_CONFIGURE_OPTS="--with-universal-arch=x86_64"
+            export LDFLAGS="-L/usr/local/opt/zlib/lib -L/usr/local/opt/bzip2/lib -L/usr/local/opt/openssl@3/lib -L/usr/local/opt/sqlite/lib -L/usr/local/opt/gettext/lib"
+            export CPPFLAGS="-I/usr/local/opt/zlib/include -I/usr/local/opt/bzip2/include -I/usr/local/opt/openssl@3/include -I/usr/local/opt/sqlite/include -I/usr/local/opt/gettext/include"
+            export PKG_CONFIG_PATH="/usr/local/opt/zlib/lib/pkgconfig"
+            
+            # Install Python
+            pyenv install 3.12.10
             pyenv global 3.12.10
             eval "$(pyenv init -)"
           fi
