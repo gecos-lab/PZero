@@ -71,8 +71,9 @@ jobs:
       - name: Upload executable
         run: |
           file ="dist/pzero-${{ runner.os }}.zip"
-          echo $file
-          gh release upload --clobber --repo $GITHUB_REPOSITORY v${{ needs.release.outputs.version }} $file
+          do
+            echo $file
+            gh release upload --clobber --repo $GITHUB_REPOSITORY v${{ needs.release.outputs.version }} $file
           done
         shell: bash
         env:
