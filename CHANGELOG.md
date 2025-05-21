@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v0.1.16 (2025-05-21)
+
+### Bug Fixes
+
+- **Actions**: Try fixing Upload executable and macos #3
+  ([`c31ca74`](https://github.com/gecos-lab/PZero/commit/c31ca749b5fef847080595f65215912754f7a369))
+
+
 ## v0.1.15 (2025-05-21)
 
 ### Bug Fixes
