@@ -49,12 +49,12 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
-          - os: windows-latest
           - os: macos-latest
             arch: x86_64
           - os: macos-latest
             arch: arm64
+          - os: ubuntu-latest
+          - os: windows-latest
     needs: release
     steps:
       - name: Checkout
@@ -70,7 +70,9 @@ jobs:
         run: |
           pip install -r requirements.txt
           pip install pyinstaller
-          pyinstaller --onedir --windowed --target-arch ${{ matrix.arch }} --collect-all rasterio pzero.py --name pzero-${{ runner.os }}
+          pyinstaller --onedir --windowed --target-arch ${{ matrix.arch }} --collect-all rasterio pzero.py --name pzero-${{ runner.os }}-${{ matrix.arch }}
+        env:
+          ARCHFLAGS: "-arch ${{ matrix.arch }}"
       - name: Build executable Other
         if: runner.os != 'macOS'
         run: |
@@ -81,9 +83,12 @@ jobs:
         if: runner.os != 'Windows'
         run: |
           cd dist
-          zip -r pzero-${{ runner.os }}.zip pzero-${{ runner.os }}/*
+          if [ "${{ runner.os }}" = "macOS" ]; then
+            zip -r pzero-${{ runner.os }}-${{ matrix.arch }}.zip pzero-${{ runner.os }}-${{ matrix.arch }}/*
+          else
+            zip -r pzero-${{ runner.os }}.zip pzero-${{ runner.os }}/*
+          fi
         shell: bash
-
       - name: Zip executable (Windows)
         if: runner.os == 'Windows'
         run: |
@@ -92,7 +97,11 @@ jobs:
         shell: pwsh
       - name: Upload executable
         run: |
-          file="dist/pzero-${{ runner.os }}.zip"
+          if [ "${{ runner.os }}" = "macOS" ]; then
+            file="dist/pzero-${{ runner.os }}-${{ matrix.arch }}.zip"
+          else
+            file="dist/pzero-${{ runner.os }}.zip"
+          fi
           gh release upload --clobber --repo $GITHUB_REPOSITORY v${{ needs.release.outputs.version }} "$file"
         shell: bash
         env:
