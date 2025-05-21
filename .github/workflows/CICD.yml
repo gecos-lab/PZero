@@ -70,18 +70,26 @@ jobs:
         run: |
           pip install -r requirements.txt
           pip install pyinstaller
-          pyinstaller --onedir --windowed --target-arch ${{ runner.arch }} --collect-all rasterio pzero.py --name pzero-${{ runner.os }}
+          pyinstaller --onedir --windowed --target-arch ${{ matrix.arch }} --collect-all rasterio pzero.py --name pzero-${{ runner.os }}
       - name: Build executable Other
         if: runner.os != 'macOS'
         run: |
           pip install -r requirements.txt
           pip install pyinstaller
           pyinstaller --onedir --windowed --collect-all rasterio pzero.py --name pzero-${{ runner.os }}
-      - name: Zip executable
+      - name: Zip executable (Unix/MacOS)
+        if: runner.os != 'Windows'
         run: |
           cd dist
           zip -r pzero-${{ runner.os }}.zip pzero-${{ runner.os }}/*
         shell: bash
+
+      - name: Zip executable (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          cd dist
+          Compress-Archive -Path "pzero-${{ runner.os }}/*" -DestinationPath "pzero-${{ runner.os }}.zip"
+        shell: pwsh
       - name: Upload executable
         run: |
           file="dist/pzero-${{ runner.os }}.zip"
