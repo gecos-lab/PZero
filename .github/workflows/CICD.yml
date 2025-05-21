@@ -10,12 +10,12 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
     steps:
+      - uses: actions/checkout@v4  # This should be first
       - name: Install dependencies
         if: ${{ matrix.os == 'ubuntu-latest' }}
         run: |
           sudo apt-get update
           sudo apt-get install -y libegl1
-      - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -46,8 +46,15 @@ jobs:
   deploy:
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        include:
+          - os: ubuntu-latest
+          - os: windows-latest
+          - os: macos-latest
+            arch: x86_64
+          - os: macos-latest
+            arch: arm64
     needs: release
     steps:
       - name: Checkout
@@ -58,7 +65,14 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Build executable
+      - name: Build executable MacOS
+        if: runner.os == 'macOS'
+        run: |
+          pip install -r requirements.txt
+          pip install pyinstaller
+          pyinstaller --onedir --windowed --target-arch ${{ runner.arch }} --collect-all rasterio pzero.py --name pzero-${{ runner.os }}
+      - name: Build executable Other
+        if: runner.os != 'macOS'
         run: |
           pip install -r requirements.txt
           pip install pyinstaller
@@ -70,11 +84,8 @@ jobs:
         shell: bash
       - name: Upload executable
         run: |
-          file ="dist/pzero-${{ runner.os }}.zip"
-          do
-            echo $file
-            gh release upload --clobber --repo $GITHUB_REPOSITORY v${{ needs.release.outputs.version }} $file
-          done
+          file="dist/pzero-${{ runner.os }}.zip"
+          gh release upload --clobber --repo $GITHUB_REPOSITORY v${{ needs.release.outputs.version }} "$file"
         shell: bash
         env:
           GITHUB_TOKEN: ${{ secrets.TOKEN }}
