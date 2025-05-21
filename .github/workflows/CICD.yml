@@ -68,11 +68,21 @@ jobs:
       - name: Build executable MacOS
         if: runner.os == 'macOS'
         run: |
+          if [ "${{ matrix.arch }}" = "x86_64" ]; then
+            # Install x86_64 Python using pyenv
+            brew install pyenv
+            PYTHON_CONFIGURE_OPTS="--with-universal-arch=x86_64" pyenv install 3.12.10
+            pyenv global 3.12.10
+            eval "$(pyenv init -)"
+          fi
+          python3 -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install pyinstaller
           pyinstaller --onedir --windowed --target-arch ${{ matrix.arch }} --collect-all rasterio pzero.py --name pzero-${{ runner.os }}-${{ matrix.arch }}
         env:
           ARCHFLAGS: "-arch ${{ matrix.arch }}"
+          CFLAGS: "-arch ${{ matrix.arch }}"
+          LDFLAGS: "-arch ${{ matrix.arch }}"
       - name: Build executable Other
         if: runner.os != 'macOS'
         run: |
