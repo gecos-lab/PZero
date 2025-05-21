@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v0.1.12 (2025-05-21)
+
+### Bug Fixes
+
+- **Actions**: Use --windowed and not --target-arch universal2
+  ([`a645a28`](https://github.com/gecos-lab/PZero/commit/a645a288301dc76e8169c7e84efaf51ba4290c48))
+
+
 ## v0.1.11 (2025-05-21)
 
 ### Bug Fixes
