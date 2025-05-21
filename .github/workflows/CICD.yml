@@ -62,7 +62,7 @@ jobs:
         run: |
           pip install -r requirements.txt
           pip install pyinstaller
-          pyinstaller --onedir --target-arch universal2 --collect-all rasterio pzero.py --name pzero-${{ runner.os }}
+          pyinstaller --onedir --windowed --collect-all rasterio pzero.py --name pzero-${{ runner.os }}
       - name: Zip executable
         run: |
           cd dist
