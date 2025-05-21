@@ -62,7 +62,7 @@ jobs:
         run: |
           pip install -r requirements.txt
           pip install pyinstaller
-          pyinstaller --onedir --collect-all rasterio pzero.py --name pzero-${{ runner.os }}
+          pyinstaller --onedir --target-arch universal2 --collect-all rasterio pzero.py --name pzero-${{ runner.os }}
       - name: Zip executable
         run: |
           cd dist
@@ -71,9 +71,8 @@ jobs:
       - name: Upload executable
         run: |
           file ="dist/pzero-${{ runner.os }}.zip"
-          do
-            echo $file
-            gh release upload --clobber --repo $GITHUB_REPOSITORY v${{ needs.release.outputs.version }} $file
+          echo $file
+          gh release upload --clobber --repo $GITHUB_REPOSITORY v${{ needs.release.outputs.version }} $file
           done
         shell: bash
         env:
