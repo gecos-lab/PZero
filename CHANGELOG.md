@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v0.1.13 (2025-05-21)
+
+### Bug Fixes
+
+- **Actions**: Try fixing Upload executable
+  ([`eb8f0cf`](https://github.com/gecos-lab/PZero/commit/eb8f0cf6a313d22671fb17420e245975ecf39077))
+
+
 ## v0.1.12 (2025-05-21)
 
 ### Bug Fixes
