@@ -70,8 +70,7 @@ jobs:
         shell: bash
       - name: Upload executable
         run: |
-          files="dist/pzero*"
-          for file in $files
+          file ="dist/pzero-${{ runner.os }}.zip"
           do
             echo $file
             gh release upload --clobber --repo $GITHUB_REPOSITORY v${{ needs.release.outputs.version }} $file
