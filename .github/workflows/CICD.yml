@@ -58,11 +58,16 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Building executable
+      - name: Build executable
         run: |
           pip install -r requirements.txt
           pip install pyinstaller
-          pyinstaller --onefile --collect-all rasterio pzero.py --name pzero-${{ runner.os }}
+          pyinstaller --onedir --collect-all rasterio pzero.py --name pzero-${{ runner.os }}
+      - name: Zip executable
+        run: |
+          cd dist
+          zip -r pzero-${{ runner.os }}.zip pzero-${{ runner.os }}/*
+        shell: bash
       - name: Upload executable
         run: |
           files="dist/pzero*"
