@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v0.1.11 (2025-05-21)
+
+### Bug Fixes
+
+- **Actions**: Fix zip file upload
+  ([`18e0ae8`](https://github.com/gecos-lab/PZero/commit/18e0ae88bdabeb9e4676b1ec507ae57f7a9bc6e7))
+
+
 ## v0.1.10 (2025-05-21)
 
 
