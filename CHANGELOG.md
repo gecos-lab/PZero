@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v0.1.9 (2025-05-21)
+
+### Bug Fixes
+
+- **Actions**: --onedir, zip files
+  ([`b9f1ddc`](https://github.com/gecos-lab/PZero/commit/b9f1ddcb99cdbd873a977d992542e252c24d2d61))
+
+
 ## v0.1.8 (2025-05-15)
 
 ### Bug Fixes
