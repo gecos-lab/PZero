@@ -6,7 +6,7 @@
 
 ***PZero*** is a Python open-source 3D geological modelling application, leveraging various libraries, with a user-friendly graphical user interface allowing to perform most standard geomodelling data management and analysis tasks, explicit surface interpolation, and advanced implicit interpolation.
 
-Up-to-date ***PZero executables*** can be downloaded for Windows, Mac, and Ubuntu in the [Releases](https://github.com/gecos-lab/PZero/releases).
+Up-to-date ***PZero executables*** can be downloaded for Windows, Mac, and Ubuntu in the [Releases](https://github.com/gecos-lab/PZero/releases). Mac executables are available for both ARM and Intel processors. After downloading, unzip the archive in any location you like on your disk, then run the executable. Sometimes you might be asked to autorize it. On Windows you might need to confirm the autorization in a pop-up window. On Linux you might need to allow execution with `chmod +x pzero-Linux` in the terminal. On Mac you might need to allow "Developer Mode" in Apple Menu > System Settings > Privacy & Security, and then sometimes allow execution of PZero with `chmod +x pzero-macOS-<your architecture>` in the terminal.
 
 For your first steps with PZero, a [very simple](https://github.com/gecos-lab/PZero-test-Simple-synthetic) and a [more advanced](https://github.com/gecos-lab/PZero-test-Llyn-Padarn) test projects can be downloaded.
 
