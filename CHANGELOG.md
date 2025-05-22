@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v0.1.23 (2025-05-22)
+
+### Bug Fixes
+
+- **ReadMe**: Readme updated to point to exe etc
+  ([`3ba1e18`](https://github.com/gecos-lab/PZero/commit/3ba1e188ebe4b52928bb32d024af0aedd9c4c902))
+
+
 ## v0.1.22 (2025-05-22)
 
 ### Bug Fixes
