@@ -1,5 +1,9 @@
+# PZero
+# Continuous Integration/Continuous Deployment
+# run tests on multiploe OS's -> create semantic relese -> deply executables for multiploe OS's with PyInstaller
 name: CICD
 
+# Runs on push on main branch, that acctually occurs only after a pull request is accepted
 on:
   push:
 
@@ -10,7 +14,7 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
     steps:
-      - uses: actions/checkout@v4  # This should be first
+      - uses: actions/checkout@v4
       - name: Install dependencies
         if: ${{ matrix.os == 'ubuntu-latest' }}
         run: |
@@ -54,6 +58,7 @@ jobs:
           - os: macos-latest
             arch: arm64
           - os: ubuntu-latest
+          - os: ubuntu-20.04
           - os: windows-latest
     needs: release
     steps:
@@ -101,14 +106,14 @@ jobs:
         if: runner.os == 'Windows'
         run: |
           cd dist
-          Compress-Archive -Path "pzero-${{ runner.os }}/*" -DestinationPath "pzero-${{ runner.os }}.zip"
+          Compress-Archive -Path "pzero-${{ matrix.os }}/*" -DestinationPath "pzero-${{ matrix.os }}.zip"
         shell: pwsh
       - name: Upload executable
         run: |
           if [ "${{ runner.os }}" = "macOS" ]; then
-            file="dist/pzero-${{ runner.os }}-${{ matrix.arch }}.zip"
+            file="dist/pzero-${{ matrix.os }}-${{ matrix.arch }}.zip"
           else
-            file="dist/pzero-${{ runner.os }}.zip"
+            file="dist/pzero-${{ matrix.os }}.zip"
           fi
           gh release upload --clobber --repo $GITHUB_REPOSITORY v${{ needs.release.outputs.version }} "$file"
         shell: bash
