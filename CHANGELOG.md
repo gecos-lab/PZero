@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v0.1.21 (2025-05-22)
+
+### Bug Fixes
+
+- **Actions**: Ubuntu-20.04 added, file names fixed
+  ([`10b63f0`](https://github.com/gecos-lab/PZero/commit/10b63f01f2e71fff23a01ead3cf2fab96a0b2723))
+
+
 ## v0.1.20 (2025-05-21)
 
 ### Bug Fixes
