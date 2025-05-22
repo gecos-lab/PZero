@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v0.1.22 (2025-05-22)
+
+### Bug Fixes
+
+- **Actions**: Reverting back to previous
+  ([`08a02d7`](https://github.com/gecos-lab/PZero/commit/08a02d7268426a881f96c72118fb8933d3510606))
+
+
 ## v0.1.21 (2025-05-22)
 
 ### Bug Fixes
