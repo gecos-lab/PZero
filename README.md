@@ -6,6 +6,10 @@
 
 ***PZero*** is a Python open-source 3D geological modelling application, leveraging various libraries, with a user-friendly graphical user interface allowing to perform most standard geomodelling data management and analysis tasks, explicit surface interpolation, and advanced implicit interpolation.
 
+Up-to-date ***PZero executables*** can be downloaded for Windows, Mac, and Ubuntu in the [Releases](https://github.com/gecos-lab/PZero/releases).
+
+For your first steps with PZero, a [very simple](https://github.com/gecos-lab/PZero-test-Simple-synthetic) and a [more advanced](https://github.com/gecos-lab/PZero-test-Llyn-Padarn) test projects can be downloaded.
+
 As discussed more in details in [this wiki page](https://github.com/gecos-lab/PZero/wiki/PZero-codebase-structure), the architecture of ***PZero*** is based on several open-source libraries. **[VTK](https://vtk.org/)** provides classes for all 3D objects, in addition to 3D visualization and basic analysis and modelling tools. The ***PZero*** graphical user interface is built with **[Qt](https://www.qt.io/qt-for-python)**. All objects in a ***PZero*** project and their metadata are collected and managed in **[Pandas](https://pandas.pydata.org/)** dataframes. We use a **[VTK-Numpy interface](https://github.com/Kitware/VTK/tree/master/Wrapping/Python/vtkmodules/numpy_interface)** that allows performing most mathematical processing with simple **[NumPy](https://numpy.org/)** syntax, while 2D plotting is performed with **[Matplotlib](https://matplotlib.org/)**. **[PyVista](https://www.pyvista.org/)** provides simplified access to **[VTK](https://vtk.org/)** visualization and I/O tools. Various 2D graphical and topological editing tools in ***PZero*** are based on **[Shapely](https://shapely.readthedocs.io)**, while **[GeoPandas](https://geopandas.org/en/stable/)**, **[Rasterio](https://rasterio.readthedocs.io)**, **[Xarray](https://xarray.pydata.org)**, **[laspy](https://github.com/laspy/laspy)**, and **[EzDxf](https://ezdxf.readthedocs.io)** provide I/O tools for GIS, point cloud, and CAD data. **[LoopStructural](https://github.com/Loop3D/LoopStructural)** provides three different implicit surface interpolation algorithms. **[mplstereonet](https://github.com/joferkington/mplstereonet)** provides stereoplots for orientation analysis.
 
 Developers of these libraries are warmly thanked!
@@ -16,13 +20,11 @@ The ***PZero*** developers are (or have been):
 * Andrea Bistacchi (since the beginning)
 * Gloria Arienti (December 2021 - January 2023)
 * Gabriele Benedetti (since January 2022)
-* Alessandro Frigeri (January 2022 - April 2022)
 * Tommaso Comelli (April 2023 - July 2023)
-* Luca Penasa (since April 2023)
 * Waqas Hussain (since November 2023)
 * Riccardo Monti (since November 2023)
-* Ivano Brunet (since March 2024)
-* Francesco Visentin (since March 2024)
+
+We acknowledge [Geode-Solutions](https://geode-solutions.com/), [Studio Vertix](https://www.vertix.it/) and [Luca Penasa](https://github.com/luca-penasa) for their contribution regarding software engineering, testing, and a more robust software development and project management in general. [Alessandro Frigeri](https://github.com/afrigeri) has provided an enthusiastic support since the beginning.
 
 ***PZero*** © 2020 by Andrea Bistacchi, released under [GNU AGPLv3 license](LICENSE.txt).
 
