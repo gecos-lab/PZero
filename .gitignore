@@ -7,3 +7,5 @@
 *.pyc
 /docs/_build
 venv/
+build/
+dist/
