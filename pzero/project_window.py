@@ -88,6 +88,7 @@ from .entities_factory import (
     Attitude,
     XsImage,
 )
+from .imports.vtkjs2vtk import vtk2vtkjs
 from .legend_manager import Legend
 from .orientation_analysis import set_normals
 from .point_clouds import decimate_pc
@@ -182,6 +183,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
 
         """File>Export actions -> slots"""
         self.actionExportCAD.triggered.connect(self.export_cad)
+        self.actionExportVTKJS.triggered.connect(self.export_vtkjs)
         self.actionExportVTK.triggered.connect(self.export_vtk)
         self.actionExportCSV.triggered.connect(self.export_csv)
 
@@ -2621,6 +2623,22 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     pd_writer.SetInputData(entity)
                     pd_writer.Write()
                 print(f"exported {uid}")
+
+    def export_vtkjs(self):
+        """Function used to export objects as vtkjs archive"""
+        out_dir_name = save_file_dialog(
+            parent=self, caption="Select save directory.", directory=True
+        )
+        if out_dir_name:
+            # Save VTKjs archive.
+            vtk2vtkjs(self=self, out_dir_name=out_dir_name)
+            # Save geological legend table to CSV and JSON files.
+            self.geol_coll.legend_df.to_csv(
+                out_dir_name + "/geol_legend_table.csv", encoding="utf-8", index=False
+            )
+            self.geol_coll.legend_df.to_json(
+                out_dir_name + "/geol_legend_table.json", orient="index"
+            )
 
     # Everything here is very bad, but I am short on time
     def export_csv(self):

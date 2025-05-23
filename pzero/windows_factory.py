@@ -2862,7 +2862,10 @@ class View3D(VTKView):
         out_file_name = save_file_dialog(
             parent=self, caption="Export 3D view as VTKjs.", filter="vtkjs (*.vtkjs)"
         ).removesuffix(".vtkjs")
-        self.plotter.export_vtkjs(out_file_name)
+        try:
+            self.plotter.export_vtksz(out_file_name)
+        except:
+            self.print_terminal("Error with export_vtksz.")
 
     def export_obj(self):
         out_file_name = save_file_dialog(

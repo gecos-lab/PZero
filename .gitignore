@@ -6,3 +6,4 @@
 /installers
 *.pyc
 /docs/_build
+venv/

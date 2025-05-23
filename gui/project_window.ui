@@ -232,6 +232,7 @@
     <addaction name="actionImportSEGY"/>
     <addaction name="separator"/>
     <addaction name="actionExportCAD"/>
+    <addaction name="actionExportVTKJS"/>
     <addaction name="actionExportVTK"/>
     <addaction name="actionExportCSV"/>
     <addaction name="separator"/>
@@ -685,6 +686,11 @@
   <action name="actionListCRS">
    <property name="text">
     <string>List CRS</string>
+   </property>
+  </action>
+  <action name="actionExportVTKJS">
+   <property name="text">
+    <string>Export VTK.js</string>
    </property>
   </action>
  </widget>
