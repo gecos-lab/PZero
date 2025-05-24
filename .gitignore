@@ -6,3 +6,5 @@
 /installers
 *.pyc
 /docs/_build
+/dist
+/build
