@@ -1,10 +1,8 @@
 import pytest
 
-from pzero.windows_factory import (
+from pzero.views.dock_window import (
     BaseView,
     View3D,
-    View2D,
-    ViewMap,
     ViewStereoplot,
     NavigationToolbar,
     View2D,

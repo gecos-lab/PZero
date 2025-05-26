@@ -112,7 +112,7 @@ from .three_d_surfaces import (
 # from .windows_factory import ViewXsection
 # from .windows_factory import View3D
 # from .windows_factory import ViewStereoplot
-from .windows_factory import DockWindow
+from pzero.views.dock_window import DockWindow
 from .processing.CRS import CRS_list, CRS_transform_selected
 
 

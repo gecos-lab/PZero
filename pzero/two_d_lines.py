@@ -37,7 +37,7 @@ from .helpers.helper_widgets import Editor, Tracer
 from .helpers.helper_functions import freeze_gui
 from .entities_factory import PolyLine, XsPolyLine
 
-from .windows_factory import ViewMap, ViewXsection
+from pzero.views.dock_window import ViewMap, ViewXsection
 
 
 def draw_line(self):
