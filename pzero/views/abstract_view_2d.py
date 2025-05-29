@@ -13,11 +13,11 @@ from PySide6.QtWidgets import (
 )
 
 # PZero imports____
-from .abstract_vtk_view import VTKView
-
+from .abstract_view_vtk import ViewVTK
 from ..helpers.helper_widgets import Vector
 
-class View2D(VTKView):
+
+class View2D(ViewVTK):
     """Create 2D view using vtk/pyvista. This should be more efficient than matplotlib"""
 
     def __init__(self, *args, **kwargs):
@@ -28,6 +28,31 @@ class View2D(VTKView):
         self.plotter.enable_parallel_projection()
 
     # Re-implementations of functions that appear in all views - see placeholders in BaseView()
+
+    def end_pick(self, pos):
+        """Function used to disable actor picking. Due to some slight difference,
+        must be reimplemented in subclasses."""
+        # Remove the selector observer
+        self.plotter.iren.interactor.RemoveObservers(
+            "LeftButtonPressEvent"
+        )
+        # Remove the right click observer
+        self.plotter.untrack_click_position(
+            side="right"
+        )
+        # Remove the left click observer
+        self.plotter.untrack_click_position(
+            side="left"
+        )
+        # self.plotter.track_click_position(
+        #    lambda pos: self.plotter.camera.SetFocalPoint(pos), side="left", double=True
+        # )
+        # Specific to View3D() implementation.
+        self.plotter.enable_image_style()
+        # Closing settings
+        self.plotter.reset_key_events()
+        self.selected_uids = self.parent.selected_uids
+        self.enable_actions()
 
     def initialize_menu_tools(self):
         from ..two_d_lines import (

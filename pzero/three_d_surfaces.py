@@ -886,12 +886,12 @@ def linear_extrusion(self):
     linear_extrusion.SetInputData(self.geol_coll.get_uid_vtk_obj(input_uids[0]))
     linear_extrusion.Update()
 
-    # [Gabriele] The output of vtkLinearExtrusionFilter() are triangle strips we convert them to triangles with vtkTriangleFilter
+    #  The output of vtkLinearExtrusionFilter() are triangle strips we convert them to triangles with vtkTriangleFilter
     triangle_filt = vtkTriangleFilter()
     triangle_filt.SetInputConnection(linear_extrusion.GetOutputPort())
     triangle_filt.Update()
 
-    # [Gabriele] translate the plane using the xyz vector with intensity = negative extrusion value.
+    #  translate the plane using the xyz vector with intensity = negative extrusion value.
     translate = vtkTransform()
     translate.Translate(
         x_vector * vertical_extrusion["bottom"],

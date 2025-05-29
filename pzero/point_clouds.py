@@ -555,7 +555,7 @@ def auto_pick(self):
     self.clear_selection()
 
 
-# [Gabriele] PC Filters ----------------------------------------------------
+#  PC Filters ----------------------------------------------------
 
 
 def thresh_filt(self):

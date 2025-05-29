@@ -1,4 +1,4 @@
-"""abstract_vtk_view.py
+"""abstract_view_vtk.py
 PZero© Andrea Bistacchi"""
 # PySide6 imports____
 from PySide6.QtGui import QAction
@@ -34,10 +34,6 @@ from pyvista import Arrow as pv_Arrow
 
 # PZero imports____
 from .abstract_base_view import BaseView
-from .view_3d import View3D
-from .view_xsection import ViewXsection
-from .view_map import ViewMap
-from .abstract_view_2d import View2D
 from ..orientation_analysis import get_dip_dir_vectors
 from ..helpers.helper_dialogs import (
     input_one_value_dialog,
@@ -67,11 +63,21 @@ from ..entities_factory import (
     Attitude,
 )
 
-class VTKView(BaseView):
+class ViewVTK(BaseView):
     """Abstract class used as a base for all classes using the VTK/PyVista plotting canvas."""
 
     def __init__(self, *args, **kwargs):
-        super(VTKView, self).__init__(*args, **kwargs)
+        super(ViewVTK, self).__init__(*args, **kwargs)
+
+    def closeEvent(self, event):
+        """Override the standard closeEvent method by (i) disconnecting all signals and,
+        (ii) closing the plotter for vtk windows."""
+        self.enable_actions()
+        self.disconnect_all_signals()
+        # To cleanly close the vtk plotter, the following line is needed. This is the only difference
+        # with the closeEvent() method in the BaseView() class.
+        self.plotter.close()
+        event.accept()
 
     def change_actor_color(self, uid=None, collection=None):
         """Update color for actor uid"""
@@ -811,20 +817,21 @@ class VTKView(BaseView):
         # self.plotter.show_axes_all()
 
         # Set orientation widget
-        # In an old version it was turned on after the qt canvas was shown, but this does not seem necessary
-        if isinstance(self, View3D):
-            self.plotter.add_camera_orientation_widget()
-            # self.cam_orient_widget = vtkCameraOrientationWidget()
-            # self.cam_orient_widget.SetParentRenderer(self.plotter.renderer)
-            # self.cam_orient_widget.On()
-        elif isinstance(self, ViewXsection):
-            self.plotter.add_orientation_widget(
-                pv_Arrow(direction=(0.0, 1.0, 0.0), scale=0.3),
-                interactive=None,
-                color="gold",
-            )
-        elif isinstance(self, ViewMap):
-            self.plotter.add_north_arrow_widget(interactive=None, color="gold")
+
+        # # In an old version it was turned on after the qt canvas was shown, but this does not seem necessary
+        # if isinstance(self, View3D):
+        #     self.plotter.add_camera_orientation_widget()
+        #     # self.cam_orient_widget = vtkCameraOrientationWidget()
+        #     # self.cam_orient_widget.SetParentRenderer(self.plotter.renderer)
+        #     # self.cam_orient_widget.On()
+        # elif isinstance(self, ViewXsection):
+        #     self.plotter.add_orientation_widget(
+        #         pv_Arrow(direction=(0.0, 1.0, 0.0), scale=0.3),
+        #         interactive=None,
+        #         color="gold",
+        #     )
+        # elif isinstance(self, ViewMap):
+        #     self.plotter.add_north_arrow_widget(interactive=None, color="gold")
 
         # Set default orientation horizontal because vertical colorbars interfere with the camera widget.
         pv_global_theme.colorbar_orientation = "horizontal"
@@ -835,16 +842,16 @@ class VTKView(BaseView):
         #    lambda pos: self.plotter.camera.SetFocalPoint(pos), side="left", double=True
         # )
 
-    def show_qt_canvas(self):
-        """Show the Qt Window"""
-        self.show()
-        if isinstance(self, View3D):
-            # ________________________
-            # CHECK THIS ZOOM SETTING
-            # ________________________
-            self.init_zoom = self.plotter.camera.distance
+        self.set_orientation_widget()
 
-            # self.picker = self.plotter.enable_mesh_picking(callback= self.pkd_mesh,show_message=False)
+    def set_orientation_widget(self):
+        """Set the orientation widget to the correct orientation.
+        To be implementyed in subclasses."""
+        pass
+
+    def show_qt_canvas(self):
+        """Show the Qt Window. Could be reimplemented in some subclass."""
+        self.show()
 
     def plot_mesh(
         self,
@@ -996,28 +1003,9 @@ class VTKView(BaseView):
         self.plotter.add_key_event("c", self.clear_selection)
 
     def end_pick(self, pos):
-        """Function used to disable actor picking"""
-
-        self.plotter.iren.interactor.RemoveObservers(
-            "LeftButtonPressEvent"
-        )  # Remove the selector observer
-        self.plotter.untrack_click_position(
-            side="right"
-        )  # Remove the right click observer
-        self.plotter.untrack_click_position(
-            side="left"
-        )  # Remove the left click observer
-        # self.plotter.track_click_position(
-        #    lambda pos: self.plotter.camera.SetFocalPoint(pos), side="left", double=True
-        # )
-        if isinstance(self, View3D):
-            self.plotter.enable_trackball_style()
-        elif isinstance(self, View2D):
-            self.plotter.enable_image_style()
-
-        self.plotter.reset_key_events()
-        self.selected_uids = self.parent.selected_uids
-        self.enable_actions()
+        """Function used to disable actor picking. Due to some slight difference,
+        must be reimplemented in subclasses."""
+        pass
 
     def clear_selection(self):
         for av_actor in self.plotter.renderer.actors.copy():

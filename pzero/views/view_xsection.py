@@ -15,6 +15,9 @@ from PySide6.QtWidgets import (
 # numpy import____
 from numpy import array as np_array
 
+# PyVista imports____
+from pyvista import Arrow as pv_Arrow
+
 # PZero imports____
 from .abstract_view_2d import View2D
 from ..helpers.helper_dialogs import input_combo_dialog, message_dialog
@@ -72,6 +75,13 @@ class ViewXsection(View2D):
         self.horizMirrorButton = QAction("Mirror horizontal axes", self)
         self.horizMirrorButton.triggered.connect(self.horizontal_mirror)
         self.menuView.addAction(self.horizMirrorButton)
+
+    def set_orientation_widget(self):
+        self.plotter.add_orientation_widget(
+            pv_Arrow(direction=(0.0, 1.0, 0.0), scale=0.3),
+            interactive=None,
+            color="gold",
+        )
 
     def horizontal_mirror(self):
         """Mirror horizontal axes."""

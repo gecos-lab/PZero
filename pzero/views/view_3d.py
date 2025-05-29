@@ -29,7 +29,7 @@ from vtkmodules.vtkFiltersPoints import vtkExtractPoints
 from pyvista import plot as pv_plot
 
 # PZero imports____
-from .abstract_vtk_view import VTKView
+from .abstract_view_vtk import ViewVTK
 from ..entities_factory import Attitude
 from ..entities_factory import PolyData
 from ..helpers.helper_dialogs import save_file_dialog, multiple_input_dialog, progress_dialog
@@ -56,7 +56,7 @@ from ..entities_factory import (
 )
 
 
-class View3D(VTKView):
+class View3D(ViewVTK):
     """Create 3D view and import UI created with Qt Designer by subclassing base view.
     Parent is the QT object that is launching this one, hence the ProjectWindow() instance in this case.
     """
@@ -161,6 +161,40 @@ class View3D(VTKView):
         # self.menuOrbit.addAction(self.actionOrbitEntity)
         # self.menuWindow.addMenu(self.menuOrbit)
 
+    def set_orientation_widget(self):
+        self.plotter.add_camera_orientation_widget()
+
+    def show_qt_canvas(self):
+        """Show the Qt Window. Reimplements the base method in ViewVTK()."""
+        self.show()
+        self.init_zoom = self.plotter.camera.distance
+        # self.picker = self.plotter.enable_mesh_picking(callback= self.pkd_mesh,show_message=False)
+
+    def end_pick(self, pos):
+        """Function used to disable actor picking. Due to some slight difference,
+        must be reimplemented in subclasses."""
+        # Remove the selector observer
+        self.plotter.iren.interactor.RemoveObservers(
+            "LeftButtonPressEvent"
+        )
+        # Remove the right click observer
+        self.plotter.untrack_click_position(
+            side="right"
+        )
+        # Remove the left click observer
+        self.plotter.untrack_click_position(
+            side="left"
+        )
+        # self.plotter.track_click_position(
+        #    lambda pos: self.plotter.camera.SetFocalPoint(pos), side="left", double=True
+        # )
+        # Specific to View3D() implementation.
+        self.plotter.enable_trackball_style()
+        # Closing settings
+        self.plotter.reset_key_events()
+        self.selected_uids = self.parent.selected_uids
+        self.enable_actions()
+
     def export_html(self):
         out_file_name = save_file_dialog(
             parent=self, caption="Export 3D view as HTML.", filter="html (*.html)"
@@ -228,7 +262,7 @@ class View3D(VTKView):
         extr.SetInputData(obj)
         extr.ExtractInsideOn()
         extr.Update()
-        # [Gabriele] We could try to do this with vtkPCANormalEstimation
+        #  We could try to do this with vtkPCANormalEstimation
         points = numpy_support.vtk_to_numpy(extr.GetOutput().GetPoints().GetData())
         plane_c, plane_n = best_fitting_plane(points)
 
@@ -351,7 +385,7 @@ class View3D(VTKView):
         vis_uids = self.actors_df.loc[self.actors_df["show"] == True, "uid"]
         for uid in vis_uids:
             vtk_obj = self.parent.dom_coll.get_uid_vtk_obj(uid)
-            octree = PolyData()  # [Gabriele] possible recursion problem
+            octree = PolyData()  #  possible recursion problem
             # print(vtk_obj.locator)
             vtk_obj.locator.GenerateRepresentation(3, octree)
 

@@ -75,6 +75,9 @@ class ViewMap(View2D):
         )
         self.menuCreate.addAction(self.boundaryFromPointsButton)
 
+    def set_orientation_widget(self):
+        self.plotter.add_north_arrow_widget(interactive=None, color="gold")
+
     def show_actor_with_property(
         self, uid=None, collection=None, show_property=None, visible=None
     ):
@@ -292,14 +295,14 @@ class ViewMap(View2D):
                 elif show_property == "Z":
                     show_property_value = plot_entity.points_Z
                 elif show_property[-1] == "]":
-                    # [Gabriele] we can identify multicomponent properties such as RGB[0] or Normals[0] by
+                    #  we can identify multicomponent properties such as RGB[0] or Normals[0] by
                     # taking the last character of the property name ("]").
-                    # [Gabriele] Get the start and end index of the [n_component]
+                    #  Get the start and end index of the [n_component]
                     pos1 = show_property.index("[")
                     pos2 = show_property.index("]")
-                    # [Gabriele] Get the original property (e.g. RGB[0] -> RGB)
+                    #  Get the original property (e.g. RGB[0] -> RGB)
                     original_prop = show_property[:pos1]
-                    # [Gabriele] Get the column index (the n_component value)
+                    #  Get the column index (the n_component value)
                     index = int(show_property[pos1 + 1 : pos2])
                     show_property_value = plot_entity.get_point_data(original_prop)[
                         :, index

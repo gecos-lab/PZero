@@ -10,7 +10,7 @@ from .view_3d import View3D
 from .view_map import ViewMap
 from .view_xsection import ViewXsection
 from .view_stereoplot import ViewStereoplot
-from .abstract_vtk_view import VTKView
+from .abstract_view_vtk import ViewVTK
 
 
 class DockWindow(QDockWidget):
@@ -82,5 +82,5 @@ class DockWindow(QDockWidget):
         # of BaseView(), then cleanly close the VTK plotter.
         self.canvas.enable_actions()
         self.canvas.disconnect_all_signals()
-        if isinstance(self.canvas, VTKView):
+        if isinstance(self.canvas, ViewVTK):
             self.canvas.plotter.close()

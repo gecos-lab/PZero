@@ -378,7 +378,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 selected_uids.append(idx_proxy.data())
         return selected_uids
 
-    # [Gabriele] This is should be used for cross collection operations (e.g. cut surfaces in the geology table with the DEM).
+    #  This is should be used for cross collection operations (e.g. cut surfaces in the geology table with the DEM).
     # We could use this instead of selected_uids but we should impose validity checks for the different functions
     # @property
     # def selected_uids_all(self):
@@ -1065,19 +1065,19 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.boundary_coll = BoundaryCollection(parent=self)
         self.BoundariesTableView.setModel(self.boundary_coll.proxy_table_model)
 
-        # [Gabriele]  Create the weel_coll WellCollection (a Qt QAbstractTableModel with a Pandas dataframe as attribute)
+        #   Create the weel_coll WellCollection (a Qt QAbstractTableModel with a Pandas dataframe as attribute)
         # and connect the model to WellTableView (a Qt QTableView created with QTDesigner and provided by
         # Ui_ProjectWindow). Setting the model also updates the view.
         self.well_coll = WellCollection(parent=self)
         self.WellsTableView.setModel(self.well_coll.proxy_table_model)
 
-        # [Gabriele]  Create the fluid_coll FluidCollection (a Qt QAbstractTableModel with a Pandas dataframe as attribute)
+        #   Create the fluid_coll FluidCollection (a Qt QAbstractTableModel with a Pandas dataframe as attribute)
         # and connect the model to FluidTableView (a Qt QTableView created with QTDesigner and provided by
         # Ui_ProjectWindow). Setting the model also updates the view.
         self.fluid_coll = FluidCollection(parent=self)
         self.FluidsTableView.setModel(self.fluid_coll.proxy_table_model)
 
-        # [Gabriele]  Create the backgrnd_coll BackgroundCollection (a Qt QAbstractTableModel with a Pandas dataframe as attribute)
+        #   Create the backgrnd_coll BackgroundCollection (a Qt QAbstractTableModel with a Pandas dataframe as attribute)
         # and connect the model to FluidTableView (a Qt QTableView created with QTDesigner and provided by
         # Ui_ProjectWindow). Setting the model also updates the view.
         self.backgrnd_coll = BackgroundCollection(parent=self)
@@ -2563,7 +2563,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 uid
             ) in (
                 self.selected_uids
-            ):  # [gabriele] this could be generalized with a helper function
+            ):  #  this could be generalized with a helper function
                 if self.shown_table == "tabGeology":
                     entity = self.geol_coll.get_uid_vtk_obj(uid)
 
@@ -2636,7 +2636,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 uid
             ) in (
                 self.selected_uids
-            ):  # [gabriele] this could be generalized with a helper function
+            ):  #  this could be generalized with a helper function
                 if self.shown_table == "tabGeology":
                     entity = self.geol_coll.get_uid_vtk_obj(uid)
 

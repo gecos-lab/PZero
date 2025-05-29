@@ -711,15 +711,15 @@ class VertexSet(PolyData):
             self.DeleteCells()
             self.GetVerts().Modified()
 
-        vertices = vtkCellArray()  # [Gabriele] vertices (cells)
-        npoints = self.points_number  # [Gabriele] Points present in the object
+        vertices = vtkCellArray()  #  vertices (cells)
+        npoints = self.points_number  #  Points present in the object
         cellIds = [0]
         for pid in range(npoints):
             cellIds[0] = pid
             vertices.InsertNextCell(1, cellIds)
         self.SetVerts(
             vertices
-        )  # [Gabriele] Assign the vertices to the point_cloud (vtkPolyData)
+        )  #  Assign the vertices to the point_cloud (vtkPolyData)
         self.Modified()
 
 
@@ -2716,7 +2716,7 @@ class Image3D(Image):
 
 
 class Well:
-    # [Gabriele] vtkCylinderSource could be used but it is not supported by pyvista
+    #  vtkCylinderSource could be used but it is not supported by pyvista
 
     def __init__(self, ID=None, trace_xyz=None, head_xyz=None, *args, **kwargs):
         super(Well, self).__init__(*args, **kwargs)

@@ -30,7 +30,7 @@ def create_dom_list(self, sec_uid=None):
         property_texture_combo.addItem("Z")
         # property_texture_combo.addItem("RGB")
 
-        """[Gabriele] To add support to multi components properties (e.g. RGB) we can add a component check (if components > 1). If this statement is True we can iterate over the n components and set the new n properties using the template prop[n_component]. These properties do not point to actual data (the "RGB[0]" property is not present) but to a slice of the original property (RGB[:,0])."""
+        """ To add support to multi components properties (e.g. RGB) we can add a component check (if components > 1). If this statement is True we can iterate over the n components and set the new n properties using the template prop[n_component]. These properties do not point to actual data (the "RGB[0]" property is not present) but to a slice of the original property (RGB[:,0])."""
 
         for prop, components in zip(
             self.parent.dom_coll.get_uid_properties_names(uid),
@@ -112,7 +112,7 @@ def update_dom_list_added(self, new_list=None, sec_uid=None):
         property_texture_combo.addItem("Z")
         # property_texture_combo.addItem("RGB")
 
-        """[Gabriele] See function above for explanation"""
+        """ See function above for explanation"""
 
         for prop, components in zip(
             self.parent.dom_coll.get_uid_properties_names(uid),

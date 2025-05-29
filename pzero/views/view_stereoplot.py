@@ -5,7 +5,6 @@ PZero© Andrea Bistacchi"""
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QAction
 from PySide6.QtWidgets import QSizePolicy, QTreeWidgetItem, QComboBox
-from matplotlib.backends.backend_template import FigureCanvas
 
 # numpy import____
 from numpy import all as np_all
@@ -14,44 +13,32 @@ from numpy import ndarray as np_ndarray
 # Pandas imports____
 from pandas import DataFrame as pd_DataFrame
 from pandas import unique as pd_unique
+from pandas import concat as pd_concat
+
+# PZero imports____
+from .abstract_view_mpl import ViewMPL
+from ..entities_factory import VertexSet, XsVertexSet, Attitude
 
 # mplstereonet import____
 import mplstereonet
+
+# Matplotlib imports____
+from matplotlib.backend_bases import FigureCanvasBase
+from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib import style as mplstyle
 
-# from matplotlib.backend_bases import FigureCanvasBase
 
-# the following is customized in subclass NavigationToolbar a few lines below
-from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT
-
-# Background color for matplotlib plots, it could be made interactive in the future.
-# 'fast' is supposed to make plotting large objects faster.
-mplstyle.use(["dark_background", "fast"])
-
-
-class NavigationToolbar(NavigationToolbar2QT):
-    """Can customize NavigationToolbar2QT used in matplotlib to display only the buttons we need.
-    Note that toolitems is a class variable defined before __init__."""
-
-    toolitems = [
-        t
-        for t in NavigationToolbar2QT.toolitems
-        if t[0] in ("Home", "Pan", "Zoom", "Save")
-    ]
-
-    def __init__(self, parent=None, *args, **kwargs):
-        super(NavigationToolbar, self).__init__(parent, *args, **kwargs)
-
-
-# PZero imports____
-from .abstract_mpl_view import MPLView
-
-class ViewStereoplot(MPLView):
+class ViewStereoplot(ViewMPL):
     def __init__(self, *args, **kwargs):
+        # Some properties need to be set before calling super.__init__ to import the parent class.
+        # self.proj_type can be 'equal_area' or  ‘equal_angle’
+        self.proj_type = 'equal_area'
+        # self.grid_kind can be 'polar' or None (for equatorial grid)
+        self.grid_kind = 'polar'
+        # self.contours can be True (filled), False (non filled) or None (no contours)
+        self.contours = None
         super(ViewStereoplot, self).__init__(*args, **kwargs)
         self.setWindowTitle("Stereoplot View")
-        self.tog_contours = -1
-        # mplstyle.context('classic')
 
     def initialize_menu_tools(self):
         """This is the method of the ViewStereoplot() class, used to add menu tools in addition to those inherited from
@@ -60,9 +47,9 @@ class ViewStereoplot(MPLView):
         super().initialize_menu_tools()
 
         # then add new code specific to MPLView()
-        self.actionContours = QAction("View contours", self)
+        self.actionContours = QAction("Toggle contours", self)
         self.actionContours.triggered.connect(
-            lambda: self.toggle_contours(filled=False)
+            lambda: self.toggle_contours()
         )
         self.menuView.addAction(self.actionContours)
 
@@ -86,34 +73,33 @@ class ViewStereoplot(MPLView):
         )
         self.menuView.addAction(self.actionSetEquiang)
 
-    def initialize_interactor(self, kind=None, projection="equal_area_stereonet"):
-        self.grid_kind = kind
-        self.proj_type = projection
+    def initialize_interactor(self):
+        """
+        Initializes the interactor for the application.
 
-        with mplstyle.context("default"):
-            # Create Matplotlib canvas, figure and navi_toolbar. this implicitly
-            # creates also the canvas to contain the figure.
-            self.figure, self.ax = mplstereonet.subplots(projection=self.proj_type)
+        This method creates the Matplotlib canvas, figure, and navigation toolbar.
+        It also integrates the canvas into a Qt layout for seamless embedding.
 
-        self.canvas = FigureCanvas(
-            self.figure
-        )  # get a reference to the canvas that contains the figure
-        # print("dir(self.canvas):\n", dir(self.canvas))
-        # https://doc.qt.io/qt-5/qsizepolicy.html
-        self.navi_toolbar = NavigationToolbar(
-            self.figure.canvas, self
-        )  # create a navi_toolbar with the matplotlib.backends.backend_qt5agg method NavigationToolbar
+        Attributes:
+            figure (Figure): The Matplotlib figure created using the specified projection type.
+            ax (Axes): The axis object corresponding to the created figure.
+            canvas (FigureCanvas): The canvas widget containing the Matplotlib figure.
 
-        # Create Qt layout andNone add Matplotlib canvas, figure and navi_toolbar"""
-        # canvas_widget = self.figure.canvas
-        # canvas_widget.setAutoFillBackground(True)
-        self.ViewFrameLayout.addWidget(
-            self.canvas
-        )  # add Matplotlib canvas (created above) as a widget to the Qt layout
-        # print(plot_widget)
-        self.ViewFrameLayout.addWidget(
-            self.navi_toolbar
-        )  # add navigation navi_toolbar (created above) to the layout
+        Raises:
+            None
+        """
+        # Create Matplotlib canvas, figure and navi_toolbar. this implicitly
+        # creates also the canvas to contain the figure.
+        # refactor allowing to change background color with:
+        # mplstyle.use("default")
+        # mplstyle.use("dark_background")
+        self.figure, self.ax = mplstereonet.subplots(projection=self.proj_type)
+
+        # get a reference to the canvas that contains the figure
+        self.canvas = FigureCanvas(self.figure)
+
+        # Create Qt layout and add Matplotlib canvas (created above) as a widget to the Qt layout
+        self.ViewFrameLayout.addWidget(self.canvas)
         self.ax.grid(kind=self.grid_kind, color="k")
 
     def create_geology_tree(self):
@@ -760,7 +746,6 @@ class ViewStereoplot(MPLView):
         self.GeologyTopologyTreeWidget.expandAll()
 
     def set_actor_visible(self, uid=None, visible=None):
-        # print(self.actors_df)
         """Set actor uid visible or invisible (visible = True or False)"""
         if isinstance(
             self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[0], Line2D
@@ -816,8 +801,8 @@ class ViewStereoplot(MPLView):
             pass
 
     def remove_actor_in_view(self, uid=None, redraw=False):
-        """ "Remove actor from plotter"""
-        # Can remove a single entity or a list of entities as actors - here we remove a single entity"
+        """ "Remove actor from plotter. Can remove a single entity or a list of
+        entities as actors - here we remove a single entity"""
 
         if not self.actors_df.loc[self.actors_df["uid"] == uid].empty:
             if self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[0]:
@@ -867,7 +852,7 @@ class ViewStereoplot(MPLView):
                     # This check is needed to avoid errors when trying to plot an empty
                     # PolyData, just created at the beginning of a digitizing session.
                     # Check if both these conditions are necessary_________________
-                    # [Gabriele] Dip az needs to be converted to strike (dz-90) to plot with mplstereonet
+                    #  Dip az needs to be converted to strike (dz-90) to plot with mplstereonet
                     strike = (plot_entity.points_map_dip_azimuth - 90) % 360
                     dip = plot_entity.points_map_dip
 
@@ -915,21 +900,30 @@ class ViewStereoplot(MPLView):
             this_actor.figure.canvas.draw()
         return this_actor
 
-    # def stop_event_loops(self):
-    #     """Terminate running event loops"""
-    #     self.figure.canvas.stop_event_loop()
+    def stop_event_loops(self):
+        """Terminate running event loops. It looks like we do not use this method."""
+        self.figure.canvas.stop_event_loop()
 
     def change_grid(self, kind):
+        # refactoring needed - use toggle contours as an example.
+        """
+        Change the type of grid displayed in the view by updating canvas and related
+        interactive components, then applying updated visualization settings for
+        geological vertex sets.
+
+        Parameters
+        ----------
+        kind : Any
+            Specifies the typeof the grid to be used.
+        """
         self.grid_kind = kind
         self.ViewFrameLayout.removeWidget(self.canvas)
-        self.ViewFrameLayout.removeWidget(self.navi_toolbar)
-        self.initialize_interactor(kind=kind, projection=self.proj_type)
+        self.initialize_interactor()
         uids = self.parent.geol_coll.df.loc[
             self.parent.geol_coll.df["topology"] == "VertexSet", "uid"
         ]
 
-        # [Gabriele]It is not always the case that VertexSets have normal data (are attitude measurements). When
-        # importing from shp we should add a dialog to identify VertexSets as Attitude measurements
+        # It is not always the case that VertexSets have normal data (are attitude measurements).
 
         # att_uid_list = []
         # for uid in uids:
@@ -941,18 +935,6 @@ class ViewStereoplot(MPLView):
             show = self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]
             self.remove_actor_in_view(uid, redraw=False)
             this_actor = self.show_actor_with_property(uid, "geol_coll", visible=show)
-            # Old Pandas <= 1.5.3
-            # self.actors_df = self.actors_df.append(
-            #     {
-            #         "uid": uid,
-            #         "actor": this_actor,
-            #         "show": show,
-            #         "collection": "geol_collection",
-            #         "show_property": "poles",
-            #     },
-            #     ignore_index=True,
-            # )
-            # New Pandas >= 2.0.0
             self.actors_df = pd_concat(
                 [
                     self.actors_df,
@@ -973,10 +955,10 @@ class ViewStereoplot(MPLView):
             # For now only geol_collection (I guess this is the only collection for attitude measurements)
 
     def change_proj(self, projection):
+        # refactoring needed - use toggle contours as an example.
         self.proj_type = projection
         self.ViewFrameLayout.removeWidget(self.canvas)
-        self.ViewFrameLayout.removeWidget(self.navi_toolbar)
-        self.initialize_interactor(kind=self.grid_kind, projection=self.proj_type)
+        self.initialize_interactor()
         uids = self.parent.geol_coll.df.loc[
             self.parent.geol_coll.df["topology"] == "VertexSet", "uid"
         ]
@@ -984,18 +966,6 @@ class ViewStereoplot(MPLView):
             show = self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]
             self.remove_actor_in_view(uid, redraw=False)
             this_actor = self.show_actor_with_property(uid, "geol_coll", visible=show)
-            # Old Pandas <= 1.5.3
-            # self.actors_df = self.actors_df.append(
-            #     {
-            #         "uid": uid,
-            #         "actor": this_actor,
-            #         "show": show,
-            #         "collection": "geol_collection",
-            #         "show_property": "poles",
-            #     },
-            #     ignore_index=True,
-            # )
-            # New Pandas >= 2.0.0
             self.actors_df = pd_concat(
                 [
                     self.actors_df,
@@ -1014,29 +984,29 @@ class ViewStereoplot(MPLView):
                 ignore_index=True,
             )
 
-    def toggle_contours(self, filled=False):
+    def toggle_contours(self):
+        # refactoring needed - it looks like this method destroys the plot and rebuilds it, with a lot of code duplication.
         # This is not the best way, but for now will do.
-        """It's a toggle switch that display kamb contours for visible poles in
-        the stereoplot."""
+        """Display Kamb contours for visible poles in the stereoplot."""
 
         self.ViewFrameLayout.removeWidget(self.canvas)
-        self.ViewFrameLayout.removeWidget(self.navi_toolbar)
 
-        self.initialize_interactor(kind=self.grid_kind, projection=self.proj_type)
+        self.initialize_interactor()
         uids = self.parent.geol_coll.df.loc[
             (self.parent.geol_coll.df["topology"] == "VertexSet")
             | (self.parent.geol_coll.df["topology"] == "XsVertexSet"),
             "uid",
         ]
 
-        if self.tog_contours == -1:
-            filled_opt = filled
-            self.tog_contours *= -1
-            print("Contours enabled")
+        if self.contours == None:
+            self.contours = False
+            self.parent.print_terminal("Contours enabled, unfilled")
+        elif self.contours == False:
+            self.contours = True
+            self.parent.print_terminal("Contours enabled, filled")
         else:
-            filled_opt = None
-            self.tog_contours *= -1
-            print("Contours disabled")
+            self.contours = None
+            self.parent.print_terminal("Contours disabled")
 
         for uid in uids:
             show = self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]
@@ -1044,20 +1014,8 @@ class ViewStereoplot(MPLView):
             self.remove_actor_in_view(uid, redraw=False)
 
             this_actor = self.show_actor_with_property(
-                uid, "geol_coll", visible=show, filled=filled_opt
+                uid, "geol_coll", visible=show, filled=self.contours
             )
-            # Old Pandas <= 1.5.3
-            # self.actors_df = self.actors_df.append(
-            #     {
-            #         "uid": uid,
-            #         "actor": this_actor,
-            #         "show": show,
-            #         "collection": "geol_collection",
-            #         "show_property": "poles",
-            #     },
-            #     ignore_index=True,
-            # )
-            # New Pandas >= 2.0.0
             self.actors_df = pd_concat(
                 [
                     self.actors_df,
@@ -1077,6 +1035,7 @@ class ViewStereoplot(MPLView):
             )
 
     def change_actor_color(self, uid=None, collection=None):
+        # refactor using a collection parameter instead of if - elif - else
         """Change colour with Matplotlib method."""
         if collection == "geol_coll":
             color_R = self.parent.geol_coll.get_uid_legend(uid=uid)["color_R"]
@@ -1102,10 +1061,13 @@ class ViewStereoplot(MPLView):
             ].figure.canvas.draw()
 
     def change_actor_opacity(self, uid=None, collection=None):
+        # to be implemented
         return
 
     def change_actor_line_thick(self, uid=None, collection=None):
+        # to be implemented
         return
 
     def change_actor_point_size(self, uid=None, collection=None):
+        # to be implemented
         return

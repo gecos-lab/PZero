@@ -2,96 +2,11 @@
 PZero© Andrea Bistacchi"""
 
 # PySide6 imports____
-from PySide6.QtWidgets import (
-    QMainWindow,
-    QMenu,
-    QAbstractItemView,
-    QDockWidget,
-    QSizePolicy,
-    QMessageBox,
-)
-
-# General Python imports____
-from copy import deepcopy
-from uuid import uuid4
-
-# from math import degrees, sqrt, atan2
-# import sys
-# from time import sleep
-# from uuid import UUID (there is already above 'from uuid import uuid4')
-
+from PySide6.QtWidgets import  QMainWindow
 from PySide6.QtGui import QAction
-from PySide6.QtCore import Qt
-from PySide6.QtCore import Signal as pyqtSignal
-
-
-
-# from numpy import sin as np_sin
-# from numpy import cos as np_cos
-# from numpy import pi as np_pi
-# from numpy import cross as np_cross
-
-from matplotlib import style as mplstyle
-
-# from matplotlib.backend_bases import FigureCanvasBase
-
-# the following is customized in subclass NavigationToolbar a few lines below
-from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT
-
-# Background color for matplotlib plots, it could be made interactive in the future.
-# 'fast' is supposed to make plotting large objects faster.
-mplstyle.use(["dark_background", "fast"])
-
-
-class NavigationToolbar(NavigationToolbar2QT):
-    """Can customize NavigationToolbar2QT used in matplotlib to display only the buttons we need.
-    Note that toolitems is a class variable defined before __init__."""
-
-    toolitems = [
-        t
-        for t in NavigationToolbar2QT.toolitems
-        if t[0] in ("Home", "Pan", "Zoom", "Save")
-    ]
-
-    def __init__(self, parent=None, *args, **kwargs):
-        super(NavigationToolbar, self).__init__(parent, *args, **kwargs)
-
-
-# Pandas imports____
-from pandas import DataFrame as pd_DataFrame
-from pandas import unique as pd_unique
 
 # PZero imports____
-# from .abstract_vtk_view import VTKView
 from ..ui.base_view_window_ui import Ui_BaseViewWindow
-from ..entities_factory import (
-    VertexSet,
-    PolyLine,
-    TriSurf,
-    XsVertexSet,
-    XsPolyLine,
-    DEM,
-    PCDom,
-    MapImage,
-    Voxet,
-    XsVoxet,
-    Seismics,
-    XsImage,
-    PolyData,
-    Well,
-    WellMarker,
-    WellTrace,
-    Attitude,
-)
-from ..build_and_update.backgrounds import *
-from ..build_and_update.boundary import *
-from ..build_and_update.dom import *
-from ..build_and_update.fluids import *
-from ..build_and_update.geology import *
-from ..build_and_update.image import *
-from ..build_and_update.mesh3d import *
-from ..build_and_update.wells import *
-from ..build_and_update.xsections import *
 from ..add_remove_update_actors.background import *
 from ..add_remove_update_actors.boundary import *
 from ..add_remove_update_actors.dom import *
@@ -1528,24 +1443,18 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         return
 
     def closeEvent(self, event):
-        """Override the standard closeEvent method by (i) disconnecting all signals and,
-        (ii) closing the plotter for vtk windows."""
+        """Override the standard closeEvent method by (i) disconnecting all signals."""
         self.enable_actions()
         self.disconnect_all_signals()
-        # if isinstance(self, VTKView):
-        #     self.plotter.close()  # needed to cleanly close the vtk plotter
-        if self.plotter:
-            self.plotter.close()  # needed to cleanly close the vtk plotter
         event.accept()
 
     def disable_actions(self):
         """Freeze all actions while doing something."""
         # self.parent.findChildren(QAction) returns a list of all actions in the application.
         for action in self.parent.findChildren(QAction):
+            # try - except added to catch an inexplicable bug with an action with text=""
             try:
-                # try - except added to catch an inexplicable bug with an action with text=""
-                if isinstance(action.parent(), NavigationToolbar) is False:
-                    action.setDisabled(True)
+                action.setDisabled(True)
             except:
                 pass
 
@@ -1554,12 +1463,6 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         # self.parent.findChildren(QAction) returns a list of all actions in the application.
         for action in self.parent.findChildren(QAction):
             action.setEnabled(True)
-            # try:
-            #     # try - except added for symmetry with disable_actions (bug with an action with text="")
-            #     action.setEnabled(True)
-            #     print("enable: ", action)
-            # except:
-            #     pass
 
     def print_terminal(self, string=None):
         """Show string in the terminal."""
