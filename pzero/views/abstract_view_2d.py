@@ -3,14 +3,6 @@ PZero© Andrea Bistacchi"""
 
 # PySide6 imports____
 from PySide6.QtGui import QAction
-from PySide6.QtWidgets import (
-    QMainWindow,
-    QMenu,
-    QAbstractItemView,
-    QDockWidget,
-    QSizePolicy,
-    QMessageBox,
-)
 
 # PZero imports____
 from .abstract_view_vtk import ViewVTK
@@ -29,32 +21,14 @@ class View2D(ViewVTK):
 
     # Re-implementations of functions that appear in all views - see placeholders in BaseView()
 
-    def end_pick(self, pos):
-        """Function used to disable actor picking. Due to some slight difference,
-        must be reimplemented in subclasses."""
-        # Remove the selector observer
-        self.plotter.iren.interactor.RemoveObservers(
-            "LeftButtonPressEvent"
-        )
-        # Remove the right click observer
-        self.plotter.untrack_click_position(
-            side="right"
-        )
-        # Remove the left click observer
-        self.plotter.untrack_click_position(
-            side="left"
-        )
-        # self.plotter.track_click_position(
-        #    lambda pos: self.plotter.camera.SetFocalPoint(pos), side="left", double=True
-        # )
-        # Specific to View3D() implementation.
-        self.plotter.enable_image_style()
-        # Closing settings
-        self.plotter.reset_key_events()
-        self.selected_uids = self.parent.selected_uids
-        self.enable_actions()
-
     def initialize_menu_tools(self):
+        """This method collects menus and actions in superclasses and then adds custom ones, specific to this view."""
+        # append code from superclass
+        super().initialize_menu_tools()
+
+        # then add new code specific to this class
+
+        # import here otherwise a circular reference would occur involving ViewMap and ViewXsection
         from ..two_d_lines import (
             draw_line,
             edit_line,
@@ -75,12 +49,6 @@ class View2D(ViewVTK):
             measure_distance,
             clean_intersection,
         )
-
-        # Imports for this view.
-        # Customize menus and tools for this view
-        super().initialize_menu_tools()
-        # self.menuBaseView.setTitle("Edit")
-        # self.actionBase_Tool.setText("Edit")
 
         # ------------------------------------
         # CONSIDER MOVING SOME OF THE FOLLOWING METHODS TO VTKView(), IN ORDER TO HAVE THEM ALSO IN 3D VIEWS
@@ -167,6 +135,31 @@ class View2D(ViewVTK):
         self.cleanSectionButton = QAction("Clean intersections", self)
         self.cleanSectionButton.triggered.connect(lambda: clean_intersection(self))
         self.menuModify.addAction(self.cleanSectionButton)
+
+    def end_pick(self, pos):
+        """Function used to disable actor picking. Due to some slight difference,
+        must be reimplemented in subclasses."""
+        # Remove the selector observer
+        self.plotter.iren.interactor.RemoveObservers(
+            "LeftButtonPressEvent"
+        )
+        # Remove the right click observer
+        self.plotter.untrack_click_position(
+            side="right"
+        )
+        # Remove the left click observer
+        self.plotter.untrack_click_position(
+            side="left"
+        )
+        # self.plotter.track_click_position(
+        #    lambda pos: self.plotter.camera.SetFocalPoint(pos), side="left", double=True
+        # )
+        # Specific to View3D() implementation.
+        self.plotter.enable_image_style()
+        # Closing settings
+        self.plotter.reset_key_events()
+        self.selected_uids = self.parent.selected_uids
+        self.enable_actions()
 
     def vector_by_mouse(self, func):
         # if not self.selected_uids:

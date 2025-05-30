@@ -2,18 +2,7 @@
 PZero© Andrea Bistacchi"""
 
 # PySide6 imports____
-from PySide6.QtCore import Qt
 from PySide6.QtGui import QAction
-from PySide6.QtWidgets import QSizePolicy, QTreeWidgetItem, QComboBox
-from matplotlib.backends.backend_template import FigureCanvas
-from PySide6.QtWidgets import (
-    QMainWindow,
-    QMenu,
-    QAbstractItemView,
-    QDockWidget,
-    QSizePolicy,
-    QMessageBox,
-)
 
 # Numpy imports____
 from numpy import ndarray as np_ndarray
@@ -37,17 +26,15 @@ from ..entities_factory import (
     PCDom,
     MapImage,
     Voxet,
-    XsVoxet,
     Seismics,
     XsImage,
-    PolyData,
-    Well,
     WellMarker,
     WellTrace,
     Attitude,
 )
-
 from ..orientation_analysis import get_dip_dir_vectors
+from ..collections.xsection_collection import section_from_azimuth
+from ..collections.boundary_collection import boundary_from_points
 
 
 class ViewMap(View2D):
@@ -57,12 +44,11 @@ class ViewMap(View2D):
         self.plotter.view_xy()
 
     def initialize_menu_tools(self):
-        from pzero.collections.xsection_collection import section_from_azimuth
-        from pzero.collections.boundary_collection import boundary_from_points
-
-        # Imports for this view.
-        # Customize menus and tools for this view
+        """This method collects menus and actions in superclasses and then adds custom ones, specific to this view."""
+        # append code from superclass
         super().initialize_menu_tools()
+
+        # then add new code specific to this class
         self.sectionFromAzimuthButton = QAction("Section from azimuth", self)
         self.sectionFromAzimuthButton.triggered.connect(
             lambda: self.vector_by_mouse(section_from_azimuth)

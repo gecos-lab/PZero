@@ -6,16 +6,8 @@ from copy import deepcopy
 from uuid import uuid4
 
 # PySide6 imports____
-from PySide6.QtCore import Qt
 from PySide6.QtGui import QAction
-from PySide6.QtWidgets import (
-    QMainWindow,
-    QMenu,
-    QAbstractItemView,
-    QDockWidget,
-    QSizePolicy,
-    QMessageBox,
-)
+from PySide6.QtWidgets import QMenu
 
 # Numpy imports____
 from numpy import append as np_append
@@ -30,30 +22,10 @@ from pyvista import plot as pv_plot
 
 # PZero imports____
 from .abstract_view_vtk import ViewVTK
-from ..entities_factory import Attitude
-from ..entities_factory import PolyData
 from ..helpers.helper_dialogs import save_file_dialog, multiple_input_dialog, progress_dialog
 from ..helpers.helper_functions import best_fitting_plane, gen_frame
 from ..collections.geological_collection import GeologicalCollection
-from ..entities_factory import (
-    VertexSet,
-    PolyLine,
-    TriSurf,
-    XsVertexSet,
-    XsPolyLine,
-    DEM,
-    PCDom,
-    MapImage,
-    Voxet,
-    XsVoxet,
-    Seismics,
-    XsImage,
-    PolyData,
-    Well,
-    WellMarker,
-    WellTrace,
-    Attitude,
-)
+from ..entities_factory import PolyData, Attitude
 
 
 class View3D(ViewVTK):
@@ -78,19 +50,11 @@ class View3D(ViewVTK):
         self.trigger_event = "LeftButtonPressEvent"
 
     def initialize_menu_tools(self):
-        """Customize menus and tools for this view"""
-        from ..point_clouds import (
-            cut_pc,
-            segment_pc,
-            facets_pc,
-            auto_pick,
-            thresh_filt,
-            normals2dd,
-            calibration_pc,
-        )
-
+        """This method collects menus and actions in superclasses and then adds custom ones, specific to this view."""
+        # append code from superclass
         super().initialize_menu_tools()
 
+        # then add new code specific to this class
         self.menuBoreTraceVis = QMenu("Borehole visualization methods", self)
 
         self.actionBoreTrace = QAction("Trace", self)
@@ -101,13 +65,13 @@ class View3D(ViewVTK):
             lambda: self.change_bore_vis("cylinder")
         )
 
-        self.actionToggleGeology = QAction("Toggle geology", self)
-        self.actionToggleGeology.triggered.connect(lambda: self.change_bore_vis("geo"))
-
         self.actionToggleLithology = QAction("Toggle lithology", self)
         self.actionToggleLithology.triggered.connect(
             lambda: self.change_bore_vis("litho")
         )
+
+        self.actionToggleGeology = QAction("Toggle geology", self)
+        self.actionToggleGeology.triggered.connect(lambda: self.change_bore_vis("geo"))
 
         self.menuBoreTraceVis.addAction(self.actionBoreTrace)
         self.menuBoreTraceVis.addAction(self.actionBoreCylinder)
@@ -115,29 +79,6 @@ class View3D(ViewVTK):
         self.menuBoreTraceVis.addAction(self.actionToggleGeology)
 
         self.menuView.addMenu(self.menuBoreTraceVis)
-
-        # self.actionThresholdf.triggered.connect(lambda: thresh_filt(self))
-        # self.actionSurface_densityf.triggered.connect(lambda: self.surf_den_filt())
-        # self.actionRoughnessf.triggered.connect(lambda: self.rough_filt())
-        # self.actionCurvaturef.triggered.connect(lambda: self.curv_filt())
-        # self.actionNormalsf.triggered.connect(lambda: self.norm_filt())
-        # self.actionManualBoth.triggered.connect(lambda: cut_pc(self))
-        # self.actionManualInner.triggered.connect(lambda: cut_pc(self, "inner"))
-        # self.actionManualOuter.triggered.connect(lambda: cut_pc(self, "outer"))
-        #
-        # self.actionCalibration.triggered.connect(lambda: calibration_pc(self))
-        # self.actionManual_picking.triggered.connect(lambda: self.act_att())
-        # self.actionSegment.triggered.connect(lambda: segment_pc(self))
-        # self.actionPick.triggered.connect(lambda: auto_pick(self))
-        # self.actionFacets.triggered.connect(lambda: facets_pc(self))
-        #
-        # # self.actionCalculate_normals.triggered.connect(lambda: self.normalGeometry())
-        # self.actionNormals_to_DDR.triggered.connect(lambda: normals2dd(self))
-
-        # self.showOct = QAction("Show octree structure", self)
-        # self.showOct.triggered.connect(self.show_octree)
-        # self.menuBaseView.addAction(self.showOct)
-        # self.toolBarBase.addAction(self.showOct)
 
         self.actionExportGltf = QAction("Export as GLTF", self)
         self.actionExportGltf.triggered.connect(self.export_gltf)
@@ -160,6 +101,29 @@ class View3D(ViewVTK):
         # self.actionOrbitEntity.triggered.connect(lambda: self.orbit_entity())
         # self.menuOrbit.addAction(self.actionOrbitEntity)
         # self.menuWindow.addMenu(self.menuOrbit)
+        #
+        # self.actionThresholdf.triggered.connect(lambda: thresh_filt(self))
+        # self.actionSurface_densityf.triggered.connect(lambda: self.surf_den_filt())
+        # self.actionRoughnessf.triggered.connect(lambda: self.rough_filt())
+        # self.actionCurvaturef.triggered.connect(lambda: self.curv_filt())
+        # self.actionNormalsf.triggered.connect(lambda: self.norm_filt())
+        # self.actionManualBoth.triggered.connect(lambda: cut_pc(self))
+        # self.actionManualInner.triggered.connect(lambda: cut_pc(self, "inner"))
+        # self.actionManualOuter.triggered.connect(lambda: cut_pc(self, "outer"))
+        #
+        # self.actionCalibration.triggered.connect(lambda: calibration_pc(self))
+        # self.actionManual_picking.triggered.connect(lambda: self.act_att())
+        # self.actionSegment.triggered.connect(lambda: segment_pc(self))
+        # self.actionPick.triggered.connect(lambda: auto_pick(self))
+        # self.actionFacets.triggered.connect(lambda: facets_pc(self))
+        #
+        # # self.actionCalculate_normals.triggered.connect(lambda: self.normalGeometry())
+        # self.actionNormals_to_DDR.triggered.connect(lambda: normals2dd(self))
+        #
+        # self.showOct = QAction("Show octree structure", self)
+        # self.showOct.triggered.connect(self.show_octree)
+        # self.menuBaseView.addAction(self.showOct)
+        # self.toolBarBase.addAction(self.showOct)
 
     def set_orientation_widget(self):
         self.plotter.add_camera_orientation_widget()

@@ -3,14 +3,6 @@ PZero© Andrea Bistacchi"""
 
 # PySide6 imports____
 from PySide6.QtGui import QAction
-from PySide6.QtWidgets import (
-    QMainWindow,
-    QMenu,
-    QAbstractItemView,
-    QDockWidget,
-    QSizePolicy,
-    QMessageBox,
-)
 
 # numpy import____
 from numpy import array as np_array
@@ -66,12 +58,11 @@ class ViewXsection(View2D):
     # functions because the x_removed_x works on an already built/modified tree.
 
     def initialize_menu_tools(self):
-        """This is the intermediate method of the VTKView() abstract class, used to add menu tools used by all VTK windows.
-        The code appearing here is appended in subclasses using super().initialize_menu_tools() in their first line.
-        """
-        # append code from BaseView()
+        """This method collects menus and actions in superclasses and then adds custom ones, specific to this view."""
+        # append code from superclass
         super().initialize_menu_tools()
 
+        # then add new code specific to this class
         self.horizMirrorButton = QAction("Mirror horizontal axes", self)
         self.horizMirrorButton.triggered.connect(self.horizontal_mirror)
         self.menuView.addAction(self.horizMirrorButton)

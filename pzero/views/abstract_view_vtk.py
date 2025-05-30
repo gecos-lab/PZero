@@ -3,24 +3,15 @@ PZero© Andrea Bistacchi"""
 # PySide6 imports____
 from PySide6.QtGui import QAction
 from PySide6.QtWidgets import (
-    QMainWindow,
-    QMenu,
     QAbstractItemView,
-    QDockWidget,
-    QSizePolicy,
-    QMessageBox,
 )
 
 # numpy import____
 from numpy import ndarray as np_ndarray
 
 # VTK imports incl. VTK-Numpy interface____
-from vtkmodules.vtkRenderingCore import vtkPropPicker, vtkCellPicker
-
-# import vtk.numpy_interface.dataset_adapter as dsa
-from vtkmodules.util import numpy_support
-from vtkmodules.vtkInteractionWidgets import vtkCameraOrientationWidget
-from vtk import vtkExtractPoints, vtkSphere, vtkAppendPolyData
+from vtkmodules.vtkRenderingCore import vtkCellPicker
+from vtk import vtkAppendPolyData
 
 # PyVista imports____
 from pyvista import global_theme as pv_global_theme
@@ -29,20 +20,11 @@ from pyvista import Box as pv_Box
 from pyvista import Line as pv_Line
 from pyvista import Disc as pv_Disc
 from pyvista import PointSet as pvPointSet
-from pyvista import Plotter as pv_plot
-from pyvista import Arrow as pv_Arrow
 
 # PZero imports____
 from .abstract_base_view import BaseView
 from ..orientation_analysis import get_dip_dir_vectors
-from ..helpers.helper_dialogs import (
-    input_one_value_dialog,
-    input_combo_dialog,
-    message_dialog,
-    multiple_input_dialog,
-    progress_dialog,
-    save_file_dialog,
-)
+from ..helpers.helper_dialogs import input_one_value_dialog, save_file_dialog
 from ..entities_factory import (
     VertexSet,
     PolyLine,
@@ -53,15 +35,13 @@ from ..entities_factory import (
     PCDom,
     MapImage,
     Voxet,
-    XsVoxet,
     Seismics,
     XsImage,
-    PolyData,
-    Well,
     WellMarker,
     WellTrace,
     Attitude,
 )
+
 
 class ViewVTK(BaseView):
     """Abstract class used as a base for all classes using the VTK/PyVista plotting canvas."""
@@ -78,6 +58,44 @@ class ViewVTK(BaseView):
         # with the closeEvent() method in the BaseView() class.
         self.plotter.close()
         event.accept()
+
+    def initialize_menu_tools(self):
+        """This method collects menus and actions in superclasses and then adds custom ones, specific to this view."""
+        # append code from superclass
+        super().initialize_menu_tools()
+
+        # then add new code specific to this class
+        self.saveHomeView = QAction("Save home view", self)
+        self.saveHomeView.triggered.connect(self.save_home_view)
+        self.menuView.addAction(self.saveHomeView)  # add action to menu
+
+        self.zoomHomeView = QAction("Zoom to home", self)
+        self.zoomHomeView.triggered.connect(self.zoom_home_view)
+        self.menuView.addAction(self.zoomHomeView)
+
+        self.zoomActive = QAction("Zoom to active", self)
+        self.zoomActive.triggered.connect(self.zoom_active)
+        self.menuView.addAction(self.zoomActive)
+
+        self.selectLineButton = QAction("Select entity", self)
+        self.selectLineButton.triggered.connect(self.select_actor_with_mouse)
+        self.menuSelect.addAction(self.selectLineButton)
+
+        self.clearSelectionButton = QAction("Clear Selection", self)
+        self.clearSelectionButton.triggered.connect(self.clear_selection)
+        self.menuSelect.addAction(self.clearSelectionButton)
+
+        self.removeEntityButton = QAction("Remove Entity", self)
+        self.removeEntityButton.triggered.connect(self.remove_entity)
+        self.menuModify.addAction(self.removeEntityButton)
+
+        self.vertExagButton = QAction("Vertical exaggeration", self)
+        self.vertExagButton.triggered.connect(self.vert_exag)
+        self.menuView.addAction(self.vertExagButton)
+
+        self.actionExportScreen = QAction("Take screenshot", self)
+        self.actionExportScreen.triggered.connect(self.export_screen)
+        self.menuView.addAction(self.actionExportScreen)
 
     def change_actor_color(self, uid=None, collection=None):
         """Update color for actor uid"""
@@ -755,46 +773,6 @@ class ViewVTK(BaseView):
 
     def zoom_active(self):
         self.plotter.reset_camera()
-
-    def initialize_menu_tools(self):
-        """This is the intermediate method of the VTKView() abstract class, used to add menu tools used by all VTK windows.
-        The code appearing here is appended in subclasses using super().initialize_menu_tools() in their first line.
-        """
-        # append code from BaseView()
-        super().initialize_menu_tools()
-
-        # then add new code specific to VTKView()
-        self.saveHomeView = QAction("Save home view", self)
-        self.saveHomeView.triggered.connect(self.save_home_view)
-        self.menuView.addAction(self.saveHomeView)  # add action to menu
-
-        self.zoomHomeView = QAction("Zoom to home", self)
-        self.zoomHomeView.triggered.connect(self.zoom_home_view)
-        self.menuView.addAction(self.zoomHomeView)
-
-        self.zoomActive = QAction("Zoom to active", self)
-        self.zoomActive.triggered.connect(self.zoom_active)
-        self.menuView.addAction(self.zoomActive)
-
-        self.selectLineButton = QAction("Select entity", self)
-        self.selectLineButton.triggered.connect(self.select_actor_with_mouse)
-        self.menuSelect.addAction(self.selectLineButton)
-
-        self.clearSelectionButton = QAction("Clear Selection", self)
-        self.clearSelectionButton.triggered.connect(self.clear_selection)
-        self.menuSelect.addAction(self.clearSelectionButton)
-
-        self.removeEntityButton = QAction("Remove Entity", self)
-        self.removeEntityButton.triggered.connect(self.remove_entity)
-        self.menuModify.addAction(self.removeEntityButton)
-
-        self.vertExagButton = QAction("Vertical exaggeration", self)
-        self.vertExagButton.triggered.connect(self.vert_exag)
-        self.menuView.addAction(self.vertExagButton)
-
-        self.actionExportScreen = QAction("Take screenshot", self)
-        self.actionExportScreen.triggered.connect(self.export_screen)
-        self.menuView.addAction(self.actionExportScreen)
 
     def export_screen(self):
         out_file_name = save_file_dialog(

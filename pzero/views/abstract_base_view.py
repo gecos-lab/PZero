@@ -981,6 +981,18 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
 
     # General methods shared by all views
 
+    def closeEvent(self, event):
+        """Override the standard closeEvent method by (i) disconnecting all signals."""
+        self.enable_actions()
+        self.disconnect_all_signals()
+        event.accept()
+
+    def initialize_menu_tools(self):
+        """This is the base method of the abstract BaseView() class, used to add menu tools used by all windows.
+        The code appearing here is appended in subclasses using super().initialize_menu_tools() in their first line.
+        Do not use "pass" that would be appended to child classes.
+        """
+
     def toggle_property(self, sender=None):
         """Generic method to toggle the property shown by an actor that is already present in the view."""
         show_property = sender.currentText()
@@ -1429,11 +1441,6 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         """Dummy method to show labels for uid and property. Must be implemented in subclasses."""
         return
 
-    def initialize_menu_tools(self):
-        """This is the base method of the abstract BaseView() class, used to add menu tools used by all windows.
-        The code appearing here is appended in subclasses using super().initialize_menu_tools() in their first line.
-        """
-
     def initialize_interactor(self):
         """Dummy method to initialize the plotting canvas. Must be implemented in subclasses."""
         return
@@ -1441,12 +1448,6 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
     def show_qt_canvas(self):
         """Dummy method to show the plotting canvas. Must be implemented in subclasses."""
         return
-
-    def closeEvent(self, event):
-        """Override the standard closeEvent method by (i) disconnecting all signals."""
-        self.enable_actions()
-        self.disconnect_all_signals()
-        event.accept()
 
     def disable_actions(self):
         """Freeze all actions while doing something."""
