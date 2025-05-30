@@ -469,7 +469,6 @@ class PolyData(vtkPolyData):
         # For vector entities return a n-by-m-dimensional array where n is the
         # number of points and m is the number of components of the attribute.
         # Reshape is needed since the Numpy array returned by dsa is "flat" as a standard VTK array.
-        print("point_data:\n", WrapDataObject(self).PointData[data_key])
         point_data = (
             WrapDataObject(self)
             .PointData[data_key]
