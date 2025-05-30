@@ -57,6 +57,8 @@ class ViewXsection(View2D):
     # the sec_uid parameter for the update_dom_list_added func. We just need the x_added_x
     # functions because the x_removed_x works on an already built/modified tree.
 
+    # ================================  General methods shared by all views - built incrementally =====================
+
     def initialize_menu_tools(self):
         """This method collects menus and actions in superclasses and then adds custom ones, specific to this view."""
         # append code from superclass
@@ -67,12 +69,16 @@ class ViewXsection(View2D):
         self.horizMirrorButton.triggered.connect(self.horizontal_mirror)
         self.menuView.addAction(self.horizMirrorButton)
 
+    # ================================  Methods required by ViewVTK(), (re-)implemented here ==========================
+
     def set_orientation_widget(self):
         self.plotter.add_orientation_widget(
             pv_Arrow(direction=(0.0, 1.0, 0.0), scale=0.3),
             interactive=None,
             color="gold",
         )
+
+    # ================================  Methods specific to Xsection views ============================================
 
     def horizontal_mirror(self):
         """Mirror horizontal axes."""

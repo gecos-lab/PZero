@@ -43,6 +43,8 @@ class ViewMap(View2D):
         self.setWindowTitle("Map View")
         self.plotter.view_xy()
 
+    # ================================  General methods shared by all views - built incrementally =====================
+
     def initialize_menu_tools(self):
         """This method collects menus and actions in superclasses and then adds custom ones, specific to this view."""
         # append code from superclass
@@ -61,8 +63,7 @@ class ViewMap(View2D):
         )
         self.menuCreate.addAction(self.boundaryFromPointsButton)
 
-    def set_orientation_widget(self):
-        self.plotter.add_north_arrow_widget(interactive=None, color="gold")
+    # ================================  Methods required by BaseView(), (re-)implemented here =========================
 
     def show_actor_with_property(
         self, uid=None, collection=None, show_property=None, visible=None
@@ -70,6 +71,7 @@ class ViewMap(View2D):
         """Show actor with scalar property (default None)
         https://github.com/pyvista/pyvista/blob/140b15be1d4021b81ded46b1c212c70e86a98ee7/pyvista/plotting/plotting.py#L1045
         """
+        # ___________________________________________________see if this reimplementation from VTKView can be avoided
         # First get the vtk object from its collection.
         show_property_title = show_property
         this_coll = eval("self.parent." + collection)
@@ -441,3 +443,9 @@ class ViewMap(View2D):
             print("[Windows factory]: actor with no class")
             this_actor = None
         return this_actor
+
+    # ================================  Methods required by ViewVTK(), (re-)implemented here ==========================
+
+    def set_orientation_widget(self):
+        self.plotter.add_north_arrow_widget(interactive=None, color="gold")
+

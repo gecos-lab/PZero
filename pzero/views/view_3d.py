@@ -49,6 +49,8 @@ class View3D(ViewVTK):
 
         self.trigger_event = "LeftButtonPressEvent"
 
+    # ================================  General methods shared by all views - built incrementally =====================
+
     def initialize_menu_tools(self):
         """This method collects menus and actions in superclasses and then adds custom ones, specific to this view."""
         # append code from superclass
@@ -125,6 +127,8 @@ class View3D(ViewVTK):
         # self.menuBaseView.addAction(self.showOct)
         # self.toolBarBase.addAction(self.showOct)
 
+    # ================================  Methods required by ViewVTK(), (re-)implemented here ==========================
+
     def set_orientation_widget(self):
         self.plotter.add_camera_orientation_widget()
 
@@ -133,6 +137,8 @@ class View3D(ViewVTK):
         self.show()
         self.init_zoom = self.plotter.camera.distance
         # self.picker = self.plotter.enable_mesh_picking(callback= self.pkd_mesh,show_message=False)
+
+    # ================================  Methods specific to 3D views ==================================================
 
     def end_pick(self, pos):
         """Function used to disable actor picking. Due to some slight difference,
@@ -149,9 +155,7 @@ class View3D(ViewVTK):
         self.plotter.untrack_click_position(
             side="left"
         )
-        # self.plotter.track_click_position(
-        #    lambda pos: self.plotter.camera.SetFocalPoint(pos), side="left", double=True
-        # )
+
         # Specific to View3D() implementation.
         self.plotter.enable_trackball_style()
         # Closing settings
@@ -159,29 +163,91 @@ class View3D(ViewVTK):
         self.selected_uids = self.parent.selected_uids
         self.enable_actions()
 
-    def export_html(self):
-        out_file_name = save_file_dialog(
-            parent=self, caption="Export 3D view as HTML.", filter="html (*.html)"
+    def orbit_entity(self):
+        uid_list = list(self.actors_df["uid"].values)
+
+        in_dict = {
+            "uid": ["Actor uid", uid_list],
+            "up_x": ["Orbital plane (Nx)", 0.0],
+            "up_y": ["Orbital plane (Ny)", 0.0],
+            "up_z": ["Orbital plane (Nz)", 1.0],
+            "fac": ["Zoom factor", 1.0],
+            "ele": ["Elevation above surface", 0],
+            "fps": ["Fps", 60],
+            "length": ["Movie length [sec]:", 60],
+            "name": ["gif name", "test"],
+        }
+
+        opt_dict = multiple_input_dialog(
+            title="Orbiting options", input_dict=in_dict, return_widget=False
         )
-        self.plotter.export_html(out_file_name)
 
-    def export_vtkjs(self):
-        out_file_name = save_file_dialog(
-            parent=self, caption="Export 3D view as VTKjs.", filter="vtkjs (*.vtkjs)"
-        ).removesuffix(".vtkjs")
-        self.plotter.export_vtkjs(out_file_name)
+        uid = opt_dict["uid"]
+        entity = self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[0]
 
-    def export_obj(self):
-        out_file_name = save_file_dialog(
-            parent=self, caption="Export 3D view as OBJ.", filter="obj (*.obj)"
-        ).removesuffix(".obj")
-        self.plotter.export_obj(out_file_name)
+        focus = entity.GetCenter()
+        view_up = [
+            float(opt_dict["up_x"]),
+            float(opt_dict["up_y"]),
+            float(opt_dict["up_z"]),
+        ]
+        factor = float(opt_dict["fac"])
 
-    def export_gltf(self):
-        out_file_name = save_file_dialog(
-            parent=self, caption="Export 3D view as GLTF.", filter="gltf (*.gltf)"
+        # time = int(opt_dict['length']/60)
+
+        # print(factor)
+
+        off_screen_plot = pv_plot(off_screen=True)
+        # off_screen_plot.set_background('Green')
+
+        visible_actors = self.actors_df.loc[
+            self.actors_df["show"] == True, "actor"
+        ].values
+        for actor in visible_actors:
+            off_screen_plot.add_actor(actor)
+
+        # off_screen_plot.show(auto_close=False)
+        n_points = int(opt_dict["fps"] * opt_dict["length"])
+        path = off_screen_plot.generate_orbital_path(
+            n_points=n_points,
+            factor=factor,
+            viewup=view_up,
+            shift=float(opt_dict["ele"]),
         )
-        self.plotter.export_gltf(out_file_name)
+
+        # off_screen_plot.store_image = True
+        # off_screen_plot.open_gif(f'{opt_dict["name"]}.gif')
+
+        points = path.points
+        off_screen_plot.set_focus(focus)
+        off_screen_plot.set_viewup(view_up)
+        images = []
+        prgs = progress_dialog(
+            max_value=n_points,
+            title_txt="Writing gif",
+            label_txt="Saving frames",
+            parent=self,
+        )
+        # print('Creating gif')
+        for point in range(n_points):
+            # print(f'{point}/{n_points}',end='\r')
+            off_screen_plot.set_position(points[point])
+
+            # off_screen_plot.write_frame()
+            img = off_screen_plot.screenshot(transparent_background=True)
+            images.append(gen_frame(img))
+            prgs.add_one()
+        duration = 1000 / opt_dict["fps"]
+        images[0].save(
+            f'{opt_dict["name"]}.gif',
+            save_all=True,
+            append_images=images,
+            loop=0,
+            duration=duration,
+            disposal=2,
+        )
+        # off_screen_plot.orbit_on_path(path=path,focus=focus, write_frames=True,progress_bar=True,threaded=False)
+        # off_screen_plot.close()
 
     def act_att(self):
         """Used to activate pkd_point, which returns data from picking on point clouds."""
@@ -273,23 +339,6 @@ class View3D(ViewVTK):
             del extr
             del sphere
 
-    def plot_volume_3D(self, uid=None, plot_entity=None):
-        if not self.actors_df.empty:
-            """This stores the camera position before redrawing the actor.
-            Added to avoid a bug that sometimes sends the scene to a very distant place.
-            Could be used as a basis to implement saved views widgets, synced 3D views, etc.
-            The is is needed to avoid sending the camera to the origin that is the
-            default position before any mesh is plotted."""
-            camera_position = self.plotter.camera_position
-        this_actor = self.plotter.add_volume(plot_entity, name=uid)
-        if not self.actors_df.empty:
-            # See above.
-            self.plotter.camera_position = camera_position
-        return this_actor
-
-    # Implementation of functions specific to this view (e.g. particular editing or visualization functions)
-    # NONE AT THE MOMENT
-
     def plot_PC_3D(
         self,
         uid=None,
@@ -355,6 +404,20 @@ class View3D(ViewVTK):
 
             self.plotter.add_mesh(octree, style="wireframe", color="red")
 
+    def plot_volume_3D(self, uid=None, plot_entity=None):
+        if not self.actors_df.empty:
+            """This stores the camera position before redrawing the actor.
+            Added to avoid a bug that sometimes sends the scene to a very distant place.
+            Could be used as a basis to implement saved views widgets, synced 3D views, etc.
+            The is is needed to avoid sending the camera to the origin that is the
+            default position before any mesh is plotted."""
+            camera_position = self.plotter.camera_position
+        this_actor = self.plotter.add_volume(plot_entity, name=uid)
+        if not self.actors_df.empty:
+            # See above.
+            self.plotter.camera_position = camera_position
+        return this_actor
+
     def change_bore_vis(self, method):
         actors = set(self.plotter.renderer.actors.copy())
         wells = set(self.parent.well_coll.get_uids)
@@ -395,90 +458,26 @@ class View3D(ViewVTK):
 
             self.toggle_bore_litho *= -1
 
-    # Orbit object ----------------------------------------------------
-
-    def orbit_entity(self):
-        uid_list = list(self.actors_df["uid"].values)
-
-        in_dict = {
-            "uid": ["Actor uid", uid_list],
-            "up_x": ["Orbital plane (Nx)", 0.0],
-            "up_y": ["Orbital plane (Ny)", 0.0],
-            "up_z": ["Orbital plane (Nz)", 1.0],
-            "fac": ["Zoom factor", 1.0],
-            "ele": ["Elevation above surface", 0],
-            "fps": ["Fps", 60],
-            "length": ["Movie length [sec]:", 60],
-            "name": ["gif name", "test"],
-        }
-
-        opt_dict = multiple_input_dialog(
-            title="Orbiting options", input_dict=in_dict, return_widget=False
+    def export_gltf(self):
+        out_file_name = save_file_dialog(
+            parent=self, caption="Export 3D view as GLTF.", filter="gltf (*.gltf)"
         )
+        self.plotter.export_gltf(out_file_name)
 
-        uid = opt_dict["uid"]
-        entity = self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[0]
-
-        focus = entity.GetCenter()
-        view_up = [
-            float(opt_dict["up_x"]),
-            float(opt_dict["up_y"]),
-            float(opt_dict["up_z"]),
-        ]
-        factor = float(opt_dict["fac"])
-
-        # time = int(opt_dict['length']/60)
-
-        # print(factor)
-
-        off_screen_plot = pv_plot(off_screen=True)
-        # off_screen_plot.set_background('Green')
-
-        visible_actors = self.actors_df.loc[
-            self.actors_df["show"] == True, "actor"
-        ].values
-        for actor in visible_actors:
-            off_screen_plot.add_actor(actor)
-
-        # off_screen_plot.show(auto_close=False)
-        n_points = int(opt_dict["fps"] * opt_dict["length"])
-        path = off_screen_plot.generate_orbital_path(
-            n_points=n_points,
-            factor=factor,
-            viewup=view_up,
-            shift=float(opt_dict["ele"]),
+    def export_html(self):
+        out_file_name = save_file_dialog(
+            parent=self, caption="Export 3D view as HTML.", filter="html (*.html)"
         )
+        self.plotter.export_html(out_file_name)
 
-        # off_screen_plot.store_image = True
-        # off_screen_plot.open_gif(f'{opt_dict["name"]}.gif')
+    def export_vtkjs(self):
+        out_file_name = save_file_dialog(
+            parent=self, caption="Export 3D view as VTKjs.", filter="vtkjs (*.vtkjs)"
+        ).removesuffix(".vtkjs")
+        self.plotter.export_vtkjs(out_file_name)
 
-        points = path.points
-        off_screen_plot.set_focus(focus)
-        off_screen_plot.set_viewup(view_up)
-        images = []
-        prgs = progress_dialog(
-            max_value=n_points,
-            title_txt="Writing gif",
-            label_txt="Saving frames",
-            parent=self,
-        )
-        # print('Creating gif')
-        for point in range(n_points):
-            # print(f'{point}/{n_points}',end='\r')
-            off_screen_plot.set_position(points[point])
-
-            # off_screen_plot.write_frame()
-            img = off_screen_plot.screenshot(transparent_background=True)
-            images.append(gen_frame(img))
-            prgs.add_one()
-        duration = 1000 / opt_dict["fps"]
-        images[0].save(
-            f'{opt_dict["name"]}.gif',
-            save_all=True,
-            append_images=images,
-            loop=0,
-            duration=duration,
-            disposal=2,
-        )
-        # off_screen_plot.orbit_on_path(path=path,focus=focus, write_frames=True,progress_bar=True,threaded=False)
-        # off_screen_plot.close()
+    def export_obj(self):
+        out_file_name = save_file_dialog(
+            parent=self, caption="Export 3D view as OBJ.", filter="obj (*.obj)"
+        ).removesuffix(".obj")
+        self.plotter.export_obj(out_file_name)

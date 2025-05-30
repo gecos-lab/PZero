@@ -758,6 +758,8 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
 
         self.parent.prop_legend_cmap_modified_signal.connect(self.prop_legend_lambda)
 
+    # ================================  General methods shared by all views ===========================================
+
     def disconnect_all_signals(self):
         """Used to disconnect all windows signals correctly, when a window is closed.
         If this method is removed PZero will crash when closing a window.
@@ -977,21 +979,28 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
 
         self.parent.prop_legend_cmap_modified_signal.disconnect(self.prop_legend_lambda)
 
-    # ================================  general methods ================================
+    def disable_actions(self):
+        """Freeze all actions while doing something."""
+        # self.parent.findChildren(QAction) returns a list of all actions in the application.
+        for action in self.parent.findChildren(QAction):
+            # try - except added to catch an inexplicable bug with an action with text=""
+            try:
+                action.setDisabled(True)
+            except:
+                pass
 
-    # General methods shared by all views
+    def enable_actions(self):
+        """Un-freeze all actions after having done something."""
+        # self.parent.findChildren(QAction) returns a list of all actions in the application.
+        for action in self.parent.findChildren(QAction):
+            action.setEnabled(True)
 
-    def closeEvent(self, event):
-        """Override the standard closeEvent method by (i) disconnecting all signals."""
-        self.enable_actions()
-        self.disconnect_all_signals()
-        event.accept()
-
-    def initialize_menu_tools(self):
-        """This is the base method of the abstract BaseView() class, used to add menu tools used by all windows.
-        The code appearing here is appended in subclasses using super().initialize_menu_tools() in their first line.
-        Do not use "pass" that would be appended to child classes.
-        """
+    def print_terminal(self, string=None):
+        """Show string in the terminal."""
+        try:
+            self.parent.TextTerminal.appendPlainText(string)
+        except:
+            self.parent.TextTerminal.appendPlainText("error printing in terminal")
 
     def toggle_property(self, sender=None):
         """Generic method to toggle the property shown by an actor that is already present in the view."""
@@ -1402,6 +1411,22 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                     this_property
                 )
 
+    # ================================  General methods shared by all views - built incrementally =====================
+
+    def initialize_menu_tools(self):
+        """This is the base method of the abstract BaseView() class, used to add menu tools used by all windows.
+        The code appearing here is appended in subclasses using super().initialize_menu_tools() in their first line.
+        Do not use "pass" that would be appended to child classes.
+        """
+
+    def closeEvent(self, event):
+        """Override the standard closeEvent method by (i) disconnecting all signals."""
+        self.enable_actions()
+        self.disconnect_all_signals()
+        event.accept()
+
+    # ================================  Placeholders for required methods, implemented in child classes ===============
+
     def change_actor_color(self, uid=None, collection=None):
         """Dummy method to update color for actor uid. Must be implemented in subclasses."""
         return
@@ -1448,26 +1473,3 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
     def show_qt_canvas(self):
         """Dummy method to show the plotting canvas. Must be implemented in subclasses."""
         return
-
-    def disable_actions(self):
-        """Freeze all actions while doing something."""
-        # self.parent.findChildren(QAction) returns a list of all actions in the application.
-        for action in self.parent.findChildren(QAction):
-            # try - except added to catch an inexplicable bug with an action with text=""
-            try:
-                action.setDisabled(True)
-            except:
-                pass
-
-    def enable_actions(self):
-        """Un-freeze all actions after having done something."""
-        # self.parent.findChildren(QAction) returns a list of all actions in the application.
-        for action in self.parent.findChildren(QAction):
-            action.setEnabled(True)
-
-    def print_terminal(self, string=None):
-        """Show string in the terminal."""
-        try:
-            self.parent.TextTerminal.appendPlainText(string)
-        except:
-            self.parent.TextTerminal.appendPlainText("error printing in terminal")

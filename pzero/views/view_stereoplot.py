@@ -42,6 +42,8 @@ class ViewStereoplot(ViewMPL):
         super(ViewStereoplot, self).__init__(*args, **kwargs)
         self.setWindowTitle("Stereoplot View")
 
+    # ================================  General methods shared by all views - built incrementally =====================
+
     def initialize_menu_tools(self):
         """This is the method of the ViewStereoplot() class, used to add menu tools in addition to those inherited from
         superclasses, that are appended here using super().initialize_menu_tools()."""
@@ -60,6 +62,8 @@ class ViewStereoplot(ViewMPL):
         self.actionSetPolar = QAction("Toggle grid", self)
         self.actionSetPolar.triggered.connect(self.toggle_grid)
         self.menuView.addAction(self.actionSetPolar)
+
+    # ================================  Methods TO BE REMOVED  ------  Methods TO BE REMOVED  =========================
 
     def create_geology_tree(self):
         """Create geology tree with checkboxes and properties"""
@@ -702,6 +706,34 @@ class ViewStereoplot(ViewMPL):
         )
         self.GeologyTopologyTreeWidget.expandAll()
 
+    def change_actor_color(self, uid=None, collection=None):
+        # refactor using a collection parameter instead of if - elif - else
+        """Change colour with Matplotlib method."""
+        if collection == "geol_coll":
+            color_R = self.parent.geol_coll.get_uid_legend(uid=uid)["color_R"]
+            color_G = self.parent.geol_coll.get_uid_legend(uid=uid)["color_G"]
+            color_B = self.parent.geol_coll.get_uid_legend(uid=uid)["color_B"]
+            color_RGB = [color_R / 255, color_G / 255, color_B / 255]
+        elif collection == "xsect_coll":
+            color_R = self.parent.xsect_coll.get_legend()["color_R"]
+            color_G = self.parent.xsect_coll.get_legend()["color_G"]
+            color_B = self.parent.xsect_coll.get_legend()["color_B"]
+            color_RGB = [color_R / 255, color_G / 255, color_B / 255]
+        else:
+            return
+        if isinstance(
+            self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[0], Line2D
+        ):
+            "Case for Line2D"
+            self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[
+                0
+            ].set_color(color_RGB)
+            self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[
+                0
+            ].figure.canvas.draw()
+
+    # ================================  Methods required by BaseView(), (re-)implemented here =========================
+
     def set_actor_visible(self, uid=None, visible=None):
         """Set actor uid visible or invisible (visible = True or False)"""
         # _______________________must be check, the options below seem too much, but contours are not toggled
@@ -866,6 +898,8 @@ class ViewStereoplot(ViewMPL):
             this_actor.figure.canvas.draw()
         return this_actor
 
+    # ================================  Methods specific to Stereoplot views ==========================================
+
     def toggle_projection(self):
         """
         Switches the projection type between 'equal_area_stereonet' and 'equal_angle_stereonet'.
@@ -975,44 +1009,6 @@ class ViewStereoplot(ViewMPL):
             self.grid_kind = 'polar'
             self.parent.print_terminal("Grid polar")
         self.figure.canvas.draw()
-
-    def change_actor_color(self, uid=None, collection=None):
-        # refactor using a collection parameter instead of if - elif - else
-        """Change colour with Matplotlib method."""
-        if collection == "geol_coll":
-            color_R = self.parent.geol_coll.get_uid_legend(uid=uid)["color_R"]
-            color_G = self.parent.geol_coll.get_uid_legend(uid=uid)["color_G"]
-            color_B = self.parent.geol_coll.get_uid_legend(uid=uid)["color_B"]
-            color_RGB = [color_R / 255, color_G / 255, color_B / 255]
-        elif collection == "xsect_coll":
-            color_R = self.parent.xsect_coll.get_legend()["color_R"]
-            color_G = self.parent.xsect_coll.get_legend()["color_G"]
-            color_B = self.parent.xsect_coll.get_legend()["color_B"]
-            color_RGB = [color_R / 255, color_G / 255, color_B / 255]
-        else:
-            return
-        if isinstance(
-            self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[0], Line2D
-        ):
-            "Case for Line2D"
-            self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[
-                0
-            ].set_color(color_RGB)
-            self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[
-                0
-            ].figure.canvas.draw()
-
-    def change_actor_opacity(self, uid=None, collection=None):
-        # to be implemented
-        return
-
-    def change_actor_line_thick(self, uid=None, collection=None):
-        # to be implemented
-        return
-
-    def change_actor_point_size(self, uid=None, collection=None):
-        # to be implemented
-        return
 
     def stop_event_loops(self):
         """Terminate running event loops. It looks like we do not use this method."""

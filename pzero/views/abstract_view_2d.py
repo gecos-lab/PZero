@@ -19,7 +19,7 @@ class View2D(ViewVTK):
         self.plotter.enable_image_style()
         self.plotter.enable_parallel_projection()
 
-    # Re-implementations of functions that appear in all views - see placeholders in BaseView()
+    # ================================  General methods shared by all views - built incrementally =====================
 
     def initialize_menu_tools(self):
         """This method collects menus and actions in superclasses and then adds custom ones, specific to this view."""
@@ -136,6 +136,14 @@ class View2D(ViewVTK):
         self.cleanSectionButton.triggered.connect(lambda: clean_intersection(self))
         self.menuModify.addAction(self.cleanSectionButton)
 
+    # ================================  Methods required by ViewVTK(), (re-)implemented here ==========================
+
+    def show_qt_canvas(self):
+        """Show the Qt Window."""
+        self.show()
+
+    # ================================  Methods specific to 2D views ==================================================
+
     def end_pick(self, pos):
         """Function used to disable actor picking. Due to some slight difference,
         must be reimplemented in subclasses."""
@@ -151,10 +159,8 @@ class View2D(ViewVTK):
         self.plotter.untrack_click_position(
             side="left"
         )
-        # self.plotter.track_click_position(
-        #    lambda pos: self.plotter.camera.SetFocalPoint(pos), side="left", double=True
-        # )
-        # Specific to View3D() implementation.
+
+        # Specific to View2D() implementation.
         self.plotter.enable_image_style()
         # Closing settings
         self.plotter.reset_key_events()

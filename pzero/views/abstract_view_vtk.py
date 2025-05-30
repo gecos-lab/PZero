@@ -49,15 +49,7 @@ class ViewVTK(BaseView):
     def __init__(self, *args, **kwargs):
         super(ViewVTK, self).__init__(*args, **kwargs)
 
-    def closeEvent(self, event):
-        """Override the standard closeEvent method by (i) disconnecting all signals and,
-        (ii) closing the plotter for vtk windows."""
-        self.enable_actions()
-        self.disconnect_all_signals()
-        # To cleanly close the vtk plotter, the following line is needed. This is the only difference
-        # with the closeEvent() method in the BaseView() class.
-        self.plotter.close()
-        event.accept()
+    # ================================  General methods shared by all views - built incrementally =====================
 
     def initialize_menu_tools(self):
         """This method collects menus and actions in superclasses and then adds custom ones, specific to this view."""
@@ -96,6 +88,18 @@ class ViewVTK(BaseView):
         self.actionExportScreen = QAction("Take screenshot", self)
         self.actionExportScreen.triggered.connect(self.export_screen)
         self.menuView.addAction(self.actionExportScreen)
+
+    def closeEvent(self, event):
+        """Override the standard closeEvent method by (i) disconnecting all signals and,
+        (ii) closing the plotter for vtk windows."""
+        self.enable_actions()
+        self.disconnect_all_signals()
+        # To cleanly close the vtk plotter, the following line is needed. This is the only difference
+        # with the closeEvent() method in the BaseView() class.
+        self.plotter.close()
+        event.accept()
+
+    # ================================  Methods required by BaseView(), (re-)implemented here =========================
 
     def change_actor_color(self, uid=None, collection=None):
         """Update color for actor uid"""
@@ -822,14 +826,7 @@ class ViewVTK(BaseView):
 
         self.set_orientation_widget()
 
-    def set_orientation_widget(self):
-        """Set the orientation widget to the correct orientation.
-        To be implementyed in subclasses."""
-        pass
-
-    def show_qt_canvas(self):
-        """Show the Qt Window. Could be reimplemented in some subclass."""
-        self.show()
+    # ================================  Methods specific to VTK views =================================================
 
     def plot_mesh(
         self,
@@ -1089,3 +1086,14 @@ class ViewVTK(BaseView):
         )
 
         self.plotter.set_scale(zscale=exag_value)
+
+    # ================================  Placeholders for required methods, implemented in child classes ===============
+
+    def set_orientation_widget(self):
+        """Set the orientation widget to the correct orientation.
+        To be implementyed in subclasses."""
+        pass
+
+    def show_qt_canvas(self):
+        """Show the Qt Window. To be reimplemented in some subclass."""
+        pass
