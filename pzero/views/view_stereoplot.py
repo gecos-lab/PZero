@@ -852,7 +852,7 @@ class ViewStereoplot(ViewMPL):
             plot_entity = this_coll.get_uid_vtk_obj(uid)
         else:
             # catch errors
-            self.parent.print_terminal("no collection: " + collection)
+            self.print_terminal("no collection: " + collection)
             plot_entity = None
 
         # Then plot.
@@ -954,13 +954,13 @@ class ViewStereoplot(ViewMPL):
 
         if self.contours == None:
             self.contours = False
-            self.parent.print_terminal("Contours enabled, unfilled")
+            self.print_terminal("Contours enabled, unfilled")
         elif self.contours == False:
             self.contours = True
-            self.parent.print_terminal("Contours enabled, filled")
+            self.print_terminal("Contours enabled, filled")
         else:
             self.contours = None
-            self.parent.print_terminal("Contours disabled")
+            self.print_terminal("Contours disabled")
 
         for uid in uids:
             show = self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]
@@ -998,16 +998,16 @@ class ViewStereoplot(ViewMPL):
         if self.grid_kind == 'polar':
             self.ax.grid(False)
             self.grid_kind = 'hidden'
-            self.parent.print_terminal("Grid hidden")
+            self.print_terminal("Grid hidden")
         elif self.grid_kind == 'hidden':
             self.ax.grid(True, kind='arbitrary', color='k', ls=':')
             # self.ax.grid(visible=True, kind='arbitrary')
             self.grid_kind = 'equatorial'
-            self.parent.print_terminal("Grid equatorial")
+            self.print_terminal("Grid equatorial")
         elif self.grid_kind == 'equatorial':
             self.ax.grid(True, kind='polar', color='k', ls=':')
             self.grid_kind = 'polar'
-            self.parent.print_terminal("Grid polar")
+            self.print_terminal("Grid polar")
         self.figure.canvas.draw()
 
     def stop_event_loops(self):

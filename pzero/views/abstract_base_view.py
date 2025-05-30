@@ -33,6 +33,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         # _____________________________________________________________________________
         self.setAttribute(Qt.WA_DeleteOnClose, True)
         self.parent = parent
+        self.print_terminal = self.parent.print_terminal
 
         self.actors_df = pd_DataFrame(
             columns=["uid", "actor", "show", "collection", "show_property"]
@@ -994,13 +995,6 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         # self.parent.findChildren(QAction) returns a list of all actions in the application.
         for action in self.parent.findChildren(QAction):
             action.setEnabled(True)
-
-    def print_terminal(self, string=None):
-        """Show string in the terminal."""
-        try:
-            self.parent.TextTerminal.appendPlainText(string)
-        except:
-            self.parent.TextTerminal.appendPlainText("error printing in terminal")
 
     def toggle_property(self, sender=None):
         """Generic method to toggle the property shown by an actor that is already present in the view."""
