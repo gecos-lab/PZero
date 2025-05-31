@@ -26,17 +26,6 @@ def geology_added_update_views(self, updated_list=None):
         this_actor = self.show_actor_with_property(
             uid=uid, collection="geol_coll", show_property=None, visible=True
         )
-        # Old Pandas <= 1.5.3
-        # self.actors_df = self.actors_df.append(
-        #     {
-        #         "uid": uid,
-        #         "actor": this_actor,
-        #         "show": True,
-        #         "collection": "geol_coll",
-        #         "show_property": None,
-        #     },
-        #     ignore_index=True,
-        # )
         # New Pandas >= 2.0.0
         self.actors_df = pd_concat(
             [
