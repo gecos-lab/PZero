@@ -38,7 +38,13 @@ class ViewStereoplot(ViewMPL):
         # self.contours can be True (filled), False (non filled) or None (no contours)
         self.contours = None
         # self.grid_kind can be 'polar', None (equatorial grid), or False (no grid at all)
-        self.grid_kind = 'polar'
+        self.grid_kind = "polar"
+
+        # Set filter for entities belonging to this cross section.
+        # properties_names.astype("str") converts the list of strings in properties_names into a single
+        # concatenated string, then .str.contains("Normals") searches for the (sub-)string "Normals".
+        self.view_filter = 'properties_names.astype("str").str.contains("Normals", na=False) or properties_names.astype("str").str.contains("Lineations", na=False)'
+
         super(ViewStereoplot, self).__init__(*args, **kwargs)
         self.setWindowTitle("Stereoplot View")
 
@@ -737,7 +743,9 @@ class ViewStereoplot(ViewMPL):
     def set_actor_visible(self, uid=None, visible=None):
         """Set actor uid visible or invisible (visible = True or False)"""
         # _______________________must be check, the options below seem too much, but contours are not toggled
-        if isinstance(self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[0], Line2D):
+        if isinstance(
+            self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[0], Line2D
+        ):
             "Case for Line2D"
             self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[
                 0
@@ -745,7 +753,10 @@ class ViewStereoplot(ViewMPL):
             self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[
                 0
             ].figure.canvas.draw()
-        elif isinstance(self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[0], PathCollection):
+        elif isinstance(
+            self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[0],
+            PathCollection,
+        ):
             "Case for PathCollection -> ax.scatter"
             pass
         # elif isinstance(self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[0], TriContourSet):
@@ -822,19 +833,19 @@ class ViewStereoplot(ViewMPL):
 
         # Create Qt layout and add Matplotlib canvas (created above) as a widget to the Qt layout
         self.ViewFrameLayout.addWidget(self.canvas)
-        if self.grid_kind == 'hidden':
+        if self.grid_kind == "hidden":
             self.ax.grid(False)
-        elif self.grid_kind == 'equatorial':
-            self.ax.grid(True, kind='arbitrary', color='k', ls=':')
-        elif self.grid_kind == 'polar':
-            self.ax.grid(True, kind='polar', color='k', ls=':')
+        elif self.grid_kind == "equatorial":
+            self.ax.grid(True, kind="arbitrary", color="k", ls=":")
+        elif self.grid_kind == "polar":
+            self.ax.grid(True, kind="polar", color="k", ls=":")
 
     def show_actor_with_property(
-            self,
-            uid=None,
-            collection=None,
-            show_property=None,
-            visible=None,
+        self,
+        uid=None,
+        collection=None,
+        show_property=None,
+        visible=None,
     ):
         # Show actor with scalar property (default None)
         if show_property is None:
@@ -869,21 +880,33 @@ class ViewStereoplot(ViewMPL):
                     if np_all(strike != None):
                         if uid in self.selected_uids:
                             if show_property == "Planes":
-                                this_actor = self.ax.plane(strike, dip, color=color_RGB)[0]
+                                this_actor = self.ax.plane(
+                                    strike, dip, color=color_RGB
+                                )[0]
                             else:
-                                this_actor = self.ax.pole(strike, dip, color=color_RGB)[0]
+                                this_actor = self.ax.pole(strike, dip, color=color_RGB)[
+                                    0
+                                ]
 
                             this_actor.set_visible(visible)
                         else:
                             if show_property == "Planes":
-                                this_actor = self.ax.plane(strike, dip, color=color_RGB)[0]
+                                this_actor = self.ax.plane(
+                                    strike, dip, color=color_RGB
+                                )[0]
                             else:
                                 if self.contours is not None and visible is True:
                                     if self.contours:
-                                        self.ax.density_contourf(strike, dip, measurement="poles")
+                                        self.ax.density_contourf(
+                                            strike, dip, measurement="poles"
+                                        )
                                     else:
-                                        self.ax.density_contour(strike, dip, measurement="poles")
-                                this_actor = self.ax.pole(strike, dip, color=color_RGB)[0]
+                                        self.ax.density_contour(
+                                            strike, dip, measurement="poles"
+                                        )
+                                this_actor = self.ax.pole(strike, dip, color=color_RGB)[
+                                    0
+                                ]
                             if this_actor:
                                 this_actor.set_visible(visible)
                     else:
@@ -908,10 +931,10 @@ class ViewStereoplot(ViewMPL):
         the actors related to geological data.
         """
         # Switch projection
-        if self.proj_type == 'equal_area_stereonet':
-            self.proj_type = 'equal_angle_stereonet'
-        elif self.proj_type == 'equal_angle_stereonet':
-            self.proj_type = 'equal_area_stereonet'
+        if self.proj_type == "equal_area_stereonet":
+            self.proj_type = "equal_angle_stereonet"
+        elif self.proj_type == "equal_angle_stereonet":
+            self.proj_type = "equal_area_stereonet"
 
         self.ViewFrameLayout.removeWidget(self.canvas)
         self.initialize_interactor()
@@ -921,7 +944,9 @@ class ViewStereoplot(ViewMPL):
         for uid in uids:
             show = self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]
             self.remove_actor_in_view(uid, redraw=False)
-            this_actor = self.show_actor_with_property(uid=uid, collection="geol_coll", visible=show)
+            this_actor = self.show_actor_with_property(
+                uid=uid, collection="geol_coll", visible=show
+            )
             self.actors_df = pd_concat(
                 [
                     self.actors_df,
@@ -967,7 +992,9 @@ class ViewStereoplot(ViewMPL):
 
             self.remove_actor_in_view(uid, redraw=False)
 
-            this_actor = self.show_actor_with_property(uid=uid,collection="geol_coll", visible=show)
+            this_actor = self.show_actor_with_property(
+                uid=uid, collection="geol_coll", visible=show
+            )
             self.actors_df = pd_concat(
                 [
                     self.actors_df,
@@ -995,18 +1022,18 @@ class ViewStereoplot(ViewMPL):
         accordingly and updates the parent container's terminal with a
         message indicating the current state of the grid.
         """
-        if self.grid_kind == 'polar':
+        if self.grid_kind == "polar":
             self.ax.grid(False)
-            self.grid_kind = 'hidden'
+            self.grid_kind = "hidden"
             self.print_terminal("Grid hidden")
-        elif self.grid_kind == 'hidden':
-            self.ax.grid(True, kind='arbitrary', color='k', ls=':')
+        elif self.grid_kind == "hidden":
+            self.ax.grid(True, kind="arbitrary", color="k", ls=":")
             # self.ax.grid(visible=True, kind='arbitrary')
-            self.grid_kind = 'equatorial'
+            self.grid_kind = "equatorial"
             self.print_terminal("Grid equatorial")
-        elif self.grid_kind == 'equatorial':
-            self.ax.grid(True, kind='polar', color='k', ls=':')
-            self.grid_kind = 'polar'
+        elif self.grid_kind == "equatorial":
+            self.ax.grid(True, kind="polar", color="k", ls=":")
+            self.grid_kind = "polar"
             self.print_terminal("Grid polar")
         self.figure.canvas.draw()
 

@@ -21,7 +21,8 @@ def create_xsections_tree(self):
     try:
         uids = self.parent.xsect_coll.df.query(self.view_filter)["uid"].to_list()
     except:
-        uids = [self.this_x_section_uid]
+        # uids = [self.this_x_section_uid] this was used to add the frame.
+        uids = []
     for uid in uids:
         # Do not use query here, it's not necessary and will rise errors.
         name = self.parent.xsect_coll.df.loc[

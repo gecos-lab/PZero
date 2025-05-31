@@ -11,7 +11,10 @@ def create_boundary_list(self):
     self.BoundariesTableWidget.setRowCount(0)
     self.BoundariesTableWidget.setHorizontalHeaderLabels(["Name", "uid"])
     self.BoundariesTableWidget.hideColumn(1)  # hide the uid column
-    uids = self.parent.boundary_coll.df.query(self.view_filter)["uid"].to_list()
+    try:
+        uids = self.parent.boundary_coll.df.query(self.view_filter)["uid"].to_list()
+    except:
+        uids = []
     row = 0
     for uid in uids:
         name = self.parent.boundary_coll.df.loc[

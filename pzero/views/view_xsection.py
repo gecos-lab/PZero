@@ -36,7 +36,11 @@ class ViewXsection(View2D):
         else:
             return
         # Set filter for entities belonging to this cross section.
-        self.view_filter = f'x_section == "{self.this_x_section_uid}"'
+        # Note that this filter does not return the cross section itself. If we want its frame to be shown we must
+        # find a different solution to add it to the plotter.
+        self.view_filter = (
+            f'x_section.str.contains("{self.this_x_section_uid}", na=False)'
+        )
 
         # Super here after having set the x_section_uid and _name
         super(ViewXsection, self).__init__(parent, *args, **kwargs)
@@ -89,4 +93,3 @@ class ViewXsection(View2D):
         self.plotter.camera.focal_point = self.center
         self.plotter.camera.position = self.center + self.direction
         self.plotter.reset_camera()
-

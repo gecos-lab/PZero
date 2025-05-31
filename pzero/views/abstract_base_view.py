@@ -2,7 +2,7 @@
 PZero© Andrea Bistacchi"""
 
 # PySide6 imports____
-from PySide6.QtWidgets import  QMainWindow
+from PySide6.QtWidgets import QMainWindow
 from PySide6.QtGui import QAction
 
 # PZero imports____
@@ -16,6 +16,7 @@ from ..add_remove_update_actors.image import *
 from ..add_remove_update_actors.mesh3d import *
 from ..add_remove_update_actors.wells import *
 from ..add_remove_update_actors.xsection import *
+
 
 class BaseView(QMainWindow, Ui_BaseViewWindow):
     """Create base view - abstract class providing common methods for all views. This includes all side tree and list
@@ -1037,39 +1038,31 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         All objects are visible by default -> show = True
         This must be reimplemented for cross-sections in order
         to show entities belonging to the section only."""
-        for uid in self.parent.geol_coll.df.query(self.view_filter)["uid"].tolist():
-            this_actor = self.show_actor_with_property(
-                uid=uid, collection="geol_coll", show_property=None, visible=True
-            )
-            # Old Pandas <= 1.5.3
-            # self.actors_df = self.actors_df.append(
-            #     {
-            #         "uid": uid,
-            #         "actor": this_actor,
-            #         "show": True,
-            #         "collection": "geol_coll",
-            #         "show_property": None,
-            #     },
-            #     ignore_index=True,
-            # )
-            # New Pandas >= 2.0.0
-            self.actors_df = pd_concat(
-                [
-                    self.actors_df,
-                    pd_DataFrame(
-                        [
-                            {
-                                "uid": uid,
-                                "actor": this_actor,
-                                "show": True,
-                                "collection": "geol_coll",
-                                "show_property": None,
-                            }
-                        ]
-                    ),
-                ],
-                ignore_index=True,
-            )
+        try:
+            for uid in self.parent.geol_coll.df.query(self.view_filter)["uid"].tolist():
+                this_actor = self.show_actor_with_property(
+                    uid=uid, collection="geol_coll", show_property=None, visible=True
+                )
+                # New Pandas >= 2.0.0
+                self.actors_df = pd_concat(
+                    [
+                        self.actors_df,
+                        pd_DataFrame(
+                            [
+                                {
+                                    "uid": uid,
+                                    "actor": this_actor,
+                                    "show": True,
+                                    "collection": "geol_coll",
+                                    "show_property": None,
+                                }
+                            ]
+                        ),
+                    ],
+                    ignore_index=True,
+                )
+        except:
+            pass
         try:
             for uid in self.parent.xsect_coll.df.query(self.view_filter)[
                 "uid"
@@ -1077,17 +1070,6 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                 this_actor = self.show_actor_with_property(
                     uid=uid, collection="xsect_coll", show_property=None, visible=False
                 )
-                # Old Pandas <= 1.5.3
-                # self.actors_df = self.actors_df.append(
-                #     {
-                #         "uid": uid,
-                #         "actor": this_actor,
-                #         "show": False,
-                #         "collection": "xsect_coll",
-                #         "show_property": None,
-                #     },
-                #     ignore_index=True,
-                # )
                 # New Pandas >= 2.0.0
                 self.actors_df = pd_concat(
                     [
@@ -1107,90 +1089,41 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                     ignore_index=True,
                 )
         except:
-            # This plots the X section frame in cases where a X section is plotting itself in a NewXsView()
-            this_actor = self.show_actor_with_property(
-                uid=self.this_x_section_uid,
-                collection="xsect_coll",
-                show_property=None,
-                visible=False,
-            )
-            # Old Pandas <= 1.5.3
-            # self.actors_df = self.actors_df.append(
-            #     {
-            #         "uid": self.this_x_section_uid,
-            #         "actor": this_actor,
-            #         "show": False,
-            #         "collection": "xsect_coll",
-            #         "show_property": None,
-            #     },
-            #     ignore_index=True,
-            # )
-            # New Pandas >= 2.0.0
-            self.actors_df = pd_concat(
-                [
-                    self.actors_df,
-                    pd_DataFrame(
-                        [
-                            {
-                                "uid": self.this_x_section_uid,
-                                "actor": this_actor,
-                                "show": False,
-                                "collection": "xsect_coll",
-                                "show_property": None,
-                            }
-                        ]
-                    ),
-                ],
-                ignore_index=True,
-            )
-        for uid in self.parent.boundary_coll.df.query(self.view_filter)["uid"].tolist():
-            this_actor = self.show_actor_with_property(
-                uid=uid, collection="boundary_coll", show_property=None, visible=False
-            )
-            # Old Pandas <= 1.5.3
-            # self.actors_df = self.actors_df.append(
-            #     {
-            #         "uid": uid,
-            #         "actor": this_actor,
-            #         "show": False,
-            #         "collection": "boundary_coll",
-            #         "show_property": None,
-            #     },
-            #     ignore_index=True,
-            # )
-            # New Pandas >= 2.0.0
-            self.actors_df = pd_concat(
-                [
-                    self.actors_df,
-                    pd_DataFrame(
-                        [
-                            {
-                                "uid": uid,
-                                "actor": this_actor,
-                                "show": False,
-                                "collection": "boundary_coll",
-                                "show_property": None,
-                            }
-                        ]
-                    ),
-                ],
-                ignore_index=True,
-            )
+            pass
+        try:
+            for uid in self.parent.boundary_coll.df.query(self.view_filter)[
+                "uid"
+            ].tolist():
+                this_actor = self.show_actor_with_property(
+                    uid=uid,
+                    collection="boundary_coll",
+                    show_property=None,
+                    visible=False,
+                )
+                # New Pandas >= 2.0.0
+                self.actors_df = pd_concat(
+                    [
+                        self.actors_df,
+                        pd_DataFrame(
+                            [
+                                {
+                                    "uid": uid,
+                                    "actor": this_actor,
+                                    "show": False,
+                                    "collection": "boundary_coll",
+                                    "show_property": None,
+                                }
+                            ]
+                        ),
+                    ],
+                    ignore_index=True,
+                )
+        except:
+            pass
         for uid in self.parent.mesh3d_coll.df.query(self.view_filter)["uid"].tolist():
             this_actor = self.show_actor_with_property(
                 uid=uid, collection="mesh3d_coll", show_property=None, visible=False
             )
-            # Old Pandas <= 1.5.3
-            # self.actors_df = self.actors_df.append(
-            #     {
-            #         "uid": uid,
-            #         "actor": this_actor,
-            #         "show": False,
-            #         "collection": "mesh3d_coll",
-            #         "show_property": None,
-            #     },
-            #     ignore_index=True,
-            # )
             # New Pandas >= 2.0.0
             self.actors_df = pd_concat(
                 [
@@ -1213,17 +1146,6 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             this_actor = self.show_actor_with_property(
                 uid=uid, collection="dom_coll", show_property=None, visible=False
             )
-            # Old Pandas <= 1.5.3
-            # self.actors_df = self.actors_df.append(
-            #     {
-            #         "uid": uid,
-            #         "actor": this_actor,
-            #         "show": False,
-            #         "collection": "dom_coll",
-            #         "show_property": None,
-            #     },
-            #     ignore_index=True,
-            # )
             # New Pandas >= 2.0.0
             self.actors_df = pd_concat(
                 [
@@ -1246,17 +1168,6 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             this_actor = self.show_actor_with_property(
                 uid=uid, collection="image_coll", show_property=None, visible=False
             )
-            # Old Pandas <= 1.5.3
-            # self.actors_df = self.actors_df.append(
-            #     {
-            #         "uid": uid,
-            #         "actor": this_actor,
-            #         "show": False,
-            #         "collection": "image_coll",
-            #         "show_property": None,
-            #     },
-            #     ignore_index=True,
-            # )
             # New Pandas >= 2.0.0
             self.actors_df = pd_concat(
                 [
@@ -1279,17 +1190,6 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             this_actor = self.show_actor_with_property(
                 uid=uid, collection="well_coll", show_property=None, visible=False
             )
-            # Old Pandas <= 1.5.3
-            # self.actors_df = self.actors_df.append(
-            #     {
-            #         "uid": uid,
-            #         "actor": this_actor,
-            #         "show": False,
-            #         "collection": "well_coll",
-            #         "show_property": None,
-            #     },
-            #     ignore_index=True,
-            # )
             # New Pandas >= 2.0.0
             self.actors_df = pd_concat(
                 [
@@ -1312,17 +1212,6 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             this_actor = self.show_actor_with_property(
                 uid=uid, collection="fluid_coll", show_property=None, visible=False
             )
-            # Old Pandas <= 1.5.3
-            # self.actors_df = self.actors_df.append(
-            #     {
-            #         "uid": uid,
-            #         "actor": this_actor,
-            #         "show": False,
-            #         "collection": "fluid_coll",
-            #         "show_property": None,
-            #     },
-            #     ignore_index=True,
-            # )
             # New Pandas >= 2.0.0
             self.actors_df = pd_concat(
                 [
@@ -1348,17 +1237,6 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                 show_property=None,
                 visible=False,
             )
-            # Old Pandas <= 1.5.3
-            # self.actors_df = self.actors_df.append(
-            #     {
-            #         "uid": uid,
-            #         "actor": this_actor,
-            #         "show": False,
-            #         "collection": "backgrnd_coll",
-            #         "show_property": None,
-            #     },
-            #     ignore_index=True,
-            # )
             # New Pandas >= 2.0.0
             self.actors_df = pd_concat(
                 [
