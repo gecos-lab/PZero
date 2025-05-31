@@ -1,5 +1,6 @@
 """abstract_view_vtk.py
 PZero© Andrea Bistacchi"""
+
 # PySide6 imports____
 from PySide6.QtGui import QAction
 from PySide6.QtWidgets import (
@@ -301,6 +302,44 @@ class ViewVTK(BaseView):
             self.actors_df.drop(
                 self.actors_df[self.actors_df["uid"] == uid].index, inplace=True
             )
+
+    def initialize_interactor(self):
+        """Add the pyvista interactor object to self.ViewFrameLayout ->
+        the layout of an empty frame generated with Qt Designer"""
+        # print(self.ViewFrame)
+        self.plotter = pvQtInteractor(self.ViewFrame)
+        # background color - could be made interactive in the future
+        self.plotter.set_background("black")
+        self.ViewFrameLayout.addWidget(self.plotter.interactor)
+        # self.plotter.show_axes_all()
+
+        # Set orientation widget
+
+        # # In an old version it was turned on after the qt canvas was shown, but this does not seem necessary
+        # if isinstance(self, View3D):
+        #     self.plotter.add_camera_orientation_widget()
+        #     # self.cam_orient_widget = vtkCameraOrientationWidget()
+        #     # self.cam_orient_widget.SetParentRenderer(self.plotter.renderer)
+        #     # self.cam_orient_widget.On()
+        # elif isinstance(self, ViewXsection):
+        #     self.plotter.add_orientation_widget(
+        #         pv_Arrow(direction=(0.0, 1.0, 0.0), scale=0.3),
+        #         interactive=None,
+        #         color="gold",
+        #     )
+        # elif isinstance(self, ViewMap):
+        #     self.plotter.add_north_arrow_widget(interactive=None, color="gold")
+
+        # Set default orientation horizontal because vertical colorbars interfere with the camera widget.
+        pv_global_theme.colorbar_orientation = "horizontal"
+
+        # Manage home view
+        self.default_view = self.plotter.camera_position
+        # self.plotter.track_click_position(
+        #    lambda pos: self.plotter.camera.SetFocalPoint(pos), side="left", double=True
+        # )
+
+        self.set_orientation_widget()
 
     def show_actor_with_property(
         self, uid=None, collection=None, show_property=None, visible=None
@@ -787,44 +826,6 @@ class ViewVTK(BaseView):
         self.plotter.screenshot(
             out_file_name, transparent_background=True, window_size=(1920, 1080)
         )
-
-    def initialize_interactor(self):
-        """Add the pyvista interactor object to self.ViewFrameLayout ->
-        the layout of an empty frame generated with Qt Designer"""
-        # print(self.ViewFrame)
-        self.plotter = pvQtInteractor(self.ViewFrame)
-        # background color - could be made interactive in the future
-        self.plotter.set_background("black")
-        self.ViewFrameLayout.addWidget(self.plotter.interactor)
-        # self.plotter.show_axes_all()
-
-        # Set orientation widget
-
-        # # In an old version it was turned on after the qt canvas was shown, but this does not seem necessary
-        # if isinstance(self, View3D):
-        #     self.plotter.add_camera_orientation_widget()
-        #     # self.cam_orient_widget = vtkCameraOrientationWidget()
-        #     # self.cam_orient_widget.SetParentRenderer(self.plotter.renderer)
-        #     # self.cam_orient_widget.On()
-        # elif isinstance(self, ViewXsection):
-        #     self.plotter.add_orientation_widget(
-        #         pv_Arrow(direction=(0.0, 1.0, 0.0), scale=0.3),
-        #         interactive=None,
-        #         color="gold",
-        #     )
-        # elif isinstance(self, ViewMap):
-        #     self.plotter.add_north_arrow_widget(interactive=None, color="gold")
-
-        # Set default orientation horizontal because vertical colorbars interfere with the camera widget.
-        pv_global_theme.colorbar_orientation = "horizontal"
-
-        # Manage home view
-        self.default_view = self.plotter.camera_position
-        # self.plotter.track_click_position(
-        #    lambda pos: self.plotter.camera.SetFocalPoint(pos), side="left", double=True
-        # )
-
-        self.set_orientation_widget()
 
     # ================================  Methods specific to VTK views =================================================
 

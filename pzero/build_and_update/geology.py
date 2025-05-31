@@ -16,6 +16,7 @@ def create_geology_tree(self):
     # hide the uid column
     self.GeologyTreeWidget.hideColumn(1)
     self.GeologyTreeWidget.setItemsExpandable(True)
+
     roles = pd_unique(self.parent.geol_coll.df.query(self.view_filter)["role"])
     for role in roles:
         # self.GeologyTreeWidget as parent -> top level
