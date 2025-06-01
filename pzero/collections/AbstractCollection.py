@@ -41,6 +41,7 @@ class CollectionSignals(QObject):
     legend_thick_modified = pyqtSignal(list)
     legend_point_size_modified = pyqtSignal(list)
     legend_opacity_modified = pyqtSignal(list)
+    itemsSelected = pyqtSignal(str)  # selection changed on the collection in the signal argument
 
 
 class BaseCollection(ABC):
@@ -70,6 +71,8 @@ class BaseCollection(ABC):
         self._editable_columns_names: list = list()
 
         self._table_model = BaseTableModel(self.parent, self)
+        
+        self._selected_uids = []  # list of selected uids
 
         self._signals = CollectionSignals()
 
@@ -206,6 +209,14 @@ class BaseCollection(ABC):
     def df(self, df: pd_DataFrame):
         """Set the dataframe of the Collection."""
         self._df = df
+    
+    @property
+    def selected_uids(self):
+        return self._selected_uids
+    
+    @selected_uids.setter
+    def selected_uids(self, selected_uids: list):
+        self._selected_uids = selected_uids
 
     @property
     def collection_name(self) -> str:
