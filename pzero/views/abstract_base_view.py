@@ -163,9 +163,9 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
 
             print("----------------")
 
-            setattr(self, f"{page_name}", QWidget())
-            eval(f"self.{page_name}").setObjectName(page_name)
-            eval(f"self.{page_name}").setGeometry(QRect(0, 0, 626, 258))
+            # setattr(self, f"{page_name}", QWidget())
+            # eval(f"self.{page_name}").setObjectName(page_name)
+            # eval(f"self.{page_name}").setGeometry(QRect(0, 0, 626, 258))
 
             setattr(
                 self,
@@ -183,12 +183,12 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             )
             eval(f"self.{tree_name}").setObjectName(tree_name)
 
-            setattr(self, f"{layout_name}", QVBoxLayout(eval(f"self.{page_name}")))
-            eval(f"self.{layout_name}").setObjectName(layout_name)
+            # setattr(self, f"{layout_name}", QVBoxLayout(eval(f"self.{page_name}")))
+            # eval(f"self.{layout_name}").setObjectName(layout_name)
 
             eval(f"self.{layout_name}").addWidget(eval(f"self.{tree_name}"))
 
-            self.toolBox.addItem(eval(f"self.{page_name}"), show_name)
+            # self.toolBox.addItem(eval(f"self.{page_name}"), show_name)
 
             print("================")
 
