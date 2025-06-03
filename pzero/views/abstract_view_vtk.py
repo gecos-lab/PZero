@@ -255,6 +255,9 @@ class ViewVTK(BaseView):
 
     def set_actor_visible(self, uid=None, visible=None, name=None):
         """Set actor uid visible or invisible (visible = True or False)"""
+        print(
+            "setting actor visible - uid: ", uid, " visible: ", visible, " name: ", name
+        )
         this_actor = self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[0]
         collection = self.actors_df.loc[
             self.actors_df["uid"] == uid, "collection"

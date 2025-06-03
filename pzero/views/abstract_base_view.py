@@ -4,7 +4,7 @@ PZero© Andrea Bistacchi"""
 from PySide6.QtCore import QRect, QObject
 
 # PySide6 imports____
-from PySide6.QtWidgets import QMainWindow, QTreeWidget, QWidget, QVBoxLayout
+from PySide6.QtWidgets import QMainWindow
 from PySide6.QtGui import QAction
 from PySide6.QtCore import Signal as pyqtSignal
 
@@ -25,28 +25,26 @@ from ..add_remove_update_actors.xsection import *
 class BaseViewSignals(QObject):
     """
     This class is necessary since non-Qt classes cannot emit Qt signals. Therefore, we create a generic
-    BaseViewSignals() Qt object, that will include all signals used by collections. These will be used according
+    BaseViewSignals() Qt object that will include all signals used by collections. These will be used according
     to the following pattern:
 
     self.signals = BaseViewSignals()
-
     self.signals.specific_signal.emit(some_message)
-
-    etc.
 
     Basically, in this way, instead of using inheritance, we add all signals with a quick move by composition.
     """
 
-    # signal broadcast on checkbox toggled with the collection and lists of uids to be turned on or off as arguments
+    # signal broadcast on checkbox toggled, with the collection and lists of uids to be turned on or off as arguments
     checkboxToggled = pyqtSignal(str, list, list)
-    # signal broadcast on property combobox changed with the collection, uid and property as arguments
+    # signal broadcast on property combobox changed, with the collection, uid and property as arguments
     propertyToggled = pyqtSignal(str, str, str)
     # signal for selection change, emits a list of UIDs
     newSelection = pyqtSignal(list)
 
 
 class BaseView(QMainWindow, Ui_BaseViewWindow):
-    """Create base view - abstract class providing common methods for all views. This includes all side tree and list
+    """
+    Create base view - abstract class providing common methods for all views. This includes all side tree and list
     views, but not the main plotting canvas, that must be managed by subclasses.
     parent is the QT object that is launching this one, hence the ProjectWindow() instance.
     """
@@ -54,17 +52,13 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
     def __init__(self, parent=None, *args, **kwargs):
         super(BaseView, self).__init__(parent, *args, **kwargs)
         self.setupUi(self)
-        # _____________________________________________________________________________
-        # THE FOLLOWING ACTUALLY DELETES ANY REFERENCE TO CLOSED WINDOWS, HENCE FREEING
+        # Qt.WA_DeleteOnClose DELETES ANY REFERENCE TO CLOSED WINDOWS, HENCE FREEING
         # MEMORY, BUT COULD CREATE PROBLEMS WITH SIGNALS THAT ARE STILL ACTIVE
         # SEE DISCUSSIONS ON QPointer AND WA_DeleteOnClose ON THE INTERNET
-        # _____________________________________________________________________________
         self.setAttribute(Qt.WA_DeleteOnClose, True)
         self.parent = parent
         self.signals = BaseViewSignals()
         self.print_terminal = self.parent.print_terminal
-
-        # dictionary with tree (key) vs. collection (value)
         self.tree_collection_dict = {
             "GeologyTreeWidget": "geol_coll",
             "FluidsTreeWidget": "fluid_coll",
@@ -76,121 +70,43 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             "XSectionTreeWidget": "xsect_coll",
             "WellsTreeWidget": "well_coll",
         }
-
         self.actors_df = pd_DataFrame(
-            columns=["uid", "actor", "show", "collection", "show_property"]
+            {
+                "uid": str,
+                "actor": str,
+                "show": bool,
+                "collection": str,
+                "show_property": str,
+            },
+            index=[],
         )
-
-        # Create empty list of selected uid's
-        # _____________________________________________
-        # SEE IF IT IA A GOOD IDEA TO USE INSTEAD A NEW "selected" COLUMN IN self.actors_df
-        # _____________________________________________
-
+        # __________________________________________________________________________________________
+        # THIS MUST BE REMOVED - USE self.collection.selected_uids  ================================
+        # __________________________________________________________________________________________
         self.selected_uids = []
-
         # Set view_filter attribute to a string indicating that all entities must be selected (i.e. no filtering).
         # Somebody says 'ilevel_0 in ilevel_0' is more robust than 'index == index', but it seems OK.
-
         if not hasattr(self, "view_filter"):
             self.view_filter = "index == index"
             self.this_x_section_uid = []
-
         # Initialize menus and tools, canvas, add actors and show it. These methods must be defined in subclasses.
-
         self.initialize_menu_tools()
         self.initialize_interactor()
         self.add_all_entities()
         # self.show_qt_canvas()  # comment this to avoid flashing window when opening a new view
+        # self.toggle_backgrounds_visibility = lambda item: toggle_backgrounds_visibility(self, item)
+        # self.toggle_boundary_visibility = lambda item: toggle_boundary_visibility(self, item)
+        # self.toggle_dom_visibility = lambda cell: toggle_dom_visibility(self, cell)
+        # self.toggle_fluids_visibility = lambda item: toggle_fluids_visibility(self, item)
+        # self.toggle_geology_visibility = lambda item: toggle_geology_visibility(self, item)
+        # self.toggle_image_visibility = lambda cell: toggle_image_visibility(self, cell)
+        # self.toggle_mesh3d_visibility = lambda cell: toggle_mesh3d_visibility(self, cell)
+        # self.toggle_well_visibility = lambda item: toggle_well_visibility(self, item)
+        # self.toggle_xsection_visibility = lambda item: toggle_xsection_visibility(self, item)
 
-        self.toggle_backgrounds_visibility = lambda item: toggle_backgrounds_visibility(
-            self, item
-        )
+        self.create_trees()
 
-        self.toggle_boundary_visibility = lambda item: toggle_boundary_visibility(
-            self, item
-        )
-
-        self.toggle_dom_visibility = lambda cell: toggle_dom_visibility(self, cell)
-
-        self.toggle_fluids_visibility = lambda item: toggle_fluids_visibility(
-            self, item
-        )
-
-        self.toggle_geology_visibility = lambda item: toggle_geology_visibility(
-            self, item
-        )
-
-        self.toggle_image_visibility = lambda cell: toggle_image_visibility(self, cell)
-
-        self.toggle_mesh3d_visibility = lambda cell: toggle_mesh3d_visibility(
-            self, cell
-        )
-
-        self.toggle_well_visibility = lambda item: toggle_well_visibility(self, item)
-
-        self.toggle_xsection_visibility = lambda item: toggle_xsection_visibility(
-            self, item
-        )
-
-        for tree_name, coll_name in self.tree_collection_dict.items():
-            print("coll_name: ", coll_name)
-            print("tree_name: ", tree_name)
-            show_name = tree_name.removesuffix("Widget")
-            page_name = show_name + "Page"
-            layout_name = show_name + "Layout"
-            print("page_name: ", page_name)
-            print("layout_name: ", layout_name)
-            collection = eval(f"self.parent.{coll_name}")
-            # tree = eval(f"self.{tree_name}")
-            # page = eval(f"self.{page_name}")
-            # layout = eval(f"self.{layout_name}")
-            print("................")
-
-            tree_labels = ["role", "topology", "feature", "scenario"]
-            if not "role" in eval(f"self.parent.{coll_name}.entity_dict.keys()"):
-                tree_labels.remove("role")
-            if not "topology" in eval(f"self.parent.{coll_name}.entity_dict.keys()"):
-                tree_labels.remove("topology")
-            if not "feature" in eval(f"self.parent.{coll_name}.entity_dict.keys()"):
-                tree_labels.remove("feature")
-            if "properties_names" in eval(
-                f"self.parent.{coll_name}.entity_dict.keys()"
-            ):
-                prop_label = "properties_names"
-            else:
-                prop_label = None
-            default_labels = ["none", "X", "Y", "Z"]
-
-            print("----------------")
-
-            # setattr(self, f"{page_name}", QWidget())
-            # eval(f"self.{page_name}").setObjectName(page_name)
-            # eval(f"self.{page_name}").setGeometry(QRect(0, 0, 626, 258))
-
-            setattr(
-                self,
-                f"{tree_name}",
-                CustomTreeWidget(
-                    parent=eval(f"self.{page_name}"),
-                    view=self,
-                    collection=collection,
-                    tree_labels=tree_labels,
-                    name_label="name",
-                    uid_label="uid",
-                    prop_label=prop_label,
-                    default_labels=default_labels,
-                ),
-            )
-            eval(f"self.{tree_name}").setObjectName(tree_name)
-
-            # setattr(self, f"{layout_name}", QVBoxLayout(eval(f"self.{page_name}")))
-            # eval(f"self.{layout_name}").setObjectName(layout_name)
-
-            eval(f"self.{layout_name}").addWidget(eval(f"self.{tree_name}"))
-
-            # self.toolBox.addItem(eval(f"self.{page_name}"), show_name)
-
-            print("================")
+        self.connect_signals()
 
         # create_geology_tree(self)
         # create_topology_tree(self)
@@ -863,6 +779,13 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
 
     # ================================  General methods shared by all views ===========================================
 
+    def connect_signals(self):
+        self.signals.checkboxToggled.connect(
+            lambda collection_name, turn_on_uids, turn_off_uids: self.toggle_visibility(
+                collection_name, turn_on_uids, turn_off_uids
+            )
+        )
+
     def disconnect_all_signals(self):
         """Used to disconnect all windows signals correctly, when a window is closed.
         If this method is removed PZero will crash when closing a window.
@@ -1098,6 +1021,89 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         for action in self.parent.findChildren(QAction):
             action.setEnabled(True)
 
+    def create_trees(self):
+        for tree_name, coll_name in self.tree_collection_dict.items():
+            # print("coll_name: ", coll_name)
+            # print("tree_name: ", tree_name)
+            show_name = tree_name.removesuffix("Widget")
+            page_name = show_name + "Page"
+            layout_name = show_name + "Layout"
+            # print("page_name: ", page_name)
+            # print("layout_name: ", layout_name)
+            collection = eval(f"self.parent.{coll_name}")
+            # tree = eval(f"self.{tree_name}")
+            # page = eval(f"self.{page_name}")
+            # layout = eval(f"self.{layout_name}")
+            # print("................")
+            tree_labels = ["role", "topology", "feature", "scenario"]
+            if not "role" in eval(f"self.parent.{coll_name}.entity_dict.keys()"):
+                tree_labels.remove("role")
+            if not "topology" in eval(f"self.parent.{coll_name}.entity_dict.keys()"):
+                tree_labels.remove("topology")
+            if not "feature" in eval(f"self.parent.{coll_name}.entity_dict.keys()"):
+                tree_labels.remove("feature")
+            if "properties_names" in eval(
+                f"self.parent.{coll_name}.entity_dict.keys()"
+            ):
+                prop_label = "properties_names"
+            else:
+                prop_label = None
+            default_labels = ["none", "X", "Y", "Z"]
+            # print("----------------")
+            # setattr(self, f"{page_name}", QWidget())
+            # eval(f"self.{page_name}").setObjectName(page_name)
+            # eval(f"self.{page_name}").setGeometry(QRect(0, 0, 626, 258))
+            setattr(
+                self,
+                f"{tree_name}",
+                CustomTreeWidget(
+                    parent=eval(f"self.{page_name}"),
+                    view=self,
+                    collection=collection,
+                    tree_labels=tree_labels,
+                    name_label="name",
+                    uid_label="uid",
+                    prop_label=prop_label,
+                    default_labels=default_labels,
+                ),
+            )
+            eval(f"self.{tree_name}").setObjectName(tree_name)
+            # setattr(self, f"{layout_name}", QVBoxLayout(eval(f"self.{page_name}")))
+            # eval(f"self.{layout_name}").setObjectName(layout_name)
+            eval(f"self.{layout_name}").addWidget(eval(f"self.{tree_name}"))
+            # self.toolBox.addItem(eval(f"self.{page_name}"), show_name)
+            # print("================")
+
+    def toggle_visibility(
+        self, collection_name=None, turn_on_uids=None, turn_off_uids=None
+    ):
+        print("self.actors_df:\n", self.actors_df)
+        print(
+            "Toggling visibility - on uids: ",
+            turn_on_uids,
+            " - off uids: ",
+            turn_off_uids,
+        )
+        # if turn_on_uids:
+        for uid in turn_on_uids:
+            # if (self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0] == False):
+            print(
+                "on: ",
+                self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0],
+            )
+            # self.actors_df.loc[self.actors_df["uid"] == uid, "show"] = True
+            self.set_actor_visible(uid=uid, visible=True)
+        # if turn_off_uids:
+        for uid in turn_off_uids:
+            # if (self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0] == True):
+            print(
+                "off: ",
+                self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0],
+            )
+            # self.actors_df.loc[self.actors_df["uid"] == uid, "show"] = False
+            self.set_actor_visible(uid=uid, visible=False)
+        print("self.actors_df:\n", self.actors_df)
+
     def toggle_property(self, sender=None):
         """Generic method to toggle the property shown by an actor that is already present in the view."""
         show_property = sender.currentText()
@@ -1135,227 +1141,236 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         )
 
     def add_all_entities(self):
-        """Add all entities in project collections.
-        All objects are visible by default -> show = True
-        This must be reimplemented for cross-sections in order
-        to show entities belonging to the section only."""
-        try:
-            for uid in self.parent.geol_coll.df.query(self.view_filter)["uid"].tolist():
-                this_actor = self.show_actor_with_property(
-                    uid=uid, collection="geol_coll", show_property=None, visible=True
-                )
-                # New Pandas >= 2.0.0
-                self.actors_df = pd_concat(
-                    [
-                        self.actors_df,
-                        pd_DataFrame(
-                            [
-                                {
-                                    "uid": uid,
-                                    "actor": this_actor,
-                                    "show": True,
-                                    "collection": "geol_coll",
-                                    "show_property": None,
-                                }
-                            ]
-                        ),
-                    ],
-                    ignore_index=True,
-                )
-        except:
-            pass
-        try:
-            for uid in self.parent.xsect_coll.df.query(self.view_filter)[
-                "uid"
-            ].tolist():
-                this_actor = self.show_actor_with_property(
-                    uid=uid, collection="xsect_coll", show_property=None, visible=False
-                )
-                # New Pandas >= 2.0.0
-                self.actors_df = pd_concat(
-                    [
-                        self.actors_df,
-                        pd_DataFrame(
-                            [
-                                {
-                                    "uid": uid,
-                                    "actor": this_actor,
-                                    "show": False,
-                                    "collection": "xsect_coll",
-                                    "show_property": None,
-                                }
-                            ]
-                        ),
-                    ],
-                    ignore_index=True,
-                )
-        except:
-            pass
-        try:
-            for uid in self.parent.boundary_coll.df.query(self.view_filter)[
-                "uid"
-            ].tolist():
-                this_actor = self.show_actor_with_property(
-                    uid=uid,
-                    collection="boundary_coll",
-                    show_property=None,
-                    visible=False,
-                )
-                # New Pandas >= 2.0.0
-                self.actors_df = pd_concat(
-                    [
-                        self.actors_df,
-                        pd_DataFrame(
-                            [
-                                {
-                                    "uid": uid,
-                                    "actor": this_actor,
-                                    "show": False,
-                                    "collection": "boundary_coll",
-                                    "show_property": None,
-                                }
-                            ]
-                        ),
-                    ],
-                    ignore_index=True,
-                )
-        except:
-            pass
-        for uid in self.parent.mesh3d_coll.df.query(self.view_filter)["uid"].tolist():
-            this_actor = self.show_actor_with_property(
-                uid=uid, collection="mesh3d_coll", show_property=None, visible=False
-            )
-            # New Pandas >= 2.0.0
-            self.actors_df = pd_concat(
-                [
-                    self.actors_df,
-                    pd_DataFrame(
+        """
+        Add all entities in project collections.
+        All objects are visible by default -> show = True.
+        """
+        for collection_name in self.tree_collection_dict.values():
+            try:
+                for uid in (
+                    eval(f"self.parent.{collection_name}")
+                    .df.query(self.view_filter)["uid"]
+                    .tolist()
+                ):
+                    this_actor = self.show_actor_with_property(
+                        uid=uid,
+                        collection=collection_name,
+                        show_property=None,
+                        visible=True,
+                    )
+                    # New Pandas >= 2.0.0
+                    self.actors_df = pd_concat(
                         [
-                            {
-                                "uid": uid,
-                                "actor": this_actor,
-                                "show": False,
-                                "collection": "mesh3d_coll",
-                                "show_property": None,
-                            }
-                        ]
-                    ),
-                ],
-                ignore_index=True,
-            )
-        for uid in self.parent.dom_coll.df.query(self.view_filter)["uid"].tolist():
-            this_actor = self.show_actor_with_property(
-                uid=uid, collection="dom_coll", show_property=None, visible=False
-            )
-            # New Pandas >= 2.0.0
-            self.actors_df = pd_concat(
-                [
-                    self.actors_df,
-                    pd_DataFrame(
-                        [
-                            {
-                                "uid": uid,
-                                "actor": this_actor,
-                                "show": False,
-                                "collection": "dom_coll",
-                                "show_property": None,
-                            }
-                        ]
-                    ),
-                ],
-                ignore_index=True,
-            )
-        for uid in self.parent.image_coll.df.query(self.view_filter)["uid"].tolist():
-            this_actor = self.show_actor_with_property(
-                uid=uid, collection="image_coll", show_property=None, visible=False
-            )
-            # New Pandas >= 2.0.0
-            self.actors_df = pd_concat(
-                [
-                    self.actors_df,
-                    pd_DataFrame(
-                        [
-                            {
-                                "uid": uid,
-                                "actor": this_actor,
-                                "show": False,
-                                "collection": "image_coll",
-                                "show_property": None,
-                            }
-                        ]
-                    ),
-                ],
-                ignore_index=True,
-            )
-        for uid in self.parent.well_coll.df.query(self.view_filter)["uid"].tolist():
-            this_actor = self.show_actor_with_property(
-                uid=uid, collection="well_coll", show_property=None, visible=False
-            )
-            # New Pandas >= 2.0.0
-            self.actors_df = pd_concat(
-                [
-                    self.actors_df,
-                    pd_DataFrame(
-                        [
-                            {
-                                "uid": uid,
-                                "actor": this_actor,
-                                "show": False,
-                                "collection": "well_coll",
-                                "show_property": None,
-                            }
-                        ]
-                    ),
-                ],
-                ignore_index=True,
-            )
-        for uid in self.parent.fluid_coll.df.query(self.view_filter)["uid"].tolist():
-            this_actor = self.show_actor_with_property(
-                uid=uid, collection="fluid_coll", show_property=None, visible=False
-            )
-            # New Pandas >= 2.0.0
-            self.actors_df = pd_concat(
-                [
-                    self.actors_df,
-                    pd_DataFrame(
-                        [
-                            {
-                                "uid": uid,
-                                "actor": this_actor,
-                                "show": False,
-                                "collection": "fluid_coll",
-                                "show_property": None,
-                            }
-                        ]
-                    ),
-                ],
-                ignore_index=True,
-            )
-        for uid in self.parent.backgrnd_coll.df.query(self.view_filter)["uid"].tolist():
-            this_actor = self.show_actor_with_property(
-                uid=uid,
-                collection="backgrnd_coll",
-                show_property=None,
-                visible=False,
-            )
-            # New Pandas >= 2.0.0
-            self.actors_df = pd_concat(
-                [
-                    self.actors_df,
-                    pd_DataFrame(
-                        [
-                            {
-                                "uid": uid,
-                                "actor": this_actor,
-                                "show": False,
-                                "collection": "backgrnd_coll",
-                                "show_property": None,
-                            }
-                        ]
-                    ),
-                ],
-                ignore_index=True,
-            )
+                            self.actors_df,
+                            pd_DataFrame(
+                                [
+                                    {
+                                        "uid": uid,
+                                        "actor": this_actor,
+                                        "show": True,
+                                        "collection": collection_name,
+                                        "show_property": None,
+                                    }
+                                ]
+                            ),
+                        ],
+                        ignore_index=True,
+                    )
+            except:
+                pass
+        print("self.actors_df:\n", self.actors_df)
+        # try:
+        #     for uid in self.parent.xsect_coll.df.query(self.view_filter)[
+        #         "uid"
+        #     ].tolist():
+        #         this_actor = self.show_actor_with_property(
+        #             uid=uid, collection="xsect_coll", show_property=None, visible=False
+        #         )
+        #         # New Pandas >= 2.0.0
+        #         self.actors_df = pd_concat(
+        #             [
+        #                 self.actors_df,
+        #                 pd_DataFrame(
+        #                     [
+        #                         {
+        #                             "uid": uid,
+        #                             "actor": this_actor,
+        #                             "show": False,
+        #                             "collection": "xsect_coll",
+        #                             "show_property": None,
+        #                         }
+        #                     ]
+        #                 ),
+        #             ],
+        #             ignore_index=True,
+        #         )
+        # except:
+        #     pass
+        # try:
+        #     for uid in self.parent.boundary_coll.df.query(self.view_filter)[
+        #         "uid"
+        #     ].tolist():
+        #         this_actor = self.show_actor_with_property(
+        #             uid=uid,
+        #             collection="boundary_coll",
+        #             show_property=None,
+        #             visible=False,
+        #         )
+        #         # New Pandas >= 2.0.0
+        #         self.actors_df = pd_concat(
+        #             [
+        #                 self.actors_df,
+        #                 pd_DataFrame(
+        #                     [
+        #                         {
+        #                             "uid": uid,
+        #                             "actor": this_actor,
+        #                             "show": False,
+        #                             "collection": "boundary_coll",
+        #                             "show_property": None,
+        #                         }
+        #                     ]
+        #                 ),
+        #             ],
+        #             ignore_index=True,
+        #         )
+        # except:
+        #     pass
+        # for uid in self.parent.mesh3d_coll.df.query(self.view_filter)["uid"].tolist():
+        #     this_actor = self.show_actor_with_property(
+        #         uid=uid, collection="mesh3d_coll", show_property=None, visible=False
+        #     )
+        #     # New Pandas >= 2.0.0
+        #     self.actors_df = pd_concat(
+        #         [
+        #             self.actors_df,
+        #             pd_DataFrame(
+        #                 [
+        #                     {
+        #                         "uid": uid,
+        #                         "actor": this_actor,
+        #                         "show": False,
+        #                         "collection": "mesh3d_coll",
+        #                         "show_property": None,
+        #                     }
+        #                 ]
+        #             ),
+        #         ],
+        #         ignore_index=True,
+        #     )
+        # for uid in self.parent.dom_coll.df.query(self.view_filter)["uid"].tolist():
+        #     this_actor = self.show_actor_with_property(
+        #         uid=uid, collection="dom_coll", show_property=None, visible=False
+        #     )
+        #     # New Pandas >= 2.0.0
+        #     self.actors_df = pd_concat(
+        #         [
+        #             self.actors_df,
+        #             pd_DataFrame(
+        #                 [
+        #                     {
+        #                         "uid": uid,
+        #                         "actor": this_actor,
+        #                         "show": False,
+        #                         "collection": "dom_coll",
+        #                         "show_property": None,
+        #                     }
+        #                 ]
+        #             ),
+        #         ],
+        #         ignore_index=True,
+        #     )
+        # for uid in self.parent.image_coll.df.query(self.view_filter)["uid"].tolist():
+        #     this_actor = self.show_actor_with_property(
+        #         uid=uid, collection="image_coll", show_property=None, visible=False
+        #     )
+        #     # New Pandas >= 2.0.0
+        #     self.actors_df = pd_concat(
+        #         [
+        #             self.actors_df,
+        #             pd_DataFrame(
+        #                 [
+        #                     {
+        #                         "uid": uid,
+        #                         "actor": this_actor,
+        #                         "show": False,
+        #                         "collection": "image_coll",
+        #                         "show_property": None,
+        #                     }
+        #                 ]
+        #             ),
+        #         ],
+        #         ignore_index=True,
+        #     )
+        # for uid in self.parent.well_coll.df.query(self.view_filter)["uid"].tolist():
+        #     this_actor = self.show_actor_with_property(
+        #         uid=uid, collection="well_coll", show_property=None, visible=False
+        #     )
+        #     # New Pandas >= 2.0.0
+        #     self.actors_df = pd_concat(
+        #         [
+        #             self.actors_df,
+        #             pd_DataFrame(
+        #                 [
+        #                     {
+        #                         "uid": uid,
+        #                         "actor": this_actor,
+        #                         "show": False,
+        #                         "collection": "well_coll",
+        #                         "show_property": None,
+        #                     }
+        #                 ]
+        #             ),
+        #         ],
+        #         ignore_index=True,
+        #     )
+        # for uid in self.parent.fluid_coll.df.query(self.view_filter)["uid"].tolist():
+        #     this_actor = self.show_actor_with_property(
+        #         uid=uid, collection="fluid_coll", show_property=None, visible=False
+        #     )
+        #     # New Pandas >= 2.0.0
+        #     self.actors_df = pd_concat(
+        #         [
+        #             self.actors_df,
+        #             pd_DataFrame(
+        #                 [
+        #                     {
+        #                         "uid": uid,
+        #                         "actor": this_actor,
+        #                         "show": False,
+        #                         "collection": "fluid_coll",
+        #                         "show_property": None,
+        #                     }
+        #                 ]
+        #             ),
+        #         ],
+        #         ignore_index=True,
+        #     )
+        # for uid in self.parent.backgrnd_coll.df.query(self.view_filter)["uid"].tolist():
+        #     this_actor = self.show_actor_with_property(
+        #         uid=uid,
+        #         collection="backgrnd_coll",
+        #         show_property=None,
+        #         visible=False,
+        #     )
+        #     # New Pandas >= 2.0.0
+        #     self.actors_df = pd_concat(
+        #         [
+        #             self.actors_df,
+        #             pd_DataFrame(
+        #                 [
+        #                     {
+        #                         "uid": uid,
+        #                         "actor": this_actor,
+        #                         "show": False,
+        #                         "collection": "backgrnd_coll",
+        #                         "show_property": None,
+        #                     }
+        #                 ]
+        #             ),
+        #         ],
+        #         ignore_index=True,
+        #     )
 
     def prop_legend_cmap_modified_update_views(self, this_property=None):
         """Redraw all actors that are currently shown with a property whose colormap has been changed."""
