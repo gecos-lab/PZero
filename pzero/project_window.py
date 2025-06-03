@@ -146,7 +146,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             "Welcome to PZero!\n3D modelling application by Andrea Bistacchi, started June 3rd 2020."
         )
 
-        # list of collections
+        # dictionary with table (key) vs. collection (value)
         self.tab_collection_dict = {
             "tabGeology": "geol_coll",
             "tabXSections": "xsect_coll",

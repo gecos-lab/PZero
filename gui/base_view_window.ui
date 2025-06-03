@@ -61,39 +61,15 @@
           <x>0</x>
           <y>0</y>
           <width>626</width>
-          <height>168</height>
+          <height>258</height>
          </rect>
         </property>
         <attribute name="label">
-         <string>Geology &gt; Geology</string>
+         <string>Geology</string>
         </attribute>
         <layout class="QVBoxLayout" name="verticalLayout_2">
          <item>
           <widget class="QTreeWidget" name="GeologyTreeWidget">
-           <column>
-            <property name="text">
-             <string notr="true">1</string>
-            </property>
-           </column>
-          </widget>
-         </item>
-        </layout>
-       </widget>
-       <widget class="QWidget" name="GeologyTopologyTreePage">
-        <property name="geometry">
-         <rect>
-          <x>0</x>
-          <y>0</y>
-          <width>98</width>
-          <height>74</height>
-         </rect>
-        </property>
-        <attribute name="label">
-         <string>Geology &gt; Topology</string>
-        </attribute>
-        <layout class="QVBoxLayout" name="verticalLayout_3">
-         <item>
-          <widget class="QTreeWidget" name="GeologyTopologyTreeWidget">
            <column>
             <property name="text">
              <string notr="true">1</string>
@@ -108,40 +84,16 @@
          <rect>
           <x>0</x>
           <y>0</y>
-          <width>98</width>
-          <height>74</height>
+          <width>626</width>
+          <height>258</height>
          </rect>
         </property>
         <attribute name="label">
-         <string>Fluids &gt; Fluids</string>
+         <string>Fluids</string>
         </attribute>
         <layout class="QVBoxLayout" name="verticalLayout_4">
          <item>
           <widget class="QTreeWidget" name="FluidsTreeWidget">
-           <column>
-            <property name="text">
-             <string notr="true">1</string>
-            </property>
-           </column>
-          </widget>
-         </item>
-        </layout>
-       </widget>
-       <widget class="QWidget" name="FluidsTopologyTreePage">
-        <property name="geometry">
-         <rect>
-          <x>0</x>
-          <y>0</y>
-          <width>98</width>
-          <height>74</height>
-         </rect>
-        </property>
-        <attribute name="label">
-         <string>Fluids &gt; Topology</string>
-        </attribute>
-        <layout class="QVBoxLayout" name="verticalLayout_5">
-         <item>
-          <widget class="QTreeWidget" name="FluidsTopologyTreeWidget">
            <column>
             <property name="text">
              <string notr="true">1</string>
@@ -156,40 +108,16 @@
          <rect>
           <x>0</x>
           <y>0</y>
-          <width>98</width>
-          <height>74</height>
+          <width>626</width>
+          <height>258</height>
          </rect>
         </property>
         <attribute name="label">
-         <string>Background &gt; Background</string>
+         <string>Background</string>
         </attribute>
         <layout class="QVBoxLayout" name="verticalLayout_6">
          <item>
           <widget class="QTreeWidget" name="BackgroundsTreeWidget">
-           <column>
-            <property name="text">
-             <string notr="true">1</string>
-            </property>
-           </column>
-          </widget>
-         </item>
-        </layout>
-       </widget>
-       <widget class="QWidget" name="BackgroundsTopologyTreePage">
-        <property name="geometry">
-         <rect>
-          <x>0</x>
-          <y>0</y>
-          <width>98</width>
-          <height>74</height>
-         </rect>
-        </property>
-        <attribute name="label">
-         <string>Background &gt; Topology</string>
-        </attribute>
-        <layout class="QVBoxLayout" name="verticalLayout_7">
-         <item>
-          <widget class="QTreeWidget" name="BackgroundsTopologyTreeWidget">
            <column>
             <property name="text">
              <string notr="true">1</string>
@@ -204,8 +132,8 @@
          <rect>
           <x>0</x>
           <y>0</y>
-          <width>98</width>
-          <height>74</height>
+          <width>626</width>
+          <height>258</height>
          </rect>
         </property>
         <attribute name="label">
@@ -213,7 +141,13 @@
         </attribute>
         <layout class="QVBoxLayout" name="verticalLayout_8">
          <item>
-          <widget class="QTableWidget" name="DOMsTableWidget"/>
+          <widget class="QTreeWidget" name="DOMsTreeWidget">
+           <column>
+            <property name="text">
+             <string notr="true">1</string>
+            </property>
+           </column>
+          </widget>
          </item>
         </layout>
        </widget>
@@ -222,8 +156,8 @@
          <rect>
           <x>0</x>
           <y>0</y>
-          <width>98</width>
-          <height>74</height>
+          <width>626</width>
+          <height>258</height>
          </rect>
         </property>
         <attribute name="label">
@@ -231,7 +165,13 @@
         </attribute>
         <layout class="QVBoxLayout" name="verticalLayout_9">
          <item>
-          <widget class="QTableWidget" name="ImagesTableWidget"/>
+          <widget class="QTreeWidget" name="ImagesTreeWidget">
+           <column>
+            <property name="text">
+             <string notr="true">1</string>
+            </property>
+           </column>
+          </widget>
          </item>
         </layout>
        </widget>
@@ -240,8 +180,8 @@
          <rect>
           <x>0</x>
           <y>0</y>
-          <width>98</width>
-          <height>74</height>
+          <width>626</width>
+          <height>258</height>
          </rect>
         </property>
         <attribute name="label">
@@ -249,7 +189,13 @@
         </attribute>
         <layout class="QVBoxLayout" name="verticalLayout_10">
          <item>
-          <widget class="QTableWidget" name="Mesh3DTableWidget"/>
+          <widget class="QTreeWidget" name="Mesh3DTreeWidget">
+           <column>
+            <property name="text">
+             <string notr="true">1</string>
+            </property>
+           </column>
+          </widget>
          </item>
         </layout>
        </widget>
@@ -258,8 +204,8 @@
          <rect>
           <x>0</x>
           <y>0</y>
-          <width>98</width>
-          <height>74</height>
+          <width>626</width>
+          <height>258</height>
          </rect>
         </property>
         <attribute name="label">
@@ -267,7 +213,13 @@
         </attribute>
         <layout class="QVBoxLayout" name="verticalLayout_11">
          <item>
-          <widget class="QTableWidget" name="BoundariesTableWidget"/>
+          <widget class="QTreeWidget" name="BoundariesTreeWidget">
+           <column>
+            <property name="text">
+             <string notr="true">1</string>
+            </property>
+           </column>
+          </widget>
          </item>
         </layout>
        </widget>
@@ -276,8 +228,8 @@
          <rect>
           <x>0</x>
           <y>0</y>
-          <width>98</width>
-          <height>74</height>
+          <width>626</width>
+          <height>258</height>
          </rect>
         </property>
         <attribute name="label">
@@ -300,8 +252,8 @@
          <rect>
           <x>0</x>
           <y>0</y>
-          <width>98</width>
-          <height>74</height>
+          <width>626</width>
+          <height>258</height>
          </rect>
         </property>
         <attribute name="label">

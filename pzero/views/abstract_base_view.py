@@ -1,11 +1,15 @@
 """abstract_base_view.py
 PZero© Andrea Bistacchi"""
 
+from PySide6.QtCore import QRect, QObject
+
 # PySide6 imports____
-from PySide6.QtWidgets import QMainWindow
+from PySide6.QtWidgets import QMainWindow, QTreeWidget, QWidget, QVBoxLayout
 from PySide6.QtGui import QAction
+from PySide6.QtCore import Signal as pyqtSignal
 
 # PZero imports____
+from .view_tree import CustomTreeWidget
 from ..ui.base_view_window_ui import Ui_BaseViewWindow
 from ..add_remove_update_actors.background import *
 from ..add_remove_update_actors.boundary import *
@@ -16,6 +20,29 @@ from ..add_remove_update_actors.image import *
 from ..add_remove_update_actors.mesh3d import *
 from ..add_remove_update_actors.wells import *
 from ..add_remove_update_actors.xsection import *
+
+
+class BaseViewSignals(QObject):
+    """
+    This class is necessary since non-Qt classes cannot emit Qt signals. Therefore, we create a generic
+    BaseViewSignals() Qt object, that will include all signals used by collections. These will be used according
+    to the following pattern:
+
+    self.signals = BaseViewSignals()
+
+    self.signals.specific_signal.emit(some_message)
+
+    etc.
+
+    Basically, in this way, instead of using inheritance, we add all signals with a quick move by composition.
+    """
+
+    # signal broadcast on checkbox toggled with the collection and lists of uids to be turned on or off as arguments
+    checkboxToggled = pyqtSignal(str, list, list)
+    # signal broadcast on property combobox changed with the collection, uid and property as arguments
+    propertyToggled = pyqtSignal(str, str, str)
+    # signal for selection change, emits a list of UIDs
+    newSelection = pyqtSignal(list)
 
 
 class BaseView(QMainWindow, Ui_BaseViewWindow):
@@ -34,7 +61,21 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         # _____________________________________________________________________________
         self.setAttribute(Qt.WA_DeleteOnClose, True)
         self.parent = parent
+        self.signals = BaseViewSignals()
         self.print_terminal = self.parent.print_terminal
+
+        # dictionary with tree (key) vs. collection (value)
+        self.tree_collection_dict = {
+            "GeologyTreeWidget": "geol_coll",
+            "FluidsTreeWidget": "fluid_coll",
+            "BackgroundsTreeWidget": "backgrnd_coll",
+            "DOMsTreeWidget": "dom_coll",
+            "ImagesTreeWidget": "image_coll",
+            "Mesh3DTreeWidget": "mesh3d_coll",
+            "BoundariesTreeWidget": "boundary_coll",
+            "XSectionTreeWidget": "xsect_coll",
+            "WellsTreeWidget": "well_coll",
+        }
 
         self.actors_df = pd_DataFrame(
             columns=["uid", "actor", "show", "collection", "show_property"]
@@ -91,18 +132,78 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             self, item
         )
 
-        create_geology_tree(self)
-        create_topology_tree(self)
-        create_xsections_tree(self)
-        create_boundary_list(self)
-        create_mesh3d_list(self)
-        create_dom_list(self)
-        create_image_list(self)
-        create_well_tree(self)
-        create_fluids_tree(self)
-        create_fluids_topology_tree(self)
-        create_backgrounds_tree(self)
-        create_backgrounds_topology_tree(self)
+        for tree_name, coll_name in self.tree_collection_dict.items():
+            print("coll_name: ", coll_name)
+            print("tree_name: ", tree_name)
+            show_name = tree_name.removesuffix("Widget")
+            page_name = show_name + "Page"
+            layout_name = show_name + "Layout"
+            print("page_name: ", page_name)
+            print("layout_name: ", layout_name)
+            collection = eval(f"self.parent.{coll_name}")
+            # tree = eval(f"self.{tree_name}")
+            # page = eval(f"self.{page_name}")
+            # layout = eval(f"self.{layout_name}")
+            print("................")
+
+            tree_labels = ["role", "topology", "feature", "scenario"]
+            if not "role" in eval(f"self.parent.{coll_name}.entity_dict.keys()"):
+                tree_labels.remove("role")
+            if not "topology" in eval(f"self.parent.{coll_name}.entity_dict.keys()"):
+                tree_labels.remove("topology")
+            if not "feature" in eval(f"self.parent.{coll_name}.entity_dict.keys()"):
+                tree_labels.remove("feature")
+            if "properties_names" in eval(
+                f"self.parent.{coll_name}.entity_dict.keys()"
+            ):
+                prop_label = "properties_names"
+            else:
+                prop_label = None
+            default_labels = ["none", "X", "Y", "Z"]
+
+            print("----------------")
+
+            setattr(self, f"{page_name}", QWidget())
+            eval(f"self.{page_name}").setObjectName(page_name)
+            eval(f"self.{page_name}").setGeometry(QRect(0, 0, 626, 258))
+
+            setattr(
+                self,
+                f"{tree_name}",
+                CustomTreeWidget(
+                    parent=eval(f"self.{page_name}"),
+                    view=self,
+                    collection=collection,
+                    tree_labels=tree_labels,
+                    name_label="name",
+                    uid_label="uid",
+                    prop_label=prop_label,
+                    default_labels=default_labels,
+                ),
+            )
+            eval(f"self.{tree_name}").setObjectName(tree_name)
+
+            setattr(self, f"{layout_name}", QVBoxLayout(eval(f"self.{page_name}")))
+            eval(f"self.{layout_name}").setObjectName(layout_name)
+
+            eval(f"self.{layout_name}").addWidget(eval(f"self.{tree_name}"))
+
+            self.toolBox.addItem(eval(f"self.{page_name}"), show_name)
+
+            print("================")
+
+        # create_geology_tree(self)
+        # create_topology_tree(self)
+        # create_xsections_tree(self)
+        # create_boundary_list(self)
+        # create_mesh3d_list(self)
+        # create_dom_list(self)
+        # create_image_list(self)
+        # create_well_tree(self)
+        # create_fluids_tree(self)
+        # create_fluids_topology_tree(self)
+        # create_backgrounds_tree(self)
+        # create_backgrounds_topology_tree(self)
 
         # Build and show other widgets, icons, tools, etc.
         # ----
