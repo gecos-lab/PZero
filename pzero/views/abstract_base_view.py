@@ -785,6 +785,11 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                 collection_name, turn_on_uids, turn_off_uids
             )
         )
+        self.signals.propertyToggled.connect(
+            lambda collection_name, uid, prop_text: self.toggle_property(
+                collection_name, uid, prop_text
+            )
+        )
 
     def disconnect_all_signals(self):
         """Used to disconnect all windows signals correctly, when a window is closed.
@@ -1073,41 +1078,30 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             # self.print_terminal("off: " + str(self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]))
             self.set_actor_visible(uid=uid, visible=False)
 
-    def toggle_property(self, sender=None):
+    def toggle_property(self, collection_name=None, uid=None, prop_text=None):
         """Generic method to toggle the property shown by an actor that is already present in the view."""
-        show_property = sender.currentText()
-        uid = sender.uid
-        try:
-            name = sender.name
-        except AttributeError:
-            name = None
+        # self.print_terminal("Toggling property " + prop_text + " on uid " + uid)
+        # store shown/hidden state
         show = self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]
         collection = self.actors_df.loc[
             self.actors_df["uid"] == uid, "collection"
         ].values[0]
-        # Replace the previous copy of the actor with the same uid, and update the actors dataframe, only if a
-        # property that has been removed is shown at the moment. See issue #33 for a discussion on actors
-        # replacement by the PyVista add_mesh and add_volume methods.
-        if name == "Marker":
-            # case for Marker
-            self.show_markers(uid=uid, show_property=show_property)
-        elif name == "Annotations":
-            # case for Annotations
-            self.show_labels(
-                uid=uid, show_property=show_property, collection=collection
-            )
+        # case for Marker
+        if prop_text == "Marker":
+            self.show_markers(uid=uid, show_property=prop_text)
+        # case for Annotations
+        elif prop_text == "Annotations":
+            self.show_labels(uid=uid, show_property=prop_text, collection=collection)
+        # case for all other properties
         else:
-            # case for all other properties
             this_actor = self.show_actor_with_property(
                 uid=uid,
                 collection=collection,
-                show_property=show_property,
+                show_property=prop_text,
                 visible=show,
             )
-        # Replace the shown property in the actors dataframe
-        self.actors_df.loc[self.actors_df["uid"] == uid, "show_property"] = (
-            show_property
-        )
+        # replace the property shown in the actors dataframe
+        self.actors_df.loc[self.actors_df["uid"] == uid, "show_property"] = prop_text
 
     def add_all_entities(self):
         """

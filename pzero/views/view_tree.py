@@ -528,7 +528,7 @@ class CustomTreeWidget(QTreeWidget):
                 if index >= 0:
                     property_combo.setCurrentIndex(index)
             property_combo.currentTextChanged.connect(
-                lambda text, item=name_item: self.on_combo_changed(item, text)
+                lambda prop_text, item=name_item: self.on_combo_changed(item, prop_text)
             )
 
             # Add the item and set the combo box in the last column
@@ -687,7 +687,7 @@ class CustomTreeWidget(QTreeWidget):
                     property_combo.setCurrentIndex(index)
 
             property_combo.currentTextChanged.connect(
-                lambda text, item=name_item: self.on_combo_changed(item, text)
+                lambda prop_text, item=name_item: self.on_combo_changed(item, prop_text)
             )
 
             self.setItemWidget(name_item, self.columnCount() - 1, property_combo)
@@ -1012,25 +1012,25 @@ class CustomTreeWidget(QTreeWidget):
         return property_combo
 
     @preserve_selection
-    def on_combo_changed(self, item, text):
+    def on_combo_changed(self, item, prop_text):
         """
         Updates the combo box value and handles property toggling for the associated item
         while maintaining the state of the current selection.
 
         :param item: The item associated with the combo box.
-        :param text: The new value to set for the combo box.
+        :param prop_text: The new value to set for the combo box.
         :return: None
         """
         # Update the stored combo value
         uid = self.get_item_uid(item)
         if uid:
-            self.combo_values[uid] = text
+            self.combo_values[uid] = prop_text
             # Update show_property in actors_df for the current uid
             self.view.actors_df.loc[
                 self.view.actors_df["uid"] == uid, "show_property"
-            ] = text
+            ] = prop_text
             self.view.signals.propertyToggled.emit(
-                self.collection.collection_name, uid, text
+                self.collection.collection_name, uid, prop_text
             )
 
     def toggle_with_menu(self, position):
