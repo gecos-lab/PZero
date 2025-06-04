@@ -1023,18 +1023,10 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
 
     def create_trees(self):
         for tree_name, coll_name in self.tree_collection_dict.items():
-            # print("coll_name: ", coll_name)
-            # print("tree_name: ", tree_name)
             show_name = tree_name.removesuffix("Widget")
             page_name = show_name + "Page"
             layout_name = show_name + "Layout"
-            # print("page_name: ", page_name)
-            # print("layout_name: ", layout_name)
             collection = eval(f"self.parent.{coll_name}")
-            # tree = eval(f"self.{tree_name}")
-            # page = eval(f"self.{page_name}")
-            # layout = eval(f"self.{layout_name}")
-            # print("................")
             tree_labels = ["role", "topology", "feature", "scenario"]
             if not "role" in eval(f"self.parent.{coll_name}.entity_dict.keys()"):
                 tree_labels.remove("role")
@@ -1049,10 +1041,6 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             else:
                 prop_label = None
             default_labels = ["none", "X", "Y", "Z"]
-            # print("----------------")
-            # setattr(self, f"{page_name}", QWidget())
-            # eval(f"self.{page_name}").setObjectName(page_name)
-            # eval(f"self.{page_name}").setGeometry(QRect(0, 0, 626, 258))
             setattr(
                 self,
                 f"{tree_name}",
@@ -1068,41 +1056,22 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                 ),
             )
             eval(f"self.{tree_name}").setObjectName(tree_name)
-            # setattr(self, f"{layout_name}", QVBoxLayout(eval(f"self.{page_name}")))
-            # eval(f"self.{layout_name}").setObjectName(layout_name)
             eval(f"self.{layout_name}").addWidget(eval(f"self.{tree_name}"))
-            # self.toolBox.addItem(eval(f"self.{page_name}"), show_name)
-            # print("================")
 
     def toggle_visibility(
         self, collection_name=None, turn_on_uids=None, turn_off_uids=None
     ):
-        print("self.actors_df:\n", self.actors_df)
-        print(
-            "Toggling visibility - on uids: ",
-            turn_on_uids,
-            " - off uids: ",
-            turn_off_uids,
-        )
+        # self.print_terminal("Toggling visibility - on uids: " + str(turn_on_uids) + " - off uids: " + str(turn_off_uids))
         # if turn_on_uids:
         for uid in turn_on_uids:
             # if (self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0] == False):
-            print(
-                "on: ",
-                self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0],
-            )
-            # self.actors_df.loc[self.actors_df["uid"] == uid, "show"] = True
+            # self.print_terminal("on: " + str(self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]))
             self.set_actor_visible(uid=uid, visible=True)
         # if turn_off_uids:
         for uid in turn_off_uids:
             # if (self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0] == True):
-            print(
-                "off: ",
-                self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0],
-            )
-            # self.actors_df.loc[self.actors_df["uid"] == uid, "show"] = False
+            # self.print_terminal("off: " + str(self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]))
             self.set_actor_visible(uid=uid, visible=False)
-        print("self.actors_df:\n", self.actors_df)
 
     def toggle_property(self, sender=None):
         """Generic method to toggle the property shown by an actor that is already present in the view."""
@@ -1178,7 +1147,6 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                     )
             except:
                 pass
-        print("self.actors_df:\n", self.actors_df)
         # try:
         #     for uid in self.parent.xsect_coll.df.query(self.view_filter)[
         #         "uid"

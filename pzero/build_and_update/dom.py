@@ -83,7 +83,6 @@ def create_dom_list(self, sec_uid=None):
 
 def update_dom_list_added(self, new_list=None, sec_uid=None):
     """Update DOM list without creating a new model"""
-    # print('update_dom_list_added')
     row = self.DOMsTableWidget.rowCount()
     uid_list = list(new_list["uid"])
     if sec_uid:
@@ -126,7 +125,6 @@ def update_dom_list_added(self, new_list=None, sec_uid=None):
             ):
                 property_texture_combo.addItem(prop)
                 property_texture_combo.texture_uid_list.append(prop)
-                # print(prop)
                 if components > 1:
                     for n_component in range(components):
                         property_texture_combo.addItem(f"{prop}[{n_component}]")

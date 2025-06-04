@@ -862,7 +862,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     vtk_out_dict["vtk_obj"] = vtk_object
                     collection.add_entity_from_dict(entity_dict=vtk_out_dict)
                 else:
-                    print("Only Point clouds are supported")
+                    self.print_terminal("Only Point clouds are supported")
                     return
         else:
             print("No entity selected")

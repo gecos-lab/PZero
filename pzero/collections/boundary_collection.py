@@ -241,7 +241,7 @@ class BoundaryCollection(BaseCollection):
             self.df.loc[self.df["uid"] == uid, "vtk_obj"] = vtk_object
             self.signals.geom_modified.emit([uid])
         else:
-            print("ERROR - replace_vtk with vtk of a different type not allowed.")
+            self.print_terminal("ERROR - replace_vtk with vtk of a different type not allowed.")
 
     def attr_modified_update_legend_table(self):
         """Update legend table when attributes are changed."""

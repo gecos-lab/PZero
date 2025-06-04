@@ -168,7 +168,7 @@ def set_normals(self):
                         dir_name=updt_dict["dir_name"],
                     )
                     self.prop_legend.update_widget(self)
-                    self.print_terminal("Normals set on vertex set ", uid)
+                    self.print_terminal("Normals set on vertex set " + uid)
                 self.print_terminal("All Normals set.")
             # Case for TriSurf and XsPolyLine where Normal are calculated from geometry
             elif isinstance(
@@ -190,7 +190,7 @@ def set_normals(self):
                     )
                     self.geol_coll.get_uid_vtk_obj(uid).vtk_set_normals()
                     self.prop_legend.update_widget(self)
-                    self.print_terminal("Normals set on TriSurf or XsPolyLine", uid)
+                    self.print_terminal("Normals set on TriSurf or XsPolyLine" + uid)
                     obj = self.geol_coll.get_uid_vtk_obj(uid)
                     normals = obj.get_property("Normals")
                     print(f"UID {uid}:")

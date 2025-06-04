@@ -955,27 +955,14 @@ class CustomTreeWidget(QTreeWidget):
                     ].iloc[0]
                     == True
                 )
-                print(
-                    "uid: ",
-                    uid,
-                    " is_checked: ",
-                    is_checked,
-                    " is_shown: ",
-                    is_shown,
-                    " is_checked: ",
-                    type(is_checked),
-                    " is_shown: ",
-                    type(is_shown),
-                )
+                # self.view.print_terminal("uid: " + str(uid) +" is_checked: " +str(is_checked) +" is_shown: " + str(is_shown) + " is_checked: " + str(type(is_checked)) + " is_shown: " + str(type(is_shown)))
                 if is_checked != is_shown:
                     self.view.actors_df.loc[
                         self.view.actors_df["uid"] == uid, "show"
                     ] = is_checked
                     if is_checked:
-                        print("appending uid: ", uid, " to turn_on_uids")
                         turn_on_uids.append(uid)
                     else:
-                        print("appending uid: ", uid, " to turn_off_uids")
                         turn_off_uids.append(uid)
         # Emit signal
         self.view.signals.checkboxToggled.emit(

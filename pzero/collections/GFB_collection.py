@@ -241,7 +241,7 @@ class GFBCollection(BaseCollection):
             self.signals.data_keys_modified.emit([uid])
             self.signals.geom_modified.emit([uid])
         else:
-            print("ERROR - replace_vtk with vtk of a different type not allowed.")
+            self.parent.print_terminal("ERROR - replace_vtk with vtk of a different type not allowed.")
 
     def attr_modified_update_legend_table(self):
         """Update legend table when attributes are changed."""

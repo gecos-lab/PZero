@@ -140,4 +140,3 @@ def toggle_property_image(self, sender=None):
         uid=uid, collection=collection, show_property=show_property, visible=show
     )
     self.actors_df.loc[self.actors_df["uid"] == uid, ["show_property"]] = show_property
-    # print(f"TEST uid {uid} property {show_property}")

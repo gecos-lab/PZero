@@ -431,6 +431,9 @@ class BaseCollection(ABC):
         ].to_dict("records")
         return legend_dict[0]
 
+    def print_terminal(self, string=None):
+        return self.parent.print_terminal(string=string)
+
     # =================== Common QT methods slightly adapted to the data source ====================================
 
 

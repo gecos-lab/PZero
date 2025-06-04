@@ -190,7 +190,6 @@ def background_metadata_modified_update_views(self, updated_list=None):
 
 
 def background_legend_color_modified_update_views(self, updated_list=None):
-    # print(updated_list)
     """This is called when the color in the fluid legend is modified.
     Disconnect signals to fluid and topology tree, if they are set, to avoid a nasty loop
     that disrupts the trees, then they are reconnected when the trees are rebuilt"""
