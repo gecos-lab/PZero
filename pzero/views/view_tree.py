@@ -394,6 +394,10 @@ class CustomTreeWidget(QTreeWidget):
         if hasattr(self.collection, "selected_uids"):
             self.restore_selection(self.collection.selected_uids)
 
+    @property
+    def tree_name(self):
+        return self.objectName()
+
     def preserve_selection(func):
         """
         Decorator that preserves the current selection of items in a collection
