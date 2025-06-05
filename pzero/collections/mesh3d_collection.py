@@ -29,7 +29,7 @@ class Mesh3DCollection(DIMCollection):
         # Initialize properties required by the abstract superclass.
         self.valid_topologies = ["TetraSolid", "Voxet", "XsVoxet"]
 
-        self.collection_name = "mesh3d"
+        self.collection_name = "mesh3d_coll"
 
         self.default_colormap = "rainbow"
 

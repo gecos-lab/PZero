@@ -55,7 +55,7 @@ class WellCollection(BaseCollection):
 
         self.editable_columns_names = ["name", "scenario"]
 
-        self.collection_name = "wells"
+        self.collection_name = "well_coll"
 
         self.initialize_df()
 

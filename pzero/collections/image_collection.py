@@ -34,7 +34,7 @@ class ImageCollection(DIMCollection):
             "Image3D",
         ]
 
-        self.collection_name = "image"
+        self.collection_name = "image_coll"
 
         self.default_colormap = "gray"
 

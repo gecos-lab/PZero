@@ -44,7 +44,7 @@ class GeologicalCollection(GFBCollection):
             "formation",
         ]
 
-        self.collection_name = "geological"
+        self.collection_name = "geol_coll"
 
         self.default_sequence = "strati_0"
 

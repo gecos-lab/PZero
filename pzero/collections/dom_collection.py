@@ -29,7 +29,7 @@ class DomCollection(DIMCollection):
         # Initialize properties required by the abstract superclass.
         self.valid_topologies = ["DEM", "TSDom", "PCDom"]
 
-        self.collection_name = "dom"
+        self.collection_name = "dom_coll"
 
         self.default_colormap = "terrain"
 

@@ -193,7 +193,7 @@ class BoundaryCollection(BaseCollection):
 
         self.editable_columns_names = ["name", "scenario"]
 
-        self.collection_name = "boundary"
+        self.collection_name = "boundary_coll"
 
         self.initialize_df()
 

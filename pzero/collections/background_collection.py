@@ -31,7 +31,7 @@ class BackgroundCollection(GFBCollection):
             "imported",
         ]
 
-        self.collection_name = "background"
+        self.collection_name = "backgrnd_coll"
 
         self.default_sequence = "back_0"
 

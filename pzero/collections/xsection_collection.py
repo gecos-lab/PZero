@@ -342,7 +342,7 @@ class XSectionCollection(BaseCollection):
         }
         self.valid_topologies = [""]
         self.editable_columns_names = ["name", "scenario"]
-        self.collection_name = "xsection"
+        self.collection_name = "xsect_coll"
         self.initialize_df()
 
     def add_entity_from_dict(

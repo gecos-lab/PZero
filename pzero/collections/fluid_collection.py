@@ -32,7 +32,7 @@ class FluidCollection(GFBCollection):
             "seal",
         ]
 
-        self.collection_name = "fluid"
+        self.collection_name = "fluid_coll"
 
         self.default_sequence = "fluid_0"
 
