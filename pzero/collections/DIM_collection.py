@@ -35,25 +35,25 @@ class DIMCollection(BaseCollection):
         self.entity_dict = {
             "uid": "",
             "name": "undef",
-            "topology": "undef",
             "scenario": "undef",
+            "x_section": "",  # this is the uid of the cross section for "XsVertexSet", "XsPolyLine", and "XsImage", empty for all others
+            "topology": "undef",
+            "vtk_obj": None,
             "properties_names": [],
             "properties_components": [],
             "properties_types": [],
-            "x_section": "",  # this is the uid of the cross section for "XsVertexSet", "XsPolyLine", and "XsImage", empty for all others
-            "vtk_obj": None,
         }
 
         self.entity_dict_types = {
             "uid": str,
             "name": str,
-            "topology": str,
             "scenario": str,
+            "x_section": str,
+            "topology": str,
+            "vtk_obj": object,
             "properties_names": list,
             "properties_components": list,
             "properties_types": list,
-            "x_section": str,
-            "vtk_obj": object,
         }
 
         self.valid_topologies = []
@@ -114,7 +114,7 @@ class DIMCollection(BaseCollection):
                     self.parent.prop_legend.update_widget(self.parent)
         # Then emit signal to update the views. A list of uids is emitted, even if the
         # entity is just one, for future compatibility
-        self.signals.added.emit([entity_dict["uid"]])
+        self.signals.entity_added.emit([entity_dict["uid"]])
         return entity_dict["uid"]
 
     def remove_entity(self, uid: str = None) -> str:
@@ -133,7 +133,7 @@ class DIMCollection(BaseCollection):
         self.modelReset.emit()  # is this really necessary?
         self.parent.prop_legend.update_widget(self.parent)
         # When done, send a signal over to the views. A list of uids is emitted, even if the entity is just one.
-        self.signals.removed.emit([uid])
+        self.signals.entity_removed.emit([uid])
         return uid
 
     def clone_entity(self, uid: str = None) -> str:

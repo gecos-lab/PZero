@@ -174,18 +174,18 @@ class BoundaryCollection(BaseCollection):
         self.entity_dict = {
             "uid": "",
             "name": "undef",
-            "topology": "undef",
             "scenario": "undef",
             "x_section": "",  # this is the uid of the cross section for "XsVertexSet", "XsPolyLine", and "XsImage", empty for all others
+            "topology": "undef",
             "vtk_obj": None,
         }
 
         self.entity_dict_types = {
             "uid": str,
             "name": str,
-            "topology": str,
             "scenario": str,
             "x_section": str,
+            "topology": str,
             "vtk_obj": object,
         }
 
@@ -215,7 +215,7 @@ class BoundaryCollection(BaseCollection):
         # Reset data model.
         self.modelReset.emit()
         # Then emit signal to update the views. A list of uids is emitted, even if the entity is just one.
-        self.signals.added.emit([entity_dict["uid"]])
+        self.signals.entity_added.emit([entity_dict["uid"]])
         return entity_dict["uid"]
 
     def remove_entity(self, uid: str = None) -> str:
@@ -224,7 +224,7 @@ class BoundaryCollection(BaseCollection):
         self.df.drop(self.df[self.df["uid"] == uid].index, inplace=True)
         self.modelReset.emit()  # is this really necessary?
         # When done, send a signal over to the views. A list of uids is emitted, even if the entity is just one.
-        self.signals.removed.emit([uid])
+        self.signals.entity_removed.emit([uid])
         return uid
 
     def clone_entity(self, uid: str = None) -> str:

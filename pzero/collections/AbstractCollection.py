@@ -31,10 +31,12 @@ class CollectionSignals(QObject):
     Basically in this way, instead of using inheritance, we add all signals with a qick move by composition.
     """
 
-    added = pyqtSignal(list)  # rename entity_added?
-    removed = pyqtSignal(list)  # rename entity_removed?
+    entity_added = pyqtSignal(list)
+    entity_removed = pyqtSignal(list)
     geom_modified = pyqtSignal(list)  # this includes topology modified
-    data_keys_modified = pyqtSignal(list)  # split keys added/removed?
+    data_keys_modified = pyqtSignal(list)  # remove after splittting keys added/removed ==========
+    data_keys_added = pyqtSignal(list)
+    data_keys_removed = pyqtSignal(list)
     data_val_modified = pyqtSignal(list)
     metadata_modified = pyqtSignal(list)
     legend_color_modified = pyqtSignal(list)
@@ -145,6 +147,11 @@ class BaseCollection(ABC):
     def collection_name(self) -> str:
         """Get the collection name."""
         return self._collection_name
+
+    @collection_name.setter
+    def collection_name(self, collection_name) -> str:
+        """Get the collection name."""
+        self._collection_name = collection_name
 
     @property
     def signals(self):
