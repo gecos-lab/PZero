@@ -31,10 +31,10 @@ class CollectionSignals(QObject):
     Basically in this way, instead of using inheritance, we add all signals with a qick move by composition.
     """
 
-    added = pyqtSignal(list)
-    removed = pyqtSignal(list)
+    added = pyqtSignal(list)  # rename entity_added?
+    removed = pyqtSignal(list)  # rename entity_removed?
     geom_modified = pyqtSignal(list)  # this includes topology modified
-    data_keys_modified = pyqtSignal(list)
+    data_keys_modified = pyqtSignal(list)  # split keys added/removed?
     data_val_modified = pyqtSignal(list)
     metadata_modified = pyqtSignal(list)
     legend_color_modified = pyqtSignal(list)
@@ -61,6 +61,8 @@ class BaseCollection(ABC):
         self._parent = parent
         self._collection_name: str = ""
 
+        self._signals = CollectionSignals()
+
         self._entity_dict: dict = dict()
         self._entity_dict_types: dict = dict()
 
@@ -69,12 +71,9 @@ class BaseCollection(ABC):
 
         self._df: pd_DataFrame = pd_DataFrame()
         self._editable_columns_names: list = list()
+        self._selected_uids: list = list()  # list of selected uids
 
         self._table_model = BaseTableModel(self.parent, self)
-        
-        self._selected_uids = []  # list of selected uids
-
-        self._signals = CollectionSignals()
 
     # =========================== Abstract (obligatory) methods ================================
 
@@ -137,18 +136,19 @@ class BaseCollection(ABC):
     # =================================== Common properties ================================================
 
     @property
-    def signals(self):
-        return self._signals
-
-    @property
     def parent(self):
         """Get the parent of the Collection."""
         return self._parent
 
-    @parent.setter
-    def parent(self, parent):
-        """Set the parent of the Collection."""
-        self._parent = parent
+
+    @property
+    def collection_name(self) -> str:
+        """Get the collection name."""
+        return self._collection_name
+
+    @property
+    def signals(self):
+        return self._signals
 
     @property
     def entity_dict(self) -> dict:
@@ -219,26 +219,6 @@ class BaseCollection(ABC):
         self._selected_uids = selected_uids
 
     @property
-    def collection_name(self) -> str:
-        """Get the collection name."""
-        return self._collection_name
-
-    @collection_name.setter
-    def collection_name(self, name: str):
-        """Set the collection name."""
-        self._collection_name = name
-
-    # @property
-    # def coll_type_name(self) -> str:
-    #     """Helper property to get the full collection type column name for the given collection."""
-    #     return f'{self.collection_name}_type'
-
-    # @property
-    # def coll_feature_name(self) -> str:
-    #     """Helper property to get the full collection feature column name for the given collection."""
-    #     return f'{self.collection_name}_feature'
-
-    @property
     def entity_dict_keys(self) -> list:
         """Get the entity dict keys as a list."""
         return list(self.entity_dict.keys())
@@ -269,11 +249,6 @@ class BaseCollection(ABC):
         """Get the table model."""
         return self._table_model
 
-    # @table_model.setter
-    # def table_model(self, table_model):
-    #     """Set the table model."""
-    #     self._table_model = table_model
-
     @property
     def proxy_table_model(self) -> QSortFilterProxyModel:
         """Get the proxy table model, used i.e. when sorting rows in the table view."""
@@ -288,14 +263,12 @@ class BaseCollection(ABC):
 
     # =================================== Common methods ================================================
 
-    def initialize_df(self):
-        """Initialize Pandas dataframe."""
-        self.df = pd_DataFrame(columns=self.entity_dict_keys)
+    def print_terminal(self, string=None):
+        return self.parent.print_terminal(string=string)
 
-    def get_topology_uids(self, topology: str = None) -> list:
-        """Get list of uids of a given topology."""
-        # Use the query method in the future?
-        return self.df.loc[self.df["topology"] == topology, "uid"].to_list()
+    def initialize_df(self):
+        """Initialize Pandas dataframe. Must be called in the subclass constructor."""
+        self.df = pd_DataFrame(columns=self.entity_dict_keys)
 
     def get_uid_name(self, uid: str = None) -> str:
         """Get value(s) stored in dataframe (as pointer) from uid."""
@@ -310,6 +283,11 @@ class BaseCollection(ABC):
         """Get a list of uids corresponding to a given name."""
         # Use the query method in the future?
         return self.df.loc[self.df["name"] == name, "uid"].to_list()
+
+    def get_topology_uids(self, topology: str = None) -> list:
+        """Get list of uids of a given topology."""
+        # Use the query method in the future?
+        return self.df.loc[self.df["topology"] == topology, "uid"].to_list()
 
     def get_uid_topology(self, uid: str = None) -> str:
         """Get value topological type from uid."""
@@ -430,9 +408,6 @@ class BaseCollection(ABC):
             self.parent.others_legend_df["other_collection"] == "DOM"
         ].to_dict("records")
         return legend_dict[0]
-
-    def print_terminal(self, string=None):
-        return self.parent.print_terminal(string=string)
 
     # =================== Common QT methods slightly adapted to the data source ====================================
 
