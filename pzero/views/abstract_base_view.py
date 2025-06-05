@@ -71,7 +71,9 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             "XSectionTreeWidget": "xsect_coll",
             "WellsTreeWidget": "well_coll",
         }
-        self.collection_tree_dict = dict(zip(self.tree_collection_dict.values(), self.tree_collection_dict.keys()))
+        self.collection_tree_dict = dict(
+            zip(self.tree_collection_dict.values(), self.tree_collection_dict.keys())
+        )
         self.actors_df = pd_DataFrame(
             {
                 "uid": str,
@@ -108,7 +110,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
 
         self.create_trees()
 
-        self.connect_signals()
+        self.connect_all_signals()
 
         # create_geology_tree(self)
         # create_topology_tree(self)
@@ -781,37 +783,72 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
 
     # ================================  General methods shared by all views ===========================================
 
-    def connect_signals(self):
-        # view signals
+    def connect_all_signals(self):
+        """
+        Connect signals to update functions. Use lambda functions where we need to pass additional
+        arguments such as parent in addition to the signal itself, e.g. the updated_list
+        Note that it could be possible to connect the (lambda) functions directly, without naming them, as in:
         self.signals.checkboxToggled.connect(
             lambda collection_name, turn_on_uids, turn_off_uids: self.toggle_visibility(
                 collection_name, turn_on_uids, turn_off_uids
             )
         )
-        self.signals.propertyToggled.connect(
+        But in this way it would be impossible to disconnect them in a clean way in disconnect_all_signals, so
+        we name every lambda function explicitly as follows.
+
+        It is IMPORTANT to check that all signals connected here are in the list of signals to be disconnected.
+        """
+        # view signals self.view_sig_...
+        self.view_sig_check_lmb = (
+            lambda collection_name, turn_on_uids, turn_off_uids: self.toggle_visibility(
+                collection_name, turn_on_uids, turn_off_uids
+            )
+        )
+        self.signals.checkboxToggled.connect(self.view_sig_check_lmb)
+
+        self.view_sig_prop_lmb = (
             lambda collection_name, uid, prop_text: self.toggle_property(
                 collection_name, uid, prop_text
             )
         )
-        # project signal (if any)
+        self.signals.propertyToggled.connect(self.view_sig_prop_lmb)
 
-        # collection signals
+        # project signal (if any) self.proj_sig_...
+
+        # collection signals self.coll_sig_...
         for tree_name, coll_name in self.tree_collection_dict.items():
             tree = eval(f"self.{tree_name}")
             collection = eval(f"self.parent.{coll_name}")
 
             # collection.signals.entity_added.connect()
+            setattr(
+                self,
+                f"{coll_name}_sig_add_lmb",
+                lambda collection, updated_list: self.entity_added_update_views(
+                    collection=collection, updated_list=updated_list
+                ),
+            )
+            collection.signals.entity_added.connect(eval(f"self.{coll_name}_sig_add_lmb"))
+
+            ### FOLLOW THIS PATTERN!!!
+
             # collection.signals.entity_removed.connect()
             # collection.signals.geom_modified.connect()
             collection.signals.data_keys_modified.connect(
-                lambda collection_name, updated_uids: self.data_keys_modified_update_views(collection_name,
-                                                                                           updated_uids))  # legacy to be removed
+                lambda collection_name, updated_uids: self.data_keys_modified_update_views(
+                    collection_name, updated_uids
+                )
+            )  # legacy to be removed
             collection.signals.data_keys_added.connect(
-                lambda collection_name, updated_uids: self.data_keys_modified_update_views(collection_name,
-                                                                                           updated_uids))
+                lambda collection_name, updated_uids: self.data_keys_modified_update_views(
+                    collection_name, updated_uids
+                )
+            )
             collection.signals.data_keys_removed.connect(
-                lambda collection_name, updated_uids: self.data_keys_modified_update_views(collection_name,
-                                                                                           updated_uids))
+                lambda collection_name, updated_uids: self.data_keys_modified_update_views(
+                    collection_name, updated_uids
+                )
+            )
             # collection.signals.data_val_modified.connect()
             # collection.signals.metadata_modified.connect()
             # collection.signals.legend_color_modified.connect()
@@ -820,16 +857,30 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             # collection.signals.legend_opacity_modified.connect()
             # collection.signals.itemsSelected.connect()
 
-
-
     def disconnect_all_signals(self):
-        """Used to disconnect all windows signals correctly, when a window is closed.
+        """
+        Used to disconnect all windows signals correctly, when a window is closed.
         If this method is removed PZero will crash when closing a window.
         If new signals are added, they must be listed also here.
         It would be nicer to keep a list of signals and then disconnect all signals in
-        the list, but we have not found a way to do this at the moment."""
+        the list, but we have not found a way to do this at the moment.
+        """
+        # view signals
+        self.signals.checkboxToggled.disconnect(self.view_sig_check_lmb)
+        self.signals.propertyToggled.disconnect(self.view_sig_prop_lmb)
+        # project signal (if any)
+
+        # collection signals
+        for tree_name, coll_name in self.tree_collection_dict.items():
+            tree = eval(f"self.{tree_name}")
+            collection = eval(f"self.parent.{coll_name}")
+
+            collection.signals.entity_added.disconnect(eval(f"self.{coll_name}_sig_add_lmb"))
+
+            ### FOLLOW THIS PATTERN!!!
 
         # Disconnect GEOLOGY signals
+
 
         self.parent.geol_coll.signals.entity_added.disconnect(self.upd_list_geo_add)
         self.parent.geol_coll.signals.entity_removed.disconnect(self.upd_list_geo_rm)
@@ -876,8 +927,12 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
 
         # Disconnect BOUNDARY signals
 
-        self.parent.boundary_coll.signals.entity_added.disconnect(self.upd_list_bound_add)
-        self.parent.boundary_coll.signals.entity_removed.disconnect(self.upd_list_bound_rm)
+        self.parent.boundary_coll.signals.entity_added.disconnect(
+            self.upd_list_bound_add
+        )
+        self.parent.boundary_coll.signals.entity_removed.disconnect(
+            self.upd_list_bound_rm
+        )
         self.parent.boundary_coll.signals.geom_modified.disconnect(
             self.upd_list_bound_geo_mod
         )
@@ -896,8 +951,12 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
 
         # Disconnect MESH3D signals
 
-        self.parent.mesh3d_coll.signals.entity_added.disconnect(self.upd_list_mesh3d_add)
-        self.parent.mesh3d_coll.signals.entity_removed.disconnect(self.upd_list_mesh3d_rm)
+        self.parent.mesh3d_coll.signals.entity_added.disconnect(
+            self.upd_list_mesh3d_add
+        )
+        self.parent.mesh3d_coll.signals.entity_removed.disconnect(
+            self.upd_list_mesh3d_rm
+        )
         self.parent.mesh3d_coll.signals.data_keys_modified.disconnect(
             self.upd_list_mesh3d_data_keys_mod
         )
@@ -1008,7 +1067,9 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
 
         # Disconnect BACKGROUND signals
 
-        self.parent.backgrnd_coll.signals.entity_added.disconnect(self.upd_list_background_add)
+        self.parent.backgrnd_coll.signals.entity_added.disconnect(
+            self.upd_list_background_add
+        )
         self.parent.backgrnd_coll.signals.entity_removed.disconnect(
             self.upd_list_background_rm
         )
@@ -1161,8 +1222,8 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.actors_df.loc[self.actors_df["uid"] == uid, "show_property"] = prop_text
 
     def data_keys_modified_update_views(self, collection_name=None, updated_uids=None):
-        collection = eval(f'self.parent.{collection_name}')
-        tree = eval(f'self.{self.collection_tree_dict[collection_name]}')
+        collection = eval(f"self.parent.{collection_name}")
+        tree = eval(f"self.{self.collection_tree_dict[collection_name]}")
         # Remove from updated_uids the uid's that are excluded from this view by self.view_filter
         # by removing from the list of all uid's that should appear in this view (from query)
         # the uid's that do not belong to the updated_list
