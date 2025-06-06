@@ -31,10 +31,12 @@ class CollectionSignals(QObject):
     Basically in this way, instead of using inheritance, we add all signals with a qick move by composition.
     """
 
-    entity_added = pyqtSignal(list)
-    entity_removed = pyqtSignal(list)
+    entities_added = pyqtSignal(list)
+    entities_removed = pyqtSignal(list)
     geom_modified = pyqtSignal(list)  # this includes topology modified
-    data_keys_modified = pyqtSignal(list)  # remove after splittting keys added/removed ==========
+    data_keys_modified = pyqtSignal(
+        list
+    )  # remove after splittting keys added/removed ==========
     data_keys_added = pyqtSignal(list)
     data_keys_removed = pyqtSignal(list)
     data_val_modified = pyqtSignal(list)
@@ -43,7 +45,9 @@ class CollectionSignals(QObject):
     legend_thick_modified = pyqtSignal(list)
     legend_point_size_modified = pyqtSignal(list)
     legend_opacity_modified = pyqtSignal(list)
-    itemsSelected = pyqtSignal(str)  # selection changed on the collection in the signal argument
+    itemsSelected = pyqtSignal(
+        str
+    )  # selection changed on the collection in the signal argument
 
 
 class BaseCollection(ABC):
@@ -142,7 +146,6 @@ class BaseCollection(ABC):
         """Get the parent of the Collection."""
         return self._parent
 
-
     @property
     def collection_name(self) -> str:
         """Get the collection name."""
@@ -216,11 +219,11 @@ class BaseCollection(ABC):
     def df(self, df: pd_DataFrame):
         """Set the dataframe of the Collection."""
         self._df = df
-    
+
     @property
     def selected_uids(self):
         return self._selected_uids
-    
+
     @selected_uids.setter
     def selected_uids(self, selected_uids: list):
         self._selected_uids = selected_uids
@@ -415,6 +418,12 @@ class BaseCollection(ABC):
             self.parent.others_legend_df["other_collection"] == "DOM"
         ].to_dict("records")
         return legend_dict[0]
+
+    def filter_uids(self, query: str = None, uids: list = None):
+        return list(
+            set(self.df.query(query)["uid"].tolist())
+            - (set(self.df.query(query)["uid"].tolist()) - set(uids))
+        )
 
     # =================== Common QT methods slightly adapted to the data source ====================================
 

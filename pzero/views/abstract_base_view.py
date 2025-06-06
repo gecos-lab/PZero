@@ -200,576 +200,576 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             )
         )
 
-        # Connect GEOLOGY lamda functions and signals
-
-        self.parent.geol_coll.signals.entity_added.connect(
-            self.upd_list_geo_add
-        )  # this is emitted from the collection
-        self.parent.geol_coll.signals.entity_removed.connect(
-            self.upd_list_geo_rm
-        )  # this is emitted from the collection
-        self.parent.geol_coll.signals.data_keys_modified.connect(
-            self.upd_list_geo_datakeys_mod
-        )  # this is emitted from collection
-        self.parent.geol_coll.signals.metadata_modified.connect(
-            self.upd_list_geo_metadata_mod
-        )  # this is emitted from collection and three_d_surfaces
-        self.parent.geol_coll.signals.geom_modified.connect(
-            self.upd_list_geo_mod
-        )  # this is emitted from two_d_lines and three_d_surfaces
-        self.parent.geol_coll.signals.data_keys_modified.connect(
-            self.upd_list_geo_dataval_mod
-        )  # this is emitted from nowhere (?)
-        self.parent.geol_coll.signals.legend_color_modified.connect(
-            self.upd_list_geo_leg_col_mod
-        )  # this is emitted from legend manager
-        self.parent.geol_coll.signals.legend_thick_modified.connect(
-            self.upd_list_geo_leg_thick_mod
-        )  # this is emitted from legend manager
-        self.parent.geol_coll.signals.legend_point_size_modified.connect(
-            self.upd_list_geo_leg_point_mod
-        )  # this is emitted from legend manager
-        self.parent.geol_coll.signals.legend_opacity_modified.connect(
-            self.upd_list_geo_leg_op_mod
-        )  # this is emitted from legend manager
-
-        # Define X SECTION lamda functions and signals
-
-        self.upd_list_x_add = lambda updated_list: xsect_added_update_views(
-            self, updated_list=updated_list
-        )
-        self.upd_list_x_rm = lambda updated_list: xsect_removed_update_views(
-            self, updated_list=updated_list
-        )
-        self.upd_list_x_mod = lambda updated_list: xsect_geom_modified_update_views(
-            self, updated_list=updated_list
-        )
-        self.upd_list_x_metadata_mod = (
-            lambda updated_list: xsect_metadata_modified_update_views(
-                self, updated_list=updated_list
-            )
-        )
-        self.upd_list_x_leg_col_mod = (
-            lambda updated_list: xsect_legend_color_modified_update_views(
-                self, updated_list=updated_list
-            )
-        )
-        self.upd_list_x_leg_thick_mod = (
-            lambda updated_list: xsect_legend_thick_modified_update_views(
-                self, updated_list=updated_list
-            )
-        )
-        self.upd_list_x_leg_op_mod = (
-            lambda updated_list: xsect_legend_opacity_modified_update_views(
-                self, updated_list=updated_list
-            )
-        )
-
-        # Connect X SECTION lamda functions and signals
-
-        self.parent.xsect_coll.signals.entity_added.connect(
-            self.upd_list_x_add
-        )  # this is emitted from the collection
-        self.parent.xsect_coll.signals.entity_removed.connect(
-            self.upd_list_x_rm
-        )  # this is emitted from the collection
-        self.parent.xsect_coll.signals.metadata_modified.connect(
-            self.upd_list_x_metadata_mod
-        )  # this is emitted from the collection
-
-        self.parent.xsect_coll.signals.geom_modified.connect(
-            self.upd_list_x_mod
-        )  # this is emitted from nowhere (?)
-
-        self.parent.xsect_coll.signals.legend_color_modified.connect(
-            self.upd_list_x_leg_col_mod
-        )  # this is emitted from the legend manager
-        self.parent.xsect_coll.signals.legend_thick_modified.connect(
-            self.upd_list_x_leg_thick_mod
-        )  # this is emitted from the legend manager
-        self.parent.xsect_coll.signals.legend_opacity_modified.connect(
-            self.upd_list_x_leg_op_mod
-        )  # this is emitted from the legend manager
-
-        # Define BOUNDARY lamda functions and signals
-
-        self.upd_list_bound_add = lambda updated_list: boundary_added_update_views(
-            self, updated_list=updated_list
-        )
-        self.upd_list_bound_rm = lambda updated_list: boundary_removed_update_views(
-            self, updated_list=updated_list
-        )
-        self.upd_list_bound_geo_mod = (
-            lambda updated_list: boundary_geom_modified_update_views(
-                self, updated_list=updated_list
-            )
-        )
-        self.upd_list_bound_metadata_mod = (
-            lambda updated_list: boundary_metadata_modified_update_views(
-                self, updated_list=updated_list
-            )
-        )
-        self.upd_list_bound_leg_col_mod = (
-            lambda updated_list: boundary_legend_color_modified_update_views(
-                self, updated_list=updated_list
-            )
-        )
-        self.upd_list_bound_leg_thick_mod = (
-            lambda updated_list: boundary_legend_thick_modified_update_views(
-                self, updated_list=updated_list
-            )
-        )
-        self.upd_list_bound_leg_op_mod = (
-            lambda updated_list: boundary_legend_opacity_modified_update_views(
-                self, updated_list=updated_list
-            )
-        )
-
-        # Connect BOUNDARY lamda functions and signals
-
-        self.parent.boundary_coll.signals.entity_added.connect(
-            self.upd_list_bound_add
-        )  # this is emitted from the collection
-        self.parent.boundary_coll.signals.entity_removed.connect(
-            self.upd_list_bound_rm
-        )  # this is emitted from the collection
-        self.parent.boundary_coll.signals.metadata_modified.connect(
-            self.upd_list_bound_metadata_mod
-        )  # this is emitted from the collection
-
-        self.parent.boundary_coll.signals.geom_modified.connect(
-            self.upd_list_bound_geo_mod
-        )  # this is emitted from nowhere(?)
-
-        self.parent.boundary_coll.signals.legend_color_modified.connect(
-            self.upd_list_bound_leg_col_mod
-        )  # this is emitted from the legend manager
-        self.parent.boundary_coll.signals.legend_thick_modified.connect(
-            self.upd_list_bound_leg_thick_mod
-        )  # this is emitted from the legend manager
-        self.parent.boundary_coll.signals.legend_opacity_modified.connect(
-            self.upd_list_bound_leg_op_mod
-        )  # this is emitted from the legend manager
-
-        # Define MESH 3D lamda functions and signals
-
-        self.upd_list_mesh3d_add = lambda updated_list: mesh3d_added_update_views(
-            self, updated_list=updated_list
-        )
-        self.upd_list_mesh3d_rm = lambda updated_list: mesh3d_removed_update_views(
-            self, updated_list=updated_list
-        )
-        self.upd_list_mesh3d_data_keys_mod = (
-            lambda updated_list: mesh3d_data_keys_modified_update_views(
-                self, updated_list=updated_list
-            )
-        )
-        self.upd_list_mesh3d_data_val_mod = (
-            lambda updated_list: mesh3d_data_val_modified_update_views(
-                self, updated_list=updated_list
-            )
-        )
-        self.upd_list_mesh3d_metadata_mod = (
-            lambda updated_list: mesh3d_metadata_modified_update_views(
-                self, updated_list=updated_list
-            )
-        )
-        self.upd_list_mesh3d_leg_col_mod = (
-            lambda updated_list: mesh3d_legend_color_modified_update_views(
-                self, updated_list=updated_list
-            )
-        )
-        self.upd_list_mesh3d_leg_thick_mod = (
-            lambda updated_list: mesh3d_legend_thick_modified_update_views(
-                self, updated_list=updated_list
-            )
-        )
-        self.upd_list_mesh3d_leg_op_mod = (
-            lambda updated_list: mesh3d_legend_opacity_modified_update_views(
-                self, updated_list=updated_list
-            )
-        )
-
-        # Connect MESH 3D lamda functions and signals
-
-        self.parent.mesh3d_coll.signals.entity_added.connect(
-            self.upd_list_mesh3d_add
-        )  # this is emitted from the collection
-        self.parent.mesh3d_coll.signals.entity_removed.connect(
-            self.upd_list_mesh3d_rm
-        )  # this is emitted from the collection
-        self.parent.mesh3d_coll.signals.data_keys_modified.connect(
-            self.upd_list_mesh3d_data_keys_mod
-        )  # this is emitted from the collection
-        self.parent.mesh3d_coll.signals.metadata_modified.connect(
-            self.upd_list_mesh3d_metadata_mod
-        )  # this is emitted from the collection
-
-        self.parent.mesh3d_coll.signals.data_val_modified.connect(
-            self.upd_list_mesh3d_data_val_mod
-        )  # this is emitted from nowhere (?)
-
-        self.parent.mesh3d_coll.signals.legend_color_modified.connect(
-            self.upd_list_mesh3d_leg_col_mod
-        )  # this is emitted from the legend manager
-        self.parent.mesh3d_coll.signals.legend_thick_modified.connect(
-            self.upd_list_mesh3d_leg_thick_mod
-        )  # this is emitted from the legend manager
-        self.parent.mesh3d_coll.signals.legend_opacity_modified.connect(
-            self.upd_list_mesh3d_leg_op_mod
-        )  # this is emitted from the legend manager
-
-        # Define DOM lamda functions and signals
-
-        self.upd_list_dom_add = lambda updated_list: dom_added_update_views(
-            self, updated_list=updated_list
-        )
-        self.upd_list_dom_rm = lambda updated_list: dom_removed_update_views(
-            self, updated_list=updated_list
-        )
-        self.upd_list_dom_data_keys_mod = (
-            lambda updated_list: dom_data_keys_modified_update_views(
-                self, updated_list=updated_list
-            )
-        )
-        self.upd_list_dom_data_val_mod = (
-            lambda updated_list: dom_data_val_modified_update_views(
-                self, updated_list=updated_list
-            )
-        )
-        self.upd_list_dom_metadata_mod = (
-            lambda updated_list: dom_metadata_modified_update_views(
-                self, updated_list=updated_list
-            )
-        )
-        self.upd_list_dom_leg_col_mod = (
-            lambda updated_list: dom_legend_color_modified_update_views(
-                self, updated_list=updated_list
-            )
-        )
-        self.upd_list_dom_leg_thick_mod = (
-            lambda updated_list: dom_legend_thick_modified_update_views(
-                self, updated_list=updated_list
-            )
-        )
-        self.upd_list_dom_leg_point_mod = (
-            lambda updated_list: dom_legend_point_size_modified_update_views(
-                self, updated_list=updated_list
-            )
-        )
-        self.upd_list_dom_leg_op_mod = (
-            lambda updated_list: dom_legend_opacity_modified_update_views(
-                self, updated_list=updated_list
-            )
-        )
-
-        # Collect DOM lamda functions and signals
-
-        self.parent.dom_coll.signals.entity_added.connect(
-            self.upd_list_dom_add
-        )  # this is emitted from the collection
-        self.parent.dom_coll.signals.entity_removed.connect(
-            self.upd_list_dom_rm
-        )  # this is emitted from the collection
-        self.parent.dom_coll.signals.data_keys_modified.connect(
-            self.upd_list_dom_data_keys_mod
-        )  # this is emitted from the collection
-        self.parent.dom_coll.signals.metadata_modified.connect(
-            self.upd_list_dom_metadata_mod
-        )  # this is emitted from the collection
-
-        self.parent.dom_coll.signals.data_val_modified.connect(
-            self.upd_list_dom_data_val_mod
-        )  # this is emitted from nowhere(?)
-
-        self.parent.dom_coll.signals.legend_color_modified.connect(
-            self.upd_list_dom_leg_col_mod
-        )  # this is emitted from the legend manager
-        self.parent.dom_coll.signals.legend_thick_modified.connect(
-            self.upd_list_dom_leg_thick_mod
-        )  # this is emitted from the legend manager
-        self.parent.dom_coll.signals.legend_point_size_modified.connect(
-            self.upd_list_dom_leg_point_mod
-        )  # this is emitted from the legend manager
-        self.parent.dom_coll.signals.legend_opacity_modified.connect(
-            self.upd_list_dom_leg_op_mod
-        )  # this is emitted from the legend manager
-
-        # Define IMAGE lamda functions and signals
-
-        self.upd_list_img_add = lambda updated_list: image_added_update_views(
-            self, updated_list=updated_list
-        )
-        self.upd_list_img_rm = lambda updated_list: image_removed_update_views(
-            self, updated_list=updated_list
-        )
-        self.upd_list_metadata_mod = (
-            lambda updated_list: image_metadata_modified_update_views(
-                self, updated_list=updated_list
-            )
-        )
-        self.upd_list_img_leg_op_mod = (
-            lambda updated_list: image_legend_opacity_modified_update_views(
-                self, updated_list=updated_list
-            )
-        )
-
-        # Connect IMAGE lamda functions and signals
-
-        self.parent.image_coll.signals.entity_added.connect(
-            self.upd_list_img_add
-        )  # this is emitted from the collection
-        self.parent.image_coll.signals.entity_removed.connect(
-            self.upd_list_img_rm
-        )  # this is emitted from the collection
-        self.parent.image_coll.signals.metadata_modified.connect(
-            self.upd_list_metadata_mod
-        )  # this is emitted from the collection
-
-        self.parent.image_coll.signals.legend_opacity_modified.connect(
-            self.upd_list_img_leg_op_mod
-        )  # this is emitted from the legend manager
-
-        # Define WELL lamda functions and signals
-
-        self.upd_list_well_add = lambda updated_list: well_added_update_views(
-            self, updated_list=updated_list
-        )
-        self.upd_list_well_rm = lambda updated_list: well_removed_update_views(
-            self, updated_list=updated_list
-        )
-        self.upd_list_well_data_keys_mod = (
-            lambda updated_list: well_data_keys_modified_update_views(
-                self, updated_list=updated_list
-            )
-        )
-        self.upd_list_well_data_val_mod = (
-            lambda updated_list: well_data_val_modified_update_views(
-                self, updated_list=updated_list
-            )
-        )
-        self.upd_list_well_metadata_mod = (
-            lambda updated_list: well_metadata_modified_update_views(
-                self, updated_list=updated_list
-            )
-        )
-        self.upd_list_well_leg_col_mod = (
-            lambda updated_list: well_legend_color_modified_update_views(
-                self, updated_list=updated_list
-            )
-        )
-        self.upd_list_well_leg_thick_mod = (
-            lambda updated_list: well_legend_thick_modified_update_views(
-                self, updated_list=updated_list
-            )
-        )
-        self.upd_list_well_leg_op_mod = (
-            lambda updated_list: well_legend_opacity_modified_update_views(
-                self, updated_list=updated_list
-            )
-        )
-
-        # Connect WELL lamda functions and signals
-
-        self.parent.well_coll.signals.entity_added.connect(
-            self.upd_list_well_add
-        )  # this is emitted from the collection
-        self.parent.well_coll.signals.entity_removed.connect(
-            self.upd_list_well_rm
-        )  # this is emitted from the collection
-        self.parent.well_coll.signals.data_keys_modified.connect(
-            self.upd_list_well_data_keys_mod
-        )  # this is emitted from the collection
-        self.parent.well_coll.signals.metadata_modified.connect(
-            self.upd_list_well_metadata_mod
-        )  # this is emitted from the collection
-
-        self.parent.well_coll.signals.data_val_modified.connect(
-            self.upd_list_well_data_val_mod
-        )  # this is emitted from nowhere(?)
-
-        self.parent.well_coll.signals.legend_color_modified.connect(
-            self.upd_list_well_leg_col_mod
-        )  # this is emitted from the legend manager
-        self.parent.well_coll.signals.legend_thick_modified.connect(
-            self.upd_list_well_leg_thick_mod
-        )  # this is emitted from the legend manager
-        self.parent.well_coll.signals.legend_opacity_modified.connect(
-            self.upd_list_well_leg_op_mod
-        )  # this is emitted from the legend manager
-
-        # Define FLUID lamda functions and signals
-
-        self.upd_list_fluid_add = lambda updated_list: fluid_added_update_views(
-            self, updated_list=updated_list
-        )
-        self.upd_list_fluid_rm = lambda updated_list: fluid_removed_update_views(
-            self, updated_list=updated_list
-        )
-        self.upd_list_fluid_geo_mod = (
-            lambda updated_list: fluid_geom_modified_update_views(
-                self, updated_list=updated_list
-            )
-        )
-        self.upd_list_fluid_data_keys_mod = (
-            lambda updated_list: fluid_data_keys_modified_update_views(
-                self, updated_list=updated_list
-            )
-        )
-        self.upd_list_fluid_data_val_mod = (
-            lambda updated_list: fluid_data_val_modified_update_views(
-                self, updated_list=updated_list
-            )
-        )
-        self.upd_list_fluid_metadata_mod = (
-            lambda updated_list: fluid_metadata_modified_update_views(
-                self, updated_list=updated_list
-            )
-        )
-        self.upd_list_fluid_leg_col_mod = (
-            lambda updated_list: fluid_legend_color_modified_update_views(
-                self, updated_list=updated_list
-            )
-        )
-        self.upd_list_fluid_leg_thick_mod = (
-            lambda updated_list: fluid_legend_thick_modified_update_views(
-                self, updated_list=updated_list
-            )
-        )
-        self.upd_list_fluid_leg_point_mod = (
-            lambda updated_list: fluid_legend_point_size_modified_update_views(
-                self, updated_list=updated_list
-            )
-        )
-        self.upd_list_fluid_leg_op_mod = (
-            lambda updated_list: fluid_legend_opacity_modified_update_views(
-                self, updated_list=updated_list
-            )
-        )
-
-        # Connect FLUID lamda functions and signals
-
-        self.parent.fluid_coll.signals.entity_added.connect(
-            self.upd_list_fluid_add
-        )  # this is emitted from the collection
-        self.parent.fluid_coll.signals.entity_removed.connect(
-            self.upd_list_fluid_rm
-        )  # this is emitted from the collection
-        self.parent.fluid_coll.signals.data_keys_modified.connect(
-            self.upd_list_fluid_data_keys_mod
-        )  # this is emitted from the collection
-        self.parent.fluid_coll.signals.metadata_modified.connect(
-            self.upd_list_fluid_metadata_mod
-        )  # this is emitted from the collection
-
-        self.parent.fluid_coll.signals.geom_modified.connect(
-            self.upd_list_fluid_geo_mod
-        )  # this is emitted from nowhere(?)
-
-        self.parent.fluid_coll.signals.data_val_modified.connect(
-            self.upd_list_fluid_data_val_mod
-        )  # this is emitted from nowhere(?)
-
-        self.parent.fluid_coll.signals.legend_color_modified.connect(
-            self.upd_list_fluid_leg_col_mod
-        )  # this is emitted from the legend manager
-        self.parent.fluid_coll.signals.legend_thick_modified.connect(
-            self.upd_list_fluid_leg_thick_mod
-        )  # this is emitted from the legend manager
-        self.parent.fluid_coll.signals.legend_point_size_modified.connect(
-            self.upd_list_fluid_leg_point_mod
-        )  # this is emitted from the legend manager
-        self.parent.fluid_coll.signals.legend_opacity_modified.connect(
-            self.upd_list_fluid_leg_op_mod
-        )  # this is emitted from the legend manager
-
-        # Define BACKGROUND lamda functions and signals
-
-        self.upd_list_background_add = (
-            lambda updated_list: background_added_update_views(
-                self, updated_list=updated_list
-            )
-        )
-        self.upd_list_background_rm = (
-            lambda updated_list: background_removed_update_views(
-                self, updated_list=updated_list
-            )
-        )
-        self.upd_list_background_geo_mod = (
-            lambda updated_list: background_geom_modified_update_views(
-                self, updated_list=updated_list
-            )
-        )
-        self.upd_list_background_data_keys = (
-            lambda updated_list: background_data_keys_modified_update_views(
-                self, updated_list=updated_list
-            )
-        )
-        self.upd_list_background_data_val = (
-            lambda updated_list: background_data_val_modified_update_views(
-                self, updated_list=updated_list
-            )
-        )
-        self.upd_list_background_metadata = (
-            lambda updated_list: background_metadata_modified_update_views(
-                self, updated_list=updated_list
-            )
-        )
-        self.upd_list_background_leg_col = (
-            lambda updated_list: background_legend_color_modified_update_views(
-                self, updated_list=updated_list
-            )
-        )
-        self.upd_list_background_leg_thick = (
-            lambda updated_list: background_legend_thick_modified_update_views(
-                self, updated_list=updated_list
-            )
-        )
-        self.upd_list_background_leg_point = (
-            lambda updated_list: background_legend_point_size_modified_update_views(
-                self, updated_list=updated_list
-            )
-        )
-        self.upd_list_background_leg_op = (
-            lambda updated_list: background_legend_opacity_modified_update_views(
-                self, updated_list=updated_list
-            )
-        )
-
-        # Connect BACKGROUND lamda functions and signals
-
-        self.parent.backgrnd_coll.signals.entity_added.connect(
-            self.upd_list_background_add
-        )  # this is emitted from the collection
-        self.parent.backgrnd_coll.signals.entity_removed.connect(
-            self.upd_list_background_rm
-        )  # this is emitted from the collection
-        self.parent.backgrnd_coll.signals.data_keys_modified.connect(
-            self.upd_list_background_data_keys
-        )  # this is emitted from the collection
-        self.parent.backgrnd_coll.signals.metadata_modified.connect(
-            self.upd_list_background_metadata
-        )  # this is emitted from the collection
-
-        self.parent.backgrnd_coll.signals.geom_modified.connect(
-            self.upd_list_background_geo_mod
-        )  # this is emitted from nowhere(?)
-        self.parent.backgrnd_coll.signals.data_val_modified.connect(
-            self.upd_list_background_data_val
-        )  # this is emitted from nowhere(?)
-
-        self.parent.backgrnd_coll.signals.legend_color_modified.connect(
-            self.upd_list_background_leg_col
-        )  # this is emitted from the legend manager
-        self.parent.backgrnd_coll.signals.legend_thick_modified.connect(
-            self.upd_list_background_leg_thick
-        )  # this is emitted from the legend manager
-        self.parent.backgrnd_coll.signals.legend_point_size_modified.connect(
-            self.upd_list_background_leg_point
-        )  # this is emitted from the legend manager
-        self.parent.backgrnd_coll.signals.legend_opacity_modified.connect(
-            self.upd_list_background_leg_op
-        )  # this is emitted from the legend manager
+        # # Connect GEOLOGY lamda functions and signals
+        #
+        # self.parent.geol_coll.signals.entity_added.connect(
+        #     self.upd_list_geo_add
+        # )  # this is emitted from the collection
+        # self.parent.geol_coll.signals.entity_removed.connect(
+        #     self.upd_list_geo_rm
+        # )  # this is emitted from the collection
+        # self.parent.geol_coll.signals.data_keys_modified.connect(
+        #     self.upd_list_geo_datakeys_mod
+        # )  # this is emitted from collection
+        # self.parent.geol_coll.signals.metadata_modified.connect(
+        #     self.upd_list_geo_metadata_mod
+        # )  # this is emitted from collection and three_d_surfaces
+        # self.parent.geol_coll.signals.geom_modified.connect(
+        #     self.upd_list_geo_mod
+        # )  # this is emitted from two_d_lines and three_d_surfaces
+        # self.parent.geol_coll.signals.data_keys_modified.connect(
+        #     self.upd_list_geo_dataval_mod
+        # )  # this is emitted from nowhere (?)
+        # self.parent.geol_coll.signals.legend_color_modified.connect(
+        #     self.upd_list_geo_leg_col_mod
+        # )  # this is emitted from legend manager
+        # self.parent.geol_coll.signals.legend_thick_modified.connect(
+        #     self.upd_list_geo_leg_thick_mod
+        # )  # this is emitted from legend manager
+        # self.parent.geol_coll.signals.legend_point_size_modified.connect(
+        #     self.upd_list_geo_leg_point_mod
+        # )  # this is emitted from legend manager
+        # self.parent.geol_coll.signals.legend_opacity_modified.connect(
+        #     self.upd_list_geo_leg_op_mod
+        # )  # this is emitted from legend manager
+        #
+        # # Define X SECTION lamda functions and signals
+        #
+        # self.upd_list_x_add = lambda updated_list: xsect_added_update_views(
+        #     self, updated_list=updated_list
+        # )
+        # self.upd_list_x_rm = lambda updated_list: xsect_removed_update_views(
+        #     self, updated_list=updated_list
+        # )
+        # self.upd_list_x_mod = lambda updated_list: xsect_geom_modified_update_views(
+        #     self, updated_list=updated_list
+        # )
+        # self.upd_list_x_metadata_mod = (
+        #     lambda updated_list: xsect_metadata_modified_update_views(
+        #         self, updated_list=updated_list
+        #     )
+        # )
+        # self.upd_list_x_leg_col_mod = (
+        #     lambda updated_list: xsect_legend_color_modified_update_views(
+        #         self, updated_list=updated_list
+        #     )
+        # )
+        # self.upd_list_x_leg_thick_mod = (
+        #     lambda updated_list: xsect_legend_thick_modified_update_views(
+        #         self, updated_list=updated_list
+        #     )
+        # )
+        # self.upd_list_x_leg_op_mod = (
+        #     lambda updated_list: xsect_legend_opacity_modified_update_views(
+        #         self, updated_list=updated_list
+        #     )
+        # )
+        #
+        # # Connect X SECTION lamda functions and signals
+        #
+        # self.parent.xsect_coll.signals.entity_added.connect(
+        #     self.upd_list_x_add
+        # )  # this is emitted from the collection
+        # self.parent.xsect_coll.signals.entity_removed.connect(
+        #     self.upd_list_x_rm
+        # )  # this is emitted from the collection
+        # self.parent.xsect_coll.signals.metadata_modified.connect(
+        #     self.upd_list_x_metadata_mod
+        # )  # this is emitted from the collection
+        #
+        # self.parent.xsect_coll.signals.geom_modified.connect(
+        #     self.upd_list_x_mod
+        # )  # this is emitted from nowhere (?)
+        #
+        # self.parent.xsect_coll.signals.legend_color_modified.connect(
+        #     self.upd_list_x_leg_col_mod
+        # )  # this is emitted from the legend manager
+        # self.parent.xsect_coll.signals.legend_thick_modified.connect(
+        #     self.upd_list_x_leg_thick_mod
+        # )  # this is emitted from the legend manager
+        # self.parent.xsect_coll.signals.legend_opacity_modified.connect(
+        #     self.upd_list_x_leg_op_mod
+        # )  # this is emitted from the legend manager
+        #
+        # # Define BOUNDARY lamda functions and signals
+        #
+        # self.upd_list_bound_add = lambda updated_list: boundary_added_update_views(
+        #     self, updated_list=updated_list
+        # )
+        # self.upd_list_bound_rm = lambda updated_list: boundary_removed_update_views(
+        #     self, updated_list=updated_list
+        # )
+        # self.upd_list_bound_geo_mod = (
+        #     lambda updated_list: boundary_geom_modified_update_views(
+        #         self, updated_list=updated_list
+        #     )
+        # )
+        # self.upd_list_bound_metadata_mod = (
+        #     lambda updated_list: boundary_metadata_modified_update_views(
+        #         self, updated_list=updated_list
+        #     )
+        # )
+        # self.upd_list_bound_leg_col_mod = (
+        #     lambda updated_list: boundary_legend_color_modified_update_views(
+        #         self, updated_list=updated_list
+        #     )
+        # )
+        # self.upd_list_bound_leg_thick_mod = (
+        #     lambda updated_list: boundary_legend_thick_modified_update_views(
+        #         self, updated_list=updated_list
+        #     )
+        # )
+        # self.upd_list_bound_leg_op_mod = (
+        #     lambda updated_list: boundary_legend_opacity_modified_update_views(
+        #         self, updated_list=updated_list
+        #     )
+        # )
+        #
+        # # Connect BOUNDARY lamda functions and signals
+        #
+        # self.parent.boundary_coll.signals.entity_added.connect(
+        #     self.upd_list_bound_add
+        # )  # this is emitted from the collection
+        # self.parent.boundary_coll.signals.entity_removed.connect(
+        #     self.upd_list_bound_rm
+        # )  # this is emitted from the collection
+        # self.parent.boundary_coll.signals.metadata_modified.connect(
+        #     self.upd_list_bound_metadata_mod
+        # )  # this is emitted from the collection
+        #
+        # self.parent.boundary_coll.signals.geom_modified.connect(
+        #     self.upd_list_bound_geo_mod
+        # )  # this is emitted from nowhere(?)
+        #
+        # self.parent.boundary_coll.signals.legend_color_modified.connect(
+        #     self.upd_list_bound_leg_col_mod
+        # )  # this is emitted from the legend manager
+        # self.parent.boundary_coll.signals.legend_thick_modified.connect(
+        #     self.upd_list_bound_leg_thick_mod
+        # )  # this is emitted from the legend manager
+        # self.parent.boundary_coll.signals.legend_opacity_modified.connect(
+        #     self.upd_list_bound_leg_op_mod
+        # )  # this is emitted from the legend manager
+        #
+        # # Define MESH 3D lamda functions and signals
+        #
+        # self.upd_list_mesh3d_add = lambda updated_list: mesh3d_added_update_views(
+        #     self, updated_list=updated_list
+        # )
+        # self.upd_list_mesh3d_rm = lambda updated_list: mesh3d_removed_update_views(
+        #     self, updated_list=updated_list
+        # )
+        # self.upd_list_mesh3d_data_keys_mod = (
+        #     lambda updated_list: mesh3d_data_keys_modified_update_views(
+        #         self, updated_list=updated_list
+        #     )
+        # )
+        # self.upd_list_mesh3d_data_val_mod = (
+        #     lambda updated_list: mesh3d_data_val_modified_update_views(
+        #         self, updated_list=updated_list
+        #     )
+        # )
+        # self.upd_list_mesh3d_metadata_mod = (
+        #     lambda updated_list: mesh3d_metadata_modified_update_views(
+        #         self, updated_list=updated_list
+        #     )
+        # )
+        # self.upd_list_mesh3d_leg_col_mod = (
+        #     lambda updated_list: mesh3d_legend_color_modified_update_views(
+        #         self, updated_list=updated_list
+        #     )
+        # )
+        # self.upd_list_mesh3d_leg_thick_mod = (
+        #     lambda updated_list: mesh3d_legend_thick_modified_update_views(
+        #         self, updated_list=updated_list
+        #     )
+        # )
+        # self.upd_list_mesh3d_leg_op_mod = (
+        #     lambda updated_list: mesh3d_legend_opacity_modified_update_views(
+        #         self, updated_list=updated_list
+        #     )
+        # )
+        #
+        # # Connect MESH 3D lamda functions and signals
+        #
+        # self.parent.mesh3d_coll.signals.entity_added.connect(
+        #     self.upd_list_mesh3d_add
+        # )  # this is emitted from the collection
+        # self.parent.mesh3d_coll.signals.entity_removed.connect(
+        #     self.upd_list_mesh3d_rm
+        # )  # this is emitted from the collection
+        # self.parent.mesh3d_coll.signals.data_keys_modified.connect(
+        #     self.upd_list_mesh3d_data_keys_mod
+        # )  # this is emitted from the collection
+        # self.parent.mesh3d_coll.signals.metadata_modified.connect(
+        #     self.upd_list_mesh3d_metadata_mod
+        # )  # this is emitted from the collection
+        #
+        # self.parent.mesh3d_coll.signals.data_val_modified.connect(
+        #     self.upd_list_mesh3d_data_val_mod
+        # )  # this is emitted from nowhere (?)
+        #
+        # self.parent.mesh3d_coll.signals.legend_color_modified.connect(
+        #     self.upd_list_mesh3d_leg_col_mod
+        # )  # this is emitted from the legend manager
+        # self.parent.mesh3d_coll.signals.legend_thick_modified.connect(
+        #     self.upd_list_mesh3d_leg_thick_mod
+        # )  # this is emitted from the legend manager
+        # self.parent.mesh3d_coll.signals.legend_opacity_modified.connect(
+        #     self.upd_list_mesh3d_leg_op_mod
+        # )  # this is emitted from the legend manager
+        #
+        # # Define DOM lamda functions and signals
+        #
+        # self.upd_list_dom_add = lambda updated_list: dom_added_update_views(
+        #     self, updated_list=updated_list
+        # )
+        # self.upd_list_dom_rm = lambda updated_list: dom_removed_update_views(
+        #     self, updated_list=updated_list
+        # )
+        # self.upd_list_dom_data_keys_mod = (
+        #     lambda updated_list: dom_data_keys_modified_update_views(
+        #         self, updated_list=updated_list
+        #     )
+        # )
+        # self.upd_list_dom_data_val_mod = (
+        #     lambda updated_list: dom_data_val_modified_update_views(
+        #         self, updated_list=updated_list
+        #     )
+        # )
+        # self.upd_list_dom_metadata_mod = (
+        #     lambda updated_list: dom_metadata_modified_update_views(
+        #         self, updated_list=updated_list
+        #     )
+        # )
+        # self.upd_list_dom_leg_col_mod = (
+        #     lambda updated_list: dom_legend_color_modified_update_views(
+        #         self, updated_list=updated_list
+        #     )
+        # )
+        # self.upd_list_dom_leg_thick_mod = (
+        #     lambda updated_list: dom_legend_thick_modified_update_views(
+        #         self, updated_list=updated_list
+        #     )
+        # )
+        # self.upd_list_dom_leg_point_mod = (
+        #     lambda updated_list: dom_legend_point_size_modified_update_views(
+        #         self, updated_list=updated_list
+        #     )
+        # )
+        # self.upd_list_dom_leg_op_mod = (
+        #     lambda updated_list: dom_legend_opacity_modified_update_views(
+        #         self, updated_list=updated_list
+        #     )
+        # )
+        #
+        # # Collect DOM lamda functions and signals
+        #
+        # self.parent.dom_coll.signals.entity_added.connect(
+        #     self.upd_list_dom_add
+        # )  # this is emitted from the collection
+        # self.parent.dom_coll.signals.entity_removed.connect(
+        #     self.upd_list_dom_rm
+        # )  # this is emitted from the collection
+        # self.parent.dom_coll.signals.data_keys_modified.connect(
+        #     self.upd_list_dom_data_keys_mod
+        # )  # this is emitted from the collection
+        # self.parent.dom_coll.signals.metadata_modified.connect(
+        #     self.upd_list_dom_metadata_mod
+        # )  # this is emitted from the collection
+        #
+        # self.parent.dom_coll.signals.data_val_modified.connect(
+        #     self.upd_list_dom_data_val_mod
+        # )  # this is emitted from nowhere(?)
+        #
+        # self.parent.dom_coll.signals.legend_color_modified.connect(
+        #     self.upd_list_dom_leg_col_mod
+        # )  # this is emitted from the legend manager
+        # self.parent.dom_coll.signals.legend_thick_modified.connect(
+        #     self.upd_list_dom_leg_thick_mod
+        # )  # this is emitted from the legend manager
+        # self.parent.dom_coll.signals.legend_point_size_modified.connect(
+        #     self.upd_list_dom_leg_point_mod
+        # )  # this is emitted from the legend manager
+        # self.parent.dom_coll.signals.legend_opacity_modified.connect(
+        #     self.upd_list_dom_leg_op_mod
+        # )  # this is emitted from the legend manager
+        #
+        # # Define IMAGE lamda functions and signals
+        #
+        # self.upd_list_img_add = lambda updated_list: image_added_update_views(
+        #     self, updated_list=updated_list
+        # )
+        # self.upd_list_img_rm = lambda updated_list: image_removed_update_views(
+        #     self, updated_list=updated_list
+        # )
+        # self.upd_list_metadata_mod = (
+        #     lambda updated_list: image_metadata_modified_update_views(
+        #         self, updated_list=updated_list
+        #     )
+        # )
+        # self.upd_list_img_leg_op_mod = (
+        #     lambda updated_list: image_legend_opacity_modified_update_views(
+        #         self, updated_list=updated_list
+        #     )
+        # )
+        #
+        # # Connect IMAGE lamda functions and signals
+        #
+        # self.parent.image_coll.signals.entity_added.connect(
+        #     self.upd_list_img_add
+        # )  # this is emitted from the collection
+        # self.parent.image_coll.signals.entity_removed.connect(
+        #     self.upd_list_img_rm
+        # )  # this is emitted from the collection
+        # self.parent.image_coll.signals.metadata_modified.connect(
+        #     self.upd_list_metadata_mod
+        # )  # this is emitted from the collection
+        #
+        # self.parent.image_coll.signals.legend_opacity_modified.connect(
+        #     self.upd_list_img_leg_op_mod
+        # )  # this is emitted from the legend manager
+        #
+        # # Define WELL lamda functions and signals
+        #
+        # self.upd_list_well_add = lambda updated_list: well_added_update_views(
+        #     self, updated_list=updated_list
+        # )
+        # self.upd_list_well_rm = lambda updated_list: well_removed_update_views(
+        #     self, updated_list=updated_list
+        # )
+        # self.upd_list_well_data_keys_mod = (
+        #     lambda updated_list: well_data_keys_modified_update_views(
+        #         self, updated_list=updated_list
+        #     )
+        # )
+        # self.upd_list_well_data_val_mod = (
+        #     lambda updated_list: well_data_val_modified_update_views(
+        #         self, updated_list=updated_list
+        #     )
+        # )
+        # self.upd_list_well_metadata_mod = (
+        #     lambda updated_list: well_metadata_modified_update_views(
+        #         self, updated_list=updated_list
+        #     )
+        # )
+        # self.upd_list_well_leg_col_mod = (
+        #     lambda updated_list: well_legend_color_modified_update_views(
+        #         self, updated_list=updated_list
+        #     )
+        # )
+        # self.upd_list_well_leg_thick_mod = (
+        #     lambda updated_list: well_legend_thick_modified_update_views(
+        #         self, updated_list=updated_list
+        #     )
+        # )
+        # self.upd_list_well_leg_op_mod = (
+        #     lambda updated_list: well_legend_opacity_modified_update_views(
+        #         self, updated_list=updated_list
+        #     )
+        # )
+        #
+        # # Connect WELL lamda functions and signals
+        #
+        # self.parent.well_coll.signals.entity_added.connect(
+        #     self.upd_list_well_add
+        # )  # this is emitted from the collection
+        # self.parent.well_coll.signals.entity_removed.connect(
+        #     self.upd_list_well_rm
+        # )  # this is emitted from the collection
+        # self.parent.well_coll.signals.data_keys_modified.connect(
+        #     self.upd_list_well_data_keys_mod
+        # )  # this is emitted from the collection
+        # self.parent.well_coll.signals.metadata_modified.connect(
+        #     self.upd_list_well_metadata_mod
+        # )  # this is emitted from the collection
+        #
+        # self.parent.well_coll.signals.data_val_modified.connect(
+        #     self.upd_list_well_data_val_mod
+        # )  # this is emitted from nowhere(?)
+        #
+        # self.parent.well_coll.signals.legend_color_modified.connect(
+        #     self.upd_list_well_leg_col_mod
+        # )  # this is emitted from the legend manager
+        # self.parent.well_coll.signals.legend_thick_modified.connect(
+        #     self.upd_list_well_leg_thick_mod
+        # )  # this is emitted from the legend manager
+        # self.parent.well_coll.signals.legend_opacity_modified.connect(
+        #     self.upd_list_well_leg_op_mod
+        # )  # this is emitted from the legend manager
+        #
+        # # Define FLUID lamda functions and signals
+        #
+        # self.upd_list_fluid_add = lambda updated_list: fluid_added_update_views(
+        #     self, updated_list=updated_list
+        # )
+        # self.upd_list_fluid_rm = lambda updated_list: fluid_removed_update_views(
+        #     self, updated_list=updated_list
+        # )
+        # self.upd_list_fluid_geo_mod = (
+        #     lambda updated_list: fluid_geom_modified_update_views(
+        #         self, updated_list=updated_list
+        #     )
+        # )
+        # self.upd_list_fluid_data_keys_mod = (
+        #     lambda updated_list: fluid_data_keys_modified_update_views(
+        #         self, updated_list=updated_list
+        #     )
+        # )
+        # self.upd_list_fluid_data_val_mod = (
+        #     lambda updated_list: fluid_data_val_modified_update_views(
+        #         self, updated_list=updated_list
+        #     )
+        # )
+        # self.upd_list_fluid_metadata_mod = (
+        #     lambda updated_list: fluid_metadata_modified_update_views(
+        #         self, updated_list=updated_list
+        #     )
+        # )
+        # self.upd_list_fluid_leg_col_mod = (
+        #     lambda updated_list: fluid_legend_color_modified_update_views(
+        #         self, updated_list=updated_list
+        #     )
+        # )
+        # self.upd_list_fluid_leg_thick_mod = (
+        #     lambda updated_list: fluid_legend_thick_modified_update_views(
+        #         self, updated_list=updated_list
+        #     )
+        # )
+        # self.upd_list_fluid_leg_point_mod = (
+        #     lambda updated_list: fluid_legend_point_size_modified_update_views(
+        #         self, updated_list=updated_list
+        #     )
+        # )
+        # self.upd_list_fluid_leg_op_mod = (
+        #     lambda updated_list: fluid_legend_opacity_modified_update_views(
+        #         self, updated_list=updated_list
+        #     )
+        # )
+        #
+        # # Connect FLUID lamda functions and signals
+        #
+        # self.parent.fluid_coll.signals.entity_added.connect(
+        #     self.upd_list_fluid_add
+        # )  # this is emitted from the collection
+        # self.parent.fluid_coll.signals.entity_removed.connect(
+        #     self.upd_list_fluid_rm
+        # )  # this is emitted from the collection
+        # self.parent.fluid_coll.signals.data_keys_modified.connect(
+        #     self.upd_list_fluid_data_keys_mod
+        # )  # this is emitted from the collection
+        # self.parent.fluid_coll.signals.metadata_modified.connect(
+        #     self.upd_list_fluid_metadata_mod
+        # )  # this is emitted from the collection
+        #
+        # self.parent.fluid_coll.signals.geom_modified.connect(
+        #     self.upd_list_fluid_geo_mod
+        # )  # this is emitted from nowhere(?)
+        #
+        # self.parent.fluid_coll.signals.data_val_modified.connect(
+        #     self.upd_list_fluid_data_val_mod
+        # )  # this is emitted from nowhere(?)
+        #
+        # self.parent.fluid_coll.signals.legend_color_modified.connect(
+        #     self.upd_list_fluid_leg_col_mod
+        # )  # this is emitted from the legend manager
+        # self.parent.fluid_coll.signals.legend_thick_modified.connect(
+        #     self.upd_list_fluid_leg_thick_mod
+        # )  # this is emitted from the legend manager
+        # self.parent.fluid_coll.signals.legend_point_size_modified.connect(
+        #     self.upd_list_fluid_leg_point_mod
+        # )  # this is emitted from the legend manager
+        # self.parent.fluid_coll.signals.legend_opacity_modified.connect(
+        #     self.upd_list_fluid_leg_op_mod
+        # )  # this is emitted from the legend manager
+        #
+        # # Define BACKGROUND lamda functions and signals
+        #
+        # self.upd_list_background_add = (
+        #     lambda updated_list: background_added_update_views(
+        #         self, updated_list=updated_list
+        #     )
+        # )
+        # self.upd_list_background_rm = (
+        #     lambda updated_list: background_removed_update_views(
+        #         self, updated_list=updated_list
+        #     )
+        # )
+        # self.upd_list_background_geo_mod = (
+        #     lambda updated_list: background_geom_modified_update_views(
+        #         self, updated_list=updated_list
+        #     )
+        # )
+        # self.upd_list_background_data_keys = (
+        #     lambda updated_list: background_data_keys_modified_update_views(
+        #         self, updated_list=updated_list
+        #     )
+        # )
+        # self.upd_list_background_data_val = (
+        #     lambda updated_list: background_data_val_modified_update_views(
+        #         self, updated_list=updated_list
+        #     )
+        # )
+        # self.upd_list_background_metadata = (
+        #     lambda updated_list: background_metadata_modified_update_views(
+        #         self, updated_list=updated_list
+        #     )
+        # )
+        # self.upd_list_background_leg_col = (
+        #     lambda updated_list: background_legend_color_modified_update_views(
+        #         self, updated_list=updated_list
+        #     )
+        # )
+        # self.upd_list_background_leg_thick = (
+        #     lambda updated_list: background_legend_thick_modified_update_views(
+        #         self, updated_list=updated_list
+        #     )
+        # )
+        # self.upd_list_background_leg_point = (
+        #     lambda updated_list: background_legend_point_size_modified_update_views(
+        #         self, updated_list=updated_list
+        #     )
+        # )
+        # self.upd_list_background_leg_op = (
+        #     lambda updated_list: background_legend_opacity_modified_update_views(
+        #         self, updated_list=updated_list
+        #     )
+        # )
+        #
+        # # Connect BACKGROUND lamda functions and signals
+        #
+        # self.parent.backgrnd_coll.signals.entity_added.connect(
+        #     self.upd_list_background_add
+        # )  # this is emitted from the collection
+        # self.parent.backgrnd_coll.signals.entity_removed.connect(
+        #     self.upd_list_background_rm
+        # )  # this is emitted from the collection
+        # self.parent.backgrnd_coll.signals.data_keys_modified.connect(
+        #     self.upd_list_background_data_keys
+        # )  # this is emitted from the collection
+        # self.parent.backgrnd_coll.signals.metadata_modified.connect(
+        #     self.upd_list_background_metadata
+        # )  # this is emitted from the collection
+        #
+        # self.parent.backgrnd_coll.signals.geom_modified.connect(
+        #     self.upd_list_background_geo_mod
+        # )  # this is emitted from nowhere(?)
+        # self.parent.backgrnd_coll.signals.data_val_modified.connect(
+        #     self.upd_list_background_data_val
+        # )  # this is emitted from nowhere(?)
+        #
+        # self.parent.backgrnd_coll.signals.legend_color_modified.connect(
+        #     self.upd_list_background_leg_col
+        # )  # this is emitted from the legend manager
+        # self.parent.backgrnd_coll.signals.legend_thick_modified.connect(
+        #     self.upd_list_background_leg_thick
+        # )  # this is emitted from the legend manager
+        # self.parent.backgrnd_coll.signals.legend_point_size_modified.connect(
+        #     self.upd_list_background_leg_point
+        # )  # this is emitted from the legend manager
+        # self.parent.backgrnd_coll.signals.legend_opacity_modified.connect(
+        #     self.upd_list_background_leg_op
+        # )  # this is emitted from the legend manager
 
         # Define and connect PROPERTY LEGEND lamda functions and signals
 
@@ -820,35 +820,148 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             tree = eval(f"self.{tree_name}")
             collection = eval(f"self.parent.{coll_name}")
 
-            # collection.signals.entity_added.connect()
+            # entities_added
             setattr(
                 self,
                 f"{coll_name}_sig_add_lmb",
-                lambda collection, updated_list: self.entity_added_update_views(
-                    collection=collection, updated_list=updated_list
+                lambda upd_uids: self.entities_added_update_views(
+                    collection=collection, tree=tree, updated_uids=upd_uids
                 ),
             )
-            collection.signals.entity_added.connect(eval(f"self.{coll_name}_sig_add_lmb"))
+            collection.signals.entities_added.connect(
+                eval(f"self.{coll_name}_sig_add_lmb")
+            )
+            # entities_removed
+            setattr(
+                self,
+                f"{coll_name}_sig_rem_lmb",
+                lambda upd_uids: self.entities_removed_update_views(
+                    collection=collection, tree=tree, updated_uids=upd_uids
+                ),
+            )
+            collection.signals.entities_removed.connect(
+                eval(f"self.{coll_name}_sig_rem_lmb")
+            )
+            # geom_modified
+            setattr(
+                self,
+                f"{coll_name}_sig_geom_lmb",
+                lambda upd_uids: self.entities_geom_modified_update_views(
+                    collection=collection, tree=tree, updated_uids=upd_uids
+                ),
+            )
+            collection.signals.geom_modified.connect(
+                eval(f"self.{coll_name}_sig_geom_lmb")
+            )
+            # data_keys_added
+            setattr(
+                self,
+                f"{coll_name}_sig_k_add_lmb",
+                lambda upd_uids: self.entities_data_keys_added_update_views(
+                    collection=collection, tree=tree, updated_uids=upd_uids
+                ),
+            )
+            collection.signals.data_keys_added.connect(
+                eval(f"self.{coll_name}_sig_k_add_lmb")
+            )
+            # data_keys_removed
+            setattr(
+                self,
+                f"{coll_name}_sig_k_rmv_lmb",
+                lambda upd_uids: self.entities_data_keys_removed_update_views(
+                    collection=collection, tree=tree, updated_uids=upd_uids
+                ),
+            )
+            collection.signals.data_keys_removed.connect(
+                eval(f"self.{coll_name}_sig_k_rmv_lmb")
+            )
+            # data_val_modified
+            setattr(
+                self,
+                f"{coll_name}_sig_val_lmb",
+                lambda upd_uids: self.entities_data_val_modified_update_views(
+                    collection=collection, tree=tree, updated_uids=upd_uids
+                ),
+            )
+            collection.signals.data_val_modified.connect(
+                eval(f"self.{coll_name}_sig_val_lmb")
+            )
+            # metadata_modified
+            setattr(
+                self,
+                f"{coll_name}_sig_meta_lmb",
+                lambda upd_uids: self.entities_metadata_modified_update_views(
+                    collection=collection, tree=tree, updated_uids=upd_uids
+                ),
+            )
+            collection.signals.metadata_modified.connect(
+                eval(f"self.{coll_name}_sig_meta_lmb")
+            )
+            # legend_color_modified -> legend_modified ???
+            setattr(
+                self,
+                f"{coll_name}_sig_clr_lmb",
+                lambda upd_uids: self.entities_legend_modified_update_views(
+                    collection=collection, tree=tree, updated_uids=upd_uids
+                ),
+            )
+            collection.signals.legend_color_modified.connect(
+                eval(f"self.{coll_name}_sig_clr_lmb")
+            )
+            # legend_thick_modified -> legend_modified ???
+            setattr(
+                self,
+                f"{coll_name}_sig_thk_lmb",
+                lambda upd_uids: self.entities_legend_modified_update_views(
+                    collection=collection, tree=tree, updated_uids=upd_uids
+                ),
+            )
+            collection.signals.legend_thick_modified.connect(
+                eval(f"self.{coll_name}_sig_thk_lmb")
+            )
+            # legend_point_size_modified -> legend_modified ???
+            setattr(
+                self,
+                f"{coll_name}_sig_pnt_lmb",
+                lambda upd_uids: self.entities_legend_modified_update_views(
+                    collection=collection, tree=tree, updated_uids=upd_uids
+                ),
+            )
+            collection.signals.legend_point_size_modified.connect(
+                eval(f"self.{coll_name}_sig_pnt_lmb")
+            )
+            # legend_opacity_modified -> legend_modified ???
+            setattr(
+                self,
+                f"{coll_name}_sig_opct_lmb",
+                lambda upd_uids: self.entities_legend_modified_update_views(
+                    collection=collection, tree=tree, updated_uids=upd_uids
+                ),
+            )
+            collection.signals.legend_opacity_modified.connect(
+                eval(f"self.{coll_name}_sig_opct_lmb")
+            )
+            # itemsSelected
 
-            ### FOLLOW THIS PATTERN!!!
+            ### FOLLOW THE PATTERN ABOVE !!!
 
             # collection.signals.entity_removed.connect()
             # collection.signals.geom_modified.connect()
-            collection.signals.data_keys_modified.connect(
-                lambda collection_name, updated_uids: self.data_keys_modified_update_views(
-                    collection_name, updated_uids
-                )
-            )  # legacy to be removed
-            collection.signals.data_keys_added.connect(
-                lambda collection_name, updated_uids: self.data_keys_modified_update_views(
-                    collection_name, updated_uids
-                )
-            )
-            collection.signals.data_keys_removed.connect(
-                lambda collection_name, updated_uids: self.data_keys_modified_update_views(
-                    collection_name, updated_uids
-                )
-            )
+            # collection.signals.data_keys_modified.connect(
+            #     lambda collection_name, updated_uids: self.data_keys_modified_update_views(
+            #         collection_name, updated_uids
+            #     )
+            # )  # legacy to be removed
+            # collection.signals.data_keys_added.connect(
+            #     lambda collection_name, updated_uids: self.data_keys_modified_update_views(
+            #         collection_name, updated_uids
+            #     )
+            # )
+            # collection.signals.data_keys_removed.connect(
+            #     lambda collection_name, updated_uids: self.data_keys_modified_update_views(
+            #         collection_name, updated_uids
+            #     )
+            # )
             # collection.signals.data_val_modified.connect()
             # collection.signals.metadata_modified.connect()
             # collection.signals.legend_color_modified.connect()
@@ -874,229 +987,271 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         for tree_name, coll_name in self.tree_collection_dict.items():
             tree = eval(f"self.{tree_name}")
             collection = eval(f"self.parent.{coll_name}")
+            # entities_added
+            collection.signals.entities_added.disconnect(
+                eval(f"self.{coll_name}_sig_add_lmb")
+            )
+            # entities_removed
+            collection.signals.entities_removed.disconnect(
+                eval(f"self.{coll_name}_sig_rem_lmb")
+            )
+            # geom_modified
+            collection.signals.geom_modified.disconnect(
+                eval(f"self.{coll_name}_sig_geom_lmb")
+            )
+            # data_keys_added
+            collection.signals.data_keys_added.disconnect(
+                eval(f"self.{coll_name}_sig_k_add_lmb")
+            )
+            # data_keys_removed
+            collection.signals.data_keys_removed.disconnect(
+                eval(f"self.{coll_name}_sig_k_rmv_lmb")
+            )
+            # data_val_modified
+            collection.signals.data_val_modified.disconnect(
+                eval(f"self.{coll_name}_sig_val_lmb")
+            )
+            # metadata_modified
+            collection.signals.metadata_modified.disconnect(
+                eval(f"self.{coll_name}_sig_meta_lmb")
+            )
+            # legend_color_modified
+            collection.signals.legend_color_modified.disconnect(
+                eval(f"self.{coll_name}_sig_clr_lmb")
+            )
+            # legend_thick_modified
+            collection.signals.legend_thick_modified.disconnect(
+                eval(f"self.{coll_name}_sig_thk_lmb")
+            )
+            # legend_point_size_modified
+            collection.signals.legend_point_size_modified.disconnect(
+                eval(f"self.{coll_name}_sig_pnt_lmb")
+            )
+            # legend_opacity_modified
+            collection.signals.legend_opacity_modified.disconnect(
+                eval(f"self.{coll_name}_sig_opct_lmb")
+            )
+            # itemsSelected
 
-            collection.signals.entity_added.disconnect(eval(f"self.{coll_name}_sig_add_lmb"))
+            ### FOLLOW THE PATTERN ABOVE !!!
 
-            ### FOLLOW THIS PATTERN!!!
-
-        # Disconnect GEOLOGY signals
-
-
-        self.parent.geol_coll.signals.entity_added.disconnect(self.upd_list_geo_add)
-        self.parent.geol_coll.signals.entity_removed.disconnect(self.upd_list_geo_rm)
-        self.parent.geol_coll.signals.geom_modified.disconnect(self.upd_list_geo_mod)
-        self.parent.geol_coll.signals.data_keys_modified.disconnect(
-            self.upd_list_geo_datakeys_mod
-        )
-        self.parent.geol_coll.signals.data_keys_modified.disconnect(
-            self.upd_list_geo_dataval_mod
-        )
-        self.parent.geol_coll.signals.metadata_modified.disconnect(
-            self.upd_list_geo_metadata_mod
-        )
-        self.parent.geol_coll.signals.legend_color_modified.disconnect(
-            self.upd_list_geo_leg_col_mod
-        )
-        self.parent.geol_coll.signals.legend_thick_modified.disconnect(
-            self.upd_list_geo_leg_thick_mod
-        )
-        self.parent.geol_coll.signals.legend_point_size_modified.disconnect(
-            self.upd_list_geo_leg_point_mod
-        )
-        self.parent.geol_coll.signals.legend_opacity_modified.disconnect(
-            self.upd_list_geo_leg_op_mod
-        )
-
-        # Disconnect X-SECTION signals
-
-        self.parent.xsect_coll.signals.entity_added.disconnect(self.upd_list_x_add)
-        self.parent.xsect_coll.signals.entity_removed.disconnect(self.upd_list_x_rm)
-        self.parent.xsect_coll.signals.geom_modified.disconnect(self.upd_list_x_mod)
-        self.parent.xsect_coll.signals.metadata_modified.disconnect(
-            self.upd_list_x_metadata_mod
-        )
-        self.parent.xsect_coll.signals.legend_color_modified.disconnect(
-            self.upd_list_x_leg_col_mod
-        )
-        self.parent.xsect_coll.signals.legend_thick_modified.disconnect(
-            self.upd_list_x_leg_thick_mod
-        )
-        self.parent.xsect_coll.signals.legend_opacity_modified.disconnect(
-            self.upd_list_x_leg_op_mod
-        )
-
-        # Disconnect BOUNDARY signals
-
-        self.parent.boundary_coll.signals.entity_added.disconnect(
-            self.upd_list_bound_add
-        )
-        self.parent.boundary_coll.signals.entity_removed.disconnect(
-            self.upd_list_bound_rm
-        )
-        self.parent.boundary_coll.signals.geom_modified.disconnect(
-            self.upd_list_bound_geo_mod
-        )
-        self.parent.boundary_coll.signals.metadata_modified.disconnect(
-            self.upd_list_bound_metadata_mod
-        )
-        self.parent.boundary_coll.signals.legend_color_modified.disconnect(
-            self.upd_list_bound_leg_col_mod
-        )
-        self.parent.boundary_coll.signals.legend_thick_modified.disconnect(
-            self.upd_list_bound_leg_thick_mod
-        )
-        self.parent.boundary_coll.signals.legend_opacity_modified.disconnect(
-            self.upd_list_bound_leg_op_mod
-        )
-
-        # Disconnect MESH3D signals
-
-        self.parent.mesh3d_coll.signals.entity_added.disconnect(
-            self.upd_list_mesh3d_add
-        )
-        self.parent.mesh3d_coll.signals.entity_removed.disconnect(
-            self.upd_list_mesh3d_rm
-        )
-        self.parent.mesh3d_coll.signals.data_keys_modified.disconnect(
-            self.upd_list_mesh3d_data_keys_mod
-        )
-        self.parent.mesh3d_coll.signals.data_val_modified.disconnect(
-            self.upd_list_mesh3d_data_val_mod
-        )
-        self.parent.mesh3d_coll.signals.metadata_modified.disconnect(
-            self.upd_list_mesh3d_metadata_mod
-        )
-        self.parent.mesh3d_coll.signals.legend_color_modified.disconnect(
-            self.upd_list_mesh3d_leg_col_mod
-        )
-        self.parent.mesh3d_coll.signals.legend_thick_modified.disconnect(
-            self.upd_list_mesh3d_leg_thick_mod
-        )
-        self.parent.mesh3d_coll.signals.legend_opacity_modified.disconnect(
-            self.upd_list_mesh3d_leg_op_mod
-        )
-
-        # Disconnect DOM signals
-
-        self.parent.dom_coll.signals.entity_added.disconnect(self.upd_list_dom_add)
-        self.parent.dom_coll.signals.entity_removed.disconnect(self.upd_list_dom_rm)
-        self.parent.dom_coll.signals.data_keys_modified.disconnect(
-            self.upd_list_dom_data_keys_mod
-        )
-        self.parent.dom_coll.signals.data_val_modified.disconnect(
-            self.upd_list_dom_data_val_mod
-        )
-        self.parent.dom_coll.signals.metadata_modified.disconnect(
-            self.upd_list_dom_metadata_mod
-        )
-        self.parent.dom_coll.signals.legend_color_modified.disconnect(
-            self.upd_list_dom_leg_col_mod
-        )
-        self.parent.dom_coll.signals.legend_thick_modified.disconnect(
-            self.upd_list_dom_leg_thick_mod
-        )
-        self.parent.dom_coll.signals.legend_point_size_modified.disconnect(
-            self.upd_list_dom_leg_point_mod
-        )
-        self.parent.dom_coll.signals.legend_opacity_modified.disconnect(
-            self.upd_list_dom_leg_op_mod
-        )
-
-        # Disconnect IMAGE signals
-
-        self.parent.image_coll.signals.entity_added.disconnect(self.upd_list_img_add)
-        self.parent.image_coll.signals.entity_removed.disconnect(self.upd_list_img_rm)
-        self.parent.image_coll.signals.metadata_modified.disconnect(
-            self.upd_list_metadata_mod
-        )
-        self.parent.image_coll.signals.legend_opacity_modified.disconnect(
-            self.upd_list_img_leg_op_mod
-        )
-
-        # Disconnect WELL signals
-
-        self.parent.well_coll.signals.entity_added.disconnect(self.upd_list_well_add)
-        self.parent.well_coll.signals.entity_removed.disconnect(self.upd_list_well_rm)
-        self.parent.well_coll.signals.data_keys_modified.disconnect(
-            self.upd_list_well_data_keys_mod
-        )
-        self.parent.well_coll.signals.data_val_modified.disconnect(
-            self.upd_list_well_data_val_mod
-        )
-        self.parent.well_coll.signals.metadata_modified.disconnect(
-            self.upd_list_well_metadata_mod
-        )
-        self.parent.well_coll.signals.legend_color_modified.disconnect(
-            self.upd_list_well_leg_col_mod
-        )
-        self.parent.well_coll.signals.legend_thick_modified.disconnect(
-            self.upd_list_well_leg_thick_mod
-        )
-        self.parent.well_coll.signals.legend_opacity_modified.disconnect(
-            self.upd_list_well_leg_op_mod
-        )
-
-        # Disconnect FLUID signals
-
-        self.parent.fluid_coll.signals.entity_added.disconnect(self.upd_list_fluid_add)
-        self.parent.fluid_coll.signals.entity_removed.disconnect(self.upd_list_fluid_rm)
-        self.parent.fluid_coll.signals.geom_modified.disconnect(
-            self.upd_list_fluid_geo_mod
-        )
-        self.parent.fluid_coll.signals.data_keys_modified.disconnect(
-            self.upd_list_fluid_data_keys_mod
-        )
-        self.parent.fluid_coll.signals.data_val_modified.disconnect(
-            self.upd_list_fluid_data_val_mod
-        )
-        self.parent.fluid_coll.signals.metadata_modified.disconnect(
-            self.upd_list_fluid_metadata_mod
-        )
-        self.parent.fluid_coll.signals.legend_color_modified.disconnect(
-            self.upd_list_fluid_leg_col_mod
-        )
-        self.parent.fluid_coll.signals.legend_thick_modified.disconnect(
-            self.upd_list_fluid_leg_thick_mod
-        )
-        self.parent.fluid_coll.signals.legend_point_size_modified.disconnect(
-            self.upd_list_fluid_leg_point_mod
-        )
-        self.parent.fluid_coll.signals.legend_opacity_modified.disconnect(
-            self.upd_list_fluid_leg_op_mod
-        )
-
-        # Disconnect BACKGROUND signals
-
-        self.parent.backgrnd_coll.signals.entity_added.disconnect(
-            self.upd_list_background_add
-        )
-        self.parent.backgrnd_coll.signals.entity_removed.disconnect(
-            self.upd_list_background_rm
-        )
-        self.parent.backgrnd_coll.signals.geom_modified.disconnect(
-            self.upd_list_background_geo_mod
-        )
-        self.parent.backgrnd_coll.signals.data_keys_modified.disconnect(
-            self.upd_list_background_data_keys
-        )
-        self.parent.backgrnd_coll.signals.data_val_modified.disconnect(
-            self.upd_list_background_data_val
-        )
-        self.parent.backgrnd_coll.signals.metadata_modified.disconnect(
-            self.upd_list_background_metadata
-        )
-        self.parent.backgrnd_coll.signals.legend_color_modified.disconnect(
-            self.upd_list_background_leg_col
-        )
-        self.parent.backgrnd_coll.signals.legend_thick_modified.disconnect(
-            self.upd_list_background_leg_thick
-        )
-        self.parent.backgrnd_coll.signals.legend_point_size_modified.disconnect(
-            self.upd_list_background_leg_point
-        )
-        self.parent.backgrnd_coll.signals.legend_opacity_modified.disconnect(
-            self.upd_list_background_leg_op
-        )
+        # # OLD ==== Disconnect GEOLOGY signals
+        #
+        # self.parent.geol_coll.signals.entity_added.disconnect(self.upd_list_geo_add)
+        # self.parent.geol_coll.signals.entity_removed.disconnect(self.upd_list_geo_rm)
+        # self.parent.geol_coll.signals.geom_modified.disconnect(self.upd_list_geo_mod)
+        # self.parent.geol_coll.signals.data_keys_modified.disconnect(
+        #     self.upd_list_geo_datakeys_mod
+        # )
+        # self.parent.geol_coll.signals.data_keys_modified.disconnect(
+        #     self.upd_list_geo_dataval_mod
+        # )
+        # self.parent.geol_coll.signals.metadata_modified.disconnect(
+        #     self.upd_list_geo_metadata_mod
+        # )
+        # self.parent.geol_coll.signals.legend_color_modified.disconnect(
+        #     self.upd_list_geo_leg_col_mod
+        # )
+        # self.parent.geol_coll.signals.legend_thick_modified.disconnect(
+        #     self.upd_list_geo_leg_thick_mod
+        # )
+        # self.parent.geol_coll.signals.legend_point_size_modified.disconnect(
+        #     self.upd_list_geo_leg_point_mod
+        # )
+        # self.parent.geol_coll.signals.legend_opacity_modified.disconnect(
+        #     self.upd_list_geo_leg_op_mod
+        # )
+        #
+        # # Disconnect X-SECTION signals
+        #
+        # self.parent.xsect_coll.signals.entity_added.disconnect(self.upd_list_x_add)
+        # self.parent.xsect_coll.signals.entity_removed.disconnect(self.upd_list_x_rm)
+        # self.parent.xsect_coll.signals.geom_modified.disconnect(self.upd_list_x_mod)
+        # self.parent.xsect_coll.signals.metadata_modified.disconnect(
+        #     self.upd_list_x_metadata_mod
+        # )
+        # self.parent.xsect_coll.signals.legend_color_modified.disconnect(
+        #     self.upd_list_x_leg_col_mod
+        # )
+        # self.parent.xsect_coll.signals.legend_thick_modified.disconnect(
+        #     self.upd_list_x_leg_thick_mod
+        # )
+        # self.parent.xsect_coll.signals.legend_opacity_modified.disconnect(
+        #     self.upd_list_x_leg_op_mod
+        # )
+        #
+        # # Disconnect BOUNDARY signals
+        #
+        # self.parent.boundary_coll.signals.entity_added.disconnect(
+        #     self.upd_list_bound_add
+        # )
+        # self.parent.boundary_coll.signals.entity_removed.disconnect(
+        #     self.upd_list_bound_rm
+        # )
+        # self.parent.boundary_coll.signals.geom_modified.disconnect(
+        #     self.upd_list_bound_geo_mod
+        # )
+        # self.parent.boundary_coll.signals.metadata_modified.disconnect(
+        #     self.upd_list_bound_metadata_mod
+        # )
+        # self.parent.boundary_coll.signals.legend_color_modified.disconnect(
+        #     self.upd_list_bound_leg_col_mod
+        # )
+        # self.parent.boundary_coll.signals.legend_thick_modified.disconnect(
+        #     self.upd_list_bound_leg_thick_mod
+        # )
+        # self.parent.boundary_coll.signals.legend_opacity_modified.disconnect(
+        #     self.upd_list_bound_leg_op_mod
+        # )
+        #
+        # # Disconnect MESH3D signals
+        #
+        # self.parent.mesh3d_coll.signals.entity_added.disconnect(
+        #     self.upd_list_mesh3d_add
+        # )
+        # self.parent.mesh3d_coll.signals.entity_removed.disconnect(
+        #     self.upd_list_mesh3d_rm
+        # )
+        # self.parent.mesh3d_coll.signals.data_keys_modified.disconnect(
+        #     self.upd_list_mesh3d_data_keys_mod
+        # )
+        # self.parent.mesh3d_coll.signals.data_val_modified.disconnect(
+        #     self.upd_list_mesh3d_data_val_mod
+        # )
+        # self.parent.mesh3d_coll.signals.metadata_modified.disconnect(
+        #     self.upd_list_mesh3d_metadata_mod
+        # )
+        # self.parent.mesh3d_coll.signals.legend_color_modified.disconnect(
+        #     self.upd_list_mesh3d_leg_col_mod
+        # )
+        # self.parent.mesh3d_coll.signals.legend_thick_modified.disconnect(
+        #     self.upd_list_mesh3d_leg_thick_mod
+        # )
+        # self.parent.mesh3d_coll.signals.legend_opacity_modified.disconnect(
+        #     self.upd_list_mesh3d_leg_op_mod
+        # )
+        #
+        # # Disconnect DOM signals
+        #
+        # self.parent.dom_coll.signals.entity_added.disconnect(self.upd_list_dom_add)
+        # self.parent.dom_coll.signals.entity_removed.disconnect(self.upd_list_dom_rm)
+        # self.parent.dom_coll.signals.data_keys_modified.disconnect(
+        #     self.upd_list_dom_data_keys_mod
+        # )
+        # self.parent.dom_coll.signals.data_val_modified.disconnect(
+        #     self.upd_list_dom_data_val_mod
+        # )
+        # self.parent.dom_coll.signals.metadata_modified.disconnect(
+        #     self.upd_list_dom_metadata_mod
+        # )
+        # self.parent.dom_coll.signals.legend_color_modified.disconnect(
+        #     self.upd_list_dom_leg_col_mod
+        # )
+        # self.parent.dom_coll.signals.legend_thick_modified.disconnect(
+        #     self.upd_list_dom_leg_thick_mod
+        # )
+        # self.parent.dom_coll.signals.legend_point_size_modified.disconnect(
+        #     self.upd_list_dom_leg_point_mod
+        # )
+        # self.parent.dom_coll.signals.legend_opacity_modified.disconnect(
+        #     self.upd_list_dom_leg_op_mod
+        # )
+        #
+        # # Disconnect IMAGE signals
+        #
+        # self.parent.image_coll.signals.entity_added.disconnect(self.upd_list_img_add)
+        # self.parent.image_coll.signals.entity_removed.disconnect(self.upd_list_img_rm)
+        # self.parent.image_coll.signals.metadata_modified.disconnect(
+        #     self.upd_list_metadata_mod
+        # )
+        # self.parent.image_coll.signals.legend_opacity_modified.disconnect(
+        #     self.upd_list_img_leg_op_mod
+        # )
+        #
+        # # Disconnect WELL signals
+        #
+        # self.parent.well_coll.signals.entity_added.disconnect(self.upd_list_well_add)
+        # self.parent.well_coll.signals.entity_removed.disconnect(self.upd_list_well_rm)
+        # self.parent.well_coll.signals.data_keys_modified.disconnect(
+        #     self.upd_list_well_data_keys_mod
+        # )
+        # self.parent.well_coll.signals.data_val_modified.disconnect(
+        #     self.upd_list_well_data_val_mod
+        # )
+        # self.parent.well_coll.signals.metadata_modified.disconnect(
+        #     self.upd_list_well_metadata_mod
+        # )
+        # self.parent.well_coll.signals.legend_color_modified.disconnect(
+        #     self.upd_list_well_leg_col_mod
+        # )
+        # self.parent.well_coll.signals.legend_thick_modified.disconnect(
+        #     self.upd_list_well_leg_thick_mod
+        # )
+        # self.parent.well_coll.signals.legend_opacity_modified.disconnect(
+        #     self.upd_list_well_leg_op_mod
+        # )
+        #
+        # # Disconnect FLUID signals
+        #
+        # self.parent.fluid_coll.signals.entity_added.disconnect(self.upd_list_fluid_add)
+        # self.parent.fluid_coll.signals.entity_removed.disconnect(self.upd_list_fluid_rm)
+        # self.parent.fluid_coll.signals.geom_modified.disconnect(
+        #     self.upd_list_fluid_geo_mod
+        # )
+        # self.parent.fluid_coll.signals.data_keys_modified.disconnect(
+        #     self.upd_list_fluid_data_keys_mod
+        # )
+        # self.parent.fluid_coll.signals.data_val_modified.disconnect(
+        #     self.upd_list_fluid_data_val_mod
+        # )
+        # self.parent.fluid_coll.signals.metadata_modified.disconnect(
+        #     self.upd_list_fluid_metadata_mod
+        # )
+        # self.parent.fluid_coll.signals.legend_color_modified.disconnect(
+        #     self.upd_list_fluid_leg_col_mod
+        # )
+        # self.parent.fluid_coll.signals.legend_thick_modified.disconnect(
+        #     self.upd_list_fluid_leg_thick_mod
+        # )
+        # self.parent.fluid_coll.signals.legend_point_size_modified.disconnect(
+        #     self.upd_list_fluid_leg_point_mod
+        # )
+        # self.parent.fluid_coll.signals.legend_opacity_modified.disconnect(
+        #     self.upd_list_fluid_leg_op_mod
+        # )
+        #
+        # # Disconnect BACKGROUND signals
+        #
+        # self.parent.backgrnd_coll.signals.entity_added.disconnect(
+        #     self.upd_list_background_add
+        # )
+        # self.parent.backgrnd_coll.signals.entity_removed.disconnect(
+        #     self.upd_list_background_rm
+        # )
+        # self.parent.backgrnd_coll.signals.geom_modified.disconnect(
+        #     self.upd_list_background_geo_mod
+        # )
+        # self.parent.backgrnd_coll.signals.data_keys_modified.disconnect(
+        #     self.upd_list_background_data_keys
+        # )
+        # self.parent.backgrnd_coll.signals.data_val_modified.disconnect(
+        #     self.upd_list_background_data_val
+        # )
+        # self.parent.backgrnd_coll.signals.metadata_modified.disconnect(
+        #     self.upd_list_background_metadata
+        # )
+        # self.parent.backgrnd_coll.signals.legend_color_modified.disconnect(
+        #     self.upd_list_background_leg_col
+        # )
+        # self.parent.backgrnd_coll.signals.legend_thick_modified.disconnect(
+        #     self.upd_list_background_leg_thick
+        # )
+        # self.parent.backgrnd_coll.signals.legend_point_size_modified.disconnect(
+        #     self.upd_list_background_leg_point
+        # )
+        # self.parent.backgrnd_coll.signals.legend_opacity_modified.disconnect(
+        #     self.upd_list_background_leg_op
+        # )
 
         # Disconnect PROPERTY LEGEND signals
 
@@ -1181,6 +1336,222 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             print("Error in tree_from_coll")
             return None
 
+    def entities_added_update_views(
+        self, collection=None, tree=None, updated_uids=None
+    ):
+        """This is called when an entity is added to a collection."""
+        # # Signals to the collection view tree, if they are set, are disconnected to avoid a nasty loop that would disrupt them.
+        tree.itemChanged.disconnect()
+        # remove from updated_list the uid's that are excluded from this view by self.view_filter.collection,
+        # by removing from the list of all uid's that should appear in this view (from query), the uid's that
+        # do not belong to the updated_list. try/except needed for when the query is non-valid.
+        updated_uids = collection.filter_uids(query=self.view_filter, uids=updated_uids)
+        for uid in updated_uids:
+            this_actor = self.show_actor_with_property(
+                uid=uid, collection=collection, show_property=None, visible=True
+            )
+            # New Pandas >= 2.0.0
+            self.actors_df = pd_concat(
+                [
+                    self.actors_df,
+                    pd_DataFrame(
+                        [
+                            {
+                                "uid": uid,
+                                "actor": this_actor,
+                                "show": True,
+                                "collection": collection,
+                                "show_property": None,
+                            }
+                        ]
+                    ),
+                ],
+                ignore_index=True,
+            )
+            # THE TREE MUST NOT ALTER self.actors_df ==========================================
+        tree.update_tree_added(self, uid_list=updated_uids)
+        tree.itemChanged.connect(self.toggle_visibility)
+
+    def entities_removed_update_views(
+        self, collection=None, tree=None, updated_uids=None
+    ):
+        """This is called when an entity is removed from a collection."""
+        # # Signals to the collection view tree, if they are set, are disconnected to avoid a nasty loop that would disrupt them. No need to apply a filter, since if a uid is not found in the actors list, nothing happens.
+        tree.itemChanged.disconnect()
+        for uid in updated_uids:
+            self.remove_actor_in_view(uid=uid, redraw=True)
+        tree.update_tree_removed(self, removed_list=updated_uids)
+        tree.itemChanged.connect(self.toggle_visibility)
+
+    def entities_geom_modified_update_views(
+        self, collection=None, tree=None, updated_uids=None
+    ):
+        """This is called when an entity geometry or topology is modified (i.e. the vtk object is modified).
+        In a previous version of this method, signals were disconnected, but this is no longer required
+        since actors are replaced, not deleted and then re-created."""
+        # remove from updated_list the uid's that are excluded from this view by self.view_filter.collection,
+        # by removing from the list of all uid's that should appear in this view (from query), the uid's that
+        # do not belong to the updated_list. try/except needed for when the query is non-valid.
+        updated_uids = collection.filter_uids(query=self.view_filter, uids=updated_uids)
+        for uid in updated_uids:
+            # This replaces the previous copy of the actor with the same uid, and updates the actors dataframe.
+            # See issue #33 for a discussion on actors replacement by the PyVista add_mesh and add_volume methods.
+            show = self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]
+            show_property = self.actors_df.loc[
+                self.actors_df["uid"] == uid, "show_property"
+            ].values[0]
+            self.show_actor_with_property(
+                uid=uid,
+                collection=collection,
+                show_property=show_property,
+                visible=show,
+            )
+
+    def entities_data_keys_added_update_views(
+        self, collection=None, tree=None, updated_uids=None
+    ):
+        """This is called when point or cell data (properties) are added."""
+        # ___________________________________________________________ DIFFERENCE WITH REMOVED???
+
+        # Signals to the collection view tree, if they are set, are disconnected to avoid a nasty loop that would disrupt them.
+        tree.itemChanged.disconnect()
+        # remove from updated_list the uid's that are excluded from this view by self.view_filter.collection,
+        # by removing from the list of all uid's that should appear in this view (from query), the uid's that
+        # do not belong to the updated_list. try/except needed for when the query is non-valid.
+        updated_uids = collection.filter_uids(query=self.view_filter, uids=updated_uids)
+        for uid in updated_uids:
+            # Replace the previous copy of the actor with the same uid, and update the actors dataframe, only if a
+            # property that has been removed is shown at the moment. See issue #33 for a discussion on actors
+            # replacement by the PyVista add_mesh and add_volume methods.
+            if (
+                not self.actors_df.loc[
+                    self.actors_df["uid"] == uid, "show_property"
+                ].to_list()[0]
+                is None
+            ):
+                if not self.actors_df.loc[
+                    self.actors_df["uid"] == uid, "show_property"
+                ].values[0] in collection.get_uid_properties_names(uid):
+                    show = self.actors_df.loc[
+                        self.actors_df["uid"] == uid, "show"
+                    ].to_list()[0]
+                    self.show_actor_with_property(
+                        uid=uid, collection=collection, show_property=None, visible=show
+                    )
+                    self.actors_df.loc[
+                        self.actors_df["uid"] == uid, ["show_property"]
+                    ] = None
+        # Rebuild the trees to add/remove the properties that have been changed.
+        tree.create_tree(self)  # this should be a method of the tree
+        tree.itemChanged.connect(self.toggle_visibility)
+
+    def entities_data_keys_removed_update_views(
+        self, collection=None, tree=None, updated_uids=None
+    ):
+        """This is called when point or cell data (properties) are removed."""
+        # ___________________________________________________________ DIFFERENCE WITH ADDED???
+        # Signals to the collection view tree, if they are set, are disconnected to avoid a nasty loop that would disrupt them.
+        tree.itemChanged.disconnect()
+        # remove from updated_list the uid's that are excluded from this view by self.view_filter.collection,
+        # by removing from the list of all uid's that should appear in this view (from query), the uid's that
+        # do not belong to the updated_list. try/except needed for when the query is non-valid.
+        updated_uids = collection.filter_uids(query=self.view_filter, uids=updated_uids)
+        for uid in updated_uids:
+            # Replace the previous copy of the actor with the same uid, and update the actors dataframe, only if a
+            # property that has been removed is shown at the moment. See issue #33 for a discussion on actors
+            # replacement by the PyVista add_mesh and add_volume methods.
+            if (
+                not self.actors_df.loc[
+                    self.actors_df["uid"] == uid, "show_property"
+                ].to_list()[0]
+                is None
+            ):
+                if not self.actors_df.loc[
+                    self.actors_df["uid"] == uid, "show_property"
+                ].values[0] in collection.get_uid_properties_names(uid):
+                    show = self.actors_df.loc[
+                        self.actors_df["uid"] == uid, "show"
+                    ].to_list()[0]
+                    self.show_actor_with_property(
+                        uid=uid, collection=collection, show_property=None, visible=show
+                    )
+                    self.actors_df.loc[
+                        self.actors_df["uid"] == uid, ["show_property"]
+                    ] = None
+        # Rebuild the trees to add/remove the properties that have been changed.
+        tree.create_tree(self)  # this should be a method of the tree
+        tree.itemChanged.connect(self.toggle_visibility)
+
+    def entities_data_val_modified_update_views(
+        self, collection=None, tree=None, updated_uids=None
+    ):
+        """This is called when entity point or cell data are modified. The actor is modified just if the
+        modified property is currently shown. Trees do not need to be modified."""
+        # remove from updated_list the uid's that are excluded from this view by self.view_filter.collection,
+        # by removing from the list of all uid's that should appear in this view (from query), the uid's that
+        # do not belong to the updated_list. try/except needed for when the query is non-valid.
+        updated_uids = collection.filter_uids(query=self.view_filter, uids=updated_uids)
+        for uid in updated_uids:
+            # Replace the previous copy of the actor with the same uid, and update the actors dataframe, only if a
+            # property that has been removed is shown at the moment. See issue #33 for a discussion on actors
+            # replacement by the PyVista add_mesh and add_volume methods.
+            if (
+                not self.actors_df.loc[
+                    self.actors_df["uid"] == uid, "show_property"
+                ].to_list()[0]
+                is None
+            ):
+                if not self.actors_df.loc[
+                    self.actors_df["uid"] == uid, "show_property"
+                ].values[0] in collection.get_uid_properties_names(uid):
+                    show = self.actors_df.loc[
+                        self.actors_df["uid"] == uid, "show"
+                    ].to_list()[0]
+                    self.show_actor_with_property(
+                        uid=uid,
+                        collection="geol_coll",
+                        show_property=None,
+                        visible=show,
+                    )
+                    self.actors_df.loc[
+                        self.actors_df["uid"] == uid, ["show_property"]
+                    ] = None
+
+    def entities_metadata_modified_update_views(
+        self, collection=None, tree=None, updated_uids=None
+    ):
+        """This is called when an entity metadata are modified, and the legend is automatically updated. Signals
+        to the collection view tree, if they are set, are disconnected to avoid a nasty loop that would disrupt them.
+        """
+        tree.itemChanged.disconnect()
+        tree.legend_modified_update_views(
+            self, updated_uids=updated_uids
+        )  # is this a method of the tree or of the collection (already existing)?
+        tree.create_tree(self)  # this should be a method of the tree
+        tree.itemChanged.connect(self.toggle_visibility)
+
+    def entities_legend_modified_update_views(
+        self, collection=None, tree=None, updated_uids=None
+    ):
+        """This is called when changing any property in the legend. Updating trees not
+        needed since metadata do not change and entities are neither added or removed.
+        """
+        # remove from updated_list the uid's that are excluded from this view by self.view_filter.collection,
+        # by removing from the list of all uid's that should appear in this view (from query), the uid's that
+        # do not belong to the updated_list. try/except needed for when the query is non-valid.
+        updated_uids = collection.filter_uids(query=self.view_filter, uids=updated_uids)
+        for uid in updated_uids:
+            show = self.actors_df.loc[self.actors_df["uid"] == uid, "show"].to_list()[0]
+            show_property = self.actors_df.loc[
+                self.actors_df["uid"] == uid, "show_property"
+            ].to_list()[0]
+            self.show_actor_with_property(
+                uid=uid,
+                collection=collection,
+                show_property=show_property,
+                visible=show,
+            )
+
     def toggle_visibility(
         self, collection_name=None, turn_on_uids=None, turn_off_uids=None
     ):
@@ -1222,18 +1593,13 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.actors_df.loc[self.actors_df["uid"] == uid, "show_property"] = prop_text
 
     def data_keys_modified_update_views(self, collection_name=None, updated_uids=None):
+        # __________________________________________________________________ ?????
         collection = eval(f"self.parent.{collection_name}")
         tree = eval(f"self.{self.collection_tree_dict[collection_name]}")
         # Remove from updated_uids the uid's that are excluded from this view by self.view_filter
         # by removing from the list of all uid's that should appear in this view (from query)
         # the uid's that do not belong to the updated_list
-        updated_uids = list(
-            set(collection.df.query(self.view_filter)["uid"].tolist())
-            - (
-                set(collection.df.query(self.view_filter)["uid"].tolist())
-                - set(updated_uids)
-            )
-        )
+        updated_uids = collection.filter_uids(query=self.view_filter, uids=updated_uids)
         # Deal with removed properties that are currently shown (do nothing in view otherwise)
         # for uid in updated_uids:
         #     shown_prop = self.actors_df.loc[self.actors_df["uid"] == uid, "show_property"].values[0]
