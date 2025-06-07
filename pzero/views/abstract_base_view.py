@@ -1,26 +1,30 @@
 """abstract_base_view.py
 PZero© Andrea Bistacchi"""
 
-from PySide6.QtCore import QRect, QObject
-
 # PySide6 imports____
+from PySide6.QtCore import QRect, QObject, Qt
 from PySide6.QtWidgets import QMainWindow
 from PySide6.QtGui import QAction
 from PySide6.QtCore import Signal as pyqtSignal
+
+# Pandas imports____
+from pandas import DataFrame as pd_DataFrame
+from pandas import concat as pd_concat
 
 # PZero imports____
 from .view_tree import CustomTreeWidget
 from ..collections.AbstractCollection import BaseCollection
 from ..ui.base_view_window_ui import Ui_BaseViewWindow
-from ..add_remove_update_actors.background import *
-from ..add_remove_update_actors.boundary import *
-from ..add_remove_update_actors.dom import *
-from ..add_remove_update_actors.fluid import *
-from ..add_remove_update_actors.geology import *
-from ..add_remove_update_actors.image import *
-from ..add_remove_update_actors.mesh3d import *
-from ..add_remove_update_actors.wells import *
-from ..add_remove_update_actors.xsection import *
+
+# from ..add_remove_update_actors.background import *
+# from ..add_remove_update_actors.boundary import *
+# from ..add_remove_update_actors.dom import *
+# from ..add_remove_update_actors.fluid import *
+# from ..add_remove_update_actors.geology import *
+# from ..add_remove_update_actors.image import *
+# from ..add_remove_update_actors.mesh3d import *
+# from ..add_remove_update_actors.wells import *
+# from ..add_remove_update_actors.xsection import *
 
 
 class BaseViewSignals(QObject):
@@ -141,64 +145,64 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         # self.parent.geol_coll.signals.entity_added.connect(self.upd_list_geo_add)
         # self.parent.geol_coll.signals.entity_added.disconnect(self.upd_list_geo_add)
 
-        # Define GEOLOGY lamda functions and signals
-
-        self.upd_list_geo_add = lambda updated_list: geology_added_update_views(
-            self, updated_list=updated_list
-        )
-        self.upd_list_geo_rm = lambda updated_list: geology_removed_update_views(
-            self, updated_list=updated_list
-        )
-        self.upd_list_geo_mod = lambda updated_list: geology_geom_modified_update_views(
-            self, updated_list=updated_list
-        )
-        self.upd_list_geo_datakeys_mod = (
-            lambda updated_list: geology_data_keys_modified_update_views(
-                self, updated_list=updated_list
-            )
-        )
-        self.upd_list_geo_dataval_mod = (
-            lambda updated_list: geology_data_val_modified_update_views(
-                self, updated_list=updated_list
-            )
-        )
-        self.upd_list_geo_metadata_mod = (
-            lambda updated_list: geology_metadata_modified_update_views(
-                self, updated_list=updated_list
-            )
-        )
-        # self.upd_list_geo_leg_col_mod = lambda updated_list: self.geology_legend_color_modified_update_views(
-        #     updated_list=updated_list
+        # # Define GEOLOGY lamda functions and signals
+        #
+        # self.upd_list_geo_add = lambda updated_list: geology_added_update_views(
+        #     self, updated_list=updated_list
         # )
-        self.upd_list_geo_leg_col_mod = (
-            lambda updated_list: geology_legend_modified_update_views(
-                self, updated_list=updated_list
-            )
-        )
-        # self.upd_list_geo_leg_thick_mod = lambda updated_list: self.geology_legend_thick_modified_update_views(
-        #     updated_list=updated_list
+        # self.upd_list_geo_rm = lambda updated_list: geology_removed_update_views(
+        #     self, updated_list=updated_list
         # )
-        self.upd_list_geo_leg_thick_mod = (
-            lambda updated_list: geology_legend_modified_update_views(
-                self, updated_list=updated_list
-            )
-        )
-        # self.upd_list_geo_leg_point_mod = lambda updated_list: self.geology_legend_point_size_modified_update_views(
-        #     updated_list=updated_list
+        # self.upd_list_geo_mod = lambda updated_list: geology_geom_modified_update_views(
+        #     self, updated_list=updated_list
         # )
-        self.upd_list_geo_leg_point_mod = (
-            lambda updated_list: geology_legend_modified_update_views(
-                self, updated_list=updated_list
-            )
-        )
-        # self.upd_list_geo_leg_op_mod = lambda updated_list: self.geology_legend_opacity_modified_update_views(
-        #     updated_list=updated_list
+        # self.upd_list_geo_datakeys_mod = (
+        #     lambda updated_list: geology_data_keys_modified_update_views(
+        #         self, updated_list=updated_list
+        #     )
         # )
-        self.upd_list_geo_leg_op_mod = (
-            lambda updated_list: geology_legend_modified_update_views(
-                self, updated_list=updated_list
-            )
-        )
+        # self.upd_list_geo_dataval_mod = (
+        #     lambda updated_list: geology_data_val_modified_update_views(
+        #         self, updated_list=updated_list
+        #     )
+        # )
+        # self.upd_list_geo_metadata_mod = (
+        #     lambda updated_list: geology_metadata_modified_update_views(
+        #         self, updated_list=updated_list
+        #     )
+        # )
+        # # self.upd_list_geo_leg_col_mod = lambda updated_list: self.geology_legend_color_modified_update_views(
+        # #     updated_list=updated_list
+        # # )
+        # self.upd_list_geo_leg_col_mod = (
+        #     lambda updated_list: geology_legend_modified_update_views(
+        #         self, updated_list=updated_list
+        #     )
+        # )
+        # # self.upd_list_geo_leg_thick_mod = lambda updated_list: self.geology_legend_thick_modified_update_views(
+        # #     updated_list=updated_list
+        # # )
+        # self.upd_list_geo_leg_thick_mod = (
+        #     lambda updated_list: geology_legend_modified_update_views(
+        #         self, updated_list=updated_list
+        #     )
+        # )
+        # # self.upd_list_geo_leg_point_mod = lambda updated_list: self.geology_legend_point_size_modified_update_views(
+        # #     updated_list=updated_list
+        # # )
+        # self.upd_list_geo_leg_point_mod = (
+        #     lambda updated_list: geology_legend_modified_update_views(
+        #         self, updated_list=updated_list
+        #     )
+        # )
+        # # self.upd_list_geo_leg_op_mod = lambda updated_list: self.geology_legend_opacity_modified_update_views(
+        # #     updated_list=updated_list
+        # # )
+        # self.upd_list_geo_leg_op_mod = (
+        #     lambda updated_list: geology_legend_modified_update_views(
+        #         self, updated_list=updated_list
+        #     )
+        # )
 
         # # Connect GEOLOGY lamda functions and signals
         #

@@ -22,7 +22,11 @@ from pyvista import plot as pv_plot
 
 # PZero imports____
 from .abstract_view_vtk import ViewVTK
-from ..helpers.helper_dialogs import save_file_dialog, multiple_input_dialog, progress_dialog
+from ..helpers.helper_dialogs import (
+    save_file_dialog,
+    multiple_input_dialog,
+    progress_dialog,
+)
 from ..helpers.helper_functions import best_fitting_plane, gen_frame
 from ..collections.geological_collection import GeologicalCollection
 from ..entities_factory import PolyData, Attitude
@@ -144,17 +148,11 @@ class View3D(ViewVTK):
         """Function used to disable actor picking. Due to some slight difference,
         must be reimplemented in subclasses."""
         # Remove the selector observer
-        self.plotter.iren.interactor.RemoveObservers(
-            "LeftButtonPressEvent"
-        )
+        self.plotter.iren.interactor.RemoveObservers("LeftButtonPressEvent")
         # Remove the right click observer
-        self.plotter.untrack_click_position(
-            side="right"
-        )
+        self.plotter.untrack_click_position(side="right")
         # Remove the left click observer
-        self.plotter.untrack_click_position(
-            side="left"
-        )
+        self.plotter.untrack_click_position(side="left")
 
         # Specific to View3D() implementation.
         self.plotter.enable_trackball_style()
