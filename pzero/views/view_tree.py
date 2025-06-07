@@ -1,8 +1,10 @@
 """view_tree.py
 PZero© Andrea Bistacchi"""
 
+# Standard library imports____
 from functools import wraps
 
+# PySide imports____
 from PySide6.QtWidgets import (
     QTreeWidget,
     QTreeWidgetItem,
@@ -19,35 +21,13 @@ from PySide6.QtGui import QDrag
 
 class DraggableButton(QPushButton):
     """
-    A draggable button that inherits from QPushButton.
-
-    Provides functionality for a button that can be dragged across
-    the interface while maintaining custom appearances and behaviors.
-    This widget is checkable, with fixed size settings, and supports
-    drag-and-drop operations.
-
-    :ivar checkable: Indicates if the button can be toggled on/off.
-    :type checkable: bool
-    :ivar checked: States whether the button is currently checked or not.
-    :type checked: bool
-    :ivar size_policy: Defines the size policy of the button, set to fixed.
-    :type size_policy: QSizePolicy
-    :ivar minimum_size: Specifies the minimum allowable size for the button.
-    :type minimum_size: QSize
-    :ivar maximum_size: Specifies the maximum allowable size for the button.
-    :type maximum_size: QSize
+    A draggable button that inherits from QPushButton. It can be dragged across
+    the interface while maintaining custom appearances and behavior.
     """
 
     def __init__(self, text, parent=None):
         """
-        Initializes a checkable widget with a fixed size, defaulting it to a checked state.
-        This constructor sets the widget's size policy to fixed, ensuring its dimensions
-        match the preferred size hint, and configures it to be checkable and checked.
-
-        :param text: The text label displayed on the widget.
-        :type text: str
-        :param parent: The parent widget that contains this widget. Defaults to None.
-        :type parent: QWidget, optional
+        Initializes the checkable button with a fixed size, defaulting it to a checked state.
         """
         super().__init__(text, parent)
         self.setCheckable(True)
@@ -58,14 +38,9 @@ class DraggableButton(QPushButton):
 
     def mouseMoveEvent(self, event):
         """
-        Handle mouse move events to enable drag-and-drop functionality.
-
-        This method is triggered when the mouse is moved while a mouse button is pressed.
-        It initiates a drag-and-drop action if the left mouse button is pressed.
-
-        :param event: The QMouseEvent instance containing event-related data.
-        :type event: QMouseEvent
-        :return: None
+        Handle mouse move events to enable drag-and-drop functionality. This method is triggered
+        when the mouse is moved while a mouse button is pressed and initiates a
+        drag-and-drop action if the left mouse button is pressed.
         """
         if event.buttons() == Qt.LeftButton:
             drag = QDrag(self)
@@ -78,43 +53,23 @@ class DraggableButton(QPushButton):
 
 class CustomHeader(QWidget):
     """
-    Provides a custom header widget with draggable buttons and signal support.
-
-    This class allows creating a custom header for a widget that can include draggable
-    buttons. The button layout can be rearranged dynamically through drag-and-drop
-    interactions. Each button click emits a signal to trigger further actions, and
-    the current order of buttons can be extracted via a defined method.
-
-    :ivar buttonToggled: Signal emitted when a button is toggled.
-    :type buttonToggled: Signal
-    :ivar layout: Layout manager containing the draggable buttons.
-    :type layout: QHBoxLayout
-    :ivar buttons: List of draggable button objects in the header.
-    :type buttons: List[DraggableButton]
+    A custom header widget with draggable buttons and signal support. The button layout
+    can be rearranged dynamically through drag-and-drop interactions. Each button click
+    emits a signal to trigger actions, and the current order of buttons can be extracted.
     """
 
     buttonToggled = Signal()
 
     def __init__(self, parent=None, labels=None):
         """
-        Represents a graphical user interface element that consists of a horizontal layout
-        containing multiple draggable buttons. This class initializes a layout with buttons
-        provided in the labels argument, connects their click events to a toggling method,
-        and sets up the widget to accept drag-and-drop interactions.
+        A horizontal layout containing multiple draggable buttons. The constructor initializes a
+        layout with buttons provided in the labels argument, connects their click events to a
+        toggling method, and sets up the widget to accept drag-and-drop interactions.
 
-        Attributes
-        ----------
-        layout : QHBoxLayout
-            The horizontal layout to manage the arrangement of the draggable buttons.
-        buttons : list
-            A list of DraggableButton objects representing the buttons within the layout.
-
-        Parameters
-        ----------
-        :param parent: Optional parent widget of the graphical component.
-        :type parent: QWidget, optional
-        :param labels: A sequence of strings to label and create the draggable buttons.
-        :type labels: list or sequence of str
+        layout : QHBoxLayout - The horizontal layout to manage the arrangement of the draggable buttons.
+        buttons : list - A list of DraggableButton objects representing the buttons within the layout.
+        parent: Optional parent widget of the graphical component.
+        labels: A sequence of strings to label and create the draggable buttons.
         """
         super().__init__(parent)
         self.layout = QHBoxLayout(self)
@@ -131,26 +86,14 @@ class CustomHeader(QWidget):
     def on_button_toggled(self):
         """
         Emits the `buttonToggled` signal when the button's state is toggled.
-
-        This method is triggered when the button associated with it has its
-        state changed (toggled). It emits a signal called `buttonToggled`,
-        which can be connected to other slots or handlers to execute custom
-        actions when the toggled event occurs.
-
-        :return: None
         """
         self.buttonToggled.emit()
 
     def get_order(self):
         """
-        Retrieves the text values of checked buttons from a collection of buttons.
-
-        This method iterates through a list of buttons, checks which buttons are
+        Method that iterates through a list of buttons, checks which buttons are
         selected, and gathers their textual representations into a list. This list
-        of text values is then returned.
-
-        :return: A list containing the text of all selected buttons.
-        :rtype: list[str]
+        of ordered text values is then returned.
         """
         order = [button.text() for button in self.buttons if button.isChecked()]
         return order
@@ -160,41 +103,25 @@ class CustomHeader(QWidget):
         Handles the drag enter event when a drag operation enters the widget's
         area. This function ensures that the drag operation is accepted if
         the conditions of the event are met.
-
-        :param event: The QDragEnterEvent object that contains information
-            about the drag enter event.
-        :return: None
         """
         event.accept()
 
     def dragMoveEvent(self, event):
         """
         Handles the event triggered when an item is dragged within the widget's boundaries.
-
         This method is a part of the drag-and-drop functionality. The event provided is
         processed to handle cases where a dragged item is moving over the widget, and
         actions are adjusted accordingly to maintain proper drag sequence and behavior.
-
-        :param event: The QDragMoveEvent object containing details about the dragged
-            item's movement, including position and possible actions.
-        :type event: QDragMoveEvent
-        :return: None
         """
         event.accept()
 
     def dropEvent(self, event):
         """
         Handles the drop event for rearranging buttons.
-
         This method is triggered when a drag-and-drop event ends. It validates if the
         source of the event is part of the recognized buttons. If it is, the method
         rearranges the button to the designated position, updates the internal button
         list, and emits a signal indicating the button state has changed.
-
-        :param event: The event object representing the drop action. Carries the source
-            of the event and its position.
-        :type event: QDropEvent
-        :return: None
         """
         source_button = event.source()
         if source_button not in self.buttons:
@@ -210,12 +137,6 @@ class CustomHeader(QWidget):
         and inserting it at a new position based on the provided drop position.
         The method determines the closest button to the drop position and adjusts
         the placement accordingly.
-
-        :param source_button: The button widget to be rearranged.
-        :type source_button: QWidget
-        :param drop_position: The position at which the button should be placed.
-        :type drop_position: QPoint
-        :return: None
         """
         self.layout.removeWidget(source_button)
         closest_button, index = self._find_closest_button(drop_position)
@@ -230,16 +151,9 @@ class CustomHeader(QWidget):
     def _find_closest_button(self, position):
         """
         Finds the closest button to a given position horizontally and returns it along with its index.
-
         This method calculates the horizontal distance between the given position
         and the center of each button. It identifies the button with the minimum
         distance and returns it alongside its index.
-
-        :param position: The position against which the closest button is calculated.
-                         It is expected to have an `x()` method for retrieving the x-coordinate.
-        :type position: Any object that has an `x()` method
-        :return: A tuple containing the closest button object and its index in the buttons list.
-        :rtype: tuple
         """
         closest_button = None
         min_distance = float("inf")
@@ -258,17 +172,9 @@ class CustomHeader(QWidget):
         """
         Determines whether a button should be inserted after a given position
         based on the button's geometry and the provided position's x-coordinate.
-
         This private method compares the x-coordinate of the given position to the
         center point of the button's geometry and returns True if the position is
         on the right side of the button.
-
-        :param button: The button whose position is being compared.
-        :type button: QWidget
-        :param position: The position to compare against the button's geometry.
-        :type position: QPoint
-        :return: True if the position is to the right of the button's center, otherwise False.
-        :rtype: bool
         """
         return position.x() > button.geometry().left() + button.geometry().width() / 2
 
@@ -277,9 +183,6 @@ class CustomHeader(QWidget):
         Updates the list of buttons by iterating through the items in the layout, checking
         if each item is a widget of type DraggableButton, and storing matching widgets
         in the 'buttons' attribute.
-
-        :raises AttributeError: If 'layout' or 'itemAt' is not properly defined on the class,
-            an AttributeError may be raised during execution.
         """
         self.buttons = [
             widget
@@ -290,19 +193,15 @@ class CustomHeader(QWidget):
 
 class CustomTreeWidget(QTreeWidget):
     """
-    Represents a customized tree widget with advanced operations such as
-    managing items, check states, and property-based behaviors.
-
-    CustomTreeWidget facilitates the organization and interaction with a hierarchical
-    data structure. It integrates additional features like custom headers, context
-    menu functionality, item-specific widgets, and selection preservation for more
-    comprehensive user interactions. The widget also supports advanced customization
-    via properties tied to hierarchical elements.
+    A customized tree widget with advanced operations and a hierarchical data structure.
+    It integrates additional features like custom draggable headers, context menu functions,
+    multi-level checkboxes, and selection preservation. The widget also supports advanced customization
+    via parameters passed at instantiation.
     """
 
     def __init__(
         self,
-        parent=None,  # parent is the parent in Qt, so the QtWidget where this tree is included
+        parent=None,
         view=None,
         collection=None,
         tree_labels=None,
@@ -312,32 +211,16 @@ class CustomTreeWidget(QTreeWidget):
         default_labels=None,
     ):
         """
-        Initializes an advanced QTreeWidget subclass and configures its settings
-        and data population using provided parameters. This class is designed to
-        manage hierarchical data with customizable headers, context menus,
-        selection options, and property mappings.
+        Initializes CustomTreeWidget with the following parameters:
 
-        :param parent: Parent widget that owns this tree widget.
-        :type parent: QWidget, optional
-        :param collection.df: Dataframe containing hierarchical collection data
-            to populate the tree structure.
-        :type collection.df: pandas.DataFrame, optional
-        :param tree_labels: List of labels for the tree's header columns.
-        :type tree_labels: list of str, optional
-        :param name_label: Label representing the name column.
-        :type name_label: str, optional
-        :param uid_label: Label representing a unique identifier for tree nodes.
-        :type uid_label: str, optional
-        :param prop_label: Label representing additional property fields.
-        :type prop_label: str, optional
-        :param default_labels: Initial list of default labels to be used if required.
-        :type default_labels: list of str, optional
-
-        :raises ValueError: Raised internally if incorrect arguments or unexpected
-            parameters are passed during instantiation. Does not describe specific
-            triggers since the behavior depends on implementation logic in the
-            methods utilizing the parameters.
-
+        parent: the parent in Qt, so the QtWidget where this tree is included.
+        view: the parent view = the parent in the sense of the main application.
+        collection.df: Dataframe containing hierarchical collection data to populate the tree.
+        tree_labels: List of labels for the tree's header columns.
+        name_label: Label representing the name column.
+        uid_label: Label representing a unique identifier for tree nodes.
+        prop_label: Label representing additional property fields to be used in combo boxes.
+        default_labels: Initial list of default labels.
         """
         super().__init__()
         self.parent = parent
@@ -400,16 +283,8 @@ class CustomTreeWidget(QTreeWidget):
 
     def preserve_selection(func):
         """
-        Decorator that preserves the current selection of items in a collection
-        while executing the decorated function. After the function execution,
-        the original selection is restored. This is particularly useful in cases
-        when the function manipulates the collection and might otherwise alter
-        the selection unintentionally.
-
-        :param func: The function to be wrapped by the decorator.
-        :type func: Callable
-        :return: The wrapped function that restores the current selection after execution.
-        :rtype: Callable
+        Decorator that preserves the current selection of items while executing the decorated
+        function. After the function execution, the original selection is restored.
         """
 
         @wraps(func)
@@ -426,12 +301,7 @@ class CustomTreeWidget(QTreeWidget):
         Restores the previously saved selection of items in the widget based on their unique identifiers.
         This method clears any existing selection in the widget, selects the items matching the provided
         UIDs, and updates the parent's collection of selected UIDs. During this process, widget signals
-        are temporarily blocked to avoid triggering unwanted behaviors.
-
-        :param uids_to_select: A list of unique identifiers (UIDs) representing the items to be selected in
-            the widget. If list is empty or None, no changes are made.
-        :type uids_to_select: list[str]
-        :return: None
+        are temporarily blocked to avoid triggering unwanted loops.
         """
         if not uids_to_select:
             return
@@ -442,13 +312,13 @@ class CustomTreeWidget(QTreeWidget):
         # Clear current selection
         self.clearSelection()
 
-        # Find all items matching our UIDs and select them
+        # Find all items matching previously selected UIDs and select them
         for item in self.findItems("", Qt.MatchContains | Qt.MatchRecursive):
             uid = self.get_item_uid(item)
             if uid and uid in uids_to_select:
                 item.setSelected(True)
 
-        # Restore our selection list
+        # Restore selection list
         self.collection.selected_uids = uids_to_select.copy()
 
         # Unblock signals
@@ -456,16 +326,11 @@ class CustomTreeWidget(QTreeWidget):
 
     def populate_tree(self):
         """
-        Populates a tree widget with hierarchical data and correctly configures each item
+        (Re-)Populates the tree widget with hierarchical data and configures each item
         with checkboxes and combo boxes. This function retains the state of the combo boxes
         from previous iterations, clears and resets the tree, and updates the widget hierarchy
         based on a defined order. It also ensures the synchronization of checkbox states with
-        the external data source for a consistent and dynamic interface.
-
-        :raises TypeError: If accessing non-existent columns in the dataframes.
-        :raises AttributeError: If parent or header_widget attributes are not correctly set.
-        :param self: The instance of the class containing the method.
-        :return: None
+        the external data source.
         """
         # Save current combo values before clearing the tree
         if self.invisibleRootItem().childCount() > 0:
@@ -552,9 +417,8 @@ class CustomTreeWidget(QTreeWidget):
         states of tree items. This method saves the current states of selected and checked
         items, repopulates the tree hierarchy, and restores item states, while maintaining
         the synchronization with the parent collection.
-
-        :param self: Instance of the class to operate on.
         """
+
         # Store the current selection and checkbox states before repopulating
         saved_selected = self.collection.selected_uids.copy()
         saved_checked = self.checked_uids.copy()
@@ -608,25 +472,13 @@ class CustomTreeWidget(QTreeWidget):
     @preserve_selection
     def add_items_to_tree(self, uids_to_add):
         """
-        Adds the specified items to the tree view, creating necessary hierarchical
+        Adds the specified items to the tree view, updating the hierarchical
         structure dynamically based on the defined order. This method either adds new
         items into the current tree or rebuilds the entire tree depending on the number
         of items to add with respect to the total number of items. It initializes the
         checkbox state and additional properties for each new item, including setting
         up the QComboBox for custom labeling. Parent items in the tree are expanded
         after the addition of new child nodes.
-
-        This method ensures hierarchical relationships are preserved and properly
-        rendered in the tree view. It also attempts to restore previously stored UI
-        states such as combo box selection and checked states for tree nodes.
-
-        :param uids_to_add: List of unique identifiers to add to the tree view.
-                           The items represented by these UIDs must already exist in
-                           `collection.df`.
-        :type uids_to_add: list
-        :return: Boolean indicating whether the items were added successfully
-                 (True) or if the tree was rebuilt entirely (False).
-        :rtype: bool
         """
         # If adding more than 20% of total items, rebuild entire tree
         total_items = len(self.collection.df)
@@ -708,19 +560,14 @@ class CustomTreeWidget(QTreeWidget):
     @preserve_selection
     def remove_items_from_tree(self, uids_to_remove):
         """
-        Removes specified items from a tree structure and updates the state of the tree.
-        This function handles the removal of items identified by their unique IDs from
-        both a tree widget and an associated dataframe. If the specified number of items
-        to be removed exceeds 20% of the total collection, it triggers a full rebuild of
-        the tree structure. Otherwise, items are removed individually, handling any
-        associated UI elements and maintaining data consistency.
+        Removes specified items from the tree structure and updates the state of the tree.
 
-        :param uids_to_remove: List of unique IDs to be removed from the tree and dataframe.
-        :type uids_to_remove: list
+        This function handles the removal of items identified by their unique IDs from ============================
+        both a tree widget and an associated dataframe. ===========================================================
 
-        :return: A boolean indicating whether the tree structure was only updated
-                 (`True`) or fully rebuilt (`False`).
-        :rtype: bool
+        If the specified number of items to be removed exceeds 20% of the total collection,
+        it triggers a full rebuild of the tree structure. Otherwise, items are removed individually,
+        handling any associated UI elements and maintaining data consistency.
         """
         # If removing more than 20% of total items, rebuild entire tree
         total_items = len(self.collection.df)
@@ -782,13 +629,6 @@ class CustomTreeWidget(QTreeWidget):
         Searches for a child item with the given text under the provided parent. If the child item does
         not exist, creates a new one with the specified text, assigns necessary flags, sets its initial
         state to unchecked, adds it to the parent, and then returns the item.
-
-        :param parent: The parent item under which the search or creation of the child item is performed.
-        :type parent: QTreeWidgetItem
-        :param text: The text used to search for an existing child or to assign to a new child item.
-        :type text: str
-        :return: The existing or newly created child item.
-        :rtype: QTreeWidgetItem
         """
         for i in range(parent.childCount()):
             if parent.child(i).text(0) == text:
@@ -805,10 +645,6 @@ class CustomTreeWidget(QTreeWidget):
         blocks signals to prevent triggering multiple selection signals during the process.
         All current selections are cleared, and items with a matching UID from the provided
         list are selected.
-
-        :param uids: A list of unique identifiers (UIDs) to select items for.
-        :type uids: list
-        :return: None
         """
         # Block signals temporarily to prevent multiple selection signals
         self.blockSignals(True)
@@ -826,7 +662,7 @@ class CustomTreeWidget(QTreeWidget):
         self.blockSignals(False)
 
         # Emit selection changed signal
-        self.emit_selection_changed()
+        self.emit_selection_changed()  # ============================================================================
 
     def emit_selection_changed(self):
         """
@@ -837,11 +673,6 @@ class CustomTreeWidget(QTreeWidget):
         UIDs in the parent collection and repopulates it based on the currently selected
         items. After updating the internal state, it emits a signal to notify observers
         about the updated selection.
-
-        :raises AttributeError: If any of the required objects or attributes in the
-            parent or collection hierarchy are missing.
-        :raises TypeError: If the operation involves invalid types, such as incorrect
-            item UID retrieval or list modification.
         """
         # Clear the current selection list
         self.collection.selected_uids = []
@@ -853,23 +684,15 @@ class CustomTreeWidget(QTreeWidget):
                 self.collection.selected_uids.append(uid)
 
         # Emit signal
-        self.collection.signals.itemsSelected.emit(self.collection.collection_name)
+        self.collection.signals.itemsSelected.emit(
+            self.collection.collection_name
+        )  # ===============================
 
     def update_child_check_states(self, item, check_state):
         """
-        Recursively updates the check state of child items in a hierarchical structure.
-
-        This method iterates through all children of the given `item` and sets their
-        check states to the specified `check_state`. It ensures that all nested child
-        items have their check state updated as well by calling itself recursively.
-
-        :param item: The parent node whose children will have their check states updated.
-        :type item: QStandardItem
-        :param check_state: The new check state to set for all child items. It must be
-            a value corresponding to the Qt.CheckState enumeration (e.g., Qt.Checked,
-            Qt.Unchecked, or Qt.PartiallyChecked).
-        :type check_state: Qt.CheckState
-        :return: None
+        Recursively updates the check state of child items in the hierarchical structure. This method
+        iterates through all children of `item` and sets their check states to the specified `check_state`.
+        It ensures that all nested child items have their check state updated by calling itself recursively.
         """
         for i in range(item.childCount()):
             child = item.child(i)
@@ -881,10 +704,6 @@ class CustomTreeWidget(QTreeWidget):
         Updates the check state of the parent item in a tree structure based on the check
         states of its child items. This method recursively evaluates the state of parent
         items up the tree structure until the root.
-
-        :param item: The current item whose parent's check state needs to be updated.
-        :type item: QTreeWidgetItem
-        :return: None
         """
         parent = item.parent()
         if parent:
@@ -902,14 +721,9 @@ class CustomTreeWidget(QTreeWidget):
 
     def update_all_parent_check_states(self):
         """
-        Updates the check states of all parent items in the tree.
-
-        This method traverses through all the items in the tree in reverse order,
-        updating the check states of their respective parent items based on the
-        check states of their children. It ensures consistency in check states
-        throughout the tree hierarchy.
-
-        :return: None
+        Updates the check states of all parent items in the tree. This method traverses through all
+        the items in the tree in reverse order, updating the check states of their respective
+        parent items based on the check states of their children.
         """
         all_items = self.findItems("", Qt.MatchContains | Qt.MatchRecursive)
         for item in reversed(all_items):
@@ -923,21 +737,7 @@ class CustomTreeWidget(QTreeWidget):
         about the changes. This function processes all items in the tree widget, compares
         their checkbox state with the corresponding `show` state in the actors DataFrame,
         updates the DataFrame accordingly, and emits a signal with lists of unique
-        identifiers (UIDs) for items that were turned on or off.
-
-        :raises TypeError: Raised if the item's UID cannot be determined.
-
-        :raises KeyError: Raised if the required columns `uid` or `show` are missing from
-            the actors DataFrame.
-
-        :param turn_on_uids: A list of UIDs corresponding to items whose checkboxes are
-            toggled to the checked state.
-
-        :param turn_off_uids: A list of UIDs corresponding to items whose checkboxes are
-            toggled to the unchecked state.
-
-        :rtype: None
-        :return: None
+        identifiers (UIDs) for items that were turned on or off.  ===================================================
         """
         # Update the checked state in actors_df based on the current tree state
         turn_on_uids = []
@@ -959,7 +759,6 @@ class CustomTreeWidget(QTreeWidget):
                     ].iloc[0]
                     == True
                 )
-                # self.view.print_terminal("uid: " + str(uid) +" is_checked: " +str(is_checked) +" is_shown: " + str(is_shown) + " is_checked: " + str(type(is_checked)) + " is_shown: " + str(type(is_shown)))
                 if is_checked != is_shown:
                     self.view.actors_df.loc[
                         self.view.actors_df["uid"] == uid, "show"
@@ -976,7 +775,6 @@ class CustomTreeWidget(QTreeWidget):
     @preserve_selection
     def on_checkbox_changed(self, item, column):
         """Handle checkbox state changes."""
-        # is this "if" working???
         if column != 0 or item.checkState(0) == Qt.PartiallyChecked:
             return
 
@@ -989,21 +787,10 @@ class CustomTreeWidget(QTreeWidget):
 
     def create_property_combo(self, row, uid):
         """
-        Creates a QComboBox with items from the given `row` data and sets the
-        current index based on the `uid`.
-
-        This method initializes a QComboBox instance, populates it with items from a data source,
+        Creates a QComboBox with items from the given `row` data and sets the current index
+        based on the `uid`. This method initializes a QComboBox instance, populates it,
         and optionally selects a predefined item if it matches the provided unique identifier
-        (`uid`) in `combo_values`. It ensures that the correct selection is pre-loaded if there
-        is an existing binding between the `uid` and a combo value.
-
-        :param row: The data source for the combobox items. Expected to contain a key
-            corresponding to `self.prop_label` with a list of items.
-        :type row: dict
-        :param uid: The unique identifier used to set a default combo box value, if applicable.
-        :return: A QComboBox initialized with items from `row` and, if applicable,
-            preselected based on `uid`'s corresponding value in `self.combo_values`.
-        :rtype: QComboBox
+        (`uid`) in `combo_values`.
         """
         property_combo = QComboBox()
         property_combo.addItems(row[self.prop_label])
@@ -1020,10 +807,6 @@ class CustomTreeWidget(QTreeWidget):
         """
         Updates the combo box value and handles property toggling for the associated item
         while maintaining the state of the current selection.
-
-        :param item: The item associated with the combo box.
-        :param prop_text: The new value to set for the combo box.
-        :return: None
         """
         # Update the stored combo value
         uid = self.get_item_uid(item)
@@ -1041,7 +824,6 @@ class CustomTreeWidget(QTreeWidget):
         """
         Provides functionality to toggle the states of checkboxes for selected
         items through a context menu initiated at a given position.
-
         This method displays a context menu at the specified position, allowing
         the user to toggle the checkbox states of the selected items in the view.
         When the "Toggle Checkboxes" option is chosen, the method checks the state
@@ -1049,12 +831,6 @@ class CustomTreeWidget(QTreeWidget):
         (either checked or unchecked). Additionally, it updates the state of
         child and parent checkboxes for the affected items to maintain consistency.
         A signal indicating that a checkbox has been toggled is then emitted.
-
-        :param position: The position at which the context menu will appear.
-                         The position should be defined in coordinates relative
-                         to the view.
-        :type position: QPoint
-        :return: None
         """
         menu = QMenu()
         toggle_action = menu.addAction("Toggle Checkboxes")
@@ -1072,26 +848,15 @@ class CustomTreeWidget(QTreeWidget):
     def resize_columns(self):
         """
         Adjusts the width of all columns in a table to fit the content within each column. It iterates over
-        all columns of the table and resizes them based on their content. This method is typically useful
-        to ensure that the columns are appropriately sized and no extra space is wasted.
-
-        :return: None
+        all columns of the table and resizes them based on their content.
         """
         for i in range(self.columnCount()):
             self.resizeColumnToContents(i)
 
     def update_properties_for_uids(self, uids, properties_list):
         """
-        Updates properties for the provided UIDs by manipulating UI components like combo boxes
-        and updating corresponding data structures or dataframes. This method temporarily blocks
-        signals to avoid unnecessary updates during the operation.
-
-        :param uids:
-            List of unique identifiers (UIDs) to identify the target items to update.
-        :param properties_list:
-            List of property values to be applied to the identified items.
-        :return:
-            None
+        Updates properties for the provided UIDs by manipulating combo boxes and updating corresponding
+        dataframes. This method temporarily blocks signals to avoid unnecessary updates during the operation.
         """
         # Block signals temporarily to prevent unnecessary updates
         self.blockSignals(True)
@@ -1129,12 +894,12 @@ class CustomTreeWidget(QTreeWidget):
                                 self.view.actors_df["uid"] == uid, "show_property"
                             ] = combo.itemText(0)
 
-                        # Emit property changed signal
+                        # Emit property changed signal  ===============================================================
                         self.view.signals.propertyToggled.emit(
                             self.collection.collection_name, uid, combo.itemText(0)
                         )
 
-        # Update the collection.df to reflect the new properties
+        # Update the collection.df to reflect the new properties  =====================================================
         for uid in uids:
             mask = self.collection.df[self.uid_label] == uid
             self.collection.df.loc[mask, self.prop_label] = properties_list
@@ -1145,30 +910,12 @@ class CustomTreeWidget(QTreeWidget):
     def get_item_uid(self, item):
         """
         Retrieves the unique identifier (UID) of a given item.
-
-        This function extracts the UID from the provided item's data stored
-        under a specific role identifier, `Qt.UserRole`.
-
-        :param item: The item from which the UID will be extracted.
-                     Expected to be an instance of a class compatible with
-                     the `data` method, such as a `QTreeWidgetItem`.
-        :type item: Any
-
-        :return: The unique identifier (UID) extracted from the item's
-                 data stored under the `Qt.UserRole`.
-        :rtype: Any
         """
         return item.data(0, Qt.UserRole)
 
     def _recursive_cleanup(self, item):
         """
         Recursively cleans up the provided item and its children in a tree-like structure.
-        This involves iterating through all children of the given item, cleaning up child
-        widgets, and removing them properly to ensure no memory leaks or dangling references.
-
-        :param item: The root item to be cleaned up recursively. The function will process
-                     this item and all its child nodes.
-        :type item: Any
         """
         for i in range(item.childCount()):
             child = item.child(i)
@@ -1183,12 +930,6 @@ class CustomTreeWidget(QTreeWidget):
     def _cleanup_tree_widgets(self):
         """
         Recursively cleans up tree widgets by accessing the root and its child items.
-
-        This method starts at the invisible root item of a tree widget structure and
-        performs cleanup operations recursively on all its child items using an
-        internal helper method.
-
-        :return: None
         """
         root = self.invisibleRootItem()
         for i in range(root.childCount()):
@@ -1199,10 +940,6 @@ class CustomTreeWidget(QTreeWidget):
         """
         Removes empty parent items from a tree structure. This method is used to clean up
         the hierarchy by removing items that have no children.
-
-        :param item: The starting item to begin cleanup process. May be a top-level or
-                     child item.
-        :return: None
         """
         if not item:
             return
