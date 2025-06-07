@@ -272,7 +272,7 @@ class CustomTreeWidget(QTreeWidget):
                 else None
             )
         )
-        self.itemSelectionChanged.connect(self.emit_selection_changed)
+        # self.itemSelectionChanged.connect(self.emit_selection_changed)  # really necessary ?? =======================
         # Import initial selection state if parent and collection exist
         if hasattr(self.collection, "selected_uids"):
             self.restore_selection(self.collection.selected_uids)
@@ -562,8 +562,8 @@ class CustomTreeWidget(QTreeWidget):
         """
         Removes specified items from the tree structure and updates the state of the tree.
 
-        This function handles the removal of items identified by their unique IDs from ============================
-        both a tree widget and an associated dataframe. ===========================================================
+        This function handles the removal of items identified by their unique IDs from
+        both a tree widget and an associated dataframe.
 
         If the specified number of items to be removed exceeds 20% of the total collection,
         it triggers a full rebuild of the tree structure. Otherwise, items are removed individually,
@@ -572,12 +572,11 @@ class CustomTreeWidget(QTreeWidget):
         # If removing more than 20% of total items, rebuild entire tree
         total_items = len(self.collection.df)
         if len(uids_to_remove) > total_items * 0.2:
-            # Remove items from collection.df
-            self.collection.df = self.collection.df[
-                ~self.collection.df[self.uid_label].isin(uids_to_remove)
-            ]
+            # # Remove items from collection.df  ======================================================================
+            # self.collection.df = self.collection.df[
+            #     ~self.collection.df[self.uid_label].isin(uids_to_remove)
+            # ]
             self.populate_tree()
-            return False
 
         # Remove items one by one
         for uid in uids_to_remove:
@@ -614,15 +613,12 @@ class CustomTreeWidget(QTreeWidget):
                 # Clean up empty parents recursively
                 self._cleanup_empty_parents(parent)
 
-        # Remove items from collection.df
-        self.collection.df = self.collection.df[
-            ~self.collection.df[self.uid_label].isin(uids_to_remove)
-        ]
+        # # Remove items from collection.df  ==========================================================================
+        # self.collection.df = self.collection.df[~self.collection.df[self.uid_label].isin(uids_to_remove)]
 
         # Update parent checkbox states and resize columns
         self.update_all_parent_check_states()
         self.resize_columns()
-        return True
 
     def get_or_create_item(self, parent, text):
         """
@@ -639,12 +635,12 @@ class CustomTreeWidget(QTreeWidget):
         parent.addChild(item)
         return item
 
-    def set_selection_from_uids(self, uids):
+    def set_selection_from_collection(self):
         """
-        Sets the selection of items based on their unique identifiers (UIDs). It temporarily
-        blocks signals to prevent triggering multiple selection signals during the process.
-        All current selections are cleared, and items with a matching UID from the provided
-        list are selected.
+        To be called from the main application, sets the selection of items in the tree
+        from self.collection.selected_uids. It temporarily blocks signals to prevent triggering
+        multiple selection signals during the process.  All current selections
+        are cleared, and items with a matching UID from the provided list are selected.
         """
         # Block signals temporarily to prevent multiple selection signals
         self.blockSignals(True)
@@ -655,20 +651,20 @@ class CustomTreeWidget(QTreeWidget):
         # Find and select items with matching UIDs
         for item in self.findItems("", Qt.MatchContains | Qt.MatchRecursive):
             uid = self.get_item_uid(item)
-            if uid in uids:
+            if uid in self.collection.selected_uids:
                 item.setSelected(True)
 
         # Unblock signals
         self.blockSignals(False)
 
-        # Emit selection changed signal
-        self.emit_selection_changed()  # ============================================================================
+        # # Emit selection changed signal
+        # self.emit_selection_changed()  # ============================================================================
 
     def emit_selection_changed(self):
         """
-        Clear the current selection, update it with the UIDs of selected items, and emit
-        a signal to indicate that the selection has changed.
-
+        To be used when selecting items from the tree towards the main application, it clears the current
+        selection, update it with the UIDs of selected items, and emits a signal to indicate that
+        the selection has changed.
         The method resets the internal selection state by clearing the list of selected
         UIDs in the parent collection and repopulates it based on the currently selected
         items. After updating the internal state, it emits a signal to notify observers
@@ -684,9 +680,7 @@ class CustomTreeWidget(QTreeWidget):
                 self.collection.selected_uids.append(uid)
 
         # Emit signal
-        self.collection.signals.itemsSelected.emit(
-            self.collection.collection_name
-        )  # ===============================
+        self.collection.signals.itemsSelected.emit(self.collection.collection_name)
 
     def update_child_check_states(self, item, check_state):
         """
@@ -732,12 +726,13 @@ class CustomTreeWidget(QTreeWidget):
 
     def emit_checkbox_toggled(self):
         """
+        To be used when checking/unchecking, to send the new state to the main application.
         Updates the checked state of items in the actors DataFrame based on the current
         state of checkboxes in the tree widget and emits a signal to notify listeners
         about the changes. This function processes all items in the tree widget, compares
         their checkbox state with the corresponding `show` state in the actors DataFrame,
         updates the DataFrame accordingly, and emits a signal with lists of unique
-        identifiers (UIDs) for items that were turned on or off.  ===================================================
+        identifiers (UIDs) for items that were turned on or off.
         """
         # Update the checked state in actors_df based on the current tree state
         turn_on_uids = []
@@ -805,6 +800,7 @@ class CustomTreeWidget(QTreeWidget):
     @preserve_selection
     def on_combo_changed(self, item, prop_text):
         """
+        To be used to send the new combo state to the main application.
         Updates the combo box value and handles property toggling for the associated item
         while maintaining the state of the current selection.
         """
@@ -899,10 +895,10 @@ class CustomTreeWidget(QTreeWidget):
                             self.collection.collection_name, uid, combo.itemText(0)
                         )
 
-        # Update the collection.df to reflect the new properties  =====================================================
-        for uid in uids:
-            mask = self.collection.df[self.uid_label] == uid
-            self.collection.df.loc[mask, self.prop_label] = properties_list
+        # # Update the collection.df to reflect the new properties  ===================================================
+        # for uid in uids:
+        #     mask = self.collection.df[self.uid_label] == uid
+        #     self.collection.df.loc[mask, self.prop_label] = properties_list
 
         # Unblock signals
         self.blockSignals(False)
