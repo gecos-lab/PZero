@@ -1312,7 +1312,11 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                 ),
             )
             eval(f"self.{tree_name}").setObjectName(tree_name)
+            eval(f"self.{layout_name}").addWidget(
+                eval(f"self.{tree_name}.header_widget")
+            )
             eval(f"self.{layout_name}").addWidget(eval(f"self.{tree_name}"))
+            eval(f"self.{layout_name}.setContentsMargins(0,0,0,0)")
             # print("coll_from_tree: ", tree_name, " -> ", self.coll_from_tree(tree=tree_name))
             # print("tree_from_coll: ", coll_name, " -> ", self.tree_from_coll(coll=coll_name))
             # print("coll_from_tree: ", tree_name, " -> ", self.coll_from_tree(tree=eval(f"self.{tree_name}")))

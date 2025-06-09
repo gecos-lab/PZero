@@ -265,6 +265,7 @@ class CustomTreeWidget(QTreeWidget):
         self.header().hide()
         self.itemExpanded.connect(self.resize_columns)
         self.itemCollapsed.connect(self.resize_columns)
+        # self.checked_uids must be updated when an item is checked/unchecked and self.itemChanged emitted ============
         self.itemChanged.connect(
             lambda item, column: (
                 self.on_checkbox_changed(item, column)
@@ -422,6 +423,7 @@ class CustomTreeWidget(QTreeWidget):
         # Store the current selection and checkbox states before repopulating
         saved_selected = self.collection.selected_uids.copy()
         saved_checked = self.checked_uids.copy()
+        print("saved_checked: ", saved_checked)
 
         # Save any additional checkboxes that might not be in self.checked_uids yet
         if self.invisibleRootItem().childCount() > 0:
