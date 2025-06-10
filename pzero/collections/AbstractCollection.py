@@ -425,6 +425,22 @@ class BaseCollection(ABC):
             - (set(self.df.query(query)["uid"].tolist()) - set(uids))
         )
 
+    def select_all(self):
+        """Select all entities in the collection."""
+        self.selected_uids = self.get_uids
+
+    def deselect_all(self):
+        """Deselect all entities in the collection."""
+        self.selected_uids = []
+
+    def select_uids(self, uids: list = None):
+        """Select entities by uid list."""
+        self.selected_uids = uids
+
+    def deselect_uids(self, uids: list = None):
+        """Deselect entities by uid list."""
+        self.selected_uids = list(set(self.selected_uids) - set(uids))
+
     # =================== Common QT methods slightly adapted to the data source ====================================
 
 
