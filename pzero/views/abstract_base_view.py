@@ -1344,6 +1344,22 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             print("Error in tree_from_coll")
             return None
 
+    def show_all(self):
+        """Show all actors."""
+        self.actors_df["show"] = True
+
+    def hide_all(self):
+        """Hide all actors."""
+        self.actors_df["show"] = False
+
+    def show_uids(self, uids: list = None):
+        """Show actors with the given uids."""
+        self.actors_df.loc[uids, "show"] = True
+
+    def hide_uids(self, uids: list = None):
+        """Hide actors with the given uids."""
+        self.actors_df.loc[uids, "show"] = False
+
     def entities_added_update_views(
         self, collection=None, tree=None, updated_uids=None
     ):
