@@ -1344,22 +1344,6 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             print("Error in tree_from_coll")
             return None
 
-    def show_all(self):
-        """Show all actors."""
-        self.actors_df["show"] = True
-
-    def hide_all(self):
-        """Hide all actors."""
-        self.actors_df["show"] = False
-
-    def show_uids(self, uids: list = None):
-        """Show actors with the given uids."""
-        self.actors_df.loc[uids, "show"] = True
-
-    def hide_uids(self, uids: list = None):
-        """Hide actors with the given uids."""
-        self.actors_df.loc[uids, "show"] = False
-
     def entities_added_update_views(
         self, collection=None, tree=None, updated_uids=None
     ):
@@ -1576,20 +1560,51 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                 visible=show,
             )
 
+    def show_all(self):
+        """Show all actors."""
+        for uid in self.actors_df["uid"].to_list():
+            print(f"showing uid: {uid}")
+            if not self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]:
+                self.set_actor_visible(uid=uid, visible=True)
+                print(f"hidden uid: {uid}")
+        self.actors_df["show"] = True
+        print("all uids shown")
+
+    def hide_all(self):
+        """Hide all actors."""
+        for uid in self.actors_df["uid"].to_list():
+            print(f"hiding uid: {uid}")
+            if self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]:
+                self.set_actor_visible(uid=uid, visible=False)
+                print(f"hidden uid: {uid}")
+        self.actors_df["show"] = False
+        print("all uids hidden")
+
+    def show_uids(self, uids: list = None):
+        """Show actors with the given uids."""
+        for uid in uids:
+            print(f"showing uid: {uid}")
+            print(self.actors_df)
+            if not self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]:
+                self.set_actor_visible(uid=uid, visible=True)
+                self.actors_df.loc[self.actors_df["uid"] == uid, "show"] = True
+                print(f"shown uid: {uid}")
+
+    def hide_uids(self, uids: list = None):
+        """Hide actors with the given uids."""
+        for uid in uids:
+            print(f"hiding uid: {uid}")
+            print(self.actors_df)
+            if self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]:
+                self.set_actor_visible(uid=uid, visible=False)
+                self.actors_df.loc[self.actors_df["uid"] == uid, "show"] = False
+                print(f"hidden uid: {uid}")
+
     def toggle_visibility(
         self, collection_name=None, turn_on_uids=None, turn_off_uids=None
     ):
-        # self.print_terminal("Toggling visibility - on uids: " + str(turn_on_uids) + " - off uids: " + str(turn_off_uids))
-        # if turn_on_uids:
-        for uid in turn_on_uids:
-            # if (self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0] == False):
-            # self.print_terminal("on: " + str(self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]))
-            self.set_actor_visible(uid=uid, visible=True)
-        # if turn_off_uids:
-        for uid in turn_off_uids:
-            # if (self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0] == True):
-            # self.print_terminal("off: " + str(self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]))
-            self.set_actor_visible(uid=uid, visible=False)
+        self.show_uids(turn_on_uids)
+        self.hide_uids(turn_off_uids)
 
     def toggle_property(self, collection_name=None, uid=None, prop_text=None):
         """Generic method to toggle the property shown by an actor that is already present in the view."""
