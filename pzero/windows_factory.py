@@ -3042,7 +3042,7 @@ class ViewMap(View2D):
 
     def initialize_menu_tools(self):
         from pzero.collections.xsection_collection import section_from_azimuth
-        from pzero.collections.boundary_collection import boundary_from_points
+        from pzero.collections.boundary_collection import boundary_from_points, boundary_from_pca
 
         #Imports for this view.
         #Customize menus and tools for this view
@@ -3054,6 +3054,10 @@ class ViewMap(View2D):
         self.boundaryFromPointsButton = QAction("Boundary from 2 points", self)
         self.boundaryFromPointsButton.triggered.connect(lambda: self.vector_by_mouse(boundary_from_points))
         self.menuCreate.addAction(self.boundaryFromPointsButton)
+
+        self.boundaryFromPCAButton = QAction("Boundary from PCA", self)
+        self.boundaryFromPCAButton.triggered.connect(lambda: boundary_from_pca(self))
+        self.menuCreate.addAction(self.boundaryFromPCAButton)
 
     def show_actor_with_property(
             self, uid=None,
