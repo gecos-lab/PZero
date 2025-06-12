@@ -232,11 +232,11 @@ class CustomTreeWidget(QTreeWidget):
         self.prop_label = prop_label
         self.default_labels = default_labels
         self.uid_label = uid_label
-        # ================== self.checked_uids -> self.view.actors.df =================================================
-        # self.checked_uids = []
-        # ---------------------- self.combo_values ->  self.view.actors.df --------------------------------------------
-        self.combo_values = {}
-        self.blockSignals(False)
+
+        # # is this needed?
+        # print(f'self: {self} - self.signalsBlocked(): {self.signalsBlocked()}')
+        # self.blockSignals(False)
+
         # one column for the tree hierarchy, one for name and one for properties
         self.setColumnCount(3)
         self.header_labels = ["Tree", name_label]  # not shown
@@ -251,28 +251,12 @@ class CustomTreeWidget(QTreeWidget):
         # populate the tree with view entities
         self.populate_tree()
 
-        # # Import initial property states from actors_df
-        # # if self.view and hasattr(self.view, "actors_df"):
-        # for item in self.findItems("", Qt.MatchContains | Qt.MatchRecursive):
-        #     uid = self.get_item_uid(item)
-        #     if uid:
-        #         combo = self.itemWidget(item, self.columnCount() - 1)
-        #         if combo:
-        #             # Get the show_property value for this uid from actors_df
-        #             property_value = self.view.actors_df.loc[
-        #                 self.view.actors_df["uid"] == uid, "show_property"
-        #             ].iloc[0]
-        #             # Find and set the index in the combo box
-        #             index = combo.findText(property_value)
-        #             if index >= 0:
-        #                 combo.setCurrentIndex(index)
-        #                 # Update the stored combo value
-        #                 self.combo_values[uid] = property_value
-
+        # connect signals
         self.setContextMenuPolicy(Qt.CustomContextMenu)
         self.customContextMenuRequested.connect(self.toggle_with_menu)
         self.itemExpanded.connect(self.resize_columns)
         self.itemCollapsed.connect(self.resize_columns)
+
         # self.view.actors.df must be updated when an item is checked/unchecked and self.itemChanged emitted ============
         self.itemChanged.connect(
             lambda item, column: (
@@ -281,7 +265,10 @@ class CustomTreeWidget(QTreeWidget):
                 else None
             )
         )
-        # self.itemSelectionChanged.connect(self.emit_selection_changed)  # really necessary ?? =======================
+
+        # # probably not necessary
+        # self.itemSelectionChanged.connect(self.emit_selection_changed)
+
         # Import initial selection state if parent and collection exist
         if hasattr(self.collection, "selected_uids"):
             self.restore_selection(self.collection.selected_uids)
@@ -295,8 +282,6 @@ class CustomTreeWidget(QTreeWidget):
         Decorator that preserves the current selection of items while executing the decorated
         function. After the function execution, the original selection is restored.
         """
-
-        # =============================================================================================================
 
         @wraps(func)
         def wrapper(self, *args, **kwargs):
@@ -347,26 +332,11 @@ class CustomTreeWidget(QTreeWidget):
         based on a defined order. It also ensures the synchronization of checkbox states with
         the external data source.
         """
-        # Save current combo values before clearing the tree
-        # this should be the same as shown properties =================================================================
-        if self.invisibleRootItem().childCount() > 0:
-            for item in self.findItems("", Qt.MatchContains | Qt.MatchRecursive):
-                uid = self.get_item_uid(item)
-                if uid:
-                    combo = self.itemWidget(item, self.columnCount() - 1)
-                    if combo:
-                        self.combo_values[uid] = (
-                            combo.currentText()
-                        )  # ---------------------------------------------
 
         # Clean up existing widgets before clearing the tree
         self._cleanup_tree_widgets()
         self.clear()
         hierarchy = self.header_widget.get_order()
-
-        # Ensure actors_df 'show' column is string type before we start  ______________ no string but boolean__________
-        # if hasattr(self.view, "actors_df"):
-        #     self.view.actors_df["show"] = self.view.actors_df["show"].astype(str)
 
         for _, row in self.collection.df.iterrows():
             parent = self.invisibleRootItem()
@@ -379,32 +349,16 @@ class CustomTreeWidget(QTreeWidget):
             # Store the UID and set the initial checkbox state
             if self.uid_label and self.uid_label in row:
                 uid = str(row[self.uid_label])
-                name_item.setData(0, Qt.UserRole, uid)
-                name_item.setFlags(name_item.flags() | Qt.ItemIsUserCheckable)
-
-                # # Force initial state to unchecked
-                # name_item.setCheckState(0, Qt.Unchecked)
-
-                # if hasattr(self.view, "actors_df"):
-                # mask = self.view.actors_df["uid"] == uid
-                # if any(mask):
-                # show_state = str(self.view.actors_df.loc[mask, "show"].iloc[0])
-
-                # Ensure we're working with string values
-                # is_checked = show_state.lower() == "true"  __________________ no string but boolean__________
                 is_checked = self.view.actors_df.loc[
                     self.view.actors_df["uid"] == uid, "show"
                 ].iloc[0]
+                name_item.setData(0, Qt.UserRole, uid)
+                name_item.setFlags(name_item.flags() | Qt.ItemIsUserCheckable)
                 checkbox_state = Qt.Checked if is_checked else Qt.Unchecked
-                # if is_checked:
-                #     self.checked_uids.append(
-                #         uid
-                #     )  # =====self.checked_uids -> self.view.actors.df nothing to do here "show" is already set =====
                 name_item.setCheckState(0, checkbox_state)
             else:
                 name_item.setFlags(name_item.flags() | Qt.ItemIsUserCheckable)
                 name_item.setCheckState(0, Qt.Unchecked)
-
             parent.addChild(name_item)
 
             # Create and set up the QComboBox
@@ -413,16 +367,13 @@ class CustomTreeWidget(QTreeWidget):
                 property_combo.addItem(label)
             if self.prop_label:
                 property_combo.addItems(row[self.prop_label])
-
-            # Restore the previously selected value if it exists
-            if (
-                uid in self.combo_values
-            ):  # this should be the same as shown properties  # ---------------------------
-                index = property_combo.findText(
-                    self.combo_values[uid]
-                )  # -------------------------------------------
-                if index >= 0:
-                    property_combo.setCurrentIndex(index)
+            index = property_combo.findText(
+                self.view.actors_df.loc[
+                    self.view.actors_df["uid"] == uid, "show_property"
+                ].values[0]
+            )
+            if index >= 0:
+                property_combo.setCurrentIndex(index)
             property_combo.currentTextChanged.connect(
                 lambda prop_text, item=name_item: self.on_combo_changed(item, prop_text)
             )
@@ -440,29 +391,8 @@ class CustomTreeWidget(QTreeWidget):
     @preserve_selection
     def rearrange_hierarchy(self):
         """
-        Rearranges the tree hierarchy, preserving and restoring the selection and checkbox
-        states of tree items. This method saves the current states of selected and checked
-        items, repopulates the tree hierarchy, and restores item states, while maintaining
-        the synchronization with the parent collection.
+        Rearranges the tree hierarchy.
         """
-
-        # Store the current selection and checkbox states before repopulating
-        # saved_selected = self.collection.selected_uids.copy()
-        # saved_checked = (
-        #     self.checked_uids.copy()
-        # )  # =========self.checked_uids -> self.view.actors.df nothing to do here "show" is not affected ==============
-        # print("saved_checked: ", saved_checked)
-
-        # # Save any additional checkboxes that might not be in self.checked_uids yet
-        # if self.invisibleRootItem().childCount() > 0:
-        #     for item in self.findItems("", Qt.MatchContains | Qt.MatchRecursive):
-        #         uid = self.get_item_uid(item)
-        #         if (
-        #             uid
-        #             and item.checkState(0) == Qt.Checked
-        #             and uid not in saved_checked
-        #         ):
-        #             saved_checked.append(uid)
 
         # Block signals temporarily to prevent unnecessary signal emissions during rebuild
         self.blockSignals(True)
@@ -470,34 +400,8 @@ class CustomTreeWidget(QTreeWidget):
         # Repopulate the tree (this will clear selections and checkboxes)
         self.populate_tree()
 
-        # # Restore checkbox states
-        # self.checked_uids = saved_checked  # Restore the self.checked_uids list directly ================================
-        # for item in self.findItems("", Qt.MatchContains | Qt.MatchRecursive):
-        #     uid = self.get_item_uid(item)
-        #     if uid and uid in saved_checked:
-        #         item.setCheckState(0, Qt.Checked)
-        #
-        # # Update parent checkbox states based on children
-        # self.update_all_parent_check_states()
-
-        # # Restore selection
-        # self.clearSelection()  # Ensure a clean state before restoring
-        # if saved_selected:
-        #     # Find all items matching our saved UIDs and select them
-        #     for item in self.findItems("", Qt.MatchContains | Qt.MatchRecursive):
-        #         uid = self.get_item_uid(item)
-        #         if uid and uid in saved_selected:
-        #             item.setSelected(True)
-        #
-        # # Restore our saved selection list directly
-        # self.collection.selected_uids = saved_selected
-
         # Unblock signals
         self.blockSignals(False)
-
-        # # Emit selection signal to notify any listeners of the restored selection
-        # if saved_selected:
-        #     self.collection.signals.itemsSelected.emit(self.collection.collection_name)
 
     @preserve_selection
     def add_items_to_tree(self, uids_to_add):
@@ -510,12 +414,13 @@ class CustomTreeWidget(QTreeWidget):
         up the QComboBox for custom labeling. Parent items in the tree are expanded
         after the addition of new child nodes.
         """
-        # If adding more than 20% of total items, rebuild entire tree
+        # If adding more than 20% of total items, rebuild the entire tree
         total_items = len(self.collection.df)
         if len(uids_to_add) > total_items * 0.2:
             self.populate_tree()
             return False
 
+        # Otherwise edit specific rows as follows
         hierarchy = self.header_widget.get_order()
 
         for uid in uids_to_add:
@@ -526,6 +431,7 @@ class CustomTreeWidget(QTreeWidget):
 
             # Find or create the path in the tree hierarchy
             parent = self.invisibleRootItem()
+
             # Keep track of created/found parents to expand them later
             parents_to_expand = []
 
@@ -539,7 +445,7 @@ class CustomTreeWidget(QTreeWidget):
                     )
                     parent.setCheckState(0, Qt.Unchecked)
 
-            # Create item with empty first column and name in second column
+            # Create item with empty first column and name in the second column
             name_item = QTreeWidgetItem(["", row[self.name_label]])
             name_item.setFlags(name_item.flags() | Qt.ItemIsUserCheckable)
             name_item.setCheckState(0, Qt.Unchecked)  # Set initial state
@@ -547,39 +453,28 @@ class CustomTreeWidget(QTreeWidget):
             # Set the UID and checkbox state
             name_item.setData(0, Qt.UserRole, uid)
 
-            # Set initial checkbox state based on actors_df if available
-            # if hasattr(self.view, "actors_df"):
-            # mask = self.view.actors_df["uid"] == uid
-            # if any(mask):
+            # Set the initial checkbox state based on actors_df
             is_checked = self.view.actors_df.loc[
                 self.view.actors_df["uid"] == uid, "show"
             ].iloc[0]
-            # is_checked = show_state.lower() == "true"
             checkbox_state = Qt.Checked if is_checked else Qt.Unchecked
-            # if is_checked:
-            #     self.checked_uids.append(
-            #         uid
-            #     )  # =========self.checked_uids -> self.view.actors.df nothing to do here "show" is already set =====
             name_item.setCheckState(0, checkbox_state)
 
+            # Add item to the tree
             parent.addChild(name_item)
 
-            # Create and set up the QComboBox...
+            # Create and set up the QComboBox
             property_combo = QComboBox()
             for label in self.default_labels:
                 property_combo.addItem(label)
             property_combo.addItems(row[self.prop_label])
 
-            # # Restore previously selected value if it exists
-            # if uid in self.combo_values:
-            #     index = property_combo.findText(self.combo_values[uid])
-            #     if index >= 0:
-            #         property_combo.setCurrentIndex(index)
-
+            # Emit signal
             property_combo.currentTextChanged.connect(
                 lambda prop_text, item=name_item: self.on_combo_changed(item, prop_text)
             )
 
+            # Add the item and set the combo box in the last column
             self.setItemWidget(name_item, self.columnCount() - 1, property_combo)
 
             # Expand all parent items in the path
@@ -603,16 +498,14 @@ class CustomTreeWidget(QTreeWidget):
         it triggers a full rebuild of the tree structure. Otherwise, items are removed individually,
         handling any associated UI elements and maintaining data consistency.
         """
-        # If removing more than 20% of total items, rebuild entire tree
+
+        # If removing more than 20% of total items, rebuild the entire tree
         total_items = len(self.collection.df)
         if len(uids_to_remove) > total_items * 0.2:
-            # # Remove items from collection.df  ======================================================================
-            # self.collection.df = self.collection.df[
-            #     ~self.collection.df[self.uid_label].isin(uids_to_remove)
-            # ]
             self.populate_tree()
+            return False
 
-        # Remove items one by one
+        # Otherwise remove items one by one
         for uid in uids_to_remove:
             # Find all items matching our UID
             items_to_remove = []
@@ -628,22 +521,6 @@ class CustomTreeWidget(QTreeWidget):
                     combo.deleteLater()
                     self.removeItemWidget(item, self.columnCount() - 1)
 
-                # # Remove the item from self.checked_uids if present
-                # if (
-                #     uid in self.checked_uids
-                # ):  # ==============================================================
-                #     self.checked_uids.remove(
-                #         uid
-                #     )  # ====self.checked_uids -> self.view.actors.df nothing to do here "show" is not affected =====
-
-                # Remove the item from combo_values if present
-                if (
-                    uid in self.combo_values
-                ):  # ---------------------------------------------------------------------
-                    del self.combo_values[
-                        uid
-                    ]  # --------------------------------------------------------------------
-
                 # Get the parent before removing the item
                 parent = item.parent()
                 if parent:
@@ -654,9 +531,6 @@ class CustomTreeWidget(QTreeWidget):
 
                 # Clean up empty parents recursively
                 self._cleanup_empty_parents(parent)
-
-        # # Remove items from collection.df  ==========================================================================
-        # self.collection.df = self.collection.df[~self.collection.df[self.uid_label].isin(uids_to_remove)]
 
         # Update parent checkbox states and resize columns
         self.update_all_parent_check_states()
@@ -698,9 +572,6 @@ class CustomTreeWidget(QTreeWidget):
 
         # Unblock signals
         self.blockSignals(False)
-
-        # # Emit selection changed signal
-        # self.emit_selection_changed()  # ============================================================================
 
     def emit_selection_changed(self):
         """
@@ -815,20 +686,18 @@ class CustomTreeWidget(QTreeWidget):
         """
         Creates a QComboBox with items from the given `row` data and sets the current index
         based on the `uid`. This method initializes a QComboBox instance, populates it,
-        and optionally selects a predefined item if it matches the provided unique identifier
-        (`uid`) in `combo_values`.
+        and selects a predefined item from self.view.actors_df..
         """
         property_combo = QComboBox()
         property_combo.addItems(row[self.prop_label])
 
-        if (
-            uid in self.combo_values
-        ):  # -----------------------------------------------------------------------------
-            index = property_combo.findText(
-                self.combo_values[uid]
-            )  # -----------------------------------------------
-            if index >= 0:
-                property_combo.setCurrentIndex(index)
+        index = property_combo.findText(
+            self.view.actors_df.loc[
+                self.view.actors_df["uid"] == uid, "show_property"
+            ].values[0]
+        )
+        if index >= 0:
+            property_combo.setCurrentIndex(index)
 
         return property_combo
 
@@ -839,19 +708,13 @@ class CustomTreeWidget(QTreeWidget):
         Updates the combo box value and handles property toggling for the associated item
         while maintaining the state of the current selection.
         """
+
         # Update the stored combo value
         uid = self.get_item_uid(item)
-        if uid:
-            self.combo_values[uid] = (
-                prop_text  # --------------------------------------------------------------------
-            )
-            # Update show_property in actors_df for the current uid
-            self.view.actors_df.loc[
-                self.view.actors_df["uid"] == uid, "show_property"
-            ] = prop_text
-            self.view.signals.propertyToggled.emit(
-                self.collection.collection_name, uid, prop_text
-            )
+
+        self.view.signals.propertyToggled.emit(
+            self.collection.collection_name, uid, prop_text
+        )
 
     def toggle_with_menu(self, position):
         """
@@ -891,6 +754,7 @@ class CustomTreeWidget(QTreeWidget):
         Updates properties for the provided UIDs by manipulating combo boxes and updating corresponding
         dataframes. This method temporarily blocks signals to avoid unnecessary updates during the operation.
         """
+
         # Block signals temporarily to prevent unnecessary updates
         self.blockSignals(True)
 
@@ -919,25 +783,11 @@ class CustomTreeWidget(QTreeWidget):
                     else:
                         # If previous selection is no longer available, set to first default label
                         combo.setCurrentIndex(0)
-                        self.combo_values[uid] = combo.itemText(
-                            0
-                        )  # -------------------------------------------------
-
-                        # Update show_property in actors_df
-                        # if hasattr(self.view, "actors_df"):
-                        self.view.actors_df.loc[
-                            self.view.actors_df["uid"] == uid, "show_property"
-                        ] = combo.itemText(0)
 
                         # Emit property changed signal  ===============================================================
                         self.view.signals.propertyToggled.emit(
                             self.collection.collection_name, uid, combo.itemText(0)
                         )
-
-        # # Update the collection.df to reflect the new properties  ===================================================
-        # for uid in uids:
-        #     mask = self.collection.df[self.uid_label] == uid
-        #     self.collection.df.loc[mask, self.prop_label] = properties_list
 
         # Unblock signals
         self.blockSignals(False)
