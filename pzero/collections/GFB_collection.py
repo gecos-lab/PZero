@@ -168,7 +168,7 @@ class GFBCollection(BaseCollection):
             self.parent.legend.update_widget(self.parent)
             self.parent.prop_legend.update_widget(self.parent)
         # A list of uids is emitted, even if the entity is just one
-        self.signals.entity_removed.emit([uid])
+        self.signals.entities_removed.emit([uid])
         return uid
 
     def clone_entity(self, uid: str = None) -> str:

@@ -795,9 +795,10 @@ class ViewStereoplot(ViewMPL):
                 self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[
                     0
                 ].remove()
-                self.actors_df.drop(
-                    self.actors_df[self.actors_df["uid"] == uid].index, inplace=True
-                )
+                # the following should go in the abstract base view
+                # self.actors_df.drop(
+                #     self.actors_df[self.actors_df["uid"] == uid].index, inplace=True
+                # )
             if redraw:
                 # IN THE FUTURE check if there is a way to redraw just the actor that has just been removed.
                 self.figure.canvas.draw()

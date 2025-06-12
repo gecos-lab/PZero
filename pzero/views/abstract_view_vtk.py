@@ -300,9 +300,10 @@ class ViewVTK(BaseView):
                 self.actors_df["uid"] == uid, "actor"
             ].values[0]
             success = self.plotter.remove_actor(this_actor)
-            self.actors_df.drop(
-                self.actors_df[self.actors_df["uid"] == uid].index, inplace=True
-            )
+            # the following should go in the abstract base view
+            # self.actors_df.drop(
+            #     self.actors_df[self.actors_df["uid"] == uid].index, inplace=True
+            # )
 
     def initialize_interactor(self):
         """Add the pyvista interactor object to self.ViewFrameLayout ->

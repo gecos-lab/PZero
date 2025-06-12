@@ -502,11 +502,13 @@ class CustomTreeWidget(QTreeWidget):
         # If removing more than 20% of total items, rebuild the entire tree
         total_items = len(self.collection.df)
         if len(uids_to_remove) > total_items * 0.2:
+            print("Rebuilding the entire tree")
             self.populate_tree()
             return False
 
         # Otherwise remove items one by one
         for uid in uids_to_remove:
+            print("Removing item", uid)
             # Find all items matching our UID
             items_to_remove = []
             for item in self.findItems("", Qt.MatchContains | Qt.MatchRecursive):

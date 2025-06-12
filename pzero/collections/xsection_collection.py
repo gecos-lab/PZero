@@ -373,7 +373,7 @@ class XSectionCollection(BaseCollection):
         self.df.drop(self.df[self.df["uid"] == uid].index, inplace=True)
         self.modelReset.emit()  # is this really necessary?
         # Emit a list of uids, even if the entity is just one
-        self.signals.entity_removed.emit([uid])
+        self.signals.entities_removed.emit([uid])
         return uid
 
     def clone_entity(self, uid: str = None) -> str:
