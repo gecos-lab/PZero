@@ -232,16 +232,13 @@ class CustomTreeWidget(QTreeWidget):
         self.prop_label = prop_label
         self.default_labels = default_labels
         self.uid_label = uid_label
-        self.checked_uids = (
-            []
-        )  # ====================================================================================
-        self.combo_values = (
-            {}
-        )  # ----------------------------------------------------------------------------------
+        # ================== self.checked_uids -> self.view.actors.df =================================================
+        # self.checked_uids = []
+        # ---------------------- self.combo_values ->  self.view.actors.df --------------------------------------------
+        self.combo_values = {}
         self.blockSignals(False)
-        self.setColumnCount(
-            3
-        )  # one column for the tree hierarchy, one for name and one for properties
+        # one column for the tree hierarchy, one for name and one for properties
+        self.setColumnCount(3)
         self.header_labels = ["Tree", name_label]  # not shown
         self.setHeaderLabels(self.header_labels)  # not shown
         self.header().hide()  # not shown
@@ -276,7 +273,7 @@ class CustomTreeWidget(QTreeWidget):
         self.customContextMenuRequested.connect(self.toggle_with_menu)
         self.itemExpanded.connect(self.resize_columns)
         self.itemCollapsed.connect(self.resize_columns)
-        # self.checked_uids must be updated when an item is checked/unchecked and self.itemChanged emitted ============
+        # self.view.actors.df must be updated when an item is checked/unchecked and self.itemChanged emitted ============
         self.itemChanged.connect(
             lambda item, column: (
                 self.on_checkbox_changed(item, column)
@@ -399,10 +396,10 @@ class CustomTreeWidget(QTreeWidget):
                     self.view.actors_df["uid"] == uid, "show"
                 ].iloc[0]
                 checkbox_state = Qt.Checked if is_checked else Qt.Unchecked
-                if is_checked:
-                    self.checked_uids.append(
-                        uid
-                    )  # ==========================================================
+                # if is_checked:
+                #     self.checked_uids.append(
+                #         uid
+                #     )  # =====self.checked_uids -> self.view.actors.df nothing to do here "show" is already set =====
                 name_item.setCheckState(0, checkbox_state)
             else:
                 name_item.setFlags(name_item.flags() | Qt.ItemIsUserCheckable)
@@ -451,21 +448,21 @@ class CustomTreeWidget(QTreeWidget):
 
         # Store the current selection and checkbox states before repopulating
         # saved_selected = self.collection.selected_uids.copy()
-        saved_checked = (
-            self.checked_uids.copy()
-        )  # ==============================================================
-        print("saved_checked: ", saved_checked)
+        # saved_checked = (
+        #     self.checked_uids.copy()
+        # )  # =========self.checked_uids -> self.view.actors.df nothing to do here "show" is not affected ==============
+        # print("saved_checked: ", saved_checked)
 
-        # Save any additional checkboxes that might not be in self.checked_uids yet
-        if self.invisibleRootItem().childCount() > 0:
-            for item in self.findItems("", Qt.MatchContains | Qt.MatchRecursive):
-                uid = self.get_item_uid(item)
-                if (
-                    uid
-                    and item.checkState(0) == Qt.Checked
-                    and uid not in saved_checked
-                ):
-                    saved_checked.append(uid)
+        # # Save any additional checkboxes that might not be in self.checked_uids yet
+        # if self.invisibleRootItem().childCount() > 0:
+        #     for item in self.findItems("", Qt.MatchContains | Qt.MatchRecursive):
+        #         uid = self.get_item_uid(item)
+        #         if (
+        #             uid
+        #             and item.checkState(0) == Qt.Checked
+        #             and uid not in saved_checked
+        #         ):
+        #             saved_checked.append(uid)
 
         # Block signals temporarily to prevent unnecessary signal emissions during rebuild
         self.blockSignals(True)
@@ -473,15 +470,15 @@ class CustomTreeWidget(QTreeWidget):
         # Repopulate the tree (this will clear selections and checkboxes)
         self.populate_tree()
 
-        # Restore checkbox states
-        self.checked_uids = saved_checked  # Restore the checked_uids list directly ================================
-        for item in self.findItems("", Qt.MatchContains | Qt.MatchRecursive):
-            uid = self.get_item_uid(item)
-            if uid and uid in saved_checked:
-                item.setCheckState(0, Qt.Checked)
-
-        # Update parent checkbox states based on children
-        self.update_all_parent_check_states()
+        # # Restore checkbox states
+        # self.checked_uids = saved_checked  # Restore the self.checked_uids list directly ================================
+        # for item in self.findItems("", Qt.MatchContains | Qt.MatchRecursive):
+        #     uid = self.get_item_uid(item)
+        #     if uid and uid in saved_checked:
+        #         item.setCheckState(0, Qt.Checked)
+        #
+        # # Update parent checkbox states based on children
+        # self.update_all_parent_check_states()
 
         # # Restore selection
         # self.clearSelection()  # Ensure a clean state before restoring
@@ -559,10 +556,10 @@ class CustomTreeWidget(QTreeWidget):
             ].iloc[0]
             # is_checked = show_state.lower() == "true"
             checkbox_state = Qt.Checked if is_checked else Qt.Unchecked
-            if is_checked:
-                self.checked_uids.append(
-                    uid
-                )  # ==========================================================
+            # if is_checked:
+            #     self.checked_uids.append(
+            #         uid
+            #     )  # =========self.checked_uids -> self.view.actors.df nothing to do here "show" is already set =====
             name_item.setCheckState(0, checkbox_state)
 
             parent.addChild(name_item)
@@ -631,13 +628,13 @@ class CustomTreeWidget(QTreeWidget):
                     combo.deleteLater()
                     self.removeItemWidget(item, self.columnCount() - 1)
 
-                # Remove the item from checked_uids if present
-                if (
-                    uid in self.checked_uids
-                ):  # ==============================================================
-                    self.checked_uids.remove(
-                        uid
-                    )  # ===============================================================
+                # # Remove the item from self.checked_uids if present
+                # if (
+                #     uid in self.checked_uids
+                # ):  # ==============================================================
+                #     self.checked_uids.remove(
+                #         uid
+                #     )  # ====self.checked_uids -> self.view.actors.df nothing to do here "show" is not affected =====
 
                 # Remove the item from combo_values if present
                 if (
