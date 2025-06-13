@@ -718,11 +718,16 @@ class CustomTreeWidget(QTreeWidget):
 
         # Update the stored combo value
         uid = self.get_item_uid(item)
-
-        # emit signal  ================================================================================================
-        self.view.signals.propertyToggled.emit(
-            self.collection.collection_name, uid, prop_text
+        self.view.toggle_property(
+            collection_name=self.collection.collection_name,
+            uid=uid,
+            prop_text=prop_text,
         )
+
+        # # emit signal  ================================================================================================
+        # self.view.signals.propertyToggled.emit(
+        #     self.collection.collection_name, uid, prop_text
+        # )
 
     def toggle_with_menu(self, position):
         """
@@ -757,7 +762,7 @@ class CustomTreeWidget(QTreeWidget):
         for i in range(self.columnCount()):
             self.resizeColumnToContents(i)
 
-    def update_properties_for_uids(self, uids, properties_list):
+    def update_properties_for_uids(self, uids):
         """
         Updates properties for the provided UIDs by manipulating combo boxes and updating corresponding
         dataframes. This method temporarily blocks signals to avoid unnecessary updates during the operation.
@@ -782,6 +787,9 @@ class CustomTreeWidget(QTreeWidget):
                         combo.addItem(label)
 
                     # Add the new properties
+                    properties_list = self.collection.df.loc[
+                        self.collection.df[self.uid_label] == uid, self.prop_label
+                    ].values[0]
                     combo.addItems(properties_list)
 
                     # Try to restore previous selection if it's still available
@@ -792,10 +800,16 @@ class CustomTreeWidget(QTreeWidget):
                         # If previous selection is no longer available, set to first default label
                         combo.setCurrentIndex(0)
 
-                        # Emit property changed signal  ===============================================================
-                        self.view.signals.propertyToggled.emit(
-                            self.collection.collection_name, uid, combo.itemText(0)
-                        )
+                        # self.view.toggle_property(
+                        #     collection_name=self.collection.collection_name,
+                        #     uid=uid,
+                        #     prop_text=self.default_labels[0],
+                        # )
+
+                        # # Emit property changed signal  ===============================================================
+                        # self.view.signals.propertyToggled.emit(
+                        #     self.collection.collection_name, uid, combo.itemText(0)
+                        # )
 
         # Unblock signals
         self.blockSignals(False)

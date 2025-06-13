@@ -43,8 +43,8 @@ class BaseViewSignals(QObject):
     # # Create signal ===================================================================================================
     # checkboxToggled = pyqtSignal(str, list, list)
     # signal broadcast on property combobox changed, with the collection, uid and property as arguments
-    # Create signal ===================================================================================================
-    propertyToggled = pyqtSignal(str, str, str)
+    # # Create signal ===================================================================================================
+    # propertyToggled = pyqtSignal(str, str, str)
     # signal for selection change, emits a list of UIDs
     # Create signal ===================================================================================================
     newSelection = pyqtSignal(list)
@@ -814,13 +814,13 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         # )
         # self.signals.checkboxToggled.connect(self.view_sig_check_lmb)
 
-        # Connect signal ==============================================================================================
-        self.view_sig_prop_lmb = (
-            lambda collection_name, uid, prop_text: self.toggle_property(
-                collection_name, uid, prop_text
-            )
-        )
-        self.signals.propertyToggled.connect(self.view_sig_prop_lmb)
+        # # Connect signal ==============================================================================================
+        # self.view_sig_prop_lmb = (
+        #     lambda collection_name, uid, prop_text: self.toggle_property(
+        #         collection_name, uid, prop_text
+        #     )
+        # )
+        # self.signals.propertyToggled.connect(self.view_sig_prop_lmb)
 
         # project signal (if any) self.proj_sig_...
 
@@ -990,8 +990,8 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         # view signals
         # # Disconnect signal ===========================================================================================
         # self.signals.checkboxToggled.disconnect(self.view_sig_check_lmb)
-        # Disconnect signal ===========================================================================================
-        self.signals.propertyToggled.disconnect(self.view_sig_prop_lmb)
+        # # Disconnect signal ===========================================================================================
+        # self.signals.propertyToggled.disconnect(self.view_sig_prop_lmb)
         # project signal (if any)
 
         # collection signals
@@ -1499,8 +1499,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                         self.actors_df["uid"] == uid, ["show_property"]
                     ] = None
         # Rebuild the trees to add/remove the properties that have been changed.
-        tree.create_tree(self)  # this should be a method of the tree
-        tree.itemChanged.connect(self.toggle_visibility)
+        tree.update_properties_for_uids(uids=updated_uids)
 
     def entities_data_val_modified_update_views(
         self, collection=None, tree=None, updated_uids=None
@@ -1658,7 +1657,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         #     if not shown_prop in valid_props:
         #         self.toggle_property(collection_name=collection_name, uid=uid, prop_text=None)
         # Deal with combo boxes in tree
-        tree.update_properties_for_uids(updated_uids)
+        tree.update_properties_for_uids(uids=updated_uids)
 
     def prop_legend_cmap_modified_update_views(self, this_property=None):
         """Redraw all actors that are currently shown with a property whose colormap has been changed."""

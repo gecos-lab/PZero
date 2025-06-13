@@ -2,7 +2,7 @@
 PZero© Andrea Bistacchi"""
 
 # from PySide6.QtCore import QAbstractTableModel, Qt, QVariant, QSortFilterProxyModel, QObject, pyqtSignal
-from PySide6.QtCore import QAbstractTableModel, Qt, QSortFilterProxyModel, QObject
+from PySide6.QtCore import QAbstractTableModel, Qt, QSortFilterProxyModel, QObject, Signal
 from PySide6.QtCore import Signal as pyqtSignal
 
 from abc import abstractmethod, ABC
@@ -36,9 +36,9 @@ class CollectionSignals(QObject):
     geom_modified = pyqtSignal(list)  # this includes topology modified
     data_keys_modified = pyqtSignal(
         list
-    )  # remove after splittting keys added/removed ==========
+    )  # remove after splitting keys added/removed ==========
     data_keys_added = pyqtSignal(list)
-    data_keys_removed = pyqtSignal(list)
+    data_keys_removed: Signal = pyqtSignal(list)
     data_val_modified = pyqtSignal(list)
     metadata_modified = pyqtSignal(list)
     legend_color_modified = pyqtSignal(list)
@@ -398,7 +398,7 @@ class BaseCollection(ABC):
         )
         self.get_uid_vtk_obj(uid=uid).remove_point_data(data_key=property_name)
         # IN THE FUTURE add cell data.
-        self.signals.data_keys_modified([uid])
+        self.signals.data_keys_removed.emit([uid])
 
     def get_uid_property_shape(
         self, uid: str = None, property_name: str = None
