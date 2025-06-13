@@ -594,7 +594,7 @@ class CustomTreeWidget(QTreeWidget):
             if uid:
                 self.collection.selected_uids.append(uid)
 
-        # Emit signal
+        # emit signal  ================================================================================================
         self.collection.signals.itemsSelected.emit(self.collection.collection_name)
 
     def update_child_check_states(self, item, check_state):
@@ -666,10 +666,15 @@ class CustomTreeWidget(QTreeWidget):
                         turn_on_uids.append(uid)
                     else:
                         turn_off_uids.append(uid)
-        # Emit signal
-        self.view.signals.checkboxToggled.emit(
-            self.collection.collection_name, turn_on_uids, turn_off_uids
+        self.view.toggle_visibility(
+            collection_name=self.collection.collection_name,
+            turn_on_uids=turn_on_uids,
+            turn_off_uids=turn_off_uids,
         )
+        # # Emit signal =================================================================================================
+        # self.view.signals.checkboxToggled.emit(
+        #     self.collection.collection_name, turn_on_uids, turn_off_uids
+        # )
 
     @preserve_selection
     def on_checkbox_changed(self, item, column):
@@ -714,6 +719,7 @@ class CustomTreeWidget(QTreeWidget):
         # Update the stored combo value
         uid = self.get_item_uid(item)
 
+        # emit signal  ================================================================================================
         self.view.signals.propertyToggled.emit(
             self.collection.collection_name, uid, prop_text
         )

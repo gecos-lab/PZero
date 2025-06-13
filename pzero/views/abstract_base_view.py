@@ -40,10 +40,13 @@ class BaseViewSignals(QObject):
     """
 
     # signal broadcast on checkbox toggled, with the collection and lists of uids to be turned on or off as arguments
-    checkboxToggled = pyqtSignal(str, list, list)
+    # # Create signal ===================================================================================================
+    # checkboxToggled = pyqtSignal(str, list, list)
     # signal broadcast on property combobox changed, with the collection, uid and property as arguments
+    # Create signal ===================================================================================================
     propertyToggled = pyqtSignal(str, str, str)
     # signal for selection change, emits a list of UIDs
+    # Create signal ===================================================================================================
     newSelection = pyqtSignal(list)
 
 
@@ -803,13 +806,15 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         It is IMPORTANT to check that all signals connected here are in the list of signals to be disconnected.
         """
         # view signals self.view_sig_...
-        self.view_sig_check_lmb = (
-            lambda collection_name, turn_on_uids, turn_off_uids: self.toggle_visibility(
-                collection_name, turn_on_uids, turn_off_uids
-            )
-        )
-        self.signals.checkboxToggled.connect(self.view_sig_check_lmb)
+        # # Connect signal ==============================================================================================
+        # self.view_sig_check_lmb = (
+        #     lambda collection_name, turn_on_uids, turn_off_uids: self.toggle_visibility(
+        #         collection_name, turn_on_uids, turn_off_uids
+        #     )
+        # )
+        # self.signals.checkboxToggled.connect(self.view_sig_check_lmb)
 
+        # Connect signal ==============================================================================================
         self.view_sig_prop_lmb = (
             lambda collection_name, uid, prop_text: self.toggle_property(
                 collection_name, uid, prop_text
@@ -983,7 +988,9 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         the list, but we have not found a way to do this at the moment.
         """
         # view signals
-        self.signals.checkboxToggled.disconnect(self.view_sig_check_lmb)
+        # # Disconnect signal ===========================================================================================
+        # self.signals.checkboxToggled.disconnect(self.view_sig_check_lmb)
+        # Disconnect signal ===========================================================================================
         self.signals.propertyToggled.disconnect(self.view_sig_prop_lmb)
         # project signal (if any)
 
