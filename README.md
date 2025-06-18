@@ -30,7 +30,7 @@ We acknowledge [Geode-Solutions](https://geode-solutions.com/), [Studio Vertix](
 
 &nbsp;
 <p align="center">
-   <img src="images/mosaic.jpg" width="100%" height="100%"/>
+   <img src="images/screenshot.jpg" width="100%" height="100%"/>
 </p>
 &nbsp;
 &nbsp;
