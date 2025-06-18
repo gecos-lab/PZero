@@ -58,4 +58,4 @@ We have uploaded some test project on public repositories:
 <br />
 <br />
 
-<img src='https://github.com/gecos-lab/PZero/blob/master/images/pzero_QR.png' width='200'>
+<img src='images/pzero_QR.png' width='200'>
