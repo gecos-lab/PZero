@@ -30,7 +30,7 @@ We acknowledge [Geode-Solutions](https://geode-solutions.com/), [Studio Vertix](
 
 &nbsp;
 <p align="center">
-   <img src="images/mosaic.jpg" width="100%" height="100%"/>
+   <img src="images/screenshot.png" width="100%" height="100%"/>
 </p>
 &nbsp;
 &nbsp;
@@ -58,4 +58,4 @@ We have uploaded some test project on public repositories:
 <br />
 <br />
 
-<img src='https://github.com/gecos-lab/PZero/blob/master/images/pzero_QR.png' width='200'>
+<img src='images/pzero_QR.png' width='200'>
