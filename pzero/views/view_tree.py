@@ -193,9 +193,8 @@ class CustomHeader(QWidget):
 
 class CustomTreeWidget(QTreeWidget):
     """
-    A customized tree widget with advanced operations and a hierarchical data structure.
-    It integrates additional features like custom draggable headers, context menu functions,
-    multi-level checkboxes, and selection preservation. The widget also supports advanced customization
+    A customized tree widget with hierarchical data structure, custom draggable headers, context menu
+    functions, multi-level checkboxes, and selection preservation. The widget structure is customized
     via parameters passed at instantiation.
     """
 
@@ -215,12 +214,12 @@ class CustomTreeWidget(QTreeWidget):
 
         parent: the parent in Qt, so the QtWidget where this tree is included.
         view: the parent view = the parent in the sense of the main application.
-        collection.df: Dataframe containing hierarchical collection data to populate the tree.
-        tree_labels: List of labels for the tree's header columns.
-        name_label: Label representing the name column.
-        uid_label: Label representing a unique identifier for tree nodes.
-        prop_label: Label representing additional property fields to be used in combo boxes.
-        default_labels: Initial list of default labels.
+        collection: the collection used to populate the tree.
+        tree_labels: list of labels for the tree's header columns.
+        name_label: label representing the name column.
+        prop_label: label representing additional property fields to be used in combo boxes.
+        default_labels: initial list of default labels.
+        uid_label: label representing a unique identifier for tree nodes.
         """
         super().__init__()
         # set all parameters with default values
@@ -246,18 +245,17 @@ class CustomTreeWidget(QTreeWidget):
 
         # set header with draggable buttons
         self.header_widget = CustomHeader(labels=self.tree_labels)
-        self.header_widget.buttonToggled.connect(self.rearrange_hierarchy)
+        self.header_widget.buttonToggled.connect(self.populate_tree)
+        # self.header_widget.buttonToggled.connect(self.rearrange_hierarchy)
 
         # populate the tree with view entities
         self.populate_tree()
 
-        # connect signals
+        # connect signals managing tree events
         self.setContextMenuPolicy(Qt.CustomContextMenu)
         self.customContextMenuRequested.connect(self.toggle_with_menu)
         self.itemExpanded.connect(self.resize_columns)
         self.itemCollapsed.connect(self.resize_columns)
-
-        # self.view.actors.df must be updated when an item is checked/unchecked and self.itemChanged emitted ============
         self.itemChanged.connect(
             lambda item, column: (
                 self.on_checkbox_changed(item, column)
@@ -265,7 +263,6 @@ class CustomTreeWidget(QTreeWidget):
                 else None
             )
         )
-
         # # probably not necessary
         # self.itemSelectionChanged.connect(self.emit_selection_changed)
 
@@ -279,17 +276,16 @@ class CustomTreeWidget(QTreeWidget):
 
     def preserve_selection(func):
         """
-        Decorator that preserves the current selection of items while executing the decorated
-        function. After the function execution, the original selection is restored.
+        Decorator that preserves the current selection of items while executing the decorated function.
         """
 
         @wraps(func)
         def wrapper(self, *args, **kwargs):
-            # this is recoded before the function runs
+            # selection is recoded before the function runs
             current_selection = self.collection.selected_uids.copy()
             # the wrapped function runs here
             result = func(self, *args, **kwargs)
-            # this is restored after the function has run
+            # selection is restored after the function has run
             self.restore_selection(current_selection)
             # the wrapped function's return value is returned here
             return result
@@ -303,6 +299,8 @@ class CustomTreeWidget(QTreeWidget):
         UIDs, and updates the parent's collection of selected UIDs. During this process, widget signals
         are temporarily blocked to avoid triggering unwanted loops.
         """
+
+        # Just to check
         if not uids_to_select:
             return
 
@@ -312,9 +310,10 @@ class CustomTreeWidget(QTreeWidget):
         # Clear current selection
         self.clearSelection()
 
-        # Find all items matching previously selected UIDs and select them
+        # Find all items matching previously selected UIDs, i.e. in set_actor_visible, and select them
         for item in self.findItems("", Qt.MatchContains | Qt.MatchRecursive):
             uid = self.get_item_uid(item)
+            # "if uid" is needed since higher levels do not have an uid
             if uid and uid in uids_to_select:
                 item.setSelected(True)
 
@@ -333,6 +332,9 @@ class CustomTreeWidget(QTreeWidget):
         the external data source.
         """
 
+        # Block signals temporarily to prevent unnecessary signal emissions during rebuild
+        self.blockSignals(True)
+
         # Clean up existing widgets before clearing the tree
         self._cleanup_tree_widgets()
         self.clear()
@@ -347,6 +349,7 @@ class CustomTreeWidget(QTreeWidget):
             name_item = QTreeWidgetItem(["", row[self.name_label]])
 
             # Store the UID and set the initial checkbox state
+            # "if uid_label" is needed since higher levels do not have an uid
             if self.uid_label and self.uid_label in row:
                 uid = str(row[self.uid_label])
                 is_checked = self.view.actors_df.loc[
@@ -354,7 +357,10 @@ class CustomTreeWidget(QTreeWidget):
                 ].iloc[0]
                 name_item.setData(0, Qt.UserRole, uid)
                 name_item.setFlags(name_item.flags() | Qt.ItemIsUserCheckable)
-                checkbox_state = Qt.Checked if is_checked else Qt.Unchecked
+                if is_checked:
+                    checkbox_state = Qt.Checked
+                else:
+                    checkbox_state = Qt.Unchecked
                 name_item.setCheckState(0, checkbox_state)
             else:
                 name_item.setFlags(name_item.flags() | Qt.ItemIsUserCheckable)
@@ -388,20 +394,23 @@ class CustomTreeWidget(QTreeWidget):
         # Update parent checkbox states based on the imported states
         self.update_all_parent_check_states()
 
-    @preserve_selection
-    def rearrange_hierarchy(self):
-        """
-        Rearranges the tree hierarchy.
-        """
-
-        # Block signals temporarily to prevent unnecessary signal emissions during rebuild
-        self.blockSignals(True)
-
-        # Repopulate the tree (this will clear selections and checkboxes)
-        self.populate_tree()
-
         # Unblock signals
         self.blockSignals(False)
+
+    # @preserve_selection
+    # def rearrange_hierarchy(self):
+    #     """
+    #     Rearranges the tree hierarchy.
+    #     """
+    #
+    #     # Block signals temporarily to prevent unnecessary signal emissions during rebuild
+    #     self.blockSignals(True)
+    #
+    #     # Repopulate the tree (this will clear selections and checkboxes)
+    #     self.populate_tree()
+    #
+    #     # Unblock signals
+    #     self.blockSignals(False)
 
     @preserve_selection
     def add_items_to_tree(self, uids_to_add):
@@ -639,6 +648,44 @@ class CustomTreeWidget(QTreeWidget):
             if item.parent():
                 self.update_parent_check_states(item)
 
+    @preserve_selection
+    def on_checkbox_changed(self, item, column):
+        """Handle state changes of a checkbox by mouse click, after self.itemChanged signal is emitted."""
+        if column != 0 or item.checkState(0) == Qt.PartiallyChecked:
+            return
+
+        self.blockSignals(True)
+        self.update_child_check_states(item, item.checkState(0))
+        self.update_parent_check_states(item)
+        self.blockSignals(False)
+
+        self.emit_checkbox_toggled()
+
+    def toggle_with_menu(self, position):
+        """
+        Provides functionality to toggle the states of checkboxes for selected
+        items through a context menu initiated at a given position.
+        This method displays a context menu at the specified position, allowing
+        the user to toggle the checkbox states of the selected items in the view.
+        When the "Toggle Checkboxes" option is chosen, the method checks the state
+        of each selected item's checkbox and switches it to the opposite state
+        (either checked or unchecked). It also updates the state of
+        child and parent checkboxes for the affected items to maintain consistency.
+        A signal indicating that a checkbox has been toggled is then emitted.
+        """
+        menu = QMenu()
+        toggle_action = menu.addAction("Toggle Checkboxes")
+        action = menu.exec_(self.viewport().mapToGlobal(position))
+        if action == toggle_action:
+            for item in self.selectedItems():
+                new_state = (
+                    Qt.Checked if item.checkState(0) == Qt.Unchecked else Qt.Unchecked
+                )
+                item.setCheckState(0, new_state)
+                self.update_child_check_states(item, new_state)
+                self.update_parent_check_states(item)
+        self.emit_checkbox_toggled()
+
     def emit_checkbox_toggled(self):
         """
         To be used when checking/unchecking, to send the new state to the main application.
@@ -675,19 +722,6 @@ class CustomTreeWidget(QTreeWidget):
         # self.view.signals.checkboxToggled.emit(
         #     self.collection.collection_name, turn_on_uids, turn_off_uids
         # )
-
-    @preserve_selection
-    def on_checkbox_changed(self, item, column):
-        """Handle checkbox state changes."""
-        if column != 0 or item.checkState(0) == Qt.PartiallyChecked:
-            return
-
-        self.blockSignals(True)
-        self.update_child_check_states(item, item.checkState(0))
-        self.update_parent_check_states(item)
-        self.blockSignals(False)
-
-        self.emit_checkbox_toggled()
 
     def create_property_combo(self, row, uid):
         """
@@ -729,31 +763,6 @@ class CustomTreeWidget(QTreeWidget):
         #     self.collection.collection_name, uid, prop_text
         # )
 
-    def toggle_with_menu(self, position):
-        """
-        Provides functionality to toggle the states of checkboxes for selected
-        items through a context menu initiated at a given position.
-        This method displays a context menu at the specified position, allowing
-        the user to toggle the checkbox states of the selected items in the view.
-        When the "Toggle Checkboxes" option is chosen, the method checks the state
-        of each selected item's checkbox and switches it to the opposite state
-        (either checked or unchecked). Additionally, it updates the state of
-        child and parent checkboxes for the affected items to maintain consistency.
-        A signal indicating that a checkbox has been toggled is then emitted.
-        """
-        menu = QMenu()
-        toggle_action = menu.addAction("Toggle Checkboxes")
-        action = menu.exec_(self.viewport().mapToGlobal(position))
-        if action == toggle_action:
-            for item in self.selectedItems():
-                new_state = (
-                    Qt.Checked if item.checkState(0) == Qt.Unchecked else Qt.Unchecked
-                )
-                item.setCheckState(0, new_state)
-                self.update_child_check_states(item, new_state)
-                self.update_parent_check_states(item)
-            self.emit_checkbox_toggled()
-
     def resize_columns(self):
         """
         Adjusts the width of all columns in a table to fit the content within each column. It iterates over
@@ -773,6 +782,7 @@ class CustomTreeWidget(QTreeWidget):
 
         for item in self.findItems("", Qt.MatchContains | Qt.MatchRecursive):
             uid = self.get_item_uid(item)
+            # "if uid" is needed since higher levels do not have an uid
             if uid and uid in uids:
                 combo = self.itemWidget(item, self.columnCount() - 1)
                 if combo:

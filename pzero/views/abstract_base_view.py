@@ -1337,7 +1337,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             collection = eval(f"self.parent.{coll_name}")
             return collection
         except:
-            print("Error in coll_from_tree")
+            self.print_terminal("Error in coll_from_tree")
             return None
 
     def tree_from_coll(self, coll=None):
@@ -1348,7 +1348,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             tree = eval(f"self.{tree_name}")
             return tree
         except:
-            print("Error in tree_from_coll")
+            self.print_terminal("Error in tree_from_coll")
             return None
 
     def entities_added_update_views(
@@ -1393,13 +1393,13 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         """This is called when an entity is removed from a collection."""
         # # Signals to the collection view tree, if they are set, are disconnected to avoid a nasty loop that would disrupt them. No need to apply a filter, since if a uid is not found in the actors list, nothing happens.
         tree.itemChanged.disconnect()
-        print("pre- self.actors_df: ", self.actors_df)
+        # self.print_terminal(f"pre- self.actors_df: {self.actors_df}")
         for uid in updated_uids:
             self.remove_actor_in_view(uid=uid, redraw=True)
             self.actors_df.drop(
                 self.actors_df[self.actors_df["uid"] == uid].index, inplace=True
             )
-        print("post- self.actors_df: ", self.actors_df)
+        # self.print_terminal(f"post- self.actors_df: {self.actors_df}")
         tree.remove_items_from_tree(uids_to_remove=updated_uids)
         tree.itemChanged.connect(self.toggle_visibility)
 
@@ -1574,42 +1574,42 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
     def show_all(self):
         """Show all actors."""
         for uid in self.actors_df["uid"].to_list():
-            print(f"showing uid: {uid}")
+            self.print_terminal(f"showing uid: {uid}")
             if not self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]:
                 self.set_actor_visible(uid=uid, visible=True)
-                print(f"hidden uid: {uid}")
+                self.print_terminal(f"shown uid: {uid}")
         self.actors_df["show"] = True
-        print("all uids shown")
+        self.print_terminal("all uids shown")
 
     def hide_all(self):
         """Hide all actors."""
         for uid in self.actors_df["uid"].to_list():
-            print(f"hiding uid: {uid}")
+            self.print_terminal(f"hiding uid: {uid}")
             if self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]:
                 self.set_actor_visible(uid=uid, visible=False)
-                print(f"hidden uid: {uid}")
+                self.print_terminal(f"hidden uid: {uid}")
         self.actors_df["show"] = False
-        print("all uids hidden")
+        self.print_terminal("all uids hidden")
 
     def show_uids(self, uids: list = None):
         """Show actors with the given uids."""
         for uid in uids:
-            print(f"showing uid: {uid}")
-            print(self.actors_df)
+            self.print_terminal(f"showing uid: {uid}")
+            # self.print_terminal(f"{self.actors_df}")
             if not self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]:
                 self.set_actor_visible(uid=uid, visible=True)
                 self.actors_df.loc[self.actors_df["uid"] == uid, "show"] = True
-                print(f"shown uid: {uid}")
+                self.print_terminal(f"shown uid: {uid}")
 
     def hide_uids(self, uids: list = None):
         """Hide actors with the given uids."""
         for uid in uids:
-            print(f"hiding uid: {uid}")
-            print(self.actors_df)
+            self.print_terminal(f"hiding uid: {uid}")
+            # self.print_terminal(f"{self.actors_df}")
             if self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]:
                 self.set_actor_visible(uid=uid, visible=False)
                 self.actors_df.loc[self.actors_df["uid"] == uid, "show"] = False
-                print(f"hidden uid: {uid}")
+                self.print_terminal(f"hidden uid: {uid}")
 
     def toggle_visibility(
         self, collection_name=None, turn_on_uids=None, turn_off_uids=None

@@ -255,12 +255,20 @@ class ViewVTK(BaseView):
 
     def set_actor_visible(self, uid=None, visible=None, name=None):
         """Set actor uid visible or invisible (visible = True or False)"""
-        # self.print_terminal("setting actor visible - uid: " + uid + " visible: " + str(visible) + " name: " + str(name))
-        this_actor = self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[0]
+        self.print_terminal(
+            f"setting actor visible - uid: {uid} - visible: {visible} - name: {name}"
+        )
+        # this_actor = self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[0]
         collection = self.actors_df.loc[
             self.actors_df["uid"] == uid, "collection"
         ].values[0]
         actors = self.plotter.renderer.actors
+        # Here we use the default dictionary of actors, named with uid's when created _________________________________
+        this_actor = actors[uid]
+        # print("type(self.plotter.renderer.actors): ", type(self.plotter.renderer.actors))
+        # print("self.plotter.renderer.actors.keys(): ", self.plotter.renderer.actors.keys())
+        # print("self.plotter.renderer.actors.values(): ", self.plotter.renderer.actors.values(),)
+        # print("self.plotter.renderer.actors: ", self.plotter.renderer.actors)
         if collection == "well_coll":
             # case for WELLS
             if name == "Trace":
@@ -289,6 +297,7 @@ class ViewVTK(BaseView):
             this_actor.SetVisibility(visible)
         else:
             # case for ALL OTHER COLLECTIONS
+            self.print_terminal("case for ALL OTHER COLLECTIONS")
             this_actor.SetVisibility(visible)
 
     def remove_actor_in_view(self, uid=None, redraw=False):
@@ -350,6 +359,9 @@ class ViewVTK(BaseView):
         Show actor with scalar property (default None). See details in:
         https://github.com/pyvista/pyvista/blob/140b15be1d4021b81ded46b1c212c70e86a98ee7/pyvista/plotting/plotting.py#L1045
         """
+        self.print_terminal(
+            f"Showing actor with property {show_property}, visible {visible}."
+        )
         # First get the vtk object from its collection.
         show_property_title = show_property
         this_coll = eval("self.parent." + collection)
@@ -379,7 +391,7 @@ class ViewVTK(BaseView):
             plot_entity = this_coll.get_uid_vtk_obj(uid)
         else:
             # catch errors
-            print("no collection", collection)
+            self.print_terminal(f"no collection: {collection}")
             this_actor = None
         # Then plot the vtk object with proper options.
         if isinstance(plot_entity, (PolyLine, TriSurf, XsPolyLine)) and not isinstance(
@@ -727,7 +739,7 @@ class ViewVTK(BaseView):
             )
         else:
             # catch errors
-            print("[Windows factory]: actor with no class")
+            self.print_terminal("error - actor with no class")
             this_actor = None
         return this_actor
 
@@ -932,7 +944,7 @@ class ViewVTK(BaseView):
                 # set the correct tab to avoid problems
                 self.parent.tabWidgetTopLeft.setCurrentIndex(4)
             else:
-                print(
+                self.print_terminal(
                     "Selection not supported for entities that do not belong to geological or DOM collection."
                 )
                 return
