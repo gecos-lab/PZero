@@ -1925,6 +1925,28 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
 
     # ================================  Placeholders for required methods, implemented in child classes ===============
 
+    def get_actor_by_uid(self, uid: str = None):
+        """Dummy method to get an actor by uid. Must be implemented in subclasses."""
+        return None
+
+    def get_uid_from_actor(self):
+        """Dummy method to get the uid of an actor, e.g. selected with mouse or in other ways.
+        Must be implemented in subclasses."""
+        return None
+
+    def actor_shown(self, uid: str = None):
+        """Dummy method to check if an actor is shown. Returns a boolean.
+        Must be implemented in subclasses."""
+        return False
+
+    def show_actors(self, uids: list = None):
+        """Dummy method to show actors in uids list. Must be implemented in subclasses."""
+        return
+
+    def hide_actors(self, uids: list = None):
+        """Dummy method to hide actors in uids list. Must be implemented in subclasses."""
+        return
+
     def change_actor_color(self, uid=None, collection=None):
         """Dummy method to update color for actor uid. Must be implemented in subclasses."""
         return

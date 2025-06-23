@@ -341,6 +341,11 @@ class CustomTreeWidget(QTreeWidget):
         hierarchy = self.header_widget.get_order()
 
         for _, row in self.collection.df.iterrows():
+            # if self.uid_label and self.uid_label in row:
+            if self.uid_label in row:
+                uid = str(row[self.uid_label])
+                if uid not in self.view.actors_df["uid"].values:
+                    continue
             parent = self.invisibleRootItem()
             for level in hierarchy:
                 parent = self.get_or_create_item(parent, row[level])
@@ -350,7 +355,8 @@ class CustomTreeWidget(QTreeWidget):
 
             # Store the UID and set the initial checkbox state
             # "if uid_label" is needed since higher levels do not have an uid
-            if self.uid_label and self.uid_label in row:
+            # if self.uid_label and self.uid_label in row:
+            if self.uid_label in row:
                 uid = str(row[self.uid_label])
                 is_checked = self.view.actors_df.loc[
                     self.view.actors_df["uid"] == uid, "show"

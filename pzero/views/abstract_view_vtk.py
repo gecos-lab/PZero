@@ -102,6 +102,52 @@ class ViewVTK(BaseView):
 
     # ================================  Methods required by BaseView(), (re-)implemented here =========================
 
+    def get_actor_by_uid(self, uid: str = None):
+        """
+        Get an actor by uid in a VTK/PyVista plotter. Here we use self.plotter.renderer.actors
+        that is a dictionary with key = uid string and value = actor.
+        """
+        actors = self.plotter.renderer.actors
+        return actors[uid]
+
+    def get_uid_from_actor(self, actor=None):
+        """
+        Get the uid of an actor in a VTK/PyVista plotter. Here we use self.plotter.renderer.actors
+        that is a dictionary with key = uid string and value = actor.
+        """
+        # return next(
+        #     key
+        #     for key, value in self.plotter.renderer.actors.items()
+        #     if value == this_actor
+        # )
+        uid = None
+        for uid_i, actor_i in self.plotter.renderer.actors.items():
+            if actor_i == actor:
+                uid = uid_i
+                break
+        return uid
+
+    def actor_shown(self, uid: str = None):
+        """Method to check if an actor is shown in a VTK/PyVista plotter. Returns a boolean.
+        Must be implemented in subclasses."""
+        actors = self.plotter.renderer.actors
+        this_actor = actors[uid]
+        return this_actor.GetVisibility()
+
+    def show_actors(self, uids: list = None):
+        """Method to show actors in uids list in a VTK/PyVista plotter."""
+        actors = self.plotter.renderer.actors
+        for uid, actor in actors.items():
+            if uid in uids:
+                actor.SetVisibility(True)
+
+    def hide_actors(self, uids: list = None):
+        """Method to show actors in uids list in a VTK/PyVista plotter."""
+        actors = self.plotter.renderer.actors
+        for uid, actor in actors.items():
+            if uid in uids:
+                actor.SetVisibility(False)
+
     def change_actor_color(self, uid=None, collection=None):
         """Update color for actor uid"""
         if uid in self.actors_df.uid:
@@ -1036,12 +1082,15 @@ class ViewVTK(BaseView):
         # self.print_terminal(f"Picker actor: {actor}")
 
         # proceed if an actor is selected
-        if not self.actors_df.loc[self.actors_df["actor"] == actor, "uid"].empty:
-            # if picker_output:
+        # if not self.actors_df.loc[self.actors_df["actor"] == actor, "uid"].empty:
+        #     # if picker_output:
+        #     # Get uid of picked actor
+        #     sel_uid = self.actors_df.loc[
+        #         self.actors_df["actor"] == actor, "uid"
+        #     ].values[0]
+        if self.get_uid_from_actor(actor=actor):
             # Get uid of picked actor
-            sel_uid = self.actors_df.loc[
-                self.actors_df["actor"] == actor, "uid"
-            ].values[0]
+            sel_uid = self.get_uid_from_actor(actor=actor)
             self.print_terminal(f"Picked uid: {sel_uid}")
 
             # Add uid of picked actor to selected_uids list, with SHIFT-SELECT option

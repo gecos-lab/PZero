@@ -710,6 +710,28 @@ class ViewStereoplot(ViewMPL):
 
     # ================================  Methods required by BaseView(), (re-)implemented here =========================
 
+    def get_actor_by_uid(self, uid: str = None):
+        """Dummy method to get an actor by uid. Must be implemented in subclasses."""
+        return None
+
+    def get_uid_from_actor(self):
+        """Dummy method to get the uid of an actor, e.g. selected with mouse or in other ways.
+        Must be implemented in subclasses."""
+        return None
+
+    def actor_shown(self, uid: str = None):
+        """Dummy method to check if an actor is shown. Returns a boolean.
+        Must be implemented in subclasses."""
+        return False
+
+    def show_actors(self, uids: list = None):
+        """Dummy method to show actors in uids list. Must be implemented in subclasses."""
+        return
+
+    def hide_actors(self, uids: list = None):
+        """Dummy method to hide actors in uids list. Must be implemented in subclasses."""
+        return
+
     def change_actor_color(self, uid=None, collection=None):
         # refactor using a collection parameter instead of if - elif - else
         """Change colour with Matplotlib method."""
@@ -886,6 +908,7 @@ class ViewStereoplot(ViewMPL):
                                 ]
 
                             this_actor.set_visible(visible)
+                            self.print_terminal(f"uid: {uid} - agent: {this_actor}")
                         else:
                             if show_property == "Planes":
                                 this_actor = self.ax.plane(
