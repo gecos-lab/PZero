@@ -16,16 +16,6 @@ from .view_tree import CustomTreeWidget
 from ..collections.AbstractCollection import BaseCollection
 from ..ui.base_view_window_ui import Ui_BaseViewWindow
 
-# from ..add_remove_update_actors.background import *
-# from ..add_remove_update_actors.boundary import *
-# from ..add_remove_update_actors.dom import *
-# from ..add_remove_update_actors.fluid import *
-# from ..add_remove_update_actors.geology import *
-# from ..add_remove_update_actors.image import *
-# from ..add_remove_update_actors.mesh3d import *
-# from ..add_remove_update_actors.wells import *
-# from ..add_remove_update_actors.xsection import *
-
 
 class BaseViewSignals(QObject):
     """
@@ -63,6 +53,8 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         # Qt.WA_DeleteOnClose DELETES ANY REFERENCE TO CLOSED WINDOWS, HENCE FREEING
         # MEMORY, BUT COULD CREATE PROBLEMS WITH SIGNALS THAT ARE STILL ACTIVE
         # SEE DISCUSSIONS ON QPointer AND WA_DeleteOnClose ON THE INTERNET
+        # For this we collect all signals and particularly connections to functions and
+        # delete them before closing the view.
         self.setAttribute(Qt.WA_DeleteOnClose, True)
         self.parent = parent
         self.signals = BaseViewSignals()
