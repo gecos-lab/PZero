@@ -1566,22 +1566,22 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
     def show_all(self):
         """Show all actors."""
         for uid in self.actors_df["uid"].to_list():
-            self.print_terminal(f"showing uid: {uid}")
+            # self.print_terminal(f"showing uid: {uid}")
             if not self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]:
                 self.set_actor_visible(uid=uid, visible=True)
-                self.print_terminal(f"shown uid: {uid}")
+                # self.print_terminal(f"shown uid: {uid}")
         self.actors_df["show"] = True
-        self.print_terminal("all uids shown")
+        # self.print_terminal("all uids shown")
 
     def hide_all(self):
         """Hide all actors."""
         for uid in self.actors_df["uid"].to_list():
-            self.print_terminal(f"hiding uid: {uid}")
+            # self.print_terminal(f"hiding uid: {uid}")
             if self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]:
                 self.set_actor_visible(uid=uid, visible=False)
-                self.print_terminal(f"hidden uid: {uid}")
+                # self.print_terminal(f"hidden uid: {uid}")
         self.actors_df["show"] = False
-        self.print_terminal("all uids hidden")
+        # self.print_terminal("all uids hidden")
 
     def show_uids(self, uids: list = None):
         """Show actors with the given uids."""
@@ -1601,7 +1601,15 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             if self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]:
                 self.set_actor_visible(uid=uid, visible=False)
                 self.actors_df.loc[self.actors_df["uid"] == uid, "show"] = False
-                self.print_terminal(f"hidden uid: {uid}")
+                # self.print_terminal(f"hidden uid: {uid}")
+
+    @property
+    def shown_uids(self):
+        return self.actors_df.loc[self.actors_df["show"] == True, "uid"].to_list()
+
+    @property
+    def hidden_uids(self):
+        return self.actors_df.loc[self.actors_df["show"] == False, "uid"].to_list()
 
     def toggle_visibility(
         self, collection_name=None, turn_on_uids=None, turn_off_uids=None

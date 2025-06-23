@@ -48,6 +48,8 @@ class ViewStereoplot(ViewMPL):
         super(ViewStereoplot, self).__init__(*args, **kwargs)
         self.setWindowTitle("Stereoplot View")
 
+        print(f"self.mpl_actors: {self.mpl_actors}")
+
     # ================================  General methods shared by all views - built incrementally =====================
 
     def initialize_menu_tools(self):
@@ -939,6 +941,7 @@ class ViewStereoplot(ViewMPL):
             this_actor = None
         if this_actor:
             this_actor.figure.canvas.draw()
+        self.mpl_actors[uid] = this_actor
         return this_actor
 
     # ================================  Methods specific to Stereoplot views ==========================================
@@ -962,7 +965,8 @@ class ViewStereoplot(ViewMPL):
             self.parent.geol_coll.df["topology"] == "VertexSet", "uid"
         ]
         for uid in uids:
-            show = self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]
+            # show = self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]
+            show = self.actor_shown(uid=uid)
             self.remove_actor_in_view(uid, redraw=False)
             this_actor = self.show_actor_with_property(
                 uid=uid, collection="geol_coll", visible=show
@@ -1008,7 +1012,8 @@ class ViewStereoplot(ViewMPL):
             self.print_terminal("Contours disabled")
 
         for uid in uids:
-            show = self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]
+            # show = self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]
+            show = self.actor_shown(uid=uid)
 
             self.remove_actor_in_view(uid, redraw=False)
 

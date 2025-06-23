@@ -189,9 +189,8 @@ class ViewVTK(BaseView):
             # No color for image
             # Now update color for actor uid
             color_RGB = [color_R / 255, color_G / 255, color_B / 255]
-            self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[
-                0
-            ].GetProperty().SetColor(color_RGB)
+            # self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[0].GetProperty().SetColor(color_RGB)
+            self.get_actor_by_uid(uid).GetProperty().SetColor(color_RGB)
         else:
             return
 
@@ -224,9 +223,8 @@ class ViewVTK(BaseView):
             elif collection == "image_coll":
                 opacity = self.parent.image_coll.get_legend()["opacity"] / 100
             # Now update color for actor uid
-            self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[
-                0
-            ].GetProperty().SetOpacity(opacity)
+            # self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[0].GetProperty().SetOpacity(opacity)
+            self.get_actor_by_uid(uid).GetProperty().SetOpacity(opacity)
         else:
             return
 
@@ -258,9 +256,8 @@ class ViewVTK(BaseView):
                 ]
             # No thickness for image
             # Now update thickness for actor uid
-            self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[
-                0
-            ].GetProperty().SetLineWidth(line_thick)
+            # self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[0].GetProperty().SetLineWidth(line_thick)
+            self.get_actor_by_uid(uid).GetProperty().SetLineWidth(line_thick)
         else:
             return
 
@@ -293,9 +290,8 @@ class ViewVTK(BaseView):
                 ]
             # No thickness for image
             # Now update point size for actor uid
-            self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[
-                0
-            ].GetProperty().SetPointSize(point_size)
+            # self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[0].GetProperty().SetPointSize(point_size)
+            self.get_actor_by_uid(uid).GetProperty().SetPointSize(point_size)
         else:
             return
 
@@ -351,14 +347,9 @@ class ViewVTK(BaseView):
         # plotter.remove_actor can remove a single entity or a list of entities as actors ->
         # here we remove a single entity
         if not self.actors_df.loc[self.actors_df["uid"] == uid].empty:
-            this_actor = self.actors_df.loc[
-                self.actors_df["uid"] == uid, "actor"
-            ].values[0]
+            # this_actor = self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[0]
+            this_actor = self.get_actor_by_uid(uid)
             success = self.plotter.remove_actor(this_actor)
-            # the following should go in the abstract base view
-            # self.actors_df.drop(
-            #     self.actors_df[self.actors_df["uid"] == uid].index, inplace=True
-            # )
 
     def initialize_interactor(self):
         """Add the pyvista interactor object to self.ViewFrameLayout ->
@@ -1102,9 +1093,8 @@ class ViewVTK(BaseView):
 
             # Show selected actors in yellow
             for sel_uid in self.selected_uids:
-                sel_actor = self.actors_df.loc[
-                    self.actors_df["uid"] == sel_uid, "actor"
-                ].values[0]
+                # sel_actor = self.actors_df.loc[self.actors_df["uid"] == sel_uid, "actor"].values[0]
+                sel_actor = self.get_actor_by_uid(sel_uid)
                 collection = self.actors_df.loc[
                     self.actors_df["uid"] == sel_uid, "collection"
                 ].values[0]

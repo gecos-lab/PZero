@@ -162,7 +162,7 @@ class View3D(ViewVTK):
         self.enable_actions()
 
     def orbit_entity(self):
-        uid_list = list(self.actors_df["uid"].values)
+        uid_list = self.actors_df["uid"].to_list()
 
         in_dict = {
             "uid": ["Actor uid", uid_list],
@@ -181,7 +181,8 @@ class View3D(ViewVTK):
         )
 
         uid = opt_dict["uid"]
-        entity = self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[0]
+        # entity = self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[0]
+        entity = self.get_actor_by_uid(uid)
 
         focus = entity.GetCenter()
         view_up = [
@@ -198,11 +199,13 @@ class View3D(ViewVTK):
         off_screen_plot = pv_plot(off_screen=True)
         # off_screen_plot.set_background('Green')
 
-        visible_actors = self.actors_df.loc[
-            self.actors_df["show"] == True, "actor"
-        ].values
-        for actor in visible_actors:
-            off_screen_plot.add_actor(actor)
+        # visible_actors = self.actors_df.loc[
+        #     self.actors_df["show"] == True, "actor"
+        # ].values
+        # for actor in visible_actors:
+        #     off_screen_plot.add_actor(actor)
+        for uid in self.shown_uids:
+            off_screen_plot.add_actor(self.get_actor_by_uid(uid))
 
         # off_screen_plot.show(auto_close=False)
         n_points = int(opt_dict["fps"] * opt_dict["length"])
@@ -393,8 +396,9 @@ class View3D(ViewVTK):
         return this_actor
 
     def show_octree(self):
-        vis_uids = self.actors_df.loc[self.actors_df["show"] == True, "uid"]
-        for uid in vis_uids:
+        # vis_uids = self.actors_df.loc[self.actors_df["show"] == True, "uid"]
+        # for uid in vis_uids:
+        for uid in self.shown_uids:
             vtk_obj = self.parent.dom_coll.get_uid_vtk_obj(uid)
             octree = PolyData()  #  possible recursion problem
             # print(vtk_obj.locator)
