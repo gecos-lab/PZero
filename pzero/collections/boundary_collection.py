@@ -236,8 +236,9 @@ def boundary_from_pca(self):
                 if len(existing_vtk.points) > 0:
                     existing_z_values = existing_vtk.points[:, 2]
                     if len(existing_z_values) > 0:
-                        z_min = np.min(existing_z_values)
-                        z_max = np.max(existing_z_values)
+                        from numpy import min as np_min, max as np_max
+                        z_min = np_min(existing_z_values)
+                        z_max = np_max(existing_z_values)
                         if z_min != z_max:
                             top_edit.setText(f"{z_max:.2f}")
                             bottom_edit.setText(f"{z_min:.2f}")
@@ -613,6 +614,621 @@ def boundary_from_pca(self):
             boundary_dict["vtk_obj"].append_cell(np_array([0, 7, 4]))
         else:
             # Build oriented rectangular polyline at Z=0 meters using PCA corners
+            boundary_dict["topology"] = "PolyLine"
+            boundary_dict["vtk_obj"] = PolyLine()
+            corners = boundary_dict_updt["corners"]
+            boundary_dict["vtk_obj"].points = [
+                (corners[0, 0], corners[0, 1], 0.0),  # corner 0
+                (corners[1, 0], corners[1, 1], 0.0),  # corner 1
+                (corners[2, 0], corners[2, 1], 0.0),  # corner 2
+                (corners[3, 0], corners[3, 1], 0.0),  # corner 3
+                (corners[0, 0], corners[0, 1], 0.0),  # back to corner 0 to close
+            ]
+            boundary_dict["vtk_obj"].auto_cells()
+        
+        uid = self.parent.boundary_coll.add_entity_from_dict(entity_dict=boundary_dict)
+    
+    else:
+        # Updating existing boundary - it was already updated in the preview
+        # The boundary is already updated via the preview mechanism
+        pass
+    
+    # Un-Freeze QT interface
+    self.enable_actions()
+
+def compute_obb_boundary(parent):
+    """Compute oriented bounding box from all data using covariance matrix approach"""
+    from numpy import concatenate as np_concatenate
+    from numpy import mean as np_mean
+    from numpy import cov as np_cov
+    from numpy import min as np_min
+    from numpy import max as np_max
+    from numpy.linalg import eig as np_eig
+    from numpy import dot as np_dot
+    from numpy import column_stack as np_column_stack
+    
+    # Collect all points from all collections
+    all_points = []
+    
+    # Get points from geological collection
+    try:
+        for uid in parent.geol_coll.get_uids:
+            vtk_obj = parent.geol_coll.get_uid_vtk_obj(uid)
+            if hasattr(vtk_obj, 'points') and isinstance(vtk_obj.points, np_ndarray):
+                all_points.append(vtk_obj.points)
+    except:
+        pass
+    
+    # Get points from fluid collection  
+    try:
+        for uid in parent.fluid_coll.get_uids:
+            vtk_obj = parent.fluid_coll.get_uid_vtk_obj(uid)
+            if hasattr(vtk_obj, 'points') and isinstance(vtk_obj.points, np_ndarray):
+                all_points.append(vtk_obj.points)
+    except:
+        pass
+        
+    # Get points from background collection
+    try:
+        for uid in parent.backgrnd_coll.get_uids:
+            vtk_obj = parent.backgrnd_coll.get_uid_vtk_obj(uid)
+            if hasattr(vtk_obj, 'points') and isinstance(vtk_obj.points, np_ndarray):
+                all_points.append(vtk_obj.points)
+    except:
+        pass
+        
+    # Get points from well collection
+    try:
+        for uid in parent.well_coll.get_uids:
+            vtk_obj = parent.well_coll.get_uid_vtk_obj(uid)
+            if hasattr(vtk_obj, 'points') and isinstance(vtk_obj.points, np_ndarray):
+                all_points.append(vtk_obj.points)
+    except:
+        pass
+        
+    # Get points from domain collection
+    try:
+        for uid in parent.dom_coll.get_uids:
+            vtk_obj = parent.dom_coll.get_uid_vtk_obj(uid)
+            if hasattr(vtk_obj, 'points') and isinstance(vtk_obj.points, np_ndarray):
+                all_points.append(vtk_obj.points)
+    except:
+        pass
+    
+    if not all_points:
+        return None, None, None
+        
+    # Concatenate all points
+    combined_points = np_concatenate(all_points, axis=0)
+    
+    # Use only X,Y coordinates for 2D OBB (map view)
+    xy_points = combined_points[:, :2]
+    
+    # Compute centroid
+    centroid = np_mean(xy_points, axis=0)
+    
+    # Center the points
+    centered_points = xy_points - centroid
+    
+    # Compute covariance matrix
+    cov_matrix = np_cov(centered_points.T)
+    
+    # Get eigenvalues and eigenvectors
+    eigenvalues, eigenvectors = np_eig(cov_matrix)
+    
+    # Sort eigenvectors by eigenvalues (descending order)
+    from numpy import argsort as np_argsort
+    idx = np_argsort(eigenvalues)[::-1]
+    eigenvalues = eigenvalues[idx]
+    eigenvectors = eigenvectors[:, idx]
+    
+    # Project points onto the principal axes
+    projected_points = np_dot(centered_points, eigenvectors)
+    
+    # Find the extent in the projected space
+    min_proj = np_array([np_min(projected_points[:, 0]), np_min(projected_points[:, 1])])
+    max_proj = np_array([np_max(projected_points[:, 0]), np_max(projected_points[:, 1])])
+    
+    # Add some margin (10% of range)
+    range_proj = max_proj - min_proj
+    margin = range_proj * 0.1
+    min_proj_extended = min_proj - margin
+    max_proj_extended = max_proj + margin
+    
+    # Create corner points in the projected space (oriented rectangle)
+    corners_proj = np_array([
+        [min_proj_extended[0], min_proj_extended[1]],  # corner 0
+        [max_proj_extended[0], min_proj_extended[1]],  # corner 1 
+        [max_proj_extended[0], max_proj_extended[1]],  # corner 2
+        [min_proj_extended[0], max_proj_extended[1]]   # corner 3
+    ])
+    
+    # Transform corners back to original coordinate space
+    corners_xy = np_dot(corners_proj, eigenvectors.T) + centroid
+    
+    # Get Z extent from all points
+    z_min = np_min(combined_points[:, 2])
+    z_max = np_max(combined_points[:, 2])
+    z_range = z_max - z_min
+    z_margin = z_range * 0.1
+    z_bottom = z_min - z_margin
+    z_top = z_max + z_margin
+    
+    # Return the four corners of the oriented rectangle plus Z extent
+    return corners_xy, z_top, z_bottom
+
+def boundary_from_obb(self):
+    """Create a new Boundary from OBB (Oriented Bounding Box) analysis of all data"""
+    boundary_dict = deepcopy(self.parent.boundary_coll.entity_dict)
+    
+    # Freeze QT interface
+    self.disable_actions()
+    
+    # Compute initial OBB values
+    obb_result = compute_obb_boundary(self.parent)
+    
+    if obb_result[0] is None:
+        from pzero.helpers.helper_dialogs import message_dialog
+        message_dialog(title="OBB Boundary Error", message="No data found to compute OBB boundary.")
+        self.enable_actions()
+        return
+    
+    # Extract OBB results
+    corners_xy, top, bottom = obb_result
+    
+    # Create enhanced dialog with OBB compute button and size controls
+    from PySide6.QtWidgets import (QWidget, QGridLayout, QLabel, QLineEdit, QCheckBox, 
+                                   QPushButton, QVBoxLayout, QSlider, QHBoxLayout, QSpinBox,
+                                   QGroupBox)
+    from PySide6.QtCore import Qt
+    
+    # Store original OBB dimensions for scaling
+    original_corners = corners_xy.copy()
+    
+    # Calculate original dimensions for scaling reference  
+    from numpy import max as np_max, min as np_min
+    obb_width = np_max(corners_xy[:, 0]) - np_min(corners_xy[:, 0])
+    obb_height = np_max(corners_xy[:, 1]) - np_min(corners_xy[:, 1])
+    
+    # Create custom dialog widget
+    dialog = QWidget()
+    dialog.setWindowTitle("New Boundary from OBB - Interactive Sizing")
+    dialog.resize(500, 400)
+    dialog.setWindowModality(Qt.ApplicationModal)
+    
+    layout = QVBoxLayout(dialog)
+    
+    # Add warning label
+    warning_label = QLabel("Build new Boundary using OBB (Oriented Bounding Box) analysis of all data.\nMinimum volume oriented boundary box will be created based on covariance matrix.\nUse sliders to adjust size and click 'Update Preview' to see changes.")
+    layout.addWidget(warning_label)
+    
+    # Create form layout for basic inputs
+    basic_group = QGroupBox("Basic Settings")
+    basic_layout = QGridLayout(basic_group)
+    
+    # Boundary selection dropdown
+    from PySide6.QtWidgets import QComboBox
+    boundary_combo = QComboBox()
+    boundary_combo.addItem("Create New Boundary", "new")
+    
+    # Add existing boundaries to dropdown
+    existing_boundaries = self.parent.boundary_coll.get_names
+    for boundary_name in existing_boundaries:
+        boundary_uid = None
+        for uid in self.parent.boundary_coll.get_uids:
+            if self.parent.boundary_coll.get_uid_name(uid) == boundary_name:
+                boundary_uid = uid
+                break
+        if boundary_uid:
+            boundary_combo.addItem(f"Update: {boundary_name}", boundary_uid)
+    
+    # Input fields
+    name_edit = QLineEdit("obb_boundary")
+    top_edit = QLineEdit(f"{top:.2f}")
+    bottom_edit = QLineEdit(f"{bottom:.2f}")
+    volume_checkbox = QCheckBox()
+    volume_checkbox.setChecked(True)
+    
+    # Function to handle boundary selection change
+    def on_boundary_selection_changed():
+        selected_data = boundary_combo.currentData()
+        if selected_data == "new":
+            # New boundary mode
+            name_edit.setEnabled(True)
+            name_edit.setText("obb_boundary")
+            top_edit.setText(f"{top:.2f}")
+            bottom_edit.setText(f"{bottom:.2f}")
+            volume_checkbox.setChecked(True)
+        else:
+            # Update existing boundary mode
+            existing_uid = selected_data
+            existing_name = self.parent.boundary_coll.get_uid_name(existing_uid)
+            name_edit.setEnabled(False)
+            name_edit.setText(existing_name)
+            
+            # Get existing boundary properties
+            existing_vtk = self.parent.boundary_coll.get_uid_vtk_obj(existing_uid)
+            if hasattr(existing_vtk, 'points') and existing_vtk.points is not None:
+                if len(existing_vtk.points) > 0:
+                    existing_z_values = existing_vtk.points[:, 2]
+                    if len(existing_z_values) > 0:
+                        z_min = np_min(existing_z_values)
+                        z_max = np_max(existing_z_values)
+                        if z_min != z_max:
+                            top_edit.setText(f"{z_max:.2f}")
+                            bottom_edit.setText(f"{z_min:.2f}")
+                            volume_checkbox.setChecked(True)
+                        else:
+                            # It's a 2D boundary
+                            volume_checkbox.setChecked(False)
+    
+    boundary_combo.currentTextChanged.connect(on_boundary_selection_changed)
+    
+    # Add to basic form
+    basic_layout.addWidget(QLabel("Boundary:"), 0, 0)
+    basic_layout.addWidget(boundary_combo, 0, 1)
+    basic_layout.addWidget(QLabel("Boundary name:"), 1, 0)
+    basic_layout.addWidget(name_edit, 1, 1)
+    basic_layout.addWidget(QLabel("Top Z:"), 2, 0)
+    basic_layout.addWidget(top_edit, 2, 1)
+    basic_layout.addWidget(QLabel("Bottom Z:"), 3, 0)
+    basic_layout.addWidget(bottom_edit, 3, 1)
+    basic_layout.addWidget(QLabel("Create volume:"), 4, 0)
+    basic_layout.addWidget(volume_checkbox, 4, 1)
+    
+    layout.addWidget(basic_group)
+    
+    # Create size control group
+    size_group = QGroupBox("Size Controls")
+    size_layout = QGridLayout(size_group)
+    
+    # Width control (along first principal component)
+    width_label = QLabel("Width Scale:")
+    width_slider = QSlider(Qt.Horizontal)
+    width_slider.setMinimum(10)  # 10% of original
+    width_slider.setMaximum(500)  # 500% of original
+    width_slider.setValue(100)  # 100% = original size
+    width_spinbox = QSpinBox()
+    width_spinbox.setMinimum(10)
+    width_spinbox.setMaximum(500)
+    width_spinbox.setValue(100)
+    width_spinbox.setSuffix("%")
+    
+    # Height control (along second principal component)
+    height_label = QLabel("Height Scale:")
+    height_slider = QSlider(Qt.Horizontal)
+    height_slider.setMinimum(10)  # 10% of original
+    height_slider.setMaximum(500)  # 500% of original
+    height_slider.setValue(100)  # 100% = original size
+    height_spinbox = QSpinBox()
+    height_spinbox.setMinimum(10)
+    height_spinbox.setMaximum(500)
+    height_spinbox.setValue(100)
+    height_spinbox.setSuffix("%")
+    
+    # Connect sliders and spinboxes
+    width_slider.valueChanged.connect(width_spinbox.setValue)
+    width_spinbox.valueChanged.connect(width_slider.setValue)
+    height_slider.valueChanged.connect(height_spinbox.setValue)
+    height_spinbox.valueChanged.connect(height_slider.setValue)
+    
+    # Add to size layout
+    size_layout.addWidget(width_label, 0, 0)
+    size_layout.addWidget(width_slider, 0, 1)
+    size_layout.addWidget(width_spinbox, 0, 2)
+    size_layout.addWidget(height_label, 1, 0)
+    size_layout.addWidget(height_slider, 1, 1)
+    size_layout.addWidget(height_spinbox, 1, 2)
+    
+    layout.addWidget(size_group)
+    
+    # Function to update corners based on slider values
+    def update_corners_from_sliders():
+        nonlocal corners_xy
+        # Get scale factors from sliders (convert percentage to decimal)
+        width_scale = width_slider.value() / 100.0
+        height_scale = height_slider.value() / 100.0
+        
+        # Calculate center of original corners
+        center_x = np_mean(original_corners[:, 0])
+        center_y = np_mean(original_corners[:, 1])
+        
+        # Scale corners relative to center
+        scaled_corners = original_corners.copy()
+        scaled_corners[:, 0] = center_x + (scaled_corners[:, 0] - center_x) * width_scale
+        scaled_corners[:, 1] = center_y + (scaled_corners[:, 1] - center_y) * height_scale
+        
+        corners_xy = scaled_corners
+        return scaled_corners
+    
+    # Function to update preview in the main view
+    def update_preview():
+        # Update corners based on current slider values
+        updated_corners = update_corners_from_sliders()
+        
+        selected_data = boundary_combo.currentData()
+        current_top = float(top_edit.text()) if top_edit.text() else top
+        current_bottom = float(bottom_edit.text()) if bottom_edit.text() else bottom
+        
+        if selected_data == "new":
+            # Create a temporary boundary for preview
+            temp_boundary_dict = deepcopy(self.parent.boundary_coll.entity_dict)
+            temp_boundary_dict["name"] = "preview_boundary_temp"
+            
+            if volume_checkbox.isChecked():
+                # Create 3D preview
+                temp_boundary_dict["topology"] = "TriSurf"
+                temp_boundary_dict["vtk_obj"] = TriSurf()
+                nodes = vtkPoints()
+                
+                # Bottom face
+                for i in range(4):
+                    nodes.InsertPoint(i, updated_corners[i, 0], updated_corners[i, 1], current_bottom)
+                # Top face  
+                for i in range(4):
+                    nodes.InsertPoint(i + 4, updated_corners[i, 0], updated_corners[i, 1], current_top)
+                
+                temp_boundary_dict["vtk_obj"].SetPoints(nodes)
+                # Add faces (simplified for preview)
+                temp_boundary_dict["vtk_obj"].append_cell(np_array([0, 1, 2]))
+                temp_boundary_dict["vtk_obj"].append_cell(np_array([0, 2, 3]))
+                temp_boundary_dict["vtk_obj"].append_cell(np_array([4, 6, 5]))
+                temp_boundary_dict["vtk_obj"].append_cell(np_array([4, 7, 6]))
+                temp_boundary_dict["vtk_obj"].append_cell(np_array([0, 1, 4]))
+                temp_boundary_dict["vtk_obj"].append_cell(np_array([1, 4, 5]))
+                temp_boundary_dict["vtk_obj"].append_cell(np_array([1, 2, 5]))
+                temp_boundary_dict["vtk_obj"].append_cell(np_array([2, 5, 6]))
+                temp_boundary_dict["vtk_obj"].append_cell(np_array([2, 3, 6]))
+                temp_boundary_dict["vtk_obj"].append_cell(np_array([3, 6, 7]))
+                temp_boundary_dict["vtk_obj"].append_cell(np_array([3, 0, 7]))
+                temp_boundary_dict["vtk_obj"].append_cell(np_array([0, 7, 4]))
+            else:
+                # Create 2D preview
+                temp_boundary_dict["topology"] = "PolyLine"
+                temp_boundary_dict["vtk_obj"] = PolyLine()
+                temp_boundary_dict["vtk_obj"].points = [
+                    (updated_corners[0, 0], updated_corners[0, 1], 0.0),
+                    (updated_corners[1, 0], updated_corners[1, 1], 0.0),
+                    (updated_corners[2, 0], updated_corners[2, 1], 0.0),
+                    (updated_corners[3, 0], updated_corners[3, 1], 0.0),
+                    (updated_corners[0, 0], updated_corners[0, 1], 0.0),
+                ]
+                temp_boundary_dict["vtk_obj"].auto_cells()
+            
+            # Remove any existing preview
+            existing_preview_uids = [uid for uid in self.parent.boundary_coll.get_uids if 
+                                    self.parent.boundary_coll.get_uid_name(uid) == "preview_boundary_temp"]
+            for uid in existing_preview_uids:
+                self.parent.boundary_coll.remove_entity(uid)
+            
+            # Add new preview
+            preview_uid = self.parent.boundary_coll.add_entity_from_dict(entity_dict=temp_boundary_dict)
+        
+        else:
+            # Update existing boundary directly
+            existing_uid = selected_data
+            existing_vtk = self.parent.boundary_coll.get_uid_vtk_obj(existing_uid)
+            
+            if volume_checkbox.isChecked():
+                # Update to 3D boundary
+                if not isinstance(existing_vtk, TriSurf):
+                    # Convert from 2D to 3D
+                    new_vtk = TriSurf()
+                else:
+                    new_vtk = existing_vtk
+                    new_vtk.Reset()  # Clear existing geometry
+                
+                nodes = vtkPoints()
+                # Bottom face
+                for i in range(4):
+                    nodes.InsertPoint(i, updated_corners[i, 0], updated_corners[i, 1], current_bottom)
+                # Top face  
+                for i in range(4):
+                    nodes.InsertPoint(i + 4, updated_corners[i, 0], updated_corners[i, 1], current_top)
+                
+                new_vtk.SetPoints(nodes)
+                # Add faces
+                new_vtk.append_cell(np_array([0, 1, 2]))
+                new_vtk.append_cell(np_array([0, 2, 3]))
+                new_vtk.append_cell(np_array([4, 6, 5]))
+                new_vtk.append_cell(np_array([4, 7, 6]))
+                new_vtk.append_cell(np_array([0, 1, 4]))
+                new_vtk.append_cell(np_array([1, 4, 5]))
+                new_vtk.append_cell(np_array([1, 2, 5]))
+                new_vtk.append_cell(np_array([2, 5, 6]))
+                new_vtk.append_cell(np_array([2, 3, 6]))
+                new_vtk.append_cell(np_array([3, 6, 7]))
+                new_vtk.append_cell(np_array([3, 0, 7]))
+                new_vtk.append_cell(np_array([0, 7, 4]))
+                
+                # Update the topology if changed
+                if not isinstance(existing_vtk, TriSurf):
+                    self.parent.boundary_coll.df.loc[
+                        self.parent.boundary_coll.df["uid"] == existing_uid, "topology"
+                    ] = "TriSurf"
+                
+                self.parent.boundary_coll.replace_vtk(existing_uid, new_vtk)
+            
+            else:
+                # Update to 2D boundary
+                if not isinstance(existing_vtk, PolyLine):
+                    # Convert from 3D to 2D
+                    new_vtk = PolyLine()
+                else:
+                    new_vtk = existing_vtk
+                    new_vtk.Reset()  # Clear existing geometry
+                
+                new_vtk.points = [
+                    (updated_corners[0, 0], updated_corners[0, 1], 0.0),
+                    (updated_corners[1, 0], updated_corners[1, 1], 0.0),
+                    (updated_corners[2, 0], updated_corners[2, 1], 0.0),
+                    (updated_corners[3, 0], updated_corners[3, 1], 0.0),
+                    (updated_corners[0, 0], updated_corners[0, 1], 0.0),
+                ]
+                new_vtk.auto_cells()
+                
+                # Update the topology if changed
+                if not isinstance(existing_vtk, PolyLine):
+                    self.parent.boundary_coll.df.loc[
+                        self.parent.boundary_coll.df["uid"] == existing_uid, "topology"
+                    ] = "PolyLine"
+                
+                self.parent.boundary_coll.replace_vtk(existing_uid, new_vtk)
+        
+        # Force view update
+        try:
+            for view in self.parent.view_dict.values():
+                if hasattr(view, 'add_all_entities'):
+                    view.add_all_entities()
+        except:
+            pass
+    
+    # Button layout
+    button_layout = QGridLayout()
+    
+    # OBB compute button
+    def compute_obb_callback():
+        nonlocal corners_xy, top, bottom, original_corners
+        new_result = compute_obb_boundary(self.parent)
+        if new_result[0] is not None:
+            corners_xy, new_top, new_bottom = new_result
+            original_corners = corners_xy.copy()  # Update original reference
+            top_edit.setText(f"{new_top:.2f}")
+            bottom_edit.setText(f"{new_bottom:.2f}")
+            top = new_top
+            bottom = new_bottom
+            # Reset sliders to 100%
+            width_slider.setValue(100)
+            height_slider.setValue(100)
+    
+    obb_button = QPushButton("Compute OBB")
+    obb_button.clicked.connect(compute_obb_callback)
+    
+    update_button = QPushButton("Update Preview")
+    update_button.clicked.connect(update_preview)
+    
+    ok_button = QPushButton("OK")
+    cancel_button = QPushButton("Cancel")
+    
+    button_layout.addWidget(obb_button, 0, 0)
+    button_layout.addWidget(update_button, 0, 1)
+    button_layout.addWidget(cancel_button, 0, 2)
+    button_layout.addWidget(ok_button, 0, 3)
+    
+    layout.addLayout(button_layout)
+    
+    # Dialog result handling
+    dialog_result = {"accepted": False}
+        
+    def reject_dialog():
+        dialog_result["accepted"] = False
+        # Clean up preview when canceling
+        existing_preview_uids = [uid for uid in self.parent.boundary_coll.get_uids if 
+                                self.parent.boundary_coll.get_uid_name(uid) == "preview_boundary_temp"]
+        for uid in existing_preview_uids:
+            self.parent.boundary_coll.remove_entity(uid)
+        dialog.close()
+    
+    def accept_dialog():
+        dialog_result["accepted"] = True
+        # Update corners one final time before accepting
+        update_corners_from_sliders()
+        # Clean up preview
+        existing_preview_uids = [uid for uid in self.parent.boundary_coll.get_uids if 
+                                self.parent.boundary_coll.get_uid_name(uid) == "preview_boundary_temp"]
+        for uid in existing_preview_uids:
+            self.parent.boundary_coll.remove_entity(uid)
+        dialog.close()
+    
+    ok_button.clicked.connect(accept_dialog)
+    cancel_button.clicked.connect(reject_dialog)
+    
+    # Show dialog and wait for result
+    dialog.show()
+    
+    # Process events until dialog is closed
+    from PySide6.QtWidgets import QApplication
+    while dialog.isVisible():
+        QApplication.processEvents()
+    
+    if not dialog_result["accepted"]:
+        self.enable_actions()
+        return
+    
+    # Get values from dialog
+    selected_data = boundary_combo.currentData()
+    boundary_dict_updt = {
+        "name": name_edit.text() if name_edit.text() else "obb_boundary",
+        "top": float(top_edit.text()) if top_edit.text() else 1000.0,
+        "bottom": float(bottom_edit.text()) if bottom_edit.text() else -1000.0,
+        "activatevolume": "check" if volume_checkbox.isChecked() else "uncheck",
+        "corners": corners_xy  # Store the oriented corners
+    }
+    
+    # Check if top and bottom fields are valid
+    if boundary_dict_updt["top"] == boundary_dict_updt["bottom"]:
+        boundary_dict_updt["top"] = boundary_dict_updt["top"] + 1.0
+    
+    if selected_data == "new":
+        # Creating new boundary
+        # Check if other Boundaries with the same name exist. If so, add suffix to make the name unique.
+        while True:
+            if boundary_dict_updt["name"] in self.parent.boundary_coll.get_names:
+                boundary_dict_updt["name"] = boundary_dict_updt["name"] + "_0"
+            else:
+                break
+        
+        boundary_dict["name"] = boundary_dict_updt["name"]
+        
+        if boundary_dict_updt["activatevolume"] == "check":
+            # Build oriented Boundary as volume using OBB corners
+            boundary_dict["topology"] = "TriSurf"
+            boundary_dict["vtk_obj"] = TriSurf()
+            nodes = vtkPoints()
+            
+            # Get the oriented corners
+            corners = boundary_dict_updt["corners"]
+            
+            # Bottom face (4 corners at bottom Z)
+            for i in range(4):
+                nodes.InsertPoint(
+                    i,
+                    corners[i, 0],  # X from OBB
+                    corners[i, 1],  # Y from OBB  
+                    boundary_dict_updt["bottom"]  # Z bottom
+                )
+            
+            # Top face (4 corners at top Z)
+            for i in range(4):
+                nodes.InsertPoint(
+                    i + 4,
+                    corners[i, 0],  # X from OBB
+                    corners[i, 1],  # Y from OBB
+                    boundary_dict_updt["top"]  # Z top
+                )
+            
+            boundary_dict["vtk_obj"].SetPoints(nodes)
+            
+            # Create triangular faces for the oriented box
+            # Bottom face (2 triangles)
+            boundary_dict["vtk_obj"].append_cell(np_array([0, 1, 2]))
+            boundary_dict["vtk_obj"].append_cell(np_array([0, 2, 3]))
+            
+            # Top face (2 triangles)
+            boundary_dict["vtk_obj"].append_cell(np_array([4, 6, 5]))
+            boundary_dict["vtk_obj"].append_cell(np_array([4, 7, 6]))
+            
+            # Side faces (8 triangles)
+            boundary_dict["vtk_obj"].append_cell(np_array([0, 1, 4]))
+            boundary_dict["vtk_obj"].append_cell(np_array([1, 4, 5]))
+            boundary_dict["vtk_obj"].append_cell(np_array([1, 2, 5]))
+            boundary_dict["vtk_obj"].append_cell(np_array([2, 5, 6]))
+            boundary_dict["vtk_obj"].append_cell(np_array([2, 3, 6]))
+            boundary_dict["vtk_obj"].append_cell(np_array([3, 6, 7]))
+            boundary_dict["vtk_obj"].append_cell(np_array([3, 0, 7]))
+            boundary_dict["vtk_obj"].append_cell(np_array([0, 7, 4]))
+        else:
+            # Build oriented rectangular polyline at Z=0 meters using OBB corners
             boundary_dict["topology"] = "PolyLine"
             boundary_dict["vtk_obj"] = PolyLine()
             corners = boundary_dict_updt["corners"]

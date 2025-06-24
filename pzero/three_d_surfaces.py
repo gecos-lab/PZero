@@ -9,6 +9,7 @@ from pyvista import PolyData as pv_PolyData
 
 from numpy import abs as np_abs
 from numpy import around as np_around
+from numpy import array as np_array
 from numpy import cbrt as np_cbrt
 from numpy import cos as np_cos
 from numpy import flip as np_flip
@@ -79,6 +80,174 @@ from .entities_factory import (
     Attitude,
 )
 from .helpers.helper_functions import freeze_gui
+
+def get_boundary_orientation_info(boundary_vtk_obj):
+    """
+    Determine if boundary is oriented and extract transformation parameters.
+    Returns orientation info for coordinate transformation.
+    """
+    from numpy import array as np_array
+    from numpy import mean as np_mean
+    from numpy import arctan2 as np_arctan2
+    from numpy import pi as np_pi
+    
+    # Check if this is a 3D boundary (TriSurf) - could be oriented
+    if hasattr(boundary_vtk_obj, 'points') and boundary_vtk_obj.points is not None:
+        if len(boundary_vtk_obj.points) >= 4:  # At least 4 points for oriented box
+            
+            # Get the boundary points
+            points = boundary_vtk_obj.points
+            
+            # For 3D boundaries, check if this looks like an oriented box
+            # by analyzing the point distribution
+            if len(points) == 8:  # Exactly 8 points = likely oriented box
+                # Get bottom face points (assuming first 4 are bottom)
+                bottom_points = points[:4, :2]  # X,Y coordinates only
+                
+                # Calculate edges of the rectangle
+                edge1 = bottom_points[1] - bottom_points[0]
+                edge2 = bottom_points[3] - bottom_points[0]
+                
+                # Check if edges are roughly perpendicular (oriented box)
+                from numpy import dot as np_dot
+                from numpy.linalg import norm as np_norm
+                if abs(np_dot(edge1, edge2) / (np_norm(edge1) * np_norm(edge2))) < 0.1:  # Nearly perpendicular
+                    
+                    # This looks like an oriented box - calculate transformation
+                    # Find the primary edge (longest one)
+                    if np_norm(edge1) >= np_norm(edge2):
+                        primary_edge = edge1
+                    else:
+                        primary_edge = edge2
+                    
+                    # Calculate rotation angle to align primary edge with X-axis
+                    rotation_angle = np_arctan2(primary_edge[1], primary_edge[0])
+                    
+                    # Translation vector (negative of lower-left corner)
+                    corner_coords = np_mean(bottom_points, axis=0)  # Use centroid as reference
+                    min_corner = np_array([points[:, 0].min(), points[:, 1].min()])
+                    translation_vector = -min_corner
+                    
+                    return {
+                        'is_oriented': True,
+                        'rotation_angle': rotation_angle,
+                        'translation_vector': translation_vector,
+                        'box_points': points
+                    }
+            
+            # For 2D boundaries or complex shapes, check if it looks oriented
+            elif len(points) >= 4:
+                # Use first 4 points to estimate orientation
+                xy_points = points[:4, :2]
+                
+                # Calculate covariance to detect orientation
+                from numpy import cov as np_cov
+                from numpy.linalg import eig as np_eig
+                centered_points = xy_points - np_mean(xy_points, axis=0)
+                cov_matrix = np_cov(centered_points.T)
+                eigenvalues, eigenvectors = np_eig(cov_matrix)
+                
+                # Check if there's a clear primary direction
+                ratio = eigenvalues.max() / eigenvalues.min()
+                if ratio > 2.0:  # Significant anisotropy suggests orientation
+                    
+                    # Get primary eigenvector
+                    primary_idx = eigenvalues.argmax()
+                    primary_vector = eigenvectors[:, primary_idx]
+                    
+                    # Calculate rotation angle
+                    rotation_angle = np_arctan2(primary_vector[1], primary_vector[0])
+                    
+                    # Translation vector
+                    min_corner = np_array([points[:, 0].min(), points[:, 1].min()])
+                    translation_vector = -min_corner
+                    
+                    return {
+                        'is_oriented': True,
+                        'rotation_angle': rotation_angle,
+                        'translation_vector': translation_vector,
+                        'box_points': points
+                    }
+    
+    # Default: not oriented (axis-aligned or circular)
+    return {
+        'is_oriented': False,
+        'rotation_angle': 0.0,
+        'translation_vector': np_array([0.0, 0.0]),
+        'box_points': None
+    }
+
+def apply_coordinate_transformation(points_df, orientation_info):
+    """
+    Apply coordinate transformation to input data points.
+    Transform from real coordinates to local oriented coordinates.
+    """
+    from numpy import cos as np_cos
+    from numpy import sin as np_sin
+    from numpy import array as np_array
+    
+    if not orientation_info['is_oriented']:
+        return points_df.copy()  # No transformation needed
+    
+    # Get transformation parameters
+    angle = orientation_info['rotation_angle']
+    translation = orientation_info['translation_vector']
+    
+    # Create rotation matrix (2D, horizontal plane only)
+    cos_a = np_cos(-angle)  # Negative angle for forward transformation
+    sin_a = np_sin(-angle)
+    
+    # Apply transformation to input dataframe
+    transformed_df = points_df.copy()
+    
+    # Translate first
+    transformed_df['X'] = transformed_df['X'] + translation[0]
+    transformed_df['Y'] = transformed_df['Y'] + translation[1]
+    # Z stays the same (no rotation around Z-axis)
+    
+    # Then rotate
+    original_x = transformed_df['X'].values.copy()
+    original_y = transformed_df['Y'].values.copy()
+    transformed_df['X'] = cos_a * original_x - sin_a * original_y
+    transformed_df['Y'] = sin_a * original_x + cos_a * original_y
+    
+    return transformed_df
+
+def apply_inverse_coordinate_transformation(points, orientation_info):
+    """
+    Apply inverse coordinate transformation to results.
+    Transform from local oriented coordinates back to real coordinates.
+    """
+    from numpy import cos as np_cos
+    from numpy import sin as np_sin
+    from numpy import array as np_array
+    
+    if not orientation_info['is_oriented']:
+        return points  # No transformation needed
+    
+    # Get transformation parameters
+    angle = orientation_info['rotation_angle']
+    translation = orientation_info['translation_vector']
+    
+    # Create inverse rotation matrix
+    cos_a = np_cos(angle)  # Positive angle for inverse transformation
+    sin_a = np_sin(angle)
+    
+    # Apply inverse transformation
+    transformed_points = points.copy()
+    
+    # Inverse rotate first
+    original_x = transformed_points[:, 0].copy()
+    original_y = transformed_points[:, 1].copy()
+    transformed_points[:, 0] = cos_a * original_x - sin_a * original_y
+    transformed_points[:, 1] = sin_a * original_x + cos_a * original_y
+    
+    # Then inverse translate
+    transformed_points[:, 0] = transformed_points[:, 0] - translation[0]
+    transformed_points[:, 1] = transformed_points[:, 1] - translation[1]
+    # Z stays the same
+    
+    return transformed_points
 
 @freeze_gui
 def interpolation_delaunay_2d(self):
@@ -420,14 +589,81 @@ def implicit_model_loop_structural(self):
         options_dict["boundary"] = self.boundary_coll.get_names[0]
         options_dict["method"] = "PLI"
     boundary_uid = self.boundary_coll.df.loc[self.boundary_coll.df["name"] == options_dict["boundary"], "uid"].values[0]
-    origin_x = self.boundary_coll.get_uid_vtk_obj(boundary_uid).GetBounds()[0]
-    origin_y = self.boundary_coll.get_uid_vtk_obj(boundary_uid).GetBounds()[2]
-    maximum_x = self.boundary_coll.get_uid_vtk_obj(boundary_uid).GetBounds()[1]
-    maximum_y = self.boundary_coll.get_uid_vtk_obj(boundary_uid).GetBounds()[3]
-    if (
-        self.boundary_coll.get_uid_vtk_obj(boundary_uid).GetBounds()[4]
-        == self.boundary_coll.get_uid_vtk_obj(boundary_uid).GetBounds()[5]
-    ):
+    boundary_vtk_obj = self.boundary_coll.get_uid_vtk_obj(boundary_uid)
+    
+    # Check if boundary is oriented and get transformation info
+    orientation_info = get_boundary_orientation_info(boundary_vtk_obj)
+    
+    if orientation_info['is_oriented']:
+        self.print_terminal("-> Detected oriented boundary - applying coordinate transformation...")
+        self.print_terminal(f"   Rotation angle: {orientation_info['rotation_angle'] * 180.0 / np_pi:.2f} degrees")
+        self.print_terminal(f"   Translation vector: {orientation_info['translation_vector']}")
+        
+        # Check data coverage before transformation
+        original_data_count = len(all_input_data_df)
+        self.print_terminal(f"   Original data points: {original_data_count}")
+        
+        # Transform input data to local coordinates
+        all_input_data_df = apply_coordinate_transformation(all_input_data_df, orientation_info)
+        
+        # Check data distribution after transformation
+        x_range = all_input_data_df['X'].max() - all_input_data_df['X'].min()
+        y_range = all_input_data_df['Y'].max() - all_input_data_df['Y'].min()
+        z_range = all_input_data_df['Z'].max() - all_input_data_df['Z'].min()
+        self.print_terminal(f"   Transformed data ranges - X: {x_range:.1f}, Y: {y_range:.1f}, Z: {z_range:.1f}")
+        
+        # Check for data sparsity issues
+        if original_data_count < 10:
+            self.print_terminal("   WARNING: Very few data points - consider adding more geological constraints")
+        
+    else:
+        self.print_terminal("-> Using standard axis-aligned boundary")
+    
+    # Get boundary extents (now in potentially transformed coordinates)
+    origin_x = boundary_vtk_obj.GetBounds()[0]
+    origin_y = boundary_vtk_obj.GetBounds()[2]
+    maximum_x = boundary_vtk_obj.GetBounds()[1]
+    maximum_y = boundary_vtk_obj.GetBounds()[3]
+    
+    # For oriented boundaries, we need to recalculate bounds in transformed space
+    if orientation_info['is_oriented']:
+        # Transform boundary points to get proper extents in local coordinates
+        boundary_points_real = orientation_info['box_points']
+        if boundary_points_real is not None:
+            # Create temporary dataframe for boundary points
+            boundary_df = pd_DataFrame({
+                'X': boundary_points_real[:, 0],
+                'Y': boundary_points_real[:, 1],
+                'Z': boundary_points_real[:, 2]
+            })
+            boundary_transformed = apply_coordinate_transformation(boundary_df, orientation_info)
+            
+            # Get extents in transformed space
+            origin_x = boundary_transformed['X'].min()
+            maximum_x = boundary_transformed['X'].max()
+            origin_y = boundary_transformed['Y'].min()
+            maximum_y = boundary_transformed['Y'].max()
+    # Handle Z-coordinate bounds
+    if orientation_info['is_oriented'] and orientation_info['box_points'] is not None:
+        # For oriented boundaries, get Z bounds from the transformed boundary points
+        boundary_z_min = boundary_points_real[:, 2].min()
+        boundary_z_max = boundary_points_real[:, 2].max()
+        if boundary_z_min == boundary_z_max:
+            # 2D oriented boundary
+            z_bounds_equal = True
+        else:
+            # 3D oriented boundary
+            z_bounds_equal = False
+            origin_z = boundary_z_min
+            maximum_z = boundary_z_max
+    else:
+        # Standard axis-aligned boundary
+        z_bounds_equal = (boundary_vtk_obj.GetBounds()[4] == boundary_vtk_obj.GetBounds()[5])
+        if not z_bounds_equal:
+            origin_z = boundary_vtk_obj.GetBounds()[4]
+            maximum_z = boundary_vtk_obj.GetBounds()[5]
+    
+    if z_bounds_equal:
         #Boundary with no vertical dimension has been chosen. A dialog that asks for max and min Z is needed
         vertical_extension_in = {
             "message": [
@@ -456,10 +692,6 @@ def implicit_model_loop_structural(self):
         else:
             origin_z = vertical_extension_updt["bottom"]
             maximum_z = vertical_extension_updt["top"]
-    else:
-        #Collect information on the vertical extension of the model from the Boundary vtk obj
-        origin_z = self.boundary_coll.get_uid_vtk_obj(boundary_uid).GetBounds()[4]
-        maximum_z = self.boundary_coll.get_uid_vtk_obj(boundary_uid).GetBounds()[5]
     edge_x = maximum_x - origin_x
     edge_y = maximum_y - origin_y
     edge_z = maximum_z - origin_z
@@ -479,12 +711,26 @@ def implicit_model_loop_structural(self):
     ):
         self.print_terminal("Exit tool: Bounding Box does not intersect input data")
         return
-    default_spacing = np_cbrt(
-        edge_x * edge_y * edge_z / (50 * 50 * 25)
-    )  # default dimension in Loop is 50 x 50 x 25
+    # Adjust grid resolution based on data density and orientation
+    if orientation_info['is_oriented']:
+        # For oriented boundaries, use coarser resolution to avoid over-fitting with sparse data
+        base_resolution = (30 * 30 * 15)  # Coarser than default
+        self.print_terminal("   Using coarser resolution for oriented boundary to improve stability")
+    else:
+        base_resolution = (50 * 50 * 25)  # Standard resolution
+    
+    default_spacing = np_cbrt(edge_x * edge_y * edge_z / base_resolution)
+    
+    # Adjust based on data count
+    data_count = len(all_input_data_df)
+    if data_count < 20:
+        # Very sparse data - use even coarser resolution
+        default_spacing *= 1.5
+        self.print_terminal(f"   Adjusting to coarser spacing due to sparse data ({data_count} points)")
+    
     target_spacing = input_one_value_dialog(
         title="Implicit Modelling - LoopStructural algorithms",
-        label="Grid target spacing in model units\n (yields a 62500 cells model)",
+        label="Grid target spacing in model units\n (auto-adjusted for data density)",
         default_value=default_spacing,
     )
     if target_spacing is None or target_spacing <= 0:
@@ -525,12 +771,43 @@ def implicit_model_loop_structural(self):
     #Add a foliation to the model
     self.print_terminal("-> create_and_add_foliation...")
     tic(parent=self)
+    
+    # Adjust interpolation method for oriented boundaries and sparse data
+    interpolation_method = options_dict["method"]
+    nelements = dimensions[0] * dimensions[1] * dimensions[2]
+    
+    if orientation_info['is_oriented']:
+        # For oriented boundaries, adjust interpolation parameters
+        if data_count < 15:
+            # Very sparse data - use simpler interpolation
+            if interpolation_method == "PLI":
+                self.print_terminal("   Using reduced element count for sparse data with PLI")
+                nelements = min(nelements, data_count * 200)  # Limit complexity
+            elif interpolation_method == "FDI":
+                self.print_terminal("   Switching to PLI for better stability with sparse data")
+                interpolation_method = "PLI"
+                nelements = min(nelements, data_count * 150)
+        
+        self.print_terminal(f"   Adjusted interpolation: {interpolation_method}, elements: {nelements}")
+    
     # interpolator_type can be 'PLI', 'FDI' or 'surfe'
-    model.create_and_add_foliation(
-        "strati_0",
-        interpolator_type=options_dict["method"],
-        nelements=(dimensions[0] * dimensions[1] * dimensions[2]),
-    )
+    try:
+        model.create_and_add_foliation(
+            "strati_0",
+            interpolator_type=interpolation_method,
+            nelements=nelements,
+        )
+    except Exception as e:
+        self.print_terminal(f"   Interpolation failed with {interpolation_method}: {str(e)}")
+        if interpolation_method != "PLI":
+            self.print_terminal("   Falling back to PLI interpolation...")
+            model.create_and_add_foliation(
+                "strati_0",
+                interpolator_type="PLI",
+                nelements=min(nelements, data_count * 100),
+            )
+        else:
+            raise e
     #In version 1.1+ the implicit function representing a geological feature does not have to be solved to generate the model object.
     #The scalar field is solved on demand when the geological features are evaluated. This means that parts of the geological model
     #can be modified and only the older (features lower in the feature list) are updated.
@@ -546,6 +823,13 @@ def implicit_model_loop_structural(self):
     #FOR THE FUTURE: anisotropic resolution?
     # rescale is True by default
     regular_grid = model.regular_grid(nsteps=dimensions, shuffle=False, rescale=False)
+    
+    # Store the original grid coordinates for transformation back to real space
+    if orientation_info['is_oriented']:
+        # The regular_grid is in local (transformed) coordinates
+        # We'll need to transform the final voxet back to real coordinates
+        local_grid_coords = regular_grid.copy()
+    
     toc(parent=self)
     #Evaluate scalar field.#
     self.print_terminal("-> evaluate_feature_value...")
@@ -587,22 +871,50 @@ def implicit_model_loop_structural(self):
     voxet_dict["topology"] = "Voxet"
     voxet_dict["properties_names"] = ["strati_0"]
     voxet_dict["properties_components"] = [1]
-    #Create new instance of Voxet() class
+        #Create new instance of Voxet() class
     voxet_dict["vtk_obj"] = Voxet()
-   #Set origin, dimensions and spacing of the output Voxet.
-    voxet_dict["vtk_obj"].origin = [
-        origin_x + spacing_x / 2,
-        origin_y + spacing_y / 2,
-        origin_z + spacing_z / 2,
-    ]
-    voxet_dict["vtk_obj"].dimensions = dimensions
-    voxet_dict["vtk_obj"].spacing = spacing
+    
+    # Set origin, dimensions and spacing of the output Voxet
+    if orientation_info['is_oriented']:
+        # For oriented boundaries, we need to handle the coordinate transformation
+        # The voxet will be created in local coordinates first, then transformed
+        self.print_terminal("-> Setting up voxet in local coordinate system...")
+        
+        # Use local coordinate system for now
+        local_origin = [
+            origin_x + spacing_x / 2,
+            origin_y + spacing_y / 2,
+            origin_z + spacing_z / 2,
+        ]
+        voxet_dict["vtk_obj"].origin = local_origin
+        voxet_dict["vtk_obj"].dimensions = dimensions
+        voxet_dict["vtk_obj"].spacing = spacing
+        
+        # Store transformation info for later use
+        voxet_dict["_orientation_info"] = orientation_info
+        voxet_dict["_local_origin"] = local_origin
+    else:
+        # Standard axis-aligned voxet
+        voxet_dict["vtk_obj"].origin = [
+            origin_x + spacing_x / 2,
+            origin_y + spacing_y / 2,
+            origin_z + spacing_z / 2,
+        ]
+        voxet_dict["vtk_obj"].dimensions = dimensions
+        voxet_dict["vtk_obj"].spacing = spacing
     print(voxet_dict)
     toc(parent=self)
     #Pass calculated values of the LoopStructural model to the Voxet, as scalar fields
     self.print_terminal("-> populate Voxet...")
     tic(parent=self)
     voxet_dict["vtk_obj"].set_point_data(data_key="strati_0", attribute_matrix=scalar_field)
+    
+    # For oriented boundaries, the voxet is initially created in local coordinates
+    # We'll transform it to real coordinates after iso-surface extraction
+    if orientation_info['is_oriented']:
+        self.print_terminal("-> voxet created in local coordinate system for now...")
+        self.print_terminal(f"   Will transform to real coordinates after iso-surface extraction")
+    
     #Create new entity in mesh3d_coll from the populated voxet dictionary
     if voxet_dict["vtk_obj"].points_number > 0:
         self.mesh3d_coll.add_entity_from_dict(voxet_dict)
@@ -651,6 +963,21 @@ def implicit_model_loop_structural(self):
         surf_dict["scenario"] = scenario
         surf_dict["vtk_obj"] = TriSurf()
         surf_dict["vtk_obj"].ShallowCopy(iso_surface.GetOutput())
+        
+        # Transform iso-surface back to real coordinates if needed
+        if orientation_info['is_oriented']:
+            if isinstance(surf_dict["vtk_obj"].points, np_ndarray) and len(surf_dict["vtk_obj"].points) > 0:
+                self.print_terminal(f"-> transforming iso-surface at value = {value} back to real coordinates...")
+                
+                # Transform points back to real coordinate system
+                transformed_points = apply_inverse_coordinate_transformation(
+                    surf_dict["vtk_obj"].points, orientation_info
+                )
+                
+                # Update the surface points
+                surf_dict["vtk_obj"].points[:] = transformed_points
+                surf_dict["vtk_obj"].Modified()
+        
         surf_dict["vtk_obj"].Modified()
         if isinstance(surf_dict["vtk_obj"].points, np_ndarray):
             if len(surf_dict["vtk_obj"].points) > 0:
@@ -660,6 +987,60 @@ def implicit_model_loop_structural(self):
             else:
                 self.print_terminal(" -- empty object -- ")
     toc(parent=self)
+    
+    # Final step: Transform the voxet to real coordinates if oriented
+    if orientation_info['is_oriented']:
+        self.print_terminal("-> Final step: transforming voxet to real coordinates...")
+        
+        # Get the voxet that was created
+        voxet_uid = None
+        for uid in self.mesh3d_coll.get_uids:
+            if self.mesh3d_coll.get_uid_name(uid) == model_name:
+                voxet_uid = uid
+                break
+        
+        if voxet_uid:
+            # Get the voxet object
+            voxet_obj = self.mesh3d_coll.get_uid_vtk_obj(voxet_uid)
+            
+            # Apply coordinate transformation to the voxet
+            from numpy import cos as np_cos
+            from numpy import sin as np_sin
+            
+            # Get transformation parameters
+            angle = orientation_info['rotation_angle']
+            translation = orientation_info['translation_vector']
+            
+            # Create direction matrix for the rotation (VTK uses 3x3 matrix)
+            cos_a = np_cos(angle)
+            sin_a = np_sin(angle)
+            
+            # VTK direction matrix (row-major order) - for inverse transformation
+            direction_matrix = [
+                cos_a, -sin_a, 0.0,  # First row: transformed X axis
+                sin_a,  cos_a, 0.0,  # Second row: transformed Y axis
+                0.0,    0.0,   1.0   # Third row: Z axis unchanged
+            ]
+            
+            # Set the direction matrix to handle rotation
+            voxet_obj.SetDirectionMatrix(direction_matrix)
+            
+            # Transform the origin back to real coordinates
+            local_origin = np_array(voxet_obj.GetOrigin())
+            
+            # Apply inverse transformation to get real world origin
+            real_origin = apply_inverse_coordinate_transformation(
+                local_origin.reshape(1, -1), orientation_info
+            )[0]
+            
+            voxet_obj.SetOrigin(real_origin)
+            voxet_obj.Modified()
+            
+            self.print_terminal(f"   Applied rotation: {angle * 180.0 / np_pi:.2f} degrees")
+            self.print_terminal(f"   Local origin: {local_origin}")
+            self.print_terminal(f"   Real origin: {real_origin}")
+            self.print_terminal(f"   Voxet successfully transformed to real coordinates")
+    
     self.print_terminal("Loop interpolation completed.")
 
 
