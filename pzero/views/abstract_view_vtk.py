@@ -149,51 +149,62 @@ class ViewVTK(BaseView):
             if uid in uids:
                 actor.SetVisibility(False)
 
-    def change_actor_color(self, uid=None, collection=None):
-        """Update color for actor uid"""
-        if uid in self.actors_df.uid:
-            # _______________________________________________________________________
-            # THIS COULD BE SIMPLIFIED IF A SUPER-CLASS TO COLLECTIONS IS IMPLEMENTED
-            # _______________________________________________________________________
-            if collection == "geol_coll":
-                color_R = self.parent.geol_coll.get_uid_legend(uid=uid)["color_R"]
-                color_G = self.parent.geol_coll.get_uid_legend(uid=uid)["color_G"]
-                color_B = self.parent.geol_coll.get_uid_legend(uid=uid)["color_B"]
-            elif collection == "xsect_coll":
-                color_R = self.parent.xsect_coll.get_legend()["color_R"]
-                color_G = self.parent.xsect_coll.get_legend()["color_G"]
-                color_B = self.parent.xsect_coll.get_legend()["color_B"]
-            elif collection == "boundary_coll":
-                color_R = self.parent.boundary_coll.get_legend()["color_R"]
-                color_G = self.parent.boundary_coll.get_legend()["color_G"]
-                color_B = self.parent.boundary_coll.get_legend()["color_B"]
-            elif collection == "mesh3d_coll":
-                color_R = self.parent.mesh3d_coll.get_legend()["color_R"]
-                color_G = self.parent.mesh3d_coll.get_legend()["color_G"]
-                color_B = self.parent.mesh3d_coll.get_legend()["color_B"]
-            elif collection == "dom_coll":
-                color_R = self.parent.dom_coll.get_legend()["color_R"]
-                color_G = self.parent.dom_coll.get_legend()["color_G"]
-                color_B = self.parent.dom_coll.get_legend()["color_B"]
-            elif collection == "well_coll":
-                color_R = self.parent.well_coll.get_uid_legend(uid=uid)["color_R"]
-                color_G = self.parent.well_coll.get_uid_legend(uid=uid)["color_G"]
-                color_B = self.parent.well_coll.get_uid_legend(uid=uid)["color_B"]
-            elif collection == "fluid_coll":
-                color_R = self.parent.fluid_coll.get_uid_legend(uid=uid)["color_R"]
-                color_G = self.parent.fluid_coll.get_uid_legend(uid=uid)["color_G"]
-                color_B = self.parent.fluid_coll.get_uid_legend(uid=uid)["color_B"]
-            elif collection == "backgrnd_coll":
-                color_R = self.parent.backgrnd_coll.get_uid_legend(uid=uid)["color_R"]
-                color_G = self.parent.backgrnd_coll.get_uid_legend(uid=uid)["color_G"]
-                color_B = self.parent.backgrnd_coll.get_uid_legend(uid=uid)["color_B"]
-            # No color for image
-            # Now update color for actor uid
-            color_RGB = [color_R / 255, color_G / 255, color_B / 255]
-            # self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[0].GetProperty().SetColor(color_RGB)
-            self.get_actor_by_uid(uid).GetProperty().SetColor(color_RGB)
-        else:
-            return
+    def change_actor_color(self, uids: list=None, collection=None):
+        """Change color for VTK plots."""
+        for uid in uids:
+            print(f'changing actor color - uid: {uid} - collection: {collection}')
+            if uid in self.uids_in_view:
+                print('uid in view')
+
+                # # _______________________________________________________________________
+                # # THIS COULD BE SIMPLIFIED IF A SUPER-CLASS TO COLLECTIONS IS IMPLEMENTED
+                # # _______________________________________________________________________
+                # if collection == "geol_coll":
+                #     color_R = self.parent.geol_coll.get_uid_legend(uid=uid)["color_R"]
+                #     color_G = self.parent.geol_coll.get_uid_legend(uid=uid)["color_G"]
+                #     color_B = self.parent.geol_coll.get_uid_legend(uid=uid)["color_B"]
+                # elif collection == "xsect_coll":
+                #     color_R = self.parent.xsect_coll.get_legend()["color_R"]
+                #     color_G = self.parent.xsect_coll.get_legend()["color_G"]
+                #     color_B = self.parent.xsect_coll.get_legend()["color_B"]
+                # elif collection == "boundary_coll":
+                #     color_R = self.parent.boundary_coll.get_legend()["color_R"]
+                #     color_G = self.parent.boundary_coll.get_legend()["color_G"]
+                #     color_B = self.parent.boundary_coll.get_legend()["color_B"]
+                # elif collection == "mesh3d_coll":
+                #     color_R = self.parent.mesh3d_coll.get_legend()["color_R"]
+                #     color_G = self.parent.mesh3d_coll.get_legend()["color_G"]
+                #     color_B = self.parent.mesh3d_coll.get_legend()["color_B"]
+                # elif collection == "dom_coll":
+                #     color_R = self.parent.dom_coll.get_legend()["color_R"]
+                #     color_G = self.parent.dom_coll.get_legend()["color_G"]
+                #     color_B = self.parent.dom_coll.get_legend()["color_B"]
+                # elif collection == "well_coll":
+                #     color_R = self.parent.well_coll.get_uid_legend(uid=uid)["color_R"]
+                #     color_G = self.parent.well_coll.get_uid_legend(uid=uid)["color_G"]
+                #     color_B = self.parent.well_coll.get_uid_legend(uid=uid)["color_B"]
+                # elif collection == "fluid_coll":
+                #     color_R = self.parent.fluid_coll.get_uid_legend(uid=uid)["color_R"]
+                #     color_G = self.parent.fluid_coll.get_uid_legend(uid=uid)["color_G"]
+                #     color_B = self.parent.fluid_coll.get_uid_legend(uid=uid)["color_B"]
+                # elif collection == "backgrnd_coll":
+                #     color_R = self.parent.backgrnd_coll.get_uid_legend(uid=uid)["color_R"]
+                #     color_G = self.parent.backgrnd_coll.get_uid_legend(uid=uid)["color_G"]
+                #     color_B = self.parent.backgrnd_coll.get_uid_legend(uid=uid)["color_B"]
+                # # No color for image
+
+                # Get color from legend
+                color_R = collection.get_uid_legend(uid=uid)["color_R"]
+                color_G = collection.get_uid_legend(uid=uid)["color_G"]
+                color_B = collection.get_uid_legend(uid=uid)["color_B"]
+                color_RGB = [color_R / 255, color_G / 255, color_B / 255]
+                print(f'color_RGB: {color_RGB}')
+                # Now update color for actor uid
+                # self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[0].GetProperty().SetColor(color_RGB)
+                self.get_actor_by_uid(uid).GetProperty().SetColor(color_RGB)
+            else:
+                print('uid not in view')
+                continue
 
     def change_actor_opacity(self, uid=None, collection=None):
         """Update opacity for actor uid"""
@@ -298,15 +309,14 @@ class ViewVTK(BaseView):
 
     def set_actor_visible(self, uid=None, visible=None, name=None):
         """Set actor uid visible or invisible (visible = True or False)"""
-        self.print_terminal(
-            f"setting actor visible - uid: {uid} - visible: {visible} - name: {name}"
-        )
+        # self.print_terminal(
+        #     f"setting actor visible - uid: {uid} - visible: {visible} - name: {name}"
+        # )
         # this_actor = self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[0]
         collection = self.actors_df.loc[
             self.actors_df["uid"] == uid, "collection"
         ].values[0]
         actors = self.plotter.renderer.actors
-        # Here we use the default dictionary of actors, named with uid's when created _________________________________
         this_actor = actors[uid]
         # print("type(self.plotter.renderer.actors): ", type(self.plotter.renderer.actors))
         # print("self.plotter.renderer.actors.keys(): ", self.plotter.renderer.actors.keys())
@@ -397,9 +407,9 @@ class ViewVTK(BaseView):
         Show actor with scalar property (default None). See details in:
         https://github.com/pyvista/pyvista/blob/140b15be1d4021b81ded46b1c212c70e86a98ee7/pyvista/plotting/plotting.py#L1045
         """
-        self.print_terminal(
-            f"Showing actor with property {show_property}, visible {visible}."
-        )
+        # self.print_terminal(
+        #     f"Showing actor with property {show_property}, visible {visible}."
+        # )
         # First get the vtk object from its collection.
         show_property_title = show_property
         this_coll = eval("self.parent." + collection)

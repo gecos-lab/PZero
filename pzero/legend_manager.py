@@ -828,6 +828,7 @@ class Legend(QObject):
             & (parent.geol_coll.df["scenario"] == scenario),
             "uid",
         ].to_list()
+        print(f'legend_color_modified.emit geol_coll uids {updated_list}')
         parent.geol_coll.signals.legend_color_modified.emit(updated_list)
         # self.change_well_feature_color(parent,feature) #Update the wells
 
@@ -1004,18 +1005,25 @@ class Legend(QObject):
         )
         # Signals to update actors in windows. This is emitted only for the modified uid under the 'color' key.
         if other_collection == "XSection":
+            print(f'legend_color_modified.emit xsect_coll uids {parent.boundary_coll.df["uid"].tolist()}')
             parent.xsect_coll.signals.legend_color_modified.emit(
                 parent.xsect_coll.df["uid"].tolist()
             )
+
         elif other_collection == "DOM":
+            print(f'legend_color_modified.emit dom_coll uids {parent.boundary_coll.df["uid"].tolist()}')
             parent.dom_coll.signals.legend_color_modified.emit(
                 parent.dom_coll.df["uid"].tolist()
             )
+
         elif other_collection == "Mesh3D":
+            print(f'legend_color_modified.emit mesh3d_coll uids {parent.boundary_coll.df["uid"].tolist()}')
             parent.mesh3d_coll.signals.legend_color_modified.emit(
                 parent.dom_coll.df["uid"].tolist()
             )
+
         elif other_collection == "Boundary":
+            print(f'legend_color_modified.emit boundary_coll uids {parent.boundary_coll.df["uid"].tolist()}')
             parent.boundary_coll.signals.legend_color_modified.emit(
                 parent.boundary_coll.df["uid"].tolist()
             )
@@ -1149,6 +1157,7 @@ class Legend(QObject):
         updated_list = parent.well_coll.df.loc[
             parent.well_legend_df["Loc ID"] == locid, "uid"
         ].to_list()
+        print(f'legend_color_modified.emit well_coll uids {updated_list}')
         parent.well_coll.signals.legend_color_modified.emit(updated_list)
 
     def change_well_line_thick(self, sender=None, parent=None):
@@ -1253,6 +1262,7 @@ class Legend(QObject):
             & (parent.fluid_coll.df["scenario"] == scenario),
             "uid",
         ].to_list()
+        print(f'legend_color_modified.emit fluid_coll uids {updated_list}')
         parent.fluid_coll.signals.legend_color_modified.emit(updated_list)
         # self.change_fluid_feature_color(parent) #Update the fluids
 
@@ -1427,6 +1437,7 @@ class Legend(QObject):
             & (parent.backgrnd_coll.df["feature"] == feature),
             "uid",
         ].to_list()
+        print(f'legend_color_modified.emit backgrnd_coll uids {updated_list}')
         parent.backgrnd_coll.signals.legend_color_modified.emit(updated_list)
 
     def change_background_feature_line_thick(self, sender=None, parent=None):

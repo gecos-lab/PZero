@@ -820,6 +820,8 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         for tree_name, coll_name in self.tree_collection_dict.items():
             tree = eval(f"self.{tree_name}")
             collection = eval(f"self.parent.{coll_name}")
+            print(f'setting signals - tree_name: {tree_name},       tree: {tree}')
+            print(f'setting signals - coll_name: {coll_name}, collection: {collection}')
 
             # entities_added
             setattr(
@@ -898,17 +900,32 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             collection.signals.metadata_modified.connect(
                 eval(f"self.{coll_name}_sig_meta_lmb")
             )
+
+
+
             # legend_color_modified -> legend_modified ???
+            # setattr(
+            #     self,
+            #     f"{coll_name}_sig_clr_lmb",
+            #     lambda upd_uids: self.entities_legend_modified_update_views(
+            #         collection=collection, tree=tree, updated_uids=upd_uids
+            #     ),
+            # )
+            print(f'collection: {collection} - connecting signal: {collection.signals.legend_color_modified} to lambda: {f"{coll_name}_sig_clr_lmb"}')
             setattr(
                 self,
                 f"{coll_name}_sig_clr_lmb",
-                lambda upd_uids: self.entities_legend_modified_update_views(
-                    collection=collection, tree=tree, updated_uids=upd_uids
+                lambda upd_uids: self.change_actor_color(
+                    uids=upd_uids,
+                    collection=collection,
                 ),
             )
             collection.signals.legend_color_modified.connect(
                 eval(f"self.{coll_name}_sig_clr_lmb")
             )
+
+
+
             # legend_thick_modified -> legend_modified ???
             setattr(
                 self,
@@ -1544,6 +1561,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
     def entities_legend_modified_update_views(
         self, collection=None, tree=None, updated_uids=None
     ):
+        self.print_terminal(f'legend modified - uid: {updated_uids} - collection: {collection}')
         """This is called when changing any property in the legend. Updating trees not
         needed since metadata do not change and entities are neither added or removed.
         """
@@ -1585,6 +1603,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
 
     def show_uids(self, uids: list = None):
         """Show actors with the given uids."""
+        # Maybe in th future this might be reimplemented in parallel or vectorized?
         for uid in uids:
             self.print_terminal(f"showing uid: {uid}")
             # self.print_terminal(f"{self.actors_df}")
@@ -1595,6 +1614,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
 
     def hide_uids(self, uids: list = None):
         """Hide actors with the given uids."""
+        # Maybe in th future this might be reimplemented in parallel or vectorized?
         for uid in uids:
             self.print_terminal(f"hiding uid: {uid}")
             # self.print_terminal(f"{self.actors_df}")
@@ -1602,6 +1622,10 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                 self.set_actor_visible(uid=uid, visible=False)
                 self.actors_df.loc[self.actors_df["uid"] == uid, "show"] = False
                 # self.print_terminal(f"hidden uid: {uid}")
+
+    @property
+    def uids_in_view(self):
+        return self.actors_df["uid"].to_list()
 
     @property
     def shown_uids(self):

@@ -28,7 +28,7 @@ class CollectionSignals(QObject):
 
     etc.
 
-    Basically in this way, instead of using inheritance, we add all signals with a qick move by composition.
+    Basically in this way, instead of using inheritance, we add all signals by composition.
     """
 
     entities_added = pyqtSignal(list)
