@@ -828,8 +828,9 @@ class Legend(QObject):
             & (parent.geol_coll.df["scenario"] == scenario),
             "uid",
         ].to_list()
-        print(f'legend_color_modified.emit geol_coll uids {updated_list}')
-        parent.geol_coll.signals.legend_color_modified.emit(updated_list)
+        parent.geol_coll.signals.legend_color_modified.emit(
+            updated_list, parent.geol_coll
+        )
         # self.change_well_feature_color(parent,feature) #Update the wells
 
     def change_geology_feature_line_thick(self, sender=None, parent=None):
@@ -855,7 +856,9 @@ class Legend(QObject):
             & (parent.geol_coll.df["scenario"] == scenario),
             "uid",
         ].to_list()
-        parent.geol_coll.signals.legend_thick_modified.emit(updated_list)
+        parent.geol_coll.signals.legend_thick_modified.emit(
+            updated_list, parent.geol_coll
+        )
 
     def change_geology_feature_point_size(self, sender=None, parent=None):
         # role = self.sender().role
@@ -880,7 +883,9 @@ class Legend(QObject):
             & (parent.geol_coll.df["scenario"] == scenario),
             "uid",
         ].to_list()
-        parent.geol_coll.signals.legend_point_size_modified.emit(updated_list)
+        parent.geol_coll.signals.legend_point_size_modified.emit(
+            updated_list, parent.geol_coll
+        )
 
     def change_geology_feature_opacity(self, sender=None, parent=None):
         # role = self.sender().role
@@ -905,7 +910,9 @@ class Legend(QObject):
             & (parent.geol_coll.df["scenario"] == scenario),
             "uid",
         ].to_list()
-        parent.geol_coll.signals.legend_opacity_modified.emit(updated_list)
+        parent.geol_coll.signals.legend_opacity_modified.emit(
+            updated_list, parent.geol_coll
+        )
 
     def change_time(self, sender=None, parent=None):
         # role = self.sender().role
@@ -1005,27 +1012,26 @@ class Legend(QObject):
         )
         # Signals to update actors in windows. This is emitted only for the modified uid under the 'color' key.
         if other_collection == "XSection":
-            print(f'legend_color_modified.emit xsect_coll uids {parent.boundary_coll.df["uid"].tolist()}')
             parent.xsect_coll.signals.legend_color_modified.emit(
-                parent.xsect_coll.df["uid"].tolist()
+                parent.xsect_coll.df["uid"].tolist(),
+                parent.xsect_coll,
             )
 
         elif other_collection == "DOM":
-            print(f'legend_color_modified.emit dom_coll uids {parent.boundary_coll.df["uid"].tolist()}')
             parent.dom_coll.signals.legend_color_modified.emit(
-                parent.dom_coll.df["uid"].tolist()
+                parent.dom_coll.df["uid"].tolist(),
+                parent.dom_coll,
             )
 
         elif other_collection == "Mesh3D":
-            print(f'legend_color_modified.emit mesh3d_coll uids {parent.boundary_coll.df["uid"].tolist()}')
             parent.mesh3d_coll.signals.legend_color_modified.emit(
-                parent.dom_coll.df["uid"].tolist()
+                parent.mesh3d_coll.df["uid"].tolist(),
+                parent.mesh3d_coll,
             )
 
         elif other_collection == "Boundary":
-            print(f'legend_color_modified.emit boundary_coll uids {parent.boundary_coll.df["uid"].tolist()}')
             parent.boundary_coll.signals.legend_color_modified.emit(
-                parent.boundary_coll.df["uid"].tolist()
+                parent.boundary_coll.df["uid"].tolist(), parent.boundary_coll
             )
 
     def change_other_feature_line_thick(self, sender=None, parent=None):
@@ -1041,19 +1047,22 @@ class Legend(QObject):
         # Signals to update actors in windows. This is emitted only for the modified uid under the 'color' key.
         if other_collection == "XSection":
             parent.xsect_coll.signals.legend_thick_modified.emit(
-                parent.xsect_coll.df["uid"].tolist()
+                parent.xsect_coll.df["uid"].tolist(),
+                parent.xsect_coll,
             )
         elif other_collection == "DOM":
             parent.dom_coll.signals.legend_thick_modified.emit(
-                parent.dom_coll.df["uid"].tolist()
+                parent.dom_coll.df["uid"].tolist(),
+                parent.dom_coll,
             )
         elif other_collection == "Mesh3D":
             parent.mesh3d_coll.signals.legend_thick_modified.emit(
-                parent.dom_coll.df["uid"].tolist()
+                parent.dom_coll.df["uid"].tolist(),
+                parent.mesh3d_coll,
             )
         elif other_collection == "Boundary":
             parent.boundary_coll.signals.legend_thick_modified.emit(
-                parent.boundary_coll.df["uid"].tolist()
+                parent.boundary_coll.df["uid"].tolist(), parent.boundary_coll
             )
 
     def change_other_feature_point_size(self, sender=None, parent=None):
@@ -1071,7 +1080,8 @@ class Legend(QObject):
         #     parent.xsect_legend_point_size_modified_signal.emit(parent.xsect_coll.df['uid'].tolist())
         if other_collection == "DOM":
             parent.dom_coll.signals.legend_point_size_modified.emit(
-                parent.dom_coll.df["uid"].tolist()
+                parent.dom_coll.df["uid"].tolist(),
+                parent.dom_coll,
             )
         # elif other_collection == "Mesh3D":
         #     parent.mesh3d_legend_point_size_modified_signal.emit(parent.dom_coll.df['uid'].tolist())
@@ -1090,23 +1100,28 @@ class Legend(QObject):
         # Signals to update actors in windows. This is emitted only for the modified uid under the 'color' key.
         if other_collection == "XSection":
             parent.xsect_coll.signals.legend_opacity_modified.emit(
-                parent.xsect_coll.df["uid"].tolist()
+                parent.xsect_coll.df["uid"].tolist(),
+                parent.xsect_coll,
             )
         elif other_collection == "DOM":
             parent.dom_coll.signals.legend_opacity_modified.emit(
-                parent.dom_coll.df["uid"].tolist()
+                parent.dom_coll.df["uid"].tolist(),
+                parent.dom_coll,
             )
         elif other_collection == "Mesh3D":
             parent.mesh3d_coll.signals.legend_opacity_modified.emit(
-                parent.dom_coll.df["uid"].tolist()
+                parent.mesh3d_coll.df["uid"].tolist(),
+                parent.mesh3d_coll,
             )
         elif other_collection == "Boundary":
             parent.boundary_coll.signals.legend_opacity_modified.emit(
-                parent.boundary_coll.df["uid"].tolist()
+                parent.boundary_coll.df["uid"].tolist(),
+                parent.boundary_coll,
             )
         elif other_collection == "Image":
             parent.image_coll.signals.legend_opacity_modified.emit(
-                parent.image_coll.df["uid"].tolist()
+                parent.image_coll.df["uid"].tolist(),
+                parent.image_coll,
             )
 
     def change_well_color(self, parent=None, sender=None, feature=None):
@@ -1157,8 +1172,9 @@ class Legend(QObject):
         updated_list = parent.well_coll.df.loc[
             parent.well_legend_df["Loc ID"] == locid, "uid"
         ].to_list()
-        print(f'legend_color_modified.emit well_coll uids {updated_list}')
-        parent.well_coll.signals.legend_color_modified.emit(updated_list)
+        parent.well_coll.signals.legend_color_modified.emit(
+            updated_list, parent.well_coll
+        )
 
     def change_well_line_thick(self, sender=None, parent=None):
         # locid = self.sender().locid
@@ -1174,7 +1190,9 @@ class Legend(QObject):
             parent.well_coll.df["Loc ID"] == locid, "uid"
         ].to_list()
         # print(updated_list)
-        parent.well_coll.signals.legend_thick_modified.emit(updated_list)
+        parent.well_coll.signals.legend_thick_modified.emit(
+            updated_list, parent.well_coll
+        )
 
     def change_well_line_opacity(self, sender=None, parent=None):
         # locid = self.sender().locid
@@ -1190,7 +1208,9 @@ class Legend(QObject):
             parent.well_coll.df["Loc ID"] == locid, "uid"
         ].to_list()
         # print(updated_list)
-        parent.well_coll.signals.legend_opacity_modified.emit(updated_list)
+        parent.well_coll.signals.legend_opacity_modified.emit(
+            updated_list, parent.well_coll
+        )
 
     def change_fluid_feature_color(self, sender=None, parent=None):
         # role = self.sender().role
@@ -1262,8 +1282,9 @@ class Legend(QObject):
             & (parent.fluid_coll.df["scenario"] == scenario),
             "uid",
         ].to_list()
-        print(f'legend_color_modified.emit fluid_coll uids {updated_list}')
-        parent.fluid_coll.signals.legend_color_modified.emit(updated_list)
+        parent.fluid_coll.signals.legend_color_modified.emit(
+            updated_list, parent.fluid_coll
+        )
         # self.change_fluid_feature_color(parent) #Update the fluids
 
     def change_fluid_feature_line_thick(self, sender=None, parent=None):
@@ -1289,7 +1310,9 @@ class Legend(QObject):
             & (parent.fluid_coll.df["scenario"] == scenario),
             "uid",
         ].to_list()
-        parent.fluid_coll.signals.legend_thick_modified.emit(updated_list)
+        parent.fluid_coll.signals.legend_thick_modified.emit(
+            updated_list, parent.fluid_coll
+        )
 
     def change_fluid_feature_point_size(self, sender=None, parent=None):
         # role = self.sender().role
@@ -1314,7 +1337,9 @@ class Legend(QObject):
             & (parent.fluid_coll.df["scenario"] == scenario),
             "uid",
         ].to_list()
-        parent.fluid_coll.signals.legend_point_size_modified.emit(updated_list)
+        parent.fluid_coll.signals.legend_point_size_modified.emit(
+            updated_list, parent.fluid_coll
+        )
 
     def change_fluid_feature_opacity(self, sender=None, parent=None):
         # role = self.sender().role
@@ -1339,7 +1364,9 @@ class Legend(QObject):
             & (parent.fluid_coll.df["scenario"] == scenario),
             "uid",
         ].to_list()
-        parent.fluid_coll.signals.legend_opacity_modified.emit(updated_list)
+        parent.fluid_coll.signals.legend_opacity_modified.emit(
+            updated_list, parent.fluid_coll
+        )
 
     def change_fluid_time(self, sender=None, parent=None):
         # role = self.sender().role
@@ -1437,8 +1464,9 @@ class Legend(QObject):
             & (parent.backgrnd_coll.df["feature"] == feature),
             "uid",
         ].to_list()
-        print(f'legend_color_modified.emit backgrnd_coll uids {updated_list}')
-        parent.backgrnd_coll.signals.legend_color_modified.emit(updated_list)
+        parent.backgrnd_coll.signals.legend_color_modified.emit(
+            updated_list, parent.backgrnd_coll
+        )
 
     def change_background_feature_line_thick(self, sender=None, parent=None):
         # role = self.sender().role
@@ -1459,7 +1487,9 @@ class Legend(QObject):
             & (parent.backgrnd_coll.df["feature"] == feature),
             "uid",
         ].to_list()
-        parent.backgrnd_coll.signals.legend_thick_modified.emit(updated_list)
+        parent.backgrnd_coll.signals.legend_thick_modified.emit(
+            updated_list, parent.backgrnd_coll
+        )
 
     def change_background_feature_point_size(self, sender=None, parent=None):
         # role = self.sender().role
@@ -1480,7 +1510,9 @@ class Legend(QObject):
             & (parent.backgrnd_coll.df["feature"] == feature),
             "uid",
         ].to_list()
-        parent.backgrnd_coll.signals.legend_point_size_modified.emit(updated_list)
+        parent.backgrnd_coll.signals.legend_point_size_modified.emit(
+            updated_list, parent.backgrnd_coll
+        )
 
     def change_background_opacity(self, sender=None, parent=None):
         # role = self.sender().role
@@ -1501,7 +1533,9 @@ class Legend(QObject):
             & (parent.backgrnd_coll.df["feature"] == feature),
             "uid",
         ].to_list()
-        parent.backgrnd_coll.signals.legend_opacity_modified.emit(updated_list)
+        parent.backgrnd_coll.signals.legend_opacity_modified.emit(
+            updated_list, parent.backgrnd_coll
+        )
 
     # def change_geological_sequence(self, parent=None):
     #     role = self.sender().role

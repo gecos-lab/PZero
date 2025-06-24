@@ -797,168 +797,156 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
 
         It is IMPORTANT to check that all signals connected here are in the list of signals to be disconnected.
         """
-        # view signals self.view_sig_...
-        # # Connect signal ==============================================================================================
-        # self.view_sig_check_lmb = (
-        #     lambda collection_name, turn_on_uids, turn_off_uids: self.toggle_visibility(
-        #         collection_name, turn_on_uids, turn_off_uids
-        #     )
-        # )
-        # self.signals.checkboxToggled.connect(self.view_sig_check_lmb)
-
-        # # Connect signal ==============================================================================================
-        # self.view_sig_prop_lmb = (
-        #     lambda collection_name, uid, prop_text: self.toggle_property(
-        #         collection_name, uid, prop_text
-        #     )
-        # )
-        # self.signals.propertyToggled.connect(self.view_sig_prop_lmb)
-
         # project signal (if any) self.proj_sig_...
 
-        # collection signals self.coll_sig_...
+        # collection signals self.{coll_name}_sig_...
         for tree_name, coll_name in self.tree_collection_dict.items():
             tree = eval(f"self.{tree_name}")
             collection = eval(f"self.parent.{coll_name}")
-            print(f'setting signals - tree_name: {tree_name},       tree: {tree}')
-            print(f'setting signals - coll_name: {coll_name}, collection: {collection}')
 
-            # entities_added
+            # entities_added ---
             setattr(
                 self,
                 f"{coll_name}_sig_add_lmb",
-                lambda upd_uids: self.entities_added_update_views(
-                    collection=collection, tree=tree, updated_uids=upd_uids
+                lambda upd_uids, coll: self.entities_added_update_views(
+                    updated_uids=upd_uids,
+                    collection=coll,
                 ),
             )
             collection.signals.entities_added.connect(
                 eval(f"self.{coll_name}_sig_add_lmb")
             )
-            # entities_removed
+
+            # entities_removed ---
             setattr(
                 self,
                 f"{coll_name}_sig_rem_lmb",
-                lambda upd_uids: self.entities_removed_update_views(
-                    collection=collection, tree=tree, updated_uids=upd_uids
+                lambda upd_uids, coll: self.entities_removed_update_views(
+                    updated_uids=upd_uids,
+                    collection=coll,
                 ),
             )
             collection.signals.entities_removed.connect(
                 eval(f"self.{coll_name}_sig_rem_lmb")
             )
-            # geom_modified
+
+            # geom_modified ---
             setattr(
                 self,
                 f"{coll_name}_sig_geom_lmb",
-                lambda upd_uids: self.entities_geom_modified_update_views(
-                    collection=collection, tree=tree, updated_uids=upd_uids
+                lambda upd_uids, coll: self.entities_geom_modified_update_views(
+                    updated_uids=upd_uids,
+                    collection=coll,
                 ),
             )
             collection.signals.geom_modified.connect(
                 eval(f"self.{coll_name}_sig_geom_lmb")
             )
-            # data_keys_added
+
+            # data_keys_added ---
             setattr(
                 self,
                 f"{coll_name}_sig_k_add_lmb",
-                lambda upd_uids: self.entities_data_keys_added_update_views(
-                    collection=collection, tree=tree, updated_uids=upd_uids
+                lambda upd_uids, coll: self.entities_data_keys_added_update_views(
+                    updated_uids=upd_uids,
+                    collection=coll,
                 ),
             )
             collection.signals.data_keys_added.connect(
                 eval(f"self.{coll_name}_sig_k_add_lmb")
             )
-            # data_keys_removed
+
+            # data_keys_removed ---
             setattr(
                 self,
                 f"{coll_name}_sig_k_rmv_lmb",
-                lambda upd_uids: self.entities_data_keys_removed_update_views(
-                    collection=collection, tree=tree, updated_uids=upd_uids
+                lambda upd_uids, coll: self.entities_data_keys_removed_update_views(
+                    updated_uids=upd_uids,
+                    collection=coll,
                 ),
             )
             collection.signals.data_keys_removed.connect(
                 eval(f"self.{coll_name}_sig_k_rmv_lmb")
             )
-            # data_val_modified
+
+            # data_val_modified ---
             setattr(
                 self,
                 f"{coll_name}_sig_val_lmb",
-                lambda upd_uids: self.entities_data_val_modified_update_views(
-                    collection=collection, tree=tree, updated_uids=upd_uids
+                lambda upd_uids, coll: self.entities_data_val_modified_update_views(
+                    updated_uids=upd_uids,
+                    collection=coll,
                 ),
             )
             collection.signals.data_val_modified.connect(
                 eval(f"self.{coll_name}_sig_val_lmb")
             )
-            # metadata_modified
+
+            # metadata_modified ---
             setattr(
                 self,
                 f"{coll_name}_sig_meta_lmb",
-                lambda upd_uids: self.entities_metadata_modified_update_views(
-                    collection=collection, tree=tree, updated_uids=upd_uids
+                lambda upd_uids, coll: self.entities_metadata_modified_update_views(
+                    updated_uids=upd_uids,
+                    collection=coll,
                 ),
             )
             collection.signals.metadata_modified.connect(
                 eval(f"self.{coll_name}_sig_meta_lmb")
             )
 
-
-
-            # legend_color_modified -> legend_modified ???
-            # setattr(
-            #     self,
-            #     f"{coll_name}_sig_clr_lmb",
-            #     lambda upd_uids: self.entities_legend_modified_update_views(
-            #         collection=collection, tree=tree, updated_uids=upd_uids
-            #     ),
-            # )
-            print(f'collection: {collection} - connecting signal: {collection.signals.legend_color_modified} to lambda: {f"{coll_name}_sig_clr_lmb"}')
+            # legend_color_modified ---
             setattr(
                 self,
                 f"{coll_name}_sig_clr_lmb",
-                lambda upd_uids: self.change_actor_color(
-                    uids=upd_uids,
-                    collection=collection,
+                lambda upd_uids, coll: self.change_actor_color(
+                    updated_uids=upd_uids,
+                    collection=coll,
                 ),
             )
             collection.signals.legend_color_modified.connect(
                 eval(f"self.{coll_name}_sig_clr_lmb")
             )
 
-
-
-            # legend_thick_modified -> legend_modified ???
+            # legend_thick_modified ---
             setattr(
                 self,
                 f"{coll_name}_sig_thk_lmb",
-                lambda upd_uids: self.entities_legend_modified_update_views(
-                    collection=collection, tree=tree, updated_uids=upd_uids
+                lambda upd_uids, coll: self.change_actor_line_thick(
+                    updated_uids=upd_uids,
+                    collection=coll,
                 ),
             )
             collection.signals.legend_thick_modified.connect(
                 eval(f"self.{coll_name}_sig_thk_lmb")
             )
-            # legend_point_size_modified -> legend_modified ???
+
+            # legend_point_size_modified ---
             setattr(
                 self,
                 f"{coll_name}_sig_pnt_lmb",
-                lambda upd_uids: self.entities_legend_modified_update_views(
-                    collection=collection, tree=tree, updated_uids=upd_uids
+                lambda upd_uids, coll: self.change_actor_point_size(
+                    updated_uids=upd_uids,
+                    collection=coll,
                 ),
             )
             collection.signals.legend_point_size_modified.connect(
                 eval(f"self.{coll_name}_sig_pnt_lmb")
             )
-            # legend_opacity_modified -> legend_modified ???
+
+            # legend_opacity_modified ---
             setattr(
                 self,
                 f"{coll_name}_sig_opct_lmb",
-                lambda upd_uids: self.entities_legend_modified_update_views(
-                    collection=collection, tree=tree, updated_uids=upd_uids
+                lambda upd_uids, coll: self.change_actor_opacity(
+                    updated_uids=upd_uids,
+                    collection=coll,
                 ),
             )
             collection.signals.legend_opacity_modified.connect(
                 eval(f"self.{coll_name}_sig_opct_lmb")
             )
+
             # itemsSelected
 
             ### FOLLOW THE PATTERN ABOVE !!!
@@ -1360,11 +1348,10 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             self.print_terminal("Error in tree_from_coll")
             return None
 
-    def entities_added_update_views(
-        self, collection=None, tree=None, updated_uids=None
-    ):
+    def entities_added_update_views(self, updated_uids=None, collection=None):
         """This is called when an entity is added to a collection."""
         # # Signals to the collection view tree, if they are set, are disconnected to avoid a nasty loop that would disrupt them.
+        tree = self.tree_from_coll(coll=collection)
         tree.itemChanged.disconnect()
         # remove from updated_list the uid's that are excluded from this view by self.view_filter.collection,
         # by removing from the list of all uid's that should appear in this view (from query), the uid's that
@@ -1396,11 +1383,10 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         tree.update_tree_added(self, uid_list=updated_uids)
         tree.itemChanged.connect(self.toggle_visibility)
 
-    def entities_removed_update_views(
-        self, collection=None, tree=None, updated_uids=None
-    ):
+    def entities_removed_update_views(self, updated_uids=None, collection=None):
         """This is called when an entity is removed from a collection."""
         # # Signals to the collection view tree, if they are set, are disconnected to avoid a nasty loop that would disrupt them. No need to apply a filter, since if a uid is not found in the actors list, nothing happens.
+        tree = self.tree_from_coll(coll=collection)
         tree.itemChanged.disconnect()
         # self.print_terminal(f"pre- self.actors_df: {self.actors_df}")
         for uid in updated_uids:
@@ -1412,9 +1398,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         tree.remove_items_from_tree(uids_to_remove=updated_uids)
         tree.itemChanged.connect(self.toggle_visibility)
 
-    def entities_geom_modified_update_views(
-        self, collection=None, tree=None, updated_uids=None
-    ):
+    def entities_geom_modified_update_views(self, updated_uids=None, collection=None):
         """This is called when an entity geometry or topology is modified (i.e. the vtk object is modified).
         In a previous version of this method, signals were disconnected, but this is no longer required
         since actors are replaced, not deleted and then re-created."""
@@ -1436,13 +1420,12 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                 visible=show,
             )
 
-    def entities_data_keys_added_update_views(
-        self, collection=None, tree=None, updated_uids=None
-    ):
+    def entities_data_keys_added_update_views(self, updated_uids=None, collection=None):
         """This is called when point or cell data (properties) are added."""
         # ___________________________________________________________ DIFFERENCE WITH REMOVED???
 
         # Signals to the collection view tree, if they are set, are disconnected to avoid a nasty loop that would disrupt them.
+        tree = self.tree_from_coll(coll=collection)
         tree.itemChanged.disconnect()
         # remove from updated_list the uid's that are excluded from this view by self.view_filter.collection,
         # by removing from the list of all uid's that should appear in this view (from query), the uid's that
@@ -1475,11 +1458,12 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         tree.itemChanged.connect(self.toggle_visibility)
 
     def entities_data_keys_removed_update_views(
-        self, collection=None, tree=None, updated_uids=None
+        self, updated_uids=None, collection=None
     ):
         """This is called when point or cell data (properties) are removed."""
         # ___________________________________________________________ DIFFERENCE WITH ADDED???
         # Signals to the collection view tree, if they are set, are disconnected to avoid a nasty loop that would disrupt them.
+        tree = self.tree_from_coll(coll=collection)
         tree.itemChanged.disconnect()
         # remove from updated_list the uid's that are excluded from this view by self.view_filter.collection,
         # by removing from the list of all uid's that should appear in this view (from query), the uid's that
@@ -1511,7 +1495,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         tree.update_properties_for_uids(uids=updated_uids)
 
     def entities_data_val_modified_update_views(
-        self, collection=None, tree=None, updated_uids=None
+        self, updated_uids=None, collection=None
     ):
         """This is called when entity point or cell data are modified. The actor is modified just if the
         modified property is currently shown. Trees do not need to be modified."""
@@ -1546,11 +1530,12 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                     ] = None
 
     def entities_metadata_modified_update_views(
-        self, collection=None, tree=None, updated_uids=None
+        self, collection=None, updated_uids=None
     ):
         """This is called when an entity metadata are modified, and the legend is automatically updated. Signals
         to the collection view tree, if they are set, are disconnected to avoid a nasty loop that would disrupt them.
         """
+        tree = self.tree_from_coll(coll=collection)
         tree.itemChanged.disconnect()
         tree.legend_modified_update_views(
             self, updated_uids=updated_uids
@@ -1558,10 +1543,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         tree.create_tree(self)  # this should be a method of the tree
         tree.itemChanged.connect(self.toggle_visibility)
 
-    def entities_legend_modified_update_views(
-        self, collection=None, tree=None, updated_uids=None
-    ):
-        self.print_terminal(f'legend modified - uid: {updated_uids} - collection: {collection}')
+    def entities_legend_modified_update_views(self, collection=None, updated_uids=None):
         """This is called when changing any property in the legend. Updating trees not
         needed since metadata do not change and entities are neither added or removed.
         """
@@ -1977,21 +1959,21 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         """Dummy method to hide actors in uids list. Must be implemented in subclasses."""
         return
 
-    def change_actor_color(self, uid=None, collection=None):
+    def change_actor_color(self, updated_uids: list = None, collection=None):
         """Dummy method to update color for actor uid. Must be implemented in subclasses."""
         return
 
-    def change_actor_opacity(self, uid=None, collection=None):
+    def change_actor_opacity(self, updated_uids: list = None, collection=None):
         """Dummy method to update opacity for actor uid. Must be implemented in subclasses."""
         return
 
-    def change_actor_line_thick(self, uid=None, collection=None):
+    def change_actor_line_thick(self, updated_uids: list = None, collection=None):
         """Dummy method to update line thickness for actor uid. Must be implemented in subclasses."""
         return
 
-    def change_actor_point_size(self, uid=None, collection=None):
+    def change_actor_point_size(self, updated_uids: list = None, collection=None):
         """Dummy method to update point size for actor uid. Must be implemented in subclasses."""
-        return self.add_all_entities()
+        return
 
     def set_actor_visible(self, uid=None, visible=None, name=None):
         """Dummy method to Set actor uid visible or invisible (visible = True or False).

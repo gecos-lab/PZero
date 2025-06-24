@@ -149,12 +149,10 @@ class ViewVTK(BaseView):
             if uid in uids:
                 actor.SetVisibility(False)
 
-    def change_actor_color(self, uids: list=None, collection=None):
+    def change_actor_color(self, updated_uids: list = None, collection=None):
         """Change color for VTK plots."""
-        for uid in uids:
-            print(f'changing actor color - uid: {uid} - collection: {collection}')
+        for uid in updated_uids:
             if uid in self.uids_in_view:
-                print('uid in view')
 
                 # # _______________________________________________________________________
                 # # THIS COULD BE SIMPLIFIED IF A SUPER-CLASS TO COLLECTIONS IS IMPLEMENTED
@@ -198,114 +196,128 @@ class ViewVTK(BaseView):
                 color_G = collection.get_uid_legend(uid=uid)["color_G"]
                 color_B = collection.get_uid_legend(uid=uid)["color_B"]
                 color_RGB = [color_R / 255, color_G / 255, color_B / 255]
-                print(f'color_RGB: {color_RGB}')
                 # Now update color for actor uid
                 # self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[0].GetProperty().SetColor(color_RGB)
                 self.get_actor_by_uid(uid).GetProperty().SetColor(color_RGB)
             else:
-                print('uid not in view')
                 continue
 
-    def change_actor_opacity(self, uid=None, collection=None):
+    def change_actor_opacity(self, updated_uids: list = None, collection=None):
         """Update opacity for actor uid"""
-        if uid in self.actors_df.uid:
-            # _______________________________________________________________________
-            # THIS COULD BE SIMPLIFIED IF A SUPER-CLASS TO COLLECTIONS IS IMPLEMENTED
-            # _______________________________________________________________________
-            if collection == "geol_coll":
-                opacity = self.parent.geol_coll.get_uid_legend(uid=uid)["opacity"] / 100
-            elif collection == "xsect_coll":
-                opacity = self.parent.xsect_coll.get_legend()["opacity"] / 100
-            elif collection == "boundary_coll":
-                opacity = self.parent.boundary_coll.get_legend()["opacity"] / 100
-            elif collection == "mesh3d_coll":
-                opacity = self.parent.mesh3d_coll.get_legend()["opacity"] / 100
-            elif collection == "dom_coll":
-                opacity = self.parent.dom_coll.get_legend()["opacity"] / 100
-            elif collection == "well_coll":
-                opacity = self.parent.well_coll.get_uid_legend(uid=uid)["opacity"] / 100
-            elif collection == "fluid_coll":
-                opacity = (
-                    self.parent.fluid_coll.get_uid_legend(uid=uid)["opacity"] / 100
-                )
-            elif collection == "backgrnd_coll":
-                opacity = (
-                    self.parent.backgrnd_coll.get_uid_legend(uid=uid)["opacity"] / 100
-                )
-            elif collection == "image_coll":
-                opacity = self.parent.image_coll.get_legend()["opacity"] / 100
-            # Now update color for actor uid
-            # self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[0].GetProperty().SetOpacity(opacity)
-            self.get_actor_by_uid(uid).GetProperty().SetOpacity(opacity)
-        else:
-            return
+        for uid in updated_uids:
+            if uid in self.actors_df.uid:
+                # _______________________________________________________________________
+                # THIS COULD BE SIMPLIFIED IF A SUPER-CLASS TO COLLECTIONS IS IMPLEMENTED
+                # _______________________________________________________________________
+                if collection == "geol_coll":
+                    opacity = (
+                        self.parent.geol_coll.get_uid_legend(uid=uid)["opacity"] / 100
+                    )
+                elif collection == "xsect_coll":
+                    opacity = self.parent.xsect_coll.get_legend()["opacity"] / 100
+                elif collection == "boundary_coll":
+                    opacity = self.parent.boundary_coll.get_legend()["opacity"] / 100
+                elif collection == "mesh3d_coll":
+                    opacity = self.parent.mesh3d_coll.get_legend()["opacity"] / 100
+                elif collection == "dom_coll":
+                    opacity = self.parent.dom_coll.get_legend()["opacity"] / 100
+                elif collection == "well_coll":
+                    opacity = (
+                        self.parent.well_coll.get_uid_legend(uid=uid)["opacity"] / 100
+                    )
+                elif collection == "fluid_coll":
+                    opacity = (
+                        self.parent.fluid_coll.get_uid_legend(uid=uid)["opacity"] / 100
+                    )
+                elif collection == "backgrnd_coll":
+                    opacity = (
+                        self.parent.backgrnd_coll.get_uid_legend(uid=uid)["opacity"]
+                        / 100
+                    )
+                elif collection == "image_coll":
+                    opacity = self.parent.image_coll.get_legend()["opacity"] / 100
+                # Now update color for actor uid
+                # self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[0].GetProperty().SetOpacity(opacity)
+                self.get_actor_by_uid(uid).GetProperty().SetOpacity(opacity)
+            else:
+                continue
 
-    def change_actor_line_thick(self, uid=None, collection=None):
+    def change_actor_line_thick(self, updated_uids: list = None, collection=None):
         """Update line thickness for actor uid"""
-        if uid in self.actors_df.uid:
-            # _______________________________________________________________________
-            # THIS COULD BE SIMPLIFIED IF A SUPER-CLASS TO COLLECTIONS IS IMPLEMENTED
-            # _______________________________________________________________________
-            if collection == "geol_coll":
-                line_thick = self.parent.geol_coll.get_uid_legend(uid=uid)["line_thick"]
-            elif collection == "xsect_coll":
-                line_thick = self.parent.xsect_coll.get_legend()["line_thick"]
-            elif collection == "boundary_coll":
-                line_thick = self.parent.boundary_coll.get_legend()["line_thick"]
-            elif collection == "mesh3d_coll":
-                line_thick = self.parent.mesh3d_coll.get_legend()["line_thick"]
-            elif collection == "dom_coll":
-                line_thick = self.parent.dom_coll.get_legend()["line_thick"]
-            elif collection == "well_coll":
-                line_thick = self.parent.well_coll.get_uid_legend(uid=uid)["line_thick"]
-            elif collection == "fluid_coll":
-                line_thick = self.parent.fluid_coll.get_uid_legend(uid=uid)[
-                    "line_thick"
-                ]
-            elif collection == "backgrnd_coll":
-                line_thick = self.parent.backgrnd_coll.get_uid_legend(uid=uid)[
-                    "line_thick"
-                ]
-            # No thickness for image
-            # Now update thickness for actor uid
-            # self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[0].GetProperty().SetLineWidth(line_thick)
-            self.get_actor_by_uid(uid).GetProperty().SetLineWidth(line_thick)
-        else:
-            return
+        for uid in updated_uids:
+            if uid in self.actors_df.uid:
+                # _______________________________________________________________________
+                # THIS COULD BE SIMPLIFIED IF A SUPER-CLASS TO COLLECTIONS IS IMPLEMENTED
+                # _______________________________________________________________________
+                if collection == "geol_coll":
+                    line_thick = self.parent.geol_coll.get_uid_legend(uid=uid)[
+                        "line_thick"
+                    ]
+                elif collection == "xsect_coll":
+                    line_thick = self.parent.xsect_coll.get_legend()["line_thick"]
+                elif collection == "boundary_coll":
+                    line_thick = self.parent.boundary_coll.get_legend()["line_thick"]
+                elif collection == "mesh3d_coll":
+                    line_thick = self.parent.mesh3d_coll.get_legend()["line_thick"]
+                elif collection == "dom_coll":
+                    line_thick = self.parent.dom_coll.get_legend()["line_thick"]
+                elif collection == "well_coll":
+                    line_thick = self.parent.well_coll.get_uid_legend(uid=uid)[
+                        "line_thick"
+                    ]
+                elif collection == "fluid_coll":
+                    line_thick = self.parent.fluid_coll.get_uid_legend(uid=uid)[
+                        "line_thick"
+                    ]
+                elif collection == "backgrnd_coll":
+                    line_thick = self.parent.backgrnd_coll.get_uid_legend(uid=uid)[
+                        "line_thick"
+                    ]
+                # No thickness for image
+                # Now update thickness for actor uid
+                # self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[0].GetProperty().SetLineWidth(line_thick)
+                self.get_actor_by_uid(uid).GetProperty().SetLineWidth(line_thick)
+            else:
+                continue
 
-    def change_actor_point_size(self, uid=None, collection=None):
+    def change_actor_point_size(self, updated_uids: list = None, collection=None):
         """Update point size for actor uid"""
-        if uid in self.actors_df.uid:
-            # _______________________________________________________________________
-            # THIS COULD BE SIMPLIFIED IF A SUPER-CLASS TO COLLECTIONS IS IMPLEMENTED
-            # _______________________________________________________________________
-            if collection == "geol_coll":
-                point_size = self.parent.geol_coll.get_uid_legend(uid=uid)["point_size"]
-            elif collection == "xsect_coll":
-                point_size = self.parent.xsect_coll.get_legend()["point_size"]
-            elif collection == "boundary_coll":
-                point_size = self.parent.boundary_coll.get_legend()["point_size"]
-            elif collection == "mesh3d_coll":
-                point_size = self.parent.mesh3d_coll.get_legend()["point_size"]
-            elif collection == "dom_coll":
-                point_size = self.parent.dom_coll.get_legend()["point_size"]
-                """Note: no legend for image."""
-            elif collection == "well_coll":
-                point_size = self.parent.well_coll.get_uid_legend(uid=uid)["point_size"]
-            elif collection == "fluid_coll":
-                point_size = self.parent.fluid_coll.get_uid_legend(uid=uid)[
-                    "point_size"
-                ]
-            elif collection == "backgrnd_coll":
-                point_size = self.parent.backgrnd_coll.get_uid_legend(uid=uid)[
-                    "point_size"
-                ]
-            # No thickness for image
-            # Now update point size for actor uid
-            # self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[0].GetProperty().SetPointSize(point_size)
-            self.get_actor_by_uid(uid).GetProperty().SetPointSize(point_size)
-        else:
-            return
+        for uid in updated_uids:
+            if uid in self.actors_df.uid:
+                # _______________________________________________________________________
+                # THIS COULD BE SIMPLIFIED IF A SUPER-CLASS TO COLLECTIONS IS IMPLEMENTED
+                # _______________________________________________________________________
+                if collection == "geol_coll":
+                    point_size = self.parent.geol_coll.get_uid_legend(uid=uid)[
+                        "point_size"
+                    ]
+                elif collection == "xsect_coll":
+                    point_size = self.parent.xsect_coll.get_legend()["point_size"]
+                elif collection == "boundary_coll":
+                    point_size = self.parent.boundary_coll.get_legend()["point_size"]
+                elif collection == "mesh3d_coll":
+                    point_size = self.parent.mesh3d_coll.get_legend()["point_size"]
+                elif collection == "dom_coll":
+                    point_size = self.parent.dom_coll.get_legend()["point_size"]
+                    """Note: no legend for image."""
+                elif collection == "well_coll":
+                    point_size = self.parent.well_coll.get_uid_legend(uid=uid)[
+                        "point_size"
+                    ]
+                elif collection == "fluid_coll":
+                    point_size = self.parent.fluid_coll.get_uid_legend(uid=uid)[
+                        "point_size"
+                    ]
+                elif collection == "backgrnd_coll":
+                    point_size = self.parent.backgrnd_coll.get_uid_legend(uid=uid)[
+                        "point_size"
+                    ]
+                # No thickness for image
+                # Now update point size for actor uid
+                # self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[0].GetProperty().SetPointSize(point_size)
+                self.get_actor_by_uid(uid).GetProperty().SetPointSize(point_size)
+            else:
+                continue
 
     def set_actor_visible(self, uid=None, visible=None, name=None):
         """Set actor uid visible or invisible (visible = True or False)"""

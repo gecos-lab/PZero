@@ -2,7 +2,13 @@
 PZero© Andrea Bistacchi"""
 
 # from PySide6.QtCore import QAbstractTableModel, Qt, QVariant, QSortFilterProxyModel, QObject, pyqtSignal
-from PySide6.QtCore import QAbstractTableModel, Qt, QSortFilterProxyModel, QObject, Signal
+from PySide6.QtCore import (
+    QAbstractTableModel,
+    Qt,
+    QSortFilterProxyModel,
+    QObject,
+    Signal,
+)
 from PySide6.QtCore import Signal as pyqtSignal
 
 from abc import abstractmethod, ABC
@@ -31,22 +37,24 @@ class CollectionSignals(QObject):
     Basically in this way, instead of using inheritance, we add all signals by composition.
     """
 
-    entities_added = pyqtSignal(list)
-    entities_removed = pyqtSignal(list)
-    geom_modified = pyqtSignal(list)  # this includes topology modified
+    # "object" is used to pass the collection object that emitted the signal
+    # the other argument is a list of uids, or a single uid, or a list of entities
+    entities_added = pyqtSignal(list, object)
+    entities_removed = pyqtSignal(list, object)
+    geom_modified = pyqtSignal(list, object)  # this includes topology modified
     data_keys_modified = pyqtSignal(
-        list
+        list, object
     )  # remove after splitting keys added/removed ==========
-    data_keys_added = pyqtSignal(list)
-    data_keys_removed: Signal = pyqtSignal(list)
-    data_val_modified = pyqtSignal(list)
-    metadata_modified = pyqtSignal(list)
-    legend_color_modified = pyqtSignal(list)
-    legend_thick_modified = pyqtSignal(list)
-    legend_point_size_modified = pyqtSignal(list)
-    legend_opacity_modified = pyqtSignal(list)
+    data_keys_added = pyqtSignal(list, object)
+    data_keys_removed: Signal = pyqtSignal(list, object)
+    data_val_modified = pyqtSignal(list, object)
+    metadata_modified = pyqtSignal(list, object)
+    legend_color_modified = pyqtSignal(list, object)
+    legend_thick_modified = pyqtSignal(list, object)
+    legend_point_size_modified = pyqtSignal(list, object)
+    legend_opacity_modified = pyqtSignal(list, object)
     itemsSelected = pyqtSignal(
-        str
+        str, object
     )  # selection changed on the collection in the signal argument
 
 
