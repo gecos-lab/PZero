@@ -107,8 +107,9 @@ class ViewVTK(BaseView):
         Get an actor by uid in a VTK/PyVista plotter. Here we use self.plotter.renderer.actors
         that is a dictionary with key = uid string and value = actor.
         """
-        actors = self.plotter.renderer.actors
-        return actors[uid]
+        # actors = self.plotter.renderer.actors
+        # return actors[uid]
+        return self.plotter.renderer.actors[uid]
 
     def get_uid_from_actor(self, actor=None):
         """
@@ -128,11 +129,11 @@ class ViewVTK(BaseView):
         return uid
 
     def actor_shown(self, uid: str = None):
-        """Method to check if an actor is shown in a VTK/PyVista plotter. Returns a boolean.
-        Must be implemented in subclasses."""
-        actors = self.plotter.renderer.actors
-        this_actor = actors[uid]
-        return this_actor.GetVisibility()
+        """Method to check if an actor is shown in a VTK/PyVista plotter. Returns a boolean."""
+        # actors = self.plotter.renderer.actors
+        # this_actor = actors[uid]
+        # return this_actor.GetVisibility()
+        return self.plotter.renderer.actors[uid].GetVisibility()
 
     def show_actors(self, uids: list = None):
         """Method to show actors in uids list in a VTK/PyVista plotter."""

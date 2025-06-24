@@ -25,9 +25,6 @@ import mplstereonet
 # Matplotlib imports____
 from matplotlib.backend_bases import FigureCanvasBase
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
-from matplotlib import style as mplstyle
-from matplotlib.lines import Line2D
-from matplotlib.collections import PathCollection
 
 
 class ViewStereoplot(ViewMPL):
@@ -711,121 +708,6 @@ class ViewStereoplot(ViewMPL):
     #     self.GeologyTopologyTreeWidget.expandAll()
 
     # ================================  Methods required by BaseView(), (re-)implemented here =========================
-
-    def get_actor_by_uid(self, uid: str = None):
-        """Dummy method to get an actor by uid. Must be implemented in subclasses."""
-        return None
-
-    def get_uid_from_actor(self):
-        """Dummy method to get the uid of an actor, e.g. selected with mouse or in other ways.
-        Must be implemented in subclasses."""
-        return None
-
-    def actor_shown(self, uid: str = None):
-        """Dummy method to check if an actor is shown. Returns a boolean.
-        Must be implemented in subclasses."""
-        return False
-
-    def show_actors(self, uids: list = None):
-        """Dummy method to show actors in uids list. Must be implemented in subclasses."""
-        return
-
-    def hide_actors(self, uids: list = None):
-        """Dummy method to hide actors in uids list. Must be implemented in subclasses."""
-        return
-
-    def change_actor_color(self, uid=None, collection=None):
-        # refactor using a collection parameter instead of if - elif - else
-        """Change colour with Matplotlib method."""
-        if collection == "geol_coll":
-            color_R = self.parent.geol_coll.get_uid_legend(uid=uid)["color_R"]
-            color_G = self.parent.geol_coll.get_uid_legend(uid=uid)["color_G"]
-            color_B = self.parent.geol_coll.get_uid_legend(uid=uid)["color_B"]
-            color_RGB = [color_R / 255, color_G / 255, color_B / 255]
-        elif collection == "xsect_coll":
-            color_R = self.parent.xsect_coll.get_legend()["color_R"]
-            color_G = self.parent.xsect_coll.get_legend()["color_G"]
-            color_B = self.parent.xsect_coll.get_legend()["color_B"]
-            color_RGB = [color_R / 255, color_G / 255, color_B / 255]
-        else:
-            return
-        if isinstance(
-            self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[0], Line2D
-        ):
-            "Case for Line2D"
-            self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[
-                0
-            ].set_color(color_RGB)
-            self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[
-                0
-            ].figure.canvas.draw()
-
-    def set_actor_visible(self, uid=None, visible=None):
-        """Set actor uid visible or invisible (visible = True or False)"""
-        # _______________________must be check, the options below seem too much, but contours are not toggled
-        if isinstance(
-            self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[0], Line2D
-        ):
-            "Case for Line2D"
-            self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[
-                0
-            ].set_visible(visible)
-            self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[
-                0
-            ].figure.canvas.draw()
-        elif isinstance(
-            self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[0],
-            PathCollection,
-        ):
-            "Case for PathCollection -> ax.scatter"
-            pass
-        # elif isinstance(self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[0], TriContourSet):
-        #     "Case for TriContourSet -> ax.tricontourf"
-        #     pass
-        # elif isinstance(self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[0], AxesImage):
-        #     "Case for AxesImage (i.e. images)"
-        #     # Hide other images if (1) they are shown and (2) you are showing another one.
-        #     for hide_uid in self.actors_df.loc[
-        #         (self.actors_df["collection"] == "image_coll")
-        #         & (self.actors_df["show"])
-        #         & (self.actors_df["uid"] != uid),
-        #         "uid",
-        #     ].to_list():
-        #         self.actors_df.loc[self.actors_df["uid"] == hide_uid, "show"] = False
-        #         self.actors_df.loc[self.actors_df["uid"] == hide_uid, "actor"].values[
-        #             0
-        #         ].set_visible(False)
-        #         row = self.ImagesTableWidget.findItems(hide_uid, Qt.MatchExactly)[
-        #             0
-        #         ].row()
-        #         self.ImagesTableWidget.item(row, 0).setCheckState(Qt.Unchecked)
-        #     # Then show this one.
-        #     self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[
-        #         0
-        #     ].set_visible(visible)
-        #     self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[
-        #         0
-        #     ].figure.canvas.draw()
-        else:
-            "Do-nothing option to avoid errors, but it does not set/unset visibility."
-            pass
-
-    def remove_actor_in_view(self, uid=None, redraw=False):
-        """ "Remove actor from plotter. Can remove a single entity or a list of
-        entities as actors - here we remove a single entity"""
-
-        if not self.actors_df.loc[self.actors_df["uid"] == uid].empty:
-            if self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[0]:
-                self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[
-                    0
-                ].remove()
-                # the following should go in the abstract base view
-                # self.actors_df.drop(
-                #     self.actors_df[self.actors_df["uid"] == uid].index, inplace=True
-                # )
-            if redraw:
-                # IN THE FUTURE check if there is a way to redraw just the actor that has just been removed.
-                self.figure.canvas.draw()
 
     def initialize_interactor(self):
         """
