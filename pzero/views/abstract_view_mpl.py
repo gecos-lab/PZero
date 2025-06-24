@@ -20,7 +20,23 @@ class ViewMPL(BaseView):
 
         super(ViewMPL, self).__init__(*args, **kwargs)
 
+    # ================================  General methods shared by all views - built incrementally =====================
+
+    def initialize_menu_tools(self):
+        """This method collects menus and actions in superclasses and then adds custom ones, specific to this view."""
+        # append code from superclass
+        super().initialize_menu_tools()
+
+        # then add new code specific to this class
+
     # ================================  Methods required by BaseView(), (re-)implemented here =========================
+
+    def closeEvent(self, event):
+        """Override the standard closeEvent method by (i) disconnecting all signals and,
+        (ii) closing the plotter for vtk windows."""
+        self.enable_actions()
+        self.disconnect_all_signals()
+        event.accept()
 
     def get_actor_by_uid(self, uid: str = None):
         """

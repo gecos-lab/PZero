@@ -90,6 +90,8 @@ class ViewVTK(BaseView):
         self.actionExportScreen.triggered.connect(self.export_screen)
         self.menuView.addAction(self.actionExportScreen)
 
+    # ================================  Methods required by BaseView(), (re-)implemented here =========================
+
     def closeEvent(self, event):
         """Override the standard closeEvent method by (i) disconnecting all signals and,
         (ii) closing the plotter for vtk windows."""
@@ -99,8 +101,6 @@ class ViewVTK(BaseView):
         # with the closeEvent() method in the BaseView() class.
         self.plotter.close()
         event.accept()
-
-    # ================================  Methods required by BaseView(), (re-)implemented here =========================
 
     def get_actor_by_uid(self, uid: str = None):
         """

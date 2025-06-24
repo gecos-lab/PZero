@@ -1925,13 +1925,11 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         Do not use "pass" that would be appended to child classes.
         """
 
-    def closeEvent(self, event):
-        """Override the standard closeEvent method by (i) disconnecting all signals."""
-        self.enable_actions()
-        self.disconnect_all_signals()
-        event.accept()
-
     # ================================  Placeholders for required methods, implemented in child classes ===============
+
+    def closeEvent(self, event):
+        """Dummy method to override the standard closeEvent method by (i) disconnecting all signals."""
+        pass
 
     def get_actor_by_uid(self, uid: str = None):
         """Dummy method to get an actor by uid. Must be implemented in subclasses."""
