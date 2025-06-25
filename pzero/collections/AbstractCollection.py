@@ -42,16 +42,24 @@ class CollectionSignals(QObject):
     # the other argument is a list of uids, or a single uid, or a list of entities
     entities_added = pyqtSignal(list, object)  # seems OK
     entities_removed = pyqtSignal(list, object)  # seems OK
-    geom_modified = pyqtSignal(list, object)  # this includes topology modified - more check needed ============
-    data_keys_added = pyqtSignal(list, object)  # more check needed ============================================
+    # this includes topology modified - more check needed ========================================================
+    geom_modified = pyqtSignal(list, object)
+    # more check needed ==========================================================================================
+    data_keys_added = pyqtSignal(list, object)
     data_keys_removed: Signal = pyqtSignal(list, object)  # seems OK
     data_val_modified = pyqtSignal(list, object)  # this is not used at the moment
+    # working on this that has complex ramifications =============================================================
     metadata_modified = pyqtSignal(list, object)
-    legend_color_modified = pyqtSignal(list, object)
+    legend_color_modified = pyqtSignal(list, object)  # seems OK
+    # this does not crash the application, but does not work =====================================================
     legend_thick_modified = pyqtSignal(list, object)
+    # this does not crash the application, but does not work =====================================================
     legend_point_size_modified = pyqtSignal(list, object)
+    # this does not crash the application, but does not work =====================================================
     legend_opacity_modified = pyqtSignal(list, object)
-    selection_changed = pyqtSignal(object)  # selection self.selected_uids changed on the collection = object
+    selection_changed = pyqtSignal(
+        object
+    )  # selection self.selected_uids changed on the collection = object
 
 
 class BaseCollection(ABC):
@@ -446,7 +454,9 @@ class BaseCollection(ABC):
             # Replace old properties names and components with new ones
             new_keys = vtk_object.point_data_keys
             old_props = self.df.loc[self.df["uid"] == uid, "properties_names"].values[0]
-            old_comps = self.df.loc[self.df["uid"] == uid, "properties_components"].values[0]
+            old_comps = self.df.loc[
+                self.df["uid"] == uid, "properties_components"
+            ].values[0]
             self.df.loc[self.df["uid"] == uid, "properties_names"].values[0] = []
             self.df.loc[self.df["uid"] == uid, "properties_components"].values[0] = []
 
@@ -490,8 +500,9 @@ class BaseCollection(ABC):
 
             self.signals.geom_modified.emit([uid], self)
         else:
-            self.parent.print_terminal("ERROR - replace_vtk with vtk of a different type not allowed.")
-
+            self.parent.print_terminal(
+                "ERROR - replace_vtk with vtk of a different type not allowed."
+            )
 
     # =================== Common QT methods slightly adapted to the data source ====================================
 

@@ -1362,7 +1362,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                 uid=uid,
                 coll_name=collection.collection_name,
                 show_property=None,
-                visible=True
+                visible=True,
             )
             # New Pandas >= 2.0.0
             self.actors_df = pd_concat(
@@ -1454,7 +1454,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                         uid=uid,
                         coll_name=collection.collection_name,
                         show_property=None,
-                        visible=show
+                        visible=show,
                     )
                     self.actors_df.loc[
                         self.actors_df["uid"] == uid, ["show_property"]
@@ -1495,7 +1495,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                         uid=uid,
                         coll_name=collection.collection_name,
                         show_property=None,
-                        visible=show
+                        visible=show,
                     )
                     self.actors_df.loc[
                         self.actors_df["uid"] == uid, ["show_property"]
@@ -1545,12 +1545,14 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         to the collection view tree, if they are set, are disconnected to avoid a nasty loop that would disrupt them.
         """
         tree = self.tree_from_coll(coll=collection)
-        tree.itemChanged.disconnect()
-        tree.legend_modified_update_views(
-            self, updated_uids=updated_uids
-        )  # is this a method of the tree or of the collection (already existing)?
-        tree.create_tree(self)  # this should be a method of the tree
-        tree.itemChanged.connect(self.toggle_visibility)
+        # tree.itemChanged.disconnect()
+        self.change_actor_color(collection=collection, updated_uids=updated_uids)
+        self.change_actor_point_size(collection=collection, updated_uids=updated_uids)
+        self.change_actor_line_thick(collection=collection, updated_uids=updated_uids)
+        self.change_actor_opacity(collection=collection, updated_uids=updated_uids)
+        tree.remove_items_from_tree(uids_to_remove=updated_uids)
+        tree.add_items_to_tree(uids_to_add=updated_uids)
+        # tree.itemChanged.connect(self.toggle_visibility)
 
     def entities_legend_modified_update_views(self, collection=None, updated_uids=None):
         """This is called when changing any property in the legend. Updating trees not
@@ -1561,10 +1563,10 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         # do not belong to the updated_list. try/except needed for when the query is non-valid.
         updated_uids = collection.filter_uids(query=self.view_filter, uids=updated_uids)
         for uid in updated_uids:
-            show = self.actors_df.loc[self.actors_df["uid"] == uid, "show"].to_list()[0]
+            show = self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]
             show_property = self.actors_df.loc[
                 self.actors_df["uid"] == uid, "show_property"
-            ].to_list()[0]
+            ].values[0]
             self.show_actor_with_property(
                 uid=uid,
                 coll_name=collection.collection_name,
@@ -1594,7 +1596,8 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
 
     def show_uids(self, uids: list = None):
         """Show actors with the given uids."""
-        # Maybe in th future this might be reimplemented in parallel or vectorized?
+        # Maybe in the future this might be reimplemented in parallel or vectorized?
+        print("show_uids: ", uids)
         for uid in uids:
             self.print_terminal(f"showing uid: {uid}")
             # self.print_terminal(f"{self.actors_df}")
@@ -1606,6 +1609,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
     def hide_uids(self, uids: list = None):
         """Hide actors with the given uids."""
         # Maybe in th future this might be reimplemented in parallel or vectorized?
+        print("hide_uids: ", uids)
         for uid in uids:
             self.print_terminal(f"hiding uid: {uid}")
             # self.print_terminal(f"{self.actors_df}")
@@ -1629,6 +1633,9 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
     def toggle_visibility(
         self, collection_name=None, turn_on_uids=None, turn_off_uids=None
     ):
+        print(
+            f"toggle_visibility: {collection_name}, turn_on_uids: {turn_on_uids}, turn_off_uids: {turn_off_uids}"
+        )
         self.show_uids(turn_on_uids)
         self.hide_uids(turn_off_uids)
 
@@ -1642,7 +1649,9 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             self.show_markers(uid=uid, show_property=prop_text)
         # case for Annotations
         elif prop_text == "Annotations":
-            self.show_labels(uid=uid, show_property=prop_text, coll_name=collection_name)
+            self.show_labels(
+                uid=uid, show_property=prop_text, coll_name=collection_name
+            )
         # case for all other properties
         else:
             this_actor = self.show_actor_with_property(
