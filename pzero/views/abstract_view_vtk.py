@@ -413,7 +413,7 @@ class ViewVTK(BaseView):
         self.set_orientation_widget()
 
     def show_actor_with_property(
-        self, uid=None, collection=None, show_property=None, visible=None
+        self, uid=None, coll_name=None, show_property=None, visible=None
     ):
         """
         Show actor with scalar property (default None). See details in:
@@ -423,9 +423,12 @@ class ViewVTK(BaseView):
         #     f"Showing actor with property {show_property}, visible {visible}."
         # )
         # First get the vtk object from its collection.
-        show_property_title = show_property
-        this_coll = eval("self.parent." + collection)
-        if collection in ["geol_coll", "fluid_coll", "backgrnd_coll", "well_coll"]:
+        if show_property:
+            show_property_title = show_property
+        else:
+            show_property_title = None
+        this_coll = eval(f"self.parent.{coll_name}")
+        if coll_name in ["geol_coll", "fluid_coll", "backgrnd_coll", "well_coll"]:
             color_R = this_coll.get_uid_legend(uid=uid)["color_R"]
             color_G = this_coll.get_uid_legend(uid=uid)["color_G"]
             color_B = this_coll.get_uid_legend(uid=uid)["color_B"]
@@ -434,7 +437,7 @@ class ViewVTK(BaseView):
             point_size = this_coll.get_uid_legend(uid=uid)["point_size"]
             opacity = this_coll.get_uid_legend(uid=uid)["opacity"] / 100
             plot_entity = this_coll.get_uid_vtk_obj(uid)
-        elif collection in [
+        elif coll_name in [
             "xsect_coll",
             "boundary_coll",
             "mesh3d_coll",
@@ -451,7 +454,7 @@ class ViewVTK(BaseView):
             plot_entity = this_coll.get_uid_vtk_obj(uid)
         else:
             # catch errors
-            self.print_terminal(f"no collection: {collection}")
+            self.print_terminal(f"no collection: {coll_name}")
             this_actor = None
         # Then plot the vtk object with proper options.
         if isinstance(plot_entity, (PolyLine, TriSurf, XsPolyLine)) and not isinstance(
@@ -461,7 +464,11 @@ class ViewVTK(BaseView):
             if isinstance(plot_entity.points, np_ndarray):
                 # This  check is needed to avoid errors when trying to plot an empty
                 # PolyData, just created at the beginning of a digitizing session.
-                if show_property == "none" or show_property is None:
+                if show_property == "none":
+                    show_property = None
+                elif show_property == None:
+                    show_property = None
+                elif not show_property:
                     show_property = None
                 elif show_property == "X":
                     show_property = plot_entity.points_X
@@ -827,40 +834,40 @@ class ViewVTK(BaseView):
             show_property = None
             show_property_title = None
 
-    def show_labels(self, uid=None, collection=None, show_property=None):
-        if collection == "geol_coll":
+    def show_labels(self, uid=None, coll_name=None, show_property=None):
+        if coll_name == "geol_coll":
             plot_entity = self.parent.geol_coll.get_uid_vtk_obj(uid)
             point = plot_entity.GetCenter()
             name_value = self.parent.geol_coll.get_uid_name(uid)
-        elif collection == "xsect_coll":
+        elif coll_name == "xsect_coll":
             plot_entity = self.parent.xsect_coll.get_uid_vtk_obj(uid)
             point = plot_entity.GetCenter()
             name_value = self.parent.xsect_coll.get_uid_name(uid)
-        elif collection == "boundary_coll":
+        elif coll_name == "boundary_coll":
             plot_entity = self.parent.boundary_coll.get_uid_vtk_obj(uid)
             point = plot_entity.GetCenter()
             name_value = self.parent.boundary_coll.get_uid_name(uid)
-        elif collection == "mesh3d_coll":
+        elif coll_name == "mesh3d_coll":
             plot_entity = self.parent.mesh3d_coll.get_uid_vtk_obj(uid)
             point = plot_entity.GetCenter()
             name_value = self.parent.mesh3d_coll.get_uid_name(uid)
-        elif collection == "dom_coll":
+        elif coll_name == "dom_coll":
             plot_entity = self.parent.dom_coll.get_uid_vtk_obj(uid)
             point = plot_entity.GetCenter()
             name_value = self.parent.dom_coll.get_uid_name(uid)
-        elif collection == "image_coll":
+        elif coll_name == "image_coll":
             plot_entity = self.parent.image_coll.get_uid_vtk_obj(uid)
             point = plot_entity.GetCenter()
             name_value = self.parent.image_coll.get_uid_name(uid)
-        elif collection == "well_coll":
+        elif coll_name == "well_coll":
             plot_entity = self.parent.well_coll.get_uid_vtk_obj(uid)
             point = plot_entity.points[0].reshape(-1, 3)
             name_value = [self.parent.well_coll.get_uid_well_locid(uid)]
-        elif collection == "fluid_coll":
+        elif coll_name == "fluid_coll":
             plot_entity = self.parent.fluid_coll.get_uid_vtk_obj(uid)
             point = plot_entity.GetCenter()
             name_value = self.parent.fluid_coll.get_uid_name(uid)
-        elif collection == "backgrnd_coll":
+        elif coll_name == "backgrnd_coll":
             plot_entity = self.parent.backgrnd_coll.get_uid_vtk_obj(uid)
             if self.parent.backgrnd_coll.get_uid_topology(uid) == "PolyLine":
                 point = plot_entity.GetCenter()
