@@ -215,7 +215,7 @@ class BoundaryCollection(BaseCollection):
         # Reset data model.
         self.modelReset.emit()
         # Then emit signal to update the views. A list of uids is emitted, even if the entity is just one.
-        self.signals.entity_added.emit([entity_dict["uid"]])
+        self.signals.entities_added.emit([entity_dict["uid"]], self)
         return entity_dict["uid"]
 
     def remove_entity(self, uid: str = None) -> str:
@@ -224,24 +224,13 @@ class BoundaryCollection(BaseCollection):
         self.df.drop(self.df[self.df["uid"] == uid].index, inplace=True)
         self.modelReset.emit()  # is this really necessary?
         # When done, send a signal over to the views. A list of uids is emitted, even if the entity is just one.
-        self.signals.entities_removed.emit([uid])
+        self.signals.entities_removed.emit([uid], self)
         return uid
 
     def clone_entity(self, uid: str = None) -> str:
         """Clone an entity."""
         # Not implemented for this collection, but required by the abstract superclass.
         pass
-
-    def replace_vtk(self, uid: str = None, vtk_object: vtkDataObject = None):
-        """Replace the vtk object of a given uid with another vtkobject."""
-        # ============ CAN BE UNIFIED AS COMMON METHOD OF THE ABSTRACT COLLECTION WHEN SIGNALS WILL BE UNIFIED ==========
-        if isinstance(
-            vtk_object, type(self.df.loc[self.df["uid"] == uid, "vtk_obj"].values[0])
-        ):
-            self.df.loc[self.df["uid"] == uid, "vtk_obj"] = vtk_object
-            self.signals.geom_modified.emit([uid])
-        else:
-            self.print_terminal("ERROR - replace_vtk with vtk of a different type not allowed.")
 
     def attr_modified_update_legend_table(self):
         """Update legend table when attributes are changed."""

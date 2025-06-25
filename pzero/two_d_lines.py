@@ -155,9 +155,7 @@ def sort_line_nodes(self):
             current_uid
         ).sort_nodes()  # this could be probably done per-part__________________________
         # Deselect input line.
-        self.parent.geol_coll.signals.geom_modified.emit(
-            [current_uid]
-        )  # emit uid as list to force redraw()
+        self.parent.geol_coll.signals.geom_modified.emit([current_uid], self.parent.geol_coll)
         # for action in self.findChildren(QAction):
         #     action.setEnabled(True)
     # Deselect input line.
@@ -205,9 +203,7 @@ def move_line(self, vector):
         self.parent.geol_coll.get_uid_vtk_obj(current_uid).points = points
         left_right(current_uid)
         # Deselect input line.
-        self.parent.geol_coll.signals.geom_modified.emit(
-            [current_uid]
-        )  # emit uid as list to force redraw()
+        self.parent.geol_coll.signals.geom_modified.emit([current_uid], self.parent.geol_coll)
     # Deselect input line.
     self.clear_selection()
 
@@ -266,7 +262,7 @@ def rotate_line(self):
         self.parent.geol_coll.get_uid_vtk_obj(current_uid).points = outXYZ
         left_right(current_uid)
         # emit uid as list to force redraw()
-        self.parent.geol_coll.signals.geom_modified.emit([current_uid])
+        self.parent.geol_coll.signals.geom_modified.emit([current_uid], self.parent.geol_coll)
     # Deselect input line.
     self.clear_selection()
 
@@ -454,9 +450,7 @@ def split_line_line(self):
                     self.parent.geol_coll.replace_vtk(
                         uid=current_uid_paper, vtk_object=new_line["vtk_obj"]
                     )
-                    self.parent.geol_coll.signals.geom_modified.emit(
-                        [current_uid_paper]
-                    )  # emit uid as list to force redraw()
+                    self.parent.geol_coll.signals.geom_modified.emit([current_uid_paper], self.parent.geol_coll)
                     replace = 0
                     uids.append(current_uid_paper)
                 else:
@@ -948,7 +942,7 @@ def resample_lines_distance(self):
             self.print_terminal(" -- Empty object -- ")
         # Deselect input line and emit uid as list to force redraw.
         self.clear_selection()
-        self.parent.geol_coll.signals.geom_modified.emit([current_uid])
+        self.parent.geol_coll.signals.geom_modified.emit([current_uid], self.parent.geol_coll)
         self.print_terminal(
             f"Line {current_uid} resampled with distance = {distance_delta}"
         )
@@ -1045,7 +1039,7 @@ def resample_lines_number_points(
             self.print_terminal(" -- Empty object -- ")
         # Deselect input line and emit uid as list to force redraw.
         self.clear_selection()
-        self.parent.geol_coll.signals.geom_modified.emit([current_uid])
+        self.parent.geol_coll.signals.geom_modified.emit([current_uid], self.parent.geol_coll)
         self.print_terminal(
             f"Line {current_uid} resampled with number of points = {number_of_points}"
         )
@@ -1138,9 +1132,7 @@ def simplify_line(
         else:
             self.print_terminal("Empty object")
 
-        self.parent.geol_coll.signals.geom_modified.emit(
-            [current_uid]
-        )  # emit uid as list to force redraw()
+        self.parent.geol_coll.signals.geom_modified.emit([current_uid], self.parent.geol_coll)
     # Deselect input line.
     self.clear_selection()
 
@@ -1322,9 +1314,7 @@ def copy_kink(
     inUV = np_column_stack((inU, inV))
     # Deselect input line.
     self.clear_selection()
-    self.parent.geol_coll.signals.geom_modified.emit(
-        [input_uid]
-    )  # emit uid as list to force redraw()
+    self.parent.geol_coll.signals.geom_modified.emit([input_uid], self.parent.geol_coll)
     # Run the Shapely function.
     shp_line_in = shp_linestring(inUV)
     if shp_line_in.is_simple:

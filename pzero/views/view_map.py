@@ -66,7 +66,7 @@ class ViewMap(View2D):
     # ================================  Methods required by BaseView(), (re-)implemented here =========================
 
     def show_actor_with_property(
-        self, uid=None, collection=None, show_property=None, visible=None
+        self, uid=None, coll_name=None, show_property=None, visible=None
     ):
         """Show actor with scalar property (default None)
         https://github.com/pyvista/pyvista/blob/140b15be1d4021b81ded46b1c212c70e86a98ee7/pyvista/plotting/plotting.py#L1045
@@ -74,8 +74,8 @@ class ViewMap(View2D):
         # ___________________________________________________see if this reimplementation from VTKView can be avoided
         # First get the vtk object from its collection.
         show_property_title = show_property
-        this_coll = eval("self.parent." + collection)
-        if collection in ["geol_coll", "fluid_coll", "backgrnd_coll", "well_coll"]:
+        this_coll = eval(f"self.parent.{coll_name}")
+        if coll_name in ["geol_coll", "fluid_coll", "backgrnd_coll", "well_coll"]:
             color_R = this_coll.get_uid_legend(uid=uid)["color_R"]
             color_G = this_coll.get_uid_legend(uid=uid)["color_G"]
             color_B = this_coll.get_uid_legend(uid=uid)["color_B"]
@@ -84,7 +84,7 @@ class ViewMap(View2D):
             point_size = this_coll.get_uid_legend(uid=uid)["point_size"]
             opacity = this_coll.get_uid_legend(uid=uid)["opacity"] / 100
             plot_entity = this_coll.get_uid_vtk_obj(uid)
-        elif collection in [
+        elif coll_name in [
             "xsect_coll",
             "boundary_coll",
             "mesh3d_coll",
@@ -101,7 +101,7 @@ class ViewMap(View2D):
             plot_entity = this_coll.get_uid_vtk_obj(uid)
         else:
             # catch errors
-            print("no collection", collection)
+            print("no collection", coll_name)
             this_actor = None
         # Then plot the vtk object with proper options.
         if isinstance(plot_entity, (PolyLine, TriSurf, XsPolyLine)) and not isinstance(

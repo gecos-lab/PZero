@@ -610,7 +610,7 @@ class CustomTreeWidget(QTreeWidget):
                 self.collection.selected_uids.append(uid)
 
         # emit signal  ================================================================================================
-        self.collection.signals.itemsSelected.emit(self.collection.collection_name)
+        self.collection.signals.selection_changed.emit(self.collection)
 
     def update_child_check_states(self, item, check_state):
         """

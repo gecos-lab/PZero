@@ -130,15 +130,15 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         # Connect signals to update functions. Use lambda functions where we need to pass additional
         # arguments such as parent in addition to the signal itself, e.g. the updated_list
         # Note that it could be possible to connect the (lambda) functions directly, without naming them, as in:
-        # self.parent.geol_coll.signals.entity_added.connect(lambda updated_list: self.geology_added_update_views(
+        # self.parent.geol_coll.signals.entities_added.connect(lambda updated_list: self.geology_added_update_views(
         #             updated_list=updated_list
         #         ))
         # but in this way it will be impossible to disconnect them selectively when closing this window, so we use:
         # self.upd_list_geo_add = lambda updated_list: self.geology_added_update_views(
         #             updated_list=updated_list
         #         )
-        # self.parent.geol_coll.signals.entity_added.connect(self.upd_list_geo_add)
-        # self.parent.geol_coll.signals.entity_added.disconnect(self.upd_list_geo_add)
+        # self.parent.geol_coll.signals.entities_added.connect(self.upd_list_geo_add)
+        # self.parent.geol_coll.signals.entities_added.disconnect(self.upd_list_geo_add)
 
         # # Define GEOLOGY lamda functions and signals
         #
@@ -201,7 +201,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
 
         # # Connect GEOLOGY lamda functions and signals
         #
-        # self.parent.geol_coll.signals.entity_added.connect(
+        # self.parent.geol_coll.signals.entities_added.connect(
         #     self.upd_list_geo_add
         # )  # this is emitted from the collection
         # self.parent.geol_coll.signals.entities_removed.connect(
@@ -266,7 +266,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         #
         # # Connect X SECTION lamda functions and signals
         #
-        # self.parent.xsect_coll.signals.entity_added.connect(
+        # self.parent.xsect_coll.signals.entities_added.connect(
         #     self.upd_list_x_add
         # )  # this is emitted from the collection
         # self.parent.xsect_coll.signals.entities_removed.connect(
@@ -326,7 +326,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         #
         # # Connect BOUNDARY lamda functions and signals
         #
-        # self.parent.boundary_coll.signals.entity_added.connect(
+        # self.parent.boundary_coll.signals.entities_added.connect(
         #     self.upd_list_bound_add
         # )  # this is emitted from the collection
         # self.parent.boundary_coll.signals.entities_removed.connect(
@@ -391,7 +391,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         #
         # # Connect MESH 3D lamda functions and signals
         #
-        # self.parent.mesh3d_coll.signals.entity_added.connect(
+        # self.parent.mesh3d_coll.signals.entities_added.connect(
         #     self.upd_list_mesh3d_add
         # )  # this is emitted from the collection
         # self.parent.mesh3d_coll.signals.entities_removed.connect(
@@ -464,7 +464,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         #
         # # Collect DOM lamda functions and signals
         #
-        # self.parent.dom_coll.signals.entity_added.connect(
+        # self.parent.dom_coll.signals.entities_added.connect(
         #     self.upd_list_dom_add
         # )  # this is emitted from the collection
         # self.parent.dom_coll.signals.entities_removed.connect(
@@ -515,7 +515,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         #
         # # Connect IMAGE lamda functions and signals
         #
-        # self.parent.image_coll.signals.entity_added.connect(
+        # self.parent.image_coll.signals.entities_added.connect(
         #     self.upd_list_img_add
         # )  # this is emitted from the collection
         # self.parent.image_coll.signals.entities_removed.connect(
@@ -570,7 +570,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         #
         # # Connect WELL lamda functions and signals
         #
-        # self.parent.well_coll.signals.entity_added.connect(
+        # self.parent.well_coll.signals.entities_added.connect(
         #     self.upd_list_well_add
         # )  # this is emitted from the collection
         # self.parent.well_coll.signals.entities_removed.connect(
@@ -648,7 +648,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         #
         # # Connect FLUID lamda functions and signals
         #
-        # self.parent.fluid_coll.signals.entity_added.connect(
+        # self.parent.fluid_coll.signals.entities_added.connect(
         #     self.upd_list_fluid_add
         # )  # this is emitted from the collection
         # self.parent.fluid_coll.signals.entities_removed.connect(
@@ -737,7 +737,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         #
         # # Connect BACKGROUND lamda functions and signals
         #
-        # self.parent.backgrnd_coll.signals.entity_added.connect(
+        # self.parent.backgrnd_coll.signals.entities_added.connect(
         #     self.upd_list_background_add
         # )  # this is emitted from the collection
         # self.parent.backgrnd_coll.signals.entities_removed.connect(
@@ -947,7 +947,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                 eval(f"self.{coll_name}_sig_opct_lmb")
             )
 
-            # itemsSelected
+            # selection_changed
 
             ### FOLLOW THE PATTERN ABOVE !!!
 
@@ -974,7 +974,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             # collection.signals.legend_thick_modified.connect()
             # collection.signals.legend_point_size_modified.connect()
             # collection.signals.legend_opacity_modified.connect()
-            # collection.signals.itemsSelected.connect()
+            # collection.signals.selection_changed.connect()
 
     def disconnect_all_signals(self):
         """
@@ -1039,13 +1039,13 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             collection.signals.legend_opacity_modified.disconnect(
                 eval(f"self.{coll_name}_sig_opct_lmb")
             )
-            # itemsSelected
+            # selection_changed
 
             ### FOLLOW THE PATTERN ABOVE !!!
 
         # # OLD ==== Disconnect GEOLOGY signals
         #
-        # self.parent.geol_coll.signals.entity_added.disconnect(self.upd_list_geo_add)
+        # self.parent.geol_coll.signals.entities_added.disconnect(self.upd_list_geo_add)
         # self.parent.geol_coll.signals.entities_removed.disconnect(self.upd_list_geo_rm)
         # self.parent.geol_coll.signals.geom_modified.disconnect(self.upd_list_geo_mod)
         # self.parent.geol_coll.signals.data_keys_modified.disconnect(
@@ -1072,7 +1072,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         #
         # # Disconnect X-SECTION signals
         #
-        # self.parent.xsect_coll.signals.entity_added.disconnect(self.upd_list_x_add)
+        # self.parent.xsect_coll.signals.entities_added.disconnect(self.upd_list_x_add)
         # self.parent.xsect_coll.signals.entities_removed.disconnect(self.upd_list_x_rm)
         # self.parent.xsect_coll.signals.geom_modified.disconnect(self.upd_list_x_mod)
         # self.parent.xsect_coll.signals.metadata_modified.disconnect(
@@ -1090,7 +1090,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         #
         # # Disconnect BOUNDARY signals
         #
-        # self.parent.boundary_coll.signals.entity_added.disconnect(
+        # self.parent.boundary_coll.signals.entities_added.disconnect(
         #     self.upd_list_bound_add
         # )
         # self.parent.boundary_coll.signals.entities_removed.disconnect(
@@ -1114,7 +1114,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         #
         # # Disconnect MESH3D signals
         #
-        # self.parent.mesh3d_coll.signals.entity_added.disconnect(
+        # self.parent.mesh3d_coll.signals.entities_added.disconnect(
         #     self.upd_list_mesh3d_add
         # )
         # self.parent.mesh3d_coll.signals.entities_removed.disconnect(
@@ -1141,7 +1141,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         #
         # # Disconnect DOM signals
         #
-        # self.parent.dom_coll.signals.entity_added.disconnect(self.upd_list_dom_add)
+        # self.parent.dom_coll.signals.entities_added.disconnect(self.upd_list_dom_add)
         # self.parent.dom_coll.signals.entities_removed.disconnect(self.upd_list_dom_rm)
         # self.parent.dom_coll.signals.data_keys_modified.disconnect(
         #     self.upd_list_dom_data_keys_mod
@@ -1167,7 +1167,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         #
         # # Disconnect IMAGE signals
         #
-        # self.parent.image_coll.signals.entity_added.disconnect(self.upd_list_img_add)
+        # self.parent.image_coll.signals.entities_added.disconnect(self.upd_list_img_add)
         # self.parent.image_coll.signals.entities_removed.disconnect(self.upd_list_img_rm)
         # self.parent.image_coll.signals.metadata_modified.disconnect(
         #     self.upd_list_metadata_mod
@@ -1178,7 +1178,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         #
         # # Disconnect WELL signals
         #
-        # self.parent.well_coll.signals.entity_added.disconnect(self.upd_list_well_add)
+        # self.parent.well_coll.signals.entities_added.disconnect(self.upd_list_well_add)
         # self.parent.well_coll.signals.entities_removed.disconnect(self.upd_list_well_rm)
         # self.parent.well_coll.signals.data_keys_modified.disconnect(
         #     self.upd_list_well_data_keys_mod
@@ -1201,7 +1201,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         #
         # # Disconnect FLUID signals
         #
-        # self.parent.fluid_coll.signals.entity_added.disconnect(self.upd_list_fluid_add)
+        # self.parent.fluid_coll.signals.entities_added.disconnect(self.upd_list_fluid_add)
         # self.parent.fluid_coll.signals.entities_removed.disconnect(self.upd_list_fluid_rm)
         # self.parent.fluid_coll.signals.geom_modified.disconnect(
         #     self.upd_list_fluid_geo_mod
@@ -1230,7 +1230,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         #
         # # Disconnect BACKGROUND signals
         #
-        # self.parent.backgrnd_coll.signals.entity_added.disconnect(
+        # self.parent.backgrnd_coll.signals.entities_added.disconnect(
         #     self.upd_list_background_add
         # )
         # self.parent.backgrnd_coll.signals.entities_removed.disconnect(
@@ -1359,7 +1359,10 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         updated_uids = collection.filter_uids(query=self.view_filter, uids=updated_uids)
         for uid in updated_uids:
             this_actor = self.show_actor_with_property(
-                uid=uid, collection=collection, show_property=None, visible=True
+                uid=uid,
+                coll_name=collection.collection_name,
+                show_property=None,
+                visible=True
             )
             # New Pandas >= 2.0.0
             self.actors_df = pd_concat(
@@ -1380,7 +1383,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                 ignore_index=True,
             )
             # THE TREE MUST NOT ALTER self.actors_df ==========================================
-        tree.update_tree_added(self, uid_list=updated_uids)
+        tree.add_items_to_tree(uids_to_add=updated_uids)
         tree.itemChanged.connect(self.toggle_visibility)
 
     def entities_removed_update_views(self, updated_uids=None, collection=None):
@@ -1415,7 +1418,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             ].values[0]
             self.show_actor_with_property(
                 uid=uid,
-                collection=collection,
+                coll_name=collection.collection_name,
                 show_property=show_property,
                 visible=show,
             )
@@ -1448,7 +1451,10 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                         self.actors_df["uid"] == uid, "show"
                     ].to_list()[0]
                     self.show_actor_with_property(
-                        uid=uid, collection=collection, show_property=None, visible=show
+                        uid=uid,
+                        coll_name=collection.collection_name,
+                        show_property=None,
+                        visible=show
                     )
                     self.actors_df.loc[
                         self.actors_df["uid"] == uid, ["show_property"]
@@ -1486,7 +1492,10 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                         self.actors_df["uid"] == uid, "show"
                     ].to_list()[0]
                     self.show_actor_with_property(
-                        uid=uid, collection=collection, show_property=None, visible=show
+                        uid=uid,
+                        coll_name=collection.collection_name,
+                        show_property=None,
+                        visible=show
                     )
                     self.actors_df.loc[
                         self.actors_df["uid"] == uid, ["show_property"]
@@ -1521,7 +1530,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                     ].to_list()[0]
                     self.show_actor_with_property(
                         uid=uid,
-                        collection="geol_coll",
+                        coll_name=collection.collection_name,
                         show_property=None,
                         visible=show,
                     )
@@ -1558,7 +1567,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             ].to_list()[0]
             self.show_actor_with_property(
                 uid=uid,
-                collection=collection,
+                coll_name=collection.collection_name,
                 show_property=show_property,
                 visible=show,
             )
@@ -1628,20 +1637,17 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         # self.print_terminal("Toggling property " + prop_text + " on uid " + uid)
         # store shown/hidden state
         show = self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]
-        collection = self.actors_df.loc[
-            self.actors_df["uid"] == uid, "collection"
-        ].values[0]
         # case for Marker
         if prop_text == "Marker":
             self.show_markers(uid=uid, show_property=prop_text)
         # case for Annotations
         elif prop_text == "Annotations":
-            self.show_labels(uid=uid, show_property=prop_text, collection=collection)
+            self.show_labels(uid=uid, show_property=prop_text, coll_name=collection_name)
         # case for all other properties
         else:
             this_actor = self.show_actor_with_property(
                 uid=uid,
-                collection=collection,
+                coll_name=collection_name,
                 show_property=prop_text,
                 visible=show,
             )
@@ -1684,7 +1690,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                 # See issue #33 for a discussion on actors replacement by the PyVista add_mesh and add_volume methods.
                 this_actor = self.show_actor_with_property(
                     uid=uid,
-                    collection=collection,
+                    coll_name=collection.collection_name,
                     show_property=this_property,
                     visible=show,
                 )
@@ -1706,7 +1712,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                 ):
                     this_actor = self.show_actor_with_property(
                         uid=uid,
-                        collection=collection_name,
+                        coll_name=collection_name,
                         show_property=None,
                         visible=True,
                     )
@@ -1985,7 +1991,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         return
 
     def show_actor_with_property(
-        self, uid=None, collection=None, show_property=None, visible=None
+        self, uid=None, coll_name=None, show_property=None, visible=None
     ):
         """Dummy method to show actor with uid and property. Must be implemented in subclasses."""
         return
@@ -1994,7 +2000,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         """Dummy method to show markers for uid and property. Must be implemented in subclasses."""
         return
 
-    def show_labels(self, uid=None, collection=None, show_property=None):
+    def show_labels(self, uid=None, coll_name=None, show_property=None):
         """Dummy method to show labels for uid and property. Must be implemented in subclasses."""
         return
 

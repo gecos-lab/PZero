@@ -362,7 +362,7 @@ class XSectionCollection(BaseCollection):
         # Reset data model
         self.modelReset.emit()
         # Emit a list of uids, even if the entity is just one
-        self.signals.entity_added.emit([entity_dict["uid"]])
+        self.signals.entities_added.emit([entity_dict["uid"]], self)
         return entity_dict["uid"]
 
     def remove_entity(self, uid: str = None) -> str:
@@ -373,15 +373,11 @@ class XSectionCollection(BaseCollection):
         self.df.drop(self.df[self.df["uid"] == uid].index, inplace=True)
         self.modelReset.emit()  # is this really necessary?
         # Emit a list of uids, even if the entity is just one
-        self.signals.entities_removed.emit([uid])
+        self.signals.entities_removed.emit([uid], self)
         return uid
 
     def clone_entity(self, uid: str = None) -> str:
         """Not implemented for XSectionCollection, but required by the abstract superclass."""
-        pass
-
-    def replace_vtk(self, uid: str = None, vtk_object: vtkDataObject = None):
-        """Not implemented for this collection, but required by the abstract superclass."""
         pass
 
     def attr_modified_update_legend_table(self):

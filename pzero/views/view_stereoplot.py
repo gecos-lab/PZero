@@ -744,11 +744,7 @@ class ViewStereoplot(ViewMPL):
             self.ax.grid(True, kind="polar", color="k", ls=":")
 
     def show_actor_with_property(
-        self,
-        uid=None,
-        collection=None,
-        show_property=None,
-        visible=None,
+        self, uid=None, coll_name=None, show_property=None, visible=None,
     ):
         # Show actor with scalar property (default None)
         if show_property is None:
@@ -756,8 +752,8 @@ class ViewStereoplot(ViewMPL):
 
         # First get the vtk object from its collection.
         show_property_title = show_property
-        this_coll = eval("self.parent." + collection)
-        if collection == "geol_coll":
+        this_coll = eval(f"self.parent.{coll_name}")
+        if coll_name == "geol_coll":
             color_R = this_coll.get_uid_legend(uid=uid)["color_R"]
             color_G = this_coll.get_uid_legend(uid=uid)["color_G"]
             color_B = this_coll.get_uid_legend(uid=uid)["color_B"]
@@ -766,7 +762,7 @@ class ViewStereoplot(ViewMPL):
             plot_entity = this_coll.get_uid_vtk_obj(uid)
         else:
             # catch errors
-            self.print_terminal("no collection: " + collection)
+            self.print_terminal("no collection: " + coll_name)
             plot_entity = None
 
         # Then plot.
@@ -851,7 +847,10 @@ class ViewStereoplot(ViewMPL):
             show = self.actor_shown(uid=uid)
             self.remove_actor_in_view(uid, redraw=False)
             this_actor = self.show_actor_with_property(
-                uid=uid, collection="geol_coll", visible=show
+                uid=uid,
+                coll_name="geol_coll",
+                show_property=None,
+                visible=show
             )
             self.actors_df = pd_concat(
                 [
@@ -900,7 +899,10 @@ class ViewStereoplot(ViewMPL):
             self.remove_actor_in_view(uid, redraw=False)
 
             this_actor = self.show_actor_with_property(
-                uid=uid, collection="geol_coll", visible=show
+                uid=uid,
+                coll_name="geol_coll",
+                show_property=None,
+                visible=show
             )
             self.actors_df = pd_concat(
                 [

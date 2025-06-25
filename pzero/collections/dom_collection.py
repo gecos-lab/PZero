@@ -63,7 +63,7 @@ class DomCollection(DIMCollection):
                 map_image_uid=map_image_uid,
             )
             self.df.at[row, "texture_uids"].append(map_image_uid)
-            self.signals.metadata_modified.emit([dom_uid])
+            self.signals.metadata_modified.emit([dom_uid], self)
 
     def remove_map_texture_from_dom(self, dom_uid=None, map_image_uid=None):
         """Remove a map texture from a DOM."""
@@ -71,8 +71,8 @@ class DomCollection(DIMCollection):
         if map_image_uid in self.df.at[row, "texture_uids"]:
             self.get_uid_vtk_obj(dom_uid).remove_texture(map_image_uid=map_image_uid)
             self.df.at[row, "texture_uids"].remove(map_image_uid)
-            self.signals.data_keys_modified.emit([dom_uid])
-            # self.signals.metadata_modified.emit([dom_uid])
+            self.signals.data_keys_removed.emit([dom_uid], self)
+            # self.signals.metadata_modified.emit([dom_uid], self)
 
     def set_active_texture_on_dom(self, dom_uid=None, map_image_uid=None):
         """Set active texture on a DOM."""

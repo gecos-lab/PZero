@@ -14,6 +14,7 @@ from PySide6.QtCore import Signal as pyqtSignal
 from abc import abstractmethod, ABC
 
 from pandas import DataFrame as pd_DataFrame
+from pandas import concat as pd_concat
 
 import numpy.typing as npt
 from numpy import ndarray as np_ndarray
@@ -39,23 +40,18 @@ class CollectionSignals(QObject):
 
     # "object" is used to pass the collection object that emitted the signal
     # the other argument is a list of uids, or a single uid, or a list of entities
-    entities_added = pyqtSignal(list, object)
-    entities_removed = pyqtSignal(list, object)
-    geom_modified = pyqtSignal(list, object)  # this includes topology modified
-    data_keys_modified = pyqtSignal(
-        list, object
-    )  # remove after splitting keys added/removed ==========
-    data_keys_added = pyqtSignal(list, object)
-    data_keys_removed: Signal = pyqtSignal(list, object)
-    data_val_modified = pyqtSignal(list, object)
+    entities_added = pyqtSignal(list, object)  # seems OK
+    entities_removed = pyqtSignal(list, object)  # seems OK
+    geom_modified = pyqtSignal(list, object)  # this includes topology modified - more check needed ============
+    data_keys_added = pyqtSignal(list, object)  # more check needed ============================================
+    data_keys_removed: Signal = pyqtSignal(list, object)  # seems OK
+    data_val_modified = pyqtSignal(list, object)  # this is not used at the moment
     metadata_modified = pyqtSignal(list, object)
     legend_color_modified = pyqtSignal(list, object)
     legend_thick_modified = pyqtSignal(list, object)
     legend_point_size_modified = pyqtSignal(list, object)
     legend_opacity_modified = pyqtSignal(list, object)
-    itemsSelected = pyqtSignal(
-        str, object
-    )  # selection changed on the collection in the signal argument
+    selection_changed = pyqtSignal(object)  # selection self.selected_uids changed on the collection = object
 
 
 class BaseCollection(ABC):
@@ -106,13 +102,6 @@ class BaseCollection(ABC):
     @abstractmethod
     def clone_entity(self, uid: str = None) -> str:
         """Clone an entity. Take care since this sends signals immediately (?)."""
-        pass
-
-    @abstractmethod
-    def replace_vtk(self, uid: str = None, vtk_object: vtkDataObject = None):
-        """Replace the vtk object of a given uid with another vtkobject."""
-        # ============ CAN BE UNIFIED AS COMMON METHOD OF THE ABSTRACT COLLECTION WHEN SIGNALS WILL BE UNIFIED ==========
-        # ============ NOT CLEAR HOW TO DEAL WITH COLLECTIONS OF IMMUTABLE VTKs (images, DOMs, meshes, etc.) ==========
         pass
 
     @abstractmethod
@@ -390,7 +379,7 @@ class BaseCollection(ABC):
             data_key=property_name, dimension=property_components
         )
         # IN THE FUTURE add cell data.
-        self.signals.metadata_modified.emit([uid])
+        self.signals.metadata_modified.emit([uid], self)
 
     def remove_uid_property(self, uid: str = None, property_name: str = None):
         """Remove property name and components from an uid and remove property on vtk object.
@@ -406,7 +395,7 @@ class BaseCollection(ABC):
         )
         self.get_uid_vtk_obj(uid=uid).remove_point_data(data_key=property_name)
         # IN THE FUTURE add cell data.
-        self.signals.data_keys_removed.emit([uid])
+        self.signals.data_keys_removed.emit([uid], self)
 
     def get_uid_property_shape(
         self, uid: str = None, property_name: str = None
@@ -448,6 +437,61 @@ class BaseCollection(ABC):
     def deselect_uids(self, uids: list = None):
         """Deselect entities by uid list."""
         self.selected_uids = list(set(self.selected_uids) - set(uids))
+
+    def replace_vtk(self, uid: str = None, vtk_object: vtkDataObject = None):
+        """Replace the vtk object of a given uid with another vtkobject."""
+        if isinstance(
+            vtk_object, type(self.df.loc[self.df["uid"] == uid, "vtk_obj"].values[0])
+        ):
+            # Replace old properties names and components with new ones
+            new_keys = vtk_object.point_data_keys
+            old_props = self.df.loc[self.df["uid"] == uid, "properties_names"].values[0]
+            old_comps = self.df.loc[self.df["uid"] == uid, "properties_components"].values[0]
+            self.df.loc[self.df["uid"] == uid, "properties_names"].values[0] = []
+            self.df.loc[self.df["uid"] == uid, "properties_components"].values[0] = []
+
+            for key in new_keys:
+                components = vtk_object.get_point_data_shape(key)[1]
+
+                current_props = pd_DataFrame(
+                    self.df.loc[self.df["uid"] == uid, "properties_names"].values[0]
+                )
+                current_props = pd_concat(
+                    [current_props, pd_DataFrame([key])], ignore_index=True
+                )
+                self.df.loc[self.df["uid"] == uid, "properties_names"].values[0] = (
+                    current_props[0].tolist()
+                )
+
+                current_components = pd_DataFrame(
+                    self.df.loc[self.df["uid"] == uid, "properties_components"].values[
+                        0
+                    ]
+                )
+                current_components = pd_concat(
+                    [current_components, pd_DataFrame([components])], ignore_index=True
+                )
+                self.df.loc[self.df["uid"] == uid, "properties_components"].values[
+                    0
+                ] = current_components[0].tolist()
+
+            # Replace the vtk object
+            self.df.loc[self.df["uid"] == uid, "vtk_obj"] = vtk_object
+
+            # Update project legend, views and trees
+            self.parent.prop_legend.update_widget(self.parent)
+
+            if any(prop not in current_props for prop in old_props):
+                # this means that at least one prop is included in old_props and not in current_props, so it was removed
+                self.signals.data_keys_removed.emit([uid], self)
+            if any(prop not in old_props for prop in current_props):
+                # this means that at least one prop is included in current_props and not in old_props, so it was added
+                self.signals.data_keys_added.emit([uid], self)
+
+            self.signals.geom_modified.emit([uid], self)
+        else:
+            self.parent.print_terminal("ERROR - replace_vtk with vtk of a different type not allowed.")
+
 
     # =================== Common QT methods slightly adapted to the data source ====================================
 
@@ -512,7 +556,7 @@ class BaseTableModel(QAbstractTableModel):
                 uid = self.collection.df.iloc[index.row(), 0]
                 self.collection.attr_modified_update_legend_table()
                 # a list of uids is emitted, even if the entity is just one
-                self.collection.signals.metadata_modified.emit([uid])
+                self.collection.signals.metadata_modified.emit([uid], self.collection)
                 return True
         # return QVariant()
         return None

@@ -148,7 +148,7 @@ class GFBCollection(BaseCollection):
             self.parent.prop_legend.update_widget(self.parent)
         # Then emit signal to update the views. A list of uids is emitted, even if the
         # entity is just one, for future compatibility
-        self.signals.entity_added.emit([entity_dict["uid"]])
+        self.signals.entities_added.emit([entity_dict["uid"]], self)
         return entity_dict["uid"]
 
     def remove_entity(self, uid: str = None) -> str:
@@ -168,7 +168,7 @@ class GFBCollection(BaseCollection):
             self.parent.legend.update_widget(self.parent)
             self.parent.prop_legend.update_widget(self.parent)
         # A list of uids is emitted, even if the entity is just one
-        self.signals.entities_removed.emit([uid])
+        self.signals.entities_removed.emit([uid], self)
         return uid
 
     def clone_entity(self, uid: str = None) -> str:
@@ -192,45 +192,6 @@ class GFBCollection(BaseCollection):
         entity_dict["vtk_obj"] = self.get_uid_vtk_obj(uid).deep_copy()
         out_uid = self.add_entity_from_dict(entity_dict=entity_dict)
         return out_uid
-
-    def replace_vtk(self, uid: str = None, vtk_object: vtkDataObject = None):
-        """Replace the vtk object of a given uid with another vtkobject."""
-        # ============ CAN BE UNIFIED AS COMMON METHOD OF THE ABSTRACT COLLECTION WHEN SIGNALS WILL BE UNIFIED ==========
-        if isinstance(
-            vtk_object, type(self.df.loc[self.df["uid"] == uid, "vtk_obj"].values[0])
-        ):
-            # Replace old properties names and components with new ones
-            keys = vtk_object.point_data_keys
-            self.df.loc[self.df["uid"] == uid, "properties_names"].values[0] = []
-            self.df.loc[self.df["uid"] == uid, "properties_components"].values[0] = []
-            for key in keys:
-                components = vtk_object.get_point_data_shape(key)[1]
-                current_names = pd_DataFrame(
-                    self.df.loc[self.df["uid"] == uid, "properties_names"].values[0]
-                )
-                current_names = pd_concat(
-                    [current_names, pd_DataFrame([key])], ignore_index=True
-                )
-                self.df.loc[self.df["uid"] == uid, "properties_names"].values[0] = (
-                    current_names[0].tolist()
-                )
-                current_components = pd_DataFrame(
-                    self.df.loc[self.df["uid"] == uid, "properties_components"].values[
-                        0
-                    ]
-                )
-                current_components = pd_concat(
-                    [current_components, pd_DataFrame([components])], ignore_index=True
-                )
-                self.df.loc[self.df["uid"] == uid, "properties_components"].values[
-                    0
-                ] = current_components[0].tolist()
-            self.df.loc[self.df["uid"] == uid, "vtk_obj"] = vtk_object
-            self.parent.prop_legend.update_widget(self.parent)
-            self.signals.data_keys_modified.emit([uid])
-            self.signals.geom_modified.emit([uid])
-        else:
-            self.parent.print_terminal("ERROR - replace_vtk with vtk of a different type not allowed.")
 
     def attr_modified_update_legend_table(self):
         """Update legend table when attributes are changed."""
