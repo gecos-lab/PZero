@@ -308,12 +308,7 @@ def extend_line(self):
     self.disable_actions()
     # If more than one line is selected, keep the first
     sel_uid = self.selected_uids[0]
-    current_line = (
-        self.actors_df.loc[self.actors_df["uid"] == sel_uid, "actor"]
-        .values[0]
-        .GetMapper()
-        .GetInput()
-    )
+    current_line = self.get_actor_by_uid(sel_uid).GetMapper().GetInput()
 
     extender = Editor(self)
     extender.EnabledOn()
@@ -592,9 +587,7 @@ def split_line_existing_point(self):
     self.disable_actions
     # If more than one line is selected, keep the first
     sel_uid = self.selected_uids[0]
-    current_line = self.actors_df.loc[self.actors_df["uid"] == sel_uid, "actor"].values[
-        0
-    ]
+    current_line = self.get_uid_from_actor(sel_uid)
     line = current_line.mapper.dataset
     selector = Editor(self)
     selector.EnabledOn()

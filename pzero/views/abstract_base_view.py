@@ -1444,11 +1444,11 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         # Rebuild the trees to add/remove the properties that have been changed.
         tree.update_properties_for_uids(self)  # this should be a method of the tree
 
-    def entities_data_keys_added_update_views(
+    def entities_data_keys_removed_update_views(
         self, updated_uids=None, collection=None
     ):
         """This is called when point or cell data (properties) are removed."""
-        # AT THE MOMENT THIS IS IDENTICAL TO entities_data_keys_removed_update_views - CAN BE MERGED? _________________
+        # AT THE MOMENT THIS IS IDENTICAL TO entities_data_keys_added_update_views - CAN BE MERGED? _________________
         # remove from updated_list the uid's that are excluded from this view by self.view_filter.
         updated_uids = collection.filter_uids(query=self.view_filter, uids=updated_uids)
         tree = self.tree_from_coll(coll=collection)
