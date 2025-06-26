@@ -42,24 +42,18 @@ class CollectionSignals(QObject):
     # the other argument is a list of uids, or a single uid, or a list of entities
     entities_added = pyqtSignal(list, object)  # seems OK
     entities_removed = pyqtSignal(list, object)  # seems OK
-    # this includes topology modified - more check needed ========================================================
-    geom_modified = pyqtSignal(list, object)
-    # more check needed ==========================================================================================
-    data_keys_added = pyqtSignal(list, object)
+    geom_modified = pyqtSignal(list, object)  # MORE CHECK NEEDED
+    data_keys_added = pyqtSignal(list, object)  # MORE CHECK NEEDED
     data_keys_removed: Signal = pyqtSignal(list, object)  # seems OK
-    data_val_modified = pyqtSignal(list, object)  # this is not used at the moment
-    # working on this that has complex ramifications =============================================================
-    metadata_modified = pyqtSignal(list, object)
+    data_val_modified = pyqtSignal(list, object)  # not used at the moment
+    metadata_modified = pyqtSignal(list, object)  # MORE CHECK NEEDED
     legend_color_modified = pyqtSignal(list, object)  # seems OK
-    # this does not crash the application, but does not work =====================================================
-    legend_thick_modified = pyqtSignal(list, object)
-    # this does not crash the application, but does not work =====================================================
-    legend_point_size_modified = pyqtSignal(list, object)
-    # this does not crash the application, but does not work =====================================================
-    legend_opacity_modified = pyqtSignal(list, object)
-    selection_changed = pyqtSignal(
-        object
-    )  # selection self.selected_uids changed on the collection = object
+    legend_thick_modified = pyqtSignal(list, object)  # seems OK
+    legend_point_size_modified = pyqtSignal(list, object)  # seems OK
+    legend_opacity_modified = pyqtSignal(list, object)  # seems OK
+
+    # selection self.selected_uids changed on the collection = object
+    selection_changed = pyqtSignal(object)
 
 
 class BaseCollection(ABC):

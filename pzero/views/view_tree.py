@@ -517,7 +517,6 @@ class CustomTreeWidget(QTreeWidget):
         # If removing more than 20% of total items, rebuild the entire tree
         total_items = len(self.collection.df)
         if len(uids_to_remove) > total_items * 0.2:
-            print("Rebuilding the entire tree")
             self.populate_tree()
             return False
 
