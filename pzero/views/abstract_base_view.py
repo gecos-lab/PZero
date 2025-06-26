@@ -1350,13 +1350,9 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
 
     def entities_added_update_views(self, updated_uids=None, collection=None):
         """This is called when an entity is added to a collection."""
-        # # Signals to the collection view tree, if they are set, are disconnected to avoid a nasty loop that would disrupt them.
-        tree = self.tree_from_coll(coll=collection)
-        # tree.itemChanged.disconnect()
-        # remove from updated_list the uid's that are excluded from this view by self.view_filter.collection,
-        # by removing from the list of all uid's that should appear in this view (from query), the uid's that
-        # do not belong to the updated_list. try/except needed for when the query is non-valid.
+        # remove from updated_list the uid's that are excluded from this view by self.view_filter.
         updated_uids = collection.filter_uids(query=self.view_filter, uids=updated_uids)
+        tree = self.tree_from_coll(coll=collection)
         for uid in updated_uids:
             this_actor = self.show_actor_with_property(
                 uid=uid,
@@ -1382,32 +1378,23 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                 ],
                 ignore_index=True,
             )
-        # THE TREE MUST NOT ALTER self.actors_df ==========================================
         tree.add_items_to_tree(uids_to_add=updated_uids)
-        # tree.itemChanged.connect(self.toggle_visibility)
 
     def entities_removed_update_views(self, updated_uids=None, collection=None):
         """This is called when an entity is removed from a collection."""
-        # # Signals to the collection view tree, if they are set, are disconnected to avoid a nasty loop that would disrupt them. No need to apply a filter, since if a uid is not found in the actors list, nothing happens.
+        # remove from updated_list the uid's that are excluded from this view by self.view_filter.
+        updated_uids = collection.filter_uids(query=self.view_filter, uids=updated_uids)
         tree = self.tree_from_coll(coll=collection)
-        # tree.itemChanged.disconnect()
-        # self.print_terminal(f"pre- self.actors_df: {self.actors_df}")
         for uid in updated_uids:
             self.remove_actor_in_view(uid=uid, redraw=True)
             self.actors_df.drop(
                 self.actors_df[self.actors_df["uid"] == uid].index, inplace=True
             )
-        # self.print_terminal(f"post- self.actors_df: {self.actors_df}")
         tree.remove_items_from_tree(uids_to_remove=updated_uids)
-        # tree.itemChanged.connect(self.toggle_visibility)
 
     def entities_geom_modified_update_views(self, updated_uids=None, collection=None):
-        """This is called when an entity geometry or topology is modified (i.e. the vtk object is modified).
-        In a previous version of this method, signals were disconnected, but this is no longer required
-        since actors are replaced, not deleted and then re-created."""
-        # remove from updated_list the uid's that are excluded from this view by self.view_filter.collection,
-        # by removing from the list of all uid's that should appear in this view (from query), the uid's that
-        # do not belong to the updated_list. try/except needed for when the query is non-valid.
+        """This is called when an entity geometry or topology is modified (i.e. the vtk object is modified)."""
+        # remove from updated_list the uid's that are excluded from this view by self.view_filter.
         updated_uids = collection.filter_uids(query=self.view_filter, uids=updated_uids)
         for uid in updated_uids:
             # This replaces the previous copy of the actor with the same uid, and updates the actors dataframe.
@@ -1425,6 +1412,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
 
     def entities_data_keys_added_update_views(self, updated_uids=None, collection=None):
         """This is called when point or cell data (properties) are added."""
+        # AT THE MOMENT THIS IS IDENTICAL TO entities_data_keys_removed_update_views - CAN BE MERGED? _________________
         # remove from updated_list the uid's that are excluded from this view by self.view_filter.
         updated_uids = collection.filter_uids(query=self.view_filter, uids=updated_uids)
         tree = self.tree_from_coll(coll=collection)
@@ -1454,19 +1442,16 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                         self.actors_df["uid"] == uid, ["show_property"]
                     ] = None
         # Rebuild the trees to add/remove the properties that have been changed.
-        tree.create_tree(self)  # this should be a method of the tree
-        tree.itemChanged.connect(self.toggle_visibility)
+        tree.update_properties_for_uids(self)  # this should be a method of the tree
 
-    def entities_data_keys_removed_update_views(
+    def entities_data_keys_added_update_views(
         self, updated_uids=None, collection=None
     ):
         """This is called when point or cell data (properties) are removed."""
-        tree = self.tree_from_coll(coll=collection)
-        tree.itemChanged.disconnect()
-        # remove from updated_list the uid's that are excluded from this view by self.view_filter.collection,
-        # by removing from the list of all uid's that should appear in this view (from query), the uid's that
-        # do not belong to the updated_list. try/except needed for when the query is non-valid.
+        # AT THE MOMENT THIS IS IDENTICAL TO entities_data_keys_removed_update_views - CAN BE MERGED? _________________
+        # remove from updated_list the uid's that are excluded from this view by self.view_filter.
         updated_uids = collection.filter_uids(query=self.view_filter, uids=updated_uids)
+        tree = self.tree_from_coll(coll=collection)
         for uid in updated_uids:
             # Replace the previous copy of the actor with the same uid, and update the actors dataframe, only if a
             # property that has been removed is shown at the moment. See issue #33 for a discussion on actors
@@ -1500,9 +1485,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
     ):
         """This is called when entity point or cell data are modified. The actor is modified just if the
         modified property is currently shown. Trees do not need to be modified."""
-        # remove from updated_list the uid's that are excluded from this view by self.view_filter.collection,
-        # by removing from the list of all uid's that should appear in this view (from query), the uid's that
-        # do not belong to the updated_list. try/except needed for when the query is non-valid.
+        # remove from updated_list the uid's that are excluded from this view by self.view_filter.
         updated_uids = collection.filter_uids(query=self.view_filter, uids=updated_uids)
         for uid in updated_uids:
             # Replace the previous copy of the actor with the same uid, and update the actors dataframe, only if a
@@ -1536,6 +1519,8 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         """This is called when an entity metadata are modified, and the legend is automatically updated. Signals
         to the collection view tree, if they are set, are disconnected to avoid a nasty loop that would disrupt them.
         """
+        # remove from updated_list the uid's that are excluded from this view by self.view_filter.
+        updated_uids = collection.filter_uids(query=self.view_filter, uids=updated_uids)
         tree = self.tree_from_coll(coll=collection)
         self.change_actor_color(collection=collection, updated_uids=updated_uids)
         self.change_actor_point_size(collection=collection, updated_uids=updated_uids)

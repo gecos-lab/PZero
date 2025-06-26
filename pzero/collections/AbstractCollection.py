@@ -42,11 +42,11 @@ class CollectionSignals(QObject):
     # the other argument is a list of uids, or a single uid, or a list of entities
     entities_added = pyqtSignal(list, object)  # seems OK
     entities_removed = pyqtSignal(list, object)  # seems OK
-    geom_modified = pyqtSignal(list, object)  # MORE CHECK NEEDED
-    data_keys_added = pyqtSignal(list, object)  # MORE CHECK NEEDED
-    data_keys_removed: Signal = pyqtSignal(list, object)  # seems OK
+    geom_modified = pyqtSignal(list, object)  # seems OK
+    data_keys_added = pyqtSignal(list, object)  # MORE CHECK NEEDED - CAN BE MERGED WITH "removed"?
+    data_keys_removed: Signal = pyqtSignal(list, object)  # seems OK - CAN BE MERGED WITH "added"?
     data_val_modified = pyqtSignal(list, object)  # not used at the moment
-    metadata_modified = pyqtSignal(list, object)  # MORE CHECK NEEDED
+    metadata_modified = pyqtSignal(list, object)  # seems OK
     legend_color_modified = pyqtSignal(list, object)  # seems OK
     legend_thick_modified = pyqtSignal(list, object)  # seems OK
     legend_point_size_modified = pyqtSignal(list, object)  # seems OK
@@ -446,38 +446,21 @@ class BaseCollection(ABC):
             vtk_object, type(self.df.loc[self.df["uid"] == uid, "vtk_obj"].values[0])
         ):
             # Replace old properties names and components with new ones
-            new_keys = vtk_object.point_data_keys
             old_props = self.df.loc[self.df["uid"] == uid, "properties_names"].values[0]
-            old_comps = self.df.loc[
-                self.df["uid"] == uid, "properties_components"
-            ].values[0]
-            self.df.loc[self.df["uid"] == uid, "properties_names"].values[0] = []
-            self.df.loc[self.df["uid"] == uid, "properties_components"].values[0] = []
+            old_comps = self.df.loc[self.df["uid"] == uid, "properties_components"].values[0]
+
+            new_keys = vtk_object.point_data_keys
+
+            current_props = []
+            current_components = []
 
             for key in new_keys:
-                components = vtk_object.get_point_data_shape(key)[1]
+                this_components = vtk_object.get_point_data_shape(key)[1]
+                current_props.append(key)
+                current_components.append(this_components)
 
-                current_props = pd_DataFrame(
-                    self.df.loc[self.df["uid"] == uid, "properties_names"].values[0]
-                )
-                current_props = pd_concat(
-                    [current_props, pd_DataFrame([key])], ignore_index=True
-                )
-                self.df.loc[self.df["uid"] == uid, "properties_names"].values[0] = (
-                    current_props[0].tolist()
-                )
-
-                current_components = pd_DataFrame(
-                    self.df.loc[self.df["uid"] == uid, "properties_components"].values[
-                        0
-                    ]
-                )
-                current_components = pd_concat(
-                    [current_components, pd_DataFrame([components])], ignore_index=True
-                )
-                self.df.loc[self.df["uid"] == uid, "properties_components"].values[
-                    0
-                ] = current_components[0].tolist()
+            self.df.loc[self.df["uid"] == uid, "properties_names"].values[0] = current_props
+            self.df.loc[self.df["uid"] == uid, "properties_components"].values[0] = current_components
 
             # Replace the vtk object
             self.df.loc[self.df["uid"] == uid, "vtk_obj"] = vtk_object

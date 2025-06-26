@@ -865,7 +865,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     self.print_terminal("Only Point clouds are supported")
                     return
         else:
-            print("No entity selected")
+            self.print_terminal("No entity selected")
 
     def smooth_dialog(self):
         input_dict = {

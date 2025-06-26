@@ -43,7 +43,6 @@ class ViewMPL(BaseView):
         Get an actor by uid in a Matplotlib plotter. Here we use self.plotter.renderer.actors
         that is a dictionary with key = uid string and value = actor (artist in MPL).
         """
-        print(f"get_actor_by_uid: {uid}")
         return self.mpl_actors[uid]
 
     def get_uid_from_actor(self, actor=None):
@@ -61,7 +60,6 @@ class ViewMPL(BaseView):
             if actor_i == actor:
                 uid = uid_i
                 break
-        print(f"get_uid_from_actor: {uid}")
         return uid
 
     def actor_shown(self, uid: str = None):
@@ -69,7 +67,6 @@ class ViewMPL(BaseView):
         # actors = self.plotter.renderer.actors
         # this_actor = actors[uid]
         # return this_actor.GetVisibility()
-        print(f"actor_shown: {uid}")
         return self.mpl_actors[uid].visible()
 
     def show_actors(self, uids: list = None):
@@ -78,7 +75,6 @@ class ViewMPL(BaseView):
         for uid, actor in actors.items():
             if uid in uids:
                 actor.set_visible(True)
-                print(f"show_actors: {uid}")
 
     def hide_actors(self, uids: list = None):
         """Method to hide actors in uids list in a Matplotlib plotter."""
@@ -86,7 +82,6 @@ class ViewMPL(BaseView):
         for uid, actor in actors.items():
             if uid in uids:
                 actor.set_visible(False)
-                print(f"hide_actors: {uid}")
 
     def change_actor_color(self, updated_uids: list = None, collection=None):
         """Change color for Matplotlib plots."""
@@ -194,7 +189,6 @@ class ViewMPL(BaseView):
         if not self.mpl_actors[uid].empty:
             if self.mpl_actors[uid]:
                 self.mpl_actors[uid].remove()
-                print(f"remove_actor_in_view: {uid}")
                 # the following should go in the abstract base view
                 # self.actors_df.drop(
                 #     self.actors_df[self.actors_df["uid"] == uid].index, inplace=True

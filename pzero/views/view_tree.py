@@ -484,13 +484,24 @@ class CustomTreeWidget(QTreeWidget):
                 property_combo.addItem(label)
             property_combo.addItems(row[self.prop_label])
 
-            # Emit signal
+            # Connect signal
             property_combo.currentTextChanged.connect(
                 lambda prop_text, item=name_item: self.on_combo_changed(item, prop_text)
             )
 
             # Add the item and set the combo box in the last column
             self.setItemWidget(name_item, self.columnCount() - 1, property_combo)
+
+            # Try to restore the previous combo state if it's still available
+            current_text= self.view.actors_df.loc[
+                self.view.actors_df["uid"] == uid, "show_property"
+            ].iloc[0]
+            index = property_combo.findText(current_text)
+            if index >= 0:
+                property_combo.setCurrentIndex(index)
+            else:
+                # If the previous selection is no longer available, set to first default label
+                property_combo.setCurrentIndex(0)
 
             # Expand all parent items in the path
             for parent_item in parents_to_expand:
@@ -522,7 +533,6 @@ class CustomTreeWidget(QTreeWidget):
 
         # Otherwise remove items one by one
         for uid in uids_to_remove:
-            print("Removing item", uid)
             # Find all items matching our UID
             items_to_remove = []
             for item in self.findItems("", Qt.MatchContains | Qt.MatchRecursive):
@@ -763,11 +773,6 @@ class CustomTreeWidget(QTreeWidget):
             prop_text=prop_text,
         )
 
-        # # emit signal  ================================================================================================
-        # self.view.signals.propertyToggled.emit(
-        #     self.collection.collection_name, uid, prop_text
-        # )
-
     def resize_columns(self):
         """
         Adjusts the width of all columns in a table to fit the content within each column. It iterates over
@@ -814,17 +819,6 @@ class CustomTreeWidget(QTreeWidget):
                     else:
                         # If previous selection is no longer available, set to first default label
                         combo.setCurrentIndex(0)
-
-                        # self.view.toggle_property(
-                        #     collection_name=self.collection.collection_name,
-                        #     uid=uid,
-                        #     prop_text=self.default_labels[0],
-                        # )
-
-                        # # Emit property changed signal  ===============================================================
-                        # self.view.signals.propertyToggled.emit(
-                        #     self.collection.collection_name, uid, combo.itemText(0)
-                        # )
 
         # Unblock signals
         self.blockSignals(False)

@@ -45,8 +45,6 @@ class ViewStereoplot(ViewMPL):
         super(ViewStereoplot, self).__init__(*args, **kwargs)
         self.setWindowTitle("Stereoplot View")
 
-        print(f"self.mpl_actors: {self.mpl_actors}")
-
     # ================================  General methods shared by all views - built incrementally =====================
 
     def initialize_menu_tools(self):

@@ -239,6 +239,8 @@ class GFBCollection(BaseCollection):
                                     "color_G": round(np_random.random() * 255),
                                     "color_B": round(np_random.random() * 255),
                                     "line_thick": 2.0,
+                                    "point_size": 10.0,
+                                    "opacity": 100,
                                 }
                             ]
                         ),
