@@ -1670,14 +1670,14 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                 show = self.actors_df.loc[
                     self.actors_df["uid"] == uid, "show"
                 ].to_list()[0]
-                collection = self.actors_df.loc[
+                collection_name = self.actors_df.loc[
                     self.actors_df["uid"] == uid, "collection"
                 ].to_list()[0]
                 # This replaces the previous copy of the actor with the same uid, and updates the actors dataframe.
                 # See issue #33 for a discussion on actors replacement by the PyVista add_mesh and add_volume methods.
                 this_actor = self.show_actor_with_property(
                     uid=uid,
-                    coll_name=collection.collection_name,
+                    coll_name=collection_name,
                     show_property=this_property,
                     visible=show,
                 )

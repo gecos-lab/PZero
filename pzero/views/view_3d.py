@@ -99,7 +99,7 @@ class View3D(ViewVTK):
         self.menuView.addAction(self.actionExportObj)
 
         self.actionExportVtkjs = QAction("Export as VTKjs", self)
-        self.actionExportVtkjs.triggered.connect(self.export_vtkjs)
+        self.actionExportVtkjs.triggered.connect(self.export_vtksz)
         self.menuView.addAction(self.actionExportVtkjs)
 
         # self.menuOrbit = QMenu("Orbit around", self)
@@ -472,11 +472,11 @@ class View3D(ViewVTK):
         )
         self.plotter.export_html(out_file_name)
 
-    def export_vtkjs(self):
+    def export_vtksz(self):
         out_file_name = save_file_dialog(
-            parent=self, caption="Export 3D view as VTKjs.", filter="vtkjs (*.vtkjs)"
-        ).removesuffix(".vtkjs")
-        self.plotter.export_vtkjs(out_file_name)
+            parent=self, caption="Export 3D view as VTKjs.", filter="zip (*.zip)"
+        ).removesuffix(".zip")
+        self.plotter.export_vtksz(out_file_name, format='zip')
 
     def export_obj(self):
         out_file_name = save_file_dialog(
