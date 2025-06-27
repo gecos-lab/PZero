@@ -3,6 +3,7 @@ PZero© Andrea Bistacchi"""
 
 # General Python imports____
 from copy import deepcopy
+from shutil import make_archive, rmtree
 from uuid import uuid4
 
 # PySide6 imports____
@@ -16,6 +17,7 @@ from numpy import append as np_append
 from vtkmodules.util import numpy_support
 from vtkmodules.vtkCommonDataModel import vtkSphere
 from vtkmodules.vtkFiltersPoints import vtkExtractPoints
+from vtk import vtkJSONSceneExporter
 
 # PyVista imports____
 from pyvista import plot as pv_plot
@@ -98,9 +100,9 @@ class View3D(ViewVTK):
         self.actionExportObj.triggered.connect(self.export_obj)
         self.menuView.addAction(self.actionExportObj)
 
-        self.actionExportVtkjs = QAction("Export as VTKjs", self)
-        self.actionExportVtkjs.triggered.connect(self.export_vtksz)
-        self.menuView.addAction(self.actionExportVtkjs)
+        self.actionExportVtkJSON = QAction("Export as vtkJSON scene", self)
+        self.actionExportVtkJSON.triggered.connect(self.export_vtkJS)
+        self.menuView.addAction(self.actionExportVtkJSON)
 
         # self.menuOrbit = QMenu("Orbit around", self)
         # self.actionOrbitEntity = QAction("Entity", self)
@@ -134,6 +136,9 @@ class View3D(ViewVTK):
     # ================================  Methods required by ViewVTK(), (re-)implemented here ==========================
 
     def set_orientation_widget(self):
+        # The oreintation widget can be turned off and on again, e.g. to export a scene, with:
+        # self.plotter.clear_camera_widgets()
+        # self.plotter.add_camera_orientation_widget()
         self.plotter.add_camera_orientation_widget()
 
     def show_qt_canvas(self):
@@ -463,23 +468,38 @@ class View3D(ViewVTK):
     def export_gltf(self):
         out_file_name = save_file_dialog(
             parent=self, caption="Export 3D view as GLTF.", filter="gltf (*.gltf)"
-        )
-        self.plotter.export_gltf(out_file_name)
+        ).removesuffix(".gltf")
+        self.plotter.export_gltf(f"{out_file_name}.gltf")
 
     def export_html(self):
         out_file_name = save_file_dialog(
             parent=self, caption="Export 3D view as HTML.", filter="html (*.html)"
-        )
-        self.plotter.export_html(out_file_name)
+        ).removesuffix(".html")
+        self.plotter.export_html(f"{out_file_name}.html")
 
     def export_vtksz(self):
         out_file_name = save_file_dialog(
-            parent=self, caption="Export 3D view as VTKjs.", filter="zip (*.zip)"
+            parent=self, caption="Export 3D view as VTKsz.", filter="zip (*.zip)"
         ).removesuffix(".zip")
-        self.plotter.export_vtksz(out_file_name, format='zip')
+        self.plotter.export_vtksz(f"{out_file_name}.zip", format='zip')
+
+    def export_vtkJS(self):
+        out_file_name = save_file_dialog(
+            parent=self, caption="Export 3D view as VTKsz.", filter="zip (*.zip)"
+        ).removesuffix(".zip")
+
+        self.plotter.clear_camera_widgets()
+        exporter = vtkJSONSceneExporter()
+        exporter.SetFileName(out_file_name)
+        exporter.SetInput(self.plotter.renderer.GetRenderWindow())
+        exporter.SetActiveRenderer(self.plotter.renderer)
+        exporter.Write()
+        make_archive(out_file_name, 'zip', out_file_name)
+        rmtree(out_file_name)
+        self.plotter.add_camera_orientation_widget()
 
     def export_obj(self):
         out_file_name = save_file_dialog(
             parent=self, caption="Export 3D view as OBJ.", filter="obj (*.obj)"
         ).removesuffix(".obj")
-        self.plotter.export_obj(out_file_name)
+        self.plotter.export_obj(f"{out_file_name}.obj")
