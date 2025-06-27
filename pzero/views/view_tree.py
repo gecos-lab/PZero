@@ -232,10 +232,6 @@ class CustomTreeWidget(QTreeWidget):
         self.default_labels = default_labels
         self.uid_label = uid_label
 
-        # # is this needed?
-        # print(f'self: {self} - self.signalsBlocked(): {self.signalsBlocked()}')
-        # self.blockSignals(False)
-
         # one column for the tree hierarchy, one for name and one for properties
         self.setColumnCount(3)
         self.header_labels = ["Tree", name_label]  # not shown
@@ -246,7 +242,6 @@ class CustomTreeWidget(QTreeWidget):
         # set header with draggable buttons
         self.header_widget = CustomHeader(labels=self.tree_labels)
         self.header_widget.buttonToggled.connect(self.populate_tree)
-        # self.header_widget.buttonToggled.connect(self.rearrange_hierarchy)
 
         # populate the tree with view entities
         self.populate_tree()
@@ -263,8 +258,6 @@ class CustomTreeWidget(QTreeWidget):
                 else None
             )
         )
-        # # probably not necessary
-        # self.itemSelectionChanged.connect(self.emit_selection_changed)
 
         # Import initial selection state if parent and collection exist
         if hasattr(self.collection, "selected_uids"):
@@ -402,21 +395,6 @@ class CustomTreeWidget(QTreeWidget):
 
         # Unblock signals
         self.blockSignals(False)
-
-    # @preserve_selection
-    # def rearrange_hierarchy(self):
-    #     """
-    #     Rearranges the tree hierarchy.
-    #     """
-    #
-    #     # Block signals temporarily to prevent unnecessary signal emissions during rebuild
-    #     self.blockSignals(True)
-    #
-    #     # Repopulate the tree (this will clear selections and checkboxes)
-    #     self.populate_tree()
-    #
-    #     # Unblock signals
-    #     self.blockSignals(False)
 
     @preserve_selection
     def add_items_to_tree(self, uids_to_add):
@@ -618,7 +596,7 @@ class CustomTreeWidget(QTreeWidget):
             if uid:
                 self.collection.selected_uids.append(uid)
 
-        # emit signal  ================================================================================================
+        # emit signal
         self.collection.signals.selection_changed.emit(self.collection)
 
     def update_child_check_states(self, item, check_state):
@@ -733,10 +711,6 @@ class CustomTreeWidget(QTreeWidget):
             turn_on_uids=turn_on_uids,
             turn_off_uids=turn_off_uids,
         )
-        # # Emit signal =================================================================================================
-        # self.view.signals.checkboxToggled.emit(
-        #     self.collection.collection_name, turn_on_uids, turn_off_uids
-        # )
 
     def create_property_combo(self, row, uid):
         """

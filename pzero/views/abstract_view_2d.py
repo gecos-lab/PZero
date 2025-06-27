@@ -168,9 +168,6 @@ class View2D(ViewVTK):
         self.enable_actions()
 
     def vector_by_mouse(self, func):
-        # if not self.selected_uids:
-        #     print(" -- No input data selected -- ")
-        #     return
         self.disable_actions()
         vector = Vector(parent=self, pass_func=func)
         vector.EnabledOn()

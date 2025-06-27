@@ -1,8 +1,6 @@
 """properties_manager.py
 PZero© Andrea Bistacchi"""
 
-from operator import index
-
 import cmocean as cmo
 
 import colorcet as cc
@@ -185,8 +183,6 @@ class PropertiesCMaps(QObject):
         )
 
     def change_property_cmap(self, sender=None, parent=None):
-        # new_cmap = str(self.sender().currentText())
-        # this_property = self.sender().this_property
         new_cmap = str(sender.currentText())
         this_property = sender.this_property
         index = sender.index
@@ -196,10 +192,6 @@ class PropertiesCMaps(QObject):
         parent.prop_legend_df.loc[
             parent.prop_legend_df["property_name"] == this_property, "colormap"
         ] = new_cmap
-
-        ## old solution
-        # # this is to update the sender color - see if there is a simpler solution
-        # self.update_widget(parent=parent)
 
         # this is to update the sender color
         label = QLabel()

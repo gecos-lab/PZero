@@ -6,16 +6,12 @@ from uuid import uuid4
 from copy import deepcopy
 
 from numpy import ndarray as np_ndarray
-from numpy import set_printoptions as np_set_printoptions
 from numpy import round as np_round
 from numpy import random as np_random
 
 from pandas import DataFrame as pd_DataFrame
-from pandas import set_option as pd_set_option
 from pandas import unique as pd_unique
 from pandas import concat as pd_concat
-
-from vtkmodules.vtkCommonDataModel import vtkDataObject
 
 from .AbstractCollection import BaseCollection
 
@@ -81,8 +77,6 @@ class GFBCollection(BaseCollection):
             entity_dict["uid"] = str(uuid4())
         # Append new row to dataframe. Note that the 'append()' method for Pandas dataframes DOES NOT
         # work in place, hence a NEW dataframe is created every time and then substituted to the old one.
-        # Old and less efficient syntax used up to Pandas 1.5.3:
-        # self.df = self.df.append(entity_dict, ignore_index=True)
         # New syntax with Pandas >= 2.0.0:
         self.df = pd_concat([self.df, pd_DataFrame([entity_dict])], ignore_index=True)
         # Reset data model.
@@ -103,23 +97,6 @@ class GFBCollection(BaseCollection):
             else:
                 R, G, B = np_round(np_random.random(3) * 255)
             # Use default generic values for legend.
-            # Old Pandas <= 1.5.3
-            # self.legend_df = self.legend_df.append(
-            #     {
-            #         "role": role,
-            #         "feature": feature,
-            #         "time": 0.0,
-            #         "sequence": self.default_sequence,
-            #         "scenario": scenario,
-            #         "color_R": R,
-            #         "color_G": G,
-            #         "color_B": B,
-            #         "line_thick": 5.0,
-            #         "point_size": 10.0,
-            #         "opacity": 100,
-            #     },
-            #     ignore_index=True,
-            # )
             # New Pandas >= 2.0.0
             self.legend_df = pd_concat(
                 [
@@ -208,21 +185,6 @@ class GFBCollection(BaseCollection):
                 & (self.legend_df["feature"] == feature)
                 & (self.legend_df["scenario"] == scenario)
             ].empty:
-                # Old Pandas <= 1.5.3
-                # self.legend_df = self.legend_df.append(
-                #     {
-                #         "role": role,
-                #         "feature": feature,
-                #         "time": 0.0,
-                #         "sequence": self.default_sequence,
-                #         "scenario": scenario,
-                #         "color_R": round(np_random.random() * 255),
-                #         "color_G": round(np_random.random() * 255),
-                #         "color_B": round(np_random.random() * 255),
-                #         "line_thick": 2.0,
-                #     },
-                #     ignore_index=True,
-                # )
                 # New Pandas >= 2.0.0
                 self.legend_df = pd_concat(
                     [

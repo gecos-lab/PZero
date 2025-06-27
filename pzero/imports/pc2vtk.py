@@ -1,7 +1,7 @@
 """pc2vtk.py by Gabriele Benedetti
 PZero© Andrea Bistacchi"""
 
-import os
+from os import path as os_path
 
 from copy import deepcopy
 
@@ -31,8 +31,8 @@ def pc2vtk(
 ):
     print("1. Reading and importing file")
 
-    basename = os.path.basename(in_file_name)
-    _, ext = os.path.splitext(basename)
+    basename = os_path.basename(in_file_name)
+    _, ext = os_path.splitext(basename)
 
     point_cloud = PCDom()  #  vtkPointSet object
     points = vtkPoints()

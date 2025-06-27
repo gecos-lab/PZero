@@ -9,7 +9,7 @@ from pzero.entities_factory import TriSurf
 def vtk2ply(self=None, out_dir_name=None):
     """Exports all triangulated surfaces to a collection of PLY surfaces.
     IN THE FUTURE extend to other entity classes such as DEM, polyline, etc."""
-    # Create STL writer.
+    # Create PLY writer.
     ply_writer = vtkPLYWriter()
     ply_writer.SetFileTypeToBinary()
     ply_writer.SetColorModeToUniformCellColor()

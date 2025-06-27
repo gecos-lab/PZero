@@ -14,7 +14,6 @@ from PySide6.QtCore import Signal as pyqtSignal
 from abc import abstractmethod, ABC
 
 from pandas import DataFrame as pd_DataFrame
-from pandas import concat as pd_concat
 
 import numpy.typing as npt
 from numpy import ndarray as np_ndarray

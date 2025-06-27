@@ -8,7 +8,6 @@ from uuid import uuid4 as uuid_uuid4
 
 from numpy import array as np_array
 from numpy import ndarray as np_ndarray
-from numpy import set_printoptions as np_set_printoptions
 
 from pandas import DataFrame as pd_DataFrame
 from pandas import set_option as pd_set_option
@@ -19,17 +18,6 @@ from vtk import vtkPoints
 from pzero.entities_factory import PolyLine, TriSurf
 from pzero.helpers.helper_dialogs import general_input_dialog
 from .AbstractCollection import BaseCollection
-
-# Options to print Pandas dataframes in console for testing.
-pd_desired_width = 800
-pd_max_columns = 20
-pd_show_precision = 4
-pd_max_colwidth = 80
-pd_set_option("display.width", pd_desired_width)
-np_set_printoptions(linewidth=pd_desired_width)
-pd_set_option("display.max_columns", pd_max_columns)
-pd_set_option("display.precision", pd_show_precision)
-pd_set_option("display.max_colwidth", pd_max_colwidth)
 
 
 def boundary_from_points(self, vector):
@@ -208,8 +196,6 @@ class BoundaryCollection(BaseCollection):
             entity_dict["uid"] = str(uuid_uuid4())
         # Append new row to dataframe. Note that the 'append()' method for Pandas dataframes DOES NOT
         # work in place, hence a NEW dataframe is created every time and then substituted to the old one.
-        # Old and less efficient syntax used up to Pandas 1.5.3:
-        # self.df = self.df.append(entity_dict, ignore_index=True)
         # New syntax with Pandas >= 2.0.0:
         self.df = pd_concat([self.df, pd_DataFrame([entity_dict])], ignore_index=True)
         # Reset data model.

@@ -3,27 +3,12 @@ PZero© Andrea Bistacchi"""
 
 from uuid import uuid4
 
-from numpy import set_printoptions as np_set_printoptions
 from numpy import ndarray as np_ndarray
 
 from pandas import DataFrame as pd_DataFrame
-from pandas import set_option as pd_set_option
 from pandas import concat as pd_concat
 
-from vtkmodules.vtkCommonDataModel import vtkDataObject
-
 from .AbstractCollection import BaseCollection
-
-# Options to print Pandas dataframes in console for testing.
-pd_desired_width = 800
-pd_max_columns = 20
-pd_show_precision = 4
-pd_max_colwidth = 80
-pd_set_option("display.width", pd_desired_width)
-np_set_printoptions(linewidth=pd_desired_width)
-pd_set_option("display.max_columns", pd_max_columns)
-pd_set_option("display.precision", pd_show_precision)
-pd_set_option("display.max_colwidth", pd_max_colwidth)
 
 
 class DIMCollection(BaseCollection):
@@ -77,8 +62,6 @@ class DIMCollection(BaseCollection):
             entity_dict["uid"] = str(uuid4())
         # Append new row to dataframe. Note that the 'append()' method for Pandas dataframes DOES NOT
         # work in place, hence a NEW dataframe is created every time and then substituted to the old one.
-        # Old and less efficient syntax used up to Pandas 1.5.3:
-        # self.df = self.df.append(entity_dict, ignore_index=True)
         # New syntax with Pandas >= 2.0.0:
         self.df = pd_concat([self.df, pd_DataFrame([entity_dict])], ignore_index=True)
         # Reset data model.
@@ -91,11 +74,6 @@ class DIMCollection(BaseCollection):
                 if self.parent.prop_legend_df.loc[
                     self.parent.prop_legend_df["property_name"] == property_name
                 ].empty:
-                    # Old Pandas <= 1.5.3
-                    # self.parent.prop_legend_df = self.parent.prop_legend_df.append(
-                    #     {"property_name": property_name, "colormap": self.default_colormap},
-                    #     ignore_index=True,
-                    # )
                     # New Pandas >= 2.0.0
                     self.parent.prop_legend_df = pd_concat(
                         [

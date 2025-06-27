@@ -1,5 +1,8 @@
-"""segy_standardizer.py
-Utility functions for standardizing SEG-Y files for PZero compatibility"""
+"""segy_standardizer.py by Waqas Hussain
+PZero© Andrea Bistacchi
+
+Utility functions for standardizing SEG-Y files for PZero compatibility."""
+
 
 import os
 import struct

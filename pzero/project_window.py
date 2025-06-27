@@ -108,10 +108,6 @@ from .three_d_surfaces import (
     retopo,
 )
 
-# from .windows_factory import ViewMap
-# from .windows_factory import ViewXsection
-# from .windows_factory import View3D
-# from .windows_factory import ViewStereoplot
 from pzero.views.dock_window import DockWindow
 from .processing.CRS import CRS_list, CRS_transform_selected
 
@@ -223,10 +219,6 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.actionRetopologize.triggered.connect(self.retopologize_surface)
 
         """View actions -> slots"""
-        # self.action3DView.triggered.connect(lambda: View3D(parent=self))
-        # self.actionMapView.triggered.connect(lambda: ViewMap(parent=self))
-        # self.actionXSectionView.triggered.connect(lambda: ViewXsection(parent=self))
-        # self.actionStereoplotView.triggered.connect(lambda: ViewStereoplot(parent=self))
         self.action3DView.triggered.connect(
             lambda: DockWindow(parent=self, window_type="View3D")
         )

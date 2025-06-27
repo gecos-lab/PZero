@@ -8,27 +8,6 @@ from vtk import vtkLandmarkTransform, vtkPoints
 from vtkmodules.util.numpy_support import numpy_to_vtk
 from vtkmodules.vtkFiltersGeneral import vtkTransformFilter
 
-from pzero.entities_factory import (
-    VertexSet,
-    PolyLine,
-    TriSurf,
-    Frame,
-    XsVertexSet,
-    XsPolyLine,
-    XsTriSurf,
-    TetraSolid,
-    Voxet,
-    XsVoxet,
-    Seismics,
-    DEM,
-    PCDom,
-    TSDom,
-    MapImage,
-    XsImage,
-    Image3D,
-    Well,
-    Attitude,
-)
 from pzero.helpers.helper_dialogs import general_input_dialog
 from pzero.helpers.helper_functions import freeze_gui
 
@@ -101,21 +80,14 @@ def CRS_fit_transformation(uid=None, collection=None, from_CRS=None, to_CRS=None
 def CRS_apply_transformation(uid=None, collection=None, transformation_matrix=None):
     """Apply VTK generic linear transformation defined by transformation_matrix."""
     in_entity = collection.get_uid_vtk_obj(uid)
-    # print("in_entity:\n", in_entity)
     in_entity_topology = collection.get_uid_topology(uid)
-    # print("in_entity_topology:\n", in_entity_topology)
     transform_filter = vtkTransformFilter()
     transform_filter.SetTransform(transformation_matrix)
     transform_filter.SetInputData(in_entity)
     transform_filter.Update()
-    # print("transform_filter.GetTransform():\n", transform_filter.GetTransform())
-    # print("transform_filter.GetOutput():\n", transform_filter.GetOutput())
     out_entity = eval(f"{in_entity_topology}()")
-    # print("out_entity:\n", out_entity)
     out_entity = out_entity.ShallowCopy(transform_filter.GetOutput())
-    # print("out_entity:\n", out_entity)
     collection.replace_vtk(uid=uid, vtk_object=out_entity)
-    # print("out vtk bounds:\n", collection.get_uid_vtk_obj(uid).bounds)
 
 
 @freeze_gui
@@ -156,11 +128,8 @@ def CRS_transform_selected(self):
             #                                                to_CRS=to_CRS)
             # all_entities= collection.get_all_xsect_entities(xuid=uid)
             # for entity_coll_name, uid_list in all_entities.items():
-            #     print(entity_coll_name, uid_list)
             #     for entity_uid in uid_list:
-            #         print(entity_uid)
             #         entity_coll = eval(f"self.{entity_coll_name}")
-            #         print("coll__: ", entity_coll)
             #         CRS_apply_transformation(uid=entity_uid,
             #                                  collection=entity_coll,
             #                                  transformation_matrix=transformation_matrix)

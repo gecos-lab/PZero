@@ -3,9 +3,7 @@ PZero© Andrea Bistacchi"""
 
 # PySide6 imports____
 from PySide6.QtGui import QAction
-from PySide6.QtWidgets import (
-    QAbstractItemView,
-)
+from PySide6.QtWidgets import QAbstractItemView
 
 # numpy import____
 from numpy import ndarray as np_ndarray
@@ -107,8 +105,6 @@ class ViewVTK(BaseView):
         Get an actor by uid in a VTK/PyVista plotter. Here we use self.plotter.renderer.actors
         that is a dictionary with key = uid string and value = actor.
         """
-        # actors = self.plotter.renderer.actors
-        # return actors[uid]
         return self.plotter.renderer.actors[uid]
 
     def get_uid_from_actor(self, actor=None):
@@ -116,11 +112,6 @@ class ViewVTK(BaseView):
         Get the uid of an actor in a VTK/PyVista plotter. Here we use self.plotter.renderer.actors
         that is a dictionary with key = uid string and value = actor.
         """
-        # return next(
-        #     key
-        #     for key, value in self.plotter.renderer.actors.items()
-        #     if value == this_actor
-        # )
         uid = None
         for uid_i, actor_i in self.plotter.renderer.actors.items():
             if actor_i == actor:
@@ -130,9 +121,6 @@ class ViewVTK(BaseView):
 
     def actor_shown(self, uid: str = None):
         """Method to check if an actor is shown in a VTK/PyVista plotter. Returns a boolean."""
-        # actors = self.plotter.renderer.actors
-        # this_actor = actors[uid]
-        # return this_actor.GetVisibility()
         return self.plotter.renderer.actors[uid].GetVisibility()
 
     def show_actors(self, uids: list = None):
@@ -198,19 +186,11 @@ class ViewVTK(BaseView):
 
     def set_actor_visible(self, uid=None, visible=None, name=None):
         """Set actor uid visible or invisible (visible = True or False)"""
-        # self.print_terminal(
-        #     f"setting actor visible - uid: {uid} - visible: {visible} - name: {name}"
-        # )
-        # this_actor = self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[0]
         collection = self.actors_df.loc[
             self.actors_df["uid"] == uid, "collection"
         ].values[0]
         actors = self.plotter.renderer.actors
         this_actor = actors[uid]
-        # print("type(self.plotter.renderer.actors): ", type(self.plotter.renderer.actors))
-        # print("self.plotter.renderer.actors.keys(): ", self.plotter.renderer.actors.keys())
-        # print("self.plotter.renderer.actors.values(): ", self.plotter.renderer.actors.values(),)
-        # print("self.plotter.renderer.actors: ", self.plotter.renderer.actors)
         if collection == "well_coll":
             # case for WELLS
             if name == "Trace":
@@ -247,7 +227,6 @@ class ViewVTK(BaseView):
         # plotter.remove_actor can remove a single entity or a list of entities as actors ->
         # here we remove a single entity
         if not self.actors_df.loc[self.actors_df["uid"] == uid].empty:
-            # this_actor = self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[0]
             this_actor = self.get_actor_by_uid(uid)
             success = self.plotter.remove_actor(this_actor)
 
@@ -296,9 +275,6 @@ class ViewVTK(BaseView):
         Show actor with scalar property (default None). See details in:
         https://github.com/pyvista/pyvista/blob/140b15be1d4021b81ded46b1c212c70e86a98ee7/pyvista/plotting/plotting.py#L1045
         """
-        # self.print_terminal(
-        #     f"Showing actor with property {show_property}, visible {visible}."
-        # )
         # First get the vtk object from its collection.
         if show_property:
             show_property_title = show_property
@@ -980,12 +956,6 @@ class ViewVTK(BaseView):
         # self.print_terminal(f"Picker actor: {actor}")
 
         # proceed if an actor is selected
-        # if not self.actors_df.loc[self.actors_df["actor"] == actor, "uid"].empty:
-        #     # if picker_output:
-        #     # Get uid of picked actor
-        #     sel_uid = self.actors_df.loc[
-        #         self.actors_df["actor"] == actor, "uid"
-        #     ].values[0]
         if self.get_uid_from_actor(actor=actor):
             # Get uid of picked actor
             sel_uid = self.get_uid_from_actor(actor=actor)
@@ -1000,7 +970,6 @@ class ViewVTK(BaseView):
 
             # Show selected actors in yellow
             for sel_uid in self.selected_uids:
-                # sel_actor = self.actors_df.loc[self.actors_df["uid"] == sel_uid, "actor"].values[0]
                 sel_actor = self.get_actor_by_uid(sel_uid)
                 collection = self.actors_df.loc[
                     self.actors_df["uid"] == sel_uid, "collection"

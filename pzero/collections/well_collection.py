@@ -11,8 +11,6 @@ from pandas import DataFrame as pd_DataFrame
 from pandas import unique as pd_unique
 from pandas import concat as pd_concat
 
-from vtkmodules.vtkCommonDataModel import vtkDataObject
-
 from .AbstractCollection import BaseCollection
 
 
@@ -70,8 +68,6 @@ class WellCollection(BaseCollection):
             entity_dict["uid"] = str(uuid4())
         # Append new row to dataframe. Note that the 'append()' method for Pandas dataframes DOES NOT
         # work in place, hence a NEW dataframe is created every time and then substituted to the old one.
-        # Old and less efficient syntax used up to Pandas 1.5.3:
-        # self.df = self.df.append(entity_dict, ignore_index=True)
         # New syntax with Pandas >= 2.0.0:
         self.df = pd_concat([self.df, pd_DataFrame([entity_dict])], ignore_index=True)
         # Reset data model.
@@ -85,18 +81,6 @@ class WellCollection(BaseCollection):
             self.parent.well_legend_df["name"] == name
         ].empty:
             R, G, B = np_round(np_random.random(3) * 255)
-            # Old Pandas <= 1.5.3
-            #     self.parent.well_legend_df = self.parent.well_legend_df.append(
-            #         {
-            #             "name": name,
-            #             "color_R": R,
-            #             "color_G": G,
-            #             "color_B": B,
-            #             "line_thick": 2.0,
-            #             "opacity": 100,
-            #         },
-            #         ignore_index=True,
-            #     )
             # New Pandas >= 2.0.0
             self.parent.well_legend_df = pd_concat(
                 [
@@ -153,18 +137,6 @@ class WellCollection(BaseCollection):
                 (self.parent.well_legend_df["name"] == name)
                 & (self.parent.well_legend_df["feature"] == feature)
             ].empty:
-                # Old Pandas <= 1.5.3
-                # self.parent.well_legend_df = self.parent.well_legend_df.append(
-                #     {
-                #         "name": name,
-                #         "feature": feature,
-                #         "color_R": round(np_random.random() * 255),
-                #         "color_G": round(np_random.random() * 255),
-                #         "color_B": round(np_random.random() * 255),
-                #         "line_thick": 2.0,
-                #     },
-                #     ignore_index=True,
-                # )
                 # New Pandas >= 2.0.0
                 self.parent.well_legend_df = pd_concat(
                     [

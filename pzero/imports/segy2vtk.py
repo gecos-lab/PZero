@@ -3,6 +3,7 @@ PZero© Andrea Bistacchi"""
 
 # imports
 from os import path as os_path
+from os import remove as os_remove
 from copy import deepcopy
 from uuid import uuid4 as uuid_uuid4
 from numpy import array as np_array
@@ -23,8 +24,6 @@ from segyio import TraceField as segyio_TraceField
 from pzero.entities_factory import Seismics
 from pzero.helpers.helper_functions import freeze_gui
 from pzero.processing.segy_standardizer import convert_to_standard_segy
-import os
-import numpy as np
 
 
 @freeze_gui
@@ -62,7 +61,7 @@ def segy2vtk(self, in_file_name):
             finally:
                 # Clean up temporary file
                 if os_path.exists(standardized_file):
-                    os.remove(standardized_file)
+                    os_remove(standardized_file)
 
         # Create entity dictionary and add to collection
         curr_obj_dict = deepcopy(self.image_coll.entity_dict)
