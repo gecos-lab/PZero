@@ -199,4 +199,4 @@ class PropertiesCMaps(QObject):
         parent.PropertiesTableWidget.setCellWidget(index, 2, label)
         # Signal to update actors in windows. This is emitted only for the modified
         # uid under the 'line_thick' key.
-        parent.prop_legend_cmap_modified_signal.emit(this_property)
+        parent.signals.prop_legend_cmap_modified.emit(this_property)

@@ -1619,8 +1619,8 @@ def project_2_dem(self):
         else:
             self.geol_coll.replace_vtk(uid=uid, vtk_object=obj_dict["vtk_obj"])
             self.geol_coll.set_uid_name(uid=uid, name=obj_dict["name"])
-            self.geol_coll.signals.geom_modified.emit([uid], self.geol_coll)
-        self.geol_coll.signals.metadata_modified.emit([uid], self.geol_coll)
+            self.parent.signals.geom_modified.emit([uid], self.geol_coll)
+        self.parent.signals.metadata_modified.emit([uid], self.geol_coll)
         prgs_bar.add_one()
 
 

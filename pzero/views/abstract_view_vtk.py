@@ -97,6 +97,7 @@ class ViewVTK(BaseView):
         self.disconnect_all_signals()
         # To cleanly close the vtk plotter, the following line is needed. This is the only difference
         # with the closeEvent() method in the BaseView() class.
+        self.plotter.renderer.Finalize()
         self.plotter.close()
         event.accept()
 

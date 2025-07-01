@@ -51,7 +51,7 @@ def CRS_transform_uid_accurate(
     points_X, points_Y = transformer.transform(in_entity.points_X, in_entity.points_Y)
     in_entity.points = np_column_stack((points_X, points_Y, in_entity.points_Z))
     in_entity.Modified()
-    collection.signals.geom_modified.emit([uid], collection)
+    self.parent.signals.geom_modified.emit([uid], collection)
 
 
 def CRS_fit_transformation(uid=None, collection=None, from_CRS=None, to_CRS=None):

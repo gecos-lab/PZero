@@ -116,168 +116,55 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
 
         It is IMPORTANT to check that all signals connected here are in the list of signals to be disconnected.
         """
-        # project signal (if any) self.proj_sig_...
+        # prop_legend_cmap_modified ---
+        self.prop_legend_lambda = lambda this_property: self.prop_legend_cmap_modified_update_views(this_property=this_property)
+        self.parent.signals.prop_legend_cmap_modified.connect(self.prop_legend_lambda)
 
-        # Define and connect PROPERTY LEGEND lamda functions and signals
+        # entities_added ---
+        self.sig_add_lmb = lambda upd_uids, coll: self.entities_added_update_views(updated_uids=upd_uids, collection=coll)
+        self.parent.signals.entities_added.connect(self.sig_add_lmb)
 
-        setattr(
-            self,
-            "prop_legend_lambda",
-            lambda this_property: self.prop_legend_cmap_modified_update_views(
-                this_property=this_property,
-            ),
-        )
-        self.parent.prop_legend_cmap_modified_signal.connect(self.prop_legend_lambda)
+        # entities_removed ---
+        self.sig_rem_lmb = lambda upd_uids, coll: self.entities_removed_update_views(updated_uids=upd_uids, collection=coll)
+        self.parent.signals.entities_removed.connect(self.sig_rem_lmb)
 
-        # collection signals self.{coll_name}_sig_...
-        for tree_name, coll_name in self.tree_collection_dict.items():
-            tree = eval(f"self.{tree_name}")
-            collection = eval(f"self.parent.{coll_name}")
+        # geom_modified ---
+        self.sig_geom_lmb = lambda upd_uids, coll: self.entities_geom_modified_update_views(updated_uids=upd_uids, collection=coll)
+        self.parent.signals.geom_modified.connect(self.sig_geom_lmb)
 
-            # entities_added ---
-            setattr(
-                self,
-                f"{coll_name}_sig_add_lmb",
-                lambda upd_uids, coll: self.entities_added_update_views(
-                    updated_uids=upd_uids,
-                    collection=coll,
-                ),
-            )
-            collection.signals.entities_added.connect(
-                eval(f"self.{coll_name}_sig_add_lmb")
-            )
+        # data_keys_added ---
+        self.sig_k_add_lmb = lambda upd_uids, coll: self.entities_data_keys_added_update_views(updated_uids=upd_uids, collection=coll)
+        self.parent.signals.data_keys_added.connect(self.sig_k_add_lmb)
 
-            # entities_removed ---
-            setattr(
-                self,
-                f"{coll_name}_sig_rem_lmb",
-                lambda upd_uids, coll: self.entities_removed_update_views(
-                    updated_uids=upd_uids,
-                    collection=coll,
-                ),
-            )
-            collection.signals.entities_removed.connect(
-                eval(f"self.{coll_name}_sig_rem_lmb")
-            )
+        # data_keys_removed ---
+        self.sig_k_rmv_lmb = lambda upd_uids, coll: self.entities_data_keys_removed_update_views(updated_uids=upd_uids, collection=coll)
+        self.parent.signals.data_keys_removed.connect(self.sig_k_rmv_lmb)
 
-            # geom_modified ---
-            setattr(
-                self,
-                f"{coll_name}_sig_geom_lmb",
-                lambda upd_uids, coll: self.entities_geom_modified_update_views(
-                    updated_uids=upd_uids,
-                    collection=coll,
-                ),
-            )
-            collection.signals.geom_modified.connect(
-                eval(f"self.{coll_name}_sig_geom_lmb")
-            )
+        # data_val_modified ---
+        self.sig_val_lmb = lambda upd_uids, coll: self.entities_data_val_modified_update_views(updated_uids=upd_uids, collection=coll)
+        self.parent.signals.data_val_modified.connect(self.sig_val_lmb)
 
-            # data_keys_added ---
-            setattr(
-                self,
-                f"{coll_name}_sig_k_add_lmb",
-                lambda upd_uids, coll: self.entities_data_keys_added_update_views(
-                    updated_uids=upd_uids,
-                    collection=coll,
-                ),
-            )
-            collection.signals.data_keys_added.connect(
-                eval(f"self.{coll_name}_sig_k_add_lmb")
-            )
+        # metadata_modified ---
+        self.sig_meta_lmb = lambda upd_uids, coll: self.entities_metadata_modified_update_views(updated_uids=upd_uids, collection=coll)
+        self.parent.signals.metadata_modified.connect(self.sig_meta_lmb)
 
-            # data_keys_removed ---
-            setattr(
-                self,
-                f"{coll_name}_sig_k_rmv_lmb",
-                lambda upd_uids, coll: self.entities_data_keys_removed_update_views(
-                    updated_uids=upd_uids,
-                    collection=coll,
-                ),
-            )
-            collection.signals.data_keys_removed.connect(
-                eval(f"self.{coll_name}_sig_k_rmv_lmb")
-            )
+        # legend_color_modified ---
+        self.sig_clr_lmb = lambda upd_uids, coll: self.change_actor_color(updated_uids=upd_uids, collection=coll)
+        self.parent.signals.legend_color_modified.connect(self.sig_clr_lmb)
 
-            # data_val_modified ---
-            setattr(
-                self,
-                f"{coll_name}_sig_val_lmb",
-                lambda upd_uids, coll: self.entities_data_val_modified_update_views(
-                    updated_uids=upd_uids,
-                    collection=coll,
-                ),
-            )
-            collection.signals.data_val_modified.connect(
-                eval(f"self.{coll_name}_sig_val_lmb")
-            )
+        # legend_thick_modified ---
+        self.sig_thk_lmb = lambda upd_uids, coll: self.change_actor_line_thick(updated_uids=upd_uids, collection=coll)
+        self.parent.signals.legend_thick_modified.connect(self.sig_thk_lmb)
 
-            # metadata_modified ---
-            setattr(
-                self,
-                f"{coll_name}_sig_meta_lmb",
-                lambda upd_uids, coll: self.entities_metadata_modified_update_views(
-                    updated_uids=upd_uids,
-                    collection=coll,
-                ),
-            )
-            collection.signals.metadata_modified.connect(
-                eval(f"self.{coll_name}_sig_meta_lmb")
-            )
+        # legend_point_size_modified ---
+        self.sig_pnt_lmb = lambda upd_uids, coll: self.change_actor_point_size(updated_uids=upd_uids, collection=coll)
+        self.parent.signals.legend_point_size_modified.connect(self.sig_pnt_lmb)
 
-            # legend_color_modified ---
-            setattr(
-                self,
-                f"{coll_name}_sig_clr_lmb",
-                lambda upd_uids, coll: self.change_actor_color(
-                    updated_uids=upd_uids,
-                    collection=coll,
-                ),
-            )
-            collection.signals.legend_color_modified.connect(
-                eval(f"self.{coll_name}_sig_clr_lmb")
-            )
+        # legend_opacity_modified ---
+        self.sig_opct_lmb = lambda upd_uids, coll: self.change_actor_opacity(updated_uids=upd_uids, collection=coll)
+        self.parent.signals.legend_opacity_modified.connect(self.sig_opct_lmb)
 
-            # legend_thick_modified ---
-            setattr(
-                self,
-                f"{coll_name}_sig_thk_lmb",
-                lambda upd_uids, coll: self.change_actor_line_thick(
-                    updated_uids=upd_uids,
-                    collection=coll,
-                ),
-            )
-            collection.signals.legend_thick_modified.connect(
-                eval(f"self.{coll_name}_sig_thk_lmb")
-            )
-
-            # legend_point_size_modified ---
-            setattr(
-                self,
-                f"{coll_name}_sig_pnt_lmb",
-                lambda upd_uids, coll: self.change_actor_point_size(
-                    updated_uids=upd_uids,
-                    collection=coll,
-                ),
-            )
-            collection.signals.legend_point_size_modified.connect(
-                eval(f"self.{coll_name}_sig_pnt_lmb")
-            )
-
-            # legend_opacity_modified ---
-            setattr(
-                self,
-                f"{coll_name}_sig_opct_lmb",
-                lambda upd_uids, coll: self.change_actor_opacity(
-                    updated_uids=upd_uids,
-                    collection=coll,
-                ),
-            )
-            collection.signals.legend_opacity_modified.connect(
-                eval(f"self.{coll_name}_sig_opct_lmb")
-            )
-
-            # selection_changed
+        # selection_changed
 
     def disconnect_all_signals(self):
         """
@@ -292,61 +179,31 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         # self.signals.checkboxToggled.disconnect(self.view_sig_check_lmb)
         # # Disconnect signal ===========================================================================================
         # self.signals.propertyToggled.disconnect(self.view_sig_prop_lmb)
-        # project signal (if any)
 
-        # Disconnect PROPERTY LEGEND signals
-
-        self.parent.prop_legend_cmap_modified_signal.disconnect(self.prop_legend_lambda)
-
-        # collection signals
-        for tree_name, coll_name in self.tree_collection_dict.items():
-            tree = eval(f"self.{tree_name}")
-            collection = eval(f"self.parent.{coll_name}")
-            # entities_added
-            collection.signals.entities_added.disconnect(
-                eval(f"self.{coll_name}_sig_add_lmb")
-            )
-            # entities_removed
-            collection.signals.entities_removed.disconnect(
-                eval(f"self.{coll_name}_sig_rem_lmb")
-            )
-            # geom_modified
-            collection.signals.geom_modified.disconnect(
-                eval(f"self.{coll_name}_sig_geom_lmb")
-            )
-            # data_keys_added
-            collection.signals.data_keys_added.disconnect(
-                eval(f"self.{coll_name}_sig_k_add_lmb")
-            )
-            # data_keys_removed
-            collection.signals.data_keys_removed.disconnect(
-                eval(f"self.{coll_name}_sig_k_rmv_lmb")
-            )
-            # data_val_modified
-            collection.signals.data_val_modified.disconnect(
-                eval(f"self.{coll_name}_sig_val_lmb")
-            )
-            # metadata_modified
-            collection.signals.metadata_modified.disconnect(
-                eval(f"self.{coll_name}_sig_meta_lmb")
-            )
-            # legend_color_modified
-            collection.signals.legend_color_modified.disconnect(
-                eval(f"self.{coll_name}_sig_clr_lmb")
-            )
-            # legend_thick_modified
-            collection.signals.legend_thick_modified.disconnect(
-                eval(f"self.{coll_name}_sig_thk_lmb")
-            )
-            # legend_point_size_modified
-            collection.signals.legend_point_size_modified.disconnect(
-                eval(f"self.{coll_name}_sig_pnt_lmb")
-            )
-            # legend_opacity_modified
-            collection.signals.legend_opacity_modified.disconnect(
-                eval(f"self.{coll_name}_sig_opct_lmb")
-            )
-
+        # prop_legend_cmap_modified ---
+        self.parent.signals.prop_legend_cmap_modified.disconnect(self.prop_legend_lambda)
+        # entities_added
+        self.parent.signals.entities_added.disconnect(self.sig_add_lmb)
+        # entities_removed
+        self.parent.signals.entities_removed.disconnect(self.sig_rem_lmb)
+        # geom_modified
+        self.parent.signals.geom_modified.disconnect(self.sig_geom_lmb)
+        # data_keys_added
+        self.parent.signals.data_keys_added.disconnect(self.sig_k_add_lmb)
+        # data_keys_removed
+        self.parent.signals.data_keys_removed.disconnect(self.sig_k_rmv_lmb)
+        # data_val_modified
+        self.parent.signals.data_val_modified.disconnect(self.sig_val_lmb)
+        # metadata_modified
+        self.parent.signals.metadata_modified.disconnect(self.sig_meta_lmb)
+        # legend_color_modified
+        self.parent.signals.legend_color_modified.disconnect(self.sig_clr_lmb)
+        # legend_thick_modified
+        self.parent.signals.legend_thick_modified.disconnect(self.sig_thk_lmb)
+        # legend_point_size_modified
+        self.parent.signals.legend_point_size_modified.disconnect(self.sig_pnt_lmb)
+        # legend_opacity_modified
+        self.parent.signals.legend_opacity_modified.disconnect(self.sig_opct_lmb)
         # selection_changed
 
     def disable_actions(self):
@@ -462,14 +319,13 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
 
     def entities_removed_update_views(self, updated_uids=None, collection=None):
         """This is called when an entity is removed from a collection."""
-        # remove from updated_list the uid's that are excluded from this view by self.view_filter.
-        updated_uids = collection.filter_uids(query=self.view_filter, uids=updated_uids)
         tree = self.tree_from_coll(coll=collection)
         for uid in updated_uids:
-            self.remove_actor_in_view(uid=uid, redraw=True)
-            self.actors_df.drop(
-                self.actors_df[self.actors_df["uid"] == uid].index, inplace=True
-            )
+            if uid in self.actors_df["uid"].to_list():
+                self.remove_actor_in_view(uid=uid, redraw=True)
+                self.actors_df.drop(
+                    self.actors_df[self.actors_df["uid"] == uid].index, inplace=True
+                )
         tree.remove_items_from_tree(uids_to_remove=updated_uids)
 
     def entities_geom_modified_update_views(self, updated_uids=None, collection=None):
@@ -524,7 +380,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                         self.actors_df["uid"] == uid, ["show_property"]
                     ] = None
         # Rebuild the trees to add/remove the properties that have been changed.
-        tree.update_properties_for_uids(self)  # this should be a method of the tree
+        tree.update_properties_for_uids(updated_uids)  # this should be a method of the tree
 
     def entities_data_keys_removed_update_views(
         self, updated_uids=None, collection=None

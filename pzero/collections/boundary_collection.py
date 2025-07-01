@@ -201,7 +201,7 @@ class BoundaryCollection(BaseCollection):
         # Reset data model.
         self.modelReset.emit()
         # Then emit signal to update the views. A list of uids is emitted, even if the entity is just one.
-        self.signals.entities_added.emit([entity_dict["uid"]], self)
+        self.parent.signals.entities_added.emit([entity_dict["uid"]], self)
         return entity_dict["uid"]
 
     def remove_entity(self, uid: str = None) -> str:
@@ -210,7 +210,7 @@ class BoundaryCollection(BaseCollection):
         self.df.drop(self.df[self.df["uid"] == uid].index, inplace=True)
         self.modelReset.emit()  # is this really necessary?
         # When done, send a signal over to the views. A list of uids is emitted, even if the entity is just one.
-        self.signals.entities_removed.emit([uid], self)
+        self.parent.signals.entities_removed.emit([uid], self)
         return uid
 
     def clone_entity(self, uid: str = None) -> str:

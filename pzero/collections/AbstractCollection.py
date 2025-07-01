@@ -6,10 +6,7 @@ from PySide6.QtCore import (
     QAbstractTableModel,
     Qt,
     QSortFilterProxyModel,
-    QObject,
-    Signal,
 )
-from PySide6.QtCore import Signal as pyqtSignal
 
 from abc import abstractmethod, ABC
 
@@ -20,39 +17,6 @@ from numpy import ndarray as np_ndarray
 from numpy import intp as np_intp
 
 from vtkmodules.vtkCommonDataModel import vtkDataObject
-
-
-class CollectionSignals(QObject):
-    """
-    This class is necessary since non-Qt classes cannot emit Qt signals. Therefore, we create a generic
-    CollectionSignals() Qt object, that will include all signals used by collections. These will be used according
-    to the following pattern:
-
-    self.signals = CollectionSignals()
-
-    self.signals.specific_signal.emit(some_message)
-
-    etc.
-
-    Basically in this way, instead of using inheritance, we add all signals by composition.
-    """
-
-    # "object" is used to pass the collection object that emitted the signal
-    # the other argument is a list of uids, or a single uid, or a list of entities
-    entities_added = pyqtSignal(list, object)  # seems OK
-    entities_removed = pyqtSignal(list, object)  # seems OK
-    geom_modified = pyqtSignal(list, object)  # seems OK
-    data_keys_added = pyqtSignal(list, object)  # MORE CHECK NEEDED - CAN BE MERGED WITH "removed"?
-    data_keys_removed: Signal = pyqtSignal(list, object)  # seems OK - CAN BE MERGED WITH "added"?
-    data_val_modified = pyqtSignal(list, object)  # not used at the moment
-    metadata_modified = pyqtSignal(list, object)  # seems OK
-    legend_color_modified = pyqtSignal(list, object)  # seems OK
-    legend_thick_modified = pyqtSignal(list, object)  # seems OK
-    legend_point_size_modified = pyqtSignal(list, object)  # seems OK
-    legend_opacity_modified = pyqtSignal(list, object)  # seems OK
-
-    # selection self.selected_uids changed on the collection = object
-    selection_changed = pyqtSignal(object)
 
 
 class BaseCollection(ABC):
@@ -71,8 +35,6 @@ class BaseCollection(ABC):
 
         self._parent = parent
         self._collection_name: str = ""
-
-        self._signals = CollectionSignals()
 
         self._entity_dict: dict = dict()
         self._entity_dict_types: dict = dict()
@@ -153,10 +115,6 @@ class BaseCollection(ABC):
     def collection_name(self, collection_name) -> str:
         """Get the collection name."""
         self._collection_name = collection_name
-
-    @property
-    def signals(self):
-        return self._signals
 
     @property
     def entity_dict(self) -> dict:
@@ -380,7 +338,7 @@ class BaseCollection(ABC):
             data_key=property_name, dimension=property_components
         )
         # IN THE FUTURE add cell data.
-        self.signals.metadata_modified.emit([uid], self)
+        self.parent.signals.metadata_modified.emit([uid], self)
 
     def remove_uid_property(self, uid: str = None, property_name: str = None):
         """Remove property name and components from an uid and remove property on vtk object.
@@ -396,7 +354,7 @@ class BaseCollection(ABC):
         )
         self.get_uid_vtk_obj(uid=uid).remove_point_data(data_key=property_name)
         # IN THE FUTURE add cell data.
-        self.signals.data_keys_removed.emit([uid], self)
+        self.parent.signals.data_keys_removed.emit([uid], self)
 
     def get_uid_property_shape(
         self, uid: str = None, property_name: str = None
@@ -469,12 +427,12 @@ class BaseCollection(ABC):
 
             if any(prop not in current_props for prop in old_props):
                 # this means that at least one prop is included in old_props and not in current_props, so it was removed
-                self.signals.data_keys_removed.emit([uid], self)
+                self.parent.signals.data_keys_removed.emit([uid], self)
             if any(prop not in old_props for prop in current_props):
                 # this means that at least one prop is included in current_props and not in old_props, so it was added
-                self.signals.data_keys_added.emit([uid], self)
+                self.parent.signals.data_keys_added.emit([uid], self)
 
-            self.signals.geom_modified.emit([uid], self)
+            self.parent.signals.geom_modified.emit([uid], self)
         else:
             self.parent.print_terminal(
                 "ERROR - replace_vtk with vtk of a different type not allowed."
@@ -543,7 +501,7 @@ class BaseTableModel(QAbstractTableModel):
                 uid = self.collection.df.iloc[index.row(), 0]
                 self.collection.attr_modified_update_legend_table()
                 # a list of uids is emitted, even if the entity is just one
-                self.collection.signals.metadata_modified.emit([uid], self.collection)
+                self.parent.signals.metadata_modified.emit([uid], self.collection)
                 return True
         # return QVariant()
         return None

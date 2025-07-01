@@ -8,6 +8,7 @@ from copy import deepcopy
 from datetime import datetime
 
 from PySide6.QtCore import Signal as pyqtSignal
+from PySide6.QtCore import QObject
 from PySide6.QtWidgets import QMainWindow, QMessageBox
 from PySide6.QtGui import QAction
 
@@ -112,20 +113,52 @@ from pzero.views.dock_window import DockWindow
 from .processing.CRS import CRS_list, CRS_transform_selected
 
 
+class ProjectSignals(QObject):
+    """
+    This class is used to store signals used project-wide that will be used according
+    to the following pattern:
+
+    -> within project:
+    self.signals = ProjectSignals()
+
+    -> within child objects:
+    self.project.signals.specific_signal.emit(some_message)
+    self.project.signals.specific_signal.connect(some_message)
+
+    Basically in this way we add all signals by composition.
+    """
+
+    # project_close is used to delete open windows when the current project is closed (and a new one is opened).
+    project_close = pyqtSignal()  # seems OK
+
+    # prop_legend_cmap_modified is uded by the property legend manager when a color map is changed for some
+    # property called "str"
+    prop_legend_cmap_modified = pyqtSignal(str)  # seems OK
+
+    # The following are signals used by entitied collected in collections.
+    # "object" is used to pass a reference to the collection where the entity is stored
+    # the other argument is a list of uids, or a single uid, or a list of entities
+    entities_added = pyqtSignal(list, object)  # seems OK
+    entities_removed = pyqtSignal(list, object)  # seems OK
+    geom_modified = pyqtSignal(list, object)  # seems OK
+    data_keys_added = pyqtSignal(list, object)  # seems OK - CAN BE MERGED WITH "removed"?
+    data_keys_removed = pyqtSignal(list, object)  # seems OK - CAN BE MERGED WITH "added"?
+    data_val_modified = pyqtSignal(list, object)  # not used at the moment
+    metadata_modified = pyqtSignal(list, object)  # seems OK
+    legend_color_modified = pyqtSignal(list, object)  # seems OK
+    legend_thick_modified = pyqtSignal(list, object)  # seems OK
+    legend_point_size_modified = pyqtSignal(list, object)  # seems OK
+    legend_opacity_modified = pyqtSignal(list, object)  # seems OK
+
+    # selection_changed is used to update the set of selected entities on each collection = object
+    selection_changed = pyqtSignal(object)
+
+
 class ProjectWindow(QMainWindow, Ui_ProjectWindow):
     """Create project window and import UI created with Qt Designer by subclassing both"""
 
     # Signals defined here are meant to be broadcast TO ALL views. This is why we use signals
     # instead of functions that will act within a single view only. They all pass a list of uid's.
-
-    # This is used to delete open windows when the current project is closed (and a new one is opened).
-    project_close_signal = pyqtSignal()
-
-    # Maybe also this one could be moved to collections?
-    prop_legend_cmap_modified_signal = pyqtSignal(str)
-
-    # It appears this is not used anywhere. _______________________________________
-    # line_digitized_signal = pyqtSignal(dict)
 
     """Add other signals above this line ----------------------------------------"""
 
@@ -141,6 +174,8 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.print_terminal(
             "Welcome to PZero!\n3D modelling application by Andrea Bistacchi, started June 3rd 2020."
         )
+
+        self.signals = ProjectSignals()
 
         # dictionary with table (key) vs. collection (value)
         self.tab_collection_dict = {
@@ -257,7 +292,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             QMessageBox.No,
         )
         if reply == QMessageBox.Yes:
-            self.project_close_signal.emit()  # this is used to delete open windows when the current project is closed
+            self.signals.project_close.emit()  # this is used to delete open windows when the current project is closed
             event.accept()
         else:
             event.ignore()
@@ -1019,7 +1054,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
     def create_empty(self):
         """Create empty containers for a new empty project."""
         # this is used to delete open windows when the current project is closed (and a new one is opened)
-        self.project_close_signal.emit()
+        self.signals.project_close.emit()
 
         # Create the geol_coll GeologicalCollection (a Qt QAbstractTableModel with a Pandas dataframe as attribute)
         # and connect the model to GeologyTableView (a Qt QTableView created with QTDesigner and provided by

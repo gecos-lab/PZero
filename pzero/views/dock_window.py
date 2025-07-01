@@ -25,7 +25,7 @@ class DockWindow(QDockWidget):
         n_docks = len(parent.findChildren(QDockWidget))
 
         # Connect signal and set attribute to delete dock widget (not only hide it) when the project is closed.
-        parent.project_close_signal.connect(self.deleteLater)
+        parent.signals.project_close.connect(self.deleteLater)
         self.setAttribute(Qt.WA_DeleteOnClose, True)
 
         # Set other dock window graphical properties.
