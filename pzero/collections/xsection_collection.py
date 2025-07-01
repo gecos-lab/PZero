@@ -376,7 +376,7 @@ class XSectionCollection(BaseCollection):
         return legend_updated
 
     def get_uid_legend(self, uid: str = None) -> dict:
-        """Get legend for a particular uid."""
+        """Supposed to get legend for a particular uid, in this case gets legend for XSection that are all the same."""
         legend_dict = self.parent.others_legend_df.loc[
             self.parent.others_legend_df["other_collection"] == "XSection"
         ].to_dict("records")

@@ -152,11 +152,9 @@ class GFBCollection(BaseCollection):
         """Clone an entity."""
         # Take care since add_entity_from_dict sends signals immediately.
         # First check whether the uid to be cloned exists.
-        self.print_terminal("debug")
         if uid not in self.get_uids:
             return
-        # Ten deep-copy the base disctionary, copy parameters and the VTK object, and create new entity.
-        # ====== CAN BE UNIFIED AS COMMON METHOD OF THE ABSTRACT COLLECTION IF "GEOLOGICAL" METHODS WILL BE UNIFIED ====
+        # Then deep-copy the base dictionary, copy parameters and the VTK object, and create a new entity.
         entity_dict = deepcopy(self.entity_dict)
         entity_dict["name"] = self.get_uid_name(uid)
         entity_dict["topology"] = self.get_uid_topology(uid)

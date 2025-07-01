@@ -131,7 +131,7 @@ class DIMCollection(BaseCollection):
         return legend_updated
 
     def get_uid_legend(self, uid: str = None) -> dict:
-        """Get legend for a particular uid."""
+        """Get legend for a particular uid. Implemented in subclasses."""
         pass
 
     def set_uid_legend(

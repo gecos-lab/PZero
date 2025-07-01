@@ -229,9 +229,11 @@ class BoundaryCollection(BaseCollection):
         return legend_updated
 
     def get_uid_legend(self, uid: str = None) -> dict:
-        """Get legend for a particular uid."""
-        # Not implemented for this collection, but required by the abstract superclass.
-        pass
+        """Supposed to get legend for a particular uid, in this case gets legend for boundaries that are all the same."""
+        legend_dict = self.parent.others_legend_df.loc[
+            self.parent.others_legend_df["other_collection"] == "Boundary"
+        ].to_dict("records")
+        return legend_dict[0]
 
     def set_uid_legend(
         self,

@@ -64,7 +64,7 @@ class BaseCollection(ABC):
 
     @abstractmethod
     def clone_entity(self, uid: str = None) -> str:
-        """Clone an entity. Take care since this sends signals immediately (?)."""
+        """Clone an entity. Take care since this sends signals immediately. To be implemented in subclasses."""
         pass
 
     @abstractmethod
