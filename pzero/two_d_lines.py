@@ -587,7 +587,7 @@ def split_line_existing_point(self):
     self.disable_actions
     # If more than one line is selected, keep the first
     sel_uid = self.selected_uids[0]
-    current_line = self.get_uid_from_actor(sel_uid)
+    current_line = self.get_actor_by_uid(sel_uid)
     line = current_line.mapper.dataset
     selector = Editor(self)
     selector.EnabledOn()
@@ -608,6 +608,7 @@ def merge_lines(self):
     """Merge two (contiguous or non-contiguous) lines.
     Metadata will be taken from the first selected line."""
     # Check if at least 2 lines are selected.
+    self.print_terminal(f"self.selected_uids: {self.selected_uids}")
     if not self.selected_uids:
         self.print_terminal(" -- No input data selected -- ")
         self.enable_actions()

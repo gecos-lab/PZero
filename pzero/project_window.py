@@ -166,6 +166,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         super(ProjectWindow, self).__init__(*args, **kwargs)
         """Import GUI from project_window_ui.py"""
         self.setupUi(self)
+        self.TextTerminal.setReadOnly(True)
 
         """Connect actionQuit.triggered SIGNAL to self.close SLOT"""
         self.actionQuit.triggered.connect(self.close)

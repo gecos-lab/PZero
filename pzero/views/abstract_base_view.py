@@ -621,6 +621,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                         ignore_index=True,
                     )
             except:
+                self.print_terminal(f"ERROR in add_all_entities: {collection_name}")
                 pass
 
     # ================================  General methods shared by all views - built incrementally =====================
