@@ -101,13 +101,16 @@ class PropertiesCMaps(QObject):
             coll_prop_comps = collection.df["properties_components"].to_list()
             coll_prop_comps = list(pd_flatten(coll_prop_comps))
             for i in range(len(coll_props)):
-                if coll_prop_comps[i] == 3:
-                    add_props = (
-                        add_props
-                        + [coll_props[i] + "[0]"]
-                        + [coll_props[i] + "[1]"]
-                        + [coll_props[i] + "[2]"]
-                    )
+                # if coll_prop_comps[i] == 3:
+                #     add_props = (
+                #         add_props
+                #         + [coll_props[i] + "[0]"]
+                #         + [coll_props[i] + "[1]"]
+                #         + [coll_props[i] + "[2]"]
+                #     )
+                if coll_prop_comps[i] > 1:
+                    for j in range(coll_prop_comps[i]):
+                        add_props.append(coll_props[i] + f"[{j}]")
                 elif coll_prop_comps[i] == 1:
                     add_props = add_props + [coll_props[i]]
 

@@ -316,7 +316,7 @@ class ViewVTK(BaseView):
         ):
             plot_rgb_option = None
             if isinstance(plot_entity.points, np_ndarray):
-                # This  check is needed to avoid errors when trying to plot an empty
+                # This check is needed to avoid errors when trying to plot an empty
                 # PolyData, just created at the beginning of a digitizing session.
                 if show_property == "none":
                     show_property = None
@@ -330,9 +330,27 @@ class ViewVTK(BaseView):
                     show_property = plot_entity.points_Y
                 elif show_property == "Z":
                     show_property = plot_entity.points_Z
+                elif show_property[-1] == "]":
+                    # We can identify multicomponents properties such as RGB[0] or Normals[0] by
+                    # taking the last character of the property name ("]").
+                    # Get the start and end index of the [n_component]
+                    pos1 = show_property.index("[")
+                    pos2 = show_property.index("]")
+                    # Get the original property (e.g. RGB[0] -> RGB)
+                    original_prop = show_property[:pos1]
+                    # Get the column index (the n_component value)
+                    index = int(show_property[pos1 + 1 : pos2])
+                    show_property = plot_entity.get_point_data(original_prop)[:, index]
                 else:
                     if plot_entity.get_point_data_shape(show_property)[-1] == 3:
                         plot_rgb_option = True
+                    else:
+                        # last option to catch unexpected cases
+                        if (
+                            not show_property
+                            in self.parent.prop_legend_df["property_name"].tolist()
+                        ):
+                            show_property = None
                 this_actor = self.plot_mesh(
                     uid=uid,
                     plot_entity=plot_entity,
@@ -356,6 +374,7 @@ class ViewVTK(BaseView):
                 pickable = True
             style = "points"
             plot_rgb_option = None
+            texture = False
             smooth_shading = False
             if isinstance(plot_entity.points, np_ndarray):
                 # This  check is needed to avoid errors when trying to plot an empty

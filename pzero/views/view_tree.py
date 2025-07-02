@@ -207,6 +207,7 @@ class CustomTreeWidget(QTreeWidget):
         name_label=None,
         uid_label=None,
         prop_label=None,
+        prop_comp_label=None,
         default_labels=None,
     ):
         """
@@ -229,6 +230,7 @@ class CustomTreeWidget(QTreeWidget):
         self.tree_labels = tree_labels
         self.name_label = name_label
         self.prop_label = prop_label
+        self.prop_comp_label = prop_comp_label
         self.default_labels = default_labels
         self.uid_label = uid_label
 
@@ -371,7 +373,26 @@ class CustomTreeWidget(QTreeWidget):
             for label in self.default_labels:
                 property_combo.addItem(label)
             if self.prop_label:
-                property_combo.addItems(row[self.prop_label])
+
+                # property_combo.addItems(row[self.prop_label])
+                props = row[self.prop_label]
+                props_comps = row[self.prop_comp_label]
+                add_props = []
+                for i in range(len(props)):
+                    # if props_comps[i] == 3:
+                    #     add_props = (
+                    #         add_props
+                    #         + [props[i] + "[0]"]
+                    #         + [props[i] + "[1]"]
+                    #         + [props[i] + "[2]"]
+                    #     )
+                    if props_comps[i] > 1:
+                        for j in range(props_comps[i]):
+                            add_props.append(props[i] + f"[{j}]")
+                    elif props_comps[i] == 1:
+                        add_props = add_props + [props[i]]
+                property_combo.addItems(add_props)
+
             index = property_combo.findText(
                 self.view.actors_df.loc[
                     self.view.actors_df["uid"] == uid, "show_property"
@@ -460,7 +481,25 @@ class CustomTreeWidget(QTreeWidget):
             property_combo = QComboBox()
             for label in self.default_labels:
                 property_combo.addItem(label)
-            property_combo.addItems(row[self.prop_label])
+
+            # property_combo.addItems(row[self.prop_label])
+            props = row[self.prop_label]
+            props_comps = row[self.prop_comp_label]
+            add_props = []
+            for i in range(len(props)):
+                # if props_comps[i] == 3:
+                #     add_props = (
+                #         add_props
+                #         + [props[i] + "[0]"]
+                #         + [props[i] + "[1]"]
+                #         + [props[i] + "[2]"]
+                #     )
+                if props_comps[i] > 1:
+                    for j in range(props_comps[i]):
+                        add_props.append(props[i] + f"[{j}]")
+                elif props_comps[i] == 1:
+                    add_props = add_props + [props[i]]
+            property_combo.addItems(add_props)
 
             # Connect signal
             property_combo.currentTextChanged.connect(
@@ -471,7 +510,7 @@ class CustomTreeWidget(QTreeWidget):
             self.setItemWidget(name_item, self.columnCount() - 1, property_combo)
 
             # Try to restore the previous combo state if it's still available
-            current_text= self.view.actors_df.loc[
+            current_text = self.view.actors_df.loc[
                 self.view.actors_df["uid"] == uid, "show_property"
             ].iloc[0]
             index = property_combo.findText(current_text)
@@ -712,24 +751,24 @@ class CustomTreeWidget(QTreeWidget):
             turn_off_uids=turn_off_uids,
         )
 
-    def create_property_combo(self, row, uid):
-        """
-        Creates a QComboBox with items from the given `row` data and sets the current index
-        based on the `uid`. This method initializes a QComboBox instance, populates it,
-        and selects a predefined item from self.view.actors_df..
-        """
-        property_combo = QComboBox()
-        property_combo.addItems(row[self.prop_label])
-
-        index = property_combo.findText(
-            self.view.actors_df.loc[
-                self.view.actors_df["uid"] == uid, "show_property"
-            ].values[0]
-        )
-        if index >= 0:
-            property_combo.setCurrentIndex(index)
-
-        return property_combo
+    # def create_property_combo(self, row, uid):
+    #     """
+    #     Creates a QComboBox with items from the given `row` data and sets the current index
+    #     based on the `uid`. This method initializes a QComboBox instance, populates it,
+    #     and selects a predefined item from self.view.actors_df..
+    #     """
+    #     property_combo = QComboBox()
+    #     property_combo.addItems(row[self.prop_label])
+    #
+    #     index = property_combo.findText(
+    #         self.view.actors_df.loc[
+    #             self.view.actors_df["uid"] == uid, "show_property"
+    #         ].values[0]
+    #     )
+    #     if index >= 0:
+    #         property_combo.setCurrentIndex(index)
+    #
+    #     return property_combo
 
     @preserve_selection
     def on_combo_changed(self, item, prop_text):

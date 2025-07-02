@@ -117,51 +117,87 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         It is IMPORTANT to check that all signals connected here are in the list of signals to be disconnected.
         """
         # prop_legend_cmap_modified ---
-        self.prop_legend_lambda = lambda this_property: self.prop_legend_cmap_modified_update_views(this_property=this_property)
+        self.prop_legend_lambda = (
+            lambda this_property: self.prop_legend_cmap_modified_update_views(
+                this_property=this_property
+            )
+        )
         self.parent.signals.prop_legend_cmap_modified.connect(self.prop_legend_lambda)
 
         # entities_added ---
-        self.sig_add_lmb = lambda upd_uids, coll: self.entities_added_update_views(updated_uids=upd_uids, collection=coll)
+        self.sig_add_lmb = lambda upd_uids, coll: self.entities_added_update_views(
+            updated_uids=upd_uids, collection=coll
+        )
         self.parent.signals.entities_added.connect(self.sig_add_lmb)
 
         # entities_removed ---
-        self.sig_rem_lmb = lambda upd_uids, coll: self.entities_removed_update_views(updated_uids=upd_uids, collection=coll)
+        self.sig_rem_lmb = lambda upd_uids, coll: self.entities_removed_update_views(
+            updated_uids=upd_uids, collection=coll
+        )
         self.parent.signals.entities_removed.connect(self.sig_rem_lmb)
 
         # geom_modified ---
-        self.sig_geom_lmb = lambda upd_uids, coll: self.entities_geom_modified_update_views(updated_uids=upd_uids, collection=coll)
+        self.sig_geom_lmb = (
+            lambda upd_uids, coll: self.entities_geom_modified_update_views(
+                updated_uids=upd_uids, collection=coll
+            )
+        )
         self.parent.signals.geom_modified.connect(self.sig_geom_lmb)
 
         # data_keys_added ---
-        self.sig_k_add_lmb = lambda upd_uids, coll: self.entities_data_keys_added_update_views(updated_uids=upd_uids, collection=coll)
+        self.sig_k_add_lmb = (
+            lambda upd_uids, coll: self.entities_data_keys_added_update_views(
+                updated_uids=upd_uids, collection=coll
+            )
+        )
         self.parent.signals.data_keys_added.connect(self.sig_k_add_lmb)
 
         # data_keys_removed ---
-        self.sig_k_rmv_lmb = lambda upd_uids, coll: self.entities_data_keys_removed_update_views(updated_uids=upd_uids, collection=coll)
+        self.sig_k_rmv_lmb = (
+            lambda upd_uids, coll: self.entities_data_keys_removed_update_views(
+                updated_uids=upd_uids, collection=coll
+            )
+        )
         self.parent.signals.data_keys_removed.connect(self.sig_k_rmv_lmb)
 
         # data_val_modified ---
-        self.sig_val_lmb = lambda upd_uids, coll: self.entities_data_val_modified_update_views(updated_uids=upd_uids, collection=coll)
+        self.sig_val_lmb = (
+            lambda upd_uids, coll: self.entities_data_val_modified_update_views(
+                updated_uids=upd_uids, collection=coll
+            )
+        )
         self.parent.signals.data_val_modified.connect(self.sig_val_lmb)
 
         # metadata_modified ---
-        self.sig_meta_lmb = lambda upd_uids, coll: self.entities_metadata_modified_update_views(updated_uids=upd_uids, collection=coll)
+        self.sig_meta_lmb = (
+            lambda upd_uids, coll: self.entities_metadata_modified_update_views(
+                updated_uids=upd_uids, collection=coll
+            )
+        )
         self.parent.signals.metadata_modified.connect(self.sig_meta_lmb)
 
         # legend_color_modified ---
-        self.sig_clr_lmb = lambda upd_uids, coll: self.change_actor_color(updated_uids=upd_uids, collection=coll)
+        self.sig_clr_lmb = lambda upd_uids, coll: self.change_actor_color(
+            updated_uids=upd_uids, collection=coll
+        )
         self.parent.signals.legend_color_modified.connect(self.sig_clr_lmb)
 
         # legend_thick_modified ---
-        self.sig_thk_lmb = lambda upd_uids, coll: self.change_actor_line_thick(updated_uids=upd_uids, collection=coll)
+        self.sig_thk_lmb = lambda upd_uids, coll: self.change_actor_line_thick(
+            updated_uids=upd_uids, collection=coll
+        )
         self.parent.signals.legend_thick_modified.connect(self.sig_thk_lmb)
 
         # legend_point_size_modified ---
-        self.sig_pnt_lmb = lambda upd_uids, coll: self.change_actor_point_size(updated_uids=upd_uids, collection=coll)
+        self.sig_pnt_lmb = lambda upd_uids, coll: self.change_actor_point_size(
+            updated_uids=upd_uids, collection=coll
+        )
         self.parent.signals.legend_point_size_modified.connect(self.sig_pnt_lmb)
 
         # legend_opacity_modified ---
-        self.sig_opct_lmb = lambda upd_uids, coll: self.change_actor_opacity(updated_uids=upd_uids, collection=coll)
+        self.sig_opct_lmb = lambda upd_uids, coll: self.change_actor_opacity(
+            updated_uids=upd_uids, collection=coll
+        )
         self.parent.signals.legend_opacity_modified.connect(self.sig_opct_lmb)
 
         # selection_changed
@@ -181,7 +217,9 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         # self.signals.propertyToggled.disconnect(self.view_sig_prop_lmb)
 
         # prop_legend_cmap_modified ---
-        self.parent.signals.prop_legend_cmap_modified.disconnect(self.prop_legend_lambda)
+        self.parent.signals.prop_legend_cmap_modified.disconnect(
+            self.prop_legend_lambda
+        )
         # entities_added
         self.parent.signals.entities_added.disconnect(self.sig_add_lmb)
         # entities_removed
@@ -239,8 +277,10 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                 f"self.parent.{coll_name}.entity_dict.keys()"
             ):
                 prop_label = "properties_names"
+                prop_comp_label = "properties_components"
             else:
                 prop_label = None
+                prop_comp_label = None
             default_labels = ["none", "X", "Y", "Z"]
             setattr(
                 self,
@@ -253,6 +293,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                     name_label="name",
                     uid_label="uid",
                     prop_label=prop_label,
+                    prop_comp_label=prop_comp_label,
                     default_labels=default_labels,
                 ),
             )
@@ -346,9 +387,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                 visible=show,
             )
 
-    def entities_data_keys_added_update_views(
-            self, updated_uids=None, collection=None
-    ):
+    def entities_data_keys_added_update_views(self, updated_uids=None, collection=None):
         """This is called when point or cell data (properties) are added."""
         # AT THE MOMENT THIS IS IDENTICAL TO entities_data_keys_removed_update_views
         # remove from updated_list the uid's that are excluded from this view by self.view_filter.
@@ -380,14 +419,18 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                         self.actors_df["uid"] == uid, ["show_property"]
                     ] = None
         # Rebuild the trees to add/remove the properties that have been changed.
-        tree.update_properties_for_uids(updated_uids)  # this should be a method of the tree
+        tree.update_properties_for_uids(
+            updated_uids
+        )  # this should be a method of the tree
 
     def entities_data_keys_removed_update_views(
         self, updated_uids=None, collection=None
     ):
         """This is called when point or cell data (properties) are removed."""
         # AT THE MOMENT THIS IS IDENTICAL TO entities_data_keys_added_update_views
-        return self.entities_data_keys_added_update_views(updated_uids=updated_uids, collection=collection)
+        return self.entities_data_keys_added_update_views(
+            updated_uids=updated_uids, collection=collection
+        )
 
     def entities_data_val_modified_update_views(
         self, updated_uids=None, collection=None

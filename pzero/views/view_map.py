@@ -73,7 +73,10 @@ class ViewMap(View2D):
         """
         # ___________________________________________________see if this reimplementation from VTKView can be avoided
         # First get the vtk object from its collection.
-        show_property_title = show_property
+        if show_property:
+            show_property_title = show_property
+        else:
+            show_property_title = None
         this_coll = eval(f"self.parent.{coll_name}")
         if coll_name in ["geol_coll", "fluid_coll", "backgrnd_coll", "well_coll"]:
             color_R = this_coll.get_uid_legend(uid=uid)["color_R"]
@@ -101,7 +104,7 @@ class ViewMap(View2D):
             plot_entity = this_coll.get_uid_vtk_obj(uid)
         else:
             # catch errors
-            print("no collection", coll_name)
+            self.print_terminal(f"no collection: {coll_name}")
             this_actor = None
         # Then plot the vtk object with proper options.
         if isinstance(plot_entity, (PolyLine, TriSurf, XsPolyLine)) and not isinstance(
@@ -109,9 +112,13 @@ class ViewMap(View2D):
         ):
             plot_rgb_option = None
             if isinstance(plot_entity.points, np_ndarray):
-                # This  check is needed to avoid errors when trying to plot an empty
+                # This check is needed to avoid errors when trying to plot an empty
                 # PolyData, just created at the beginning of a digitizing session.
-                if show_property == "none" or show_property is None:
+                if show_property == "none":
+                    show_property = None
+                elif show_property == None:
+                    show_property = None
+                elif not show_property:
                     show_property = None
                 elif show_property == "X":
                     show_property = plot_entity.points_X
@@ -119,9 +126,27 @@ class ViewMap(View2D):
                     show_property = plot_entity.points_Y
                 elif show_property == "Z":
                     show_property = plot_entity.points_Z
+                elif show_property[-1] == "]":
+                    # We can identify multicomponents properties such as RGB[0] or Normals[0] by
+                    # taking the last character of the property name ("]").
+                    # Get the start and end index of the [n_component]
+                    pos1 = show_property.index("[")
+                    pos2 = show_property.index("]")
+                    # Get the original property (e.g. RGB[0] -> RGB)
+                    original_prop = show_property[:pos1]
+                    # Get the column index (the n_component value)
+                    index = int(show_property[pos1 + 1 : pos2])
+                    show_property = plot_entity.get_point_data(original_prop)[:, index]
                 else:
                     if plot_entity.get_point_data_shape(show_property)[-1] == 3:
                         plot_rgb_option = True
+                    else:
+                        # last option to catch unexpected cases
+                        if (
+                            not show_property
+                            in self.parent.prop_legend_df["property_name"].tolist()
+                        ):
+                            show_property = None
                 this_actor = self.plot_mesh(
                     uid=uid,
                     plot_entity=plot_entity,
@@ -133,6 +158,8 @@ class ViewMap(View2D):
                     plot_texture_option=False,
                     plot_rgb_option=plot_rgb_option,
                     visible=visible,
+                    point_size=point_size,
+                    opacity=opacity,
                 )
             else:
                 this_actor = None
@@ -448,4 +475,3 @@ class ViewMap(View2D):
 
     def set_orientation_widget(self):
         self.plotter.add_north_arrow_widget(interactive=None, color="gold")
-
