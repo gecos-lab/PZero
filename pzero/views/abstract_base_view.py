@@ -15,6 +15,7 @@ from pandas import concat as pd_concat
 from .view_tree import CustomTreeWidget
 from ..collections.AbstractCollection import BaseCollection
 from ..ui.base_view_window_ui import Ui_BaseViewWindow
+from ..helpers.helper_dialogs import progress_dialog
 
 
 class BaseViewSignals(QObject):
@@ -634,6 +635,17 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         """
         for collection_name in self.tree_collection_dict.values():
             try:
+                prgs_bar = progress_dialog(
+                    max_value=len(
+                        eval(f"self.parent.{collection_name}")
+                        .df.query(self.view_filter)["uid"]
+                        .tolist()
+                    ),
+                    title_txt=f"Opening {self.setWindowTitle}",
+                    label_txt=f"Adding objects from {collection_name}...",
+                    cancel_txt=None,
+                    parent=self,
+                )
                 for uid in (
                     eval(f"self.parent.{collection_name}")
                     .df.query(self.view_filter)["uid"]
@@ -663,6 +675,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                         ],
                         ignore_index=True,
                     )
+                    prgs_bar.add_one()
             except:
                 self.print_terminal(f"ERROR in add_all_entities: {collection_name}")
                 pass
