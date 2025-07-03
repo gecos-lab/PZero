@@ -1483,14 +1483,16 @@ def intersection_xs(self):
                         x_section_uid=xsect_uid, parent=self
                     )
                     obj_dict["vtk_obj"].DeepCopy(cutter.GetOutput())
-                    self.print_terminal("obj_dict['vtk_obj']:\n", obj_dict["vtk_obj"])
+                    self.print_terminal(f"obj_dict['vtk_obj']:\n{obj_dict['vtk_obj']}")
                     if obj_dict["vtk_obj"].points_number > 0:
                         for data_key in obj_dict["vtk_obj"].point_data_keys:
                             if not data_key in obj_dict["properties_names"]:
                                 obj_dict["vtk_obj"].remove_point_data(data_key)
                         self.dom_coll.add_entity_from_dict(obj_dict)
+                        print("17")
                     else:
                         self.print_terminal(" -- empty object -- ")
+                        print("18")
         else:
             self.print_terminal(
                 " -- Only Geological objects, 3D Meshes and DEM & DOMs can be intersected with XSection -- "
