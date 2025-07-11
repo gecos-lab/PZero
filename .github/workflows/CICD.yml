@@ -76,12 +76,12 @@ jobs:
             arch -x86_64 pip3 install --upgrade pip
             arch -x86_64 pip3 install -r requirements.txt
             arch -x86_64 pip3 install pyinstaller
-            arch -x86_64 pyinstaller --onedir --windowed --target-arch ${{ matrix.arch }} --collect-all rasterio pzero.py --name pzero-${{ runner.os }}-${{ matrix.arch }} --splash ./images/pzero_splash.jpg
+            arch -x86_64 pyinstaller --onedir --windowed --target-arch ${{ matrix.arch }} --collect-all rasterio pzero.py --name pzero-${{ runner.os }}-${{ matrix.arch }}
           else
             python3 -m pip install --upgrade pip
             pip install -r requirements.txt
             pip install pyinstaller
-            pyinstaller --onedir --windowed --target-arch ${{ matrix.arch }} --collect-all rasterio pzero.py --name pzero-${{ runner.os }}-${{ matrix.arch }} --splash ./images/pzero_splash.jpg
+            pyinstaller --onedir --windowed --target-arch ${{ matrix.arch }} --collect-all rasterio pzero.py --name pzero-${{ runner.os }}-${{ matrix.arch }}
           fi
         env:
           ARCHFLAGS: "-arch ${{ matrix.arch }}"
@@ -90,7 +90,7 @@ jobs:
         run: |
           pip install -r requirements.txt
           pip install pyinstaller
-          pyinstaller --onedir --windowed --collect-all rasterio pzero.py --name pzero-${{ runner.os }} --splash ./images/pzero_splash.jpg
+          pyinstaller --onedir --windowed --collect-all rasterio pzero.py --name pzero-${{ runner.os }} --splash ./images/pzero_splash.png
       - name: Zip executable (Unix/MacOS)
         if: runner.os != 'Windows'
         run: |
