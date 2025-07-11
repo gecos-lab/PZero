@@ -148,17 +148,11 @@ class View2D(ViewVTK):
         """Function used to disable actor picking. Due to some slight difference,
         must be reimplemented in subclasses."""
         # Remove the selector observer
-        self.plotter.iren.interactor.RemoveObservers(
-            "LeftButtonPressEvent"
-        )
+        self.plotter.iren.interactor.RemoveObservers("LeftButtonPressEvent")
         # Remove the right click observer
-        self.plotter.untrack_click_position(
-            side="right"
-        )
+        self.plotter.untrack_click_position(side="right")
         # Remove the left click observer
-        self.plotter.untrack_click_position(
-            side="left"
-        )
+        self.plotter.untrack_click_position(side="left")
 
         # Specific to View2D() implementation.
         self.plotter.enable_image_style()

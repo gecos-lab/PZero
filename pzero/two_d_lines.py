@@ -445,7 +445,9 @@ def split_line_line(self):
                     self.parent.geol_coll.replace_vtk(
                         uid=current_uid_paper, vtk_object=new_line["vtk_obj"]
                     )
-                    self.parent.signals.geom_modified.emit([current_uid_paper], self.parent.geol_coll)
+                    self.parent.signals.geom_modified.emit(
+                        [current_uid_paper], self.parent.geol_coll
+                    )
                     replace = 0
                     uids.append(current_uid_paper)
                 else:
@@ -1033,7 +1035,9 @@ def resample_lines_number_points(
             self.print_terminal(" -- Empty object -- ")
         # Deselect input line and emit uid as list to force redraw.
         self.clear_selection()
-        self.parent.geol_coll.signals.geom_modified.emit([current_uid], self.parent.geol_coll)
+        self.parent.geol_coll.signals.geom_modified.emit(
+            [current_uid], self.parent.geol_coll
+        )
         self.print_terminal(
             f"Line {current_uid} resampled with number of points = {number_of_points}"
         )
@@ -1126,7 +1130,9 @@ def simplify_line(
         else:
             self.print_terminal("Empty object")
 
-        self.parent.geol_coll.signals.geom_modified.emit([current_uid], self.parent.geol_coll)
+        self.parent.geol_coll.signals.geom_modified.emit(
+            [current_uid], self.parent.geol_coll
+        )
     # Deselect input line.
     self.clear_selection()
 

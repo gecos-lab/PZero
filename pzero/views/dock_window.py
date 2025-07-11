@@ -2,7 +2,7 @@
 PZero© Andrea Bistacchi"""
 
 # PySide6 imports____
-from PySide6.QtWidgets import  QDockWidget
+from PySide6.QtWidgets import QDockWidget
 from PySide6.QtCore import Qt
 
 # PZero imports____

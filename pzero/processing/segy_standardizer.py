@@ -3,7 +3,6 @@ PZero© Andrea Bistacchi
 
 Utility functions for standardizing SEG-Y files for PZero compatibility."""
 
-
 import os
 import struct
 import numpy as np

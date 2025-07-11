@@ -99,7 +99,11 @@ class ViewStereoplot(ViewMPL):
             self.ax.grid(True, kind="polar", color="k", ls=":")
 
     def show_actor_with_property(
-        self, uid=None, coll_name=None, show_property=None, visible=None,
+        self,
+        uid=None,
+        coll_name=None,
+        show_property=None,
+        visible=None,
     ):
         # Show actor with scalar property (default None)
         if show_property is None:
@@ -202,10 +206,7 @@ class ViewStereoplot(ViewMPL):
             show = self.actor_shown(uid=uid)
             self.remove_actor_in_view(uid, redraw=False)
             this_actor = self.show_actor_with_property(
-                uid=uid,
-                coll_name="geol_coll",
-                show_property=None,
-                visible=show
+                uid=uid, coll_name="geol_coll", show_property=None, visible=show
             )
             self.actors_df = pd_concat(
                 [
@@ -253,10 +254,7 @@ class ViewStereoplot(ViewMPL):
             self.remove_actor_in_view(uid, redraw=False)
 
             this_actor = self.show_actor_with_property(
-                uid=uid,
-                coll_name="geol_coll",
-                show_property=None,
-                visible=show
+                uid=uid, coll_name="geol_coll", show_property=None, visible=show
             )
             self.actors_df = pd_concat(
                 [

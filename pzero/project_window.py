@@ -141,8 +141,12 @@ class ProjectSignals(QObject):
     entities_added = pyqtSignal(list, object)  # seems OK
     entities_removed = pyqtSignal(list, object)  # seems OK
     geom_modified = pyqtSignal(list, object)  # seems OK
-    data_keys_added = pyqtSignal(list, object)  # seems OK - CAN BE MERGED WITH "removed"?
-    data_keys_removed = pyqtSignal(list, object)  # seems OK - CAN BE MERGED WITH "added"?
+    data_keys_added = pyqtSignal(
+        list, object
+    )  # seems OK - CAN BE MERGED WITH "removed"?
+    data_keys_removed = pyqtSignal(
+        list, object
+    )  # seems OK - CAN BE MERGED WITH "added"?
     data_val_modified = pyqtSignal(list, object)  # not used at the moment
     metadata_modified = pyqtSignal(list, object)  # seems OK
     legend_color_modified = pyqtSignal(list, object)  # seems OK

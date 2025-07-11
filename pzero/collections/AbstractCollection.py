@@ -404,7 +404,9 @@ class BaseCollection(ABC):
         ):
             # Replace old properties names and components with new ones
             old_props = self.df.loc[self.df["uid"] == uid, "properties_names"].values[0]
-            old_comps = self.df.loc[self.df["uid"] == uid, "properties_components"].values[0]
+            old_comps = self.df.loc[
+                self.df["uid"] == uid, "properties_components"
+            ].values[0]
 
             new_keys = vtk_object.point_data_keys
 
@@ -416,8 +418,12 @@ class BaseCollection(ABC):
                 current_props.append(key)
                 current_components.append(this_components)
 
-            self.df.loc[self.df["uid"] == uid, "properties_names"].values[0] = current_props
-            self.df.loc[self.df["uid"] == uid, "properties_components"].values[0] = current_components
+            self.df.loc[self.df["uid"] == uid, "properties_names"].values[
+                0
+            ] = current_props
+            self.df.loc[self.df["uid"] == uid, "properties_components"].values[
+                0
+            ] = current_components
 
             # Replace the vtk object
             self.df.loc[self.df["uid"] == uid, "vtk_obj"] = vtk_object

@@ -716,9 +716,7 @@ class VertexSet(PolyData):
         for pid in range(npoints):
             cellIds[0] = pid
             vertices.InsertNextCell(1, cellIds)
-        self.SetVerts(
-            vertices
-        )  #  Assign the vertices to the point_cloud (vtkPolyData)
+        self.SetVerts(vertices)  #  Assign the vertices to the point_cloud (vtkPolyData)
         self.Modified()
 
 

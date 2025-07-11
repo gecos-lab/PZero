@@ -481,7 +481,7 @@ class View3D(ViewVTK):
         out_file_name = save_file_dialog(
             parent=self, caption="Export 3D view as VTKsz.", filter="zip (*.zip)"
         ).removesuffix(".zip")
-        self.plotter.export_vtksz(f"{out_file_name}.zip", format='zip')
+        self.plotter.export_vtksz(f"{out_file_name}.zip", format="zip")
 
     def export_vtkJS(self):
         out_file_name = save_file_dialog(
@@ -494,7 +494,7 @@ class View3D(ViewVTK):
         exporter.SetInput(self.plotter.renderer.GetRenderWindow())
         exporter.SetActiveRenderer(self.plotter.renderer)
         exporter.Write()
-        make_archive(out_file_name, 'zip', out_file_name)
+        make_archive(out_file_name, "zip", out_file_name)
         rmtree(out_file_name)
         self.plotter.add_camera_orientation_widget()
 
