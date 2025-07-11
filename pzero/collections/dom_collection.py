@@ -1,24 +1,7 @@
 """dom_collection.py
 PZero© Andrea Bistacchi"""
 
-from uuid import uuid4
-
-from numpy import set_printoptions as np_set_printoptions
-
-from pandas import set_option as pd_set_option
-
 from .DIM_collection import DIMCollection
-
-# Options to print Pandas dataframes in console for testing.
-pd_desired_width = 800
-pd_max_columns = 20
-pd_show_precision = 4
-pd_max_colwidth = 80
-pd_set_option("display.width", pd_desired_width)
-np_set_printoptions(linewidth=pd_desired_width)
-pd_set_option("display.max_columns", pd_max_columns)
-pd_set_option("display.precision", pd_show_precision)
-pd_set_option("display.max_colwidth", pd_max_colwidth)
 
 
 class DomCollection(DIMCollection):
@@ -29,7 +12,7 @@ class DomCollection(DIMCollection):
         # Initialize properties required by the abstract superclass.
         self.valid_topologies = ["DEM", "TSDom", "PCDom"]
 
-        self.collection_name = "dom"
+        self.collection_name = "dom_coll"
 
         self.default_colormap = "terrain"
 
@@ -63,7 +46,7 @@ class DomCollection(DIMCollection):
                 map_image_uid=map_image_uid,
             )
             self.df.at[row, "texture_uids"].append(map_image_uid)
-            self.signals.metadata_modified.emit([dom_uid])
+            self.parent.signals.metadata_modified.emit([dom_uid], self)
 
     def remove_map_texture_from_dom(self, dom_uid=None, map_image_uid=None):
         """Remove a map texture from a DOM."""
@@ -71,8 +54,8 @@ class DomCollection(DIMCollection):
         if map_image_uid in self.df.at[row, "texture_uids"]:
             self.get_uid_vtk_obj(dom_uid).remove_texture(map_image_uid=map_image_uid)
             self.df.at[row, "texture_uids"].remove(map_image_uid)
-            self.signals.data_keys_modified.emit([dom_uid])
-            # self.signals.metadata_modified.emit([dom_uid])
+            self.parent.signals.data_keys_removed.emit([dom_uid], self)
+            # self.parent.signals.metadata_modified.emit([dom_uid], self)
 
     def set_active_texture_on_dom(self, dom_uid=None, map_image_uid=None):
         """Set active texture on a DOM."""

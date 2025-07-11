@@ -13,20 +13,17 @@ from numpy import dot as np_dot
 from numpy import matmul as np_matmul
 from numpy import pi as np_pi
 from numpy import repeat as np_repeat
-from numpy import set_printoptions as np_set_printoptions
 from numpy import sin as np_sin
 from numpy import sqrt as np_sqrt
 from numpy import sign as np_sign
 from numpy.linalg import inv as np_linalg_inv
 
 from pandas import DataFrame as pd_DataFrame
-from pandas import set_option as pd_set_option
 from pandas import read_csv as pd_read_csv
 from pandas import unique as pd_unique
 from pandas import concat as pd_concat
 
 from vtk import vtkPoints, vtkCellArray, vtkLine
-from vtkmodules.vtkCommonDataModel import vtkDataObject
 
 from pzero.entities_factory import Plane, XsPolyLine
 from pzero.helpers.helper_dialogs import general_input_dialog, open_file_dialog
@@ -35,17 +32,6 @@ from pzero.orientation_analysis import dip_directions2normals, get_dip_dir_vecto
 
 from .AbstractCollection import BaseCollection
 
-# =================================== Options to print Pandas dataframes in console ===================================
-
-pd_desired_width = 800
-pd_max_columns = 20
-pd_show_precision = 4
-pd_max_colwidth = 80
-pd_set_option("display.width", pd_desired_width)
-np_set_printoptions(linewidth=pd_desired_width)
-pd_set_option("display.max_columns", pd_max_columns)
-pd_set_option("display.precision", pd_show_precision)
-pd_set_option("display.max_colwidth", pd_max_colwidth)
 
 # =================================== Methods used to create cross sections ===========================================
 
@@ -342,7 +328,7 @@ class XSectionCollection(BaseCollection):
         }
         self.valid_topologies = [""]
         self.editable_columns_names = ["name", "scenario"]
-        self.collection_name = "xsection"
+        self.collection_name = "xsect_coll"
         self.initialize_df()
 
     def add_entity_from_dict(
@@ -362,7 +348,7 @@ class XSectionCollection(BaseCollection):
         # Reset data model
         self.modelReset.emit()
         # Emit a list of uids, even if the entity is just one
-        self.signals.added.emit([entity_dict["uid"]])
+        self.parent.signals.entities_added.emit([entity_dict["uid"]], self)
         return entity_dict["uid"]
 
     def remove_entity(self, uid: str = None) -> str:
@@ -373,15 +359,11 @@ class XSectionCollection(BaseCollection):
         self.df.drop(self.df[self.df["uid"] == uid].index, inplace=True)
         self.modelReset.emit()  # is this really necessary?
         # Emit a list of uids, even if the entity is just one
-        self.signals.removed.emit([uid])
+        self.parent.signals.entities_removed.emit([uid], self)
         return uid
 
     def clone_entity(self, uid: str = None) -> str:
         """Not implemented for XSectionCollection, but required by the abstract superclass."""
-        pass
-
-    def replace_vtk(self, uid: str = None, vtk_object: vtkDataObject = None):
-        """Not implemented for this collection, but required by the abstract superclass."""
         pass
 
     def attr_modified_update_legend_table(self):
@@ -394,7 +376,7 @@ class XSectionCollection(BaseCollection):
         return legend_updated
 
     def get_uid_legend(self, uid: str = None) -> dict:
-        """Get legend for a particular uid."""
+        """Supposed to get legend for a particular uid, in this case gets legend for XSection that are all the same."""
         legend_dict = self.parent.others_legend_df.loc[
             self.parent.others_legend_df["other_collection"] == "XSection"
         ].to_dict("records")

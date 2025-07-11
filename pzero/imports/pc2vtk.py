@@ -1,7 +1,7 @@
 """pc2vtk.py by Gabriele Benedetti
 PZero© Andrea Bistacchi"""
 
-import os
+from os import path as os_path
 
 from copy import deepcopy
 
@@ -31,10 +31,10 @@ def pc2vtk(
 ):
     print("1. Reading and importing file")
 
-    basename = os.path.basename(in_file_name)
-    _, ext = os.path.splitext(basename)
+    basename = os_path.basename(in_file_name)
+    _, ext = os_path.splitext(basename)
 
-    point_cloud = PCDom()  # [Gabriele] vtkPointSet object
+    point_cloud = PCDom()  #  vtkPointSet object
     points = vtkPoints()
 
     skip_range = range(1, row_range.start)
@@ -48,7 +48,7 @@ def pc2vtk(
     else:
         nrows = None
 
-    # [Gabriele] Read in different ways depending on the input file type
+    #  Read in different ways depending on the input file type
     if ext == ".ply":
         with open(in_file_name, "r") as f:
             for i, line in enumerate(f):
@@ -93,7 +93,7 @@ def pc2vtk(
 
     print("2. Checking the data")
 
-    # [Gabriele] Check if in the whole dataset there are NaNs text and such
+    #  Check if in the whole dataset there are NaNs text and such
     val_check = input_df.apply(
         lambda c: pd_to_numeric(c, errors="coerce").notnull().all()
     )
@@ -116,7 +116,7 @@ def pc2vtk(
             )
         )
 
-        # [Gabriele] Create pyvista PolyData using XYZ data
+        #  Create pyvista PolyData using XYZ data
         points.SetData(XYZ)
         point_cloud.SetPoints(points)
         point_cloud.Modified()

@@ -8,7 +8,6 @@ from uuid import uuid4 as uuid_uuid4
 
 from numpy import array as np_array
 from numpy import ndarray as np_ndarray
-from numpy import set_printoptions as np_set_printoptions
 
 from pandas import DataFrame as pd_DataFrame
 from pandas import set_option as pd_set_option
@@ -19,17 +18,6 @@ from vtk import vtkPoints
 from pzero.entities_factory import PolyLine, TriSurf
 from pzero.helpers.helper_dialogs import general_input_dialog
 from .AbstractCollection import BaseCollection
-
-# Options to print Pandas dataframes in console for testing.
-pd_desired_width = 800
-pd_max_columns = 20
-pd_show_precision = 4
-pd_max_colwidth = 80
-pd_set_option("display.width", pd_desired_width)
-np_set_printoptions(linewidth=pd_desired_width)
-pd_set_option("display.max_columns", pd_max_columns)
-pd_set_option("display.precision", pd_show_precision)
-pd_set_option("display.max_colwidth", pd_max_colwidth)
 
 
 def boundary_from_points(self, vector):
@@ -174,18 +162,18 @@ class BoundaryCollection(BaseCollection):
         self.entity_dict = {
             "uid": "",
             "name": "undef",
-            "topology": "undef",
             "scenario": "undef",
             "x_section": "",  # this is the uid of the cross section for "XsVertexSet", "XsPolyLine", and "XsImage", empty for all others
+            "topology": "undef",
             "vtk_obj": None,
         }
 
         self.entity_dict_types = {
             "uid": str,
             "name": str,
-            "topology": str,
             "scenario": str,
             "x_section": str,
+            "topology": str,
             "vtk_obj": object,
         }
 
@@ -193,7 +181,7 @@ class BoundaryCollection(BaseCollection):
 
         self.editable_columns_names = ["name", "scenario"]
 
-        self.collection_name = "boundary"
+        self.collection_name = "boundary_coll"
 
         self.initialize_df()
 
@@ -208,14 +196,12 @@ class BoundaryCollection(BaseCollection):
             entity_dict["uid"] = str(uuid_uuid4())
         # Append new row to dataframe. Note that the 'append()' method for Pandas dataframes DOES NOT
         # work in place, hence a NEW dataframe is created every time and then substituted to the old one.
-        # Old and less efficient syntax used up to Pandas 1.5.3:
-        # self.df = self.df.append(entity_dict, ignore_index=True)
         # New syntax with Pandas >= 2.0.0:
         self.df = pd_concat([self.df, pd_DataFrame([entity_dict])], ignore_index=True)
         # Reset data model.
         self.modelReset.emit()
         # Then emit signal to update the views. A list of uids is emitted, even if the entity is just one.
-        self.signals.added.emit([entity_dict["uid"]])
+        self.parent.signals.entities_added.emit([entity_dict["uid"]], self)
         return entity_dict["uid"]
 
     def remove_entity(self, uid: str = None) -> str:
@@ -224,24 +210,13 @@ class BoundaryCollection(BaseCollection):
         self.df.drop(self.df[self.df["uid"] == uid].index, inplace=True)
         self.modelReset.emit()  # is this really necessary?
         # When done, send a signal over to the views. A list of uids is emitted, even if the entity is just one.
-        self.signals.removed.emit([uid])
+        self.parent.signals.entities_removed.emit([uid], self)
         return uid
 
     def clone_entity(self, uid: str = None) -> str:
         """Clone an entity."""
         # Not implemented for this collection, but required by the abstract superclass.
         pass
-
-    def replace_vtk(self, uid: str = None, vtk_object: vtkDataObject = None):
-        """Replace the vtk object of a given uid with another vtkobject."""
-        # ============ CAN BE UNIFIED AS COMMON METHOD OF THE ABSTRACT COLLECTION WHEN SIGNALS WILL BE UNIFIED ==========
-        if isinstance(
-            vtk_object, type(self.df.loc[self.df["uid"] == uid, "vtk_obj"].values[0])
-        ):
-            self.df.loc[self.df["uid"] == uid, "vtk_obj"] = vtk_object
-            self.signals.geom_modified.emit([uid])
-        else:
-            print("ERROR - replace_vtk with vtk of a different type not allowed.")
 
     def attr_modified_update_legend_table(self):
         """Update legend table when attributes are changed."""
@@ -254,9 +229,11 @@ class BoundaryCollection(BaseCollection):
         return legend_updated
 
     def get_uid_legend(self, uid: str = None) -> dict:
-        """Get legend for a particular uid."""
-        # Not implemented for this collection, but required by the abstract superclass.
-        pass
+        """Supposed to get legend for a particular uid, in this case gets legend for boundaries that are all the same."""
+        legend_dict = self.parent.others_legend_df.loc[
+            self.parent.others_legend_df["other_collection"] == "Boundary"
+        ].to_dict("records")
+        return legend_dict[0]
 
     def set_uid_legend(
         self,

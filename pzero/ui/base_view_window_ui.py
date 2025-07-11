@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 
 ################################################################################
-## Form generated from reading UI file 'base_view_windowuOSSnC.ui'
+## Form generated from reading UI file 'base_view_windowzJsVhk.ui'
 ##
-## Created by: Qt User Interface Compiler version 6.7.3
+## Created by: Qt User Interface Compiler version 6.9.0
 ##
 ## WARNING! All changes made in this file will be lost when recompiling UI file!
 ################################################################################
@@ -44,18 +44,13 @@ from PySide6.QtGui import (
 from PySide6.QtWidgets import (
     QApplication,
     QFrame,
-    QHeaderView,
     QMainWindow,
     QMenu,
     QMenuBar,
     QSizePolicy,
     QSplitter,
     QStatusBar,
-    QTableWidget,
-    QTableWidgetItem,
     QToolBox,
-    QTreeWidget,
-    QTreeWidgetItem,
     QVBoxLayout,
     QWidget,
 )
@@ -110,163 +105,57 @@ class Ui_BaseViewWindow(object):
         self.toolBox.setSizePolicy(sizePolicy2)
         self.GeologyTreePage = QWidget()
         self.GeologyTreePage.setObjectName("GeologyTreePage")
-        self.GeologyTreePage.setGeometry(QRect(0, 0, 626, 168))
-        self.verticalLayout_2 = QVBoxLayout(self.GeologyTreePage)
-        self.verticalLayout_2.setObjectName("verticalLayout_2")
-        self.GeologyTreeWidget = QTreeWidget(self.GeologyTreePage)
-        __qtreewidgetitem = QTreeWidgetItem()
-        __qtreewidgetitem.setText(0, "1")
-        self.GeologyTreeWidget.setHeaderItem(__qtreewidgetitem)
-        self.GeologyTreeWidget.setObjectName("GeologyTreeWidget")
-
-        self.verticalLayout_2.addWidget(self.GeologyTreeWidget)
-
-        self.toolBox.addItem(self.GeologyTreePage, "Geology > Geology")
-        self.GeologyTopologyTreePage = QWidget()
-        self.GeologyTopologyTreePage.setObjectName("GeologyTopologyTreePage")
-        self.GeologyTopologyTreePage.setGeometry(QRect(0, 0, 626, 168))
-        self.verticalLayout_3 = QVBoxLayout(self.GeologyTopologyTreePage)
-        self.verticalLayout_3.setObjectName("verticalLayout_3")
-        self.GeologyTopologyTreeWidget = QTreeWidget(self.GeologyTopologyTreePage)
-        __qtreewidgetitem1 = QTreeWidgetItem()
-        __qtreewidgetitem1.setText(0, "1")
-        self.GeologyTopologyTreeWidget.setHeaderItem(__qtreewidgetitem1)
-        self.GeologyTopologyTreeWidget.setObjectName("GeologyTopologyTreeWidget")
-
-        self.verticalLayout_3.addWidget(self.GeologyTopologyTreeWidget)
-
-        self.toolBox.addItem(self.GeologyTopologyTreePage, "Geology > Topology")
+        self.GeologyTreePage.setGeometry(QRect(0, 0, 470, 258))
+        self.GeologyTreeLayout = QVBoxLayout(self.GeologyTreePage)
+        self.GeologyTreeLayout.setObjectName("GeologyTreeLayout")
+        self.toolBox.addItem(self.GeologyTreePage, "Geology")
         self.FluidsTreePage = QWidget()
         self.FluidsTreePage.setObjectName("FluidsTreePage")
-        self.FluidsTreePage.setGeometry(QRect(0, 0, 626, 168))
-        self.verticalLayout_4 = QVBoxLayout(self.FluidsTreePage)
-        self.verticalLayout_4.setObjectName("verticalLayout_4")
-        self.FluidsTreeWidget = QTreeWidget(self.FluidsTreePage)
-        __qtreewidgetitem2 = QTreeWidgetItem()
-        __qtreewidgetitem2.setText(0, "1")
-        self.FluidsTreeWidget.setHeaderItem(__qtreewidgetitem2)
-        self.FluidsTreeWidget.setObjectName("FluidsTreeWidget")
-
-        self.verticalLayout_4.addWidget(self.FluidsTreeWidget)
-
-        self.toolBox.addItem(self.FluidsTreePage, "Fluids > Fluids")
-        self.FluidsTopologyTreePage = QWidget()
-        self.FluidsTopologyTreePage.setObjectName("FluidsTopologyTreePage")
-        self.FluidsTopologyTreePage.setGeometry(QRect(0, 0, 626, 168))
-        self.verticalLayout_5 = QVBoxLayout(self.FluidsTopologyTreePage)
-        self.verticalLayout_5.setObjectName("verticalLayout_5")
-        self.FluidsTopologyTreeWidget = QTreeWidget(self.FluidsTopologyTreePage)
-        __qtreewidgetitem3 = QTreeWidgetItem()
-        __qtreewidgetitem3.setText(0, "1")
-        self.FluidsTopologyTreeWidget.setHeaderItem(__qtreewidgetitem3)
-        self.FluidsTopologyTreeWidget.setObjectName("FluidsTopologyTreeWidget")
-
-        self.verticalLayout_5.addWidget(self.FluidsTopologyTreeWidget)
-
-        self.toolBox.addItem(self.FluidsTopologyTreePage, "Fluids > Topology")
+        self.FluidsTreePage.setGeometry(QRect(0, 0, 470, 258))
+        self.FluidsTreeLayout = QVBoxLayout(self.FluidsTreePage)
+        self.FluidsTreeLayout.setObjectName("FluidsTreeLayout")
+        self.toolBox.addItem(self.FluidsTreePage, "Fluids")
         self.BackgroundsTreePage = QWidget()
         self.BackgroundsTreePage.setObjectName("BackgroundsTreePage")
-        self.BackgroundsTreePage.setGeometry(QRect(0, 0, 626, 168))
-        self.verticalLayout_6 = QVBoxLayout(self.BackgroundsTreePage)
-        self.verticalLayout_6.setObjectName("verticalLayout_6")
-        self.BackgroundsTreeWidget = QTreeWidget(self.BackgroundsTreePage)
-        __qtreewidgetitem4 = QTreeWidgetItem()
-        __qtreewidgetitem4.setText(0, "1")
-        self.BackgroundsTreeWidget.setHeaderItem(__qtreewidgetitem4)
-        self.BackgroundsTreeWidget.setObjectName("BackgroundsTreeWidget")
-
-        self.verticalLayout_6.addWidget(self.BackgroundsTreeWidget)
-
-        self.toolBox.addItem(self.BackgroundsTreePage, "Background > Background")
-        self.BackgroundsTopologyTreePage = QWidget()
-        self.BackgroundsTopologyTreePage.setObjectName("BackgroundsTopologyTreePage")
-        self.BackgroundsTopologyTreePage.setGeometry(QRect(0, 0, 626, 168))
-        self.verticalLayout_7 = QVBoxLayout(self.BackgroundsTopologyTreePage)
-        self.verticalLayout_7.setObjectName("verticalLayout_7")
-        self.BackgroundsTopologyTreeWidget = QTreeWidget(
-            self.BackgroundsTopologyTreePage
-        )
-        __qtreewidgetitem5 = QTreeWidgetItem()
-        __qtreewidgetitem5.setText(0, "1")
-        self.BackgroundsTopologyTreeWidget.setHeaderItem(__qtreewidgetitem5)
-        self.BackgroundsTopologyTreeWidget.setObjectName(
-            "BackgroundsTopologyTreeWidget"
-        )
-
-        self.verticalLayout_7.addWidget(self.BackgroundsTopologyTreeWidget)
-
-        self.toolBox.addItem(self.BackgroundsTopologyTreePage, "Background > Topology")
-        self.DOMsTablePage = QWidget()
-        self.DOMsTablePage.setObjectName("DOMsTablePage")
-        self.DOMsTablePage.setGeometry(QRect(0, 0, 626, 168))
-        self.verticalLayout_8 = QVBoxLayout(self.DOMsTablePage)
-        self.verticalLayout_8.setObjectName("verticalLayout_8")
-        self.DOMsTableWidget = QTableWidget(self.DOMsTablePage)
-        self.DOMsTableWidget.setObjectName("DOMsTableWidget")
-
-        self.verticalLayout_8.addWidget(self.DOMsTableWidget)
-
-        self.toolBox.addItem(self.DOMsTablePage, "DEMs and DOMs")
-        self.ImagesTablePage = QWidget()
-        self.ImagesTablePage.setObjectName("ImagesTablePage")
-        self.ImagesTablePage.setGeometry(QRect(0, 0, 626, 168))
-        self.verticalLayout_9 = QVBoxLayout(self.ImagesTablePage)
-        self.verticalLayout_9.setObjectName("verticalLayout_9")
-        self.ImagesTableWidget = QTableWidget(self.ImagesTablePage)
-        self.ImagesTableWidget.setObjectName("ImagesTableWidget")
-
-        self.verticalLayout_9.addWidget(self.ImagesTableWidget)
-
-        self.toolBox.addItem(self.ImagesTablePage, "Images")
-        self.Mesh3DTablePage = QWidget()
-        self.Mesh3DTablePage.setObjectName("Mesh3DTablePage")
-        self.Mesh3DTablePage.setGeometry(QRect(0, 0, 626, 168))
-        self.verticalLayout_10 = QVBoxLayout(self.Mesh3DTablePage)
-        self.verticalLayout_10.setObjectName("verticalLayout_10")
-        self.Mesh3DTableWidget = QTableWidget(self.Mesh3DTablePage)
-        self.Mesh3DTableWidget.setObjectName("Mesh3DTableWidget")
-
-        self.verticalLayout_10.addWidget(self.Mesh3DTableWidget)
-
-        self.toolBox.addItem(self.Mesh3DTablePage, "Meshes and Grids")
-        self.BoundariesTablePage = QWidget()
-        self.BoundariesTablePage.setObjectName("BoundariesTablePage")
-        self.BoundariesTablePage.setGeometry(QRect(0, 0, 626, 168))
-        self.verticalLayout_11 = QVBoxLayout(self.BoundariesTablePage)
-        self.verticalLayout_11.setObjectName("verticalLayout_11")
-        self.BoundariesTableWidget = QTableWidget(self.BoundariesTablePage)
-        self.BoundariesTableWidget.setObjectName("BoundariesTableWidget")
-
-        self.verticalLayout_11.addWidget(self.BoundariesTableWidget)
-
-        self.toolBox.addItem(self.BoundariesTablePage, "Boundaries")
+        self.BackgroundsTreePage.setGeometry(QRect(0, 0, 470, 258))
+        self.BackgroundsTreeLayout = QVBoxLayout(self.BackgroundsTreePage)
+        self.BackgroundsTreeLayout.setObjectName("BackgroundsTreeLayout")
+        self.toolBox.addItem(self.BackgroundsTreePage, "Background")
+        self.DOMsTreePage = QWidget()
+        self.DOMsTreePage.setObjectName("DOMsTreePage")
+        self.DOMsTreePage.setGeometry(QRect(0, 0, 470, 258))
+        self.DOMsTreeLayout = QVBoxLayout(self.DOMsTreePage)
+        self.DOMsTreeLayout.setObjectName("DOMsTreeLayout")
+        self.toolBox.addItem(self.DOMsTreePage, "DEMs and DOMs")
+        self.ImagesTreePage = QWidget()
+        self.ImagesTreePage.setObjectName("ImagesTreePage")
+        self.ImagesTreePage.setGeometry(QRect(0, 0, 470, 258))
+        self.ImagesTreeLayout = QVBoxLayout(self.ImagesTreePage)
+        self.ImagesTreeLayout.setObjectName("ImagesTreeLayout")
+        self.toolBox.addItem(self.ImagesTreePage, "Images")
+        self.Mesh3DTreePage = QWidget()
+        self.Mesh3DTreePage.setObjectName("Mesh3DTreePage")
+        self.Mesh3DTreePage.setGeometry(QRect(0, 0, 470, 258))
+        self.Mesh3DTreeLayout = QVBoxLayout(self.Mesh3DTreePage)
+        self.Mesh3DTreeLayout.setObjectName("Mesh3DTreeLayout")
+        self.toolBox.addItem(self.Mesh3DTreePage, "Meshes and Grids")
+        self.BoundariesTreePage = QWidget()
+        self.BoundariesTreePage.setObjectName("BoundariesTreePage")
+        self.BoundariesTreePage.setGeometry(QRect(0, 0, 470, 258))
+        self.BoundariesTreeLayout = QVBoxLayout(self.BoundariesTreePage)
+        self.BoundariesTreeLayout.setObjectName("BoundariesTreeLayout")
+        self.toolBox.addItem(self.BoundariesTreePage, "Boundaries")
         self.XSectionTreePage = QWidget()
         self.XSectionTreePage.setObjectName("XSectionTreePage")
-        self.XSectionTreePage.setGeometry(QRect(0, 0, 626, 168))
-        self.verticalLayout_12 = QVBoxLayout(self.XSectionTreePage)
-        self.verticalLayout_12.setObjectName("verticalLayout_12")
-        self.XSectionTreeWidget = QTreeWidget(self.XSectionTreePage)
-        __qtreewidgetitem6 = QTreeWidgetItem()
-        __qtreewidgetitem6.setText(0, "1")
-        self.XSectionTreeWidget.setHeaderItem(__qtreewidgetitem6)
-        self.XSectionTreeWidget.setObjectName("XSectionTreeWidget")
-
-        self.verticalLayout_12.addWidget(self.XSectionTreeWidget)
-
+        self.XSectionTreePage.setGeometry(QRect(0, 0, 470, 258))
+        self.XSectionTreeLayout = QVBoxLayout(self.XSectionTreePage)
+        self.XSectionTreeLayout.setObjectName("XSectionTreeLayout")
         self.toolBox.addItem(self.XSectionTreePage, "X Sections")
         self.WellsTreePage = QWidget()
         self.WellsTreePage.setObjectName("WellsTreePage")
-        self.WellsTreePage.setGeometry(QRect(0, 0, 626, 168))
-        self.verticalLayout_13 = QVBoxLayout(self.WellsTreePage)
-        self.verticalLayout_13.setObjectName("verticalLayout_13")
-        self.WellsTreeWidget = QTreeWidget(self.WellsTreePage)
-        __qtreewidgetitem7 = QTreeWidgetItem()
-        __qtreewidgetitem7.setText(0, "1")
-        self.WellsTreeWidget.setHeaderItem(__qtreewidgetitem7)
-        self.WellsTreeWidget.setObjectName("WellsTreeWidget")
-
-        self.verticalLayout_13.addWidget(self.WellsTreeWidget)
-
+        self.WellsTreePage.setGeometry(QRect(0, 0, 470, 258))
+        self.WellsTreeLayout = QVBoxLayout(self.WellsTreePage)
+        self.WellsTreeLayout.setObjectName("WellsTreeLayout")
         self.toolBox.addItem(self.WellsTreePage, "Wells")
         self.splitter.addWidget(self.toolBox)
 
@@ -317,44 +206,30 @@ class Ui_BaseViewWindow(object):
         )
         self.toolBox.setItemText(
             self.toolBox.indexOf(self.GeologyTreePage),
-            QCoreApplication.translate("BaseViewWindow", "Geology > Geology", None),
-        )
-        self.toolBox.setItemText(
-            self.toolBox.indexOf(self.GeologyTopologyTreePage),
-            QCoreApplication.translate("BaseViewWindow", "Geology > Topology", None),
+            QCoreApplication.translate("BaseViewWindow", "Geology", None),
         )
         self.toolBox.setItemText(
             self.toolBox.indexOf(self.FluidsTreePage),
-            QCoreApplication.translate("BaseViewWindow", "Fluids > Fluids", None),
-        )
-        self.toolBox.setItemText(
-            self.toolBox.indexOf(self.FluidsTopologyTreePage),
-            QCoreApplication.translate("BaseViewWindow", "Fluids > Topology", None),
+            QCoreApplication.translate("BaseViewWindow", "Fluids", None),
         )
         self.toolBox.setItemText(
             self.toolBox.indexOf(self.BackgroundsTreePage),
-            QCoreApplication.translate(
-                "BaseViewWindow", "Background > Background", None
-            ),
+            QCoreApplication.translate("BaseViewWindow", "Background", None),
         )
         self.toolBox.setItemText(
-            self.toolBox.indexOf(self.BackgroundsTopologyTreePage),
-            QCoreApplication.translate("BaseViewWindow", "Background > Topology", None),
-        )
-        self.toolBox.setItemText(
-            self.toolBox.indexOf(self.DOMsTablePage),
+            self.toolBox.indexOf(self.DOMsTreePage),
             QCoreApplication.translate("BaseViewWindow", "DEMs and DOMs", None),
         )
         self.toolBox.setItemText(
-            self.toolBox.indexOf(self.ImagesTablePage),
+            self.toolBox.indexOf(self.ImagesTreePage),
             QCoreApplication.translate("BaseViewWindow", "Images", None),
         )
         self.toolBox.setItemText(
-            self.toolBox.indexOf(self.Mesh3DTablePage),
+            self.toolBox.indexOf(self.Mesh3DTreePage),
             QCoreApplication.translate("BaseViewWindow", "Meshes and Grids", None),
         )
         self.toolBox.setItemText(
-            self.toolBox.indexOf(self.BoundariesTablePage),
+            self.toolBox.indexOf(self.BoundariesTreePage),
             QCoreApplication.translate("BaseViewWindow", "Boundaries", None),
         )
         self.toolBox.setItemText(

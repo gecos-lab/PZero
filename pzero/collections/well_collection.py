@@ -11,8 +11,6 @@ from pandas import DataFrame as pd_DataFrame
 from pandas import unique as pd_unique
 from pandas import concat as pd_concat
 
-from vtkmodules.vtkCommonDataModel import vtkDataObject
-
 from .AbstractCollection import BaseCollection
 
 
@@ -24,26 +22,28 @@ class WellCollection(BaseCollection):
         # Initialize properties required by the abstract superclass.
         self.entity_dict = {
             "uid": "",
-            "Loc ID": "undef",
+            "name": "undef",
             "scenario": "undef",
+            "x_section": [],  # this is the uid of the cross section for "XsVertexSet", "XsPolyLine", and "XsImage", empty for all others
+            "topology": "undef",
+            "vtk_obj": None,
             "properties_names": [],
             "properties_components": [],
             "properties_types": [],
             "markers": [],
-            "x_section": [],  # this is the uid of the cross section for "XsVertexSet", "XsPolyLine", and "XsImage", empty for all others
-            "vtk_obj": None,
         }
 
         self.entity_dict_types = {
             "uid": str,
-            "Loc ID": str,
+            "name": str,
             "scenario": str,
+            "x_section": str,
+            "topology": str,
+            "vtk_obj": object,
             "properties_names": list,
             "properties_components": list,
             "properties_types": list,
             "markers": list,
-            "x_section": str,
-            "vtk_obj": object,
         }
 
         self.valid_topologies = [
@@ -55,7 +55,7 @@ class WellCollection(BaseCollection):
 
         self.editable_columns_names = ["name", "scenario"]
 
-        self.collection_name = "wells"
+        self.collection_name = "well_coll"
 
         self.initialize_df()
 
@@ -68,8 +68,6 @@ class WellCollection(BaseCollection):
             entity_dict["uid"] = str(uuid4())
         # Append new row to dataframe. Note that the 'append()' method for Pandas dataframes DOES NOT
         # work in place, hence a NEW dataframe is created every time and then substituted to the old one.
-        # Old and less efficient syntax used up to Pandas 1.5.3:
-        # self.df = self.df.append(entity_dict, ignore_index=True)
         # New syntax with Pandas >= 2.0.0:
         self.df = pd_concat([self.df, pd_DataFrame([entity_dict])], ignore_index=True)
         # Reset data model.
@@ -78,23 +76,11 @@ class WellCollection(BaseCollection):
         # Then update the legend if needed.
         # Note that for performance reasons this is done explicitly here, when adding an entity to the
         # collection, and not with a signal telling the legend to be updated by scanning the whole collection.
-        locid = entity_dict["Loc ID"]
+        name = entity_dict["name"]
         if self.parent.well_legend_df.loc[
-            self.parent.well_legend_df["Loc ID"] == locid
+            self.parent.well_legend_df["name"] == name
         ].empty:
             R, G, B = np_round(np_random.random(3) * 255)
-            # Old Pandas <= 1.5.3
-            #     self.parent.well_legend_df = self.parent.well_legend_df.append(
-            #         {
-            #             "Loc ID": locid,
-            #             "color_R": R,
-            #             "color_G": G,
-            #             "color_B": B,
-            #             "line_thick": 2.0,
-            #             "opacity": 100,
-            #         },
-            #         ignore_index=True,
-            #     )
             # New Pandas >= 2.0.0
             self.parent.well_legend_df = pd_concat(
                 [
@@ -102,7 +88,7 @@ class WellCollection(BaseCollection):
                     pd_DataFrame(
                         [
                             {
-                                "Loc ID": locid,
+                                "name": name,
                                 "color_R": R,
                                 "color_G": G,
                                 "color_B": B,
@@ -117,7 +103,7 @@ class WellCollection(BaseCollection):
             self.parent.legend.update_widget(self.parent)
             self.parent.prop_legend.update_widget(self.parent)
         # Then emit signal to update the views. A list of uids is emitted, even if the entity is just one.
-        self.signals.added.emit([entity_dict["uid"]])
+        self.parent.signals.entities_added.emit([entity_dict["uid"]], self)
         return entity_dict["uid"]
 
     def remove_entity(self, uid: str = None) -> str:
@@ -127,7 +113,7 @@ class WellCollection(BaseCollection):
         self.modelReset.emit()  # is this really necessary?
         self.parent.prop_legend.update_widget(self.parent)
         # When done, send a signal over to the views. A list of uids is emitted, even if the entity is just one.
-        self.signals.removed.emit([uid])
+        self.parent.signals.entities_removed.emit([uid], self)
         return uid
 
     def clone_entity(self, uid: str = None) -> str:
@@ -135,40 +121,22 @@ class WellCollection(BaseCollection):
         # Not implemented for this collection, but required by the abstract superclass.
         pass
 
-    def replace_vtk(self, uid: str = None, vtk_object: vtkDataObject = None):
-        """Replace the vtk object of a given uid with another vtkobject."""
-        # ============ CAN BE UNIFIED AS COMMON METHOD OF THE ABSTRACT COLLECTION WHEN SIGNALS WILL BE UNIFIED ==========
-        # Not implemented for this collection, but required by the abstract superclass.
-        pass
-
     def attr_modified_update_legend_table(self):
         """Update legend table when attributes are changed."""
-        # First remove unused locid / feature.
+        # First remove unused name / feature.
         legend_updated = self.remove_unused_from_legend()
-        # Then add new locid / feature.
+        # Then add new name / feature.
         for uid in self.parent.well_coll.df["uid"].to_list():
-            locid = self.parent.well_coll.df.loc[
-                self.parent.well_coll.df["uid"] == uid, "Loc ID"
+            name = self.parent.well_coll.df.loc[
+                self.parent.well_coll.df["uid"] == uid, "name"
             ].values[0]
             feature = self.parent.well_coll.df.loc[
                 self.parent.well_coll.df["uid"] == uid, "feature"
             ].values[0]
             if self.parent.well_legend_df.loc[
-                (self.parent.well_legend_df["Loc ID"] == locid)
+                (self.parent.well_legend_df["name"] == name)
                 & (self.parent.well_legend_df["feature"] == feature)
             ].empty:
-                # Old Pandas <= 1.5.3
-                # self.parent.well_legend_df = self.parent.well_legend_df.append(
-                #     {
-                #         "Loc ID": locid,
-                #         "feature": feature,
-                #         "color_R": round(np_random.random() * 255),
-                #         "color_G": round(np_random.random() * 255),
-                #         "color_B": round(np_random.random() * 255),
-                #         "line_thick": 2.0,
-                #     },
-                #     ignore_index=True,
-                # )
                 # New Pandas >= 2.0.0
                 self.parent.well_legend_df = pd_concat(
                     [
@@ -176,7 +144,7 @@ class WellCollection(BaseCollection):
                         pd_DataFrame(
                             [
                                 {
-                                    "Loc ID": locid,
+                                    "name": name,
                                     "feature": feature,
                                     "color_R": round(np_random.random() * 255),
                                     "color_G": round(np_random.random() * 255),
@@ -196,26 +164,26 @@ class WellCollection(BaseCollection):
     def remove_unused_from_legend(self):
         """Remove unused roles / features from a legend table."""
         legend_updated = False
-        locid_in_legend = pd_unique(self.parent.well_legend_df["Loc ID"])
+        name_in_legend = pd_unique(self.parent.well_legend_df["name"])
         features_in_legend = pd_unique(self.parent.well_legend_df["feature"])
-        for loc_id in locid_in_legend:
+        for loc_id in name_in_legend:
             if self.parent.well_coll.df.loc[
-                self.parent.well_coll.df["Loc ID"] == loc_id
+                self.parent.well_coll.df["name"] == loc_id
             ].empty:
                 # Get index of row to be removed, then remove it in place with .drop().
                 idx_remove = self.parent.well_legend_df[
-                    self.parent.well_legend_df["Loc ID"] == loc_id
+                    self.parent.well_legend_df["name"] == loc_id
                 ].index
                 self.parent.well_legend_df.drop(idx_remove, inplace=True)
                 legend_updated = legend_updated or True
             for feature in features_in_legend:
                 if self.parent.well_coll.df.loc[
-                    (self.parent.well_coll.df["Loc ID"] == loc_id)
+                    (self.parent.well_coll.df["name"] == loc_id)
                     & (self.parent.well_coll.df["feature"] == feature)
                 ].empty:
                     # Get index of row to be removed, then remove it in place with .drop().
                     idx_remove = self.parent.well_legend_df[
-                        (self.parent.well_legend_df["Loc ID"] == loc_id)
+                        (self.parent.well_legend_df["name"] == loc_id)
                         & (self.parent.well_legend_df["feature"] == feature)
                     ].index
                     self.parent.well_legend_df.drop(idx_remove, inplace=True)
@@ -234,9 +202,9 @@ class WellCollection(BaseCollection):
 
     def get_uid_legend(self, uid: str = None) -> dict:
         """Get legend for a particular uid."""
-        locid = self.df.loc[self.df["uid"] == uid, "Loc ID"].values[0]
+        name = self.df.loc[self.df["uid"] == uid, "name"].values[0]
         legend_dict = self.parent.well_legend_df.loc[
-            self.parent.well_legend_df["Loc ID"] == locid
+            self.parent.well_legend_df["name"] == name
         ].to_dict("records")
         return legend_dict[0]
 
@@ -256,14 +224,14 @@ class WellCollection(BaseCollection):
 
     # =================================== Additional methods ===========================================
 
-    def get_well_locid_uids(self, locid=None):
-        """Get list of uids of a given locid."""
-        return self.df.loc[self.df["Loc ID"] == locid, "uid"].to_list()
+    def get_well_name_uids(self, name=None):
+        """Get list of uids of a given name."""
+        return self.df.loc[self.df["name"] == name, "uid"].to_list()
 
-    def get_uid_well_locid(self, uid=None):
+    def get_uid_well_name(self, uid=None):
         """Get value(s) stored in dataframe (as pointer) from uid."""
-        return self.df.loc[self.df["uid"] == uid, "Loc ID"].values[0]
+        return self.df.loc[self.df["uid"] == uid, "name"].values[0]
 
-    def set_uid_well_locid(self, uid=None, locid=None):
+    def set_uid_well_name(self, uid=None, name=None):
         """Set value(s) stored in dataframe (as pointer) from uid.."""
-        self.df.loc[self.df["uid"] == uid, "Loc ID"] = locid
+        self.df.loc[self.df["uid"] == uid, "name"] = name

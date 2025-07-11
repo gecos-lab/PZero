@@ -886,12 +886,12 @@ def linear_extrusion(self):
     linear_extrusion.SetInputData(self.geol_coll.get_uid_vtk_obj(input_uids[0]))
     linear_extrusion.Update()
 
-    # [Gabriele] The output of vtkLinearExtrusionFilter() are triangle strips we convert them to triangles with vtkTriangleFilter
+    #  The output of vtkLinearExtrusionFilter() are triangle strips we convert them to triangles with vtkTriangleFilter
     triangle_filt = vtkTriangleFilter()
     triangle_filt.SetInputConnection(linear_extrusion.GetOutputPort())
     triangle_filt.Update()
 
-    # [Gabriele] translate the plane using the xyz vector with intensity = negative extrusion value.
+    #  translate the plane using the xyz vector with intensity = negative extrusion value.
     translate = vtkTransform()
     translate.Translate(
         x_vector * vertical_extrusion["bottom"],
@@ -1483,14 +1483,16 @@ def intersection_xs(self):
                         x_section_uid=xsect_uid, parent=self
                     )
                     obj_dict["vtk_obj"].DeepCopy(cutter.GetOutput())
-                    self.print_terminal("obj_dict['vtk_obj']:\n", obj_dict["vtk_obj"])
+                    self.print_terminal(f"obj_dict['vtk_obj']:\n{obj_dict['vtk_obj']}")
                     if obj_dict["vtk_obj"].points_number > 0:
                         for data_key in obj_dict["vtk_obj"].point_data_keys:
                             if not data_key in obj_dict["properties_names"]:
                                 obj_dict["vtk_obj"].remove_point_data(data_key)
                         self.dom_coll.add_entity_from_dict(obj_dict)
+                        print("17")
                     else:
                         self.print_terminal(" -- empty object -- ")
+                        print("18")
         else:
             self.print_terminal(
                 " -- Only Geological objects, 3D Meshes and DEM & DOMs can be intersected with XSection -- "
@@ -1619,10 +1621,8 @@ def project_2_dem(self):
         else:
             self.geol_coll.replace_vtk(uid=uid, vtk_object=obj_dict["vtk_obj"])
             self.geol_coll.set_uid_name(uid=uid, name=obj_dict["name"])
-            self.geol_coll.signals.geom_modified.emit(
-                [uid]
-            )  # emit uid as list to force redraw
-        self.geol_coll.signals.metadata_modified.emit([uid])
+            self.parent.signals.geom_modified.emit([uid], self.geol_coll)
+        self.parent.signals.metadata_modified.emit([uid], self.geol_coll)
         prgs_bar.add_one()
 
 

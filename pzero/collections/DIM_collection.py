@@ -3,27 +3,12 @@ PZero© Andrea Bistacchi"""
 
 from uuid import uuid4
 
-from numpy import set_printoptions as np_set_printoptions
 from numpy import ndarray as np_ndarray
 
 from pandas import DataFrame as pd_DataFrame
-from pandas import set_option as pd_set_option
 from pandas import concat as pd_concat
 
-from vtkmodules.vtkCommonDataModel import vtkDataObject
-
 from .AbstractCollection import BaseCollection
-
-# Options to print Pandas dataframes in console for testing.
-pd_desired_width = 800
-pd_max_columns = 20
-pd_show_precision = 4
-pd_max_colwidth = 80
-pd_set_option("display.width", pd_desired_width)
-np_set_printoptions(linewidth=pd_desired_width)
-pd_set_option("display.max_columns", pd_max_columns)
-pd_set_option("display.precision", pd_show_precision)
-pd_set_option("display.max_colwidth", pd_max_colwidth)
 
 
 class DIMCollection(BaseCollection):
@@ -35,25 +20,25 @@ class DIMCollection(BaseCollection):
         self.entity_dict = {
             "uid": "",
             "name": "undef",
-            "topology": "undef",
             "scenario": "undef",
+            "x_section": "",  # this is the uid of the cross section for "XsVertexSet", "XsPolyLine", and "XsImage", empty for all others
+            "topology": "undef",
+            "vtk_obj": None,
             "properties_names": [],
             "properties_components": [],
             "properties_types": [],
-            "x_section": "",  # this is the uid of the cross section for "XsVertexSet", "XsPolyLine", and "XsImage", empty for all others
-            "vtk_obj": None,
         }
 
         self.entity_dict_types = {
             "uid": str,
             "name": str,
-            "topology": str,
             "scenario": str,
+            "x_section": str,
+            "topology": str,
+            "vtk_obj": object,
             "properties_names": list,
             "properties_components": list,
             "properties_types": list,
-            "x_section": str,
-            "vtk_obj": object,
         }
 
         self.valid_topologies = []
@@ -77,8 +62,6 @@ class DIMCollection(BaseCollection):
             entity_dict["uid"] = str(uuid4())
         # Append new row to dataframe. Note that the 'append()' method for Pandas dataframes DOES NOT
         # work in place, hence a NEW dataframe is created every time and then substituted to the old one.
-        # Old and less efficient syntax used up to Pandas 1.5.3:
-        # self.df = self.df.append(entity_dict, ignore_index=True)
         # New syntax with Pandas >= 2.0.0:
         self.df = pd_concat([self.df, pd_DataFrame([entity_dict])], ignore_index=True)
         # Reset data model.
@@ -91,11 +74,6 @@ class DIMCollection(BaseCollection):
                 if self.parent.prop_legend_df.loc[
                     self.parent.prop_legend_df["property_name"] == property_name
                 ].empty:
-                    # Old Pandas <= 1.5.3
-                    # self.parent.prop_legend_df = self.parent.prop_legend_df.append(
-                    #     {"property_name": property_name, "colormap": self.default_colormap},
-                    #     ignore_index=True,
-                    # )
                     # New Pandas >= 2.0.0
                     self.parent.prop_legend_df = pd_concat(
                         [
@@ -114,7 +92,7 @@ class DIMCollection(BaseCollection):
                     self.parent.prop_legend.update_widget(self.parent)
         # Then emit signal to update the views. A list of uids is emitted, even if the
         # entity is just one, for future compatibility
-        self.signals.added.emit([entity_dict["uid"]])
+        self.parent.signals.entities_added.emit([entity_dict["uid"]], self)
         return entity_dict["uid"]
 
     def remove_entity(self, uid: str = None) -> str:
@@ -133,16 +111,11 @@ class DIMCollection(BaseCollection):
         self.modelReset.emit()  # is this really necessary?
         self.parent.prop_legend.update_widget(self.parent)
         # When done, send a signal over to the views. A list of uids is emitted, even if the entity is just one.
-        self.signals.removed.emit([uid])
+        self.parent.signals.entities_removed.emit([uid], self)
         return uid
 
     def clone_entity(self, uid: str = None) -> str:
         """Clone an entity."""
-        # Not implemented for this collection, but required by the abstract superclass.
-        pass
-
-    def replace_vtk(self, uid: str = None, vtk_object: vtkDataObject = None):
-        """Replace the vtk object of a given uid with another vtkobject."""
         # Not implemented for this collection, but required by the abstract superclass.
         pass
 
@@ -158,7 +131,7 @@ class DIMCollection(BaseCollection):
         return legend_updated
 
     def get_uid_legend(self, uid: str = None) -> dict:
-        """Get legend for a particular uid."""
+        """Get legend for a particular uid. Implemented in subclasses."""
         pass
 
     def set_uid_legend(

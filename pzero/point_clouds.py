@@ -1,4 +1,4 @@
-"""pc2vtk.py by Gabriele Benedetti
+"""point_clouds.py by Gabriele Benedetti
 PZero© Andrea Bistacchi"""
 
 from copy import deepcopy
@@ -555,7 +555,7 @@ def auto_pick(self):
     self.clear_selection()
 
 
-# [Gabriele] PC Filters ----------------------------------------------------
+#  PC Filters ----------------------------------------------------
 
 
 def thresh_filt(self):

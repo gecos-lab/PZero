@@ -141,7 +141,7 @@ def gocad2vtk(self=None, in_file_name=None, uid_from_name=None):
         reset_legend = False
     # Open input file as fin.
     fin = open(in_file_name, "rt")
-    # Record number of entities before importing and initialize entity_counter
+    # Record the number of entities before importing and initialize entity_counter
     n_entities_before = self.geol_coll.get_number_of_entities
     entity_counter = 0
     # Parse fin file.

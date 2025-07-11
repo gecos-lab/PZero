@@ -44,7 +44,7 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
     column_names = list(gdf.columns)
     # print("Column names of GeoDataframe: ", list(gdf.columns))
     # print("GeoDataframe:\n", gdf)
-    # [Gabriele] This is horroble, we should rewrite to accept
+    #  This is horroble, we should rewrite to accept
     # different types of collection without repeating the code
     if collection == "Geology":
         if (gdf.geom_type[0] == "LineString") or (

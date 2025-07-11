@@ -1,7 +1,7 @@
 """well2vtk.py by Gabriele Benedetti
 PZero© Andrea Bistacchi
 --------
-Convert well data (csv, ags ...) in vtk objects.
+Convert well data (csv, ags ...) to vtk objects.
 
 """
 
@@ -11,9 +11,6 @@ from uuid import uuid4
 
 from pandas import read_excel as pd_read_excel
 from pandas import unique as pd_unique
-
-# from pandas import read_csv as pd_read_csv
-# from pandas import isna as pd_isna
 
 from numpy import abs as np_abs
 from numpy import append as np_append
@@ -66,7 +63,6 @@ def well2vtk(self, path=None):
     del prop_df["GEOMETRY"]
 
     arr = well_obj.trace.get_point_data(data_key="MD")
-    # print(arr)
     points = well_obj.trace.points_number
     ann_list = []
     well_uid = str(uuid4())
@@ -85,8 +81,6 @@ def well2vtk(self, path=None):
                     for row, (start, end, value) in prop.iterrows():
                         start_idx = np_argmin(np_abs(arr - start))
                         end_idx = np_argmin(np_abs(arr - end))
-                        # print(key)
-                        # print(len(curve_copy.points[start_idx:end_idx]))
 
                         if key == "GEOLOGY":
                             marker_pos = well_obj.trace.points[start_idx, :].reshape(
@@ -136,8 +130,6 @@ def well2vtk(self, path=None):
                 for row, (start, end, value) in prop.iterrows():
                     start_idx = np_argmin(np_abs(arr - start))
                     end_idx = np_argmin(np_abs(arr - end))
-                    # print(key)
-                    # print(len(curve_copy.points[start_idx:end_idx]))
                     tr_data[start_idx:end_idx] = value
                     # tr_data.insert(0,0)
             well_obj.add_trace_data(

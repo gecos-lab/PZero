@@ -8,6 +8,7 @@ from copy import deepcopy
 from datetime import datetime
 
 from PySide6.QtCore import Signal as pyqtSignal
+from PySide6.QtCore import QObject
 from PySide6.QtWidgets import QMainWindow, QMessageBox
 from PySide6.QtGui import QAction
 
@@ -108,12 +109,53 @@ from .three_d_surfaces import (
     retopo,
 )
 
-# from .windows_factory import ViewMap
-# from .windows_factory import ViewXsection
-# from .windows_factory import View3D
-# from .windows_factory import ViewStereoplot
-from .windows_factory import DockWindow
+from pzero.views.dock_window import DockWindow
 from .processing.CRS import CRS_list, CRS_transform_selected
+
+
+class ProjectSignals(QObject):
+    """
+    This class is used to store signals used project-wide that will be used according
+    to the following pattern:
+
+    -> within project:
+    self.signals = ProjectSignals()
+
+    -> within child objects:
+    self.project.signals.specific_signal.emit(some_message)
+    self.project.signals.specific_signal.connect(some_message)
+
+    Basically in this way we add all signals by composition.
+    """
+
+    # project_close is used to delete open windows when the current project is closed (and a new one is opened).
+    project_close = pyqtSignal()  # seems OK
+
+    # prop_legend_cmap_modified is uded by the property legend manager when a color map is changed for some
+    # property called "str"
+    prop_legend_cmap_modified = pyqtSignal(str)  # seems OK
+
+    # The following are signals used by entitied collected in collections.
+    # "object" is used to pass a reference to the collection where the entity is stored
+    # the other argument is a list of uids, or a single uid, or a list of entities
+    entities_added = pyqtSignal(list, object)  # seems OK
+    entities_removed = pyqtSignal(list, object)  # seems OK
+    geom_modified = pyqtSignal(list, object)  # seems OK
+    data_keys_added = pyqtSignal(
+        list, object
+    )  # seems OK - CAN BE MERGED WITH "removed"?
+    data_keys_removed = pyqtSignal(
+        list, object
+    )  # seems OK - CAN BE MERGED WITH "added"?
+    data_val_modified = pyqtSignal(list, object)  # not used at the moment
+    metadata_modified = pyqtSignal(list, object)  # seems OK
+    legend_color_modified = pyqtSignal(list, object)  # seems OK
+    legend_thick_modified = pyqtSignal(list, object)  # seems OK
+    legend_point_size_modified = pyqtSignal(list, object)  # seems OK
+    legend_opacity_modified = pyqtSignal(list, object)  # seems OK
+
+    # selection_changed is used to update the set of selected entities on each collection = object
+    selection_changed = pyqtSignal(object)
 
 
 class ProjectWindow(QMainWindow, Ui_ProjectWindow):
@@ -122,21 +164,13 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
     # Signals defined here are meant to be broadcast TO ALL views. This is why we use signals
     # instead of functions that will act within a single view only. They all pass a list of uid's.
 
-    # This is used to delete open windows when the current project is closed (and a new one is opened).
-    project_close_signal = pyqtSignal()
-
-    # Maybe also this one could be moved to collections?
-    prop_legend_cmap_modified_signal = pyqtSignal(str)
-
-    # It appears this is not used anywhere. _______________________________________
-    # line_digitized_signal = pyqtSignal(dict)
-
     """Add other signals above this line ----------------------------------------"""
 
     def __init__(self, *args, **kwargs):
         super(ProjectWindow, self).__init__(*args, **kwargs)
         """Import GUI from project_window_ui.py"""
         self.setupUi(self)
+        self.TextTerminal.setReadOnly(True)
 
         """Connect actionQuit.triggered SIGNAL to self.close SLOT"""
         self.actionQuit.triggered.connect(self.close)
@@ -146,7 +180,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             "Welcome to PZero!\n3D modelling application by Andrea Bistacchi, started June 3rd 2020."
         )
 
-        # list of collections
+        self.signals = ProjectSignals()
+
+        # dictionary with table (key) vs. collection (value)
         self.tab_collection_dict = {
             "tabGeology": "geol_coll",
             "tabXSections": "xsect_coll",
@@ -223,10 +259,6 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.actionRetopologize.triggered.connect(self.retopologize_surface)
 
         """View actions -> slots"""
-        # self.action3DView.triggered.connect(lambda: View3D(parent=self))
-        # self.actionMapView.triggered.connect(lambda: ViewMap(parent=self))
-        # self.actionXSectionView.triggered.connect(lambda: ViewXsection(parent=self))
-        # self.actionStereoplotView.triggered.connect(lambda: ViewStereoplot(parent=self))
         self.action3DView.triggered.connect(
             lambda: DockWindow(parent=self, window_type="View3D")
         )
@@ -265,7 +297,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             QMessageBox.No,
         )
         if reply == QMessageBox.Yes:
-            self.project_close_signal.emit()  # this is used to delete open windows when the current project is closed
+            self.signals.project_close.emit()  # this is used to delete open windows when the current project is closed
             event.accept()
         else:
             event.ignore()
@@ -378,7 +410,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 selected_uids.append(idx_proxy.data())
         return selected_uids
 
-    # [Gabriele] This is should be used for cross collection operations (e.g. cut surfaces in the geology table with the DEM).
+    #  This is should be used for cross collection operations (e.g. cut surfaces in the geology table with the DEM).
     # We could use this instead of selected_uids but we should impose validity checks for the different functions
     # @property
     # def selected_uids_all(self):
@@ -862,10 +894,10 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     vtk_out_dict["vtk_obj"] = vtk_object
                     collection.add_entity_from_dict(entity_dict=vtk_out_dict)
                 else:
-                    print("Only Point clouds are supported")
+                    self.print_terminal("Only Point clouds are supported")
                     return
         else:
-            print("No entity selected")
+            self.print_terminal("No entity selected")
 
     def smooth_dialog(self):
         input_dict = {
@@ -1027,7 +1059,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
     def create_empty(self):
         """Create empty containers for a new empty project."""
         # this is used to delete open windows when the current project is closed (and a new one is opened)
-        self.project_close_signal.emit()
+        self.signals.project_close.emit()
 
         # Create the geol_coll GeologicalCollection (a Qt QAbstractTableModel with a Pandas dataframe as attribute)
         # and connect the model to GeologyTableView (a Qt QTableView created with QTDesigner and provided by
@@ -1065,19 +1097,19 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.boundary_coll = BoundaryCollection(parent=self)
         self.BoundariesTableView.setModel(self.boundary_coll.proxy_table_model)
 
-        # [Gabriele]  Create the weel_coll WellCollection (a Qt QAbstractTableModel with a Pandas dataframe as attribute)
+        #   Create the weel_coll WellCollection (a Qt QAbstractTableModel with a Pandas dataframe as attribute)
         # and connect the model to WellTableView (a Qt QTableView created with QTDesigner and provided by
         # Ui_ProjectWindow). Setting the model also updates the view.
         self.well_coll = WellCollection(parent=self)
         self.WellsTableView.setModel(self.well_coll.proxy_table_model)
 
-        # [Gabriele]  Create the fluid_coll FluidCollection (a Qt QAbstractTableModel with a Pandas dataframe as attribute)
+        #   Create the fluid_coll FluidCollection (a Qt QAbstractTableModel with a Pandas dataframe as attribute)
         # and connect the model to FluidTableView (a Qt QTableView created with QTDesigner and provided by
         # Ui_ProjectWindow). Setting the model also updates the view.
         self.fluid_coll = FluidCollection(parent=self)
         self.FluidsTableView.setModel(self.fluid_coll.proxy_table_model)
 
-        # [Gabriele]  Create the backgrnd_coll BackgroundCollection (a Qt QAbstractTableModel with a Pandas dataframe as attribute)
+        #   Create the backgrnd_coll BackgroundCollection (a Qt QAbstractTableModel with a Pandas dataframe as attribute)
         # and connect the model to FluidTableView (a Qt QTableView created with QTDesigner and provided by
         # Ui_ProjectWindow). Setting the model also updates the view.
         self.backgrnd_coll = BackgroundCollection(parent=self)
@@ -2563,7 +2595,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 uid
             ) in (
                 self.selected_uids
-            ):  # [gabriele] this could be generalized with a helper function
+            ):  #  this could be generalized with a helper function
                 if self.shown_table == "tabGeology":
                     entity = self.geol_coll.get_uid_vtk_obj(uid)
 
@@ -2636,7 +2668,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 uid
             ) in (
                 self.selected_uids
-            ):  # [gabriele] this could be generalized with a helper function
+            ):  #  this could be generalized with a helper function
                 if self.shown_table == "tabGeology":
                     entity = self.geol_coll.get_uid_vtk_obj(uid)
 

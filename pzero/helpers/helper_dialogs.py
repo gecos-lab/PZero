@@ -582,12 +582,12 @@ class PCDataModel(QAbstractTableModel):
 
     def columnCount(
         self, parent=None
-    ):  # [Gabriele] the n of columns is = to the number of columns of the input data set (.shape[1])
+    ):  #  the n of columns is = to the number of columns of the input data set (.shape[1])
         return self.data.shape[1]
 
     def rowCount(
         self, parent=None
-    ):  # [Gabriele] the n of rows is = to the number of rows of the input data set (.shape[0])
+    ):  #  the n of rows is = to the number of rows of the input data set (.shape[0])
         return self.data.shape[0]
 
     def data(self, index, qt_role):
@@ -598,23 +598,23 @@ class PCDataModel(QAbstractTableModel):
                     self.data.iloc[index.row(), index.column()]
                 )  # if qt_role == Qt.BackgroundRole and index.column() in self.index_list:  # return QColor(Qt.green)
             if qt_role == Qt.BackgroundRole and index.column() in self.index_list:
-                return QColor(Qt.green)  # [Gabriele] Set the color
+                return QColor(Qt.green)  #  Set the color
         return None
 
     # Set header and index If the "container" is horizontal (orientation index 1) and has a display qt_role (index 0) (-> is the header of the table). If the "container" is vertical (orientation index 2) and has a display qt_role (index 0) (-> is the index of the table)."""
 
     def headerData(self, col, orientation, qt_role):
         if orientation == Qt.Horizontal and qt_role == Qt.DisplayRole:
-            return str(self.data.columns[col])  # [Gabriele] Set the header names
+            return str(self.data.columns[col])  #  Set the header names
         if orientation == Qt.Vertical and qt_role == Qt.DisplayRole:
-            return self.data.index[col]  # [Gabriele] Set the indexes
+            return self.data.index[col]  #  Set the indexes
         return None
 
 
 class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
     """New window class used to display import options and data preview."""
 
-    #    [Gabriele]  Different options that can be changed in the import menu:
+    #      Different options that can be changed in the import menu:
     #    + in_path -> input file path
     #    + StartColspinBox -> Start import from column number
     #    + EndColspinBox -> End import on column number
@@ -630,7 +630,7 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
         "SeparatorcomboBox": " ",
     }
 
-    # [Gabriele]  Different types of separators. By writing not using the symbol as a display we can avoid possible confusion between similar separators (e.g tab and space)-> the separator is auto assigned with the auto_sep function
+    #   Different types of separators. By writing not using the symbol as a display we can avoid possible confusion between similar separators (e.g tab and space)-> the separator is auto assigned with the auto_sep function
     sep_dict = {"<space>": " ", "<comma>": ",", "<semi-col>": ";", "<tab>": "   "}
 
     def __init__(
@@ -649,7 +649,7 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
         self.setupUi(self)
 
         self.parent = parent
-        # self.action = (self.sender())  # [Gabriele] Name of the action menu from which the import function was called.
+        # self.action = (self.sender())  #  Name of the action menu from which the import function was called.
         self.default_attr_list = default_attr_list
         self.ext_filter = ext_filter
         self.caption = caption
@@ -769,7 +769,7 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
                 "!": "",
                 "-": "",
                 "_": "",
-            }  # [Gabriele] Forbidden characters that are removed from the names using the translate function
+            }  #  Forbidden characters that are removed from the names using the translate function
 
             for i, attr in enumerate(col_names):
                 table = attr.maketrans(remove_char_dict)
@@ -786,12 +786,12 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
                     self.rename_dict[i] = self.default_attr_list[index]
                 else:
                     self.rename_dict[i] = "N.a."
-            self.assign_data()  # [Gabriele] Open the assign data ui.
+            self.assign_data()  #  Open the assign data ui.
         except ValueError:
             print("Could not preview: invalid column, row or separator")
         except FileNotFoundError:
             print("Could not import: invalid file name")
-            # [Gabriele] This clears the AssingTable and dataView table
+            #  This clears the AssingTable and dataView table
             self.AssignTable.setRowCount(0)
             self.dataView.setModel(None)
 
@@ -832,7 +832,7 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
         self.args = [path, col_names, row_range, index_list, delimiter, self]
         self.close()
         self.loop.quit()
-        # [Gabriele] Would be more convinient to import from here. This way we can modify the import parameters without opening every time the dialog.
+        #  Would be more convinient to import from here. This way we can modify the import parameters without opening every time the dialog.
         # pc2vtk(in_file_name=path, col_names=col_names, row_range=row_range, usecols=index_list, delimiter=delimiter, offset=offset, self=self, header_row=0)
 
     def las2df(self, path):
@@ -956,12 +956,12 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
                 0, QHeaderView.ResizeToContents
             )
 
-        # self.resize(750, 600) #[Gabriele] Set appropriate window size
+        # self.resize(750, 600) # Set appropriate window size
 
         def ass_value(attr):
             """Get column and row of clicked widget in table"""
-            # sel_combo = self.sender()  # [Gabriele] Combobox @ row and column
-            sel_combo = attr  # [Gabriele] Combobox @ row and column
+            # sel_combo = self.sender()  #  Combobox @ row and column
+            sel_combo = attr  #  Combobox @ row and column
             row = int(sel_combo.objectName().split("_")[1])
             print(row)
 
