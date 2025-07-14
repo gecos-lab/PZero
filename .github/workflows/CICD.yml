@@ -88,16 +88,16 @@ jobs:
       - name: Build executable Other
         if: runner.os != 'macOS'
         run: |
-          if ( "${{ runner.os }}" != "Windows" ); then
+          if ( "${{ runner.os }}" = "Windows" ); then
             python3 -m pip install --upgrade pip
             pip install -r requirements.txt
             pip install pyinstaller
-            pyinstaller --onedir --windowed --collect-all rasterio pzero.py --name pzero-${{ runner.os }} --add-data "images/pzero_splash.png:images"
+            pyinstaller --onedir --windowed --collect-all rasterio pzero.py --name pzero-${{ runner.os }} --add-data "images/pzero_splash.png;images"
           else
             python -m pip install --upgrade pip
             pip install -r requirements.txt
             pip install pyinstaller
-            pyinstaller --onedir --windowed --collect-all rasterio pzero.py --name pzero-${{ runner.os }} --add-data "images/pzero_splash.png;images"
+            pyinstaller --onedir --windowed --collect-all rasterio pzero.py --name pzero-${{ runner.os }} --add-data "images/pzero_splash.png:images"
           fi
       - name: Zip executable (Unix/MacOS)
         if: runner.os != 'Windows'
