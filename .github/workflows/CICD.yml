@@ -76,21 +76,29 @@ jobs:
             arch -x86_64 pip3 install --upgrade pip
             arch -x86_64 pip3 install -r requirements.txt
             arch -x86_64 pip3 install pyinstaller
-            arch -x86_64 pyinstaller --onedir --windowed --target-arch ${{ matrix.arch }} --collect-all rasterio pzero.py --name pzero-${{ runner.os }}-${{ matrix.arch }}
+            arch -x86_64 pyinstaller --onedir --windowed --target-arch ${{ matrix.arch }} --collect-all rasterio pzero.py --name pzero-${{ runner.os }}-${{ matrix.arch }} --add-data "images/pzero_splash.png:images"
           else
             python3 -m pip install --upgrade pip
             pip install -r requirements.txt
             pip install pyinstaller
-            pyinstaller --onedir --windowed --target-arch ${{ matrix.arch }} --collect-all rasterio pzero.py --name pzero-${{ runner.os }}-${{ matrix.arch }}
+            pyinstaller --onedir --windowed --target-arch ${{ matrix.arch }} --collect-all rasterio pzero.py --name pzero-${{ runner.os }}-${{ matrix.arch }} --add-data "images/pzero_splash.png:images"
           fi
         env:
           ARCHFLAGS: "-arch ${{ matrix.arch }}"
       - name: Build executable Other
         if: runner.os != 'macOS'
         run: |
-          pip install -r requirements.txt
-          pip install pyinstaller
-          pyinstaller --onedir --windowed --collect-all rasterio pzero.py --name pzero-${{ runner.os }} --splash ./images/pzero_splash.png
+          if: runner.os == 'Windows'; then
+            python3 -m pip install --upgrade pip
+            pip install -r requirements.txt
+            pip install pyinstaller
+            pyinstaller --onedir --windowed --collect-all rasterio pzero.py --name pzero-${{ runner.os }} --add-data "images/pzero_splash.png;images"
+          else
+            python -m pip install --upgrade pip
+            pip install -r requirements.txt
+            pip install pyinstaller
+            pyinstaller --onedir --windowed --collect-all rasterio pzero.py --name pzero-${{ runner.os }} --add-data "images/pzero_splash.png:images"
+          fi
       - name: Zip executable (Unix/MacOS)
         if: runner.os != 'Windows'
         run: |
