@@ -85,20 +85,20 @@ jobs:
           fi
         env:
           ARCHFLAGS: "-arch ${{ matrix.arch }}"
-      - name: Build executable Other
-        if: runner.os != 'macOS'
+      - name: Build executable Linux
+        if: runner.os == 'Linux'
         run: |
-          if ( "${{ runner.os }}" = "Windows" ); then
-            python3 -m pip install --upgrade pip
-            pip install -r requirements.txt
-            pip install pyinstaller
-            pyinstaller --onedir --windowed --collect-all rasterio pzero.py --name pzero-${{ runner.os }} --add-data "images/pzero_splash.png;images"
-          else
-            python -m pip install --upgrade pip
-            pip install -r requirements.txt
-            pip install pyinstaller
-            pyinstaller --onedir --windowed --collect-all rasterio pzero.py --name pzero-${{ runner.os }} --add-data "images/pzero_splash.png:images"
-          fi
+          python3 -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+          pyinstaller --onedir --windowed --collect-all rasterio pzero.py --name pzero-${{ runner.os }} --add-data "images/pzero_splash.png:images"
+      - name: Build executable Windows
+        if: runner.os == 'Windows'
+        run: |
+          python3 -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+          pyinstaller --onedir --windowed --collect-all rasterio pzero.py --name pzero-${{ runner.os }} --add-data "images/pzero_splash.png;images"
       - name: Zip executable (Unix/MacOS)
         if: runner.os != 'Windows'
         run: |
