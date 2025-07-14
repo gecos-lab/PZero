@@ -641,7 +641,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                         .df.query(self.view_filter)["uid"]
                         .tolist()
                     ),
-                    title_txt=f"Opening {self.setWindowTitle}",
+                    title_txt="Opening view",
                     label_txt=f"Adding objects from {collection_name}...",
                     cancel_txt=None,
                     parent=self,
