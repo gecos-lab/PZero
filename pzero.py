@@ -29,7 +29,7 @@ app.setStyle("Fusion")
 # app.setStyle('windows')
 
 # Display splash screen before doing anything else
-splash_image = QPixmap("./images/pzero_splash.png")
+splash_image = QPixmap("pzero_splash.png")
 splash = QSplashScreen(splash_image)
 splash.show()
 
