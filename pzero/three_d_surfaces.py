@@ -1575,7 +1575,6 @@ def project_2_dem(self):
         cancel_txt=None,
         parent=self,
     )
-
     for uid in input_uids:
         # Create a new instance of vtkProjectedTerrainPath
         projection = vtkPointInterpolator2D()
@@ -1621,8 +1620,8 @@ def project_2_dem(self):
         else:
             self.geol_coll.replace_vtk(uid=uid, vtk_object=obj_dict["vtk_obj"])
             self.geol_coll.set_uid_name(uid=uid, name=obj_dict["name"])
-            self.parent.signals.geom_modified.emit([uid], self.geol_coll)
-        self.parent.signals.metadata_modified.emit([uid], self.geol_coll)
+            self.signals.geom_modified.emit([uid], self.geol_coll)
+        self.signals.metadata_modified.emit([uid], self.geol_coll)
         prgs_bar.add_one()
 
 
