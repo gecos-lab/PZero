@@ -867,7 +867,6 @@ class ViewVTK(BaseView):
 
     def actor_in_table(self, sel_uid=None):
         """Method used to highlight in the main project table view a list of selected actors."""
-        print("DEBUG VIEW: actor_in_table chiamato con:", sel_uid)
         if sel_uid:
             collection = self.actors_df.loc[
                 self.actors_df["uid"] == sel_uid[0], "collection"
@@ -887,10 +886,8 @@ class ViewVTK(BaseView):
             }
             if collection in collection_to_table:
                 table, df, tab_idx = collection_to_table[collection]
-                print(f"DEBUG: uso {table.objectName() if hasattr(table, 'objectName') else table}, df shape:", df.shape)
                 self.parent.tabWidgetTopLeft.setCurrentIndex(tab_idx)
             else:
-                print(f"DEBUG: collection non gestita: {collection}")
                 self.print_terminal(
                     "Selection not supported for entities that do not belong to a recognized collection."
                 )
@@ -898,17 +895,15 @@ class ViewVTK(BaseView):
             table.clearSelection()
             if len(sel_uid) > 1:
                 table.setSelectionMode(QAbstractItemView.MultiSelection)
-            print("DEBUG: uid_list tabella:", [table.model().index(row, 0).data() for row in range(len(df.index))])
             for uid in sel_uid:
                 uid_list = [
                     table.model().index(row, 0).data() for row in range(len(df.index))
                 ]
-                print(f"DEBUG: cerco uid {uid} in uid_list")
                 if uid in uid_list:
                     idx = uid_list.index(uid)
                     table.selectRow(idx)
                 else:
-                    print(f"DEBUG: uid {uid} non trovato nella tabella!")
+                    print(f"uid {uid} not find")
         else:
             self.parent.GeologyTableView.clearSelection()
             self.parent.DOMsTableView.clearSelection()

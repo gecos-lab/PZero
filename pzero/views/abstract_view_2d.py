@@ -19,13 +19,10 @@ class View2D(ViewVTK):
         self.plotter.enable_image_style()
         self.plotter.enable_parallel_projection()
 
-        # --- AGGIUNTA: collega il segnale selection_changed ---
         self.parent.signals.selection_changed.connect(self.on_selection_changed)
 
     # --- AGGIUNTA: funzione di slot per sincronizzazione selezione ---
     def on_selection_changed(self, collection):
-        print("DEBUG SLOT: selection_changed ricevuto per collection:", collection)
-        # Aggiorna la selezione nella view in base a collection.selected_uids
         self.selected_uids = collection.selected_uids.copy()
         self.actor_in_table(self.selected_uids)
 

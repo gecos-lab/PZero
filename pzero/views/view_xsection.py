@@ -44,7 +44,6 @@ class ViewXsection(View2D):
 
         # Super here after having set the x_section_uid and _name
         super(ViewXsection, self).__init__(parent, *args, **kwargs)
-        # --- AGGIUNTA: collega il segnale selection_changed ---
         self.parent.signals.selection_changed.connect(self.on_selection_changed)
 
         # Rename Base View, Menu and Tool
