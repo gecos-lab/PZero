@@ -871,17 +871,16 @@ class ViewVTK(BaseView):
             collection = self.actors_df.loc[
                 self.actors_df["uid"] == sel_uid[0], "collection"
             ].values[0]
-            print(f"DEBUG: collection per UID {sel_uid[0]} -> {collection}")
             # Mapping collection name to (table, df, tab index)
             collection_to_table = {
                 "geol_coll": (self.parent.GeologyTableView, self.parent.geol_coll.df, 0),
-                "fluid_coll": (self.parent.FluidsTableView, self.parent.fluid_coll.df, 2),
-                "backgrnd_coll": (self.parent.BackgroundsTableView, self.parent.backgrnd_coll.df, 6),
-                "dom_coll": (self.parent.DOMsTableView, self.parent.dom_coll.df, 4),
-                "image_coll": (self.parent.ImagesTableView, self.parent.image_coll.df, 3),
-                "mesh3d_coll": (self.parent.Meshes3DTableView, self.parent.mesh3d_coll.df, 7),
-                "boundary_coll": (self.parent.BoundariesTableView, self.parent.boundary_coll.df, 5),
-                "xsect_coll": (self.parent.XSectionsTableView, self.parent.xsect_coll.df, 1),
+                "fluid_coll": (self.parent.FluidsTableView, self.parent.fluid_coll.df, 1),
+                "backgrnd_coll": (self.parent.BackgroundsTableView, self.parent.backgrnd_coll.df, 2),
+                "dom_coll": (self.parent.DOMsTableView, self.parent.dom_coll.df, 3),
+                "image_coll": (self.parent.ImagesTableView, self.parent.image_coll.df, 4),
+                "mesh3d_coll": (self.parent.Meshes3DTableView, self.parent.mesh3d_coll.df, 5),
+                "boundary_coll": (self.parent.BoundariesTableView, self.parent.boundary_coll.df, 6),
+                "xsect_coll": (self.parent.XSectionsTableView, self.parent.xsect_coll.df, 7),
                 "well_coll": (self.parent.WellsTableView, self.parent.well_coll.df, 8),
             }
             if collection in collection_to_table:
@@ -974,7 +973,6 @@ class ViewVTK(BaseView):
             else:
                 self.selected_uids = [sel_uid]
             self.print_terminal(f"Selected uids: {self.selected_uids}")
-            print("DEBUG VIEW: selected_uids dopo selezione:", self.selected_uids)
 
             # Show selected actors in yellow
             for sel_uid in self.selected_uids:
