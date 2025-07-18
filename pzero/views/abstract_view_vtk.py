@@ -867,56 +867,48 @@ class ViewVTK(BaseView):
 
     def actor_in_table(self, sel_uid=None):
         """Method used to highlight in the main project table view a list of selected actors."""
+        print("DEBUG VIEW: actor_in_table chiamato con:", sel_uid)
         if sel_uid:
-            # To select the mesh in the entity list we compare the actors of the actors_df dataframe
-            # with the picker.GetActor() result
             collection = self.actors_df.loc[
                 self.actors_df["uid"] == sel_uid[0], "collection"
             ].values[0]
-            if collection == "geol_coll":
-                table = self.parent.GeologyTableView
-                df = self.parent.geol_coll.df
-                # set the correct tab to avoid problems
-                self.parent.tabWidgetTopLeft.setCurrentIndex(0)
-            elif collection == "dom_coll":
-                table = self.parent.DOMsTableView
-                df = self.parent.dom_coll.df
-                # set the correct tab to avoid problems
-                self.parent.tabWidgetTopLeft.setCurrentIndex(4)
+            print(f"DEBUG: collection per UID {sel_uid[0]} -> {collection}")
+            # Mapping collection name to (table, df, tab index)
+            collection_to_table = {
+                "geol_coll": (self.parent.GeologyTableView, self.parent.geol_coll.df, 0),
+                "fluid_coll": (self.parent.FluidsTableView, self.parent.fluid_coll.df, 2),
+                "backgrnd_coll": (self.parent.BackgroundsTableView, self.parent.backgrnd_coll.df, 6),
+                "dom_coll": (self.parent.DOMsTableView, self.parent.dom_coll.df, 4),
+                "image_coll": (self.parent.ImagesTableView, self.parent.image_coll.df, 3),
+                "mesh3d_coll": (self.parent.Meshes3DTableView, self.parent.mesh3d_coll.df, 7),
+                "boundary_coll": (self.parent.BoundariesTableView, self.parent.boundary_coll.df, 5),
+                "xsect_coll": (self.parent.XSectionsTableView, self.parent.xsect_coll.df, 1),
+                "well_coll": (self.parent.WellsTableView, self.parent.well_coll.df, 8),
+            }
+            if collection in collection_to_table:
+                table, df, tab_idx = collection_to_table[collection]
+                print(f"DEBUG: uso {table.objectName() if hasattr(table, 'objectName') else table}, df shape:", df.shape)
+                self.parent.tabWidgetTopLeft.setCurrentIndex(tab_idx)
             else:
+                print(f"DEBUG: collection non gestita: {collection}")
                 self.print_terminal(
-                    "Selection not supported for entities that do not belong to geological or DOM collection."
+                    "Selection not supported for entities that do not belong to a recognized collection."
                 )
                 return
             table.clearSelection()
             if len(sel_uid) > 1:
                 table.setSelectionMode(QAbstractItemView.MultiSelection)
-
-            # In general this approach is not the best.
-            # In the actors_df the index of the df is indipendent from the index of the table views.
-            # We could have 6 entities 5 of which are in the geology tab and 1 in the image tab.
-            # When selecting the image the actors_df index could be anything from 0 to 5 (depends on the add_all_entities order)
-            # but in the table view is 0 thus returning nothing.
-            # To resolve this we could:
-            #   1. Create a actor_df for each collection
-            #   2. Have a general actors_df with a table_index value (that needs to be updated when adding or removing objects)
-            #   3. Have a selected_entities_df indipendent from the tables or views that collects the selected actors (both in the table or in the view)
-
-            # For now selection will work only for geology objects
-
+            print("DEBUG: uid_list tabella:", [table.model().index(row, 0).data() for row in range(len(df.index))])
             for uid in sel_uid:
                 uid_list = [
                     table.model().index(row, 0).data() for row in range(len(df.index))
                 ]
-                idx = uid_list.index(uid)
-                # coll = self.actors_df.loc[self.actors_df['uid'] == uid, 'collection'].values[0]
-
-                # if coll == 'geol_coll':
-                table.selectRow(idx)
-
-                # elif coll == 'image_coll':
-                #     self.parent.ImagesTableView.selectRow(idx)
-                # return
+                print(f"DEBUG: cerco uid {uid} in uid_list")
+                if uid in uid_list:
+                    idx = uid_list.index(uid)
+                    table.selectRow(idx)
+                else:
+                    print(f"DEBUG: uid {uid} non trovato nella tabella!")
         else:
             self.parent.GeologyTableView.clearSelection()
             self.parent.DOMsTableView.clearSelection()
@@ -987,6 +979,7 @@ class ViewVTK(BaseView):
             else:
                 self.selected_uids = [sel_uid]
             self.print_terminal(f"Selected uids: {self.selected_uids}")
+            print("DEBUG VIEW: selected_uids dopo selezione:", self.selected_uids)
 
             # Show selected actors in yellow
             for sel_uid in self.selected_uids:

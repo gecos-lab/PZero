@@ -42,6 +42,14 @@ class ViewMap(View2D):
         super(ViewMap, self).__init__(*args, **kwargs)
         self.setWindowTitle("Map View")
         self.plotter.view_xy()
+        # --- AGGIUNTA: collega il segnale selection_changed ---
+        self.parent.signals.selection_changed.connect(self.on_selection_changed)
+
+    # --- AGGIUNTA: funzione di slot per sincronizzazione selezione ---
+    def on_selection_changed(self, collection):
+        print("DEBUG SLOT: selection_changed ricevuto per collection:", collection)
+        self.selected_uids = collection.selected_uids.copy()
+        self.actor_in_table(self.selected_uids)
 
     # ================================  General methods shared by all views - built incrementally =====================
 

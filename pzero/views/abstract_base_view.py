@@ -349,7 +349,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                                 "uid": uid,
                                 "actor": this_actor,
                                 "show": True,
-                                "collection": collection,
+                                "collection": collection.collection_name if hasattr(collection, 'collection_name') else collection,
                                 "show_property": None,
                             }
                         ]
@@ -390,39 +390,39 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
 
     def entities_data_keys_added_update_views(self, updated_uids=None, collection=None):
         """This is called when point or cell data (properties) are added."""
-        # AT THE MOMENT THIS IS IDENTICAL TO entities_data_keys_removed_update_views
         # remove from updated_list the uid's that are excluded from this view by self.view_filter.
+        if self.actors_df.empty:
+            return
+
         updated_uids = collection.filter_uids(query=self.view_filter, uids=updated_uids)
         tree = self.tree_from_coll(coll=collection)
         for uid in updated_uids:
-            # Replace the previous copy of the actor with the same uid, and update the actors dataframe, only if a
-            # property that has been removed is shown at the moment. See issue #33 for a discussion on actors
-            # replacement by the PyVista add_mesh and add_volume methods.
-            if (
-                not self.actors_df.loc[
-                    self.actors_df["uid"] == uid, "show_property"
-                ].to_list()[0]
-                is None
-            ):
-                if not self.actors_df.loc[
-                    self.actors_df["uid"] == uid, "show_property"
-                ].values[0] in collection.get_uid_properties_names(uid):
-                    show = self.actors_df.loc[
-                        self.actors_df["uid"] == uid, "show"
-                    ].to_list()[0]
+            # check if uid in actors_df
+            mask = self.actors_df["uid"] == uid
+            if not any(mask):
+                continue
+
+            # safe access
+            show_property_values = self.actors_df.loc[mask, "show_property"].tolist()
+            if not show_property_values:
+                continue
+
+            show_property = show_property_values[0]
+            if show_property is not None:
+                if show_property not in collection.get_uid_properties_names(uid):
+                    show = self.actors_df.loc[mask, "show"].tolist()[0]
                     self.show_actor_with_property(
                         uid=uid,
-                        coll_name=collection.collection_name,
+                        coll_name=collection.collection_name if hasattr(collection, 'collection_name') else collection,
                         show_property=None,
                         visible=show,
                     )
-                    self.actors_df.loc[
-                        self.actors_df["uid"] == uid, ["show_property"]
-                    ] = None
+                    self.actors_df.loc[mask, "show_property"] = None
+
         # Rebuild the trees to add/remove the properties that have been changed.
-        tree.update_properties_for_uids(
-            updated_uids
-        )  # this should be a method of the tree
+        tree.update_properties_for_uids(updated_uids)
+
+    # this should be a method of the tree
 
     def entities_data_keys_removed_update_views(
         self, updated_uids=None, collection=None
