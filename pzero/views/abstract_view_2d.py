@@ -21,7 +21,6 @@ class View2D(ViewVTK):
 
         self.parent.signals.selection_changed.connect(self.on_selection_changed)
 
-    # --- AGGIUNTA: funzione di slot per sincronizzazione selezione ---
     def on_selection_changed(self, collection):
         self.selected_uids = collection.selected_uids.copy()
         self.actor_in_table(self.selected_uids)
