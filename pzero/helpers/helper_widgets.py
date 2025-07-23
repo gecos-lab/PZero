@@ -19,8 +19,9 @@ from vtkmodules.vtkInteractionWidgets import (
 class Tracer(vtkContourWidget):
     def __init__(self, parent=None, pass_func=None, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.parent = parent
-        self.SetInteractor(self.parent.plotter.iren.interactor)
+        # avoid overriding vtk SetParent; store UI parent separately
+        self._parent = parent
+        self.SetInteractor(self._parent.plotter.iren.interactor)
         head = pv_wrap(self.GetContourRepresentation().GetActiveCursorShape())
         self.GetContourRepresentation().SetCursorShape(head)
         self.GetContourRepresentation().SetLineInterpolator(
@@ -32,15 +33,17 @@ class Tracer(vtkContourWidget):
 
         self.ContinuousDrawOff()
         self.FollowCursorOn()
-        self.event_translator = self.GetEventTranslator()
-        self.event_translator.RemoveTranslation(vtkCommand.RightButtonPressEvent)
+        # hold event translator in Python attribute to avoid VTK attribute conflict
+        self._event_translator = self.GetEventTranslator()
+        self._event_translator.RemoveTranslation(vtkCommand.RightButtonPressEvent)
 
 
 class Vector(vtkContourWidget):
     def __init__(self, parent=None, pass_func=None, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.parent = parent
-        self.SetInteractor(self.parent.plotter.iren.interactor)
+        # avoid overriding vtk SetParent; store UI parent separately
+        self._parent = parent
+        self.SetInteractor(self._parent.plotter.iren.interactor)
         self.GetContourRepresentation().SetLineInterpolator(
             vtkLinearContourLineInterpolator()
         )
@@ -59,8 +62,9 @@ class Vector(vtkContourWidget):
         self.ContinuousDrawOff()
         self.FollowCursorOn()
         self.AddObserver(vtkCommand.InteractionEvent, self.check_length)
-        self.event_translator = self.GetEventTranslator()
-        self.event_translator.RemoveTranslation(vtkCommand.RightButtonPressEvent)
+        # hold event translator in Python attribute to avoid VTK attribute conflict
+        self._event_translator = self.GetEventTranslator()
+        self._event_translator.RemoveTranslation(vtkCommand.RightButtonPressEvent)
         self.run_function = pass_func
         self.length = 0
         self.deltas = 0
@@ -87,21 +91,24 @@ class Vector(vtkContourWidget):
 
             # print(self.length)
             self.EnabledOff()
-            self.run_function(self.parent, vector=self)
+            # invoke callback with original parent
+            self.run_function(self._parent, vector=self)
 
 
 class Editor(vtkContourWidget):
     def __init__(self, parent=None, pass_func=None, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.parent = parent
-        self.SetInteractor(self.parent.plotter.iren.interactor)
+        # avoid overriding vtk SetParent; store UI parent separately
+        self._parent = parent
+        self.SetInteractor(self._parent.plotter.iren.interactor)
         # self.GetContourRepresentation().BuildRepresentation()
         # self.GetContourRepresentation().ShowSelectedNodesOn()
         head = pv_wrap(self.GetContourRepresentation().GetActiveCursorShape())
         self.pos_fin = [0, 0]
         self.active_pos = [0, 0, 0]
         self.active_ind = 0
-        self.event_translator = self.GetEventTranslator()
+        # hold event translator in Python attribute to avoid VTK attribute conflict
+        self._event_translator = self.GetEventTranslator()
 
         self.GetContourRepresentation().SetCursorShape(head)
         self.GetContourRepresentation().SetLineInterpolator(
@@ -127,27 +134,25 @@ class Editor(vtkContourWidget):
             self.ContinuousDrawOff()
             self.FollowCursorOff()
             self.AllowNodePickingOn()
-
-            self.event_translator.RemoveTranslation(vtkCommand.RightButtonPressEvent)
-            self.event_translator.RemoveTranslation(vtkCommand.LeftButtonPressEvent)
+            self._event_translator.RemoveTranslation(vtkCommand.RightButtonPressEvent)
+            self._event_translator.RemoveTranslation(vtkCommand.LeftButtonPressEvent)
             f_node = self.GetContourRepresentation().GetNumberOfNodes() - 1
-            self.GetContourRepresentation().GetNthNodeDisplayPosition(
-                f_node, self.pos_fin
-            )
+            self.GetContourRepresentation().GetNthNodeDisplayPosition(f_node, self.pos_fin)
             self.GetContourRepresentation().ActivateNode(self.pos_fin)
             self.Render()
-            self.parent.plotter.track_click_position(
+            # set up callback and key for extending line
+            self._parent.plotter.track_click_position(
                 side="left", callback=self.extend_line, viewport=True
             )
-            self.parent.plotter.add_key_event("k", self.switch_active)
+            self._parent.plotter.add_key_event("k", self.switch_active)
         elif mode == "select":
             self.Initialize(line, 0)
             self.ContinuousDrawOff()
             self.FollowCursorOff()
             self.AllowNodePickingOn()
 
-            self.event_translator.RemoveTranslation(vtkCommand.RightButtonPressEvent)
-            self.event_translator.RemoveTranslation(vtkCommand.LeftButtonPressEvent)
+            self._event_translator.RemoveTranslation(vtkCommand.RightButtonPressEvent)
+            self._event_translator.RemoveTranslation(vtkCommand.LeftButtonPressEvent)
             self.Render()
             self.parent.plotter.track_click_position(
                 side="left", callback=self.select_point, viewport=True
@@ -181,8 +186,9 @@ class Editor(vtkContourWidget):
 class Scissors(vtkContourWidget):
     def __init__(self, parent=None, pass_func=None, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.parent = parent
-        self.SetInteractor(self.parent.plotter.iren.interactor)
+        # avoid overriding vtk SetParent; store UI parent separately
+        self._parent = parent
+        self.SetInteractor(self._parent.plotter.iren.interactor)
         head = pv_wrap(self.GetContourRepresentation().GetActiveCursorShape())
         self.GetContourRepresentation().SetCursorShape(head)
         self.GetContourRepresentation().SetLineInterpolator(
@@ -194,5 +200,6 @@ class Scissors(vtkContourWidget):
 
         self.ContinuousDrawOff()
         self.FollowCursorOn()
-        self.event_translator = self.GetEventTranslator()
-        self.event_translator.RemoveTranslation(vtkCommand.RightButtonPressEvent)
+        # hold event translator in Python attribute to avoid VTK attribute conflict
+        self._event_translator = self.GetEventTranslator()
+        self._event_translator.RemoveTranslation(vtkCommand.RightButtonPressEvent)

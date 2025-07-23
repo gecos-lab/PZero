@@ -195,7 +195,29 @@ class ViewMap(View2D):
                     pos2 = show_property.index("]")
                     original_prop = show_property[:pos1]
                     comp_index = int(show_property[pos1+1:pos2])
-                    show_property = plot_entity.get_point_data(original_prop)[:, comp_index]
+                    if original_prop == "Normals":
+                        # draw 2D map glyphs for normals component request
+                        show_property_title = None
+                        show_property = None
+                        style = "surface"
+                        smooth_shading = True
+                        appender = vtkAppendPolyData()
+                        r = self.parent.geol_coll.get_uid_legend(uid=uid)["point_size"] * 4
+                        normals = plot_entity.get_point_data("Normals")
+                        az_vectors, dir_vectors = get_dip_dir_vectors(normals=normals, az=True)
+                        # glyph lines in map view
+                        line1 = pv_Line(pointa=(0, 0, 0), pointb=(r, 0, 0))
+                        line2 = pv_Line(pointa=(-r, 0, 0), pointb=(r, 0, 0))
+
+                        az_glyph = plot_entity.glyph(geometry=line1, prop=az_vectors)
+                        dir_glyph = plot_entity.glyph(geometry=line2, prop=dir_vectors)
+
+                        appender.AddInputData(az_glyph)
+                        appender.AddInputData(dir_glyph)
+                        appender.Update()
+                        plot_entity = appender.GetOutput()
+                    else:
+                        show_property = plot_entity.get_point_data(original_prop)[:, comp_index]
                 elif show_property == "Normals":
                     show_property_title = None
                     show_property = None
