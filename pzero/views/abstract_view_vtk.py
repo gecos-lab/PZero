@@ -342,8 +342,13 @@ class ViewVTK(BaseView):
                     index = int(show_property[pos1 + 1 : pos2])
                     show_property = plot_entity.get_point_data(original_prop)[:, index]
                 else:
-                    if plot_entity.get_point_data_shape(show_property)[-1] == 3:
-                        plot_rgb_option = True
+                    # Safely check for multicomponent scalar arrays
+                    try:
+                        shape = plot_entity.get_point_data_shape(show_property)
+                        if shape and shape[-1] == 3:
+                            plot_rgb_option = True
+                    except Exception:
+                        pass
                     else:
                         # last option to catch unexpected cases
                         if (
@@ -387,6 +392,36 @@ class ViewVTK(BaseView):
                     show_property = plot_entity.points_Y
                 elif show_property == "Z":
                     show_property = plot_entity.points_Z
+                # handle multicomponent properties like 'PropName[index]' and treat 'Normals[n]' as full-normal glyphs
+                elif isinstance(show_property, str) and show_property.endswith("]"):
+                    pos1 = show_property.index("[")
+                    pos2 = show_property.index("]")
+                    original_prop = show_property[:pos1]
+                    comp_index = int(show_property[pos1+1:pos2])
+                    if original_prop == "Normals":
+                        # draw discs for normals (same as plain 'Normals')
+                        show_property_title = None
+                        show_property = None
+                        style = "surface"
+                        appender = vtkAppendPolyData()
+                        r = point_size
+                        points = plot_entity.points
+                        normals = plot_entity.get_point_data("Normals")
+                        dip_vectors, dir_vectors = get_dip_dir_vectors(normals=normals)
+                        line1 = pv_Line(pointa=(0, 0, 0), pointb=(r, 0, 0))
+                        line2 = pv_Line(pointa=(-r, 0, 0), pointb=(r, 0, 0))
+                        for point, normal in zip(points, normals):
+                            base = pv_Disc(center=point, normal=normal, inner=0, outer=r, c_res=30)
+                            appender.AddInputData(base)
+                        dip_glyph = plot_entity.glyph(geometry=line1, prop=dip_vectors)
+                        dir_glyph = plot_entity.glyph(geometry=line2, prop=dir_vectors)
+                        appender.AddInputData(dip_glyph)
+                        appender.AddInputData(dir_glyph)
+                        appender.Update()
+                        plot_entity = appender.GetOutput()
+                    else:
+                        # extract the specified component from the vector property
+                        show_property = plot_entity.get_point_data(original_prop)[:, comp_index]
                 elif show_property == "Normals":
                     show_property_title = None
                     show_property = None
@@ -430,8 +465,21 @@ class ViewVTK(BaseView):
                     show_property_title = None
 
                 else:
-                    if plot_entity.get_point_data_shape(show_property)[-1] == 3:
-                        plot_rgb_option = True
+                    # handle multicomponent properties like 'PropName[index]'
+                    if isinstance(show_property, str) and show_property.endswith("]"):
+                        pos1 = show_property.index("[")
+                        pos2 = show_property.index("]")
+                        original_prop = show_property[:pos1]
+                        comp_index = int(show_property[pos1+1:pos2])
+                        show_property = plot_entity.get_point_data(original_prop)[:, comp_index]
+                    else:
+                        # Safely check for multicomponent scalar arrays
+                        try:
+                            shape = plot_entity.get_point_data_shape(show_property)
+                            if shape and shape[-1] == 3:
+                                plot_rgb_option = True
+                        except Exception:
+                            pass
                 this_actor = self.plot_mesh(
                     uid=uid,
                     plot_entity=plot_entity,

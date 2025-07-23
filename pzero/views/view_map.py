@@ -189,6 +189,13 @@ class ViewMap(View2D):
                     show_property = plot_entity.points_Y
                 elif show_property == "Z":
                     show_property = plot_entity.points_Z
+                # handle multicomponent properties like 'PropName[index]'
+                elif isinstance(show_property, str) and show_property.endswith("]"):
+                    pos1 = show_property.index("[")
+                    pos2 = show_property.index("]")
+                    original_prop = show_property[:pos1]
+                    comp_index = int(show_property[pos1+1:pos2])
+                    show_property = plot_entity.get_point_data(original_prop)[:, comp_index]
                 elif show_property == "Normals":
                     show_property_title = None
                     show_property = None
