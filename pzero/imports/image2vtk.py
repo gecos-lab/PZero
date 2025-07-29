@@ -84,12 +84,6 @@ def geo_image2vtk(self=None, in_file_name=None):
             ]
         )
         vtk_image.SetOrigin([img_x_min, img_y_max, 0])
-        # For some reason we wer re-centering the image as follows, with the comment: "Maybe not the best solution,
-        # we should add an option to add re-centering every object using the same translation vector." However this
-        # was shifting the image in a wrong position. I keep this code here in case it was useful for some reason.
-        # vtk_image.SetOrigin(
-        #     [img_x_min - round(img_x_min, -2), img_y_max - round(img_y_min, -2), 0]
-        # )
 
         # Add the vtk array image data
         vtk_image.GetPointData().AddArray(vtk_array)
@@ -98,8 +92,8 @@ def geo_image2vtk(self=None, in_file_name=None):
         elif geo_image.count >= 3:
             vtk_image.GetPointData().SetActiveScalars("RGB")
 
-        # Create dictionary.
-        curr_obj_dict = deepcopy(ImageCollection.entity_dict)
+        # Create dictionary
+        curr_obj_dict = {}
         curr_obj_dict["uid"] = str(uuid4())
         curr_obj_dict["name"] = os.path.basename(in_file_name)
         curr_obj_dict["topology"] = "MapImage"
@@ -115,9 +109,10 @@ def geo_image2vtk(self=None, in_file_name=None):
         # Cleaning (probably not necessary).
         del curr_obj_dict
         del vtk_image
-    except:
-        self.print_terminal("Image file not recognized ERROR.")
-
+    except Exception as e:
+        self.print_terminal(f"Image file not recognized ERROR: {str(e)}")
+        import traceback
+        self.print_terminal(traceback.format_exc())
 
 def xs_image2vtk(self=None, in_file_name=None, x_section_uid=None):
     """Import and add an image to the imaage collection
