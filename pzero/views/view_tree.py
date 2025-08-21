@@ -391,6 +391,18 @@ class CustomTreeWidget(QTreeWidget):
                             add_props.append(props[i] + f"[{j}]")
                     elif props_comps[i] == 1:
                         add_props = add_props + [props[i]]
+                if self.collection.collection_name == "dom_coll":
+                    # If the collection is dom_coll, add the label for textures
+                    for texture_uid in self.collection.df.loc[
+                        self.collection.df["uid"] == uid, "texture_uids"
+                    ].values[0]:
+                        texture_name = self.parent.image_coll.df.loc[
+                            self.parent.image_coll.df["uid"] == texture_uid, "name"
+                        ].values[0]
+                        # property_texture_combo.addItem(texture_name)
+                        # property_texture_combo.texture_uid_list.append(texture_uid)
+                        add_props.append(f"{texture_name}")
+
                 property_combo.addItems(add_props)
 
             index = property_combo.findText(
@@ -499,6 +511,18 @@ class CustomTreeWidget(QTreeWidget):
                         add_props.append(props[i] + f"[{j}]")
                 elif props_comps[i] == 1:
                     add_props = add_props + [props[i]]
+            if self.collection.collection_name == "dom_coll":
+                # If the collection is dom_coll, add the label for textures
+                for texture_uid in self.collection.df.loc[
+                    self.collection.df["uid"] == uid, "texture_uids"
+                ].values[0]:
+                    texture_name = self.parent.image_coll.df.loc[
+                        self.parent.image_coll.df["uid"] == texture_uid, "name"
+                    ].values[0]
+                    # property_texture_combo.addItem(texture_name)
+                    # property_texture_combo.texture_uid_list.append(texture_uid)
+                    add_props.append(f"{texture_name}")
+
             property_combo.addItems(add_props)
 
             # Connect signal
