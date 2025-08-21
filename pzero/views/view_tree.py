@@ -373,37 +373,38 @@ class CustomTreeWidget(QTreeWidget):
             for label in self.default_labels:
                 property_combo.addItem(label)
             if self.prop_label:
-
-                # property_combo.addItems(row[self.prop_label])
-                props = row[self.prop_label]
-                props_comps = row[self.prop_comp_label]
-                add_props = []
-                for i in range(len(props)):
-                    # if props_comps[i] == 3:
-                    #     add_props = (
-                    #         add_props
-                    #         + [props[i] + "[0]"]
-                    #         + [props[i] + "[1]"]
-                    #         + [props[i] + "[2]"]
-                    #     )
-                    if props_comps[i] > 1:
-                        for j in range(props_comps[i]):
-                            add_props.append(props[i] + f"[{j}]")
-                    elif props_comps[i] == 1:
-                        add_props = add_props + [props[i]]
+                property_combo.addItems(row[self.prop_label])
+                # props = row[self.prop_label]
+                # props_comps = row[self.prop_comp_label]
+                # add_props = []
+                # for i in range(len(props)):
+                #     # if props_comps[i] == 3:
+                #     #     add_props = (
+                #     #         add_props
+                #     #         + [props[i] + "[0]"]
+                #     #         + [props[i] + "[1]"]
+                #     #         + [props[i] + "[2]"]
+                #     #     )
+                #     if props_comps[i] > 1:
+                #         for j in range(props_comps[i]):
+                #             add_props.append(props[i] + f"[{j}]")
+                #     elif props_comps[i] == 1:
+                #         add_props = add_props + [props[i]]
                 if self.collection.collection_name == "dom_coll":
                     # If the collection is dom_coll, add the label for textures
                     for texture_uid in self.collection.df.loc[
                         self.collection.df["uid"] == uid, "texture_uids"
                     ].values[0]:
-                        texture_name = self.parent.image_coll.df.loc[
-                            self.parent.image_coll.df["uid"] == texture_uid, "name"
+                        texture_name = self.view.parent.image_coll.df.loc[
+                            self.view.parent.image_coll.df["uid"] == texture_uid, "name"
                         ].values[0]
                         # property_texture_combo.addItem(texture_name)
                         # property_texture_combo.texture_uid_list.append(texture_uid)
-                        add_props.append(f"{texture_name}")
+                        # add_props.append(f"{texture_name}")
+                        # property_combo.addItems(f"{texture_name}")
+                        property_combo.addItem(texture_name)
 
-                property_combo.addItems(add_props)
+                # property_combo.addItems(add_props)
 
             index = property_combo.findText(
                 self.view.actors_df.loc[
@@ -493,37 +494,38 @@ class CustomTreeWidget(QTreeWidget):
             property_combo = QComboBox()
             for label in self.default_labels:
                 property_combo.addItem(label)
+            if self.prop_label:
+                property_combo.addItems(row[self.prop_label])
+                # props = row[self.prop_label]
+                # props_comps = row[self.prop_comp_label]
+                # add_props = []
+                # for i in range(len(props)):
+                #     # if props_comps[i] == 3:
+                #     #     add_props = (
+                #     #         add_props
+                #     #         + [props[i] + "[0]"]
+                #     #         + [props[i] + "[1]"]
+                #     #         + [props[i] + "[2]"]
+                #     #     )
+                #     if props_comps[i] > 1:
+                #         for j in range(props_comps[i]):
+                #             add_props.append(props[i] + f"[{j}]")
+                #     elif props_comps[i] == 1:
+                #         add_props = add_props + [props[i]]
+                if self.collection.collection_name == "dom_coll":
+                    # If the collection is dom_coll, add the label for textures
+                    for texture_uid in self.collection.df.loc[
+                        self.collection.df["uid"] == uid, "texture_uids"
+                    ].values[0]:
+                        texture_name = self.view.parent.image_coll.df.loc[
+                            self.view.parent.image_coll.df["uid"] == texture_uid, "name"
+                        ].values[0]
+                        # property_texture_combo.addItem(texture_name)
+                        # property_texture_combo.texture_uid_list.append(texture_uid)
+                        # add_props.append(f"{texture_name}")
+                        property_combo.addItem(texture_name)
 
-            # property_combo.addItems(row[self.prop_label])
-            props = row[self.prop_label]
-            props_comps = row[self.prop_comp_label]
-            add_props = []
-            for i in range(len(props)):
-                # if props_comps[i] == 3:
-                #     add_props = (
-                #         add_props
-                #         + [props[i] + "[0]"]
-                #         + [props[i] + "[1]"]
-                #         + [props[i] + "[2]"]
-                #     )
-                if props_comps[i] > 1:
-                    for j in range(props_comps[i]):
-                        add_props.append(props[i] + f"[{j}]")
-                elif props_comps[i] == 1:
-                    add_props = add_props + [props[i]]
-            if self.collection.collection_name == "dom_coll":
-                # If the collection is dom_coll, add the label for textures
-                for texture_uid in self.collection.df.loc[
-                    self.collection.df["uid"] == uid, "texture_uids"
-                ].values[0]:
-                    texture_name = self.parent.image_coll.df.loc[
-                        self.parent.image_coll.df["uid"] == texture_uid, "name"
-                    ].values[0]
-                    # property_texture_combo.addItem(texture_name)
-                    # property_texture_combo.texture_uid_list.append(texture_uid)
-                    add_props.append(f"{texture_name}")
-
-            property_combo.addItems(add_props)
+                # property_combo.addItems(add_props)
 
             # Connect signal
             property_combo.currentTextChanged.connect(
@@ -660,7 +662,8 @@ class CustomTreeWidget(QTreeWidget):
                 self.collection.selected_uids.append(uid)
 
         # emit signal
-        self.parent.signals.selection_changed.emit(self.collection)
+        # self.parent.signals.selection_changed.emit(self.collection)
+        self.view.parent.signals.selection_changed.emit(self.collection)
 
     def update_child_check_states(self, item, check_state):
         """
