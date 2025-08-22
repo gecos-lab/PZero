@@ -28,7 +28,6 @@ class View2D(ViewVTK):
             if interactor.GetKeyCode() not in ["w", "s"]:
                 interactor.SetKeyCode("")
                 # interactor.SetKeySym("")
-                print("blank called")
 
         self.plotter.iren.interactor.AddObserver("KeyPressEvent", blank_keypress, 10)
         self.plotter.clear_events_for_key("v")
