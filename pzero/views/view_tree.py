@@ -232,7 +232,7 @@ class CustomTreeWidget(QTreeWidget):
         self.prop_label = prop_label
         self.prop_comp_label = prop_comp_label
         self.default_labels = default_labels
-        self.uid_label = uid_label
+        self.uid_label = uid_label  # could use "uid" as everywhere in PZero, without specifying it in input
 
         # one column for the tree hierarchy, one for name and one for properties
         self.setColumnCount(3)
@@ -318,6 +318,85 @@ class CustomTreeWidget(QTreeWidget):
         # Unblock signals
         self.blockSignals(False)
 
+    def create_property_combo(self, row=None):
+        """
+        Create and set up the property combo box to be added at each row in the tree.
+
+        A QComboBox can store, for each row, an "index" (from the first to the last item),
+        a "text" (the label that is shown), and optionally a "data". The latter can be
+        used to broadcast a different value as the "text", that is the default, and we
+        use this option e.g. to broadcast the uid of a textures instead of their names.
+        For this we need to set also data and then retrieve them when sending around signals.
+
+        The combo box must be created in a method and not directly in "populate_tree" and "add_items_to_tree", otherwise combos of
+        different rows get mixed up. At least, this was happening in a previous implementation since all
+        combo boxes had the same name, while now having them in a method shields the internal names.
+
+        """
+
+        uid = str(row[self.uid_label])
+
+        property_combo = QComboBox()
+        for label in self.default_labels:
+            property_combo.addItem(label)
+            property_combo.setItemData(property_combo.findText(label), label)
+        if self.prop_label:
+            # for prop in row[self.prop_label]:
+            #     property_combo.addItem(prop)
+            #     property_combo.setItemData(property_combo.findText(prop), prop)
+            # props = row[self.prop_label]
+            # prop_comps = row[self.prop_comp_label]
+            # for i in range(len(props)):
+            #     prop = props[i]
+            #     prop_comp = prop_comps[i]
+            #     property_combo.addItem(prop)
+            #     property_combo.setItemData(property_combo.findText(prop), prop)
+            #     if prop_comp > 1:
+            #         for j in range(prop_comp):
+            #             prop_ = prop + f"[{j}]"
+            #             property_combo.addItem(prop_)
+            #             property_combo.setItemData(
+            #                 property_combo.findText(prop_), prop_
+            #             )
+            for prop, prop_comp in zip(row[self.prop_label], row[self.prop_comp_label]):
+                property_combo.addItem(prop)
+                property_combo.setItemData(property_combo.findText(prop), prop)
+                if prop_comp > 1:
+                    for i in range(prop_comp):
+                        prop_ = prop + f"[{i}]"
+                        property_combo.addItem(prop_)
+                        property_combo.setItemData(
+                            property_combo.findText(prop_), prop_
+                        )
+        if "texture_uids" in self.collection.df.columns.values.tolist():
+            for texture_uid in self.collection.df.loc[
+                self.collection.df["uid"] == uid, "texture_uids"
+            ].values[0]:
+                texture_name = self.view.parent.image_coll.df.loc[
+                    self.view.parent.image_coll.df["uid"] == texture_uid, "name"
+                ].values[0]
+                property_combo.addItem(texture_name)
+                property_combo.setItemData(
+                    property_combo.findText(texture_name), texture_uid
+                )
+
+        # set to property currently recorded as shown in self.view.actors_df
+        index = property_combo.findText(
+            self.view.actors_df.loc[
+                self.view.actors_df["uid"] == uid, "show_property"
+            ].values[0]
+        )
+        if index >= 0:
+            property_combo.setCurrentIndex(index)
+
+        # connect signal used to change the property to be shown
+        property_combo.currentTextChanged.connect(
+            lambda text, this_uid=uid: self.on_combo_changed(
+                this_uid, property_combo.itemData(property_combo.findText(text))
+            )
+        )
+        return property_combo
+
     def populate_tree(self):
         """
         (Re-)Populates the tree widget with hierarchical data and configures each item
@@ -336,11 +415,10 @@ class CustomTreeWidget(QTreeWidget):
         hierarchy = self.header_widget.get_order()
 
         for _, row in self.collection.df.iterrows():
-            # if self.uid_label and self.uid_label in row:
-            if self.uid_label in row:
-                uid = str(row[self.uid_label])
-                if uid not in self.view.actors_df["uid"].values:
-                    continue
+            # Store the UID
+            uid = str(row[self.uid_label])
+            if uid not in self.view.actors_df["uid"].values:
+                continue  # jump to next row if UID is not in actors_df
             parent = self.invisibleRootItem()
             for level in hierarchy:
                 parent = self.get_or_create_item(parent, row[level])
@@ -348,77 +426,26 @@ class CustomTreeWidget(QTreeWidget):
             # Create item with empty first column and name in the second column
             name_item = QTreeWidgetItem(["", row[self.name_label]])
 
-            # Store the UID and set the initial checkbox state
-            # "if uid_label" is needed since higher levels do not have an uid
-            # if self.uid_label and self.uid_label in row:
-            if self.uid_label in row:
-                uid = str(row[self.uid_label])
-                is_checked = self.view.actors_df.loc[
-                    self.view.actors_df["uid"] == uid, "show"
-                ].iloc[0]
-                name_item.setData(0, Qt.UserRole, uid)
-                name_item.setFlags(name_item.flags() | Qt.ItemIsUserCheckable)
-                if is_checked:
-                    checkbox_state = Qt.Checked
-                else:
-                    checkbox_state = Qt.Unchecked
-                name_item.setCheckState(0, checkbox_state)
+            # set the initial checkbox state
+            is_checked = self.view.actors_df.loc[
+                self.view.actors_df["uid"] == uid, "show"
+            ].iloc[0]
+            name_item.setData(0, Qt.UserRole, uid)
+            name_item.setFlags(name_item.flags() | Qt.ItemIsUserCheckable)
+            if is_checked:
+                checkbox_state = Qt.Checked
             else:
-                name_item.setFlags(name_item.flags() | Qt.ItemIsUserCheckable)
-                name_item.setCheckState(0, Qt.Unchecked)
+                checkbox_state = Qt.Unchecked
+            name_item.setCheckState(0, checkbox_state)
+
             parent.addChild(name_item)
 
-            # Create and set up the QComboBox
-            property_combo = QComboBox()
-            for label in self.default_labels:
-                property_combo.addItem(label)
-            if self.prop_label:
-                property_combo.addItems(row[self.prop_label])
-                # props = row[self.prop_label]
-                # props_comps = row[self.prop_comp_label]
-                # add_props = []
-                # for i in range(len(props)):
-                #     # if props_comps[i] == 3:
-                #     #     add_props = (
-                #     #         add_props
-                #     #         + [props[i] + "[0]"]
-                #     #         + [props[i] + "[1]"]
-                #     #         + [props[i] + "[2]"]
-                #     #     )
-                #     if props_comps[i] > 1:
-                #         for j in range(props_comps[i]):
-                #             add_props.append(props[i] + f"[{j}]")
-                #     elif props_comps[i] == 1:
-                #         add_props = add_props + [props[i]]
-                if self.collection.collection_name == "dom_coll":
-                    # If the collection is dom_coll, add the label for textures
-                    for texture_uid in self.collection.df.loc[
-                        self.collection.df["uid"] == uid, "texture_uids"
-                    ].values[0]:
-                        texture_name = self.view.parent.image_coll.df.loc[
-                            self.view.parent.image_coll.df["uid"] == texture_uid, "name"
-                        ].values[0]
-                        # property_texture_combo.addItem(texture_name)
-                        # property_texture_combo.texture_uid_list.append(texture_uid)
-                        # add_props.append(f"{texture_name}")
-                        # property_combo.addItems(f"{texture_name}")
-                        property_combo.addItem(texture_name)
-
-                # property_combo.addItems(add_props)
-
-            index = property_combo.findText(
-                self.view.actors_df.loc[
-                    self.view.actors_df["uid"] == uid, "show_property"
-                ].values[0]
-            )
-            if index >= 0:
-                property_combo.setCurrentIndex(index)
-            property_combo.currentTextChanged.connect(
-                lambda prop_text, item=name_item: self.on_combo_changed(item, prop_text)
-            )
-
             # Add the item and set the combo box in the last column
-            self.setItemWidget(name_item, self.columnCount() - 1, property_combo)
+            self.setItemWidget(
+                name_item,
+                self.columnCount() - 1,
+                self.create_property_combo(row=row),
+            )
 
         # Expand all items and resize columns
         self.expandAll()
@@ -490,61 +517,10 @@ class CustomTreeWidget(QTreeWidget):
             # Add item to the tree
             parent.addChild(name_item)
 
-            # Create and set up the QComboBox
-            property_combo = QComboBox()
-            for label in self.default_labels:
-                property_combo.addItem(label)
-            if self.prop_label:
-                property_combo.addItems(row[self.prop_label])
-                # props = row[self.prop_label]
-                # props_comps = row[self.prop_comp_label]
-                # add_props = []
-                # for i in range(len(props)):
-                #     # if props_comps[i] == 3:
-                #     #     add_props = (
-                #     #         add_props
-                #     #         + [props[i] + "[0]"]
-                #     #         + [props[i] + "[1]"]
-                #     #         + [props[i] + "[2]"]
-                #     #     )
-                #     if props_comps[i] > 1:
-                #         for j in range(props_comps[i]):
-                #             add_props.append(props[i] + f"[{j}]")
-                #     elif props_comps[i] == 1:
-                #         add_props = add_props + [props[i]]
-                if self.collection.collection_name == "dom_coll":
-                    # If the collection is dom_coll, add the label for textures
-                    for texture_uid in self.collection.df.loc[
-                        self.collection.df["uid"] == uid, "texture_uids"
-                    ].values[0]:
-                        texture_name = self.view.parent.image_coll.df.loc[
-                            self.view.parent.image_coll.df["uid"] == texture_uid, "name"
-                        ].values[0]
-                        # property_texture_combo.addItem(texture_name)
-                        # property_texture_combo.texture_uid_list.append(texture_uid)
-                        # add_props.append(f"{texture_name}")
-                        property_combo.addItem(texture_name)
-
-                # property_combo.addItems(add_props)
-
-            # Connect signal
-            property_combo.currentTextChanged.connect(
-                lambda prop_text, item=name_item: self.on_combo_changed(item, prop_text)
-            )
-
             # Add the item and set the combo box in the last column
-            self.setItemWidget(name_item, self.columnCount() - 1, property_combo)
-
-            # Try to restore the previous combo state if it's still available
-            current_text = self.view.actors_df.loc[
-                self.view.actors_df["uid"] == uid, "show_property"
-            ].iloc[0]
-            index = property_combo.findText(current_text)
-            if index >= 0:
-                property_combo.setCurrentIndex(index)
-            else:
-                # If the previous selection is no longer available, set to first default label
-                property_combo.setCurrentIndex(0)
+            self.setItemWidget(
+                name_item, self.columnCount() - 1, self.create_property_combo(row=row)
+            )
 
             # Expand all parent items in the path
             for parent_item in parents_to_expand:
@@ -778,35 +754,14 @@ class CustomTreeWidget(QTreeWidget):
             turn_off_uids=turn_off_uids,
         )
 
-    # def create_property_combo(self, row, uid):
-    #     """
-    #     Creates a QComboBox with items from the given `row` data and sets the current index
-    #     based on the `uid`. This method initializes a QComboBox instance, populates it,
-    #     and selects a predefined item from self.view.actors_df..
-    #     """
-    #     property_combo = QComboBox()
-    #     property_combo.addItems(row[self.prop_label])
-    #
-    #     index = property_combo.findText(
-    #         self.view.actors_df.loc[
-    #             self.view.actors_df["uid"] == uid, "show_property"
-    #         ].values[0]
-    #     )
-    #     if index >= 0:
-    #         property_combo.setCurrentIndex(index)
-    #
-    #     return property_combo
-
     @preserve_selection
-    def on_combo_changed(self, item, prop_text):
+    def on_combo_changed(self, uid, prop_text):
         """
         To be used to send the new combo state to the main application.
         Updates the combo box value and handles property toggling for the associated item
         while maintaining the state of the current selection.
         """
-
         # Update the stored combo value
-        uid = self.get_item_uid(item)
         self.view.toggle_property(
             collection_name=self.collection.collection_name,
             uid=uid,
