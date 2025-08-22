@@ -10,6 +10,30 @@ class DomCollection(DIMCollection):
     def __init__(self, parent=None, *args, **kwargs):
         super(DomCollection, self).__init__(parent, *args, **kwargs)
         # Initialize properties required by the abstract superclass.
+        self.entity_dict = {
+            "uid": "",
+            "name": "undef",
+            "scenario": "undef",
+            "x_section": "",  # this is the uid of the cross section for "XsVertexSet", "XsPolyLine", and "XsImage", empty for all others
+            "texture_uids": "",
+            "topology": "undef",
+            "vtk_obj": None,
+            "properties_names": [],
+            "properties_components": [],
+        }
+
+        self.entity_dict_types = {
+            "uid": str,
+            "name": str,
+            "scenario": str,
+            "x_section": str,
+            "texture_uids": str,
+            "topology": str,
+            "vtk_obj": object,
+            "properties_names": list,
+            "properties_components": list,
+        }
+
         self.valid_topologies = ["DEM", "TSDom", "PCDom"]
 
         self.collection_name = "dom_coll"
