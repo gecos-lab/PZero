@@ -368,9 +368,9 @@ class CustomTreeWidget(QTreeWidget):
                         property_combo.setItemData(
                             property_combo.findText(prop_), prop_
                         )
-        if "texture_uids" in self.collection.df.columns.values.tolist():
+        if "textures" in self.collection.df.columns.values.tolist():
             for texture_uid in self.collection.df.loc[
-                self.collection.df["uid"] == uid, "texture_uids"
+                self.collection.df["uid"] == uid, "textures"
             ].values[0]:
                 texture_name = self.view.parent.image_coll.df.loc[
                     self.view.parent.image_coll.df["uid"] == texture_uid, "name"

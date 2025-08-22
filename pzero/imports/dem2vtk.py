@@ -43,7 +43,7 @@ def dem2vtk(self=None, in_file_name=None, collection=None):
         curr_obj_attributes["uid"] = str(uuid4())
         curr_obj_attributes["name"] = os.path.basename(in_file_name)
         curr_obj_attributes["topology"] = "DEM"
-        curr_obj_attributes["texture_uids"] = []
+        curr_obj_attributes["textures"] = []
         curr_obj_attributes["properties_names"] = ["elevation"]
         curr_obj_attributes["properties_components"] = [1]
         curr_obj_attributes["vtk_obj"] = curr_obj
@@ -54,7 +54,7 @@ def dem2vtk(self=None, in_file_name=None, collection=None):
         curr_obj_attributes["uid"] = str(uuid4())
         curr_obj_attributes["name"] = os.path.basename(in_file_name)
         curr_obj_attributes["role"] = "raster"
-        curr_obj_attributes["texture_uids"] = []
+        curr_obj_attributes["textures"] = []
         curr_obj_attributes["properties_names"] = ["elevation"]
         curr_obj_attributes["properties_components"] = [1]
         curr_obj_attributes["vtk_obj"] = curr_obj

@@ -80,7 +80,7 @@ class DIMCollection(BaseCollection):
         # First remove textures from DOMs, if defined. This is generally necessary just for images,
         # but it is worth adding it here for a more general behaviour with no relevant computational cost.
         for dom_uid in self.parent.dom_coll.get_uids:
-            if uid in self.parent.dom_coll.get_uid_texture_uids(dom_uid):
+            if uid in self.parent.dom_coll.get_uid_textures(dom_uid):
                 self.parent.dom_coll.remove_map_texture_from_dom(
                     dom_uid=dom_uid, map_image_uid=uid
                 )

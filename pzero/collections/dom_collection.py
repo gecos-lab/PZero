@@ -15,7 +15,7 @@ class DomCollection(DIMCollection):
             "name": "undef",
             "scenario": "undef",
             "x_section": "",  # this is the uid of the cross section for "XsVertexSet", "XsPolyLine", and "XsImage", empty for all others
-            "texture_uids": "",
+            "textures": "",
             "topology": "undef",
             "vtk_obj": None,
             "properties_names": [],
@@ -27,7 +27,7 @@ class DomCollection(DIMCollection):
             "name": str,
             "scenario": str,
             "x_section": str,
-            "texture_uids": str,
+            "textures": str,
             "topology": str,
             "vtk_obj": object,
             "properties_names": list,
@@ -53,31 +53,31 @@ class DomCollection(DIMCollection):
 
     # =================================== Additional methods ===========================================
 
-    def get_uid_texture_uids(self, uid=None):
+    def get_uid_textures(self, uid=None):
         """Get value(s) stored in dataframe (as pointer) from uid."""
-        return self.df.loc[self.df["uid"] == uid, "texture_uids"].values[0]
+        return self.df.loc[self.df["uid"] == uid, "textures"].values[0]
 
-    def set_uid_texture_uids(self, uid=None, texture_uids=None):
+    def set_uid_textures(self, uid=None, textures=None):
         """Set value(s) stored in dataframe (as pointer) from uid.."""
-        self.df.loc[self.df["uid"] == uid, "texture_uids"] = texture_uids
+        self.df.loc[self.df["uid"] == uid, "textures"] = textures
 
     def add_map_texture_to_dom(self, dom_uid=None, map_image_uid=None):
         """Add a map texture to a DOM."""
         row = self.df[self.df["uid"] == dom_uid].index.values[0]
-        if map_image_uid not in self.df.at[row, "texture_uids"]:
+        if map_image_uid not in self.df.at[row, "textures"]:
             self.get_uid_vtk_obj(dom_uid).add_texture(
                 map_image=self.parent.image_coll.get_uid_vtk_obj(map_image_uid),
                 map_image_uid=map_image_uid,
             )
-            self.df.at[row, "texture_uids"].append(map_image_uid)
+            self.df.at[row, "textures"].append(map_image_uid)
             self.parent.signals.metadata_modified.emit([dom_uid], self)
 
     def remove_map_texture_from_dom(self, dom_uid=None, map_image_uid=None):
         """Remove a map texture from a DOM."""
         row = self.df[self.df["uid"] == dom_uid].index.values[0]
-        if map_image_uid in self.df.at[row, "texture_uids"]:
+        if map_image_uid in self.df.at[row, "textures"]:
             self.get_uid_vtk_obj(dom_uid).remove_texture(map_image_uid=map_image_uid)
-            self.df.at[row, "texture_uids"].remove(map_image_uid)
+            self.df.at[row, "textures"].remove(map_image_uid)
             self.parent.signals.data_keys_removed.emit([dom_uid], self)
             # self.parent.signals.metadata_modified.emit([dom_uid], self)
 
