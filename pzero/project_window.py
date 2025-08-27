@@ -243,6 +243,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.actionLoopStructural.triggered.connect(
             lambda: implicit_model_loop_structural(self)
         )
+        self.actionPymeshit.triggered.connect(self.open_pymeshit_gui)
         self.actionSurfaceSmoothing.triggered.connect(self.smooth_dialog)
         self.actionSubdivisionResampling.triggered.connect(self.subd_res_dialog)
         self.actionDecimationPro.triggered.connect(
@@ -865,6 +866,42 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 octree.SetDataSet(entity)
                 octree.BuildLocator()
                 entity.locator = octree
+
+    def open_pymeshit_gui(self):
+        """Open the Pymeshit workflow GUI"""
+        try:
+            import sys
+            import os
+            from PyQt5.QtWidgets import QApplication
+
+            # Add the Pymeshit directory to Python path to ensure proper imports
+            pymeshit_dir = os.path.join(os.path.dirname(__file__), 'Pymeshit')
+            if pymeshit_dir not in sys.path:
+                sys.path.insert(0, pymeshit_dir)
+
+            # Import the Pymeshit GUI
+            from Pymeshit_workflow_gui import MeshItWorkflowGUI
+
+            # Create QApplication if it doesn't exist (needed for standalone GUI)
+            app = QApplication.instance()
+            if app is None:
+                app = QApplication(sys.argv)
+
+            # Create and show the Pymeshit GUI
+            pymeshit_window = MeshItWorkflowGUI()
+            pymeshit_window._ensure_vtk_cleanup_on_exit()
+            pymeshit_window.show()
+
+            self.print_terminal("Pymeshit GUI opened successfully")
+
+        except ImportError as e:
+            error_msg = f"Error: Could not import Pymeshit modules: {e}"
+            self.print_terminal(error_msg)
+            print(error_msg)  # Also print to console for debugging
+        except Exception as e:
+            error_msg = f"Error opening Pymeshit GUI: {e}"
+            self.print_terminal(error_msg)
+            print(error_msg)  # Also print to console for debugging
 
     def decimate_pc_dialog(self):
         if self.selected_uids:

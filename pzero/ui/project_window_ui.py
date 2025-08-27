@@ -135,6 +135,8 @@ class Ui_ProjectWindow(object):
         self.actionPoisson.setObjectName("actionPoisson")
         self.actionLoopStructural = QAction(ProjectWindow)
         self.actionLoopStructural.setObjectName("actionLoopStructural")
+        self.actionPymeshit = QAction(ProjectWindow)
+        self.actionPymeshit.setObjectName("actionPymeshit")
         self.actionSurfaceSmoothing = QAction(ProjectWindow)
         self.actionSurfaceSmoothing.setObjectName("actionSurfaceSmoothing")
         self.actionSubdivisionResampling = QAction(ProjectWindow)
@@ -426,6 +428,7 @@ class Ui_ProjectWindow(object):
         self.menuInterpolation.addAction(self.actionDelaunay2D)
         self.menuInterpolation.addAction(self.actionPoisson)
         self.menuInterpolation.addAction(self.actionLoopStructural)
+        self.menuInterpolation.addAction(self.actionPymeshit)
         self.menuInterpolation.addSeparator()
         self.menuInterpolation.addAction(self.actionDecimationPro)
         self.menuInterpolation.addAction(self.actionDecimationQuadric)
@@ -582,6 +585,9 @@ class Ui_ProjectWindow(object):
         )
         self.actionLoopStructural.setText(
             QCoreApplication.translate("ProjectWindow", "LoopStructural Implicit", None)
+        )
+        self.actionPymeshit.setText(
+            QCoreApplication.translate("ProjectWindow", "Pymeshit", None)
         )
         self.actionSurfaceSmoothing.setText(
             QCoreApplication.translate("ProjectWindow", "Surface Smoothing", None)
