@@ -15,7 +15,7 @@ class DomCollection(DIMCollection):
             "name": "undef",
             "scenario": "undef",
             "x_section": "",  # this is the uid of the cross section for "XsVertexSet", "XsPolyLine", and "XsImage", empty for all others
-            "textures": "",
+            "textures": [],
             "topology": "undef",
             "vtk_obj": None,
             "properties_names": [],

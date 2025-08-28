@@ -1765,16 +1765,16 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
 
                 if not new_dom_coll_df.empty:
                     # fix old projects with texture_uid column name
-                    if "texture_uid" in self.dom_coll.df.columns:
-                        self.dom_coll.df.rename(
-                            columns={"texture_uid": "textures"}, inplace=True
-                        )
-                        self.print_terminal("column texture_uid renamed as textures in dom table")
-                    if "texture_uids" in self.dom_coll.df.columns:
-                        self.dom_coll.df.rename(
+                    if "texture_uids" in new_dom_coll_df.columns:
+                        new_dom_coll_df.rename(
                             columns={"texture_uids": "textures"}, inplace=True
                         )
                         self.print_terminal("column texture_uids renamed as textures in dom table")
+                    if "texture_uid" in new_dom_coll_df.columns:
+                        new_dom_coll_df.rename(
+                            columns={"texture_uid": "textures"}, inplace=True
+                        )
+                        self.print_terminal("column texture_uid renamed as textures in dom table")
 
                     for new_column in new_dom_coll_df.columns.values.tolist():
                         if new_column not in self.dom_coll.df.columns.values.tolist():
