@@ -275,11 +275,11 @@ class View3D(ViewVTK):
                 use_mesh=True,
             )
             self.tog_att *= -1
-            print("Picking enabled")
+            self.print_terminal("Picking enabled")
         else:
             self.plotter.disable_picking()
             self.tog_att *= -1
-            print("Picking disabled")
+            self.print_terminal("Picking disabled")
 
     def pkd_point(self, mesh, pid, set_opt):
         """Used by  pkd_point, which returns data from picking on point clouds."""

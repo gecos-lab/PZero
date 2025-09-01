@@ -481,7 +481,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.change_actor_opacity(collection=collection, updated_uids=updated_uids)
         total_items = len(collection.df)
         if len(updated_uids) > total_items * 0.2:
-            print("Rebuilding the entire tree")
+            # print("Rebuilding the entire tree")
             tree.populate_tree()
         else:
             tree.remove_items_from_tree(uids_to_remove=updated_uids)
@@ -522,7 +522,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
     def show_uids(self, uids: list = None):
         """Show actors with the given uids."""
         # Maybe in the future this might be reimplemented in parallel or vectorized?
-        print("show_uids: ", uids)
+        # print("show_uids: ", uids)
         for uid in uids:
             self.print_terminal(f"showing uid: {uid}")
             if not self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]:

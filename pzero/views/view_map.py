@@ -467,7 +467,7 @@ class ViewMap(View2D):
                 opacity=opacity,
             )
         else:
-            print("[Windows factory]: actor with no class")
+            self.print_terminal("[Windows factory]: actor with no class")
             this_actor = None
         return this_actor
 

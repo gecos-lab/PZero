@@ -912,9 +912,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
 
         sel_uids = self.selected_uids
         if len(sel_uids) > 1:
-            print("Multiple surfaces selected, only one will be previewed")
+            self.print_terminal("Multiple surfaces selected, only one will be previewed")
         elif len(sel_uids) == 0:
-            print("No selected objects")
+            self.print_terminal("No selected objects")
             return
 
         for uid in sel_uids:
@@ -939,9 +939,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
 
         sel_uids = self.selected_uids
         if len(sel_uids) > 1:
-            print("Multiple surfaces selected, only one will be previewed")
+            self.print_terminal("Multiple surfaces selected, only one will be previewed")
         elif len(sel_uids) == 0:
-            print("No selected objects")
+            self.print_terminal("No selected objects")
             return
 
         for uid in sel_uids:
@@ -968,9 +968,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
 
         sel_uids = self.selected_uids
         if len(sel_uids) > 1:
-            print("Multiple surfaces selected, only one will be previewed")
+            self.print_terminal("Multiple surfaces selected, only one will be previewed")
         elif len(sel_uids) == 0:
-            print("No selected objects")
+            self.print_terminal("No selected objects")
             return
 
         for uid in sel_uids:
