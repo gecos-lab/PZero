@@ -912,7 +912,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
 
         sel_uids = self.selected_uids
         if len(sel_uids) > 1:
-            self.print_terminal("Multiple surfaces selected, only one will be previewed")
+            self.print_terminal(
+                "Multiple surfaces selected, only one will be previewed"
+            )
         elif len(sel_uids) == 0:
             self.print_terminal("No selected objects")
             return
@@ -939,7 +941,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
 
         sel_uids = self.selected_uids
         if len(sel_uids) > 1:
-            self.print_terminal("Multiple surfaces selected, only one will be previewed")
+            self.print_terminal(
+                "Multiple surfaces selected, only one will be previewed"
+            )
         elif len(sel_uids) == 0:
             self.print_terminal("No selected objects")
             return
@@ -968,7 +972,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
 
         sel_uids = self.selected_uids
         if len(sel_uids) > 1:
-            self.print_terminal("Multiple surfaces selected, only one will be previewed")
+            self.print_terminal(
+                "Multiple surfaces selected, only one will be previewed"
+            )
         elif len(sel_uids) == 0:
             self.print_terminal("No selected objects")
             return
@@ -1597,7 +1603,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 if len(diffs) > 0:
                     self.print_terminal(f"fluids_legend_table diffs: {diffs}")
                     for diff in diffs:
-                        self.fluid_coll.legend_df[diff] = Legend.fluids_legend_dict[diff]
+                        self.fluid_coll.legend_df[diff] = Legend.fluids_legend_dict[
+                            diff
+                        ]
                     self.fluid_coll.legend_df.sort_values(
                         by="time", ascending=True, inplace=True
                     )
@@ -1629,9 +1637,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 if len(diffs) > 0:
                     self.print_terminal(f"backgrounds_legend_table diffs: {diffs}")
                     for diff in diffs:
-                        self.backgrnd_coll.legend_df[diff] = Legend.backgrounds_legend_dict[
-                            diff
-                        ]
+                        self.backgrnd_coll.legend_df[diff] = (
+                            Legend.backgrounds_legend_dict[diff]
+                        )
 
             # Read other legend tables.
             if os.path.isfile(
@@ -1714,7 +1722,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     for new_column in new_xsect_coll_df.columns.values.tolist():
                         if new_column not in self.xsect_coll.df.columns.values.tolist():
                             new_xsect_coll_df.drop(new_column, axis=1, inplace=True)
-                            self.print_terminal(f"column {new_column} removed from xsect table")
+                            self.print_terminal(
+                                f"column {new_column} removed from xsect table"
+                            )
                     for column in self.xsect_coll.df.columns.values.tolist():
                         if column not in new_xsect_coll_df.columns.values.tolist():
                             missing_column = pd_DataFrame(
@@ -1769,17 +1779,23 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                         new_dom_coll_df.rename(
                             columns={"texture_uids": "textures"}, inplace=True
                         )
-                        self.print_terminal("column texture_uids renamed as textures in dom table")
+                        self.print_terminal(
+                            "column texture_uids renamed as textures in dom table"
+                        )
                     if "texture_uid" in new_dom_coll_df.columns:
                         new_dom_coll_df.rename(
                             columns={"texture_uid": "textures"}, inplace=True
                         )
-                        self.print_terminal("column texture_uid renamed as textures in dom table")
+                        self.print_terminal(
+                            "column texture_uid renamed as textures in dom table"
+                        )
 
                     for new_column in new_dom_coll_df.columns.values.tolist():
                         if new_column not in self.dom_coll.df.columns.values.tolist():
                             new_dom_coll_df.drop(new_column, axis=1, inplace=True)
-                            self.print_terminal(f"column {new_column} removed from dom table")
+                            self.print_terminal(
+                                f"column {new_column} removed from dom table"
+                            )
                     for column in self.dom_coll.df.columns.values.tolist():
                         if column not in new_dom_coll_df.columns.values.tolist():
                             missing_column = pd_DataFrame(
@@ -1880,7 +1896,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     for new_column in new_image_coll_df.columns.values.tolist():
                         if new_column not in self.image_coll.df.columns.values.tolist():
                             new_image_coll_df.drop(new_column, axis=1, inplace=True)
-                            self.print_terminal(f"column {new_column} removed from image table")
+                            self.print_terminal(
+                                f"column {new_column} removed from image table"
+                            )
                     for column in self.image_coll.df.columns.values.tolist():
                         if column not in new_image_coll_df.columns.values.tolist():
                             missing_column = pd_DataFrame(
@@ -1981,9 +1999,14 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 if not new_mesh3d_coll_df.empty:
 
                     for new_column in new_mesh3d_coll_df.columns.values.tolist():
-                        if new_column not in self.mesh3d_coll.df.columns.values.tolist():
+                        if (
+                            new_column
+                            not in self.mesh3d_coll.df.columns.values.tolist()
+                        ):
                             new_mesh3d_coll_df.drop(new_column, axis=1, inplace=True)
-                            self.print_terminal(f"column {new_column} removed from mesh3d table")
+                            self.print_terminal(
+                                f"column {new_column} removed from mesh3d table"
+                            )
                     for column in self.mesh3d_coll.df.columns.values.tolist():
                         if column not in new_mesh3d_coll_df.columns.values.tolist():
                             missing_column = pd_DataFrame(
@@ -1997,7 +2020,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                                 ignore_index=False,
                                 axis=1,
                             )
-                            self.print_terminal(f"column {column} added to mesh3d table")
+                            self.print_terminal(
+                                f"column {column} added to mesh3d table"
+                            )
 
                     # reorder columns
                     new_mesh3d_coll_df = new_mesh3d_coll_df[self.mesh3d_coll.df.columns]
@@ -2072,9 +2097,14 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 if not new_boundary_coll_df.empty:
 
                     for new_column in new_boundary_coll_df.columns.values.tolist():
-                        if new_column not in self.boundary_coll.df.columns.values.tolist():
+                        if (
+                            new_column
+                            not in self.boundary_coll.df.columns.values.tolist()
+                        ):
                             new_boundary_coll_df.drop(new_column, axis=1, inplace=True)
-                            self.print_terminal(f"column {new_column} removed from boundary table")
+                            self.print_terminal(
+                                f"column {new_column} removed from boundary table"
+                            )
                     for column in self.boundary_coll.df.columns.values.tolist():
                         if column not in new_boundary_coll_df.columns.values.tolist():
                             missing_column = pd_DataFrame(
@@ -2088,10 +2118,14 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                                 ignore_index=False,
                                 axis=1,
                             )
-                            self.print_terminal(f"column {column} added to boundary table")
+                            self.print_terminal(
+                                f"column {column} added to boundary table"
+                            )
 
                     # reorder columns
-                    new_boundary_coll_df = new_boundary_coll_df[self.boundary_coll.df.columns]
+                    new_boundary_coll_df = new_boundary_coll_df[
+                        self.boundary_coll.df.columns
+                    ]
 
                     self.boundary_coll.df = new_boundary_coll_df
 
@@ -2148,7 +2182,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     for new_column in new_well_coll_df.columns.values.tolist():
                         if new_column not in self.well_coll.df.columns.values.tolist():
                             new_well_coll_df.drop(new_column, axis=1, inplace=True)
-                            self.print_terminal(f"column {new_column} removed from wells table")
+                            self.print_terminal(
+                                f"column {new_column} removed from wells table"
+                            )
                     for column in self.well_coll.df.columns.values.tolist():
                         if column not in new_well_coll_df.columns.values.tolist():
                             missing_column = pd_DataFrame(
@@ -2223,7 +2259,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     for new_column in new_geol_coll_df.columns.values.tolist():
                         if new_column not in self.geol_coll.df.columns.values.tolist():
                             new_geol_coll_df.drop(new_column, axis=1, inplace=True)
-                            self.print_terminal(f"column {new_column} removed from geology table")
+                            self.print_terminal(
+                                f"column {new_column} removed from geology table"
+                            )
                     for column in self.geol_coll.df.columns.values.tolist():
                         if column not in new_geol_coll_df.columns.values.tolist():
                             missing_column = pd_DataFrame(
@@ -2237,7 +2275,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                                 ignore_index=False,
                                 axis=1,
                             )
-                            self.print_terminal(f"column {column} added to geology table")
+                            self.print_terminal(
+                                f"column {column} added to geology table"
+                            )
 
                     # reorder columns
                     new_geol_coll_df = new_geol_coll_df[self.geol_coll.df.columns]
@@ -2312,7 +2352,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     for new_column in new_fluids_coll_df.columns.values.tolist():
                         if new_column not in self.fluid_coll.df.columns.values.tolist():
                             new_fluids_coll_df.drop(new_column, axis=1, inplace=True)
-                            self.print_terminal(f"column {new_column} removed from fluids table")
+                            self.print_terminal(
+                                f"column {new_column} removed from fluids table"
+                            )
                     for column in self.fluid_coll.df.columns.values.tolist():
                         if column not in new_fluids_coll_df.columns.values.tolist():
                             missing_column = pd_DataFrame(
@@ -2326,7 +2368,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                                 ignore_index=False,
                                 axis=1,
                             )
-                            self.print_terminal(f"column {column} added to fluids table")
+                            self.print_terminal(
+                                f"column {column} added to fluids table"
+                            )
 
                     # reorder columns
                     new_fluids_coll_df = new_fluids_coll_df[self.fluid_coll.df.columns]
@@ -2396,11 +2440,21 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 if not new_backgrounds_coll_df.empty:
 
                     for new_column in new_backgrounds_coll_df.columns.values.tolist():
-                        if new_column not in self.backgrnd_coll.df.columns.values.tolist():
-                            new_backgrounds_coll_df.drop(new_column, axis=1, inplace=True)
-                            self.print_terminal(f"column {new_column} removed from background table")
+                        if (
+                            new_column
+                            not in self.backgrnd_coll.df.columns.values.tolist()
+                        ):
+                            new_backgrounds_coll_df.drop(
+                                new_column, axis=1, inplace=True
+                            )
+                            self.print_terminal(
+                                f"column {new_column} removed from background table"
+                            )
                     for column in self.backgrnd_coll.df.columns.values.tolist():
-                        if column not in new_backgrounds_coll_df.columns.values.tolist():
+                        if (
+                            column
+                            not in new_backgrounds_coll_df.columns.values.tolist()
+                        ):
                             missing_column = pd_DataFrame(
                                 [{column: self.backgrnd_coll.entity_dict[column]}]
                                 * len(new_backgrounds_coll_df)
@@ -2412,10 +2466,14 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                                 ignore_index=False,
                                 axis=1,
                             )
-                            self.print_terminal(f"column {column} added to background table")
+                            self.print_terminal(
+                                f"column {column} added to background table"
+                            )
 
                     # reorder columns
-                    new_backgrounds_coll_df = new_backgrounds_coll_df[self.backgrnd_coll.df.columns]
+                    new_backgrounds_coll_df = new_backgrounds_coll_df[
+                        self.backgrnd_coll.df.columns
+                    ]
 
                     self.backgrnd_coll.df = new_backgrounds_coll_df
 
