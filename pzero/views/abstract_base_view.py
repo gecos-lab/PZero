@@ -535,7 +535,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         # Maybe in th future this might be reimplemented in parallel or vectorized?
         # print("hide_uids: ", uids)
         for uid in uids:
-            self.print_terminal(f"hiding uid: {uid}")
+            # self.print_terminal(f"hiding uid: {uid}")
             if self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]:
                 self.set_actor_visible(uid=uid, visible=False)
                 self.actors_df.loc[self.actors_df["uid"] == uid, "show"] = False

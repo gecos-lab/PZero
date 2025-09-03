@@ -220,7 +220,7 @@ class ViewVTK(BaseView):
             this_actor.SetVisibility(visible)
         else:
             # case for ALL OTHER COLLECTIONS
-            self.print_terminal("case for ALL OTHER COLLECTIONS")
+            # self.print_terminal("case for ALL OTHER COLLECTIONS")
             this_actor.SetVisibility(visible)
 
     def remove_actor_in_view(self, uid=None, redraw=False):
