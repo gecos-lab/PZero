@@ -1072,7 +1072,7 @@ def simplify_line(self):
     try:
         for current_uid in self.selected_uids:
             if (self.parent.geol_coll.get_uid_topology(current_uid) != "PolyLine") and (
-                    self.parent.geol_coll.get_uid_topology(current_uid) != "XsPolyLine"
+                self.parent.geol_coll.get_uid_topology(current_uid) != "XsPolyLine"
             ):
                 self.print_terminal(" -- Selected data is not a line -- ")
                 continue
@@ -1097,7 +1097,9 @@ def simplify_line(self):
                 new_line["topology"] = "XsPolyLine"
                 new_line["x_section"] = self.this_x_section_uid
                 inU, inV = vtk_obj.world2plane()
-                new_line["vtk_obj"] = XsPolyLine(self.this_x_section_uid, parent=self.parent)
+                new_line["vtk_obj"] = XsPolyLine(
+                    self.this_x_section_uid, parent=self.parent
+                )
 
             # Stack coordinates in two-columns matrix
             inUV = np_column_stack((inU, inV))
@@ -1108,8 +1110,7 @@ def simplify_line(self):
             shp_line_out = shp_line_in.simplify(tolerance_p, preserve_topology=False)
 
             if shp_line_out.is_empty:
-                self.print_terminal(
-                    f"Empty geometry {current_uid}")
+                self.print_terminal(f"Empty geometry {current_uid}")
                 continue
 
             if len(shp_line_out.coords) == 0:
@@ -1140,9 +1141,13 @@ def simplify_line(self):
             if new_line["vtk_obj"].points_number > 0:
                 self.parent.geol_coll.remove_entity(current_uid)
                 self.parent.geol_coll.add_entity_from_dict(new_line)
-                self.parent.signals.geom_modified.emit([current_uid], self.parent.geol_coll)
+                self.parent.signals.geom_modified.emit(
+                    [current_uid], self.parent.geol_coll
+                )
             else:
-                self.print_terminal(f"Empty geometry after parallel offset {current_uid}")
+                self.print_terminal(
+                    f"Empty geometry after parallel offset {current_uid}"
+                )
 
     except Exception as e:
         self.print_terminal(f"Error: {str(e)}")
@@ -1322,7 +1327,9 @@ def copy_kink(self):
             inU = vtk_obj.points_X
             inV = vtk_obj.points_Y
         elif isinstance(self, ViewXsection):
-            line_dict["vtk_obj"] = XsPolyLine(self.this_x_section_uid, parent=self.parent)
+            line_dict["vtk_obj"] = XsPolyLine(
+                self.this_x_section_uid, parent=self.parent
+            )
             line_dict["topology"] = "XsPolyLine"
             line_dict["x_section"] = self.this_x_section_uid
             inU, inV = vtk_obj.world2plane()

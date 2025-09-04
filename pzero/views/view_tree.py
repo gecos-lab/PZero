@@ -368,17 +368,36 @@ class CustomTreeWidget(QTreeWidget):
                         property_combo.setItemData(
                             property_combo.findText(prop_), prop_
                         )
-        if "textures" in self.collection.df.columns.values.tolist():
-            for texture_uid in self.collection.df.loc[
-                self.collection.df["uid"] == uid, "textures"
-            ].values[0]:
-                texture_name = self.view.parent.image_coll.df.loc[
-                    self.view.parent.image_coll.df["uid"] == texture_uid, "name"
-                ].values[0]
-                property_combo.addItem(texture_name)
-                property_combo.setItemData(
-                    property_combo.findText(texture_name), texture_uid
-                )
+        if (
+            self.collection.df is not None
+            and not self.collection.df.empty
+            and "textures" in self.collection.df.columns.values.tolist()
+        ):
+
+            # Check if the uid exists in the collection
+            uid_exists = uid in self.collection.df["uid"].values
+            if uid_exists:
+                textures_value = self.collection.df.loc[
+                    self.collection.df["uid"] == uid, "textures"
+                ].values
+                if len(textures_value) > 0 and textures_value[0] is not None:
+                    for texture_uid in textures_value[0]:
+                        # Check if image collection exists and has the texture
+                        if (
+                            hasattr(self.view.parent, "image_coll")
+                            and self.view.parent.image_coll.df is not None
+                            and not self.view.parent.image_coll.df.empty
+                            and texture_uid
+                            in self.view.parent.image_coll.df["uid"].values
+                        ):
+                            texture_name = self.view.parent.image_coll.df.loc[
+                                self.view.parent.image_coll.df["uid"] == texture_uid,
+                                "name",
+                            ].values[0]
+                            property_combo.addItem(texture_name)
+                            property_combo.setItemData(
+                                property_combo.findText(texture_name), texture_uid
+                            )
 
         # set to property currently recorded as shown in self.view.actors_df
         index = property_combo.findText(
@@ -412,6 +431,12 @@ class CustomTreeWidget(QTreeWidget):
         # Clean up existing widgets before clearing the tree
         self._cleanup_tree_widgets()
         self.clear()
+
+        # Check if collection and DataFrame are properly initialized
+        if self.collection.df is None or self.collection.df.empty:
+            self.blockSignals(False)
+            return
+
         hierarchy = self.header_widget.get_order()
 
         for _, row in self.collection.df.iterrows():
@@ -468,6 +493,10 @@ class CustomTreeWidget(QTreeWidget):
         up the QComboBox for custom labeling. Parent items in the tree are expanded
         after the addition of new child nodes.
         """
+        # Check if collection and DataFrame are properly initialized
+        if self.collection.df is None or self.collection.df.empty:
+            return False
+
         # If adding more than 20% of total items, rebuild the entire tree
         total_items = len(self.collection.df)
         if len(uids_to_add) > total_items * 0.2:
@@ -478,6 +507,10 @@ class CustomTreeWidget(QTreeWidget):
         hierarchy = self.header_widget.get_order()
 
         for uid in uids_to_add:
+            # Check if uid exists in the DataFrame
+            if uid not in self.collection.df[self.uid_label].values:
+                continue
+
             # Get the row from collection.df for this UID
             row = self.collection.df.loc[
                 self.collection.df[self.uid_label] == uid
@@ -543,6 +576,10 @@ class CustomTreeWidget(QTreeWidget):
         it triggers a full rebuild of the tree structure. Otherwise, items are removed individually,
         handling any associated UI elements and maintaining data consistency.
         """
+
+        # Check if collection and DataFrame are properly initialized
+        if self.collection.df is None or self.collection.df.empty:
+            return False
 
         # If removing more than 20% of total items, rebuild the entire tree
         total_items = len(self.collection.df)
@@ -782,6 +819,10 @@ class CustomTreeWidget(QTreeWidget):
         dataframes. This method temporarily blocks signals to avoid unnecessary updates during the operation.
         """
 
+        # Check if collection and DataFrame are properly initialized
+        if self.collection.df is None or self.collection.df.empty:
+            return
+
         # Block signals temporarily to prevent unnecessary updates
         self.blockSignals(True)
 
@@ -802,10 +843,15 @@ class CustomTreeWidget(QTreeWidget):
                         combo.addItem(label)
 
                     # Add the new properties
-                    properties_list = self.collection.df.loc[
-                        self.collection.df[self.uid_label] == uid, self.prop_label
-                    ].values[0]
-                    combo.addItems(properties_list)
+                    if (
+                        self.prop_label
+                        and uid in self.collection.df[self.uid_label].values
+                    ):
+                        properties_list = self.collection.df.loc[
+                            self.collection.df[self.uid_label] == uid, self.prop_label
+                        ].values[0]
+                        if properties_list is not None:
+                            combo.addItems(properties_list)
 
                     # Try to restore previous selection if it's still available
                     index = combo.findText(current_text)
