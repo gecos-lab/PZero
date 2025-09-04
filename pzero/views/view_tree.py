@@ -368,9 +368,11 @@ class CustomTreeWidget(QTreeWidget):
                         property_combo.setItemData(
                             property_combo.findText(prop_), prop_
                         )
-        if (self.collection.df is not None and
-            not self.collection.df.empty and
-            "textures" in self.collection.df.columns.values.tolist()):
+        if (
+            self.collection.df is not None
+            and not self.collection.df.empty
+            and "textures" in self.collection.df.columns.values.tolist()
+        ):
 
             # Check if the uid exists in the collection
             uid_exists = uid in self.collection.df["uid"].values
@@ -381,12 +383,16 @@ class CustomTreeWidget(QTreeWidget):
                 if len(textures_value) > 0 and textures_value[0] is not None:
                     for texture_uid in textures_value[0]:
                         # Check if image collection exists and has the texture
-                        if (hasattr(self.view.parent, 'image_coll') and
-                            self.view.parent.image_coll.df is not None and
-                            not self.view.parent.image_coll.df.empty and
-                            texture_uid in self.view.parent.image_coll.df["uid"].values):
+                        if (
+                            hasattr(self.view.parent, "image_coll")
+                            and self.view.parent.image_coll.df is not None
+                            and not self.view.parent.image_coll.df.empty
+                            and texture_uid
+                            in self.view.parent.image_coll.df["uid"].values
+                        ):
                             texture_name = self.view.parent.image_coll.df.loc[
-                                self.view.parent.image_coll.df["uid"] == texture_uid, "name"
+                                self.view.parent.image_coll.df["uid"] == texture_uid,
+                                "name",
                             ].values[0]
                             property_combo.addItem(texture_name)
                             property_combo.setItemData(
@@ -837,7 +843,10 @@ class CustomTreeWidget(QTreeWidget):
                         combo.addItem(label)
 
                     # Add the new properties
-                    if self.prop_label and uid in self.collection.df[self.uid_label].values:
+                    if (
+                        self.prop_label
+                        and uid in self.collection.df[self.uid_label].values
+                    ):
                         properties_list = self.collection.df.loc[
                             self.collection.df[self.uid_label] == uid, self.prop_label
                         ].values[0]
