@@ -5,6 +5,8 @@ from copy import deepcopy
 
 from uuid import uuid4
 
+from PySide6.QtWidgets import QDockWidget
+
 from pyvista import PolyData as pv_PolyData
 
 from numpy import abs as np_abs
@@ -121,8 +123,8 @@ def interpolation_delaunay_2d(self):
         ],
         "role": [
             "Role: ",
-            self.parent.geol_coll.valid_roles,
-            self.parent.geol_coll.get_uid_role(input_uids[0]),
+            self.geol_coll.valid_roles,
+            self.geol_coll.get_uid_role(input_uids[0]),
         ],
         "feature": [
             "Feature: ",
@@ -188,7 +190,6 @@ def interpolation_delaunay_2d(self):
         self.geol_coll.add_entity_from_dict(surf_dict)
     else:
         self.print_terminal(" -- empty object -- ")
-
 
 @freeze_gui
 def poisson_interpolation(self):
@@ -306,6 +307,7 @@ def poisson_interpolation(self):
         self.geol_coll.add_entity_from_dict(surf_dict)
     else:
         self.print_terminal(" -- empty object -- ")
+
 
 
 @freeze_gui
