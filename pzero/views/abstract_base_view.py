@@ -481,7 +481,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.change_actor_opacity(collection=collection, updated_uids=updated_uids)
         total_items = len(collection.df)
         if len(updated_uids) > total_items * 0.2:
-            print("Rebuilding the entire tree")
+            # print("Rebuilding the entire tree")
             tree.populate_tree()
         else:
             tree.remove_items_from_tree(uids_to_remove=updated_uids)
@@ -522,7 +522,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
     def show_uids(self, uids: list = None):
         """Show actors with the given uids."""
         # Maybe in the future this might be reimplemented in parallel or vectorized?
-        print("show_uids: ", uids)
+        # print("show_uids: ", uids)
         for uid in uids:
             self.print_terminal(f"showing uid: {uid}")
             if not self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]:
@@ -533,9 +533,9 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
     def hide_uids(self, uids: list = None):
         """Hide actors with the given uids."""
         # Maybe in th future this might be reimplemented in parallel or vectorized?
-        print("hide_uids: ", uids)
+        # print("hide_uids: ", uids)
         for uid in uids:
-            self.print_terminal(f"hiding uid: {uid}")
+            # self.print_terminal(f"hiding uid: {uid}")
             if self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]:
                 self.set_actor_visible(uid=uid, visible=False)
                 self.actors_df.loc[self.actors_df["uid"] == uid, "show"] = False
@@ -555,9 +555,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
     def toggle_visibility(
         self, collection_name=None, turn_on_uids=None, turn_off_uids=None
     ):
-        print(
-            f"toggle_visibility: {collection_name}, turn_on_uids: {turn_on_uids}, turn_off_uids: {turn_off_uids}"
-        )
+        # print(f"toggle_visibility: {collection_name}, turn_on_uids: {turn_on_uids}, turn_off_uids: {turn_off_uids}")
         self.show_uids(turn_on_uids)
         self.hide_uids(turn_off_uids)
 

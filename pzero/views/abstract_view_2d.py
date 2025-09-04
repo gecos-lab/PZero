@@ -19,11 +19,6 @@ class View2D(ViewVTK):
         self.plotter.enable_image_style()
         self.plotter.enable_parallel_projection()
 
-        self.parent.signals.selection_changed.connect(self.on_selection_changed)
-
-    def on_selection_changed(self, collection):
-        self.selected_uids = collection.selected_uids.copy()
-        self.actor_in_table(self.selected_uids)
 
     # ================================  General methods shared by all views - built incrementally =====================
 

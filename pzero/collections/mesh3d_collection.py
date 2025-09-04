@@ -10,6 +10,30 @@ class Mesh3DCollection(DIMCollection):
     def __init__(self, parent=None, *args, **kwargs):
         super(Mesh3DCollection, self).__init__(parent, *args, **kwargs)
         # Initialize properties required by the abstract superclass.
+        self.entity_dict = {
+            "uid": "",
+            "name": "undef",
+            "scenario": "undef",
+            "x_section": "",  # this is the uid of the cross section for "XsVertexSet", "XsPolyLine", and "XsImage", empty for all others
+            "topology": "undef",
+            "vtk_obj": None,
+            "properties_names": [],
+            "properties_components": [],
+            "properties_types": [],
+        }
+
+        self.entity_dict_types = {
+            "uid": str,
+            "name": str,
+            "scenario": str,
+            "x_section": str,
+            "topology": str,
+            "vtk_obj": object,
+            "properties_names": list,
+            "properties_components": list,
+            "properties_types": list,
+        }
+
         self.valid_topologies = ["TetraSolid", "Voxet", "XsVoxet"]
 
         self.collection_name = "mesh3d_coll"

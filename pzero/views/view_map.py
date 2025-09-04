@@ -281,7 +281,7 @@ class ViewMap(View2D):
             if (
                 show_property
                 in self.parent.dom_coll.df.loc[
-                    self.parent.dom_coll.df["uid"] == uid, "texture_uids"
+                    self.parent.dom_coll.df["uid"] == uid, "textures"
                 ].values[0]
             ):
                 active_image = self.parent.image_coll.get_uid_vtk_obj(show_property)
@@ -502,7 +502,7 @@ class ViewMap(View2D):
                 opacity=opacity,
             )
         else:
-            print("[Windows factory]: actor with no class")
+            self.print_terminal("[Windows factory]: actor with no class")
             this_actor = None
         return this_actor
 

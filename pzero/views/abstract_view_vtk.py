@@ -220,7 +220,7 @@ class ViewVTK(BaseView):
             this_actor.SetVisibility(visible)
         else:
             # case for ALL OTHER COLLECTIONS
-            self.print_terminal("case for ALL OTHER COLLECTIONS")
+            # self.print_terminal("case for ALL OTHER COLLECTIONS")
             this_actor.SetVisibility(visible)
 
     def remove_actor_in_view(self, uid=None, redraw=False):
@@ -504,7 +504,7 @@ class ViewVTK(BaseView):
             if (
                 show_property
                 in self.parent.dom_coll.df.loc[
-                    self.parent.dom_coll.df["uid"] == uid, "texture_uids"
+                    self.parent.dom_coll.df["uid"] == uid, "textures"
                 ].values[0]
             ):
                 active_image = self.parent.image_coll.get_uid_vtk_obj(show_property)

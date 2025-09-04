@@ -624,7 +624,7 @@ def merge_lines(self):
         self.enable_actions()
         return
     # Check if all input entities are PolyLine or XsPolyLine
-    print(in_uids)
+    # print(in_uids)
     for uid in in_uids:
         if self.parent.geol_coll.get_uid_topology(uid) == "PolyLine":
             continue
@@ -733,7 +733,7 @@ def snap_line(self):
     )
 
     for current_uid_snap in self.selected_uids[:-1]:
-        print(current_uid_snap)
+        # print(current_uid_snap)
         if (
             self.parent.geol_coll.get_uid_topology(current_uid_snap) != "PolyLine"
         ) and (
