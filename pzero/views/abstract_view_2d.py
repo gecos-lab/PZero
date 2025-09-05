@@ -19,19 +19,6 @@ class View2D(ViewVTK):
         self.plotter.enable_image_style()
         self.plotter.enable_parallel_projection()
 
-        # blank X, Y, Z, V keypress events that cause an unwanted rotation of the view
-        # X, Y, Z are controlled directly by VTK, while V by PyVista
-        def blank_keypress(interactor, event):
-            """Blanks/cancels/overrides a keypress event.
-            Directly accessing VTK events is necessary since the PyVista
-            interface has a lower priority. See issue #174."""
-            if interactor.GetKeyCode() not in ["w", "s"]:
-                interactor.SetKeyCode("")
-                # interactor.SetKeySym("")
-
-        self.plotter.iren.interactor.AddObserver("KeyPressEvent", blank_keypress, 10)
-        self.plotter.clear_events_for_key("v")
-
     # ================================  General methods shared by all views - built incrementally =====================
 
     def initialize_menu_tools(self):

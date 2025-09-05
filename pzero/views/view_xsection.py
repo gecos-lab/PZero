@@ -12,6 +12,10 @@ from pyvista import Arrow as pv_Arrow
 
 # PZero imports____
 from .abstract_view_2d import View2D
+from vtkmodules.vtkFiltersCore import vtkAppendPolyData
+from pyvista import Line as pv_Line
+from .view_map import ViewMap
+from ..orientation_analysis import get_dip_dir_vectors
 from ..helpers.helper_dialogs import input_combo_dialog, message_dialog
 
 
@@ -44,6 +48,7 @@ class ViewXsection(View2D):
 
         # Super here after having set the x_section_uid and _name
         super(ViewXsection, self).__init__(parent, *args, **kwargs)
+        self.parent.signals.selection_changed.connect(self.on_selection_changed)
 
         # Rename Base View, Menu and Tool
         self.setWindowTitle(f"Xsection View: {self.this_x_section_name}")
@@ -72,6 +77,12 @@ class ViewXsection(View2D):
         self.horizMirrorButton = QAction("Mirror horizontal axes", self)
         self.horizMirrorButton.triggered.connect(self.horizontal_mirror)
         self.menuView.addAction(self.horizMirrorButton)
+
+    # --- AGGIUNTA: funzione di slot per sincronizzazione selezione ---
+    def on_selection_changed(self, collection):
+        print("DEBUG SLOT: selection_changed ricevuto per collection:", collection)
+        self.selected_uids = collection.selected_uids.copy()
+        self.actor_in_table(self.selected_uids)
 
     # ================================  Methods required by ViewVTK(), (re-)implemented here ==========================
 

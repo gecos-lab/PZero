@@ -342,8 +342,13 @@ class ViewVTK(BaseView):
                     index = int(show_property[pos1 + 1 : pos2])
                     show_property = plot_entity.get_point_data(original_prop)[:, index]
                 else:
-                    if plot_entity.get_point_data_shape(show_property)[-1] == 3:
-                        plot_rgb_option = True
+                    # Safely check for multicomponent scalar arrays
+                    try:
+                        shape = plot_entity.get_point_data_shape(show_property)
+                        if shape and shape[-1] == 3:
+                            plot_rgb_option = True
+                    except Exception:
+                        pass
                     else:
                         # last option to catch unexpected cases
                         if (
@@ -387,6 +392,40 @@ class ViewVTK(BaseView):
                     show_property = plot_entity.points_Y
                 elif show_property == "Z":
                     show_property = plot_entity.points_Z
+                # handle multicomponent properties like 'PropName[index]' and treat 'Normals[n]' as full-normal glyphs
+                elif isinstance(show_property, str) and show_property.endswith("]"):
+                    pos1 = show_property.index("[")
+                    pos2 = show_property.index("]")
+                    original_prop = show_property[:pos1]
+                    comp_index = int(show_property[pos1 + 1 : pos2])
+                    if original_prop == "Normals":
+                        # draw discs for normals (same as plain 'Normals')
+                        show_property_title = None
+                        show_property = None
+                        style = "surface"
+                        appender = vtkAppendPolyData()
+                        r = point_size
+                        points = plot_entity.points
+                        normals = plot_entity.get_point_data("Normals")
+                        dip_vectors, dir_vectors = get_dip_dir_vectors(normals=normals)
+                        line1 = pv_Line(pointa=(0, 0, 0), pointb=(r, 0, 0))
+                        line2 = pv_Line(pointa=(-r, 0, 0), pointb=(r, 0, 0))
+                        for point, normal in zip(points, normals):
+                            base = pv_Disc(
+                                center=point, normal=normal, inner=0, outer=r, c_res=30
+                            )
+                            appender.AddInputData(base)
+                        dip_glyph = plot_entity.glyph(geometry=line1, prop=dip_vectors)
+                        dir_glyph = plot_entity.glyph(geometry=line2, prop=dir_vectors)
+                        appender.AddInputData(dip_glyph)
+                        appender.AddInputData(dir_glyph)
+                        appender.Update()
+                        plot_entity = appender.GetOutput()
+                    else:
+                        # extract the specified component from the vector property
+                        show_property = plot_entity.get_point_data(original_prop)[
+                            :, comp_index
+                        ]
                 elif show_property == "Normals":
                     show_property_title = None
                     show_property = None
@@ -430,8 +469,23 @@ class ViewVTK(BaseView):
                     show_property_title = None
 
                 else:
-                    if plot_entity.get_point_data_shape(show_property)[-1] == 3:
-                        plot_rgb_option = True
+                    # handle multicomponent properties like 'PropName[index]'
+                    if isinstance(show_property, str) and show_property.endswith("]"):
+                        pos1 = show_property.index("[")
+                        pos2 = show_property.index("]")
+                        original_prop = show_property[:pos1]
+                        comp_index = int(show_property[pos1 + 1 : pos2])
+                        show_property = plot_entity.get_point_data(original_prop)[
+                            :, comp_index
+                        ]
+                    else:
+                        # Safely check for multicomponent scalar arrays
+                        try:
+                            shape = plot_entity.get_point_data_shape(show_property)
+                            if shape and shape[-1] == 3:
+                                plot_rgb_option = True
+                        except Exception:
+                            pass
                 this_actor = self.plot_mesh(
                     uid=uid,
                     plot_entity=plot_entity,
@@ -868,55 +922,69 @@ class ViewVTK(BaseView):
     def actor_in_table(self, sel_uid=None):
         """Method used to highlight in the main project table view a list of selected actors."""
         if sel_uid:
-            # To select the mesh in the entity list we compare the actors of the actors_df dataframe
-            # with the picker.GetActor() result
             collection = self.actors_df.loc[
                 self.actors_df["uid"] == sel_uid[0], "collection"
             ].values[0]
-            if collection == "geol_coll":
-                table = self.parent.GeologyTableView
-                df = self.parent.geol_coll.df
-                # set the correct tab to avoid problems
-                self.parent.tabWidgetTopLeft.setCurrentIndex(0)
-            elif collection == "dom_coll":
-                table = self.parent.DOMsTableView
-                df = self.parent.dom_coll.df
-                # set the correct tab to avoid problems
-                self.parent.tabWidgetTopLeft.setCurrentIndex(4)
+            # Mapping collection name to (table, df, tab index)
+            collection_to_table = {
+                "geol_coll": (
+                    self.parent.GeologyTableView,
+                    self.parent.geol_coll.df,
+                    0,
+                ),
+                "fluid_coll": (
+                    self.parent.FluidsTableView,
+                    self.parent.fluid_coll.df,
+                    1,
+                ),
+                "backgrnd_coll": (
+                    self.parent.BackgroundsTableView,
+                    self.parent.backgrnd_coll.df,
+                    2,
+                ),
+                "dom_coll": (self.parent.DOMsTableView, self.parent.dom_coll.df, 3),
+                "image_coll": (
+                    self.parent.ImagesTableView,
+                    self.parent.image_coll.df,
+                    4,
+                ),
+                "mesh3d_coll": (
+                    self.parent.Meshes3DTableView,
+                    self.parent.mesh3d_coll.df,
+                    5,
+                ),
+                "boundary_coll": (
+                    self.parent.BoundariesTableView,
+                    self.parent.boundary_coll.df,
+                    6,
+                ),
+                "xsect_coll": (
+                    self.parent.XSectionsTableView,
+                    self.parent.xsect_coll.df,
+                    7,
+                ),
+                "well_coll": (self.parent.WellsTableView, self.parent.well_coll.df, 8),
+            }
+            if collection in collection_to_table:
+                table, df, tab_idx = collection_to_table[collection]
+                self.parent.tabWidgetTopLeft.setCurrentIndex(tab_idx)
             else:
                 self.print_terminal(
-                    "Selection not supported for entities that do not belong to geological or DOM collection."
+                    "Selection not supported for entities that do not belong to a recognized collection."
                 )
                 return
             table.clearSelection()
             if len(sel_uid) > 1:
                 table.setSelectionMode(QAbstractItemView.MultiSelection)
-
-            # In general this approach is not the best.
-            # In the actors_df the index of the df is indipendent from the index of the table views.
-            # We could have 6 entities 5 of which are in the geology tab and 1 in the image tab.
-            # When selecting the image the actors_df index could be anything from 0 to 5 (depends on the add_all_entities order)
-            # but in the table view is 0 thus returning nothing.
-            # To resolve this we could:
-            #   1. Create a actor_df for each collection
-            #   2. Have a general actors_df with a table_index value (that needs to be updated when adding or removing objects)
-            #   3. Have a selected_entities_df indipendent from the tables or views that collects the selected actors (both in the table or in the view)
-
-            # For now selection will work only for geology objects
-
             for uid in sel_uid:
                 uid_list = [
                     table.model().index(row, 0).data() for row in range(len(df.index))
                 ]
-                idx = uid_list.index(uid)
-                # coll = self.actors_df.loc[self.actors_df['uid'] == uid, 'collection'].values[0]
-
-                # if coll == 'geol_coll':
-                table.selectRow(idx)
-
-                # elif coll == 'image_coll':
-                #     self.parent.ImagesTableView.selectRow(idx)
-                # return
+                if uid in uid_list:
+                    idx = uid_list.index(uid)
+                    table.selectRow(idx)
+                else:
+                    print(f"uid {uid} not find")
         else:
             self.parent.GeologyTableView.clearSelection()
             self.parent.DOMsTableView.clearSelection()

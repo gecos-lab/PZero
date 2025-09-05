@@ -339,7 +339,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                 show_property=None,
                 visible=True,
             )
-            # New Pandas >= 2.0.0
+
             self.actors_df = pd_concat(
                 [
                     self.actors_df,
@@ -349,7 +349,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                                 "uid": uid,
                                 "actor": this_actor,
                                 "show": True,
-                                "collection": collection,
+                                "collection": collection.collection_name,
                                 "show_property": None,
                             }
                         ]

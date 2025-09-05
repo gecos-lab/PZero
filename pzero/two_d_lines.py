@@ -1044,20 +1044,18 @@ def resample_lines_number_points(
 
 
 @freeze_gui
-def simplify_line(
-    self,
-):  # this must be done per-part_______________________________________________________
+def simplify_line(self):
     """Return a simplified representation of the line. Permits the user to choose a value for the Tolerance parameter."""
     self.print_terminal(
         "Simplify line. Define tolerance value: "
         "small values result in more vertices and great similarity with the input line."
     )
-    # Terminate running event loops
 
     # Check if a line is selected
     if not self.selected_uids:
         self.print_terminal(" -- No input data selected -- ")
         return
+
     # Ask for the tolerance parameter
     tolerance_p = input_one_value_dialog(
         parent=self,
@@ -1065,74 +1063,95 @@ def simplify_line(
         label="Insert tolerance parameter",
         default_value="0.1",
     )
-    for current_uid in self.selected_uids:
-        if (self.parent.geol_coll.get_uid_topology(current_uid) != "PolyLine") and (
-            self.parent.geol_coll.get_uid_topology(current_uid) != "XsPolyLine"
-        ):
-            self.print_terminal(" -- Selected data is not a line -- ")
-            return
 
-        if tolerance_p is None:
-            return
-        if tolerance_p <= 0:
-            tolerance_p = 0.1
-        # Editing loop. Create empty dictionary for the output line
-        new_line = deepcopy(self.parent.geol_coll.entity_dict)
-        # Get coordinates of input line.
-        if isinstance(self, ViewMap):
-            # if isinstance(self, (ViewMap, ViewMap)):
-            new_line["topology"] = "PolyLine"
-            new_line["x_section"] = None
-            inU = deepcopy(
-                self.parent.geol_coll.get_uid_vtk_obj(current_uid).points[:, 0]
-            )
-            inV = deepcopy(
-                self.parent.geol_coll.get_uid_vtk_obj(current_uid).points[:, 1]
-            )
-        # elif isinstance(self, (ViewXsection, ViewXsection)):
-        elif isinstance(self, ViewXsection):
-            new_line["topology"] = "XsPolyLine"
-            new_line["x_section"] = self.this_x_section_uid
-            inU, inV = deepcopy(
-                self.parent.geol_coll.get_uid_vtk_obj(current_uid).world2plane()
-            )
-        # Stack coordinates in two-columns matrix
-        inUV = np_column_stack((inU, inV))
-        # Run the Shapely function.
-        shp_line_in = shp_linestring(inUV)
-        shp_line_out = shp_line_in.simplify(tolerance_p, preserve_topology=False)
-        outUV = deepcopy(np_array(shp_line_out.coords))
-        # Un-stack output coordinates and write them to the empty dictionary.
-        outU = outUV[:, 0]
-        outV = outUV[:, 1]
-        if isinstance(self, ViewMap):
-            # if isinstance(self, (ViewMap, ViewMap)):
-            outX = outU
-            outY = outV
-            outZ = np_zeros(np_shape(outX))
-            new_line["vtk_obj"] = PolyLine()
-        # elif isinstance(self, (ViewXsection, ViewXsection)):
-        elif isinstance(self, ViewXsection):
-            outX, outY, outZ = self.parent.xsect_coll.plane2world(
-                self.this_x_section_uid, outU, outV
-            )
-            new_line["vtk_obj"] = XsPolyLine(
-                self.this_x_section_uid, parent=self.parent
-            )
-        # Create new vtk
-        new_points = np_column_stack((outX, outY, outZ))
-        new_line["vtk_obj"].points = new_points
-        new_line["vtk_obj"].auto_cells()
-        # Replace VTK object
-        if new_line["vtk_obj"].points_number > 0:
-            self.parent.geol_coll.remove_entity(current_uid)
-            self.parent.geol_coll.add_entity_from_dict(new_line)
-        else:
-            self.print_terminal("Empty object")
+    if tolerance_p is None:
+        return
+    if tolerance_p <= 0:
+        tolerance_p = 0.1
 
-        self.parent.geol_coll.signals.geom_modified.emit(
-            [current_uid], self.parent.geol_coll
-        )
+    try:
+        for current_uid in self.selected_uids:
+            if (self.parent.geol_coll.get_uid_topology(current_uid) != "PolyLine") and (
+                self.parent.geol_coll.get_uid_topology(current_uid) != "XsPolyLine"
+            ):
+                self.print_terminal(" -- Selected data is not a line -- ")
+                continue
+
+            # Ottieni l'oggetto VTK e verifica la sua validità
+            vtk_obj = self.parent.geol_coll.get_uid_vtk_obj(current_uid)
+            if vtk_obj is None or vtk_obj.points_number <= 0:
+                self.print_terminal(f" -- Oggetto VTK non valido per {current_uid} -- ")
+                continue
+
+            # Editing loop. Create empty dictionary for the output line
+            new_line = deepcopy(self.parent.geol_coll.entity_dict)
+
+            # Get coordinates of input line.
+            if isinstance(self, ViewMap):
+                new_line["topology"] = "PolyLine"
+                new_line["x_section"] = None
+                inU = vtk_obj.points_X
+                inV = vtk_obj.points_Y
+                new_line["vtk_obj"] = PolyLine()
+            elif isinstance(self, ViewXsection):
+                new_line["topology"] = "XsPolyLine"
+                new_line["x_section"] = self.this_x_section_uid
+                inU, inV = vtk_obj.world2plane()
+                new_line["vtk_obj"] = XsPolyLine(
+                    self.this_x_section_uid, parent=self.parent
+                )
+
+            # Stack coordinates in two-columns matrix
+            inUV = np_column_stack((inU, inV))
+
+            # Run the Shapely function.
+            shp_line_in = shp_linestring(inUV)
+
+            shp_line_out = shp_line_in.simplify(tolerance_p, preserve_topology=False)
+
+            if shp_line_out.is_empty:
+                self.print_terminal(f"Empty geometry {current_uid}")
+                continue
+
+            if len(shp_line_out.coords) == 0:
+                self.print_terminal(f"No points in line {current_uid}")
+                continue
+
+            outUV = np_array(shp_line_out.coords)
+
+            # Un-stack output coordinates and write them to the empty dictionary.
+            outU = outUV[:, 0]
+            outV = outUV[:, 1]
+
+            if isinstance(self, ViewMap):
+                outX = outU
+                outY = outV
+                outZ = np_zeros(np_shape(outX))
+            elif isinstance(self, ViewXsection):
+                outX, outY, outZ = self.parent.xsect_coll.plane2world(
+                    self.this_x_section_uid, outU, outV
+                )
+
+            # Create new vtk
+            new_points = np_column_stack((outX, outY, outZ))
+            new_line["vtk_obj"].points = new_points
+            new_line["vtk_obj"].auto_cells()
+
+            # Replace VTK object
+            if new_line["vtk_obj"].points_number > 0:
+                self.parent.geol_coll.remove_entity(current_uid)
+                self.parent.geol_coll.add_entity_from_dict(new_line)
+                self.parent.signals.geom_modified.emit(
+                    [current_uid], self.parent.geol_coll
+                )
+            else:
+                self.print_terminal(
+                    f"Empty geometry after parallel offset {current_uid}"
+                )
+
+    except Exception as e:
+        self.print_terminal(f"Error: {str(e)}")
+
     # Deselect input line.
     self.clear_selection()
 
@@ -1249,14 +1268,12 @@ def copy_parallel(
 
 
 @freeze_gui
-def copy_kink(
-    self,
-):  # this must be done per-part_______________________________________________________
+def copy_kink(self):
     """Kink folding. Create a line copied and translated from a template line using Shapely.
     Since lines are oriented left-to-right and bottom-to-top, and here we copy a line to the left,
     a positive distance creates a line shifted upwards and to the left."""
     self.print_terminal("Copy Kink. Create a line copied and translated.")
-    # Terminate running event loops
+
     # Check if a line is selected
     if not self.selected_uids:
         self.print_terminal(" -- No input data selected -- ")
@@ -1268,9 +1285,15 @@ def copy_kink(
     ):
         self.print_terminal(" -- Selected data is not a line -- ")
         return
+
     # If more than one line is selected, keep the first.
     input_uid = self.selected_uids[0]
-    # ----IN THE FUTURE add a test to check that the selected feature is a geological feature
+
+    vtk_obj = self.parent.geol_coll.get_uid_vtk_obj(input_uid)
+    if vtk_obj is None or vtk_obj.points_number <= 0:
+        self.print_terminal(" -- Oggetto VTK non valido -- ")
+        return
+
     # Editing loop.
     distance = input_one_value_dialog(
         parent=self,
@@ -1286,8 +1309,7 @@ def copy_kink(
     ].values[0]
     out_line_name = in_line_name + "_kink_" + "%d" % distance
 
-    # """Create empty dictionary for the output line and set name and role.
-    # ----IN THE FUTURE see if other metadata should be automatically set.
+    # Create empty dictionary for the output line and set name and role.
     line_dict = deepcopy(self.parent.geol_coll.entity_dict)
     line_dict["name"] = out_line_name
     line_dict["role"] = self.parent.geol_coll.df.loc[
@@ -1297,57 +1319,69 @@ def copy_kink(
     line_dict["scenario"] = self.parent.geol_coll.get_uid_scenario(
         self.selected_uids[0]
     )
-    if isinstance(self, ViewMap):
-        # if isinstance(self, (ViewMap, ViewMap)):
-        line_dict["vtk_obj"] = PolyLine()
-        line_dict["topology"] = "PolyLine"
-        inU = self.parent.geol_coll.get_uid_vtk_obj(input_uid).points_X
-        inV = self.parent.geol_coll.get_uid_vtk_obj(input_uid).points_Y
-    # elif isinstance(self, (ViewXsection, ViewXsection)):
-    elif isinstance(self, ViewXsection):
-        line_dict["vtk_obj"] = XsPolyLine(self.this_x_section_uid, parent=self.parent)
-        line_dict["topology"] = "XsPolyLine"
-        line_dict["x_section"] = self.this_x_section_uid
-        inU, inV = self.parent.geol_coll.get_uid_vtk_obj(input_uid).world2plane()
 
-    # Stack coordinates in two-columns matrix
-    inUV = np_column_stack((inU, inV))
-    # Deselect input line.
-    self.clear_selection()
-    self.parent.geol_coll.signals.geom_modified.emit([input_uid], self.parent.geol_coll)
-    # Run the Shapely function.
-    shp_line_in = shp_linestring(inUV)
-    if shp_line_in.is_simple:
+    try:
+        if isinstance(self, ViewMap):
+            line_dict["vtk_obj"] = PolyLine()
+            line_dict["topology"] = "PolyLine"
+            inU = vtk_obj.points_X
+            inV = vtk_obj.points_Y
+        elif isinstance(self, ViewXsection):
+            line_dict["vtk_obj"] = XsPolyLine(
+                self.this_x_section_uid, parent=self.parent
+            )
+            line_dict["topology"] = "XsPolyLine"
+            line_dict["x_section"] = self.this_x_section_uid
+            inU, inV = vtk_obj.world2plane()
+
+        # Stack coordinates in two-columns matrix
+        inUV = np_column_stack((inU, inV))
+
+        # Deselect input line.
+        self.clear_selection()
+        self.parent.signals.geom_modified.emit([input_uid], self.parent.geol_coll)
+
+        # Run the Shapely function.
+        shp_line_in = shp_linestring(inUV)
+        if not shp_line_in.is_simple:
+            self.print_terminal("Polyline is not simple, it self-intersects")
+            return
+
         shp_line_out = shp_line_in.parallel_offset(
             distance, "left", resolution=16, join_style=2, mitre_limit=10.0
         )  # kink folds are obtained with join_style=2, mitre_limit=10.0
+
+        if shp_line_out.is_empty:
+            self.print_terminal("Empty geometry after parallel offset")
+            return
+
         outUV = np_array(shp_line_out.coords)
-        # Un-stack output coordinates and write them to the empty dictionary.
         outU = outUV[:, 0]
         outV = outUV[:, 1]
-    else:
-        self.print_terminal("Polyline is not simple, it self-intersects")
-        return
-    if isinstance(self, ViewMap):
-        # if isinstance(self, (ViewMap, ViewMap)):
-        outX = outU
-        outY = outV
-        outZ = np_zeros(np_shape(outX))
-    # elif isinstance(self, (ViewXsection, ViewXsection)):
-    elif isinstance(self, ViewXsection):
-        outX, outY, outZ = self.parent.xsect_coll.plane2world(
-            self.this_x_section_uid, outU, outV
-        )
-    # Stack coordinates in two-columns matrix and write to vtk object.
-    outXYZ = np_column_stack((outX, outY, outZ))
-    line_dict["vtk_obj"].points = outXYZ
-    line_dict["vtk_obj"].auto_cells()
-    # Create entity from the dictionary and run left_right.
-    if line_dict["vtk_obj"].points_number > 0:
-        output_uid = self.parent.geol_coll.add_entity_from_dict(line_dict)
-        left_right(output_uid)
-    else:
-        self.print_terminal("Empty object")
+
+        if isinstance(self, ViewMap):
+            outX = outU
+            outY = outV
+            outZ = np_zeros(np_shape(outX))
+        elif isinstance(self, ViewXsection):
+            outX, outY, outZ = self.parent.xsect_coll.plane2world(
+                self.this_x_section_uid, outU, outV
+            )
+
+        # Stack coordinates in two-columns matrix and write to vtk object.
+        outXYZ = np_column_stack((outX, outY, outZ))
+        line_dict["vtk_obj"].points = outXYZ
+        line_dict["vtk_obj"].auto_cells()
+
+        # Create entity from the dictionary and run left_right.
+        if line_dict["vtk_obj"].points_number > 0:
+            output_uid = self.parent.geol_coll.add_entity_from_dict(line_dict)
+            left_right(output_uid)
+        else:
+            self.print_terminal("Empty object")
+
+    except Exception as e:
+        self.print_terminal(f"Error: {str(e)}")
 
 
 @freeze_gui
