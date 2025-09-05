@@ -137,9 +137,7 @@ class Editor(vtkContourWidget):
             self._event_translator.RemoveTranslation(vtkCommand.RightButtonPressEvent)
             self._event_translator.RemoveTranslation(vtkCommand.LeftButtonPressEvent)
             f_node = self.GetContourRepresentation().GetNumberOfNodes() - 1
-            self.GetContourRepresentation().GetNthNodeDisplayPosition(
-                f_node, self.pos_fin
-            )
+            self.GetContourRepresentation().GetNthNodeDisplayPosition(f_node, self.pos_fin)
             self.GetContourRepresentation().ActivateNode(self.pos_fin)
             self.Render()
             # set up callback and key for extending line

@@ -191,7 +191,6 @@ def interpolation_delaunay_2d(self):
     else:
         self.print_terminal(" -- empty object -- ")
 
-
 @freeze_gui
 def poisson_interpolation(self):
     """vtkSurfaceReconstructionFilter can be used to reconstruct surfaces from point clouds. Input is a vtkDataSet
@@ -308,6 +307,7 @@ def poisson_interpolation(self):
         self.geol_coll.add_entity_from_dict(surf_dict)
     else:
         self.print_terminal(" -- empty object -- ")
+
 
 
 @freeze_gui

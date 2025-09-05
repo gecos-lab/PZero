@@ -397,7 +397,7 @@ class ViewVTK(BaseView):
                     pos1 = show_property.index("[")
                     pos2 = show_property.index("]")
                     original_prop = show_property[:pos1]
-                    comp_index = int(show_property[pos1 + 1 : pos2])
+                    comp_index = int(show_property[pos1+1:pos2])
                     if original_prop == "Normals":
                         # draw discs for normals (same as plain 'Normals')
                         show_property_title = None
@@ -411,9 +411,7 @@ class ViewVTK(BaseView):
                         line1 = pv_Line(pointa=(0, 0, 0), pointb=(r, 0, 0))
                         line2 = pv_Line(pointa=(-r, 0, 0), pointb=(r, 0, 0))
                         for point, normal in zip(points, normals):
-                            base = pv_Disc(
-                                center=point, normal=normal, inner=0, outer=r, c_res=30
-                            )
+                            base = pv_Disc(center=point, normal=normal, inner=0, outer=r, c_res=30)
                             appender.AddInputData(base)
                         dip_glyph = plot_entity.glyph(geometry=line1, prop=dip_vectors)
                         dir_glyph = plot_entity.glyph(geometry=line2, prop=dir_vectors)
@@ -423,9 +421,7 @@ class ViewVTK(BaseView):
                         plot_entity = appender.GetOutput()
                     else:
                         # extract the specified component from the vector property
-                        show_property = plot_entity.get_point_data(original_prop)[
-                            :, comp_index
-                        ]
+                        show_property = plot_entity.get_point_data(original_prop)[:, comp_index]
                 elif show_property == "Normals":
                     show_property_title = None
                     show_property = None
@@ -474,10 +470,8 @@ class ViewVTK(BaseView):
                         pos1 = show_property.index("[")
                         pos2 = show_property.index("]")
                         original_prop = show_property[:pos1]
-                        comp_index = int(show_property[pos1 + 1 : pos2])
-                        show_property = plot_entity.get_point_data(original_prop)[
-                            :, comp_index
-                        ]
+                        comp_index = int(show_property[pos1+1:pos2])
+                        show_property = plot_entity.get_point_data(original_prop)[:, comp_index]
                     else:
                         # Safely check for multicomponent scalar arrays
                         try:
@@ -927,42 +921,14 @@ class ViewVTK(BaseView):
             ].values[0]
             # Mapping collection name to (table, df, tab index)
             collection_to_table = {
-                "geol_coll": (
-                    self.parent.GeologyTableView,
-                    self.parent.geol_coll.df,
-                    0,
-                ),
-                "fluid_coll": (
-                    self.parent.FluidsTableView,
-                    self.parent.fluid_coll.df,
-                    1,
-                ),
-                "backgrnd_coll": (
-                    self.parent.BackgroundsTableView,
-                    self.parent.backgrnd_coll.df,
-                    2,
-                ),
+                "geol_coll": (self.parent.GeologyTableView, self.parent.geol_coll.df, 0),
+                "fluid_coll": (self.parent.FluidsTableView, self.parent.fluid_coll.df, 1),
+                "backgrnd_coll": (self.parent.BackgroundsTableView, self.parent.backgrnd_coll.df, 2),
                 "dom_coll": (self.parent.DOMsTableView, self.parent.dom_coll.df, 3),
-                "image_coll": (
-                    self.parent.ImagesTableView,
-                    self.parent.image_coll.df,
-                    4,
-                ),
-                "mesh3d_coll": (
-                    self.parent.Meshes3DTableView,
-                    self.parent.mesh3d_coll.df,
-                    5,
-                ),
-                "boundary_coll": (
-                    self.parent.BoundariesTableView,
-                    self.parent.boundary_coll.df,
-                    6,
-                ),
-                "xsect_coll": (
-                    self.parent.XSectionsTableView,
-                    self.parent.xsect_coll.df,
-                    7,
-                ),
+                "image_coll": (self.parent.ImagesTableView, self.parent.image_coll.df, 4),
+                "mesh3d_coll": (self.parent.Meshes3DTableView, self.parent.mesh3d_coll.df, 5),
+                "boundary_coll": (self.parent.BoundariesTableView, self.parent.boundary_coll.df, 6),
+                "xsect_coll": (self.parent.XSectionsTableView, self.parent.xsect_coll.df, 7),
                 "well_coll": (self.parent.WellsTableView, self.parent.well_coll.df, 8),
             }
             if collection in collection_to_table:

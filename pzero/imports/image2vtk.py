@@ -112,9 +112,7 @@ def geo_image2vtk(self=None, in_file_name=None):
     except Exception as e:
         self.print_terminal(f"Image file not recognized ERROR: {str(e)}")
         import traceback
-
         self.print_terminal(traceback.format_exc())
-
 
 def xs_image2vtk(self=None, in_file_name=None, x_section_uid=None):
     """Import and add an image to the imaage collection
