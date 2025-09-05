@@ -1304,7 +1304,7 @@ def intersection_xs(self):
                         self.print_terminal(
                             " -- empty object from cutter_clean_strips_clean_triangle -- "
                         )
-        elif self.shown_table == "tabMeshes3D":
+        elif self.shown_table == "tabMeshes":
             for uid in input_uids:
                 if self.mesh3d_coll.get_uid_mesh3d_type(uid) == "Voxet":
                     # Get cutter - a polydata slice cut across the voxet.

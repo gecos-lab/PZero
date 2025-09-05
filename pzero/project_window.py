@@ -189,7 +189,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             "tabXSections": "xsect_coll",
             "tabDOMs": "dom_coll",
             "tabImages": "image_coll",
-            "tabMeshes3D": "mesh3d_coll",
+            "tabMeshes": "mesh3d_coll",
             "tabBoundaries": "boundary_coll",
             "tabWells": "well_coll",
             "tabFluids": "fluid_coll",
@@ -362,7 +362,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             for idx_proxy in selected_idxs_proxy:
                 selected_uids.append(idx_proxy.data())
 
-        elif self.shown_table == "tabMeshes3D":
+        elif self.shown_table == "tabMeshes":
             selected_idxs_proxy = self.Meshes3DTableView.selectionModel().selectedRows(
                 column=0
             )
@@ -416,7 +416,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
     # @property
     # def selected_uids_all(self):
     #     """Returns a list of all uids selected in every table view."""
-    #     tab_list = ["tabDOMs","tabGeology","tabXSections","tabMeshes3D","tabImages","tabBoundaries","tabWells","tabFluids"]
+    #     tab_list = ["tabDOMs","tabGeology","tabXSections","tabMeshes","tabImages","tabBoundaries","tabWells","tabFluids"]
     #     selected_idxs = []
     #     selected_uids_all = []
     #     for tab in tab_list:
@@ -432,7 +432,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
     #                 selected_idxs.append(self.proxy_xsect_coll.mapToSource(idx_proxy))
     #             for idx in selected_idxs:
     #                 selected_uids_all.append(self.xsect_coll.data(index=idx, qt_role=Qt.DisplayRole))
-    #         elif tab == "tabMeshes3D":
+    #         elif tab == "tabMeshes":
     #             selected_idxs_proxy = self.Meshes3DTableView.selectionModel().selectedRows()
     #             for idx_proxy in selected_idxs_proxy:
     #                 selected_idxs.append(self.proxy_mesh3d_coll.mapToSource(idx_proxy))
@@ -500,7 +500,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 self.geol_coll.remove_entity(uid=uid)
             elif self.shown_table == "tabXSections":
                 self.xsect_coll.remove_entity(uid=uid)
-            elif self.shown_table == "tabMeshes3D":
+            elif self.shown_table == "tabMeshes":
                 self.mesh3d_coll.remove_entity(uid=uid)
             elif self.shown_table == "tabDOMs":
                 self.dom_coll.remove_entity(uid=uid)
@@ -715,7 +715,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
     def property_add(self):
         # ____________________________________________________ ADD IMAGES
         """Add empty property on geological entity"""
-        if not self.shown_table in ["tabGeology", "tabMeshes3D", "tabDOMs"]:
+        if not self.shown_table in ["tabGeology", "tabMeshes", "tabDOMs"]:
             return
         if not self.selected_uids:
             return
@@ -738,7 +738,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                         property_name=updt_dict["property_name"],
                         property_components=updt_dict["property_components"],
                     )
-        elif self.shown_table == "tabMeshes3D":
+        elif self.shown_table == "tabMeshes":
             for uid in self.selected_uids:
                 if not updt_dict[
                     "property_name"
@@ -763,7 +763,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
 
     def property_remove(self):
         # ____________________________________________________ ADD IMAGES
-        if not self.shown_table in ["tabGeology", "tabMeshes3D", "tabDOMs"]:
+        if not self.shown_table in ["tabGeology", "tabMeshes", "tabDOMs"]:
             return
         if not self.selected_uids:
             return
@@ -787,7 +787,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             )
             for uid in self.selected_uids:
                 self.geol_coll.remove_uid_property(uid=uid, property_name=property_name)
-        elif self.shown_table == "tabMeshes3D":
+        elif self.shown_table == "tabMeshes":
             property_name_list = self.mesh3d_coll.get_uid_properties_names(
                 uid=self.selected_uids[0]
             )
@@ -835,7 +835,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
     def normals_calculate(self):
         # ____________________________________________________ ADD MORE CASES FOR POINT CLOUDS ETC.
         """Calculate Normals on geological entities (add point clouds and DOMS in the future)."""
-        if self.shown_table in ["tabGeology", "tabMeshes3D", "tabDOMs"]:
+        if self.shown_table in ["tabGeology", "tabMeshes", "tabDOMs"]:
             if self.selected_uids:
                 set_normals(self)
 
@@ -851,7 +851,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     entity = self.geol_coll.get_uid_vtk_obj(uid)
                 elif self.shown_table == "tabXSections":
                     entity = self.xsect_coll.get_uid_vtk_obj(uid)
-                elif self.shown_table == "tabMeshes3D":
+                elif self.shown_table == "tabMeshes":
                     entity = self.mesh3d_coll.get_uid_vtk_obj(uid)
                 elif self.shown_table == "tabDOMs":
                     entity = self.dom_coll.get_uid_vtk_obj(uid)
@@ -2976,7 +2976,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     pd_writer.SetFileName(f"{self.out_dir_name}/{uid}.vtp")
                     pd_writer.SetInputData(entity)
                     pd_writer.Write()
-                elif self.shown_table == "tabMeshes3D":
+                elif self.shown_table == "tabMeshes":
                     entity = self.mesh3d_coll.get_uid_vtk_obj(uid)
 
                     pd_writer = vtkXMLPolyDataWriter()
