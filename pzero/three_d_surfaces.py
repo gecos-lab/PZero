@@ -1489,10 +1489,8 @@ def intersection_xs(self):
                             if not data_key in obj_dict["properties_names"]:
                                 obj_dict["vtk_obj"].remove_point_data(data_key)
                         self.dom_coll.add_entity_from_dict(obj_dict)
-                        print("17")
                     else:
                         self.print_terminal(" -- empty object -- ")
-                        print("18")
         else:
             self.print_terminal(
                 " -- Only Geological objects, 3D Meshes and DEM & DOMs can be intersected with XSection -- "

@@ -1790,6 +1790,14 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                             "column texture_uid renamed as textures in dom table"
                         )
 
+                    if None in new_dom_coll_df["textures"].to_list():
+                        new_dom_coll_df["textures"] = new_dom_coll_df["textures"].apply(
+                            lambda x: [] if x is None else x
+                        )
+                        self.print_terminal(
+                            "None value replaced with [] in textures column of dom table"
+                        )
+
                     for new_column in new_dom_coll_df.columns.values.tolist():
                         if new_column not in self.dom_coll.df.columns.values.tolist():
                             new_dom_coll_df.drop(new_column, axis=1, inplace=True)
