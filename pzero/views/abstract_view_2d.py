@@ -19,7 +19,6 @@ class View2D(ViewVTK):
         self.plotter.enable_image_style()
         self.plotter.enable_parallel_projection()
 
-
     # ================================  General methods shared by all views - built incrementally =====================
 
     def initialize_menu_tools(self):
