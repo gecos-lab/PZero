@@ -1469,7 +1469,6 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 no_role="Open without saving",
                 reject_role="Abort",
             )
-            print(confirm_new)
             if confirm_new == 0:
                 self.save_project()
             elif confirm_new != 1:

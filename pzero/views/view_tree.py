@@ -369,6 +369,10 @@ class CustomTreeWidget(QTreeWidget):
                             property_combo.findText(prop_), prop_
                         )
         if "textures" in self.collection.df.columns.values.tolist():
+            # This takes the texture uid from the "textures" column in the collection, then matches it with
+            # the image's collection and retrieves the name of the texture. The texture name is shown in the
+            # combo box with addItem() and the uid is stored in the combo box's itemData(), which allows
+            # getting it later when on_combo_changed() is called and in turns it calls self.view.toggle_property().
             for texture_uid in self.collection.df.loc[
                 self.collection.df["uid"] == uid, "textures"
             ].values[0]:

@@ -291,6 +291,7 @@ class ViewMap(View2D):
                     self.parent.dom_coll.df["uid"] == uid, "textures"
                 ].values[0]
             ):
+                plot_entity.set_active_texture(show_property)
                 active_image = self.parent.image_coll.get_uid_vtk_obj(show_property)
                 active_image_texture = active_image.texture
                 # active_image_properties_components = active_image.properties_components[0]  # IF USED THIS MUST BE FIXED FOR TEXTURES WITH MORE THAN 3 COMPONENTS
