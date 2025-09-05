@@ -1077,7 +1077,6 @@ def simplify_line(self):
                 self.print_terminal(" -- Selected data is not a line -- ")
                 continue
 
-            
             vtk_obj = self.parent.geol_coll.get_uid_vtk_obj(current_uid)
             if vtk_obj is None or vtk_obj.points_number <= 0:
                 self.print_terminal(f" --  Object not valid for {current_uid} -- ")
