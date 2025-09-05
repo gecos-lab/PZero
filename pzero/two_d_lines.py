@@ -1077,10 +1077,10 @@ def simplify_line(self):
                 self.print_terminal(" -- Selected data is not a line -- ")
                 continue
 
-            # Ottieni l'oggetto VTK e verifica la sua validità
+            
             vtk_obj = self.parent.geol_coll.get_uid_vtk_obj(current_uid)
             if vtk_obj is None or vtk_obj.points_number <= 0:
-                self.print_terminal(f" -- Oggetto VTK non valido per {current_uid} -- ")
+                self.print_terminal(f" --  Object not valid for {current_uid} -- ")
                 continue
 
             # Editing loop. Create empty dictionary for the output line
@@ -1089,7 +1089,6 @@ def simplify_line(self):
             # Get coordinates of input line.
             if isinstance(self, ViewMap):
                 new_line["topology"] = "PolyLine"
-                new_line["x_section"] = None
                 inU = vtk_obj.points_X
                 inV = vtk_obj.points_Y
                 new_line["vtk_obj"] = PolyLine()
