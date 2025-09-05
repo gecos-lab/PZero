@@ -104,4 +104,3 @@ class ViewXsection(View2D):
         self.plotter.camera.focal_point = self.center
         self.plotter.camera.position = self.center + self.direction
         self.plotter.reset_camera()
-    
