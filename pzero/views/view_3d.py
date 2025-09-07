@@ -63,6 +63,14 @@ class View3D(ViewVTK):
         super().initialize_menu_tools()
 
         # then add new code specific to this class
+        self.saveHomeView = QAction("Save home view", self)
+        self.saveHomeView.triggered.connect(self.save_home_view)
+        self.menuView.insertAction(self.zoomActive, self.saveHomeView)
+
+        self.zoomHomeView = QAction("Zoom to home", self)
+        self.zoomHomeView.triggered.connect(self.zoom_home_view)
+        self.menuView.insertAction(self.zoomActive, self.zoomHomeView)
+
         self.menuBoreTraceVis = QMenu("Borehole visualization methods", self)
 
         self.actionBoreTrace = QAction("Trace", self)
