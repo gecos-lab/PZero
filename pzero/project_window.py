@@ -1533,11 +1533,16 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
 
                 in_keys = set(self.geol_coll.legend_df.keys())
                 def_keys = set(Legend.geol_legend_dict.keys())
-                diffs = def_keys.difference(in_keys)
-                if len(diffs) > 0:
-                    self.print_terminal(f"geol_legend_table diffs: {diffs}")
-                    for diff in diffs:
-                        self.geol_coll.legend_df[diff] = Legend.geol_legend_dict[diff]
+                to_add = def_keys.difference(in_keys)
+                to_remove = in_keys.difference(def_keys)
+                if len(to_add) > 0:
+                    for col in to_add:
+                        self.geol_coll.legend_df[col] = Legend.geol_legend_dict[col]
+                        self.print_terminal(f"column {col} added to geological legend")
+                if len(to_remove) > 0:
+                    for col in to_remove:
+                        self.geol_coll.legend_df.drop(columns=col)
+                        self.print_terminal(f"column {col} removed from geological legend")
 
                 self.geol_coll.legend_df.sort_values(
                     by="time", ascending=True, inplace=True
@@ -1716,7 +1721,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                             "width",
                             new_xsect_coll_df.top - new_xsect_coll_df.bottom,
                         )
-                        self.print_terminal("added missing width column to xsect table")
+                        self.print_terminal("column width added to xsect table")
 
                     for new_column in new_xsect_coll_df.columns.values.tolist():
                         if new_column not in self.xsect_coll.df.columns.values.tolist():
