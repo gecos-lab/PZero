@@ -194,7 +194,7 @@
         </item>
        </layout>
       </widget>
-      <widget class="QWidget" name="tabMeshes3D">
+      <widget class="QWidget" name="tabMeshes">
        <attribute name="title">
         <string>3D Meshes and Grids</string>
        </attribute>

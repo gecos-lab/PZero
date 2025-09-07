@@ -209,7 +209,7 @@
         </item>
        </layout>
       </widget>
-      <widget class="QWidget" name="tabMeshes3D">
+      <widget class="QWidget" name="tabMeshes">
        <property name="sizePolicy">
         <sizepolicy hsizetype="MinimumExpanding" vsizetype="MinimumExpanding">
          <horstretch>1</horstretch>
