@@ -429,7 +429,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
     ):
         """This is called when point or cell data (properties) are removed."""
         # AT THE MOMENT THIS IS IDENTICAL TO entities_data_keys_added_update_views
-        return self.entities_data_keys_added_update_views(
+        self.entities_data_keys_added_update_views(
             updated_uids=updated_uids, collection=collection
         )
 
