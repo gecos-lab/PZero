@@ -98,7 +98,7 @@ jobs:
           python3 -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install pyinstaller
-          pyinstaller --onedir --windowed --collect-all rasterio pzero.py --name pzero-${{ runner.os }} --add-data "_internal/pzero_splash.png;."
+          pyinstaller --onedir --windowed --collect-all rasterio pzero.py --name pzero-${{ runner.os }} --icon="_internal/pzero.ico" --add-data "_internal/pzero.ico;." --add-data "_internal/pzero_splash.png;."
       - name: Zip executable (Unix/MacOS)
         if: runner.os != 'Windows'
         run: |
