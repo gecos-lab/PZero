@@ -582,6 +582,13 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         # replace the property shown in the actors dataframe
         self.actors_df.loc[self.actors_df["uid"] == uid, "show_property"] = prop_text
 
+        # notify specialized views (e.g., View3D) to sync dependent visuals like slices
+        try:
+            if hasattr(self, "on_property_toggled"):
+                self.on_property_toggled(collection_name=collection_name, uid=uid, prop_text=prop_text)
+        except Exception:
+            pass
+
     # def data_keys_modified_update_views(self, collection_name=None, updated_uids=None):
     #     # __________________________________________________________________ ?????
     #     collection = eval(f"self.parent.{collection_name}")
