@@ -56,14 +56,6 @@ class ViewVTK(BaseView):
         super().initialize_menu_tools()
 
         # then add new code specific to this class
-        self.saveHomeView = QAction("Save home view", self)
-        self.saveHomeView.triggered.connect(self.save_home_view)
-        self.menuView.addAction(self.saveHomeView)  # add action to menu
-
-        self.zoomHomeView = QAction("Zoom to home", self)
-        self.zoomHomeView.triggered.connect(self.zoom_home_view)
-        self.menuView.addAction(self.zoomHomeView)
-
         self.zoomActive = QAction("Zoom to active", self)
         self.zoomActive.triggered.connect(self.zoom_active)
         self.menuView.addAction(self.zoomActive)
@@ -276,6 +268,7 @@ class ViewVTK(BaseView):
         Show actor with scalar property (default None). See details in:
         https://github.com/pyvista/pyvista/blob/140b15be1d4021b81ded46b1c212c70e86a98ee7/pyvista/plotting/plotting.py#L1045
         """
+
         # First get the vtk object from its collection.
         if show_property:
             show_property_title = show_property
@@ -513,6 +506,7 @@ class ViewVTK(BaseView):
                     self.parent.dom_coll.df["uid"] == uid, "textures"
                 ].values[0]
             ):
+                plot_entity.set_active_texture(show_property)
                 active_image = self.parent.image_coll.get_uid_vtk_obj(show_property)
                 active_image_texture = active_image.texture
                 # active_image_properties_components = active_image.properties_components[0]  # IF USED THIS MUST BE FIXED FOR TEXTURES WITH MORE THAN 3 COMPONENTS
@@ -869,6 +863,7 @@ class ViewVTK(BaseView):
             ].values[0]
         else:
             show_property_cmap = None
+
         this_actor = self.plotter.add_mesh(
             plot_entity,
             color=color_RGB,  # string, RGB list, or hex string, overridden if scalars are specified
