@@ -359,8 +359,8 @@ class CustomTreeWidget(QTreeWidget):
             #                 property_combo.findText(prop_), prop_
             #             )
             for prop, prop_comp in zip(row[self.prop_label], row[self.prop_comp_label]):
-                property_combo.addItem(prop)
-                property_combo.setItemData(property_combo.findText(prop), prop)
+                # property_combo.addItem(prop)
+                # property_combo.setItemData(property_combo.findText(prop), prop)
                 if prop_comp > 1:
                     for i in range(prop_comp):
                         prop_ = prop + f"[{i}]"
@@ -368,6 +368,9 @@ class CustomTreeWidget(QTreeWidget):
                         property_combo.setItemData(
                             property_combo.findText(prop_), prop_
                         )
+                else:
+                    property_combo.addItem(prop)
+                    property_combo.setItemData(property_combo.findText(prop), prop)
         if "textures" in self.collection.df.columns.values.tolist():
             # This takes the texture uid from the "textures" column in the collection, then matches it with
             # the image's collection and retrieves the name of the texture. The texture name is shown in the
