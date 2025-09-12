@@ -85,6 +85,9 @@ class View3D(ViewVTK):
 
         self.trigger_event = "LeftButtonPressEvent"
 
+        # Track singleton Mesh Slicer dialog instance
+        self.mesh_slicer_dialog = None
+
         # Ensure mesh-slice visuals react to property colormap changes
         try:
             if hasattr(self.parent, "signals") and hasattr(
@@ -738,9 +741,28 @@ class View3D(ViewVTK):
         self.plotter.export_obj(f"{out_file_name}.obj")
     def show_mesh_slicer_dialog(self):
             """Create and show a unified control panel for mesh slicing in both single and multi-slice modes."""
+            # Reuse existing dialog if already open
+            try:
+                if getattr(self, 'mesh_slicer_dialog', None) is not None and self.mesh_slicer_dialog.isVisible():
+                    # Bring to front and inform the user
+                    try:
+                        self.mesh_slicer_dialog.raise_()
+                        self.mesh_slicer_dialog.activateWindow()
+                    except Exception:
+                        pass
+                    QMessageBox.information(self, "Mesh Slicer", "Mesh Slicer is already open.")
+                    return self.mesh_slicer_dialog
+            except Exception:
+                # If anything goes wrong, reset the reference and continue to create a new dialog
+                self.mesh_slicer_dialog = None
             # Create the control panel window
             control_panel = QDialog(self)
             control_panel.setWindowTitle("Mesh Slicer")
+            # Ensure the widget is deleted on close so we can recreate later
+            try:
+                control_panel.setAttribute(Qt.WA_DeleteOnClose, True)
+            except Exception:
+                pass
             # Set dialog flags to prevent default Enter key behavior
             control_panel.setWindowFlags(control_panel.windowFlags() | Qt.WindowType.CustomizeWindowHint)
             # Disable default button behavior
@@ -2243,6 +2265,13 @@ class View3D(ViewVTK):
 
             # Add this after creating the control_panel
             control_panel.finished.connect(cleanup_on_close)
+            # Maintain singleton reference and clean it up on close/destroy
+            try:
+                self.mesh_slicer_dialog = control_panel
+                control_panel.finished.connect(lambda _result: setattr(self, 'mesh_slicer_dialog', None))
+                control_panel.destroyed.connect(lambda _obj=None: setattr(self, 'mesh_slicer_dialog', None))
+            except Exception:
+                pass
             
             # Initialize controls for the current entity
             if entity_combo.count() > 0:
