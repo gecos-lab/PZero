@@ -1,0 +1,238 @@
+[33maac2e1f[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mSeismic4[m[33m, [m[1;31morigin/Seismic4[m[33m)[m Merge branch 'Seismic4' of https://github.com/gecos-lab/PZero into Seismic4
+[33mdda53df[m fix(meshslicer): Prevent slice planes from disappearing at mesh bounds
+[33md185649[m fix(meshslicer): Replace print statements with self.print_terminal
+[33mc947f22[m fix(meshslicer): Prevent slice planes from disappearing at mesh bounds
+[33mbbca0c8[m fix(meshslicer): Ensure Mesh Slicer dialog is singleton in View3D
+[33m64124cd[m Merge branch 'main' into Seismic4
+[33mf40fa9a[m[33m ([m[1;33mtag: [m[1;33mv1.1.26[m[33m)[m fix(icon): windows icon added
+[33m1cdd7d6[m fix(icon): windows icon added
+[33me7775cc[m feat(MeshSlicer): All the changes from mesh slicer has been forwarded and properly synced into the new refactored main
+[33m0884a3f[m[33m ([m[1;33mtag: [m[1;33mv1.1.25[m[33m)[m fix(zoom home): zoom to home view removed in 2D views
+[33m931d1b7[m[33m ([m[1;33mtag: [m[1;33mv1.1.24[m[33m)[m fix(2D selection): on_selection_changed commented in map and xsection
+[33m0bf8e48[m[33m ([m[1;33mtag: [m[1;33mv1.1.23[m[33m)[m fix(tabMeshes): tabMeshes3D to tabMeshes
+[33me97be94[m[33m ([m[1;31morigin/textures[m[33m)[m some prints corrected
+[33m66d9865[m some prints corrected
+[33mc1a1e96[m added set_active_texture()
+[33m43e0b5a[m[33m ([m[1;33mtag: [m[1;33mv1.1.22[m[33m)[m Merge branch 'main' of https://github.com/gecos-lab/PZero
+[33m78d22c8[m fix(open project): texture null to empty list
+[33m2328ec4[m Revert "Synchroniced selection (#186)" (#187)
+[33m94fa813[m[33m ([m[1;31morigin/revert-merge-186[m[33m)[m Apply prepare changes
+[33m142b470[m[33m ([m[1;32mrevert-merge-186[m[33m)[m Revert "Synchroniced selection (#186)"
+[33m126a622[m Synchroniced selection (#186)
+[33m780696b[m[33m ([m[1;31morigin/SynchronicedSelection[m[33m, [m[1;32mSynchronicedSelection[m[33m)[m Apply prepare changes
+[33mf142165[m Add DataFrame existence checks to CustomTreeWidget
+[33m90f1d4b[m Apply prepare changes
+[33m4e08272[m Synchroniced selection (#185)
+[33m3805ee8[m[33m ([m[1;31morigin/rollback-to-3805ee8[m[33m, [m[1;31morigin/reset-main-to-3805ee8[m[33m, [m[1;32mrollback-to-3805ee8[m[33m, [m[1;32mreset-to-3805ee8[m[33m, [m[1;32mreset-main-to-3805ee8[m[33m)[m Merge branch 'main' into SynchronicedSelection
+[33maf4f254[m Remove custom show_actor_with_property method
+[33me0969ae[m Fix references to geol_coll in interpolation_delaunay_2d
+[33meccd957[m[33m ([m[1;33mtag: [m[1;33mv1.1.21[m[33m, [m[1;31morigin/reset-main-to-eccd957[m[33m, [m[1;32mreset-main-to-eccd957[m[33m)[m fix(print): removed some print
+[33m84ecdf9[m[33m ([m[1;33mtag: [m[1;33mv1.1.20[m[33m)[m fix(print): removed some print
+[33mba647cf[m[33m ([m[1;33mtag: [m[1;33mv1.1.19[m[33m)[m fix(splash): new splash screen
+[33m0cf6e19[m fix(splash): new splash screen
+[33mb9d90d9[m[33m ([m[1;31morigin/r-monti14-patch-1[m[33m)[m Apply prepare changes
+[33m86f408d[m New splash screen
+[33m4751dbf[m[33m ([m[1;33mtag: [m[1;33mv1.1.18[m[33m)[m fix(terminal): many print's removed or sent to PZero terminal
+[33mb028221[m[33m ([m[1;33mtag: [m[1;33mv1.1.17[m[33m)[m fix(open project): rename texture column
+[33med95e8e[m[33m ([m[1;33mtag: [m[1;33mv1.1.16[m[33m)[m fix(open project): checks old projects dataframe columns and options when opening
+[33m6e3abbd[m texture_uids -> textures
+[33m4d30e99[m DIM collections modified for texture_uids
+[33ma7aeb3c[m[33m ([m[1;33mtag: [m[1;33mv1.1.15[m[33m)[m fix(XYZV in 2D): solved also for V
+[33mc39ece1[m[33m ([m[1;33mtag: [m[1;33mv1.1.14[m[33m)[m fix(XYZV in 2D): solved also for V
+[33md3fe77f[m[33m ([m[1;33mtag: [m[1;33mv1.1.13[m[33m)[m fix(XYZV in 2D): solved foe XYZ - V still problems
+[33m8b01666[m working on combo boxes
+[33m6a50d5e[m working on showing textures
+[33m74d0457[m working on showing textures
+[33mb2d00b5[m geo_image2vtk fixed
+[33m6dd564a[m Refactor VTK widget parent handling and add normals glyphs
+[33mdf8d8c4[m Support multicomponent property indexing in views
+[33m5ac1069[m Simplify_line and copy_kink fixed
+[33md6c2bae[m attempt at fixing entities_data_keys_added_update_views
+[33mc39d119[m attempt at fixing entities_data_keys_added_update_views
+[33mfa6dcf7[m attempt at fixing entities_data_keys_added_update_views
+[33m65b0260[m attempt at fixing entities_data_keys_added_update_views
+[33m8bab2d4[m fix(project_2_dem_signals): use self.signals instead of self.parent.signals (#177)
+[33m88ddbea[m[33m ([m[1;31morigin/project_2_dem_fix[m[33m)[m Fix signal emission in project_Fix signal emission in project_2_dem2_dem
+[33m0d32cd5[m[33m ([m[1;33mtag: [m[1;33mv1.1.12[m[33m)[m fix(splash screen): updated splash screen with --add-data
+[33m9966817[m[33m ([m[1;33mtag: [m[1;33mv1.1.11[m[33m)[m fix(splash screen): updated splash screen with --add-data
+[33m68922c4[m[33m ([m[1;33mtag: [m[1;33mv1.1.10[m[33m)[m fix(splash screen): updated splash screen with --add-data
+[33m9cb34b9[m[33m ([m[1;33mtag: [m[1;33mv1.1.9[m[33m)[m fix(splash screen): updated splash screen with --add-data
+[33m355ffd8[m[33m ([m[1;33mtag: [m[1;33mv1.1.8[m[33m)[m fix(splash screen): updated splash screen with --add-data
+[33m73aa8c1[m[33m ([m[1;33mtag: [m[1;33mv1.1.7[m[33m)[m fix(splash screen): updated splash screen with --add-data
+[33mfc85206[m[33m ([m[1;33mtag: [m[1;33mv1.1.6[m[33m)[m fix(splash screen): updated splash screen with --add-data
+[33mdd8fa29[m[33m ([m[1;33mtag: [m[1;33mv1.1.5[m[33m)[m fix(splash screen): updated splash screen with --add-data
+[33ma2f23bd[m[33m ([m[1;33mtag: [m[1;33mv1.1.4[m[33m)[m fix(splash screen): updated splash screen with --add-data
+[33m4de3730[m[33m ([m[1;33mtag: [m[1;33mv1.1.3[m[33m)[m fix(splash screen): updated splash screen with --add-data
+[33mb8e67e5[m[33m ([m[1;33mtag: [m[1;33mv1.1.2[m[33m)[m fix(splash screen): new splash screen in exe
+[33m44840c3[m[33m ([m[1;33mtag: [m[1;33mv1.1.1[m[33m)[m fix(splash screen): new splash screen in exe
+[33m8e2cb88[m fix(splash screen): new splash screen in exe
+[33mab0dbdf[m image fixed
+[33mec98ac0[m[33m ([m[1;33mtag: [m[1;33mv1.1.0[m[33m)[m  feat(views_refactoring): complete refactoring of views with new tree, fix of core duplication, etc.
+[33m3426c02[m Merge pull request #176 from gecos-lab/views_refactoring
+[33m6f198f1[m[33m ([m[1;31morigin/views_refactoring[m[33m, [m[1;32mviews_refactoring[m[33m)[m Apply prepare changes
+[33m1c256a5[m interesction_xs fixed for DEMs
+[33m1083a3d[m #57 progress bar for views
+[33m585d2d5[m #56 vector properties fixed
+[33m92b20d3[m #55 some fixes
+[33m2426a78[m #54 boundary legend fixed
+[33m47949c2[m #53 signals collection -> project
+[33m2653a82[m #52 export vtkJSON
+[33m5268b7e[m #51 cleaning a lot of commented code
+[33m4845ae4[m #50 export vtk js and more fixes
+[33m32f6dfd[m #49 all collection signals updated - more fixes
+[33m5b6d9e7[m #48 all collection signals updated - testing and fixing
+[33mc662c69[m #47 all collection signals updated - testing and fixing
+[33m6f5e055[m #46 all collection signals updated - testing and fixing
+[33m57466a5[m #46 all collection signals updated - fixes needed
+[33mac0e8b1[m #46 all collection signals updated - fixes needed
+[33m1e374bb[m #45 signals mistery solved adding collections - now check all methods
+[33me07d147[m #44 updating color - signals mistery to be solved
+[33mb61600f[m #43 rearrange close event
+[33m291501a[m #42 switching ... must use new methods in MPL view
+[33m41f2507[m #41 switching to self.plotter.render.actors and self.mpl_actors
+[33m5a20972[m #40 switching to self.plotter.renderer.actors
+[33m707769a[m #39 remove build_update.py
+[33m2aceb9e[m #38 several fixes - need to switch to self.plotter.renderer.actors at next commit
+[33m601753c[m Merge remote-tracking branch 'origin/main' into views_refactoring
+[33m7112ab3[m[33m ([m[1;33mtag: [m[1;33mv1.0.0[m[33m, [m[1;33mtag: [m[1;33mv0.1.24[m[33m)[m Update README.md
+[33m6f36fdb[m Update README.md
+[33ma71139d[m Add files via upload
+[33m472e8a0[m Update README.md
+[33m2043082[m #37 readme files added
+[33mb0aa181[m #36 propertyToggled signal removed, fixes needed
+[33mfebbc02[m #35 checkboxToggled signal removed
+[33mef811b1[m #34 fixing entities removed, not completed
+[33me0c97ef[m #33 self.combo_values removed (use view.actors_df)
+[33m6660208[m #32 self.checked_uids removed (use view.actors_df)
+[33m3b8565c[m #31 show/hide methods - props to be fixed
+[33m021a2bd[m #31 show/hide methods
+[33m08aed19[m #30 selection methods
+[33mcb085e8[m #29 cleaning view_tree.py - something broken checkbox do not turn on/off
+[33mc023e79[m #28 buttons header
+[33m91a8595[m #27 cleaning view_tree.py
+[33m78ad294[m #26 cleaning view_tree.py
+[33m11239b1[m #25 old signals/slots removed
+[33m162edd5[m #24 all signals made general - to be tested
+[33m8682847[m #23 working on signals in view
+[33m05145ef[m #22 working on signals in view
+[33m7da2550[m #21 custom tree name
+[33mf57d63e[m #20 collections reordering
+[33mae939e8[m #19 abstract coll reordering
+[33m292bc10[m #18 collection names fix
+[33m34ad67c[m #16 toggle property
+[33mfae24c7[m #15 cleaning and fixes
+[33m54897a3[m #14 toggle visibility
+[33m228e110[m #12 fix designer ui
+[33m77e26f7[m #11 new tree imported
+[33m4f9e15d[m #10 selected uids in collections
+[33m69b3acb[m #9 starting new tree
+[33md11568c[m #8 removed duplication in view_stereoplot.py
+[33mec47e86[m #7 use df.query() filter for stereoplot, with fixes
+[33m0907d01[m #6 self.print_terminal fix
+[33m5c6e9f3[m #5 rearranging methods in views
+[33m8ea9774[m #4 rearranging methods in views
+[33m0de0fb9[m #3 stereoplot fixes & upgrades
+[33m606e05b[m #2 views hierarchy rearranged, fixes in stereoplot
+[33m9841ace[m #1 first steps
+[33m1729a3f[m .gitignore updated
+[33mbe78d45[m exe instructions
+[33mfb24551[m[33m ([m[1;33mtag: [m[1;33mv0.1.23[m[33m)[m 0.1.23
+[33m3ba1e18[m fix(ReadMe): README updated to point to exe etc
+[33m490a063[m[33m ([m[1;33mtag: [m[1;33mv0.1.22[m[33m)[m 0.1.22
+[33m08a02d7[m fix(Actions): reverting back to previous
+[33m3c20c8b[m[33m ([m[1;33mtag: [m[1;33mv0.1.21[m[33m)[m 0.1.21
+[33m10b63f0[m fix(Actions): ubuntu-20.04 added, file names fixed
+[33m0d36f88[m[33m ([m[1;33mtag: [m[1;33mv0.1.20[m[33m)[m 0.1.20
+[33m353fc03[m fix(Actions): try fixing Upload executable and macos #7
+[33m43a817b[m[33m ([m[1;33mtag: [m[1;33mv0.1.19[m[33m)[m 0.1.19
+[33m28ef8c5[m fix(Actions): try fixing Upload executable and macos #6
+[33m7dfd7e2[m[33m ([m[1;33mtag: [m[1;33mv0.1.18[m[33m)[m 0.1.18
+[33m1805b77[m fix(Actions): try fixing Upload executable and macos #5
+[33m8b2b5d8[m[33m ([m[1;33mtag: [m[1;33mv0.1.17[m[33m)[m 0.1.17
+[33m38de032[m fix(Actions): try fixing Upload executable and macos #4
+[33mc50d609[m[33m ([m[1;33mtag: [m[1;33mv0.1.16[m[33m)[m 0.1.16
+[33mc31ca74[m fix(Actions): try fixing Upload executable and macos #3
+[33m3548001[m[33m ([m[1;33mtag: [m[1;33mv0.1.15[m[33m)[m 0.1.15
+[33m575567e[m fix(Actions): try fixing Upload executable and macos #2
+[33m24830bb[m[33m ([m[1;33mtag: [m[1;33mv0.1.14[m[33m)[m 0.1.14
+[33m06676aa[m fix(Actions): try fixing Upload executable and macos
+[33mf69ebe7[m[33m ([m[1;33mtag: [m[1;33mv0.1.13[m[33m)[m 0.1.13
+[33meb8f0cf[m fix(Actions): try fixing Upload executable
+[33m282c720[m[33m ([m[1;33mtag: [m[1;33mv0.1.12[m[33m)[m 0.1.12
+[33ma645a28[m fix(Actions): use --windowed and not --target-arch universal2
+[33mb508d29[m[33m ([m[1;33mtag: [m[1;33mv0.1.11[m[33m)[m 0.1.11
+[33m18e0ae8[m fix(Actions): fix zip file upload
+[33m745ed8a[m[33m ([m[1;33mtag: [m[1;33mv0.1.10[m[33m)[m 0.1.10
+[33m55485f9[m Merge remote-tracking branch 'origin/main'
+[33mfce1c14[m fix(Actions): fix zip file
+[33m1cd7052[m[33m ([m[1;33mtag: [m[1;33mv0.1.9[m[33m)[m 0.1.9
+[33mb9f1ddc[m fix(Actions): --onedir, zip files
+[33m1def568[m[33m ([m[1;33mtag: [m[1;33mv0.1.8[m[33m)[m 0.1.8
+[33mb875c7a[m fix(Actions): one file dist folder path
+[33m301830b[m[33m ([m[1;33mtag: [m[1;33mv0.1.7[m[33m)[m 0.1.7
+[33m8693278[m fix(Actions): one file option
+[33mada5c2a[m[33m ([m[1;33mtag: [m[1;33mv0.1.6[m[33m)[m 0.1.6
+[33m2d57d72[m fix(Actions): change pzero name using os
+[33mde09817[m[33m ([m[1;33mtag: [m[1;33mv0.1.5[m[33m)[m 0.1.5
+[33m6fef293[m fix(Actions): upload only pzero files
+[33mbf30064[m[33m ([m[1;33mtag: [m[1;33mv0.1.4[m[33m)[m 0.1.4
+[33m51a4ba7[m fix(Actions): add token auth
+[33m9ce7536[m[33m ([m[1;33mtag: [m[1;33mv0.1.3[m[33m)[m 0.1.3
+[33mcbfd176[m fix(Actions): try to upload executable
+[33m7321287[m[33m ([m[1;33mtag: [m[1;33mv0.1.2[m[33m)[m 0.1.2
+[33m22204f1[m Merge remote-tracking branch 'origin/main'
+[33m1d4b2cf[m fix(Actions): fix python version to 3.12
+[33m1059794[m[33m ([m[1;33mtag: [m[1;33mv0.1.1[m[33m)[m 0.1.1
+[33m7b32e4f[m fix(Actions): add deploy job
+[33m43b7f5d[m[33m ([m[1;33mtag: [m[1;33mv0.1.0[m[33m)[m 0.1.0
+[33m600bc73[m Merge pull request #161 from gecos-lab/workflows
+[33m198f8f6[m[33m ([m[1;31morigin/workflows[m[33m)[m missing sudo permission
+[33m7fd881c[m install libegl1 on github runner
+[33m816f586[m install libegl1 on github runner
+[33m97f2be3[m Apply prepare changes
+[33ma7ed016[m move tests to old_tests
+[33mf586932[m move tests to old_tests
+[33m6f72d4f[m Apply prepare changes
+[33m86eba71[m fix black comments
+[33m7a93907[m remove + in tests
+[33mcb43c68[m Merge remote-tracking branch 'origin/workflows' into workflows
+[33mfc5a089[m retry
+[33md3237b3[m feat(workflows): adding new workflows
+[33m8de467d[m feat(workflows): adding new workflows
+[33mf45a798[m Merge pull request #160 from gecos-lab/add-requirements
+[33m6e0e5a6[m[33m ([m[1;31morigin/add-requirements[m[33m, [m[1;32madd-requirements[m[33m)[m fix NaN to nan
+[33mb93290e[m add black[d]
+[33m015542d[m feat(deployment): add requirements.in
+[33meffe773[m gui image added
+[33m7ad7b3c[m orientation widget warning
+[33mad36391[m orientation widgets updated
+[33m7cf868c[m added cross-section horizontal mirror view
+[33m3fd10e0[m micro fix
+[33me0ed59b[m Merge branch 'alternative_selection'
+[33m6f47e2a[m Merge remote-tracking branch 'origin/xsections_refact'
+[33m506dc2a[m[33m ([m[1;31morigin/alternative_selection[m[33m)[m replaced vtkPropPicker with vtkCellPicker
+[33m580e089[m fix re-enable actions when view closed
+[33m88fe3cd[m fix re-enable actions when view closed
+[33m1c5a084[m[33m ([m[1;31morigin/xsections_refact[m[33m)[m XSectionBaseEntity() removed, no more multiple inheritance
+[33m045341b[m Update README.md
+[33m45c631f[m Update README.md
+[33mc0faaa2[m Update README.md
+[33mf0d0232[m Changing comments for automatic documentation in all helper
+[33m57aec94[m Changing comments for automatic documentation in all imports
+[33m30ca93d[m Changing comments for automatic documentation in legend_manager.py, point_clouds.py, project_window.py, and properties_manager.py
+[33m02bec36[m Merge remote-tracking branch 'origin/main'
+[33m9c26ba5[m Changing comments for automatic documentation in two_d_lines
+[33m7031815[m v0.0.1
+[33me02cc45[m release.yml CI/CD updated
+[33m408c1cc[m Vertical exxageration
+[33m5565f21[m Updated segy standardizer
+[33m9d5e98b[m small fix
+[33mfb8396b[m fixing env
+[33md6e185c[m Changing comments for automatic documentation in windows_factory
+[33m9552e16[m Changing comments for automatic documentation in entities_factory
+[33m8f164a0[m Changing comments for automatic documentation in three_d_surfaces
+[33m4423646[m Changed the processing print statements to print function of the terminal
+[33mcb3a251[m Merge branch 'Seismic3'
+[33m7fb96ca[m Updating pzero env from history
+[33m000d7cb[m Merge branch 'Seismic3' of https://github.com/gecos-lab/PZero into Seismic3
+[33m5efd6ed[m Update segy2vtk.py

@@ -1542,7 +1542,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 if len(to_remove) > 0:
                     for col in to_remove:
                         self.geol_coll.legend_df.drop(columns=col)
-                        self.print_terminal(f"column {col} removed from geological legend")
+                        self.print_terminal(
+                            f"column {col} removed from geological legend"
+                        )
 
                 self.geol_coll.legend_df.sort_values(
                     by="time", ascending=True, inplace=True
