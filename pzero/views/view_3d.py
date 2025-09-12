@@ -88,6 +88,9 @@ class View3D(ViewVTK):
         # Track singleton Mesh Slicer dialog instance
         self.mesh_slicer_dialog = None
 
+        # Small epsilon to keep slice planes inside bounds when clamping
+        self._slice_edge_epsilon = 1e-6
+
         # Ensure mesh-slice visuals react to property colormap changes
         try:
             if hasattr(self.parent, "signals") and hasattr(
@@ -1128,7 +1131,12 @@ class View3D(ViewVTK):
                                     elif target_slice_type == 'Z' and current_bounds[5] > current_bounds[4]:
                                         new_normalized_pos = (widget_origin[2] - current_bounds[4]) / (current_bounds[5] - current_bounds[4])
 
-                                    new_normalized_pos = max(0, min(1, new_normalized_pos)) # Clamp 0-1
+                                    # Clamp slightly inside [0,1] to prevent disappearing at exact bounds
+                                    eps = getattr(self, '_slice_edge_epsilon', 1e-6)
+                                    if new_normalized_pos <= 0.0:
+                                        new_normalized_pos = eps
+                                    elif new_normalized_pos >= 1.0:
+                                        new_normalized_pos = 1.0 - eps
 
                                     # Update the specific slice visualization using the main function
                                     update_slice_visualization(target_entity_name, target_slice_type, new_normalized_pos, fast_update=True, specific_slice_id=target_slice_id)
@@ -1848,12 +1856,38 @@ class View3D(ViewVTK):
                         position = bounds[4] + normalized_position * (bounds[5] - bounds[4])
                         slice_data = pv_entity.slice(normal=[0,0,1], origin=[0, 0, position])
 
-                    # Skip if slice is empty
+                    # If slice is empty at extremes, nudge inside bounds slightly to keep it visible
                     if slice_data.n_points <= 0:
-                        print(f"Skipping empty slice at normalized position {normalized_position}")
-                        if slice_uid in self.slice_actors:
-                            self.slice_actors[slice_uid].SetVisibility(False)
-                        return
+                        eps = getattr(self, '_slice_edge_epsilon', 1e-6)
+                        try:
+                            if slice_type == 'X':
+                                if normalized_position <= 0.0:
+                                    normalized_position = eps
+                                elif normalized_position >= 1.0:
+                                    normalized_position = 1.0 - eps
+                                position = bounds[0] + normalized_position * (bounds[1] - bounds[0])
+                                slice_data = pv_entity.slice(normal=[1,0,0], origin=[position, 0, 0])
+                            elif slice_type == 'Y':
+                                if normalized_position <= 0.0:
+                                    normalized_position = eps
+                                elif normalized_position >= 1.0:
+                                    normalized_position = 1.0 - eps
+                                position = bounds[2] + normalized_position * (bounds[3] - bounds[2])
+                                slice_data = pv_entity.slice(normal=[0,1,0], origin=[0, position, 0])
+                            else:
+                                if normalized_position <= 0.0:
+                                    normalized_position = eps
+                                elif normalized_position >= 1.0:
+                                    normalized_position = 1.0 - eps
+                                position = bounds[4] + normalized_position * (bounds[5] - bounds[4])
+                                slice_data = pv_entity.slice(normal=[0,0,1], origin=[0, 0, position])
+                        except Exception:
+                            pass
+                        # If still empty, do not hide; keep current actor visible and return
+                        if slice_data.n_points <= 0:
+                            if slice_uid in self.slice_actors:
+                                self.slice_actors[slice_uid].SetVisibility(True)
+                            return
 
                     # Store current visibility if the slice exists
                     current_visibility = True
@@ -2513,8 +2547,12 @@ class View3D(ViewVTK):
                         else:
                             normalized_pos = (origin[2] - bounds[4]) / (bounds[5] - bounds[4]) if bounds[5] > bounds[4] else 0.5
                     
-                    # Clamp position to 0-1 range
-                    normalized_pos = max(0, min(1, normalized_pos))
+                    # Clamp slightly inside [0,1] to prevent disappearing at exact bounds
+                    eps = getattr(self, '_slice_edge_epsilon', 1e-6)
+                    if normalized_pos <= 0.0:
+                        normalized_pos = eps
+                    elif normalized_pos >= 1.0:
+                        normalized_pos = 1.0 - eps
                     
                     # Update slider and label with new position without triggering value changed events
                     # This prevents double rendering
@@ -2827,12 +2865,20 @@ class View3D(ViewVTK):
                     else:
                         origin = [0, 0, position]
                 
+                # Constrain widget within bounds (account for vertical exaggeration on Z)
+                widget_bounds = list(bounds)
+                if slice_type == 'Z' and v_exag != 1.0:
+                    z_mid = (bounds[4] + bounds[5]) / 2
+                    widget_bounds[4] = z_mid + (bounds[4] - z_mid) * v_exag
+                    widget_bounds[5] = z_mid + (bounds[5] - z_mid) * v_exag
+                
                 # Create the plane widget with minimal required parameters
                 try:
                     plane_widget = self.plotter.add_plane_widget(
                         update_callback,
                         normal=normal,
                         origin=origin,
+                        bounds=widget_bounds,
                         normal_rotation=False  # Disable normal rotation on manipulator
                     )
                     return plane_widget
@@ -2844,7 +2890,7 @@ class View3D(ViewVTK):
                             update_callback,
                             normal=normal,
                             origin=origin,
-                            bounds=bounds,
+                            bounds=widget_bounds,
                             normal_rotation=False  # Disable normal rotation on manipulator
                         )
                         return plane_widget
