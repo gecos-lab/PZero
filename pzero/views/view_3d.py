@@ -438,7 +438,7 @@ class View3D(ViewVTK):
 
         # time = int(opt_dict['length']/60)
 
-        # print(factor)
+        # self.print_terminal(factor)
 
         off_screen_plot = pv_plot(off_screen=True)
         # off_screen_plot.set_background('Green')
@@ -473,9 +473,9 @@ class View3D(ViewVTK):
             label_txt="Saving frames",
             parent=self,
         )
-        # print('Creating gif')
+        # self.print_terminal('Creating gif')
         for point in range(n_points):
-            # print(f'{point}/{n_points}',end='\r')
+            # self.print_terminal(f'{point}/{n_points}',end='\r')
             off_screen_plot.set_position(points[point])
 
             # off_screen_plot.write_frame()
@@ -645,7 +645,7 @@ class View3D(ViewVTK):
         for uid in self.shown_uids:
             vtk_obj = self.parent.dom_coll.get_uid_vtk_obj(uid)
             octree = PolyData()  #  possible recursion problem
-            # print(vtk_obj.locator)
+            # self.print_terminal(vtk_obj.locator)
             vtk_obj.locator.GenerateRepresentation(3, octree)
 
             self.plotter.add_mesh(octree, style="wireframe", color="red")
@@ -1039,18 +1039,18 @@ class View3D(ViewVTK):
             # Connect multi-slice direct manipulation toggle
             def toggle_multi_manipulation(state):
                 is_checked = (state == Qt.CheckState.Checked.value)
-                print(f"Multi-slice direct manipulation: {is_checked}")
+                self.print_terminal(f"Multi-slice direct manipulation: {is_checked}")
                 
                 # Get the current entity
                 entity_name = multi_entity_combo.currentText()
                 if not entity_name:
-                    print("No entity selected for multi-slice manipulation")
+                    self.print_terminal("No entity selected for multi-slice manipulation")
                     return
                     
                 # Get entity
                 entity = self.get_entity_by_name(entity_name)
                 if not entity:
-                    print(f"Entity {entity_name} not found")
+                    self.print_terminal(f"Entity {entity_name} not found")
                     return
                     
                 # Get direction and slice type
@@ -1066,13 +1066,13 @@ class View3D(ViewVTK):
                             if hasattr(self.plotter, 'remove_widget'): self.plotter.remove_widget(widget)
                             elif hasattr(self.plotter.iren, 'remove_widget'): self.plotter.iren.remove_widget(widget)
                         except Exception as e:
-                            print(f"Warning: Error removing widget: {e}")
+                            self.print_terminal(f"Warning: Error removing widget: {e}")
                     self.multi_plane_widgets = []
                     self.plotter.render() # Render after removing old widgets
 
                 if is_checked:
                     # Enable manipulation: Create a widget for EACH existing grid slice
-                    print(f"Enabling manipulation for existing grid slices ({entity_name}, {direction})...")
+                    self.print_terminal(f"Enabling manipulation for existing grid slices ({entity_name}, {direction})...")
                     try:
                         # Convert to PyVista object if needed
                         if not isinstance(entity, pv.DataSet):
@@ -1090,7 +1090,7 @@ class View3D(ViewVTK):
                         existing_slice_ids = [uid for uid in self.slice_actors.keys() if uid.startswith(slice_prefix)]
 
                         if not existing_slice_ids:
-                            print("No existing grid slices found to manipulate. Create slices first.")
+                            self.print_terminal("No existing grid slices found to manipulate. Create slices first.")
                             # Uncheck the box if no slices exist
                             multi_direct_manip.setChecked(False)
                             return
@@ -1114,9 +1114,14 @@ class View3D(ViewVTK):
                                 # Assuming Z corresponds to index 2
                                 normalized_pos = (origin[2] - bounds[4]) / (bounds[5] - bounds[4])
 
-                            normalized_pos = max(0, min(1, normalized_pos)) # Clamp 0-1
+                            # Clamp slightly inside [0,1] to prevent disappearing at exact bounds
+                            eps = getattr(self, '_slice_edge_epsilon', 1e-6)
+                            if normalized_pos <= 0.0:
+                                normalized_pos = eps
+                            elif normalized_pos >= 1.0:
+                                normalized_pos = 1.0 - eps
 
-                            print(f"  Creating widget for {slice_id} at norm_pos={normalized_pos:.3f}")
+                            self.print_terminal(f"  Creating widget for {slice_id} at norm_pos={normalized_pos:.3f}")
 
                             # --- Define NEW callback for individual slice widgets ---
                             def create_slice_update_callback(target_slice_id, target_entity_name, target_slice_type):
@@ -1152,25 +1157,25 @@ class View3D(ViewVTK):
                             if widget:
                                 self.multi_plane_widgets.append(widget)
                             else:
-                                print(f"  Failed to create widget for {slice_id}")
+                                self.print_terminal(f"  Failed to create widget for {slice_id}")
 
 
                         if self.multi_plane_widgets:
                             # Render the changes once after adding all widgets
                             self.plotter.render()
-                            print(f"Multi-slice direct manipulation enabled for {len(self.multi_plane_widgets)} slices.")
+                            self.print_terminal(f"Multi-slice direct manipulation enabled for {len(self.multi_plane_widgets)} slices.")
                         else:
-                            print("Failed to create any manipulation widgets.")
+                            self.print_terminal("Failed to create any manipulation widgets.")
                             multi_direct_manip.setChecked(False) # Uncheck if failed
 
                     except Exception as e:
-                        print(f"Error setting up multi-slice manipulation: {e}")
+                        self.print_terminal(f"Error setting up multi-slice manipulation: {e}")
                         import traceback
                         traceback.print_exc()
                         multi_direct_manip.setChecked(False) # Uncheck on error
                 else:
                     # Manipulation disabled - cleanup already happened at the start
-                    print("Multi-slice direct manipulation disabled")
+                    self.print_terminal("Multi-slice direct manipulation disabled")
                 # --- End Modification ---
 
                 # Enforce property sync on all grid slices of current entity+direction
@@ -1213,10 +1218,10 @@ class View3D(ViewVTK):
                         start_label.setText(f"{normalized_pos:.2f}")
                     
                     # Update the visualization if slices are already created
-                    print(f"Updated {widget_type} position to {normalized_pos:.2f}")
+                    self.print_terminal(f"Updated {widget_type} position to {normalized_pos:.2f}")
                     
                 except Exception as e:
-                    print(f"Error updating multi-slice position: {e}")
+                    self.print_terminal(f"Error updating multi-slice position: {e}")
                     
             multi_direct_manip.stateChanged.connect(toggle_multi_manipulation)
             
@@ -1224,7 +1229,7 @@ class View3D(ViewVTK):
             def toggle_grid_lines(state):
                 # This function would implement showing grid lines for the multi-slice view
                 is_checked = (state == Qt.CheckState.Checked.value)
-                print(f"Grid lines visibility: {is_checked}")
+                self.print_terminal(f"Grid lines visibility: {is_checked}")
                 # Future implementation: Show/hide grid lines
                 
             #show_grid_box.stateChanged.connect(toggle_grid_lines)
@@ -1246,13 +1251,13 @@ class View3D(ViewVTK):
                 n_slices = slices_spin.value()
                 
                 if not entity_name:
-                    print("No entity selected for grid slices")
+                    self.print_terminal("No entity selected for grid slices")
                     return
                     
                 # Get entity
                 entity = self.get_entity_by_name(entity_name)
                 if not entity:
-                    print(f"Entity {entity_name} not found")
+                    self.print_terminal(f"Entity {entity_name} not found")
                     return
                     
                 # Convert to PyVista dataset
@@ -1279,7 +1284,7 @@ class View3D(ViewVTK):
                 import numpy as np
                 positions = np.linspace(start_norm, end_norm, n_slices)  # Normalized positions
                 
-                print(f"Creating {n_slices} slices for {entity_name} along {direction} from {start_norm:.2f} to {end_norm:.2f}")
+                self.print_terminal(f"Creating {n_slices} slices for {entity_name} along {direction} from {start_norm:.2f} to {end_norm:.2f}")
                 
                 # Create slices
                 for i, normalized_pos in enumerate(positions):
@@ -1287,7 +1292,7 @@ class View3D(ViewVTK):
                     
                     # Skip if already exists
                     if slice_id in self.slice_actors:
-                        print(f"Slice {slice_id} already exists, skipping")
+                        self.print_terminal(f"Slice {slice_id} already exists, skipping")
                         continue
                         
                     try:
@@ -1304,7 +1309,7 @@ class View3D(ViewVTK):
                         
                         # Skip empty slices
                         if slice_data.n_points <= 0:
-                            print(f"Skipping empty slice at position {normalized_pos}")
+                            self.print_terminal(f"Skipping empty slice at position {normalized_pos}")
                             continue
                         
                         # Determine scalars/color based on main entity property for full sync
@@ -1356,10 +1361,10 @@ class View3D(ViewVTK):
                                 self.slice_meta[slice_id] = (entity_name, slice_type)
                         except Exception:
                             pass
-                        print(f"Created slice {slice_id}")
+                        self.print_terminal(f"Created slice {slice_id}")
                         
                     except Exception as e:
-                        print(f"Error creating grid slice: {e}")
+                        self.print_terminal(f"Error creating grid slice: {e}")
                         import traceback
                         traceback.print_exc()
                         continue
@@ -1373,10 +1378,10 @@ class View3D(ViewVTK):
                 slice_type = direction_to_slice_type(direction)
                 
                 if not entity_name:
-                    print("No entity selected for removing grid slices")
+                    self.print_terminal("No entity selected for removing grid slices")
                     return
                     
-                print(f"Removing grid slices for {entity_name} along {direction}")
+                self.print_terminal(f"Removing grid slices for {entity_name} along {direction}")
                 
                 # Get all grid slices for this direction and entity
                 grid_slices = [uid for uid in list(self.slice_actors.keys()) 
@@ -1392,7 +1397,7 @@ class View3D(ViewVTK):
                                 del self.slice_meta[uid]
                         except Exception:
                             pass
-                        print(f"Removed slice {uid}")
+                        self.print_terminal(f"Removed slice {uid}")
                 
                 self.plotter.render()
             
@@ -1401,11 +1406,11 @@ class View3D(ViewVTK):
                 entity_name = multi_entity_combo.currentText()
                 direction = direction_combo.currentText()
                 if not entity_name:
-                    print("No entity selected for grid slices")
+                    self.print_terminal("No entity selected for grid slices")
                     return
                 entity = self.get_entity_by_name(entity_name)
                 if not entity:
-                    print(f"Entity {entity_name} not found")
+                    self.print_terminal(f"Entity {entity_name} not found")
                     return
                 if not isinstance(entity, pv.DataSet):
                     entity = pv.wrap(entity)
@@ -1431,7 +1436,7 @@ class View3D(ViewVTK):
                 for i, normalized_pos in enumerate(positions):
                     slice_id = f"{entity_name}_{slice_type}_grid_{i}"
                     if slice_id in self.slice_actors:
-                        print(f"Slice {slice_id} already exists, skipping")
+                        self.print_terminal(f"Slice {slice_id} already exists, skipping")
                         continue
                     try:
                         if slice_type == 'X':
@@ -1444,7 +1449,7 @@ class View3D(ViewVTK):
                             pos = min_val + normalized_pos * (max_val - min_val)
                             slice_data = entity.slice(normal='z', origin=[0, 0, pos])
                         if slice_data.n_points <= 0:
-                            print(f"Skipping empty slice at position {normalized_pos}")
+                            self.print_terminal(f"Skipping empty slice at position {normalized_pos}")
                             continue
                         scalar_array = None
                         cmap = None
@@ -1482,9 +1487,9 @@ class View3D(ViewVTK):
                                 self.slice_meta[slice_id] = (entity_name, slice_type)
                         except Exception:
                             pass
-                        print(f"Created slice {slice_id}")
+                        self.print_terminal(f"Created slice {slice_id}")
                     except Exception as e:
-                        print(f"Error creating grid slice: {e}")
+                        self.print_terminal(f"Error creating grid slice: {e}")
                         import traceback
                         traceback.print_exc()
                         continue
@@ -1498,7 +1503,7 @@ class View3D(ViewVTK):
             
             def cleanup_on_close():
                 """Clean up all slices and plane widgets when dialog closes"""
-                print("Cleaning up mesh slicer resources...")
+                self.print_terminal("Cleaning up mesh slicer resources...")
                 
                 # Disable single-slice manipulation to remove plane widgets
                 if enable_manipulation.isChecked():
@@ -1519,16 +1524,16 @@ class View3D(ViewVTK):
                                 if hasattr(self.plotter, 'remove_widget'): self.plotter.remove_widget(widget)
                                 elif hasattr(self.plotter.iren, 'remove_widget'): self.plotter.iren.remove_widget(widget)
                             except Exception as e:
-                                print(f"Warning: Error removing widget: {e}")
+                                self.print_terminal(f"Warning: Error removing widget: {e}")
                         self.multi_plane_widgets = []
                 
                 # Remove all slice actors
                 for slice_uid, actor in list(self.slice_actors.items()):
                     try:
-                        print(f"Removing slice {slice_uid}")
+                        self.print_terminal(f"Removing slice {slice_uid}")
                         self.plotter.remove_actor(actor)
                     except Exception as e:
-                        print(f"Error removing slice {slice_uid}: {e}")
+                        self.print_terminal(f"Error removing slice {slice_uid}: {e}")
                 self.slice_actors = {}
                 if hasattr(self, 'slice_meta'):
                     self.slice_meta = {}
@@ -1556,7 +1561,7 @@ class View3D(ViewVTK):
                             if not prop_row.empty:
                                 cmap = prop_row['colormap'].iloc[0]
                         except Exception as e:
-                            print(f"Error getting colormap: {e}")
+                            self.print_terminal(f"Error getting colormap: {e}")
                 
                 return scalar_array, cmap
             
@@ -1619,7 +1624,7 @@ class View3D(ViewVTK):
                         'step_size': step_size
                     }
                 except Exception as e:
-                    print(f"Error getting dimension info: {e}")
+                    self.print_terminal(f"Error getting dimension info: {e}")
                     return {
                         'min_val': 0, 
                         'max_val': 1,
@@ -1747,7 +1752,7 @@ class View3D(ViewVTK):
                     finally:
                         self._updating_u_input = False
                 except Exception as e:
-                    print(f"Error processing U input: {e}")
+                    self.print_terminal(f"Error processing U input: {e}")
                     
             def on_v_input_entered():
                 entity_name = entity_combo.currentText()
@@ -1778,7 +1783,7 @@ class View3D(ViewVTK):
                     finally:
                         self._updating_v_input = False
                 except Exception as e:
-                    print(f"Error processing V input: {e}")
+                    self.print_terminal(f"Error processing V input: {e}")
                     
             def on_w_input_entered():
                 entity_name = entity_combo.currentText()
@@ -1809,7 +1814,7 @@ class View3D(ViewVTK):
                     finally:
                         self._updating_w_input = False
                 except Exception as e:
-                    print(f"Error processing W input: {e}")
+                    self.print_terminal(f"Error processing W input: {e}")
                     
             # Event handlers
             def update_slice_visualization(entity_name, slice_type, normalized_position, fast_update=False, specific_slice_id=None):
@@ -1824,7 +1829,7 @@ class View3D(ViewVTK):
                 # Get the entity
                 entity = self.get_entity_by_name(entity_name)
                 if not entity:
-                    print(f"Entity {entity_name} not found")
+                    self.print_terminal(f"Entity {entity_name} not found")
                     return
 
                 # Determine and persist the current main-mesh property for this entity
@@ -1908,7 +1913,7 @@ class View3D(ViewVTK):
                             # Ensure visibility is maintained during fast update
                             self.slice_actors[slice_uid].SetVisibility(current_visibility)
                         except Exception as e:
-                            print(f"Error in fast update: {e}. Falling back to full update.")
+                            self.print_terminal(f"Error in fast update: {e}. Falling back to full update.")
                             fast_update = False # Fallback
 
                     if not fast_update or slice_uid not in self.slice_actors:
@@ -1987,16 +1992,16 @@ class View3D(ViewVTK):
                         self.plotter.render()
 
                 except Exception as e:
-                    print(f"Error updating slice {slice_uid}: {e}")
+                    self.print_terminal(f"Error updating slice {slice_uid}: {e}")
                     import traceback
                     traceback.print_exc()
             
             # Event handler functions
             def on_manipulation_toggled(state):
                 """Handle manipulation toggle state changes"""
-                print(f"Manipulation toggle state changed: {state}")
+                self.print_terminal(f"Manipulation toggle state changed: {state}")
                 is_checked = (state == 2)  # Qt.Checked equals 2
-                print(f"Enabling direct manipulation: {is_checked}")
+                self.print_terminal(f"Enabling direct manipulation: {is_checked}")
                 
                 # Toggle manipulation
                 self.toggle_mesh_manipulation(
@@ -2246,7 +2251,7 @@ class View3D(ViewVTK):
                                     if hasattr(self.plotter, 'remove_widget'): self.plotter.remove_widget(widget)
                                     elif hasattr(self.plotter.iren, 'remove_widget'): self.plotter.iren.remove_widget(widget)
                                 except Exception as e:
-                                    print(f"Warning: Error removing widget: {e}")
+                                    self.print_terminal(f"Warning: Error removing widget: {e}")
                             self.multi_plane_widgets = []
                             self.plotter.render()
                     
@@ -2359,7 +2364,7 @@ class View3D(ViewVTK):
             
             except Exception as e:
                 self.print_terminal(f"Error getting sliceable entities: {str(e)}")
-                print(f"Error getting sliceable entities: {str(e)}")
+                self.print_terminal(f"Error getting sliceable entities: {str(e)}")
             
             return sliceable_entities
 
@@ -2368,11 +2373,11 @@ class View3D(ViewVTK):
             try:
                 # Split the prefix and actual name
                 if ":" not in name:
-                    print("Error: Name doesn't contain a prefix")
+                    self.print_terminal("Error: Name doesn't contain a prefix")
                     return None
                     
                 prefix, entity_name = name.split(": ", 1)
-                print(f"Looking for entity: {entity_name} in {prefix} collection")
+                self.print_terminal(f"Looking for entity: {entity_name} in {prefix} collection")
                 
                 # Map prefix to collection attribute name
                 collection_map = {
@@ -2389,7 +2394,7 @@ class View3D(ViewVTK):
                 
                 coll_name = collection_map.get(prefix)
                 if not coll_name:
-                    print(f"Error: Unknown prefix '{prefix}'")
+                    self.print_terminal(f"Error: Unknown prefix '{prefix}'")
                     return None
                 
                 # Get the collection and entity
@@ -2415,7 +2420,7 @@ class View3D(ViewVTK):
                         return vtk_obj
             except Exception as e:
                 self.print_terminal(f"Error getting entity: {str(e)}")
-                print(f"Error getting entity: {str(e)}")
+                self.print_terminal(f"Error getting entity: {str(e)}")
             
             return None
 
@@ -2513,7 +2518,7 @@ class View3D(ViewVTK):
                                 update_slice_func=None, u_input=None, v_input=None, w_input=None,
                                 is_refresh=False, calculate_real_position=None):
             """Toggle mesh manipulation mode."""
-            print(f"Toggle mesh manipulation called with enabled={enabled}, is_refresh={is_refresh}")
+            self.print_terminal(f"Toggle mesh manipulation called with enabled={enabled}, is_refresh={is_refresh}")
             
             # Initialize plane_widgets as a list if it doesn't exist
             if not hasattr(self, 'plane_widgets'):
@@ -2577,7 +2582,7 @@ class View3D(ViewVTK):
                                 # Fallback if function not found
                                 value_input.setText(f"{normalized_pos:.2f}")
                         except Exception as e:
-                            print(f"Error updating text input for {slice_type_to_uvw(slice_type)} direction: {e}")
+                            self.print_terminal(f"Error updating text input for {slice_type_to_uvw(slice_type)} direction: {e}")
                             value_input.setText(f"{normalized_pos:.2f}")
                     
                     # Update the slice visualization (always use fast_update for direct manipulation)
@@ -2607,13 +2612,13 @@ class View3D(ViewVTK):
             # Get the selected entity
             entity_name = entity_combo.currentText() if entity_combo.currentText() else None
             if not entity_name:
-                print("No entity selected")
+                self.print_terminal("No entity selected")
                 return
         
             # Get the entity object
             entity = self.get_entity_by_name(entity_name)
             if not entity:
-                print(f"Entity {entity_name} not found")
+                self.print_terminal(f"Entity {entity_name} not found")
                 return
         
             try:
@@ -2641,7 +2646,7 @@ class View3D(ViewVTK):
                         else:
                             u_input.setText(f"{real_pos:.2f}")
                     except Exception as e:
-                        print(f"Error updating U input: {e}")
+                        self.print_terminal(f"Error updating U input: {e}")
                     
                     # Use the local create_callback function with text input field
                     callback_func = create_callback('X', u_slider, u_value, u_input)
@@ -2650,7 +2655,7 @@ class View3D(ViewVTK):
                     widget = self.create_single_plane_widget('X', normalized_positions['X'], bounds, callback_func)
                     if widget:
                         self.plane_widgets.append(widget)
-                        print(f"Added U plane widget, total widgets: {len(self.plane_widgets)}")
+                        self.print_terminal(f"Added U plane widget, total widgets: {len(self.plane_widgets)}")
                 
                 if v_slice_check.isChecked():
                     # Update the real position value for V direction before creating widget
@@ -2661,7 +2666,7 @@ class View3D(ViewVTK):
                         else:
                             v_input.setText(f"{real_pos:.2f}")
                     except Exception as e:
-                        print(f"Error updating V input: {e}")
+                        self.print_terminal(f"Error updating V input: {e}")
                     
                     # Use the local create_callback function with text input field
                     callback_func = create_callback('Y', v_slider, v_value, v_input)
@@ -2670,7 +2675,7 @@ class View3D(ViewVTK):
                     widget = self.create_single_plane_widget('Y', normalized_positions['Y'], bounds, callback_func)
                     if widget:
                         self.plane_widgets.append(widget)
-                        print(f"Added V plane widget, total widgets: {len(self.plane_widgets)}")
+                        self.print_terminal(f"Added V plane widget, total widgets: {len(self.plane_widgets)}")
                 
                 if w_slice_check.isChecked():
                     # Update the real position value for W direction before creating widget
@@ -2681,7 +2686,7 @@ class View3D(ViewVTK):
                         else:
                             w_input.setText(f"{real_pos:.2f}")
                     except Exception as e:
-                        print(f"Error updating W input: {e}")
+                        self.print_terminal(f"Error updating W input: {e}")
                     
                     # Use the local create_callback function with text input field
                     callback_func = create_callback('Z', w_slider, w_value, w_input)
@@ -2690,19 +2695,19 @@ class View3D(ViewVTK):
                     widget = self.create_single_plane_widget('Z', normalized_positions['Z'], bounds, callback_func)
                     if widget:
                         self.plane_widgets.append(widget)
-                        print(f"Added W plane widget, total widgets: {len(self.plane_widgets)}")
+                        self.print_terminal(f"Added W plane widget, total widgets: {len(self.plane_widgets)}")
                 
                 # Render the scene to show the widgets
                 self.plotter.render()
             
             except Exception as e:
-                print(f"Error toggling mesh manipulation: {e}")
+                self.print_terminal(f"Error toggling mesh manipulation: {e}")
                 import traceback
                 traceback.print_exc()
 
     def update_slider_states(self, enabled, u_slider, v_slider, w_slider, u_input=None, v_input=None, w_input=None):
             """Update slider and input field states based on manipulation mode"""
-            print(f"Updating slider states: enabled={enabled}")
+            self.print_terminal(f"Updating slider states: enabled={enabled}")
             u_slider.setEnabled(not enabled) 
             v_slider.setEnabled(not enabled)
             w_slider.setEnabled(not enabled)
@@ -2729,7 +2734,7 @@ class View3D(ViewVTK):
             
             num_widgets = len(self.plane_widgets)
             if num_widgets > 0:
-                print(f"Cleaning up {num_widgets} plane widgets")
+                self.print_terminal(f"Cleaning up {num_widgets} plane widgets")
                 
             # Remove each plane widget - plane_widgets is a list, not a dict
             for widget in list(self.plane_widgets):
@@ -2744,7 +2749,7 @@ class View3D(ViewVTK):
                         elif hasattr(self.plotter, 'clear_widgets'):
                             self.plotter.clear_widgets()
                 except Exception as e:
-                    print(f"Error cleaning up widget: {e}")
+                    self.print_terminal(f"Error cleaning up widget: {e}")
                 
             # Clear the list
             self.plane_widgets = []
@@ -2763,7 +2768,7 @@ class View3D(ViewVTK):
             if not hasattr(self, 'slice_actors') or not self.slice_actors:
                 return
             
-            print(f"Updating slice visualizations for property '{property_name}'")
+            self.print_terminal(f"Updating slice visualizations for property '{property_name}'")
             
             # Update all slices
             for slice_uid, actor in list(self.slice_actors.items()):
@@ -2792,7 +2797,7 @@ class View3D(ViewVTK):
                 if property_name not in pv_entity.array_names:
                     continue
 
-                print(f"Updating slice {slice_uid} for property {property_name}")
+                self.print_terminal(f"Updating slice {slice_uid} for property {property_name}")
                 visible = actor.GetVisibility()
                 bounds = pv_entity.bounds
                 origin = actor.GetCenter()
@@ -2841,7 +2846,7 @@ class View3D(ViewVTK):
                 if hasattr(self, 'v_exaggeration'):
                     v_exag = self.v_exaggeration
                     
-                print(f"Creating plane widget for {slice_type} slice with vertical exaggeration: {v_exag}")
+                self.print_terminal(f"Creating plane widget for {slice_type} slice with vertical exaggeration: {v_exag}")
                 
                 # Calculate world position
                 if slice_type == 'X':
@@ -2883,7 +2888,7 @@ class View3D(ViewVTK):
                     )
                     return plane_widget
                 except Exception as e:
-                    print(f"Error creating plane widget with PyVista: {e}")
+                    self.print_terminal(f"Error creating plane widget with PyVista: {e}")
                     # Try one more approach with different parameters
                     try:
                         plane_widget = self.plotter.add_plane_widget(
@@ -2895,11 +2900,11 @@ class View3D(ViewVTK):
                         )
                         return plane_widget
                     except:
-                        print("Failed with alternate parameters too")
+                        self.print_terminal("Failed with alternate parameters too")
                         return None
                 
             except Exception as e:
-                print(f"Error creating plane widget for {slice_type} slice: {e}")
+                self.print_terminal(f"Error creating plane widget for {slice_type} slice: {e}")
                 import traceback
                 traceback.print_exc()
                 return None
@@ -2909,7 +2914,7 @@ class View3D(ViewVTK):
             if not hasattr(self, 'slice_actors') or not self.slice_actors:
                 return
             
-            print("Updating slices for vertical exaggeration...")
+            self.print_terminal("Updating slices for vertical exaggeration...")
             
             # Remember which slices have manipulation enabled
             has_manipulation = False
@@ -3036,7 +3041,7 @@ class View3D(ViewVTK):
                     if hasattr(child, 'windowTitle') and child.windowTitle() == "Mesh Slicer":
                         enable_manipulation = child.findChild(QCheckBox, "enable_manipulation")
                         if enable_manipulation:
-                            print("Re-enabling manipulation with new vertical exaggeration")
+                            self.print_terminal("Re-enabling manipulation with new vertical exaggeration")
                             enable_manipulation.setChecked(True)
                         break
             
