@@ -3,7 +3,7 @@
 # run tests on multiploe OS's -> create semantic relese -> deply executables for multiploe OS's with PyInstaller
 name: CICD
 
-# Runs on push on main branch, that acctually occurs only after a pull request is accepted
+# Runs on push on the main branch, that actually occurs only after a pull request is accepted or a push to the main branch is made directly.
 on:
   push:
 
@@ -76,51 +76,53 @@ jobs:
             arch -x86_64 pip3 install --upgrade pip
             arch -x86_64 pip3 install -r requirements.txt
             arch -x86_64 pip3 install pyinstaller
-            arch -x86_64 pyinstaller --onedir --windowed --target-arch ${{ matrix.arch }} --collect-all rasterio pzero.py --name pzero-${{ runner.os }}-${{ matrix.arch }} --add-data "_internal/pzero_splash.png:."
+            arch -x86_64 pyinstaller --onedir --windowed --target-arch ${{ matrix.arch }} --collect-all rasterio pzero.py --name pzero-macOS-${{ matrix.arch }} --add-data "_internal/pzero_splash.png:."
           else
             python3 -m pip install --upgrade pip
             pip install -r requirements.txt
             pip install pyinstaller
-            pyinstaller --onedir --windowed --target-arch ${{ matrix.arch }} --collect-all rasterio pzero.py --name pzero-${{ runner.os }}-${{ matrix.arch }} --add-data "_internal/pzero_splash.png:."
+            pyinstaller --onedir --windowed --target-arch ${{ matrix.arch }} --collect-all rasterio pzero.py --name pzero-macOS-${{ matrix.arch }} --add-data "_internal/pzero_splash.png:."
           fi
         env:
           ARCHFLAGS: "-arch ${{ matrix.arch }}"
-      - name: Build executable Linux
+      - name: Build executable Ubuntu
         if: runner.os == 'Linux'
         run: |
           python3 -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install pyinstaller
-          pyinstaller --onedir --windowed --collect-all rasterio pzero.py --name pzero-${{ runner.os }} --add-data "_internal/pzero_splash.png:."
+          pyinstaller --onedir --windowed --collect-all rasterio pzero.py --name pzero-Ubuntu --add-data "_internal/pzero_splash.png:."
       - name: Build executable Windows
         if: runner.os == 'Windows'
         run: |
           python3 -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install pyinstaller
-          pyinstaller --onedir --windowed --collect-all rasterio pzero.py --name pzero-${{ runner.os }} --icon="_internal/pzero.ico" --add-data "_internal/pzero.ico;." --add-data "_internal/pzero_splash.png;."
+          pyinstaller --onedir --windowed --collect-all rasterio pzero.py --name pzero-Windows --icon="_internal/pzero.ico" --add-data "_internal/pzero.ico;." --add-data "_internal/pzero_splash.png;."
       - name: Zip executable (Unix/MacOS)
         if: runner.os != 'Windows'
         run: |
           cd dist
           if [ "${{ runner.os }}" = "macOS" ]; then
-            zip -r pzero-${{ runner.os }}-${{ matrix.arch }}.zip pzero-${{ runner.os }}-${{ matrix.arch }}/*
+            zip -r pzero-macOS-${{ matrix.arch }}.zip pzero-macOS-${{ matrix.arch }}/*
           else
-            zip -r pzero-${{ runner.os }}.zip pzero-${{ runner.os }}/*
+            zip -r pzero-Ubuntu.zip pzero-Ubuntu/*
           fi
         shell: bash
       - name: Zip executable (Windows)
         if: runner.os == 'Windows'
         run: |
           cd dist
-          Compress-Archive -Path "pzero-${{ runner.os }}/*" -DestinationPath "pzero-${{ runner.os }}.zip"
+          Compress-Archive -Path "pzero-Windows/*" -DestinationPath "pzero-Windows.zip"
         shell: pwsh
       - name: Upload executable
         run: |
           if [ "${{ runner.os }}" = "macOS" ]; then
-            file="dist/pzero-${{ runner.os }}-${{ matrix.arch }}.zip"
+            file="dist/pzero-macOS-${{ matrix.arch }}.zip"
+          elif [ "${{ runner.os }}" = "Linux" ]; then
+            file="dist/pzero-Ubuntu.zip"          
           else
-            file="dist/pzero-${{ runner.os }}.zip"
+            file="dist/pzero-Windows.zip"
           fi
           gh release upload --clobber --repo $GITHUB_REPOSITORY v${{ needs.release.outputs.version }} "$file"
         shell: bash
