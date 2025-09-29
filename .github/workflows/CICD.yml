@@ -76,12 +76,12 @@ jobs:
             arch -x86_64 pip3 install --upgrade pip
             arch -x86_64 pip3 install -r requirements.txt
             arch -x86_64 pip3 install pyinstaller
-            arch -x86_64 pyinstaller --onedir --windowed --target-arch ${{ matrix.arch }} --collect-all rasterio pzero.py --name pzero-macOS-${{ matrix.arch }} --add-data "_internal/pzero_splash.png:."
+            arch -x86_64 pyinstaller --onedir --windowed --target-arch ${{ matrix.arch }} --hidden-import=geopandas --collect-all rasterio pzero.py --name pzero-macOS-${{ matrix.arch }} --add-data "_internal/pzero_splash.png:."
           else
             python3 -m pip install --upgrade pip
             pip install -r requirements.txt
             pip install pyinstaller
-            pyinstaller --onedir --windowed --target-arch ${{ matrix.arch }} --collect-all rasterio pzero.py --name pzero-macOS-${{ matrix.arch }} --add-data "_internal/pzero_splash.png:."
+            pyinstaller --onedir --windowed --target-arch ${{ matrix.arch }} --hidden-import=geopandas --collect-all rasterio pzero.py --name pzero-macOS-${{ matrix.arch }} --add-data "_internal/pzero_splash.png:."
           fi
         env:
           ARCHFLAGS: "-arch ${{ matrix.arch }}"
@@ -91,14 +91,14 @@ jobs:
           python3 -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install pyinstaller
-          pyinstaller --onedir --windowed --collect-all rasterio pzero.py --name pzero-Ubuntu --add-data "_internal/pzero_splash.png:."
+          pyinstaller --onedir --windowed --hidden-import=geopandas --collect-all rasterio pzero.py --name pzero-Ubuntu --add-data "_internal/pzero_splash.png:."
       - name: Build executable Windows
         if: runner.os == 'Windows'
         run: |
           python3 -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install pyinstaller
-          pyinstaller --onedir --windowed --collect-all rasterio pzero.py --name pzero-Windows --icon="_internal/pzero.ico" --add-data "_internal/pzero.ico;." --add-data "_internal/pzero_splash.png;."
+          pyinstaller --onedir --windowed --hidden-import=geopandas --collect-all rasterio pzero.py --name pzero-Windows --icon="_internal/pzero.ico" --add-data "_internal/pzero.ico;." --add-data "_internal/pzero_splash.png;."
       - name: Zip executable (Unix/MacOS)
         if: runner.os != 'Windows'
         run: |
