@@ -75,12 +75,12 @@ jobs:
           if [ "${{ matrix.arch }}" = "x86_64" ]; then
             arch -x86_64 pip3 install --upgrade pip
             arch -x86_64 pip3 install -r requirements.txt
-            arch -x86_64 pip3 install pyinstaller
+            arch -x86_64 pip3 install pyinstaller=6.15.0
             arch -x86_64 pyinstaller --onedir --windowed --target-arch ${{ matrix.arch }} --hidden-import=pyogrio._geometry --collect-all rasterio pzero.py --name pzero-macOS-${{ matrix.arch }} --add-data "_internal/pzero_splash.png:."
           else
             python3 -m pip install --upgrade pip
             pip install -r requirements.txt
-            pip install pyinstaller
+            pip install pyinstaller=6.15.0
             pyinstaller --onedir --windowed --target-arch ${{ matrix.arch }} --hidden-import=pyogrio._geometry --collect-all rasterio pzero.py --name pzero-macOS-${{ matrix.arch }} --add-data "_internal/pzero_splash.png:."
           fi
         env:
@@ -90,14 +90,14 @@ jobs:
         run: |
           python3 -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install pyinstaller
+          pip install pyinstaller=6.15.0
           pyinstaller --onedir --windowed --hidden-import=pyogrio._geometry --collect-all rasterio pzero.py --name pzero-Ubuntu --add-data "_internal/pzero_splash.png:."
       - name: Build executable Windows
         if: runner.os == 'Windows'
         run: |
           python3 -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install pyinstaller
+          pip install pyinstaller=6.15.0
           pyinstaller --onedir --windowed --hidden-import=pyogrio._geometry --collect-all rasterio pzero.py --name pzero-Windows --icon="_internal/pzero.ico" --add-data "_internal/pzero.ico;." --add-data "_internal/pzero_splash.png;."
       - name: Zip executable (Unix/MacOS)
         if: runner.os != 'Windows'
