@@ -46,6 +46,19 @@ If you want to know more about the project or want to contribute, our [Wiki](htt
 Alternatively, you can download the most recent source code and test it, provided that a suitable **Python** and **[required libraries](envs/std-environment.yml)** are installed as discussed in the [Wiki](https://github.com/gecos-lab/PZero/wiki).
 
 
+## Tutorials ##
+
+Tutorials in Italian with automatically generated subtitles are available at these links on YouTube:
+
+1) [Introduction](https://youtu.be/CdN-zhRRgKU)
+2) [First steps](https://youtu.be/d8KMVaFedqM)
+3) [Main tools](https://youtu.be/SS9ZaUwOS_o)
+4) [Creating surfaces](https://youtu.be/vd-qaj-puLs)
+5) [Mesh slicer](https://youtu.be/3wdD6n33LH4)
+
+They will be available in the [Geoscience IR platform](https://elearning.geosciences-ir.it/) soon!
+
+
 ## Test data ##
 
 We have uploaded some test project on public repositories:
@@ -53,6 +66,8 @@ We have uploaded some test project on public repositories:
 [PZero-test Simple-synthetic](https://github.com/gecos-lab/PZero-test-Simple-synthetic)
 
 [PZero-test Llyn-Padarn](https://github.com/gecos-lab/PZero-test-Llyn-Padarn)
+
+[PZero-test Tutorial](https://github.com/gecos-lab/PZero-test-Tutorial.git)
 
 <br />
 <br />
