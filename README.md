@@ -67,7 +67,7 @@ We have uploaded some test project on public repositories:
 
 [PZero-test Llyn-Padarn](https://github.com/gecos-lab/PZero-test-Llyn-Padarn)
 
-[PZero-test Tutorial](https://github.com/gecos-lab/PZero-test-Tutorial.git)
+[PZero-test Tutorial](https://github.com/gecos-lab/PZero-test-Tutorial)
 
 <br />
 <br />
