@@ -5,7 +5,7 @@
 
 ***PZero*** © 2020 by Andrea Bistacchi, released under [GNU AGPLv3 license](LICENSE.txt).
 
-
+##
 ***PZero*** is a Python open-source 3D geological modelling application, leveraging various libraries, with a user-friendly graphical user interface allowing to perform most standard geomodelling data management and analysis tasks, explicit surface interpolation, and advanced implicit interpolation.
 
 Up-to-date [PZero executables](https://github.com/gecos-lab/PZero/releases) can be downloaded for Windows, Mac, and Ubuntu in the [Releases](https://github.com/gecos-lab/PZero/releases) section. Mac executables are available for both ARM and Intel processors. After downloading, unzip the archive in any location you like on your disk, then run the executable. Sometimes you might be asked to autorize it. On Windows you might need to confirm the autorization in a pop-up window. On Linux you might need to allow execution with `chmod +x pzero-Linux` in the terminal. On Mac you might need to allow "Developer Mode" in Apple Menu > System Settings > Privacy & Security, and then sometimes allow execution of PZero with `chmod +x pzero-macOS-<your architecture>` in the terminal.
@@ -50,7 +50,7 @@ The latter is used in most of our video tutorials.
 
 
 
-
+##
 ## Architecture and Acknowledgements ##
 
 As discussed more in details in [this wiki page](https://github.com/gecos-lab/PZero/wiki/PZero-codebase-structure), the architecture of ***PZero*** is based on several open-source libraries. **[VTK](https://vtk.org/)** provides classes for all 3D objects, in addition to 3D visualization and basic analysis and modelling tools. The ***PZero*** graphical user interface is built with **[Qt](https://www.qt.io/qt-for-python)**. All objects in a ***PZero*** project and their metadata are collected and managed in **[Pandas](https://pandas.pydata.org/)** dataframes. We use a **[VTK-Numpy interface](https://github.com/Kitware/VTK/tree/master/Wrapping/Python/vtkmodules/numpy_interface)** that allows performing most mathematical processing with simple **[NumPy](https://numpy.org/)** syntax, while 2D plotting is performed with **[Matplotlib](https://matplotlib.org/)**. **[PyVista](https://www.pyvista.org/)** provides simplified access to **[VTK](https://vtk.org/)** visualization and I/O tools. Various 2D graphical and topological editing tools in ***PZero*** are based on **[Shapely](https://shapely.readthedocs.io)**, while **[GeoPandas](https://geopandas.org/en/stable/)**, **[Rasterio](https://rasterio.readthedocs.io)**, **[Xarray](https://xarray.pydata.org)**, **[laspy](https://github.com/laspy/laspy)**, and **[EzDxf](https://ezdxf.readthedocs.io)** provide I/O tools for GIS, point cloud, and CAD data. **[LoopStructural](https://github.com/Loop3D/LoopStructural)** provides three different implicit surface interpolation algorithms. **[mplstereonet](https://github.com/joferkington/mplstereonet)** provides stereoplots for orientation analysis.
