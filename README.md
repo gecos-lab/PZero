@@ -36,7 +36,7 @@ For your first steps with PZero, we have uploaded some test projects on public r
 
 [PZero-test Tutorial](https://github.com/gecos-lab/PZero-test-Tutorial)
 
-The last one is used in most tutorial videos.
+The latter is used in most of our video tutorials.
 
 
 &nbsp;
