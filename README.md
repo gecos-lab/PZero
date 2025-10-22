@@ -5,6 +5,7 @@
 
 ***PZero*** © 2020 by Andrea Bistacchi, released under [GNU AGPLv3 license](LICENSE.txt).
 
+
 ##
 ***PZero*** is a Python open-source 3D geological modelling application, leveraging various libraries, with a user-friendly graphical user interface allowing to perform most standard geomodelling data management and analysis tasks, explicit surface interpolation, and advanced implicit interpolation.
 
@@ -13,7 +14,8 @@ Up-to-date [PZero executables](https://github.com/gecos-lab/PZero/releases) can 
 Alternatively, you can download the most recent source code and test it, provided that a suitable **Python** and **[required libraries](envs/std-environment.yml)** are installed as discussed in the [Wiki](https://github.com/gecos-lab/PZero/wiki).
 
 
-## Tutorials ##
+##
+## Tutorials and test data ##
 
 Tutorials in Italian with automatically generated subtitles in any linguage you like are available on YouTube:
 
@@ -26,9 +28,6 @@ Tutorials in Italian with automatically generated subtitles in any linguage you 
 Subtitles/captions can be activated with the "C" key or the icon in the lower-right corner, and the language is selected under settings (cogwheel) > subtitles.
 
 These videos will be also available in the [Geoscience IR platform](https://elearning.geosciences-ir.it/) soon!
-
-
-## Test data ##
 
 For your first steps with PZero, we have uploaded some test projects on public repositories:
 
@@ -47,7 +46,6 @@ The latter is used in most of our video tutorials.
 </p>
 &nbsp;
 &nbsp;
-
 
 
 ##
@@ -77,5 +75,5 @@ If you want to know more about the project or want to contribute, our [Wiki](htt
 <br />
 <br />
 
-<img src='images/pzero_QR.png' width='200'>
+<img src='images/pzero_QR.png' width='150'>
 
