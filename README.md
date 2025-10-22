@@ -39,14 +39,14 @@ For your first steps with PZero, we have uploaded some test projects on public r
 The last one is used in most tutorial videos.
 
 
-***PZero*** © 2020 by Andrea Bistacchi, released under [GNU AGPLv3 license](LICENSE.txt).
-
 &nbsp;
 <p align="center">
    <img src="images/screenshot.png"/>
 </p>
 &nbsp;
 &nbsp;
+
+***PZero*** © 2020 by Andrea Bistacchi, released under [GNU AGPLv3 license](LICENSE.txt).
 
 
 ## Architecture and Acknowledgements ##
