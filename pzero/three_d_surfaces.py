@@ -1485,7 +1485,6 @@ def intersection_xs(self):
                         x_section_uid=xsect_uid, parent=self
                     )
                     obj_dict["vtk_obj"].DeepCopy(cutter.GetOutput())
-                    self.print_terminal(f"obj_dict['vtk_obj']:\n{obj_dict['vtk_obj']}")
                     if obj_dict["vtk_obj"].points_number > 0:
                         for data_key in obj_dict["vtk_obj"].point_data_keys:
                             if not data_key in obj_dict["properties_names"]:
