@@ -129,14 +129,15 @@ def xs_image2vtk(self=None, in_file_name=None, x_section_uid=None):
     # Cross-section geometry
     azimuth = self.xsect_coll.get_uid_azimuth(x_section_uid)
     origin_z = self.xsect_coll.get_uid_bottom(x_section_uid)
-    width = self.xsect_coll.get_uid_length(x_section_uid)
-    height = np_abs(self.xsect_coll.get_uid_top(x_section_uid)) - np_abs(origin_z)
+    length = self.xsect_coll.get_uid_length(x_section_uid)
+    height = np_abs(self.xsect_coll.get_uid_width(x_section_uid)) #at the moment width represents heigh from the bottom of the section
+    #height = self.xsect_coll.get_uid_height(x_section_uid)
 
     # Ask user for georeferencing parameters
     in_dict = {
         "origin_W": ["Origin W", "0.0"],
         "origin_Z": ["Origin Z", f"{origin_z}"],
-        "width": ["width", f"{width}"],
+        "length": ["length", f"{length}"],
         "height": ["height", f"{height}"],
     }
     out_dict = multiple_input_dialog(
@@ -148,7 +149,7 @@ def xs_image2vtk(self=None, in_file_name=None, x_section_uid=None):
 
     origin_W = float(out_dict["origin_W"])
     origin_Z = float(out_dict["origin_Z"])
-    width = float(out_dict["width"])
+    length = float(out_dict["length"])
     height = float(out_dict["height"])
 
     origin_X, origin_Y = self.xsect_coll.get_XY_from_W(
@@ -156,7 +157,7 @@ def xs_image2vtk(self=None, in_file_name=None, x_section_uid=None):
     )
     origin = [origin_X, origin_Y, origin_Z]
 
-    spacing_W = width / dim_W
+    spacing_W = length / dim_W
     spacing_Z = height / dim_Z
 
     # Direction matrix (original, senza rotazioni aggiuntive)
@@ -200,7 +201,7 @@ def xs_image2vtk(self=None, in_file_name=None, x_section_uid=None):
         prop_name = "RGB"
 
     else:
-        # Multibanda generica (2 o più)
+        # Generic multiband
         arr_list = [xs_image.read(i + 1) for i in range(bands)]
         numpy_array = np_dstack(arr_list)
         vtk_array = numpy_support.numpy_to_vtk(
