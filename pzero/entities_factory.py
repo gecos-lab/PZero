@@ -2509,8 +2509,22 @@ class MapImage(Image):
 
     @property
     def frame(self):
-        """Create rectangular frame to be textured.
-        .bounds is a list with xmin, xmax, ymin, ymax, zmin, zmax."""
+        """
+        Create rectangular frame to be textured, recalling that
+        - in image coords the origin is upper left
+        - .bounds is a list with xmin [0], xmax [1], ymin [2], ymax [3], zmin [4], zmax [5].
+
+        xmin,ymax ------ xmax,ymax
+            |                |
+            |                |
+        xmin,ymin ------ xmax,ymin
+
+        [0],[3] ------ [1],[3]
+           |              |
+           |              |
+        [0],[2] ------ [1],[2]
+
+        """
         points = np_array(
             [
                 [self.bounds[0], self.bounds[3], self.bounds[4]],
@@ -2633,7 +2647,23 @@ class XsImage(Image):
 
     @property
     def frame(self):
-        """Create rectangular frame to be textured."""
+
+        """
+        Create rectangular frame to be textured, recalling that
+        - in image coords the origin is upper left
+        - .bounds is a list with xmin [0], xmax [1], ymin [2], ymax [3], zmin [4], zmax [5].
+
+        xmin,ymax ------ xmax,ymax
+            |                |
+            |                |
+        xmin,ymin ------ xmax,ymin
+
+        [0],[3] ------ [1],[3]
+           |              |
+           |              |
+        [0],[2] ------ [1],[2]
+
+        """
         x_section_azimuth = self.parent.xsect_coll.get_uid_azimuth(self.x_section_uid)
         if 0 <= x_section_azimuth <= 90:
             left_x = self.bounds[0]
@@ -2657,13 +2687,13 @@ class XsImage(Image):
             right_y = self.bounds[3]
         bottom = self.bounds[4]
         top = self.bounds[5]
-        # Points
+        # Sort points
         points = np_array(
             [
-                [left_x, left_y, bottom],
                 [left_x, left_y, top],
                 [right_x, right_y, top],
                 [right_x, right_y, bottom],
+                [left_x, left_y, bottom],
             ]
         )
         # Rectangular face and frame.

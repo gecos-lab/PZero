@@ -1502,7 +1502,7 @@ def intersection_xs(self):
 def project_2_dem(self):
     """vtkProjectedTerrainPath projects an input polyline onto a terrain image.
     HOW TO USE: at the moment, as vtkProjectedTerrainPath takes vtkImageData as input, we need to import
-    DEM file also as OrthoImage (--> as vtkImageData) and to use this entity as source data for the
+    DEM file also as MapImage (--> as vtkImageData) and to use this entity as source data for the
     projection"""
     # self.print_terminal("Vertical Projection: project target lines onto a terrain image")
     if self.shown_table != "tabGeology":
@@ -1557,7 +1557,7 @@ def project_2_dem(self):
     #     dem_to_image.Update()
     #     print("dem_to_image ", dem_to_image)
     #     print("dem_to_image.GetOutput() ", dem_to_image.GetOutput())
-    #     Ask for the Orthoimage, source of the projection
+    #     Ask for the MapImage, source of the projection
     #     image_list_uids = self.image_coll.get_uids()
     #     image_list_names = []
     #     for uid in image_list_uids:

@@ -212,7 +212,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.actionImportPC.triggered.connect(self.import_PC)
         self.actionImportSHP.triggered.connect(self.import_SHP)
         self.actionImportDEM.triggered.connect(self.import_DEM)
-        self.actionImportOrthoImage.triggered.connect(self.import_mapimage)
+        self.actionImportMapImage.triggered.connect(self.import_mapimage)
         self.actionImportXSectionImage.triggered.connect(self.import_xsimage)
         self.actionImportWellData.triggered.connect(self.import_welldata)
         self.actionImportSEGY.triggered.connect(self.import_SEGY)
