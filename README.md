@@ -1,7 +1,8 @@
 # PZero #
 
 ![Workflow Testing](https://img.shields.io/github/actions/workflow/status/andrea-bistacchi/PZero/testing.yml?event=push)
-[![DOI](https://zenodo.org/badge/439080627.svg)](https://zenodo.org/badge/latestdoi/439080627)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.7575736.svg)](https://doi.org/10.5281/zenodo.7575736)
+
 
 ***PZero*** © 2020 by Andrea Bistacchi, released under [GNU AGPLv3 license](LICENSE.txt).
 
