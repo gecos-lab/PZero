@@ -714,12 +714,22 @@ class XSectionCollection(BaseCollection):
     #         return []
     #
     #     # Check where top is zero (old versions) and lower than bottom
+    #      --- OPTION 1 ---
     #     needs_top_fix = (self.df["top"] == 0.0) & (self.df["top"] < self.df["bottom"])
     #     if not needs_top_fix.any():
     #         return []
     #
     #     # Compute and assign new top and end_z values
     #     new_top = self.df.loc[needs_top_fix, "bottom"] + self.df.loc[needs_top_fix, "width"]
+    #
+    #      --- OPTION 2 ---
+    #     new_top = self.df["bottom"] + self.df["width"]
+    #     needs_top_fix = self.df["top"] != new_top
+    #     if not needs_top_fix.any():
+    #     return []
+    #
+    #     --- END OPTIONS ---
+    #
     #     self.df.loc[needs_top_fix, "top"] = new_top
     #     self.df.loc[needs_top_fix, "end_z"] = new_top
     #
