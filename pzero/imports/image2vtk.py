@@ -141,9 +141,11 @@ def xs_image2vtk(self=None, in_file_name=None, x_section_uid=None):
 
         # Cross-section geometry
         azimuth = self.xsect_coll.get_uid_azimuth(x_section_uid)
-        origin_z = self.xsect_coll.get_uid_top(x_section_uid)
+        #origin_z = self.xsect_coll.get_uid_top(x_section_uid)
         length = self.xsect_coll.get_uid_length(x_section_uid)
         width = self.xsect_coll.get_uid_width(x_section_uid)
+        bottom = self.xsect_coll.get_uid_bottom(x_section_uid)
+        origin_z = bottom + width
 
         # Ask user for georeferencing parameters
         # NOTE that "width" will be renamed to "height" that is more intuitive

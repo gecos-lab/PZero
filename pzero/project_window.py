@@ -1751,6 +1751,17 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
 
                     self.xsect_coll.df = new_xsect_coll_df
 
+                    # # fix old projects with not correct top values
+                    # try:
+                    #     changed_uids = self.xsect_coll.fix_top_values_on_load()
+                    #     if changed_uids:
+                    #         self.print_terminal(f"Top corrected for {len(changed_uids)} XSections.")
+                    # except Exception:
+                    #     self.print_terminal(
+                    #         "--Error in correcting top values for XSections--"
+                    #     )
+                    # self.xsect_coll.table_model.endResetModel()
+
                 for uid in self.xsect_coll.df["uid"].tolist():
                     self.xsect_coll.set_geometry(uid=uid)
                 self.xsect_coll.table_model.endResetModel()

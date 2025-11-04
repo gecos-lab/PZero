@@ -93,6 +93,7 @@ def section_from_azimuth(self, vector):
     section_dict.pop("num_xs", None)
     # Define other (redundant) section parameters.
     section_dict["base_z"] = section_dict["bottom"]
+    # section_dict["top"] = section_dict.get("bottom") + section_dict.get("width")
     section_dict["end_z"] = section_dict["top"]
     # Calculate normals.
     normals = dip_directions2normals(
@@ -706,3 +707,31 @@ class XSectionCollection(BaseCollection):
             if coll_name != "xsect_coll":
                 all_entities[coll_name] = coll.get_xuid_uid(xuid=xuid)
         return all_entities
+
+    # def fix_top_values_on_load(self):
+    #     """Fix saved values: if top == 0.0 and top < bottom, set top = bottom + width and sync end_z."""
+    #     if self.df.empty:
+    #         return []
+    #
+    #     # Check where top is zero (old versions) and lower than bottom
+    #     needs_top_fix = (self.df["top"] == 0.0) & (self.df["top"] < self.df["bottom"])
+    #     if not needs_top_fix.any():
+    #         return []
+    #
+    #     # Compute and assign new top and end_z values
+    #     new_top = self.df.loc[needs_top_fix, "bottom"] + self.df.loc[needs_top_fix, "width"]
+    #     self.df.loc[needs_top_fix, "top"] = new_top
+    #     self.df.loc[needs_top_fix, "end_z"] = new_top
+    #
+    #     changed_uids = self.df.loc[needs_top_fix, "uid"].tolist()
+    #
+    #     try:
+    #         if changed_uids:
+    #             self.modelReset.emit()
+    #     except Exception:
+    #         pass
+    #
+    #     return changed_uids
+    #
+    #
+    #
