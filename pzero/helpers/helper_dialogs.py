@@ -573,41 +573,31 @@ class progress_dialog(QProgressDialog):
 
 class PCDataModel(QAbstractTableModel):
     """Abstract table model that can be used to quickly display imported pc files data  from a pandas df. Taken from this stack overflow post https://stackoverflow.com/questions/31475965/fastest-way-to-populate-qtableview-from-pandas-data-frame"""
-
     def __init__(self, data, index_list, parent=None, *args, **kwargs):
         super(PCDataModel, self).__init__(*args, **kwargs)
 
-        self.data = data
+        self.df = data
         self.index_list = index_list
 
-    def columnCount(
-        self, parent=None
-    ):  #  the n of columns is = to the number of columns of the input data set (.shape[1])
-        return self.data.shape[1]
+    def columnCount(self, parent=None):
+        return self.df.shape[1]
 
-    def rowCount(
-        self, parent=None
-    ):  #  the n of rows is = to the number of rows of the input data set (.shape[0])
-        return self.data.shape[0]
+    def rowCount(self, parent=None):
+        return self.df.shape[0]
 
     def data(self, index, qt_role):
-        # print(index.column())
         if index.isValid():
             if qt_role == Qt.DisplayRole:
-                return str(
-                    self.data.iloc[index.row(), index.column()]
-                )  # if qt_role == Qt.BackgroundRole and index.column() in self.index_list:  # return QColor(Qt.green)
+                return str(self.df.iloc[index.row(), index.column()])
             if qt_role == Qt.BackgroundRole and index.column() in self.index_list:
-                return QColor(Qt.green)  #  Set the color
+                return QColor(Qt.green)
         return None
-
-    # Set header and index If the "container" is horizontal (orientation index 1) and has a display qt_role (index 0) (-> is the header of the table). If the "container" is vertical (orientation index 2) and has a display qt_role (index 0) (-> is the index of the table)."""
 
     def headerData(self, col, orientation, qt_role):
         if orientation == Qt.Horizontal and qt_role == Qt.DisplayRole:
-            return str(self.data.columns[col])  #  Set the header names
+            return str(self.df.columns[col])
         if orientation == Qt.Vertical and qt_role == Qt.DisplayRole:
-            return self.data.index[col]  #  Set the indexes
+            return self.df.index[col]
         return None
 
 
@@ -815,15 +805,23 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
         """
 
         path = self.import_options_dict["in_path"]
-
         start_row = self.import_options_dict["StartRowspinBox"]
         end_row = self.import_options_dict["EndRowspinBox"]
-
         row_range = range(start_row, end_row)
-
         delimiter = self.import_options_dict["SeparatorcomboBox"]
 
-        clean_dict = {k: v for k, v in list(self.rename_dict.items()) if v != "N.a."}
+        # Get the full column names before cleaning the rename_dict
+        full_col_names = list(self.input_data_df.columns)
+        clean_dict = {}
+
+        default_names = ["X", "Y", "Z", "R", "G", "B", "Nx", "Ny", "Nz"]
+
+        for i, v in self.rename_dict.items():
+            if v == "N.a.":
+                clean_dict[i] = default_names[i] if i < len(default_names) else full_col_names[i]
+            else:
+                clean_dict[i] = v
+
         col_names = list(clean_dict.values())
         index_list = list(clean_dict.keys())
 

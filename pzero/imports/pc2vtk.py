@@ -3,8 +3,6 @@ PZero© Andrea Bistacchi"""
 
 from os import path as os_path
 
-from copy import deepcopy
-
 from uuid import uuid4
 
 from laspy import read as lp_read
@@ -21,7 +19,6 @@ from pandas import to_numeric as pd_to_numeric
 
 from vtk import vtkPoints
 from vtkmodules.util.numpy_support import numpy_to_vtk
-
 from pzero.collections.dom_collection import DomCollection
 from pzero.entities_factory import PCDom
 
@@ -29,7 +26,7 @@ from pzero.entities_factory import PCDom
 def pc2vtk(
     in_file_name, col_names, row_range, header_row, usecols, delimiter, self=None
 ):
-    print("1. Reading and importing file")
+    self.parent.print_terminal("Reading and importing file")
 
     basename = os_path.basename(in_file_name)
     _, ext = os_path.splitext(basename)
@@ -91,7 +88,7 @@ def pc2vtk(
             names=col_names,
         )
 
-    print("2. Checking the data")
+    self.parent.print_terminal("Checking the data")
 
     #  Check if in the whole dataset there are NaNs text and such
     val_check = input_df.apply(
@@ -99,11 +96,15 @@ def pc2vtk(
     )
 
     if not val_check.all():
-        print("Invalid values in data set, not importing.")
+        self.parent.print_terminal("Invalid values in data set, not importing.")
     else:
-        print("3. Creating PointCloud")
+        self.parent.print_terminal("Creating PointCloud")
 
         # Correcting input data by subtracting an equal value approximated to the hundreds (53932.4325 -> 53932.4325 - 53900.0000 = 32.4325). Can be always applied since for numbers < 100 the approximation is always 0.
+        self.parent.print_terminal("input_df shape:", input_df.shape)
+        if input_df.empty:
+            self.parent.print_terminal("Empty dataframe")
+        val_check = input_df.apply(lambda c: pd_to_numeric(c, errors="coerce").notnull().all())
 
         offset = input_df.loc[0, ["X", "Y"]].round(-2)
 
@@ -163,7 +164,7 @@ def pc2vtk(
                 point_cloud.set_point_data(property, input_df[property].values)
                 # point_cloud.set_point_data(property,properties_value)
 
-        print("4. Adding PC to project")
+        self.parent.print_terminal("Adding PC to project")
         # point_cloud.ShallowCopy(pv_PD)
         point_cloud.Modified()
         properties_names = point_cloud.point_data_keys
@@ -176,20 +177,31 @@ def pc2vtk(
 
         # point_cloud.generate_point_set()
 
-        # Create dictionary.
-        curr_obj_attributes = deepcopy(DomCollection.entity_dict)
-        curr_obj_attributes["uid"] = str(uuid4())
-        point_cloud.Modified()
-        curr_obj_attributes["name"] = basename
-        curr_obj_attributes["topology"] = "PCDom"
-        curr_obj_attributes["textures"] = []
-        curr_obj_attributes["properties_names"] = properties_names
-        curr_obj_attributes["properties_components"] = properties_components
-        curr_obj_attributes["properties_types"] = properties_types
-        curr_obj_attributes["vtk_obj"] = point_cloud
+        # # Create dictionary.
+        # curr_obj_attributes = deepcopy(DomCollection.entity_dict)
+        # curr_obj_attributes["uid"] = str(uuid4())
+        # point_cloud.Modified()
+        # curr_obj_attributes["name"] = basename
+        # curr_obj_attributes["topology"] = "PCDom"
+        # curr_obj_attributes["textures"] = []
+        # curr_obj_attributes["properties_names"] = properties_names
+        # curr_obj_attributes["properties_components"] = properties_components
+        # curr_obj_attributes["properties_types"] = properties_types
+        # curr_obj_attributes["vtk_obj"] = point_cloud
+
+        curr_obj_attributes = {
+            "uid": str(uuid4()),
+            "name": os_path.basename(in_file_name),
+            "topology": "PCDom",
+            "textures": [],
+            "properties_names": properties_names,
+            "properties_components": properties_components,
+            "properties_types": properties_types,
+            "vtk_obj": point_cloud,
+        }
         # Add to entity collection.
         self.parent.dom_coll.add_entity_from_dict(entity_dict=curr_obj_attributes)
         # Cleaning.
         del input_df
         del point_cloud
-        print("Done!")
+        self.parent.print_terminal("Process completed")
