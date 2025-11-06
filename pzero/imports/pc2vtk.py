@@ -101,7 +101,7 @@ def pc2vtk(
         self.parent.print_terminal("Creating PointCloud")
 
         # Correcting input data by subtracting an equal value approximated to the hundreds (53932.4325 -> 53932.4325 - 53900.0000 = 32.4325). Can be always applied since for numbers < 100 the approximation is always 0.
-        self.parent.print_terminal("input_df shape:", input_df.shape)
+        print("input_df shape:", input_df.shape)
         if input_df.empty:
             self.parent.print_terminal("Empty dataframe")
         val_check = input_df.apply(lambda c: pd_to_numeric(c, errors="coerce").notnull().all())
