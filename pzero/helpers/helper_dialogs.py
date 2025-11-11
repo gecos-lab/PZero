@@ -572,10 +572,9 @@ class progress_dialog(QProgressDialog):
 
 
 class PCDataModel(QAbstractTableModel):
-    """Abstract table model that can be used to quickly display imported pc files data  from a pandas df. Taken from this stack overflow post https://stackoverflow.com/questions/31475965/fastest-way-to-populate-qtableview-from-pandas-data-frame"""
+    """Abstract table model showing a pandas DataFrame with highlighted columns."""
     def __init__(self, data, index_list, parent=None, *args, **kwargs):
         super(PCDataModel, self).__init__(*args, **kwargs)
-
         self.df = data
         self.index_list = index_list
 
@@ -585,19 +584,22 @@ class PCDataModel(QAbstractTableModel):
     def rowCount(self, parent=None):
         return self.df.shape[0]
 
-    def data(self, index, qt_role):
-        if index.isValid():
-            if qt_role == Qt.DisplayRole:
-                return str(self.df.iloc[index.row(), index.column()])
-            if qt_role == Qt.BackgroundRole and index.column() in self.index_list:
-                return QColor(Qt.green)
+    def data(self, index, role=Qt.DisplayRole):
+        if not index.isValid():
+            return None
+        if role == Qt.DisplayRole:
+            return str(self.df.iloc[index.row(), index.column()])
+        if role == Qt.BackgroundRole and index.column() in self.index_list:
+            return QColor(Qt.green)
         return None
 
-    def headerData(self, col, orientation, qt_role):
-        if orientation == Qt.Horizontal and qt_role == Qt.DisplayRole:
-            return str(self.df.columns[col])
-        if orientation == Qt.Vertical and qt_role == Qt.DisplayRole:
-            return self.df.index[col]
+    def headerData(self, section, orientation, role=Qt.DisplayRole):
+        if role != Qt.DisplayRole:
+            return None
+        if orientation == Qt.Horizontal:
+            return str(self.df.columns[section])
+        if orientation == Qt.Vertical:
+            return self.df.index[section]
         return None
 
 
@@ -621,7 +623,7 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
     }
 
     #   Different types of separators. By writing not using the symbol as a display we can avoid possible confusion between similar separators (e.g tab and space)-> the separator is auto assigned with the auto_sep function
-    sep_dict = {"<space>": " ", "<comma>": ",", "<semi-col>": ";", "<tab>": "   "}
+    sep_dict = {"<space>": " ", "<comma>": ",", "<semi-col>": ";", "<tab>": "\t"}
 
     def __init__(
         self,
@@ -814,11 +816,10 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
         full_col_names = list(self.input_data_df.columns)
         clean_dict = {}
 
-        default_names = ["X", "Y", "Z", "R", "G", "B", "Nx", "Ny", "Nz"]
-
         for i, v in self.rename_dict.items():
             if v == "N.a.":
-                clean_dict[i] = default_names[i] if i < len(default_names) else full_col_names[i]
+                # fallback to original column name if N.a.
+                clean_dict[i] = full_col_names[i]
             else:
                 clean_dict[i] = v
 
@@ -876,7 +877,11 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
 
         """
         sep = auto_sep(path)
-        self.SeparatorcomboBox.setCurrentIndex(list(self.sep_dict.values()).index(sep))
+        # Update UI combo to reflect detected separator if present
+        try:
+            self.SeparatorcomboBox.setCurrentIndex(list(self.sep_dict.values()).index(sep))
+        except ValueError:
+            pass
         df = pd_read_csv(path, sep=sep, nrows=50, engine="c", index_col=False)
         return df
 
@@ -922,81 +927,60 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
         self.AssignTable.setRowCount(len(col_names))
 
         for i, col in enumerate(col_names):
-            # To create the assign menu we cicle through the column names and assign the comboBox text to the corresponding rename_dict item if the item is contained in the default_attr_list
-            self.ColnameItem = QTableWidgetItem()
-            self.ColnameItem.setText(str(col_names[i]))
-            self.AttrcomboBox = QComboBox(self)
-            self.AttrcomboBox.setObjectName(f"AttrcomboBox_{i}")
-            self.AttrcomboBox.setEditable(False)
-            self.AttrcomboBox.addItems(self.default_attr_list)
-            self.AttrcomboBox.activated.connect(lambda: ass_value(self.AttrcomboBox))
-            self.ScalarnameLine = QLineEdit()
-            self.ScalarnameLine.setObjectName(f"ScalarnameLine_{i}")
-            self.ScalarnameLine.setEnabled(False)
-            self.ScalarnameLine.returnPressed.connect(lambda: ass_scalar())
-            self.AssignTable.setItem(i, 0, self.ColnameItem)
-            self.AssignTable.setCellWidget(i, 1, self.AttrcomboBox)
-            self.AssignTable.setCellWidget(i, 2, self.ScalarnameLine)
-            LineList.append(self.AssignTable.cellWidget(i, 2))
+            ColnameItem = QTableWidgetItem()
+            ColnameItem.setText(str(col_names[i]))
+            AttrcomboBox = QComboBox(self)
+            AttrcomboBox.setObjectName(f"AttrcomboBox_{i}")
+            AttrcomboBox.setEditable(False)
+            AttrcomboBox.addItems(self.default_attr_list)
 
+            # capture row index and combobox in lambda defaults to avoid late binding
+            AttrcomboBox.activated.connect(lambda _, idx=i, cb=AttrcomboBox: ass_value(idx, cb))
+
+            ScalarnameLine = QLineEdit()
+            ScalarnameLine.setObjectName(f"ScalarnameLine_{i}")
+            ScalarnameLine.setEnabled(False)
+            ScalarnameLine.returnPressed.connect(lambda idx=i: ass_scalar(idx))
+
+            self.AssignTable.setItem(i, 0, ColnameItem)
+            self.AssignTable.setCellWidget(i, 1, AttrcomboBox)
+            self.AssignTable.setCellWidget(i, 2, ScalarnameLine)
+            LineList.append(ScalarnameLine)
+
+            # initial selection
             if self.rename_dict[i] in self.default_attr_list:
                 self.AssignTable.cellWidget(i, 1).setCurrentText(self.rename_dict[i])
-            elif "user_" in self.rename_dict[i]:
+            elif isinstance(self.rename_dict[i], str) and self.rename_dict[i].startswith("user_"):
                 self.AssignTable.cellWidget(i, 1).setCurrentText("User defined")
                 self.AssignTable.cellWidget(i, 2).setEnabled(True)
                 self.AssignTable.cellWidget(i, 2).setText(self.rename_dict[i])
-
             else:
+                # keep as-is (will fallback to original column name at export time)
                 self.AssignTable.cellWidget(i, 1).setCurrentText("As is")
 
-            self.AssignTable.setCellWidget(i, 2, self.ScalarnameLine)
-            self.AssignTable.horizontalHeader().setSectionResizeMode(
-                0, QHeaderView.ResizeToContents
-            )
+            self.AssignTable.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
 
-        # self.resize(750, 600) # Set appropriate window size
-
-        def ass_value(attr):
-            """Get column and row of clicked widget in table"""
-            # sel_combo = self.sender()  #  Combobox @ row and column
-            sel_combo = attr  #  Combobox @ row and column
-            row = int(sel_combo.objectName().split("_")[1])
-            print(row)
-
-            # Use a dict to rename the columns. The keys are the column index of the original df while the values are the new names.
-
+        def ass_value(row, sel_combo):
             if sel_combo.currentText() == "User defined":
                 self.AssignTable.cellWidget(row, 2).setEnabled(True)
                 self.AssignTable.cellWidget(row, 2).setPlaceholderText("user_")
-
             elif sel_combo.currentText() == "As is":
                 self.rename_dict[row] = df.columns[row]
-                # self.AssignTable.cellWidget(row,2).clear()
                 self.AssignTable.cellWidget(row, 2).setEnabled(False)
             else:
-                items = list(self.rename_dict.values())
                 self.AssignTable.cellWidget(row, 2).clear()
                 self.AssignTable.cellWidget(row, 2).setEnabled(False)
-                if (
-                    sel_combo.currentText() in items
-                    and sel_combo.currentText() != "N.a."
-                ):
-                    print("Item already assigned")
-                else:
-                    self.rename_dict[row] = sel_combo.currentText()
+                self.rename_dict[row] = sel_combo.currentText()
+
             self.preview_file(self.input_data_df)
 
-        def ass_scalar():
-            clicked = QApplication.focusWidget().pos()
-            index = self.AssignTable.indexAt(clicked)
-            col = index.column()
-            row = index.row()
-            # This is the only way to choose the QLineEdit otherwise self.AssignTable.cellWidget(row,2) returns somehow a QWidget instad than a QLineEdit"""
+        def ass_scalar(row):
             sel_line = LineList[row]
             scal_name = f"user_{sel_line.text()}"
             self.rename_dict[row] = scal_name
             sel_line.setText(scal_name)
             self.preview_file(self.input_data_df)
+
 
     def close_ui(self):
         self.close()
