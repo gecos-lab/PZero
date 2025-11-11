@@ -12,15 +12,95 @@ from numpy import column_stack as np_column_stack
 from numpy import shape as np_shape
 from numpy import uint8 as np_uint8
 from numpy import where as np_where
-
 from pandas import DataFrame as pd_DataFrame
 from pandas import read_csv as pd_read_csv
 from pandas import to_numeric as pd_to_numeric
+from re import sub as re_sub
 
 from vtk import vtkPoints
 from vtkmodules.util.numpy_support import numpy_to_vtk
 from pzero.collections.dom_collection import DomCollection
 from pzero.entities_factory import PCDom
+
+
+COORDINATE_ALIASES = {
+    "X": (
+        "easting",
+        "east",
+        "longitude",
+        "lon",
+        "utm_e",
+        "utme",
+        "coordx",
+        "xcoord",
+        "xcoordinate",
+    ),
+    "Y": (
+        "northing",
+        "north",
+        "latitude",
+        "lat",
+        "utm_n",
+        "utmn",
+        "coordy",
+        "ycoord",
+        "ycoordinate",
+    ),
+    "Z": (
+        "elevation",
+        "height",
+        "altitude",
+        "depth",
+        "coordz",
+        "zcoord",
+        "zcoordinate",
+    ),
+}
+
+
+def _sanitize_column_name(column_name: str) -> str:
+    """Sanitize a column name by stripping non-alphanumeric characters."""
+    return re_sub(r"[^a-z0-9]", "", column_name.lower())
+
+
+def _match_coordinate_column(available_columns, axis: str) -> str | None:
+    """
+    Try to find a column corresponding to the requested axis.
+
+    It matches exact aliases after stripping non-alphanumeric characters.
+    """
+    search_terms = (axis,) + COORDINATE_ALIASES.get(axis, tuple())
+    sanitized_columns = {
+        col_name: _sanitize_column_name(col_name) for col_name in available_columns
+    }
+    for term in search_terms:
+        sanitized_term = _sanitize_column_name(term)
+        for column_name, sanitized_column in sanitized_columns.items():
+            if sanitized_column == sanitized_term:
+                return column_name
+    return None
+
+
+def _normalise_coordinate_columns(input_df: pd_DataFrame) -> tuple[list[str], dict]:
+    """Rename coordinate columns to the canonical X, Y, Z labels when possible."""
+    rename_map = {}
+    remaining_columns = list(input_df.columns)
+
+    for axis in ("X", "Y", "Z"):
+        if axis in input_df.columns:
+            if axis in remaining_columns:
+                remaining_columns.remove(axis)
+            continue
+        matched_column = _match_coordinate_column(remaining_columns, axis)
+        if matched_column:
+            rename_map[matched_column] = axis
+            remaining_columns.remove(matched_column)
+
+    if rename_map:
+        input_df.rename(columns=rename_map, inplace=True)
+
+    missing_axes = [axis for axis in ("X", "Y", "Z") if axis not in input_df.columns]
+    return missing_axes, rename_map
 
 
 def pc2vtk(
@@ -104,12 +184,27 @@ def pc2vtk(
         print("input_df shape:", input_df.shape)
         if input_df.empty:
             self.parent.print_terminal("Empty dataframe")
-        val_check = input_df.apply(lambda c: pd_to_numeric(c, errors="coerce").notnull().all())
 
-        offset = input_df.loc[0, ["X", "Y"]].round(-2)
+        missing_axes, renamed_axes = _normalise_coordinate_columns(input_df)
+        if renamed_axes:
+            rename_summary = ", ".join(
+                f"{source}->{target}" for source, target in renamed_axes.items()
+            )
+            self.parent.print_terminal(
+                f"Detected coordinate columns: {rename_summary}"
+            )
+        if missing_axes:
+            missing_summary = ", ".join(missing_axes)
+            self.parent.print_terminal(
+                f"Missing coordinate columns ({missing_summary}). "
+                "Please assign them in the import dialog."
+            )
+            return
 
-        input_df["X"] -= offset[0]
-        input_df["Y"] -= offset[1]
+        offset = input_df[["X", "Y"]].iloc[0].round(-2)
+
+        input_df["X"] -= offset["X"]
+        input_df["Y"] -= offset["Y"]
 
         XYZ = numpy_to_vtk(
             np_column_stack(
