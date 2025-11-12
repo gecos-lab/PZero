@@ -198,7 +198,8 @@ def multiple_input_dialog(title="title", input_dict=None, return_widget=False):
         gridLayout.addWidget(objects_qt[key][0], i + 1, 1)
         # Create QLineEdits and QComboBoxes.
         if isinstance(input_dict[key][1], list):
-            objects_qt[key][1] = QComboBox(widget, objectName=f"par_{key}")
+            objects_qt[key][1] = QComboBox(widget)
+            objects_qt[key][1].setObjectName(f"par_{key}")
             if len(input_dict[key]) == 3:
                 display_value = input_dict[key][2]
                 index = input_dict[key][1].index(display_value)
@@ -208,14 +209,16 @@ def multiple_input_dialog(title="title", input_dict=None, return_widget=False):
             objects_qt[key][1].setEditable(True)
             objects_qt[key][1].setCurrentIndex(index)
         elif isinstance(input_dict[key][1], bool):
-            objects_qt[key][1] = QCheckBox(widget, objectName=f"par_{key}")
-            # objects_qt[key][1].setText(str(input_dict[key][0]))
+            objects_qt[key][1] = QCheckBox(widget)
+            objects_qt[key][1].setObjectName(f"par_{key}")
             objects_qt[key][1].setChecked(input_dict[key][1])
         elif isinstance(input_dict[key][1], int):
-            objects_qt[key][1] = QLineEdit(widget, objectName=f"par_{key}")
+            objects_qt[key][1] = QLineEdit(widget)
+            objects_qt[key][1].setObjectName(f"par_{key}")
             objects_qt[key][1].setText(str(input_dict[key][1]))
         elif isinstance(input_dict[key][1], float):
-            objects_qt[key][1] = QLineEdit(widget, objectName=f"par_{key}")
+            objects_qt[key][1] = QLineEdit(widget)
+            objects_qt[key][1].setObjectName(f"par_{key}")
             objects_qt[key][1].setText(str(input_dict[key][1]))
         # elif isinstance(input_dict[key][1], int):
         #     objects_qt[key][1] = QSpinBox(widget)
@@ -806,27 +809,44 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
         - offset: offset quantity to recenter the point cloud.
         """
 
+        # Sync 'User defined'
+        try:
+            rows = self.AssignTable.rowCount()
+            for i in range(rows):
+                combo = self.AssignTable.cellWidget(i, 1)
+                line = self.AssignTable.cellWidget(i, 2)
+                if combo and combo.currentText() == "User defined":
+                    # normalize name
+                    name = line.text().strip() if line else ""
+                    if not name:
+                        name = f"user_{self.input_data_df.columns[i]}"
+                    elif not name.startswith("user_"):
+                        name = f"user_{name}"
+                    self.rename_dict[i] = name
+        except Exception:
+            pass
+
         path = self.import_options_dict["in_path"]
         start_row = self.import_options_dict["StartRowspinBox"]
         end_row = self.import_options_dict["EndRowspinBox"]
         row_range = range(start_row, end_row)
         delimiter = self.import_options_dict["SeparatorcomboBox"]
 
-        # Get the full column names before cleaning the rename_dict
-        full_col_names = list(self.input_data_df.columns)
+        # Build list filtering out N.a. entries
         clean_dict = {}
-
         for i, v in self.rename_dict.items():
             if v == "N.a.":
-                # fallback to original column name if N.a.
-                clean_dict[i] = full_col_names[i]
-            else:
-                clean_dict[i] = v
+                continue
+            clean_dict[i] = v
+
+        if not clean_dict:
+            self.args = None
+            self.close()
+            self.loop.quit()
+            return
 
         col_names = list(clean_dict.values())
         index_list = list(clean_dict.keys())
-
-        # X and Y are not always called exactly like this and they can occupy other positions. The clean_dict is reverse searched (get the key using a given valdue) to obtain the index positions of the X Y columns in the raw df.
 
         self.args = [path, col_names, row_range, index_list, delimiter, self]
         self.close()
@@ -940,7 +960,9 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
             ScalarnameLine = QLineEdit()
             ScalarnameLine.setObjectName(f"ScalarnameLine_{i}")
             ScalarnameLine.setEnabled(False)
+            # Consider also focus loss in addition to returnPressed
             ScalarnameLine.returnPressed.connect(lambda idx=i: ass_scalar(idx))
+            ScalarnameLine.editingFinished.connect(lambda idx=i: ass_scalar(idx))
 
             self.AssignTable.setItem(i, 0, ColnameItem)
             self.AssignTable.setCellWidget(i, 1, AttrcomboBox)
@@ -976,7 +998,12 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
 
         def ass_scalar(row):
             sel_line = LineList[row]
-            scal_name = f"user_{sel_line.text()}"
+            raw = sel_line.text().strip()
+            # if empty, use a reasonable default
+            if not raw:
+                raw = df.columns[row]
+            # ensure prefix
+            scal_name = raw if raw.startswith("user_") else f"user_{raw}"
             self.rename_dict[row] = scal_name
             sel_line.setText(scal_name)
             self.preview_file(self.input_data_df)
