@@ -717,6 +717,9 @@ class CustomTreeWidget(QTreeWidget):
         """
         menu = QMenu()
         toggle_action = menu.addAction("Toggle Checkboxes")
+        test_action = menu.addAction("Test Menu Action")
+        if self.tree_name == "WellsTree":  # Find the right name for the wells tree ____________________
+            test_action_wells = menu.addAction("Test Menu Action for wells")
         action = menu.exec_(self.viewport().mapToGlobal(position))
         if action == toggle_action:
             for item in self.selectedItems():
@@ -726,7 +729,13 @@ class CustomTreeWidget(QTreeWidget):
                 item.setCheckState(0, new_state)
                 self.update_child_check_states(item, new_state)
                 self.update_parent_check_states(item)
-        self.emit_checkbox_toggled()
+            self.emit_checkbox_toggled()
+        if action == test_action:
+            for item in self.selectedItems():
+                print("Test Menu Action for item: ", item, " - uid: ", self.get_item_uid(item))
+        if action == test_action_wells:
+            for item in self.selectedItems():
+                print("Test Menu Action for wells for item: ", item, " - uid: ", self.get_item_uid(item))
 
     def emit_checkbox_toggled(self):
         """
