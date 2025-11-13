@@ -323,7 +323,21 @@ class ViewVTK(BaseView):
                     show_property = plot_entity.points_Y
                 elif show_property == "Z":
                     show_property = plot_entity.points_Z
-                elif show_property[-1] == "]":
+                elif isinstance(show_property, str) and show_property.endswith(" (tot)"):
+                    # Aggregate only for RGB/RGBA for now. Normals support can be enabled later.
+                    base_prop = show_property[: -len(" (tot)")]
+                    try:
+                        arr = plot_entity.get_point_data(base_prop)
+                        if base_prop.upper().startswith(("RGB", "RGBA")) and arr.ndim >= 2 and arr.shape[-1] in (3, 4):
+                            plot_rgb_option = True
+                            show_property = base_prop
+                        else:
+                            # For non-RGB vectors, skip aggregate for now or fallback to scalar magnitude.
+                            # show_property = (arr ** 2).sum(axis=-1) ** 0.5  # enable when supporting generic vectors
+                            show_property = None
+                    except Exception:
+                        show_property = None
+                elif isinstance(show_property, str) and show_property.endswith("]"):
                     # We can identify multicomponents properties such as RGB[0] or Normals[0] by
                     # taking the last character of the property name ("]").
                     # Get the start and end index of the [n_component]
@@ -338,7 +352,12 @@ class ViewVTK(BaseView):
                     # Safely check for multicomponent scalar arrays
                     try:
                         shape = plot_entity.get_point_data_shape(show_property)
-                        if shape and shape[-1] == 3:
+                        if (
+                            shape
+                            and shape[-1] in (3, 4)
+                            and isinstance(show_property, str)
+                            and show_property.upper().startswith(("RGB", "RGBA"))
+                        ):
                             plot_rgb_option = True
                     except Exception:
                         pass
@@ -386,6 +405,18 @@ class ViewVTK(BaseView):
                 elif show_property == "Z":
                     show_property = plot_entity.points_Z
                 # handle multicomponent properties like 'PropName[index]' and treat 'Normals[n]' as full-normal glyphs
+                elif isinstance(show_property, str) and show_property.endswith(" (tot)"):
+                    base_prop = show_property[: -len(" (tot)")]
+                    try:
+                        arr = plot_entity.get_point_data(base_prop)
+                        if base_prop.upper().startswith(("RGB", "RGBA")) and arr.ndim >= 2 and arr.shape[-1] in (3, 4):
+                            plot_rgb_option = True
+                            show_property = base_prop
+                        else:
+                            show_property = (arr ** 2).sum(axis=-1) ** 0.5
+                        show_property_title = base_prop + " (tot)"
+                    except Exception:
+                        show_property = None
                 elif isinstance(show_property, str) and show_property.endswith("]"):
                     pos1 = show_property.index("[")
                     pos2 = show_property.index("]")
@@ -475,7 +506,12 @@ class ViewVTK(BaseView):
                         # Safely check for multicomponent scalar arrays
                         try:
                             shape = plot_entity.get_point_data_shape(show_property)
-                            if shape and shape[-1] == 3:
+                            if (
+                                shape
+                                and shape[-1] in (3, 4)
+                                and isinstance(show_property, str)
+                                and show_property.upper().startswith(("RGB", "RGBA"))
+                            ):
                                 plot_rgb_option = True
                         except Exception:
                             pass
@@ -532,6 +568,19 @@ class ViewVTK(BaseView):
                     show_property = plot_entity.points_Y
                 elif show_property == "Z":
                     show_property = plot_entity.points_Z
+                elif isinstance(show_property, str) and show_property.endswith(" (tot)"):
+                    base_prop = show_property[: -len(" (tot)")]
+                    try:
+                        arr = plot_entity.get_point_data(base_prop)
+                        if base_prop.upper().startswith(("RGB", "RGBA")) and arr.ndim >= 2 and arr.shape[-1] in (3, 4):
+                            plot_rgb_option = True
+                            show_property = base_prop
+                        else:
+                            # For non-RGB vectors, skip aggregate for now or fallback to scalar magnitude.
+                            # show_property = (arr ** 2).sum(axis=-1) ** 0.5  # enable when supporting generic vectors
+                            show_property = None
+                    except Exception:
+                        show_property = None
                 elif show_property == "RGB":
                     show_property = None
                 else:
@@ -567,7 +616,7 @@ class ViewVTK(BaseView):
                     show_property_value = plot_entity.points_Y
                 elif show_property == "Z":
                     show_property_value = plot_entity.points_Z
-                elif show_property[-1] == "]":
+                elif isinstance(show_property, str) and show_property.endswith("]"):
                     # We can identify multicomponents properties such as RGB[0] or Normals[0] by
                     # taking the last character of the property name ("]").
                     # Get the start and end index of the [n_component]
@@ -580,6 +629,19 @@ class ViewVTK(BaseView):
                     show_property_value = plot_entity.get_point_data(original_prop)[
                         :, index
                     ]
+                elif isinstance(show_property, str) and show_property.endswith(" (tot)"):
+                    base_prop = show_property[: -len(" (tot)")]
+                    try:
+                        arr = plot_entity.get_point_data(base_prop)
+                        if base_prop.upper().startswith(("RGB", "RGBA")) and arr.ndim >= 2 and arr.shape[-1] in (3, 4):
+                            plot_rgb_option = True
+                            show_property_value = arr
+                        else:
+                            # For non-RGB vectors, skip aggregate for now or fallback to scalar magnitude.
+                            # show_property_value = (arr ** 2).sum(axis=-1) ** 0.5  # enable when supporting generic vectors
+                            show_property_value = None
+                    except Exception:
+                        show_property_value = None
                 else:
                     n_comp = self.parent.dom_coll.get_uid_properties_components(uid)[
                         self.parent.dom_coll.get_uid_properties_names(uid).index(
@@ -639,6 +701,19 @@ class ViewVTK(BaseView):
                     show_property = plot_entity.points_Y
                 elif show_property == "Z":
                     show_property = plot_entity.points_Z
+                elif isinstance(show_property, str) and show_property.endswith(" (tot)"):
+                    base_prop = show_property[: -len(" (tot)")]
+                    try:
+                        arr = plot_entity.get_point_data(base_prop)
+                        if base_prop.upper().startswith(("RGB", "RGBA")) and arr.ndim >= 2 and arr.shape[-1] in (3, 4):
+                            plot_rgb_option = True
+                            show_property = base_prop
+                        else:
+                            # For non-RGB vectors, skip aggregate for now or fallback to scalar magnitude.
+                            # show_property = (arr ** 2).sum(axis=-1) ** 0.5  # enable when supporting generic vectors
+                            show_property = None
+                    except Exception:
+                        show_property = None
                 else:
                     if plot_entity.get_point_data_shape(show_property)[-1] == 3:
                         plot_rgb_option = True
@@ -673,6 +748,19 @@ class ViewVTK(BaseView):
                     ]
                 ):
                     show_property = None
+                elif isinstance(show_property, str) and show_property.endswith(" (tot)"):
+                    base_prop = show_property[: -len(" (tot)")]
+                    try:
+                        arr = plot_entity.get_point_data(base_prop)
+                        if base_prop.upper().startswith(("RGB", "RGBA")) and arr.ndim >= 2 and arr.shape[-1] in (3, 4):
+                            plot_rgb_option = True
+                            show_property = base_prop
+                        else:
+                            # For non-RGB vectors, skip aggregate for now or fallback to scalar magnitude.
+                            # show_property = (arr ** 2).sum(axis=-1) ** 0.5  # enable when supporting generic vectors
+                            show_property = None
+                    except Exception:
+                        show_property = None
                 else:
                     if plot_entity.get_point_data_shape(show_property)[-1] == 3:
                         plot_rgb_option = True
@@ -856,11 +944,29 @@ class ViewVTK(BaseView):
             # This stores the camera position before redrawing the actor. Added to avoid a bug that sometimes sends
             # the scene to a very distant place or to the origin that is the default position before any mesh is plotted.
             camera_position = self.plotter.camera_position
-        if show_property_title is not None and show_property_title != "none":
-            show_property_cmap = self.parent.prop_legend_df.loc[
-                self.parent.prop_legend_df["property_name"] == show_property_title,
-                "colormap",
-            ].values[0]
+        # Resolve colormap: skip when rgb, fall back to base property for virtual names
+        if (
+            show_property_title is not None
+            and show_property_title != "none"
+            and not plot_rgb_option
+        ):
+            lookup_title = show_property_title
+            # normalize virtual titles to base name
+            if isinstance(lookup_title, str):
+                if lookup_title.endswith(" (tot)"):
+                    lookup_title = lookup_title[: -len(" (tot)")]
+                elif "]" in lookup_title and "[" in lookup_title:
+                    try:
+                        lookup_title = lookup_title[: lookup_title.index("[")]
+                    except Exception:
+                        pass
+            try:
+                show_property_cmap = self.parent.prop_legend_df.loc[
+                    self.parent.prop_legend_df["property_name"] == lookup_title,
+                    "colormap",
+                ].values[0]
+            except Exception:
+                show_property_cmap = None
         else:
             show_property_cmap = None
 

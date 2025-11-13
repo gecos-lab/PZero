@@ -357,17 +357,18 @@ class CustomTreeWidget(QTreeWidget):
             #             property_combo.addItem(prop_)
             #             property_combo.setItemData(
             #                 property_combo.findText(prop_), prop_
-            #             )
             for prop, prop_comp in zip(row[self.prop_label], row[self.prop_comp_label]):
-                # property_combo.addItem(prop)
-                # property_combo.setItemData(property_combo.findText(prop), prop)
-                if prop_comp > 1:
+                if prop_comp and prop_comp > 1:
+                    if isinstance(prop, str) and prop.upper().startswith(("RGB", "RGBA")):
+                        # Add aggregate band " (tot)" for RGB/RGBA
+                        prop_tot = f"{prop} (tot)"
+                        property_combo.addItem(prop_tot)
+                        property_combo.setItemData(property_combo.findText(prop_tot), prop_tot)
+                    # Always add per-component bands
                     for i in range(prop_comp):
-                        prop_ = prop + f"[{i}]"
-                        property_combo.addItem(prop_)
-                        property_combo.setItemData(
-                            property_combo.findText(prop_), prop_
-                        )
+                        prop_i = f"{prop}[{i}]"
+                        property_combo.addItem(prop_i)
+                        property_combo.setItemData(property_combo.findText(prop_i), prop_i)
                 else:
                     property_combo.addItem(prop)
                     property_combo.setItemData(property_combo.findText(prop), prop)
@@ -399,9 +400,10 @@ class CustomTreeWidget(QTreeWidget):
         # connect signal used to change the property to be shown
         property_combo.currentTextChanged.connect(
             lambda text, this_uid=uid: self.on_combo_changed(
-                this_uid, property_combo.itemData(property_combo.findText(text))
+                this_uid, text
             )
         )
+
         return property_combo
 
     def populate_tree(self):

@@ -394,19 +394,32 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         # remove from updated_list the uid's that are excluded from this view by self.view_filter.
         updated_uids = collection.filter_uids(query=self.view_filter, uids=updated_uids)
         tree = self.tree_from_coll(coll=collection)
+
+        def _base_prop_name(prop_text: str):
+            if not isinstance(prop_text, str) or not prop_text:
+                return prop_text
+            # Convert virtual props like "Prop (tot)" or "Prop[0]" to base name "Prop"
+            if prop_text.endswith(" (tot)"):
+                return prop_text[: -len(" (tot)")]
+            if "]" in prop_text and "[" in prop_text:
+                try:
+                    return prop_text[: prop_text.index("[")]
+                except Exception:
+                    return prop_text
+            return prop_text
+
         for uid in updated_uids:
             # Replace the previous copy of the actor with the same uid, and update the actors dataframe, only if a
             # property that has been removed is shown at the moment. See issue #33 for a discussion on actors
             # replacement by the PyVista add_mesh and add_volume methods.
-            if (
-                not self.actors_df.loc[
-                    self.actors_df["uid"] == uid, "show_property"
-                ].to_list()[0]
-                is None
-            ):
-                if not self.actors_df.loc[
-                    self.actors_df["uid"] == uid, "show_property"
-                ].values[0] in collection.get_uid_properties_names(uid):
+            shown_prop = self.actors_df.loc[
+                self.actors_df["uid"] == uid, "show_property"
+            ].to_list()[0]
+            if shown_prop is not None:
+                valid_names = collection.get_uid_properties_names(uid)
+                # consider virtual props valid if base prop still exists
+                base_name = _base_prop_name(shown_prop)
+                if base_name not in valid_names:
                     show = self.actors_df.loc[
                         self.actors_df["uid"] == uid, "show"
                     ].to_list()[0]
@@ -440,19 +453,31 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         modified property is currently shown. Trees do not need to be modified."""
         # remove from updated_list the uid's that are excluded from this view by self.view_filter.
         updated_uids = collection.filter_uids(query=self.view_filter, uids=updated_uids)
+
+        def _base_prop_name(prop_text: str):
+            if not isinstance(prop_text, str) or not prop_text:
+                return prop_text
+            # Convert virtual props like "Prop (tot)" or "Prop[0]" to base name "Prop"
+            if prop_text.endswith(" (tot)"):
+                return prop_text[: -len(" (tot)")]
+            if "]" in prop_text and "[" in prop_text:
+                try:
+                    return prop_text[: prop_text.index("[")]
+                except Exception:
+                    return prop_text
+            return prop_text
+
         for uid in updated_uids:
             # Replace the previous copy of the actor with the same uid, and update the actors dataframe, only if a
             # property that has been removed is shown at the moment. See issue #33 for a discussion on actors
             # replacement by the PyVista add_mesh and add_volume methods.
-            if (
-                not self.actors_df.loc[
-                    self.actors_df["uid"] == uid, "show_property"
-                ].to_list()[0]
-                is None
-            ):
-                if not self.actors_df.loc[
-                    self.actors_df["uid"] == uid, "show_property"
-                ].values[0] in collection.get_uid_properties_names(uid):
+            shown_prop = self.actors_df.loc[
+                self.actors_df["uid"] == uid, "show_property"
+            ].to_list()[0]
+            if shown_prop is not None:
+                valid_names = collection.get_uid_properties_names(uid)
+                base_name = _base_prop_name(shown_prop)
+                if base_name not in valid_names:
                     show = self.actors_df.loc[
                         self.actors_df["uid"] == uid, "show"
                     ].to_list()[0]
