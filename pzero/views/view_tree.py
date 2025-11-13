@@ -19,6 +19,12 @@ from PySide6.QtCore import Qt, Signal, QMimeData
 from PySide6.QtGui import QDrag
 
 
+MESH_SLICER_COLLECTION_PREFIXES = {
+    "mesh3d_coll": "Mesh",
+    "image_coll": "Image",
+}
+
+
 class DraggableButton(QPushButton):
     """
     A draggable button that inherits from QPushButton. It can be dragged across
@@ -715,27 +721,32 @@ class CustomTreeWidget(QTreeWidget):
         child and parent checkboxes for the affected items to maintain consistency.
         A signal indicating that a checkbox has been toggled is then emitted.
         """
+        item = self.itemAt(position)
+        if item and item not in self.selectedItems():
+            self.clearSelection()
+            item.setSelected(True)
+        if item:
+            self.setCurrentItem(item)
+
         menu = QMenu()
         toggle_action = menu.addAction("Toggle Checkboxes")
-        test_action = menu.addAction("Test Menu Action")
-        if self.tree_name == "WellsTree":  # Find the right name for the wells tree ____________________
-            test_action_wells = menu.addAction("Test Menu Action for wells")
+        open_mesh_slicer_action = None
+        if self._mesh_slicer_label_for_item(item) and hasattr(
+            self.view, "show_mesh_slicer_dialog"
+        ):
+            open_mesh_slicer_action = menu.addAction("Open Mesh Slicer")
         action = menu.exec_(self.viewport().mapToGlobal(position))
         if action == toggle_action:
             for item in self.selectedItems():
-                new_state = (
+                new_state = (   
                     Qt.Checked if item.checkState(0) == Qt.Unchecked else Qt.Unchecked
                 )
                 item.setCheckState(0, new_state)
                 self.update_child_check_states(item, new_state)
                 self.update_parent_check_states(item)
             self.emit_checkbox_toggled()
-        if action == test_action:
-            for item in self.selectedItems():
-                print("Test Menu Action for item: ", item, " - uid: ", self.get_item_uid(item))
-        if action == test_action_wells:
-            for item in self.selectedItems():
-                print("Test Menu Action for wells for item: ", item, " - uid: ", self.get_item_uid(item))
+        if action == open_mesh_slicer_action:
+            self._open_mesh_slicer_for_item(item)
 
     def emit_checkbox_toggled(self):
         """
@@ -872,6 +883,63 @@ class CustomTreeWidget(QTreeWidget):
         Retrieves the unique identifier (UID) of a given item.
         """
         return item.data(0, Qt.UserRole)
+
+    def _mesh_slicer_label_for_item(self, item):
+        """
+        Return the mesh slicer target label for the provided tree item, if available.
+        """
+        if not item or self.get_item_uid(item) is None:
+            return None
+
+        collection_name = getattr(self.collection, "collection_name", None)
+        prefix = MESH_SLICER_COLLECTION_PREFIXES.get(collection_name)
+        if not prefix:
+            return None
+
+        entity_name = (item.text(1) or item.text(0) or "").strip()
+        if not entity_name:
+            return None
+
+        return f"{prefix}: {entity_name}"
+
+    def _open_mesh_slicer_for_item(self, item):
+        """
+        Open the mesh slicer dialog for the specified tree item.
+        """
+        target_label = self._mesh_slicer_label_for_item(item)
+        if not target_label:
+            return
+        if not hasattr(self.view, "show_mesh_slicer_dialog"):
+            return
+
+        dialog = getattr(self.view, "mesh_slicer_dialog", None)
+        if dialog is None or not dialog.isVisible():
+            dialog = self.view.show_mesh_slicer_dialog()
+        else:
+            try:
+                dialog.raise_()
+                dialog.activateWindow()
+            except Exception:
+                pass
+        if dialog is None:
+            return
+
+        combo = getattr(dialog, "single_entity_combo", None)
+        if not isinstance(combo, QComboBox):
+            combo = dialog.findChild(QComboBox, "mesh_slicer_entity_combo")
+        if not isinstance(combo, QComboBox):
+            return
+
+        current_index = combo.currentIndex()
+        target_index = combo.findText(target_label)
+        if target_index == -1:
+            return
+
+        combo.setCurrentIndex(target_index)
+        if current_index == target_index:
+            initializer = getattr(dialog, "initialize_entity_controls", None)
+            if callable(initializer):
+                initializer(target_label)
 
     def _recursive_cleanup(self, item):
         """
