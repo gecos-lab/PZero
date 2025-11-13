@@ -900,6 +900,7 @@ class View3D(ViewVTK):
         entity_label = QLabel("Select Entity:")
         entity_combo = QComboBox()
         entity_combo.addItems(self.getSliceableEntities())
+        entity_combo.setObjectName("mesh_slicer_entity_combo")
 
         entity_layout.addWidget(entity_label)
         entity_layout.addWidget(entity_combo)
@@ -915,6 +916,7 @@ class View3D(ViewVTK):
         multi_entity_label = QLabel("Select Entity:")
         multi_entity_combo = QComboBox()
         multi_entity_combo.addItems(self.getSliceableEntities())
+        multi_entity_combo.setObjectName("mesh_slicer_multi_entity_combo")
 
         multi_entity_layout.addWidget(multi_entity_label)
         multi_entity_layout.addWidget(multi_entity_combo)
@@ -2646,6 +2648,11 @@ class View3D(ViewVTK):
         # Set up dialog
         control_panel.setLayout(layout)
         control_panel.show()
+
+        # Expose key widgets and helpers for external callers (e.g., tree context menus)
+        control_panel.single_entity_combo = entity_combo
+        control_panel.multi_entity_combo = multi_entity_combo
+        control_panel.initialize_entity_controls = initialize_entity_controls
 
         # Add this after creating the control_panel
         control_panel.finished.connect(cleanup_on_close)
