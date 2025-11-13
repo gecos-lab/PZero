@@ -1344,7 +1344,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 im_writer.Write()
             prgs_bar.add_one()
 
-        # Save boundaries collection table to JSON file and entities as VTK.
+        # Save boundaries collection table to CSV and JSON files.
         out_cols = list(self.boundary_coll.df.columns)
         out_cols.remove("vtk_obj")
         self.boundary_coll.df[out_cols].to_json(
@@ -1365,7 +1365,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             pd_writer.Write()
             prgs_bar.add_one()
 
-        # Save wells collection table to JSON file and entities as VTK.
+        # Save wells collection table to CSV and JSON files.
 
         out_cols = list(self.well_coll.df.columns)
         out_cols.remove("vtk_obj")
@@ -1387,7 +1387,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             pd_writer.Write()
             prgs_bar.add_one()
 
-        # Save fluids collection table to JSON file and entities as VTK.
+        # Save fluids collection table to CSV and JSON files.
         out_cols = list(self.fluid_coll.df.columns)
         out_cols.remove("vtk_obj")
         self.fluid_coll.df[out_cols].to_json(
@@ -1408,7 +1408,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             pd_writer.Write()
             prgs_bar.add_one()
 
-        # Save Backgrounds collection table to JSON file and entities as VTK.
+        # Save Backgrounds collection table to CSV and JSON files.
         out_cols = list(self.backgrnd_coll.df.columns)
         out_cols.remove("vtk_obj")
         self.backgrnd_coll.df[out_cols].to_json(
@@ -2669,14 +2669,11 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
 
         ext_filter = "All supported (*.txt *.csv *.xyz *.asc *.ply *.las *.laz);;Text files (*.txt *.csv *.xyz *.asc);;PLY files (*.ply);;LAS/LAZ files (*.las *.laz)"
 
-        add_opt = [["check255Box", "Display RGB values within the 0-255 range"]]
-
         args = import_dialog(
             self,
             default_attr_list=default_attr_list,
             ext_filter=ext_filter,
             caption="Import point cloud data",
-            add_opt=add_opt,
         ).args
         if args:
             in_file_name, col_names, row_range, index_list, delimiter, origin = args

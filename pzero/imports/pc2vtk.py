@@ -225,15 +225,53 @@ def pc2vtk(
         if not input_df.empty:
             if "Red" in input_df.columns:
                 point_cloud.init_point_data("RGB", 3)
-                # print(properties_df)
-                if self.check255Box.isChecked():
-                    RGB = np_array(
-                        [input_df["Red"], input_df["Green"], input_df["Blue"]]
-                    ).T.astype(np_uint8)
+
+                # Auto-normalize RGB to uint8 [0,255]
+                r = input_df["Red"].astype(float)
+                g = input_df["Green"].astype(float)
+                b = input_df["Blue"].astype(float)
+
+                rgb_min = float(min(r.min(), g.min(), b.min()))
+                rgb_max = float(max(r.max(), g.max(), b.max()))
+
+                # Decide conversion strategy
+                converted_msg = None
+
+                if rgb_max <= 1.0:
+                    # Assume [0,1] floats -> scale to [0,255]
+                    r = (r * 255.0).round()
+                    g = (g * 255.0).round()
+                    b = (b * 255.0).round()
+                    converted_msg = "RGB floating-point: scaled to 0–255 and converted to 8-bit."
+                elif rgb_max <= 255.0 and rgb_min >= 0.0:
+                    # Already in 0–255 range, nothing to do except cast
+                    converted_msg = None
+                elif rgb_max <= 65535.0 and rgb_min >= 0.0:
+                    # Likely 16-bit -> downscale to 8-bit
+                    r = (r / 257.0).round()
+                    g = (g / 257.0).round()
+                    b = (b / 257.0).round()
+                    converted_msg = "RGB 16-bit detected: downscaled to 8-bit (0–255)."
                 else:
-                    RGB = np_array(
-                        [input_df["Red"], input_df["Green"], input_df["Blue"]]
-                    ).T
+                    # Generic normalization: scale min->0, max->255 to preserve contrast, then clip
+                    # Avoid division by zero
+                    span = rgb_max - rgb_min if rgb_max > rgb_min else 1.0
+                    r = ((r - rgb_min) * 255.0 / span).round()
+                    g = ((g - rgb_min) * 255.0 / span).round()
+                    b = ((b - rgb_min) * 255.0 / span).round()
+                    converted_msg = "RGB out of range: normalized to 8-bit (contrast-preserving)."
+
+                # Clip and cast to uint8
+                from numpy import clip as np_clip
+
+                r = np_clip(r, 0, 255).astype(np_uint8)
+                g = np_clip(g, 0, 255).astype(np_uint8)
+                b = np_clip(b, 0, 255).astype(np_uint8)
+
+                if converted_msg:
+                    self.parent.print_terminal(converted_msg)
+
+                RGB = np_array([r.values, g.values, b.values]).T
 
                 point_cloud.set_point_data("RGB", RGB)
 
