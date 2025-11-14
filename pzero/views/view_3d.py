@@ -716,6 +716,31 @@ class View3D(ViewVTK):
             self.plotter.camera_position = camera_position
         return this_actor
 
+    def _refresh_well_trace_properties(self):
+        """
+        Re-render all well property actors so they reflect the current trace visualization method.
+        """
+        if not hasattr(self, "actors_df") or self.actors_df.empty:
+            return
+        try:
+            well_rows = self.actors_df[(self.actors_df["collection"] == "well_coll")]
+        except Exception:
+            return
+
+        if well_rows.empty:
+            return
+
+        for _, row in well_rows.iterrows():
+            prop = row.get("show_property")
+            if prop in (None, "none", "Marker", "Annotations"):
+                continue
+            try:
+                self.toggle_property(
+                    collection_name="well_coll", uid=row["uid"], prop_text=prop
+                )
+            except Exception:
+                continue
+
     def change_bore_vis(self, method):
         actors = set(self.plotter.renderer.actors.copy())
         wells = set(self.parent.well_coll.get_uids)
@@ -723,8 +748,10 @@ class View3D(ViewVTK):
         well_actors = actors.intersection(wells)
         if method == "trace":
             self.trace_method = method
+            self._refresh_well_trace_properties()
         elif method == "cylinder":
             self.trace_method = method
+            self._refresh_well_trace_properties()
         elif method == "geo":
             for uid in well_actors:
                 if "_geo" in uid:
@@ -900,6 +927,7 @@ class View3D(ViewVTK):
         entity_label = QLabel("Select Entity:")
         entity_combo = QComboBox()
         entity_combo.addItems(self.getSliceableEntities())
+        entity_combo.setObjectName("mesh_slicer_entity_combo")
 
         entity_layout.addWidget(entity_label)
         entity_layout.addWidget(entity_combo)
@@ -915,6 +943,7 @@ class View3D(ViewVTK):
         multi_entity_label = QLabel("Select Entity:")
         multi_entity_combo = QComboBox()
         multi_entity_combo.addItems(self.getSliceableEntities())
+        multi_entity_combo.setObjectName("mesh_slicer_multi_entity_combo")
 
         multi_entity_layout.addWidget(multi_entity_label)
         multi_entity_layout.addWidget(multi_entity_combo)
@@ -2646,6 +2675,11 @@ class View3D(ViewVTK):
         # Set up dialog
         control_panel.setLayout(layout)
         control_panel.show()
+
+        # Expose key widgets and helpers for external callers (e.g., tree context menus)
+        control_panel.single_entity_combo = entity_combo
+        control_panel.multi_entity_combo = multi_entity_combo
+        control_panel.initialize_entity_controls = initialize_entity_controls
 
         # Add this after creating the control_panel
         control_panel.finished.connect(cleanup_on_close)

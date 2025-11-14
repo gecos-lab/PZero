@@ -16,7 +16,13 @@ from PySide6.QtWidgets import (
     QComboBox,
 )
 from PySide6.QtCore import Qt, Signal, QMimeData
-from PySide6.QtGui import QDrag
+from PySide6.QtGui import QDrag, QActionGroup
+
+
+MESH_SLICER_COLLECTION_PREFIXES = {
+    "mesh3d_coll": "Mesh",
+    "image_coll": "Image",
+}
 
 
 class DraggableButton(QPushButton):
@@ -715,8 +721,21 @@ class CustomTreeWidget(QTreeWidget):
         child and parent checkboxes for the affected items to maintain consistency.
         A signal indicating that a checkbox has been toggled is then emitted.
         """
+        item = self.itemAt(position)
+        if item and item not in self.selectedItems():
+            self.clearSelection()
+            item.setSelected(True)
+        if item:
+            self.setCurrentItem(item)
+
         menu = QMenu()
         toggle_action = menu.addAction("Toggle Checkboxes")
+        open_mesh_slicer_action = None
+        if self._mesh_slicer_label_for_item(item) and hasattr(
+            self.view, "show_mesh_slicer_dialog"
+        ):
+            open_mesh_slicer_action = menu.addAction("Open Mesh Slicer")
+        well_view_actions = self._create_well_view_mode_menu(menu)
         action = menu.exec_(self.viewport().mapToGlobal(position))
         if action == toggle_action:
             for item in self.selectedItems():
@@ -726,7 +745,60 @@ class CustomTreeWidget(QTreeWidget):
                 item.setCheckState(0, new_state)
                 self.update_child_check_states(item, new_state)
                 self.update_parent_check_states(item)
-        self.emit_checkbox_toggled()
+            self.emit_checkbox_toggled()
+        if action == open_mesh_slicer_action:
+            self._open_mesh_slicer_for_item(item)
+        if well_view_actions:
+            if action == well_view_actions.get("trace"):
+                self._set_borehole_view_mode("trace")
+            elif action == well_view_actions.get("cylinder"):
+                self._set_borehole_view_mode("cylinder")
+
+    def _create_well_view_mode_menu(self, parent_menu):
+        """
+        Create the submenu with borehole visualization options when right-clicking wells.
+        """
+        if not self._can_change_borehole_view_mode():
+            return None
+
+        parent_menu.addSeparator()
+        submenu = parent_menu.addMenu("Borehole View Mode")
+        action_group = QActionGroup(submenu)
+        action_group.setExclusive(True)
+
+        current_method = getattr(self.view, "trace_method", "trace")
+
+        trace_action = submenu.addAction("Trace (flag)")
+        trace_action.setCheckable(True)
+        trace_action.setChecked(current_method == "trace")
+        action_group.addAction(trace_action)
+
+        cylinder_action = submenu.addAction("Cylinder")
+        cylinder_action.setCheckable(True)
+        cylinder_action.setChecked(current_method == "cylinder")
+        action_group.addAction(cylinder_action)
+
+        return {"trace": trace_action, "cylinder": cylinder_action}
+
+    def _can_change_borehole_view_mode(self):
+        """
+        Return True when the current context supports borehole view changes.
+        """
+        return getattr(
+            self.collection, "collection_name", None
+        ) == "well_coll" and hasattr(self.view, "change_bore_vis")
+
+    def _set_borehole_view_mode(self, method):
+        """
+        Apply the requested borehole visualization method on the active view.
+        """
+        if not self._can_change_borehole_view_mode():
+            return
+        try:
+            self.view.change_bore_vis(method)
+        except Exception as exc:
+            if hasattr(self.view, "print_terminal"):
+                self.view.print_terminal(f"Failed to set borehole view mode: {exc}")
 
     def emit_checkbox_toggled(self):
         """
@@ -863,6 +935,63 @@ class CustomTreeWidget(QTreeWidget):
         Retrieves the unique identifier (UID) of a given item.
         """
         return item.data(0, Qt.UserRole)
+
+    def _mesh_slicer_label_for_item(self, item):
+        """
+        Return the mesh slicer target label for the provided tree item, if available.
+        """
+        if not item or self.get_item_uid(item) is None:
+            return None
+
+        collection_name = getattr(self.collection, "collection_name", None)
+        prefix = MESH_SLICER_COLLECTION_PREFIXES.get(collection_name)
+        if not prefix:
+            return None
+
+        entity_name = (item.text(1) or item.text(0) or "").strip()
+        if not entity_name:
+            return None
+
+        return f"{prefix}: {entity_name}"
+
+    def _open_mesh_slicer_for_item(self, item):
+        """
+        Open the mesh slicer dialog for the specified tree item.
+        """
+        target_label = self._mesh_slicer_label_for_item(item)
+        if not target_label:
+            return
+        if not hasattr(self.view, "show_mesh_slicer_dialog"):
+            return
+
+        dialog = getattr(self.view, "mesh_slicer_dialog", None)
+        if dialog is None or not dialog.isVisible():
+            dialog = self.view.show_mesh_slicer_dialog()
+        else:
+            try:
+                dialog.raise_()
+                dialog.activateWindow()
+            except Exception:
+                pass
+        if dialog is None:
+            return
+
+        combo = getattr(dialog, "single_entity_combo", None)
+        if not isinstance(combo, QComboBox):
+            combo = dialog.findChild(QComboBox, "mesh_slicer_entity_combo")
+        if not isinstance(combo, QComboBox):
+            return
+
+        current_index = combo.currentIndex()
+        target_index = combo.findText(target_label)
+        if target_index == -1:
+            return
+
+        combo.setCurrentIndex(target_index)
+        if current_index == target_index:
+            initializer = getattr(dialog, "initialize_entity_controls", None)
+            if callable(initializer):
+                initializer(target_label)
 
     def _recursive_cleanup(self, item):
         """
