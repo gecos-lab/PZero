@@ -15,10 +15,13 @@ from pandas import Series as pd_series
 
 from vtk import vtkAppendPolyData
 
+from pandas import DataFrame as pd_DataFrame
+
 from pzero.collections.background_collection import BackgroundCollection
 from pzero.collections.fluid_collection import FluidCollection
 from pzero.collections.geological_collection import GeologicalCollection
 from pzero.entities_factory import PolyLine, VertexSet, Attitude
+from pzero.helpers.helper_dialogs import ShapefileAssignmentDialog
 from pzero.orientation_analysis import dip_directions2normals
 
 # Importer for SHP files and other GIS formats, to be improved IN THE FUTURE.
@@ -41,29 +44,61 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
     # if True in gdf.is_empty[:]:
     #     print("Empty geometries found - aborting.")
     #     return
+
+    # Determine topology type from geometry
+    geom_type = gdf.geom_type[0]
+    if geom_type in ["LineString", "MultiLineString"]:
+        topology_type = "PolyLine"
+    elif geom_type == "Point":
+        topology_type = "Point"
+    else:
+        print(f"Only Point and Line geometries can be imported. Found: {geom_type} - aborting.")
+        return
+
+    # Create DataFrame with attributes (excluding geometry) for the dialog
+    attrs_df = pd_DataFrame(gdf.drop(columns='geometry'))
+
+    # include_label only for Background data (original code handled label only there)
+    include_label = (collection == "Background data")
+
+    # Open dialog to assign shapefile attributes to PZero properties
+    dialog = ShapefileAssignmentDialog(
+        parent=self,
+        shapefile_df=attrs_df,
+        topology_type=topology_type,
+        include_label=include_label,
+    )
+    attribute_mapping = dialog.exec()
+
+    # If user cancelled, abort import
+    if attribute_mapping is None:
+        print("Import cancelled by user.")
+        return
+
+    # Split mapping into properties vs orientation-related fields
+    # Build maps without mutating original
+    props_allowed = {"name", "role", "feature"}
+    if include_label:
+        props_allowed.add("label")
+    props_map = {k: v for k, v in attribute_mapping.items() if k in props_allowed}
+    # Include dip, dip_dir, and dir (dir will be converted to dip_dir with +90° rotation)
+    orient_map = {k: v for k, v in attribute_mapping.items() if k in {"dip", "dip_dir", "dir"}}
+
     column_names = list(gdf.columns)
-    # print("Column names of GeoDataframe: ", list(gdf.columns))
-    # print("GeoDataframe:\n", gdf)
-    #  This is horroble, we should rewrite to accept
-    # different types of collection without repeating the code
+
+    # Use props_map (entity properties) and orient_map (orientation fields) for subsequent processing
+    # No additional filtering needed here; include_label already controls presence of 'label'
+
     if collection == "Geology":
         if (gdf.geom_type[0] == "LineString") or (
             gdf.geom_type[0] == "MultiLineString"
         ):
             for row in range(gdf.shape[0]):
-                # print("____ROW: ", row)
-                # print("geometry type: ", gdf.geom_type[row])
                 curr_obj_dict = deepcopy(GeologicalCollection().entity_dict)
-                # if gdf.is_valid[row] and not gdf.is_empty[row]:
-                # try:
-                if "name" in column_names:
-                    curr_obj_dict["name"] = gdf.loc[row, "name"]
-                if "role" in column_names:
-                    curr_obj_dict["role"] = gdf.loc[row, "role"]
-                if "feature" in column_names:
-                    curr_obj_dict["feature"] = gdf.loc[row, "feature"]
-                if "scenario" in column_names:
-                    curr_obj_dict["scenario"] = gdf.loc[row, "scenario"]
+                # Use props_map to assign properties
+                for pzero_prop, shp_col in props_map.items():
+                    if shp_col in column_names:
+                        curr_obj_dict[pzero_prop] = gdf.loc[row, shp_col]
                 curr_obj_dict["topology"] = "PolyLine"
                 curr_obj_dict["vtk_obj"] = PolyLine()
                 if gdf.geom_type[row] == "LineString":
@@ -101,25 +136,25 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
                 #     print("Invalid object")
                 del curr_obj_dict
         elif gdf.geom_type[0] == "Point":
-            if "feature" in column_names:
-                gdf_index = gdf.set_index("feature")
+            feature_col = props_map.get("feature")
+            if feature_col and feature_col in column_names:
+                gdf_index = gdf.set_index(feature_col)
                 feat_list = set(gdf_index.index)
                 for i in feat_list:
                     curr_obj_dict = deepcopy(GeologicalCollection().entity_dict)
-                    if "dip" in gdf.columns:
+                    # Check if we have dip data (Attitude)
+                    dip_col = orient_map.get("dip")
+                    if dip_col and dip_col in gdf.columns:
                         vtk_obj = Attitude()
                     else:
                         vtk_obj = VertexSet()
-                    if "name" in column_names:
-                        curr_obj_dict["name"] = pd_series(gdf_index.loc[i, "name"])[0]
-                    if "role" in column_names:
-                        curr_obj_dict["role"] = pd_series(gdf_index.loc[i, "role"])[0]
-                    if "feature" in column_names:
-                        curr_obj_dict["feature"] = i
-                    if "scenario" in column_names:
-                        curr_obj_dict["scenario"] = pd_series(
-                            gdf_index.loc[i, "scenario"]
-                        )[0]
+                    # Assign entity properties
+                    for pzero_prop, shp_col in props_map.items():
+                        if shp_col in column_names:
+                            if pzero_prop == "feature":
+                                curr_obj_dict["feature"] = i
+                            else:
+                                curr_obj_dict[pzero_prop] = pd_series(gdf_index.loc[i, shp_col])[0]
                     curr_obj_dict["topology"] = "VertexSet"
                     curr_obj_dict["vtk_obj"] = vtk_obj
                     # Add a coordinate column in the gdf_index dataframe
@@ -135,23 +170,33 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
                         outXYZ = np_column_stack((outXYZ, outZ))
                     # print(np_shape(outXYZ))
                     curr_obj_dict["vtk_obj"].points = outXYZ
-                    if "dir" in column_names:
-                        direction = pd_series((gdf_index.loc[i, "dir"] + 90) % 360)
-                        curr_obj_dict["vtk_obj"].set_point_data(
-                            "dip_dir", direction.values
-                        )
-                    if "dip_dir" in column_names:
-                        curr_obj_dict["vtk_obj"].set_point_data(
-                            "dip_dir", pd_series(gdf_index.loc[i, "dip_dir"]).values
-                        )
-                    if "dip":
-                        curr_obj_dict["vtk_obj"].set_point_data(
-                            "dip", pd_series(gdf_index.loc[i, "dip"]).values
-                        )
-                    if "dip" in column_names and (
-                        "dir" in column_names or "dip_dir" in column_names
-                    ):
-                        # print(type(curr_obj_dict["vtk_obj"].get_point_data('dip')))
+
+                    # Handle dip data using mapping
+                    dip_col = orient_map.get("dip")
+                    if dip_col and dip_col in column_names:
+                        # Use pd_series constructor which handles both scalar and Series correctly
+                        dip_values = pd_series(gdf_index.loc[i, dip_col]).values
+                        curr_obj_dict["vtk_obj"].set_point_data("dip", dip_values)
+
+                    # Handle dip_dir or dir (dir needs conversion: dir + 90° = dip_dir)
+                    has_angle_data = False
+                    dir_col = orient_map.get("dir")
+                    if dir_col and dir_col in column_names:
+                        # Convert dir to dip_dir by adding 90 degrees (as in original)
+                        dir_values = pd_series(gdf_index.loc[i, dir_col])
+                        direction = (dir_values + 90) % 360
+                        curr_obj_dict["vtk_obj"].set_point_data("dip_dir", direction.values)
+                        has_angle_data = True
+                    else:
+                        # Try dip_dir directly
+                        dip_dir_col = orient_map.get("dip_dir")
+                        if dip_dir_col and dip_dir_col in column_names:
+                            dip_dir_values = pd_series(gdf_index.loc[i, dip_dir_col]).values
+                            curr_obj_dict["vtk_obj"].set_point_data("dip_dir", dip_dir_values)
+                            has_angle_data = True
+
+                    # Calculate normals if we have both dip and angle data
+                    if dip_col and dip_col in column_names and has_angle_data:
                         normals = dip_directions2normals(
                             curr_obj_dict["vtk_obj"].get_point_data("dip"),
                             curr_obj_dict["vtk_obj"].get_point_data("dip_dir"),
@@ -193,29 +238,17 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
                     self.geol_coll.add_entity_from_dict(curr_obj_dict)
                     del curr_obj_dict
             else:
-                print("Incomplete data. At least the feature property must be present")
-        else:
-            print("Only Point and Line geometries can be imported - aborting.")
-            return  # except:  #     self.print_terminal("SHP file not recognized ERROR.")
+                print("Incomplete data. Feature property is required but not found in mapping.")
     elif collection == "Fluid contacts":
         print(gdf.geom_type[0])
         if (gdf.geom_type[0] == "LineString") or (
             gdf.geom_type[0] == "MultiLineString"
         ):
             for row in range(gdf.shape[0]):
-                # print("____ROW: ", row)
-                # print("geometry type: ", gdf.geom_type[row])
                 curr_obj_dict = deepcopy(FluidCollection.entity_dict)
-                # if gdf.is_valid[row] and not gdf.is_empty[row]:
-                # try:
-                if "name" in column_names:
-                    curr_obj_dict["name"] = gdf.loc[row, "name"]
-                if "role" in column_names:
-                    curr_obj_dict["role"] = gdf.loc[row, "role"]
-                if "feature" in column_names:
-                    curr_obj_dict["feature"] = gdf.loc[row, "feature"]
-                if "scenario" in column_names:
-                    curr_obj_dict["scenario"] = gdf.loc[row, "scenario"]
+                for pzero_prop, shp_col in props_map.items():
+                    if shp_col in column_names:
+                        curr_obj_dict[pzero_prop] = gdf.loc[row, shp_col]
                 curr_obj_dict["topology"] = "PolyLine"
                 curr_obj_dict["vtk_obj"] = PolyLine()
 
@@ -253,25 +286,20 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
                 #     print("Invalid object")
                 del curr_obj_dict
         elif gdf.geom_type[0] == "Point":
-            if "feature" in column_names:
-                gdf_index = gdf.set_index("feature")
+            feature_col = props_map.get("feature")
+            if feature_col and feature_col in column_names:
+                gdf_index = gdf.set_index(feature_col)
                 feat_list = set(gdf_index.index)
                 for i in feat_list:
                     curr_obj_dict = deepcopy(FluidCollection.entity_dict)
-                    if "dip" in gdf.columns:
-                        vtk_obj = Attitude()
-                    else:
-                        vtk_obj = VertexSet()
-                    if "name" in column_names:
-                        curr_obj_dict["name"] = pd_series(gdf_index.loc[i, "name"])[0]
-                    if "role" in column_names:
-                        curr_obj_dict["role"] = pd_series(gdf_index.loc[i, "role"])[0]
-                    if "feature" in column_names:
-                        curr_obj_dict["feature"] = i
-                    if "scenario" in column_names:
-                        curr_obj_dict["scenario"] = pd_series(
-                            gdf_index.loc[i, "scenario"]
-                        )[0]
+                    dip_col = orient_map.get("dip")
+                    vtk_obj = Attitude() if (dip_col and dip_col in gdf.columns) else VertexSet()
+                    for pzero_prop, shp_col in props_map.items():
+                        if shp_col in column_names:
+                            if pzero_prop == "feature":
+                                curr_obj_dict["feature"] = i
+                            else:
+                                curr_obj_dict[pzero_prop] = pd_series(gdf_index.loc[i, shp_col])[0]
                     curr_obj_dict["topology"] = "VertexSet"
                     curr_obj_dict["vtk_obj"] = vtk_obj
                     # Add a coordinate column in the gdf_index dataframe
@@ -312,26 +340,16 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
                         self.fluid_coll.add_entity_from_dict(curr_obj_dict)
                         del curr_obj_dict
             else:
-                print("Incomplete data. At least the feature property must be present")
-        else:
-            print("Only Point and Line geometries can be imported - aborting.")
-            return  # except:  #     self.print_terminal("SHP file not recognized ERROR.")
+                print("Incomplete data. Feature property is required but not found in mapping.")
     elif collection == "Background data":
         if (gdf.geom_type[0] == "LineString") or (
             gdf.geom_type[0] == "MultiLineString"
         ):
             for row in range(gdf.shape[0]):
-                # print("____ROW: ", row)
-                # print("geometry type: ", gdf.geom_type[row])
                 curr_obj_dict = deepcopy(BackgroundCollection.entity_dict)
-                # if gdf.is_valid[row] and not gdf.is_empty[row]:
-                # try:
-                if "name" in column_names:
-                    curr_obj_dict["name"] = gdf.loc[row, "name"]
-                if "role" in column_names:
-                    curr_obj_dict["role"] = gdf.loc[row, "role"]
-                if "feature" in column_names:
-                    curr_obj_dict["feature"] = gdf.loc[row, "feature"]
+                for pzero_prop, shp_col in props_map.items():
+                    if shp_col in column_names:
+                        curr_obj_dict[pzero_prop] = gdf.loc[row, shp_col]
                 curr_obj_dict["topology"] = "PolyLine"
                 curr_obj_dict["vtk_obj"] = PolyLine()
                 if gdf.geom_type[row] == "LineString":
@@ -344,9 +362,12 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
                     # print("outXYZ:\n", outXYZ)
                     curr_obj_dict["vtk_obj"].points = outXYZ
                     curr_obj_dict["vtk_obj"].auto_cells()
-                    curr_obj_dict["vtk_obj"].set_field_data(
-                        name="name", data=gdf["label"].values
-                    )
+                    # Handle label field if present in mapping
+                    label_col = props_map.get("label")
+                    if label_col and label_col in column_names:
+                        curr_obj_dict["vtk_obj"].set_field_data(
+                            name="name", data=gdf[label_col].values
+                        )
                 elif gdf.geom_type[row] == "MultiLineString":
                     outXYZ_list = np_array(gdf.loc[row].geometry)
                     vtkappend = vtkAppendPolyData()
@@ -363,35 +384,30 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
                         temp_vtk.auto_cells()
                         vtkappend.AddInputData(temp_vtk)
                     vtkappend.Update()
-                    if "label" in column_names:
+                    # Handle label field if present in mapping
+                    label_col = props_map.get("label")
+                    if label_col and label_col in column_names:
                         out_vtk = PolyLine()
                         out_vtk.ShallowCopy(vtkappend.GetOutput())
-                        out_vtk.set_field_data(name="name", data=gdf["label"].values)
+                        out_vtk.set_field_data(name="name", data=gdf[label_col].values)
                         curr_obj_dict["vtk_obj"].ShallowCopy(out_vtk)
                     else:
                         curr_obj_dict["vtk_obj"].ShallowCopy(vtkappend.GetOutput())
-                # Create entity from the dictionary and run left_right.
-                if curr_obj_dict["vtk_obj"].points_number > 0:
-                    self.backgrnd_coll.add_entity_from_dict(curr_obj_dict)
-                else:
-                    print("Empty object")
-                # else:
-                # except:
-                #     print("Invalid object")
-                del curr_obj_dict
+            # Points
         elif gdf.geom_type[0] == "Point":
-            if "feature" in column_names:
-                gdf_index = gdf.set_index("feature")
+            feature_col = props_map.get("feature")
+            if feature_col and feature_col in column_names:
+                gdf_index = gdf.set_index(feature_col)
                 feat_list = set(gdf_index.index)
                 for i in feat_list:
                     curr_obj_dict = deepcopy(BackgroundCollection.entity_dict)
                     vtk_obj = VertexSet()
-                    if "name" in column_names:
-                        curr_obj_dict["name"] = pd_series(gdf_index.loc[i, "name"])[0]
-                    if "role" in column_names:
-                        curr_obj_dict["role"] = pd_series(gdf_index.loc[i, "role"])[0]
-                    if "feature" in column_names:
-                        curr_obj_dict["feature"] = i
+                    for pzero_prop, shp_col in props_map.items():
+                        if shp_col in column_names:
+                            if pzero_prop == "feature":
+                                curr_obj_dict["feature"] = i
+                            else:
+                                curr_obj_dict[pzero_prop] = pd_series(gdf_index.loc[i, shp_col])[0]
                     curr_obj_dict["topology"] = "VertexSet"
                     curr_obj_dict["vtk_obj"] = vtk_obj
                     # Add a coordinate column in the gdf_index dataframe
@@ -407,38 +423,13 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
                         outXYZ = np_column_stack((outXYZ, outZ))
                     curr_obj_dict["vtk_obj"].points = outXYZ
                     curr_obj_dict["vtk_obj"].auto_cells()
-                    if "label" in column_names:
+                    # Handle label field if present in mapping
+                    label_col = props_map.get("label")
+                    if label_col and label_col in column_names:
                         curr_obj_dict["vtk_obj"].set_field_data(
-                            name="name", data=np_asarray(gdf_index.loc[i, "label"])
+                            name="name", data=np_asarray(gdf_index.loc[i, label_col])
                         )
                     else:
                         curr_obj_dict["vtk_obj"].set_field_data(name="name")
-                    if curr_obj_dict["vtk_obj"].points_number > 1:
-                        # curr_obj_dict["vtk_obj"].auto_cells()
-                        # print(curr_obj_dict["vtk_obj"].point_data_keys)
-                        properties_names = curr_obj_dict["vtk_obj"].point_data_keys
-                        properties_components = [
-                            curr_obj_dict["vtk_obj"].get_point_data_shape(key)[1]
-                            for key in properties_names
-                        ]
-                        curr_obj_dict["properties_names"] = properties_names
-                        curr_obj_dict["properties_components"] = properties_components
-                        self.backgrnd_coll.add_entity_from_dict(curr_obj_dict)
-                        del curr_obj_dict
-                    elif curr_obj_dict["vtk_obj"].points_number > 0:
-                        # curr_obj_dict["vtk_obj"].auto_cells()
-                        # print(curr_obj_dict["vtk_obj"].point_data_keys)
-                        properties_names = curr_obj_dict["vtk_obj"].point_data_keys
-                        properties_components = [
-                            curr_obj_dict["vtk_obj"].get_point_data_shape(key)[1]
-                            for key in properties_names
-                        ]
-                        curr_obj_dict["properties_names"] = properties_names
-                        curr_obj_dict["properties_components"] = properties_components
-                        self.backgrnd_coll.add_entity_from_dict(curr_obj_dict)
-                        del curr_obj_dict
             else:
-                print("Incomplete data. At least the feature property must be present")
-        else:
-            print("Only Point and Line geometries can be imported - aborting.")
-            return  # except:  #     self.print_terminal("SHP file not recognized ERROR.")
+                self.print_terminal("Incomplete data. Feature property is required but not found in mapping.")

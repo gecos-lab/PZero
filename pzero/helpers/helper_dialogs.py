@@ -1,8 +1,6 @@
 """helper_dialogs.py
 PZero© Andrea Bistacchi"""
 
-from difflib import SequenceMatcher
-
 from os import path as os_path
 
 from PySide6.QtCore import QEventLoop, Qt, QAbstractTableModel
@@ -1004,6 +1002,199 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
         self.close()
         self.loop.quit()
 
+class ShapefileAssignmentDialog(QMainWindow):
+    """Dialog to assign shapefile attributes to PZero properties.
+    Similar to import_dialog but simplified for shapefile data without preview table."""
+
+    def __init__(self, parent=None, shapefile_df=None, topology_type=None, include_label=False, *args, **kwargs):
+        super(ShapefileAssignmentDialog, self).__init__(parent, *args, **kwargs)
+        self.loop = QEventLoop()
+        self.parent = parent
+        self.shapefile_df = shapefile_df
+        self.topology_type = topology_type
+        self.include_label = include_label
+        self.attribute_mapping = {}
+        self.result = None
+
+        # Define required and optional fields based on topology
+        self.required_fields, self.optional_fields = self._get_field_definitions()
+
+        self.setWindowTitle(f"Assign Shapefile Attributes - {topology_type}")
+        self.setup_ui()
+        self.auto_assign_attributes()
+
+    def _get_field_definitions(self):
+        """Define required and optional fields based on topology type."""
+        required = ["feature"]
+        optional = ["name", "role"]
+
+        # label is only included when explicitly requested (e.g., Background data)
+        if self.include_label:
+            optional.append("label")
+
+        if self.topology_type == "Point":
+            # For points we need dip and either dip_dir OR dir (as in original implementation)
+            required.extend(["dip"])
+            optional.extend(["dip_dir", "dir"])
+
+        return required, optional
+
+    def setup_ui(self):
+        """Create the UI layout."""
+        central_widget = QWidget()
+        self.setCentralWidget(central_widget)
+        main_layout = QGridLayout(central_widget)
+
+        # Instructions
+        instruction_label = QLabel(
+            f"<b>Assign shapefile attributes to PZero properties</b><br>"
+            f"Topology: {self.topology_type}<br>"
+            f"Required fields are marked with *"
+        )
+        main_layout.addWidget(instruction_label, 0, 0, 1, 3)
+
+        # Header row
+        row = 1
+        header_pzero = QLabel("<b>PZero Property</b>")
+        header_arrow = QLabel("<b>←</b>")
+        header_arrow.setAlignment(Qt.AlignCenter)
+        header_shapefile = QLabel("<b>Shapefile Column</b>")
+        main_layout.addWidget(header_pzero, row, 0)
+        main_layout.addWidget(header_arrow, row, 1)
+        main_layout.addWidget(header_shapefile, row, 2)
+        row += 1
+
+        # Create combo boxes for each field
+        self.combo_boxes = {}
+        self.field_labels = {}  # Store labels to update them dynamically
+        self.user_defined_lines = {}
+
+        shapefile_columns = ["<none>"] + list(self.shapefile_df.columns)
+
+        # Required fields
+        for field in self.required_fields:
+            label = QLabel(f"<b>{field} *</b>")
+            arrow_label = QLabel("←")
+            arrow_label.setAlignment(Qt.AlignCenter)
+            combo = QComboBox()
+            combo.addItems(shapefile_columns)
+            combo.setObjectName(f"combo_{field}")
+            combo.currentTextChanged.connect(lambda text, f=field, lbl=label: self._on_combo_changed(f, text, lbl))
+
+            main_layout.addWidget(label, row, 0)
+            main_layout.addWidget(arrow_label, row, 1)
+            main_layout.addWidget(combo, row, 2)
+            self.combo_boxes[field] = combo
+            self.field_labels[field] = label
+            row += 1
+
+        # Optional fields
+        optional_separator = QLabel("<b>Optional fields:</b>")
+        main_layout.addWidget(optional_separator, row, 0, 1, 3)
+        row += 1
+
+        for field in self.optional_fields:
+            label = QLabel(f"{field}")
+            arrow_label = QLabel("←")
+            arrow_label.setAlignment(Qt.AlignCenter)
+            combo = QComboBox()
+            combo.addItems(shapefile_columns)
+            combo.setObjectName(f"combo_{field}")
+            combo.currentTextChanged.connect(lambda text, f=field, lbl=label: self._on_combo_changed(f, text, lbl))
+
+            main_layout.addWidget(label, row, 0)
+            main_layout.addWidget(arrow_label, row, 1)
+            main_layout.addWidget(combo, row, 2)
+            self.combo_boxes[field] = combo
+            self.field_labels[field] = label
+            row += 1
+
+        # Buttons
+        from PySide6.QtWidgets import QDialogButtonBox
+        button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        button_box.accepted.connect(self._validate_and_accept)
+        button_box.rejected.connect(self.reject)
+        main_layout.addWidget(button_box, row, 0, 1, 3)
+
+        self.resize(600, 450)
+
+    def auto_assign_attributes(self):
+        """Auto-assign shapefile columns to PZero properties using exact (case-insensitive) match only."""
+        shapefile_columns = list(self.shapefile_df.columns)
+
+        # Combine required and optional for matching
+        all_fields = self.required_fields + self.optional_fields
+
+        # Exact, case-insensitive match only (no fuzzy, no char removal)
+        for shp_col in shapefile_columns:
+            clean_col = str(shp_col).strip().lower()
+            for field in all_fields:
+                if clean_col == field.strip().lower():
+                    current_assignment = self.combo_boxes[field].currentText()
+                    if current_assignment == "<none>":
+                        self.combo_boxes[field].setCurrentText(shp_col)
+                        self.attribute_mapping[field] = shp_col
+                    break
+
+    def _on_combo_changed(self, field, text, label):
+        """Handle combo box changes."""
+        if text == "<none>":
+            if field in self.attribute_mapping:
+                del self.attribute_mapping[field]
+        else:
+            self.attribute_mapping[field] = text
+
+
+    def _validate_and_accept(self):
+        """Validate that all required fields are assigned before accepting."""
+        missing_fields = []
+
+        for field in self.required_fields:
+            combo = self.combo_boxes[field]
+            if combo.currentText() == "<none>":
+                missing_fields.append(field)
+
+        # Special validation for Point topology - need either dip_dir or dir
+        if self.topology_type == "Point":
+            has_dip_dir = (self.combo_boxes.get("dip_dir") and
+                          self.combo_boxes["dip_dir"].currentText() != "<none>")
+            has_dir = (self.combo_boxes.get("dir") and
+                      self.combo_boxes["dir"].currentText() != "<none>")
+
+            if not (has_dip_dir or has_dir):
+                missing_fields.append("dip_dir or dir")
+
+        if missing_fields:
+            from PySide6.QtWidgets import QMessageBox
+            QMessageBox.warning(
+                self,
+                "Missing Required Fields",
+                f"The following required fields are not assigned:\n\n" +
+                "\n".join(f"- {field}" for field in missing_fields)
+            )
+            return
+
+        self.accept()
+
+    def accept(self):
+        """Accept the dialog and return the mapping."""
+        self.result = self.attribute_mapping.copy()
+
+
+        self.close()
+        self.loop.quit()
+
+    def reject(self):
+        """Reject the dialog."""
+        self.result = None
+        self.close()
+        self.loop.quit()
+
+    def exec(self):
+        """Execute the dialog and return the result."""
+        self.show()
+        self.loop.exec_()
+        return self.result
 
 class NavigatorWidget(QMainWindow, Ui_NavWindow):
     """Navigator widget prototype for Xsections. This widget can be used to
