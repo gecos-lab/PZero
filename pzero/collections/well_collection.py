@@ -78,7 +78,9 @@ class WellCollection(BaseCollection):
         # collection, and not with a signal telling the legend to be updated by scanning the whole collection.
         name = entity_dict["name"]
         # The well legend uses 'Loc ID' as the key column (see Legend.well_legend_dict)
-        if self.parent.well_legend_df.loc[self.parent.well_legend_df["Loc ID"] == name].empty:
+        if self.parent.well_legend_df.loc[
+            self.parent.well_legend_df["Loc ID"] == name
+        ].empty:
             R, G, B = np_round(np_random.random(3) * 255)
             # New Pandas >= 2.0.0
             self.parent.well_legend_df = pd_concat(

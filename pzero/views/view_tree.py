@@ -739,7 +739,7 @@ class CustomTreeWidget(QTreeWidget):
         action = menu.exec_(self.viewport().mapToGlobal(position))
         if action == toggle_action:
             for item in self.selectedItems():
-                new_state = (   
+                new_state = (
                     Qt.Checked if item.checkState(0) == Qt.Unchecked else Qt.Unchecked
                 )
                 item.setCheckState(0, new_state)
