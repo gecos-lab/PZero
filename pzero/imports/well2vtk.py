@@ -73,9 +73,7 @@ def well2vtk(self, path=None):
                 tr_data = np_full(shape=(points, 3), fill_value=np_nan)
 
                 try:
-                    color_dict = {
-                        k: np_random.rand(3) for k in pd_unique(prop[key])
-                    }
+                    color_dict = {k: np_random.rand(3) for k in pd_unique(prop[key])}
                 except Exception:
                     print("No key found")
                 else:
@@ -84,9 +82,9 @@ def well2vtk(self, path=None):
                         end_idx = np_argmin(np_abs(arr - end))
 
                         if key == "GEOLOGY":
-                            marker_pos = well_obj.trace.points[
-                                start_idx, :
-                            ].reshape(-1, 3)
+                            marker_pos = well_obj.trace.points[start_idx, :].reshape(
+                                -1, 3
+                            )
                             marker_obj = VertexSet()
                             marker_obj.points = marker_pos
                             marker_obj.auto_cells()
@@ -120,9 +118,7 @@ def well2vtk(self, path=None):
                                 )["color_B"]
                                 / 255
                             )
-                            color_dict[value] = np_array(
-                                [color_R, color_G, color_B]
-                            )
+                            color_dict[value] = np_array([color_R, color_G, color_B])
                             del marker_obj_dict
                         color_val = color_dict[value]
 
