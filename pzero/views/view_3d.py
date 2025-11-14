@@ -716,6 +716,33 @@ class View3D(ViewVTK):
             self.plotter.camera_position = camera_position
         return this_actor
 
+    def _refresh_well_trace_properties(self):
+        """
+        Re-render all well property actors so they reflect the current trace visualization method.
+        """
+        if not hasattr(self, "actors_df") or self.actors_df.empty:
+            return
+        try:
+            well_rows = self.actors_df[
+                (self.actors_df["collection"] == "well_coll")
+            ]
+        except Exception:
+            return
+
+        if well_rows.empty:
+            return
+
+        for _, row in well_rows.iterrows():
+            prop = row.get("show_property")
+            if prop in (None, "none", "Marker", "Annotations"):
+                continue
+            try:
+                self.toggle_property(
+                    collection_name="well_coll", uid=row["uid"], prop_text=prop
+                )
+            except Exception:
+                continue
+
     def change_bore_vis(self, method):
         actors = set(self.plotter.renderer.actors.copy())
         wells = set(self.parent.well_coll.get_uids)
@@ -723,8 +750,10 @@ class View3D(ViewVTK):
         well_actors = actors.intersection(wells)
         if method == "trace":
             self.trace_method = method
+            self._refresh_well_trace_properties()
         elif method == "cylinder":
             self.trace_method = method
+            self._refresh_well_trace_properties()
         elif method == "geo":
             for uid in well_actors:
                 if "_geo" in uid:

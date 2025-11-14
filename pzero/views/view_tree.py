@@ -16,7 +16,7 @@ from PySide6.QtWidgets import (
     QComboBox,
 )
 from PySide6.QtCore import Qt, Signal, QMimeData
-from PySide6.QtGui import QDrag
+from PySide6.QtGui import QDrag, QActionGroup
 
 
 MESH_SLICER_COLLECTION_PREFIXES = {
@@ -735,6 +735,7 @@ class CustomTreeWidget(QTreeWidget):
             self.view, "show_mesh_slicer_dialog"
         ):
             open_mesh_slicer_action = menu.addAction("Open Mesh Slicer")
+        well_view_actions = self._create_well_view_mode_menu(menu)
         action = menu.exec_(self.viewport().mapToGlobal(position))
         if action == toggle_action:
             for item in self.selectedItems():
@@ -747,6 +748,58 @@ class CustomTreeWidget(QTreeWidget):
             self.emit_checkbox_toggled()
         if action == open_mesh_slicer_action:
             self._open_mesh_slicer_for_item(item)
+        if well_view_actions:
+            if action == well_view_actions.get("trace"):
+                self._set_borehole_view_mode("trace")
+            elif action == well_view_actions.get("cylinder"):
+                self._set_borehole_view_mode("cylinder")
+
+    def _create_well_view_mode_menu(self, parent_menu):
+        """
+        Create the submenu with borehole visualization options when right-clicking wells.
+        """
+        if not self._can_change_borehole_view_mode():
+            return None
+
+        parent_menu.addSeparator()
+        submenu = parent_menu.addMenu("Borehole View Mode")
+        action_group = QActionGroup(submenu)
+        action_group.setExclusive(True)
+
+        current_method = getattr(self.view, "trace_method", "trace")
+
+        trace_action = submenu.addAction("Trace (flag)")
+        trace_action.setCheckable(True)
+        trace_action.setChecked(current_method == "trace")
+        action_group.addAction(trace_action)
+
+        cylinder_action = submenu.addAction("Cylinder")
+        cylinder_action.setCheckable(True)
+        cylinder_action.setChecked(current_method == "cylinder")
+        action_group.addAction(cylinder_action)
+
+        return {"trace": trace_action, "cylinder": cylinder_action}
+
+    def _can_change_borehole_view_mode(self):
+        """
+        Return True when the current context supports borehole view changes.
+        """
+        return (
+            getattr(self.collection, "collection_name", None) == "well_coll"
+            and hasattr(self.view, "change_bore_vis")
+        )
+
+    def _set_borehole_view_mode(self, method):
+        """
+        Apply the requested borehole visualization method on the active view.
+        """
+        if not self._can_change_borehole_view_mode():
+            return
+        try:
+            self.view.change_bore_vis(method)
+        except Exception as exc:
+            if hasattr(self.view, "print_terminal"):
+                self.view.print_terminal(f"Failed to set borehole view mode: {exc}")
 
     def emit_checkbox_toggled(self):
         """
