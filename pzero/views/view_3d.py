@@ -723,9 +723,7 @@ class View3D(ViewVTK):
         if not hasattr(self, "actors_df") or self.actors_df.empty:
             return
         try:
-            well_rows = self.actors_df[
-                (self.actors_df["collection"] == "well_coll")
-            ]
+            well_rows = self.actors_df[(self.actors_df["collection"] == "well_coll")]
         except Exception:
             return
 
