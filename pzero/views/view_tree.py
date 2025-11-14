@@ -784,10 +784,9 @@ class CustomTreeWidget(QTreeWidget):
         """
         Return True when the current context supports borehole view changes.
         """
-        return (
-            getattr(self.collection, "collection_name", None) == "well_coll"
-            and hasattr(self.view, "change_bore_vis")
-        )
+        return getattr(
+            self.collection, "collection_name", None
+        ) == "well_coll" and hasattr(self.view, "change_bore_vis")
 
     def _set_borehole_view_mode(self, method):
         """
