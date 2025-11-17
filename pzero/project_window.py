@@ -1,11 +1,15 @@
 """project_window.py
 PZero© Andrea Bistacchi"""
 
+import importlib
 import os
+import sys
 
 from copy import deepcopy
 
 from datetime import datetime
+from pathlib import Path
+from typing import Optional
 
 from PySide6.QtCore import Signal as pyqtSignal
 from PySide6.QtCore import QObject
@@ -112,6 +116,12 @@ from .three_d_surfaces import (
 
 from pzero.views.dock_window import DockWindow
 from .processing.CRS import CRS_list, CRS_transform_selected
+
+
+PYMESHIT_MODULE_NAME = "Pymeshit_workflow_gui"
+PYMESHIT_CLASS_NAME = "MeshItWorkflowGUI"
+PYMESHIT_ENTRY_FILE = "Pymeshit_workflow_gui.py"
+PYMESHIT_ENV_VAR = "PZERO_PYMESHIT_PATH"
 
 
 class ProjectSignals(QObject):
@@ -868,41 +878,91 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 octree.BuildLocator()
                 entity.locator = octree
 
+    def _locate_pymeshit_sources(self) -> Optional[Path]:
+        """Return the directory containing the Pymeshit workflow GUI entry point."""
+        candidate_dirs = []
+
+        env_path = os.getenv(PYMESHIT_ENV_VAR)
+        if env_path:
+            env_candidate = Path(env_path).expanduser()
+            if env_candidate.is_file():
+                env_candidate = env_candidate.parent
+            candidate_dirs.append(env_candidate)
+
+        project_root = Path(__file__).resolve().parents[1]
+        repo_parent = project_root.parent
+        candidate_dirs.extend(
+            [
+                project_root / "pymeshit_app",
+                project_root / "Pymeshit",
+                project_root / "MeshIt",
+                project_root / "MeshIt-master",
+                repo_parent / "Pymeshit",
+                repo_parent / "MeshIt",
+                repo_parent / "MeshIt-master",
+            ]
+        )
+
+        checked = set()
+        for candidate in candidate_dirs:
+            if not candidate:
+                continue
+            candidate = candidate.expanduser().resolve()
+            if candidate in checked:
+                continue
+            checked.add(candidate)
+            if (candidate / PYMESHIT_ENTRY_FILE).exists():
+                return candidate
+        return None
+
     def open_pymeshit_gui(self):
-        """Open the Pymeshit workflow GUI"""
+        """Launch the MeshIt workflow GUI as a mini-tool from the interpolation menu."""
+        pymeshit_dir = self._locate_pymeshit_sources()
+        if pymeshit_dir is None:
+            message = (
+                "Pymeshit sources were not found. Place the 'MeshIt-master' folder next to "
+                "PZero or set the PZERO_PYMESHIT_PATH environment variable."
+            )
+            self.print_terminal(message)
+            QMessageBox.warning(self, "Pymeshit not found", message)
+            return
+
+        sys_path_entry = str(pymeshit_dir)
+        if sys_path_entry not in sys.path:
+            sys.path.insert(0, sys_path_entry)
+
+        existing_window = getattr(self, "_pymeshit_window", None)
+        if existing_window and existing_window.isVisible():
+            existing_window.raise_()
+            existing_window.activateWindow()
+            return
+
         try:
-            import sys
-            import os
-            from PyQt5.QtWidgets import QApplication
+            pymeshit_module = importlib.import_module(PYMESHIT_MODULE_NAME)
+            meshit_gui_cls = getattr(pymeshit_module, PYMESHIT_CLASS_NAME)
+        except (ImportError, AttributeError) as exc:
+            error_msg = f"Error importing Pymeshit GUI: {exc}"
+            self.print_terminal(error_msg)
+            QMessageBox.critical(self, "Pymeshit import error", error_msg)
+            return
 
-            # Add the Pymeshit directory to Python path to ensure proper imports
-            pymeshit_dir = os.path.join(os.path.dirname(__file__), 'Pymeshit')
-            if pymeshit_dir not in sys.path:
-                sys.path.insert(0, pymeshit_dir)
-
-            # Import the Pymeshit GUI
-            from Pymeshit_workflow_gui import MeshItWorkflowGUI
-
-            # Create QApplication if it doesn't exist (needed for standalone GUI)
-            app = QApplication.instance()
-            if app is None:
-                app = QApplication(sys.argv)
-
-            # Create and show the Pymeshit GUI
-            pymeshit_window = MeshItWorkflowGUI()
-            pymeshit_window._ensure_vtk_cleanup_on_exit()
-            pymeshit_window.show()
-
+        try:
+            self._pymeshit_window = meshit_gui_cls()
+            self._pymeshit_window.destroyed.connect(
+                lambda _: setattr(self, "_pymeshit_window", None)
+            )
+            cleanup_hook = getattr(
+                self._pymeshit_window, "_ensure_vtk_cleanup_on_exit", None
+            )
+            if callable(cleanup_hook):
+                cleanup_hook()
+            self._pymeshit_window.show()
             self.print_terminal("Pymeshit GUI opened successfully")
-
-        except ImportError as e:
-            error_msg = f"Error: Could not import Pymeshit modules: {e}"
+        except Exception as exc:
+            error_msg = f"Error opening Pymeshit GUI: {exc}"
             self.print_terminal(error_msg)
-            print(error_msg)  # Also print to console for debugging
-        except Exception as e:
-            error_msg = f"Error opening Pymeshit GUI: {e}"
-            self.print_terminal(error_msg)
-            print(error_msg)  # Also print to console for debugging
+            QMessageBox.critical(self, "Pymeshit error", error_msg)
+            self._pymeshit_window = None
 
     def decimate_pc_dialog(self):
         if self.selected_uids:
