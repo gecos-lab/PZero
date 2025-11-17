@@ -13,7 +13,7 @@ import time
 import re
 
 # import List
-from typing import List, Dict, Tuple, Optional, Any
+from typing import List, Dict, Tuple, Optional, Any, TYPE_CHECKING
 # Import PySide6
 from PySide6.QtWidgets import QAbstractItemView
 from Pymeshit.intersection_utils import align_intersections_to_convex_hull, Vector3D, Intersection, refine_intersection_line_by_length, insert_triple_points, refine_hull_with_interpolation
@@ -29,7 +29,8 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QLabel, QPush
                             QSplitter, QDialog, QFormLayout, QButtonGroup, QMenu,
                             QListWidget, QColorDialog, QListWidgetItem, QProgressDialog,
                             QSpacerItem, QTableWidget, QTableWidgetItem,
-                            QTreeWidget, QTreeWidgetItem, QScrollArea)
+                            QTreeWidget, QTreeWidgetItem, QScrollArea, QDialogButtonBox,
+                            QHeaderView)
 from PySide6.QtGui import QFont, QIcon, QColor, QPalette, QPixmap, QAction, QActionGroup
 from PySide6.QtCore import Qt, QSize, Signal, QObject, QThread, QTimer, QSettings
 # Add these imports at the top of meshit_workflow_gui.py
@@ -64,6 +65,12 @@ if not logger.handlers:
     formatter = logging.Formatter('%(name)s - %(levelname)s - %(message)s')
     console_handler.setFormatter(formatter)
     logger.addHandler(console_handler)
+
+if TYPE_CHECKING:  # pragma: no cover - type checking only
+    from pzero.pymeshit_app.pzero_bridge import (
+        PZeroPymeshitBridge,
+        PZeroEntityRecord,
+    )
 
 # Add the current directory to the path
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -216,7 +223,7 @@ class MeshItWorkflowGUI(QMainWindow):
         '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf'
     ]
 
-    def __init__(self):
+    def __init__(self, pzero_bridge=None):
         """Initialize the GUI"""
         super().__init__()
         
@@ -232,6 +239,8 @@ class MeshItWorkflowGUI(QMainWindow):
         self.datasets = []  # List to hold dataset dictionaries
         self.current_dataset_index = -1  # Index of the currently active dataset
         self._color_index = 0 # For assigning colors to datasets
+        self.pzero_bridge = None
+        self._pending_pzero_bridge = pzero_bridge
         
         self.plotters = {}
         self._updating_coordinates = False  # Flag to prevent recursive updates during coordinate editing
@@ -305,6 +314,10 @@ class MeshItWorkflowGUI(QMainWindow):
         self.tetra_mesh_tab = QWidget()
         self.notebook.addTab(self.tetra_mesh_tab, "8. Tetra Mesh")
         self._setup_tetra_mesh_tab()
+
+        if self._pending_pzero_bridge:
+            self.attach_pzero_bridge(self._pending_pzero_bridge)
+            self._pending_pzero_bridge = None
 
         # Placeholder for the refine_mesh_tab plotter
         self.refine_mesh_plotter = None
@@ -1128,6 +1141,13 @@ class MeshItWorkflowGUI(QMainWindow):
         load_multiple_btn.setToolTip("Load points from multiple files as separate datasets")
         load_multiple_btn.clicked.connect(self.load_multiple_files)
         file_layout.addWidget(load_multiple_btn)
+
+        self.load_from_pzero_btn = QPushButton("Load From PZero...")
+        self.load_from_pzero_btn.setToolTip("Send datasets from the active PZero project directly into PyMeshIt")
+        self.load_from_pzero_btn.clicked.connect(self._open_pzero_loader_dialog)
+        bridge_ready = bool(self.pzero_bridge or self._pending_pzero_bridge)
+        self.load_from_pzero_btn.setEnabled(bridge_ready)
+        file_layout.addWidget(self.load_from_pzero_btn)
         
         
         
@@ -7946,6 +7966,130 @@ segmentation, triangulation, and visualization.
         """Remove the active dataset"""
         if 0 <= self.current_dataset_index < len(self.datasets):
             self._remove_dataset(self.current_dataset_index)
+
+    # ------------------------------------------------------------------ #
+    # Integration with PZero
+    # ------------------------------------------------------------------ #
+    def attach_pzero_bridge(self, bridge):
+        """Attach or refresh the live PZero data bridge."""
+        self.pzero_bridge = bridge
+        if hasattr(self, "load_from_pzero_btn"):
+            self.load_from_pzero_btn.setEnabled(bool(bridge))
+        if bridge:
+            self.statusBar().showMessage("Connected to current PZero project")
+
+    def _open_pzero_loader_dialog(self):
+        """Show a dialog that lets the user pick PZero entities to import."""
+        if not self.pzero_bridge:
+            QMessageBox.information(
+                self,
+                "Unavailable",
+                "Load From PZero is available only when the mini GUI is launched from PZero.",
+            )
+            return
+        try:
+            entity_records = self.pzero_bridge.list_entities()
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.error("Failed to list PZero entities: %s", exc, exc_info=True)
+            QMessageBox.critical(
+                self,
+                "PZero Bridge Error",
+                "Could not list entities from PZero. See logs for details.",
+            )
+            return
+
+        if not entity_records:
+            QMessageBox.information(
+                self,
+                "No Data",
+                "The current PZero project has no entities with point data to import.",
+            )
+            return
+
+        dialog = PZeroEntitySelectionDialog(self, entity_records)
+        if dialog.exec() != QDialog.Accepted:
+            self.statusBar().showMessage("Load From PZero canceled")
+            return
+
+        selected_records = dialog.selected_records()
+        if not selected_records:
+            self.statusBar().showMessage("No PZero entities selected for import")
+            return
+
+        loaded, skipped = self._import_pzero_records(selected_records)
+        if loaded:
+            message = f"Imported {loaded} dataset(s) from PZero"
+            if skipped:
+                message += f" ({skipped} skipped)"
+            self.statusBar().showMessage(message)
+        else:
+            self.statusBar().showMessage("No entities imported from PZero")
+            QMessageBox.warning(
+                self,
+                "Import Failed",
+                "None of the selected PZero entities provided usable point data.",
+            )
+
+    def _import_pzero_records(self, records):
+        """Convert selected PZero entities to datasets."""
+        loaded = 0
+        skipped = 0
+
+        for record in records:
+            try:
+                points = self.pzero_bridge.load_points(
+                    record.collection_key, record.uid
+                )
+            except Exception as exc:  # pragma: no cover - defensive
+                logger.error(
+                    "Failed to load PZero entity %s (%s): %s",
+                    record.uid,
+                    record.name,
+                    exc,
+                    exc_info=True,
+                )
+                skipped += 1
+                continue
+
+            if points is None or len(points) == 0:
+                skipped += 1
+                continue
+
+            dataset_name = self._make_unique_dataset_name(record.name)
+            dataset = {
+                "name": dataset_name,
+                "type": record.topology or "PZERO",
+                "points": points,
+                "visible": True,
+                "color": self._get_next_color(),
+                "source": "PZERO",
+                "collection": record.collection_label,
+                "collection_key": record.collection_key,
+                "uid": record.uid,
+            }
+            self.datasets.append(dataset)
+            loaded += 1
+
+        if loaded:
+            self.current_dataset_index = len(self.datasets) - 1
+            self._update_dataset_list()
+            self._update_statistics()
+            self._visualize_all_points()
+
+        return loaded, skipped
+
+    def _make_unique_dataset_name(self, base_name: str) -> str:
+        """Return a dataset name that does not collide with existing ones."""
+        fallback = base_name or "PZero dataset"
+        existing = {str(d.get("name")) for d in self.datasets if d.get("name")}
+        if fallback not in existing:
+            return fallback
+        counter = 2
+        candidate = f"{fallback} ({counter})"
+        while candidate in existing:
+            counter += 1
+            candidate = f"{fallback} ({counter})"
+        return candidate
     def _clear_visualizations(self):
         """Clear all visualizations"""
         # ... existing clear calls ...
@@ -16281,6 +16425,75 @@ segmentation, triangulation, and visualization.
         except (TypeError, ValueError, IndexError):
             # Handle any conversion errors or invalid point formats
             return False
+
+
+class PZeroEntitySelectionDialog(QDialog):
+    """Dialog that lets the user pick PZero entities to import."""
+
+    def __init__(self, parent, entity_records):
+        super().__init__(parent)
+        self.setWindowTitle("Load From PZero")
+        self.resize(600, 480)
+
+        layout = QVBoxLayout(self)
+        layout.addWidget(
+            QLabel("Select structures or point clouds to import into PyMeshIt:")
+        )
+
+        self.tree = QTreeWidget()
+        self.tree.setColumnCount(4)
+        self.tree.setHeaderLabels(["Collection", "Name", "Type", "Points"])
+        self.tree.setAlternatingRowColors(True)
+        layout.addWidget(self.tree, 1)
+
+        grouped: Dict[str, List["PZeroEntityRecord"]] = {}
+        for record in entity_records:
+            grouped.setdefault(record.collection_label, []).append(record)
+
+        for collection_label, records in grouped.items():
+            parent_item = QTreeWidgetItem([collection_label, "", "", ""])
+            parent_item.setFirstColumnSpanned(True)
+            parent_item.setFlags(Qt.ItemIsEnabled)
+            self.tree.addTopLevelItem(parent_item)
+
+            for record in records:
+                child = QTreeWidgetItem(
+                    [
+                        "",
+                        record.name,
+                        record.topology or "-",
+                        str(record.point_count),
+                    ]
+                )
+                child.setData(0, Qt.UserRole, record)
+                child.setFlags(
+                    Qt.ItemIsEnabled
+                    | Qt.ItemIsSelectable
+                    | Qt.ItemIsUserCheckable
+                )
+                child.setCheckState(0, Qt.Unchecked)
+                parent_item.addChild(child)
+
+            parent_item.setExpanded(True)
+
+        header = self.tree.header()
+        header.setSectionResizeMode(QHeaderView.Stretch)
+
+        button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        button_box.accepted.connect(self.accept)
+        button_box.rejected.connect(self.reject)
+        layout.addWidget(button_box)
+
+    def selected_records(self):
+        """Return the checked child items."""
+        selections = []
+        for index in range(self.tree.topLevelItemCount()):
+            parent = self.tree.topLevelItem(index)
+            for child_index in range(parent.childCount()):
+                child = parent.child(child_index)
+                if child.checkState(0) == Qt.Checked:
+                    selections.append(child.data(0, Qt.UserRole))
+        return selections
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)

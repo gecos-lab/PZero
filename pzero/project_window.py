@@ -2,6 +2,7 @@
 PZero© Andrea Bistacchi"""
 
 import importlib
+import importlib.util
 import os
 import sys
 
@@ -77,6 +78,7 @@ from pzero.imports.shp2vtk import shp2vtk
 from pzero.imports.stl2vtk import vtk2stl, vtk2stl_dilation
 from pzero.imports.well2vtk import well2vtk
 from pzero.ui.project_window_ui import Ui_ProjectWindow
+from pzero.pymeshit_app.pzero_bridge import PZeroPymeshitBridge
 from .entities_factory import (
     VertexSet,
     PolyLine,
@@ -880,7 +882,12 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
 
     def _locate_pymeshit_sources(self) -> Optional[Path]:
         """Return the directory containing the Pymeshit workflow GUI entry point."""
-        candidate_dirs = []
+        pzero_dir = Path(__file__).resolve().parent
+        repo_root = pzero_dir.parent
+
+        bundled_dir = pzero_dir / "pymeshit_app"
+
+        candidate_dirs = [bundled_dir]
 
         env_path = os.getenv(PYMESHIT_ENV_VAR)
         if env_path:
@@ -889,17 +896,14 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 env_candidate = env_candidate.parent
             candidate_dirs.append(env_candidate)
 
-        project_root = Path(__file__).resolve().parents[1]
-        repo_parent = project_root.parent
         candidate_dirs.extend(
             [
-                project_root / "pymeshit_app",
-                project_root / "Pymeshit",
-                project_root / "MeshIt",
-                project_root / "MeshIt-master",
-                repo_parent / "Pymeshit",
-                repo_parent / "MeshIt",
-                repo_parent / "MeshIt-master",
+                pzero_dir / "Pymeshit",
+                pzero_dir / "MeshIt",
+                pzero_dir / "MeshIt-master",
+                repo_root / "Pymeshit",
+                repo_root / "MeshIt",
+                repo_root / "MeshIt-master",
             ]
         )
 
@@ -931,14 +935,34 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         if sys_path_entry not in sys.path:
             sys.path.insert(0, sys_path_entry)
 
+        bridge = PZeroPymeshitBridge(self)
+
         existing_window = getattr(self, "_pymeshit_window", None)
         if existing_window and existing_window.isVisible():
+            attach = getattr(existing_window, "attach_pzero_bridge", None)
+            if callable(attach):
+                attach(bridge)
+            project_geom = self.geometry()
+            if project_geom and not project_geom.isNull():
+                existing_window.setGeometry(project_geom)
             existing_window.raise_()
             existing_window.activateWindow()
             return
 
         try:
-            pymeshit_module = importlib.import_module(PYMESHIT_MODULE_NAME)
+            importlib.invalidate_caches()
+            entry_path = (Path(pymeshit_dir) / PYMESHIT_ENTRY_FILE).resolve()
+            sys.modules.pop(PYMESHIT_MODULE_NAME, None)
+            spec = importlib.util.spec_from_file_location(
+                PYMESHIT_MODULE_NAME, str(entry_path)
+            )
+            if spec is None or spec.loader is None:
+                raise ImportError("Could not create module spec for Pymeshit GUI")
+            pymeshit_module = importlib.util.module_from_spec(spec)
+            sys.modules[PYMESHIT_MODULE_NAME] = pymeshit_module
+            spec.loader.exec_module(pymeshit_module)
+            module_path = Path(getattr(pymeshit_module, "__file__", "")).resolve()
+            self.print_terminal(f"Pymeshit module loaded from: {module_path}")
             meshit_gui_cls = getattr(pymeshit_module, PYMESHIT_CLASS_NAME)
         except (ImportError, AttributeError) as exc:
             error_msg = f"Error importing Pymeshit GUI: {exc}"
@@ -947,7 +971,19 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             return
 
         try:
-            self._pymeshit_window = meshit_gui_cls()
+            try:
+                self._pymeshit_window = meshit_gui_cls(pzero_bridge=bridge)
+            except TypeError as exc:
+                if "pzero_bridge" in str(exc):
+                    self._pymeshit_window = meshit_gui_cls()
+                else:
+                    raise
+            attach = getattr(self._pymeshit_window, "attach_pzero_bridge", None)
+            if callable(attach):
+                attach(bridge)
+            project_geom = self.geometry()
+            if project_geom and not project_geom.isNull():
+                self._pymeshit_window.setGeometry(project_geom)
             self._pymeshit_window.destroyed.connect(
                 lambda _: setattr(self, "_pymeshit_window", None)
             )
