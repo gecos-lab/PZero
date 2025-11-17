@@ -1026,14 +1026,15 @@ class ShapefileAssignmentDialog(QMainWindow):
     def _get_field_definitions(self):
         """Define required and optional fields based on topology type."""
         required = ["feature"]
-        optional = ["name", "role"]
+        optional = ["name", "role", "scenario"]
 
         # label is only included when explicitly requested (e.g., Background data)
         if self.include_label:
             optional.append("label")
 
-        if self.topology_type == "Point":
-            # For points we need dip and either dip_dir OR dir (as in original implementation)
+        # Orientation fields ONLY for Point topology AND NOT for Background data
+        if self.topology_type == "Point" and not self.include_label:
+            # For Geology/Fluid points we need dip and either dip_dir OR dir
             required.extend(["dip"])
             optional.extend(["dip_dir", "dir"])
 
@@ -1154,8 +1155,7 @@ class ShapefileAssignmentDialog(QMainWindow):
             if combo.currentText() == "<none>":
                 missing_fields.append(field)
 
-        # Special validation for Point topology - need either dip_dir or dir
-        if self.topology_type == "Point":
+        if self.topology_type == "Point" and not self.include_label:
             has_dip_dir = (self.combo_boxes.get("dip_dir") and
                           self.combo_boxes["dip_dir"].currentText() != "<none>")
             has_dir = (self.combo_boxes.get("dir") and

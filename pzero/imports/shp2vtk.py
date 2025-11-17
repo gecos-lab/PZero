@@ -7,6 +7,7 @@ from geopandas import read_file as gpd_read_file
 
 from numpy import array as np_array
 from numpy import asarray as np_asarray
+from numpy import atleast_1d as np_atleast_1d
 from numpy import column_stack as np_column_stack
 from numpy import shape as np_shape
 from numpy import zeros as np_zeros
@@ -80,6 +81,12 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
     props_allowed = {"name", "role", "feature"}
     if include_label:
         props_allowed.add("label")
+    # Add scenario for Geology and Fluid collections
+    if collection in ["Geology", "Fluid contacts"]:
+        props_allowed.add("scenario")
+    props_map = {k: v for k, v in attribute_mapping.items() if k in props_allowed}
+    if collection in ["Geology", "Fluid contacts"]:
+        props_allowed.add("scenario")
     props_map = {k: v for k, v in attribute_mapping.items() if k in props_allowed}
     # Include dip, dip_dir, and dir (dir will be converted to dip_dir with +90° rotation)
     orient_map = {k: v for k, v in attribute_mapping.items() if k in {"dip", "dip_dir", "dir"}}
@@ -174,8 +181,8 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
                     # Handle dip data using mapping
                     dip_col = orient_map.get("dip")
                     if dip_col and dip_col in column_names:
-                        # Use pd_series constructor which handles both scalar and Series correctly
-                        dip_values = pd_series(gdf_index.loc[i, dip_col]).values
+                        # Use pd_series constructor and ensure always array with atleast_1d
+                        dip_values = np_atleast_1d(pd_series(gdf_index.loc[i, dip_col]).values)
                         curr_obj_dict["vtk_obj"].set_point_data("dip", dip_values)
 
                     # Handle dip_dir or dir (dir needs conversion: dir + 90° = dip_dir)
@@ -185,13 +192,13 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
                         # Convert dir to dip_dir by adding 90 degrees (as in original)
                         dir_values = pd_series(gdf_index.loc[i, dir_col])
                         direction = (dir_values + 90) % 360
-                        curr_obj_dict["vtk_obj"].set_point_data("dip_dir", direction.values)
+                        curr_obj_dict["vtk_obj"].set_point_data("dip_dir", np_atleast_1d(direction.values))
                         has_angle_data = True
                     else:
                         # Try dip_dir directly
                         dip_dir_col = orient_map.get("dip_dir")
                         if dip_dir_col and dip_dir_col in column_names:
-                            dip_dir_values = pd_series(gdf_index.loc[i, dip_dir_col]).values
+                            dip_dir_values = np_atleast_1d(pd_series(gdf_index.loc[i, dip_dir_col]).values)
                             curr_obj_dict["vtk_obj"].set_point_data("dip_dir", dip_dir_values)
                             has_angle_data = True
 
@@ -245,7 +252,7 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
             gdf.geom_type[0] == "MultiLineString"
         ):
             for row in range(gdf.shape[0]):
-                curr_obj_dict = deepcopy(FluidCollection.entity_dict)
+                curr_obj_dict = deepcopy(FluidCollection().entity_dict)
                 for pzero_prop, shp_col in props_map.items():
                     if shp_col in column_names:
                         curr_obj_dict[pzero_prop] = gdf.loc[row, shp_col]
@@ -253,7 +260,7 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
                 curr_obj_dict["vtk_obj"] = PolyLine()
 
                 if gdf.geom_type[row] == "LineString":
-                    outXYZ = np_array(gdf.loc[row].geometry)
+                    outXYZ = np_array(list(gdf.loc[row].geometry.coords), dtype=float)
                     if np_shape(outXYZ)[1] == 2:
                         outZ = np_zeros((np_shape(outXYZ)[0], 1))
                         # print("outZ:\n", outZ)
@@ -291,7 +298,7 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
                 gdf_index = gdf.set_index(feature_col)
                 feat_list = set(gdf_index.index)
                 for i in feat_list:
-                    curr_obj_dict = deepcopy(FluidCollection.entity_dict)
+                    curr_obj_dict = deepcopy(FluidCollection().entity_dict)
                     dip_col = orient_map.get("dip")
                     vtk_obj = Attitude() if (dip_col and dip_col in gdf.columns) else VertexSet()
                     for pzero_prop, shp_col in props_map.items():
@@ -304,7 +311,7 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
                     curr_obj_dict["vtk_obj"] = vtk_obj
                     # Add a coordinate column in the gdf_index dataframe
                     gdf_index["coords"] = gdf_index.geometry.apply(
-                        lambda x: np_array(x)
+                        lambda x: np_array(x.coords[0])
                     )
                     outXYZ = np_array([p for p in gdf_index.loc[i, "coords"]])
                     if outXYZ.ndim == 1:
@@ -315,6 +322,40 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
                         outXYZ = np_column_stack((outXYZ, outZ))
                     # print(np_shape(outXYZ))
                     curr_obj_dict["vtk_obj"].points = outXYZ
+
+                    # Handle orientation data for Attitude objects (copied from Geology)
+                    if isinstance(vtk_obj, Attitude):
+                        # Handle dip data
+                        dip_col = orient_map.get("dip")
+                        if dip_col and dip_col in column_names:
+                            dip_values = np_atleast_1d(pd_series(gdf_index.loc[i, dip_col]).values)
+                            curr_obj_dict["vtk_obj"].set_point_data("dip", dip_values)
+
+                        # Handle dip_dir or dir (dir needs conversion: dir + 90° = dip_dir)
+                        has_angle_data = False
+                        dir_col = orient_map.get("dir")
+                        if dir_col and dir_col in column_names:
+                            # Convert dir to dip_dir by adding 90 degrees
+                            dir_values = pd_series(gdf_index.loc[i, dir_col])
+                            direction = (dir_values + 90) % 360
+                            curr_obj_dict["vtk_obj"].set_point_data("dip_dir", np_atleast_1d(direction.values))
+                            has_angle_data = True
+                        else:
+                            # Try dip_dir directly
+                            dip_dir_col = orient_map.get("dip_dir")
+                            if dip_dir_col and dip_dir_col in column_names:
+                                dip_dir_values = np_atleast_1d(pd_series(gdf_index.loc[i, dip_dir_col]).values)
+                                curr_obj_dict["vtk_obj"].set_point_data("dip_dir", dip_dir_values)
+                                has_angle_data = True
+
+                        # Calculate normals if we have both dip and angle data
+                        if dip_col and dip_col in column_names and has_angle_data:
+                            normals = dip_directions2normals(
+                                curr_obj_dict["vtk_obj"].get_point_data("dip"),
+                                curr_obj_dict["vtk_obj"].get_point_data("dip_dir"),
+                            )
+                            curr_obj_dict["vtk_obj"].set_point_data("Normals", normals)
+
                     if curr_obj_dict["vtk_obj"].points_number > 1:
                         curr_obj_dict["vtk_obj"].auto_cells()
                         # print(curr_obj_dict["vtk_obj"].point_data_keys)
@@ -340,20 +381,20 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
                         self.fluid_coll.add_entity_from_dict(curr_obj_dict)
                         del curr_obj_dict
             else:
-                print("Incomplete data. Feature property is required but not found in mapping.")
+                self.print_terminal("Incomplete data. Feature property is required but not found in mapping.")
     elif collection == "Background data":
         if (gdf.geom_type[0] == "LineString") or (
             gdf.geom_type[0] == "MultiLineString"
         ):
             for row in range(gdf.shape[0]):
-                curr_obj_dict = deepcopy(BackgroundCollection.entity_dict)
+                curr_obj_dict = deepcopy(BackgroundCollection().entity_dict)
                 for pzero_prop, shp_col in props_map.items():
                     if shp_col in column_names:
                         curr_obj_dict[pzero_prop] = gdf.loc[row, shp_col]
                 curr_obj_dict["topology"] = "PolyLine"
                 curr_obj_dict["vtk_obj"] = PolyLine()
                 if gdf.geom_type[row] == "LineString":
-                    outXYZ = np_array(gdf.loc[row].geometry)
+                    outXYZ = np_array(list(gdf.loc[row].geometry.coords), dtype=float)
                     # print("outXYZ:\n", outXYZ)
                     if np_shape(outXYZ)[1] == 2:
                         outZ = np_zeros((np_shape(outXYZ)[0], 1))
@@ -393,6 +434,12 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
                         curr_obj_dict["vtk_obj"].ShallowCopy(out_vtk)
                     else:
                         curr_obj_dict["vtk_obj"].ShallowCopy(vtkappend.GetOutput())
+
+                if curr_obj_dict["vtk_obj"].points_number > 0:
+                    self.backgrnd_coll.add_entity_from_dict(curr_obj_dict)
+                else:
+                    print("Empty object")
+                del curr_obj_dict
             # Points
         elif gdf.geom_type[0] == "Point":
             feature_col = props_map.get("feature")
@@ -400,7 +447,7 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
                 gdf_index = gdf.set_index(feature_col)
                 feat_list = set(gdf_index.index)
                 for i in feat_list:
-                    curr_obj_dict = deepcopy(BackgroundCollection.entity_dict)
+                    curr_obj_dict = deepcopy(BackgroundCollection().entity_dict)
                     vtk_obj = VertexSet()
                     for pzero_prop, shp_col in props_map.items():
                         if shp_col in column_names:
@@ -412,7 +459,7 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
                     curr_obj_dict["vtk_obj"] = vtk_obj
                     # Add a coordinate column in the gdf_index dataframe
                     gdf_index["coords"] = gdf_index.geometry.apply(
-                        lambda x: np_array(x)
+                        lambda x: np_array(x.coords[0])
                     )
                     outXYZ = np_array([p for p in gdf_index.loc[i, "coords"]])
                     if outXYZ.ndim == 1:
@@ -431,5 +478,9 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
                         )
                     else:
                         curr_obj_dict["vtk_obj"].set_field_data(name="name")
+
+                    if curr_obj_dict["vtk_obj"].points_number > 0:
+                        self.backgrnd_coll.add_entity_from_dict(curr_obj_dict)
+                    del curr_obj_dict
             else:
                 self.print_terminal("Incomplete data. Feature property is required but not found in mapping.")
