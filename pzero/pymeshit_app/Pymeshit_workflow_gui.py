@@ -8390,9 +8390,16 @@ segmentation, triangulation, and visualization.
 
         for record in records:
             try:
-                points = self.pzero_bridge.load_points(
-                    record.collection_key, record.uid
-                )
+                # Pass face_id if the record has one (for boundary faces)
+                face_id = getattr(record, 'face_id', None)
+                if face_id is not None:
+                    points = self.pzero_bridge.load_points(
+                        record.collection_key, record.uid, face_id=face_id
+                    )
+                else:
+                    points = self.pzero_bridge.load_points(
+                        record.collection_key, record.uid
+                    )
             except Exception as exc:  # pragma: no cover - defensive
                 logger.error(
                     "Failed to load PZero entity %s (%s): %s",
