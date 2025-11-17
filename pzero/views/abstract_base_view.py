@@ -339,7 +339,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                 show_property=None,
                 visible=True,
             )
-            # New Pandas >= 2.0.0
+
             self.actors_df = pd_concat(
                 [
                     self.actors_df,
@@ -349,7 +349,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                                 "uid": uid,
                                 "actor": this_actor,
                                 "show": True,
-                                "collection": collection,
+                                "collection": collection.collection_name,
                                 "show_property": None,
                             }
                         ]
@@ -429,7 +429,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
     ):
         """This is called when point or cell data (properties) are removed."""
         # AT THE MOMENT THIS IS IDENTICAL TO entities_data_keys_added_update_views
-        return self.entities_data_keys_added_update_views(
+        self.entities_data_keys_added_update_views(
             updated_uids=updated_uids, collection=collection
         )
 
@@ -481,7 +481,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.change_actor_opacity(collection=collection, updated_uids=updated_uids)
         total_items = len(collection.df)
         if len(updated_uids) > total_items * 0.2:
-            print("Rebuilding the entire tree")
+            # print("Rebuilding the entire tree")
             tree.populate_tree()
         else:
             tree.remove_items_from_tree(uids_to_remove=updated_uids)
@@ -522,20 +522,20 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
     def show_uids(self, uids: list = None):
         """Show actors with the given uids."""
         # Maybe in the future this might be reimplemented in parallel or vectorized?
-        print("show_uids: ", uids)
+        # print("show_uids: ", uids)
         for uid in uids:
-            self.print_terminal(f"showing uid: {uid}")
+            # self.print_terminal(f"showing uid: {uid}")
             if not self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]:
                 self.set_actor_visible(uid=uid, visible=True)
                 self.actors_df.loc[self.actors_df["uid"] == uid, "show"] = True
-                self.print_terminal(f"shown uid: {uid}")
+                # self.print_terminal(f"shown uid: {uid}")
 
     def hide_uids(self, uids: list = None):
         """Hide actors with the given uids."""
         # Maybe in th future this might be reimplemented in parallel or vectorized?
-        print("hide_uids: ", uids)
+        # print("hide_uids: ", uids)
         for uid in uids:
-            self.print_terminal(f"hiding uid: {uid}")
+            # self.print_terminal(f"hiding uid: {uid}")
             if self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]:
                 self.set_actor_visible(uid=uid, visible=False)
                 self.actors_df.loc[self.actors_df["uid"] == uid, "show"] = False
@@ -555,9 +555,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
     def toggle_visibility(
         self, collection_name=None, turn_on_uids=None, turn_off_uids=None
     ):
-        print(
-            f"toggle_visibility: {collection_name}, turn_on_uids: {turn_on_uids}, turn_off_uids: {turn_off_uids}"
-        )
+        # print(f"toggle_visibility: {collection_name}, turn_on_uids: {turn_on_uids}, turn_off_uids: {turn_off_uids}")
         self.show_uids(turn_on_uids)
         self.hide_uids(turn_off_uids)
 

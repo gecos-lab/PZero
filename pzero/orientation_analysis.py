@@ -193,33 +193,33 @@ def set_normals(self):
                     self.print_terminal("Normals set on TriSurf or XsPolyLine" + uid)
                     obj = self.geol_coll.get_uid_vtk_obj(uid)
                     normals = obj.get_property("Normals")
-                    print(f"UID {uid}:")
-                    print("getproperties", normals)
-                    for n in normals:
-                        print("Normals: X={0}, Y={1}, Z={2}".format(n[0], n[1], n[2]))
+                    # self.print_terminal(f"UID {uid}:")
+                    # self.print_terminal("getproperties", normals)
+                    # for n in normals:
+                    #     self.print_terminal("Normals: X={0}, Y={1}, Z={2}".format(n[0], n[1], n[2]))
 
                 self.print_terminal("All Normals set.")
             else:
-                print(
+                self.print_terminal(
                     "Only VertexSet, XsVertexSet, XsPolyLine and TriSurf entities can be processed."
                 )
 
         elif self.shown_table == "tabDOMs":
-            print("Calculating normals for Point Cloud")
+            self.print_terminal("Calculating normals for Point Cloud")
             for uid in self.selected_uids:
                 self.dom_coll.append_uid_property(
                     uid=uid, property_name="Normals", property_components=3
                 )
                 self.dom_coll.get_uid_vtk_obj(uid).vtk_set_normals()
                 self.prop_legend.update_widget(self)
-                print(self.prop_legend_df)
-            print("Done")
+                # self.print_terminal(self.prop_legend_df)
+            self.print_terminal("Done")
         else:
-            print(
+            self.print_terminal(
                 "Normals can be calculated only on geological entities and Point Clouds (at the moment)."
             )
     else:
-        print("No input data selected.")
+        self.print_terminal("No input data selected.")
 
 
 def get_dip_dir_vectors(normals=None, az=False):

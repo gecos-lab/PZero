@@ -5,6 +5,8 @@ from copy import deepcopy
 
 from uuid import uuid4
 
+from PySide6.QtWidgets import QDockWidget
+
 from pyvista import PolyData as pv_PolyData
 
 from numpy import abs as np_abs
@@ -121,8 +123,8 @@ def interpolation_delaunay_2d(self):
         ],
         "role": [
             "Role: ",
-            self.parent.geol_coll.valid_roles,
-            self.parent.geol_coll.get_uid_role(input_uids[0]),
+            self.geol_coll.valid_roles,
+            self.geol_coll.get_uid_role(input_uids[0]),
         ],
         "feature": [
             "Feature: ",
@@ -611,7 +613,7 @@ def implicit_model_loop_structural(self):
     )
     if model_name is None:
         model_name = "Loop_model"
-    print(model_name)
+    # print(model_name)
     voxet_dict["name"] = model_name
     voxet_dict["topology"] = "Voxet"
     voxet_dict["properties_names"] = ["strati_0"]
@@ -626,7 +628,7 @@ def implicit_model_loop_structural(self):
     ]
     voxet_dict["vtk_obj"].dimensions = dimensions
     voxet_dict["vtk_obj"].spacing = spacing
-    print(voxet_dict)
+    # print(voxet_dict)
     toc(parent=self)
     # Pass calculated values of the LoopStructural model to the Voxet, as scalar fields
     self.print_terminal("-> populate Voxet...")
@@ -1302,7 +1304,7 @@ def intersection_xs(self):
                         self.print_terminal(
                             " -- empty object from cutter_clean_strips_clean_triangle -- "
                         )
-        elif self.shown_table == "tabMeshes3D":
+        elif self.shown_table == "tabMeshes":
             for uid in input_uids:
                 if self.mesh3d_coll.get_uid_mesh3d_type(uid) == "Voxet":
                     # Get cutter - a polydata slice cut across the voxet.
@@ -1489,10 +1491,8 @@ def intersection_xs(self):
                             if not data_key in obj_dict["properties_names"]:
                                 obj_dict["vtk_obj"].remove_point_data(data_key)
                         self.dom_coll.add_entity_from_dict(obj_dict)
-                        print("17")
                     else:
                         self.print_terminal(" -- empty object -- ")
-                        print("18")
         else:
             self.print_terminal(
                 " -- Only Geological objects, 3D Meshes and DEM & DOMs can be intersected with XSection -- "

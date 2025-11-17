@@ -2240,6 +2240,7 @@ class DEM(vtkStructuredGrid):
         self.set_point_data(data_key=map_image_uid, attribute_matrix=UV)
 
     def remove_texture(self, map_image_uid=None):
+        self.set_active_texture(map_image_uid=None)
         self.remove_point_data(data_key=map_image_uid)
 
     def set_active_texture(self, map_image_uid=None):

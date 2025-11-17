@@ -42,6 +42,12 @@ class ViewMap(View2D):
         super(ViewMap, self).__init__(*args, **kwargs)
         self.setWindowTitle("Map View")
         self.plotter.view_xy()
+        # self.parent.signals.selection_changed.connect(self.on_selection_changed)
+
+    # def on_selection_changed(self, collection):
+    #     print("DEBUG SLOT: selection_changed ricevuto per collection:", collection)
+    #     self.selected_uids = collection.selected_uids.copy()
+    #     self.actor_in_table(self.selected_uids)
 
     # ================================  General methods shared by all views - built incrementally =====================
 
@@ -183,6 +189,42 @@ class ViewMap(View2D):
                     show_property = plot_entity.points_Y
                 elif show_property == "Z":
                     show_property = plot_entity.points_Z
+                # handle multicomponent properties like 'PropName[index]'
+                elif isinstance(show_property, str) and show_property.endswith("]"):
+                    pos1 = show_property.index("[")
+                    pos2 = show_property.index("]")
+                    original_prop = show_property[:pos1]
+                    comp_index = int(show_property[pos1 + 1 : pos2])
+                    if original_prop == "Normals":
+                        # draw 2D map glyphs for normals component request
+                        show_property_title = None
+                        show_property = None
+                        style = "surface"
+                        smooth_shading = True
+                        appender = vtkAppendPolyData()
+                        r = (
+                            self.parent.geol_coll.get_uid_legend(uid=uid)["point_size"]
+                            * 4
+                        )
+                        normals = plot_entity.get_point_data("Normals")
+                        az_vectors, dir_vectors = get_dip_dir_vectors(
+                            normals=normals, az=True
+                        )
+                        # glyph lines in map view
+                        line1 = pv_Line(pointa=(0, 0, 0), pointb=(r, 0, 0))
+                        line2 = pv_Line(pointa=(-r, 0, 0), pointb=(r, 0, 0))
+
+                        az_glyph = plot_entity.glyph(geometry=line1, prop=az_vectors)
+                        dir_glyph = plot_entity.glyph(geometry=line2, prop=dir_vectors)
+
+                        appender.AddInputData(az_glyph)
+                        appender.AddInputData(dir_glyph)
+                        appender.Update()
+                        plot_entity = appender.GetOutput()
+                    else:
+                        show_property = plot_entity.get_point_data(original_prop)[
+                            :, comp_index
+                        ]
                 elif show_property == "Normals":
                     show_property_title = None
                     show_property = None
@@ -249,6 +291,7 @@ class ViewMap(View2D):
                     self.parent.dom_coll.df["uid"] == uid, "textures"
                 ].values[0]
             ):
+                plot_entity.set_active_texture(show_property)
                 active_image = self.parent.image_coll.get_uid_vtk_obj(show_property)
                 active_image_texture = active_image.texture
                 # active_image_properties_components = active_image.properties_components[0]  # IF USED THIS MUST BE FIXED FOR TEXTURES WITH MORE THAN 3 COMPONENTS
@@ -467,7 +510,7 @@ class ViewMap(View2D):
                 opacity=opacity,
             )
         else:
-            print("[Windows factory]: actor with no class")
+            self.print_terminal("[Windows factory]: actor with no class")
             this_actor = None
         return this_actor
 

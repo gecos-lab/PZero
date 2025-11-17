@@ -15,7 +15,7 @@ class DomCollection(DIMCollection):
             "name": "undef",
             "scenario": "undef",
             "x_section": "",  # this is the uid of the cross section for "XsVertexSet", "XsPolyLine", and "XsImage", empty for all others
-            "textures": "",
+            "textures": [],
             "topology": "undef",
             "vtk_obj": None,
             "properties_names": [],
@@ -79,7 +79,9 @@ class DomCollection(DIMCollection):
             self.get_uid_vtk_obj(dom_uid).remove_texture(map_image_uid=map_image_uid)
             self.df.at[row, "textures"].remove(map_image_uid)
             self.parent.signals.data_keys_removed.emit([dom_uid], self)
+            # print("self.parent.signals.data_keys_removed.emit([dom_uid], self)")
             # self.parent.signals.metadata_modified.emit([dom_uid], self)
+            # print("self.parent.signals.metadata_modified.emit([dom_uid], self)")
 
     def set_active_texture_on_dom(self, dom_uid=None, map_image_uid=None):
         """Set active texture on a DOM."""

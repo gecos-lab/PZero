@@ -64,7 +64,7 @@ class DockWindow(QDockWidget):
         else:
             if window_type == "View3D":
                 parent.print_terminal(
-                    "Warning: as far as the orientation widget problem is not solved, please resize the window to make it smaller.\n"
+                    "\nWarning: as far as the orientation widget problem is not solved, please resize the window to make it smaller.\n"
                 )
 
     def closeEvent(self, event):
