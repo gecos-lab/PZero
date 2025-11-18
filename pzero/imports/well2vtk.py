@@ -68,14 +68,13 @@ def well2vtk(self, path=None):
     well_uid = str(uuid4())
     for key in prop_df:
         prop = prop_df[key]
-
         if "START" in prop.columns:
-            if key == "LITHOLOGY" or key == "GEOLOGY":
+            if key in ("LITHOLOGY", "GEOLOGY"):
                 tr_data = np_full(shape=(points, 3), fill_value=np_nan)
 
                 try:
                     color_dict = {k: np_random.rand(3) for k in pd_unique(prop[key])}
-                except:
+                except Exception:
                     print("No key found")
                 else:
                     for row, (start, end, value) in prop.iterrows():
@@ -124,7 +123,6 @@ def well2vtk(self, path=None):
                         color_val = color_dict[value]
 
                         tr_data[start_idx:end_idx] = color_val
-
             else:
                 tr_data = np_zeros(shape=points)
                 for row, (start, end, value) in prop.iterrows():
@@ -174,6 +172,9 @@ def well2vtk(self, path=None):
 
     bore_obj_attributes = deepcopy(WellCollection().entity_dict)
     bore_obj_attributes["uid"] = well_uid
+    # Ensure proper identification in WellCollection
+    bore_obj_attributes["name"] = well_obj.ID
+    bore_obj_attributes["topology"] = "PolyLine"
     bore_obj_attributes["Loc ID"] = well_obj.ID
     bore_obj_attributes["properties_names"] = trace_keys
     bore_obj_attributes["properties_components"] = components

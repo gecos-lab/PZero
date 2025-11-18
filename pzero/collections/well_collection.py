@@ -77,8 +77,9 @@ class WellCollection(BaseCollection):
         # Note that for performance reasons this is done explicitly here, when adding an entity to the
         # collection, and not with a signal telling the legend to be updated by scanning the whole collection.
         name = entity_dict["name"]
+        # The well legend uses 'Loc ID' as the key column (see Legend.well_legend_dict)
         if self.parent.well_legend_df.loc[
-            self.parent.well_legend_df["name"] == name
+            self.parent.well_legend_df["Loc ID"] == name
         ].empty:
             R, G, B = np_round(np_random.random(3) * 255)
             # New Pandas >= 2.0.0
@@ -88,7 +89,7 @@ class WellCollection(BaseCollection):
                     pd_DataFrame(
                         [
                             {
-                                "name": name,
+                                "Loc ID": name,
                                 "color_R": R,
                                 "color_G": G,
                                 "color_B": B,
@@ -204,9 +205,13 @@ class WellCollection(BaseCollection):
         """Get legend for a particular uid."""
         name = self.df.loc[self.df["uid"] == uid, "name"].values[0]
         legend_dict = self.parent.well_legend_df.loc[
-            self.parent.well_legend_df["name"] == name
+            self.parent.well_legend_df["Loc ID"] == name
         ].to_dict("records")
         return legend_dict[0]
+
+    def get_uid_well_locid(self, uid=None):
+        """Get the well Loc ID (alias of name for wells)."""
+        return self.df.loc[self.df["uid"] == uid, "name"].values[0]
 
     def set_uid_legend(
         self,

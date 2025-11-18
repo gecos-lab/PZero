@@ -2865,22 +2865,19 @@ class WellTrace(PolyLine):
 
         # temp.plot()
         if method == "trace":
-            # camera = self.parent.plotter.camera
             filter = vtkArcPlotter()
             filter.SetInputData(temp)
-            # arc_p.SetCamera(camera)
             filter.SetRadius(1.30)
             filter.SetHeight(2.50)
-            # filter.UseDefaultNormalOn()
-            filter.SetCamera(camera)
+            filter.UseDefaultNormalOn()
             filter.SetDefaultNormal(0, 1, 0)
-            # filter.Update()
         elif method == "cylinder":
             filter = vtkTubeFilter()
             filter.SetInputData(temp)
             filter.SetRadius(0.5)
             filter.SetNumberOfSides(100)
             filter.SetVaryRadiusToVaryRadiusByScalar()
+            filter.CappingOn()
             # filter.Update()
         mapper = vtkPolyDataMapper()
         mapper.SetInputConnection(filter.GetOutputPort())
