@@ -111,19 +111,19 @@ class ComputationWorker(QObject):
         # Define eligibility criteria and method mappings for each compute type
         config = {
             'hulls': {
-                'eligibility_func': lambda d: d.get('type') != 'WELL',
+                'eligibility_func': lambda d: d.get('type') != 'WELL' and not d.get('is_pre_triangulated', False),
                 'compute_method': '_compute_hull_for_dataset',
                 'error_msg': "No datasets loaded.",
                 'skip_msg': "No datasets loaded."
             },
             'segments': {
-                'eligibility_func': lambda d: d.get('type') != 'WELL' and d.get('hull_points') is not None,
+                'eligibility_func': lambda d: d.get('type') != 'WELL' and d.get('hull_points') is not None and not d.get('is_pre_triangulated', False),
                 'compute_method': '_compute_segments_for_dataset',
                 'error_msg': "No datasets have computed hulls.",
                 'skip_msg': "No eligible datasets."
             },
             'triangulations': {
-                'eligibility_func': lambda d: d.get('type') != 'WELL' and d.get('segments') is not None,
+                'eligibility_func': lambda d: d.get('type') != 'WELL' and d.get('segments') is not None and not d.get('is_pre_triangulated', False),
                 'compute_method': '_run_triangulation_for_dataset',
                 'error_msg': "No datasets have computed segments.",
                 'skip_msg': "No eligible datasets."
@@ -6690,6 +6690,12 @@ class MeshItWorkflowGUI(QMainWindow):
             return False
 
         ds = self.datasets[dataset_index]
+        
+        # Skip pre-triangulated TriSurf entities (they already have hull_points from boundary edges)
+        if ds.get('is_pre_triangulated', False):
+            logger.info("Skipping hull computation for pre-triangulated TriSurf '%s'", ds.get('name'))
+            return True  # Return True since hull_points already exist
+        
         pts = ds.get("points")
         if pts is None or len(pts) < 3:
             logger.warning("Dataset '%s' has < 3 points, skipping hull computation.", ds.get('name'))
@@ -7271,6 +7277,11 @@ segmentation, triangulation, and visualization.
 
         dataset = self.datasets[dataset_index]
         dataset_name = dataset.get('name', f"Dataset {dataset_index}")
+
+        # Skip pre-triangulated TriSurf entities (they already have triangulation_result)
+        if dataset.get('is_pre_triangulated', False):
+            logger.info("Skipping triangulation for pre-triangulated TriSurf '%s'", dataset_name)
+            return True  # Return True since triangulation_result already exists
 
         segments_data = dataset.get('segments')
         if segments_data is None or len(segments_data) < 3:
@@ -8412,18 +8423,115 @@ segmentation, triangulation, and visualization.
 
         for record in records:
             try:
-                # Pass face_id if the record has one (for boundary faces)
-                face_id = getattr(record, 'face_id', None)
-                if face_id is not None:
-                    points = self.pzero_bridge.load_points(
-                        record.collection_key, record.uid, face_id=face_id,
-                        extension_factor=self.border_extension_factor
+                # Check if this is a TriSurf entity (already triangulated)
+                is_trisurf = record.topology == "TriSurf"
+                
+                if is_trisurf:
+                    # For TriSurf: extract triangles and boundary edges directly
+                    tri_data = self.pzero_bridge.load_triangles(
+                        record.collection_key, record.uid
                     )
+                    boundary_hull = self.pzero_bridge.load_boundary_edges(
+                        record.collection_key, record.uid
+                    )
+                    
+                    if tri_data is None:
+                        logger.warning(
+                            "Failed to extract triangles from TriSurf %s (%s)",
+                            record.uid, record.name
+                        )
+                        skipped += 1
+                        continue
+                    
+                    vertices, triangles = tri_data
+                    
+                    # Create dataset with triangulation already populated
+                    dataset_name = self._make_unique_dataset_name(record.name)
+                    dataset = {
+                        "name": dataset_name,
+                        "type": "TriSurf",  # Mark as TriSurf
+                        "points": vertices,  # Keep points for compatibility
+                        "visible": True,
+                        "color": self._get_next_color(),
+                        "source": "PZERO",
+                        "collection": record.collection_label,
+                        "collection_key": record.collection_key,
+                        "uid": record.uid,
+                        "triangulation_result": {
+                            "vertices": vertices,
+                            "triangles": triangles,
+                        },
+                        "is_pre_triangulated": True,  # Flag to skip hull/triangulation steps
+                    }
+                    
+                    # Extract convex hull from boundary edges
+                    if boundary_hull is not None and len(boundary_hull) > 0:
+                        # Format hull_points as list of [x, y, z, point_type] arrays
+                        hull_points_list = []
+                        for pt in boundary_hull:
+                            hull_points_list.append([float(pt[0]), float(pt[1]), float(pt[2]), "DEFAULT"])
+                        dataset["hull_points"] = np.array(hull_points_list, dtype=object)
+                        logger.info(
+                            "Extracted %d boundary points for TriSurf %s",
+                            len(boundary_hull), record.name
+                        )
+                    else:
+                        logger.warning(
+                            "Could not extract boundary edges for TriSurf %s, using point cloud convex hull",
+                            record.name
+                        )
+                        # Fallback: compute convex hull from vertices
+                        from scipy.spatial import ConvexHull
+                        try:
+                            hull = ConvexHull(vertices)
+                            hull_points_list = []
+                            for idx in hull.vertices:
+                                pt = vertices[idx]
+                                hull_points_list.append([float(pt[0]), float(pt[1]), float(pt[2]), "DEFAULT"])
+                            dataset["hull_points"] = np.array(hull_points_list, dtype=object)
+                        except Exception as e:
+                            logger.warning(f"Failed to compute fallback convex hull: {e}")
+                    
+                    self.datasets.append(dataset)
+                    loaded += 1
+                    logger.info(
+                        "Loaded TriSurf %s: %d vertices, %d triangles",
+                        record.name, len(vertices), len(triangles)
+                    )
+                    
                 else:
-                    points = self.pzero_bridge.load_points(
-                        record.collection_key, record.uid,
-                        extension_factor=self.border_extension_factor
-                    )
+                    # For non-TriSurf entities: use standard point loading
+                    face_id = getattr(record, 'face_id', None)
+                    if face_id is not None:
+                        points = self.pzero_bridge.load_points(
+                            record.collection_key, record.uid, face_id=face_id,
+                            extension_factor=self.border_extension_factor
+                        )
+                    else:
+                        points = self.pzero_bridge.load_points(
+                            record.collection_key, record.uid,
+                            extension_factor=self.border_extension_factor
+                        )
+                    
+                    if points is None or len(points) == 0:
+                        skipped += 1
+                        continue
+
+                    dataset_name = self._make_unique_dataset_name(record.name)
+                    dataset = {
+                        "name": dataset_name,
+                        "type": record.topology or "PZERO",
+                        "points": points,
+                        "visible": True,
+                        "color": self._get_next_color(),
+                        "source": "PZERO",
+                        "collection": record.collection_label,
+                        "collection_key": record.collection_key,
+                        "uid": record.uid,
+                    }
+                    self.datasets.append(dataset)
+                    loaded += 1
+                    
             except Exception as exc:  # pragma: no cover - defensive
                 logger.error(
                     "Failed to load PZero entity %s (%s): %s",
@@ -8435,30 +8543,17 @@ segmentation, triangulation, and visualization.
                 skipped += 1
                 continue
 
-            if points is None or len(points) == 0:
-                skipped += 1
-                continue
-
-            dataset_name = self._make_unique_dataset_name(record.name)
-            dataset = {
-                "name": dataset_name,
-                "type": record.topology or "PZERO",
-                "points": points,
-                "visible": True,
-                "color": self._get_next_color(),
-                "source": "PZERO",
-                "collection": record.collection_label,
-                "collection_key": record.collection_key,
-                "uid": record.uid,
-            }
-            self.datasets.append(dataset)
-            loaded += 1
-
         if loaded:
             self.current_dataset_index = len(self.datasets) - 1
             self._update_dataset_list()
             self._update_statistics()
+            # Update visualizations - show triangulations if TriSurf entities were loaded
             self._visualize_all_points()
+            # Check if we have any TriSurf entities and visualize them
+            trisurf_datasets = [d for d in self.datasets if d.get('is_pre_triangulated')]
+            if trisurf_datasets:
+                self._visualize_all_triangulations()
+                self._visualize_all_hulls()
 
         return loaded, skipped
 

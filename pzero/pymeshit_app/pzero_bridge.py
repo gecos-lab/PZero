@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 from vtkmodules.util.numpy_support import vtk_to_numpy
+from scipy.spatial import ConvexHull
 
 
 @dataclass(frozen=True)
@@ -132,6 +133,122 @@ class PZeroPymeshitBridge:
             return _extract_boundary_face(vtk_obj, face_id, extension_factor)
         
         return _vtk_dataset_to_points(vtk_obj)
+
+    def load_triangles(
+        self, collection_key: str, uid: str
+    ) -> Optional[Tuple[np.ndarray, np.ndarray]]:
+        """
+        Extract triangles and vertices from a TriSurf entity.
+        
+        Parameters
+        ----------
+        collection_key : str
+            Key identifying the collection (e.g., 'geol_coll')
+        uid : str
+            Unique identifier of the TriSurf entity
+        
+        Returns
+        -------
+        Optional[Tuple[np.ndarray, np.ndarray]]
+            Tuple of (vertices, triangles) arrays, or None if not a TriSurf or extraction fails.
+            vertices: (N, 3) array of point coordinates
+            triangles: (M, 3) array of triangle indices into vertices
+        """
+        collection = getattr(self._project, collection_key, None)
+        if collection is None:
+            return None
+        if not hasattr(collection, "get_uid_vtk_obj"):
+            return None
+        
+        vtk_obj = collection.get_uid_vtk_obj(uid)
+        if vtk_obj is None:
+            return None
+        
+        # Check if it's a TriSurf
+        from pzero.entities_factory import TriSurf
+        if not isinstance(vtk_obj, TriSurf):
+            return None
+        
+        # Extract vertices
+        vertices = _vtk_dataset_to_points(vtk_obj)
+        if vertices is None or len(vertices) == 0:
+            return None
+        
+        # Extract triangles using TriSurf's cells property
+        try:
+            cells = vtk_obj.cells  # Returns (N, 3) array of triangle indices
+            if cells is None or len(cells) == 0:
+                return None
+            triangles = np.asarray(cells, dtype=np.int32)
+        except Exception:
+            return None
+        
+        return vertices, triangles
+
+    def load_boundary_edges(
+        self, collection_key: str, uid: str
+    ) -> Optional[np.ndarray]:
+        """
+        Extract boundary edges from a TriSurf entity and compute convex hull.
+        
+        Parameters
+        ----------
+        collection_key : str
+            Key identifying the collection (e.g., 'geol_coll')
+        uid : str
+            Unique identifier of the TriSurf entity
+        
+        Returns
+        -------
+        Optional[np.ndarray]
+            Array of shape (N, 3) containing boundary edge points for convex hull,
+            or None if extraction fails
+        """
+        collection = getattr(self._project, collection_key, None)
+        if collection is None:
+            return None
+        if not hasattr(collection, "get_uid_vtk_obj"):
+            return None
+        
+        vtk_obj = collection.get_uid_vtk_obj(uid)
+        if vtk_obj is None:
+            return None
+        
+        # Check if it's a TriSurf
+        from pzero.entities_factory import TriSurf
+        if not isinstance(vtk_obj, TriSurf):
+            return None
+        
+        # Extract boundary using TriSurf's get_clean_boundary method
+        try:
+            boundary_polydata = vtk_obj.get_clean_boundary()
+            if boundary_polydata is None:
+                return None
+            
+            # Extract points from boundary polydata
+            boundary_points = _vtk_dataset_to_points(boundary_polydata)
+            if boundary_points is None or len(boundary_points) == 0:
+                return None
+            
+            # Compute convex hull from boundary points
+            # Use 2D projection if points are coplanar, otherwise use 3D
+            if len(boundary_points) >= 3:
+                try:
+                    # Try 3D convex hull first
+                    hull = ConvexHull(boundary_points)
+                    hull_points = boundary_points[hull.vertices]
+                    return hull_points
+                except Exception:
+                    # If 3D fails (e.g., coplanar points), use 2D projection
+                    # Project to XY plane for convex hull computation
+                    points_2d = boundary_points[:, :2]
+                    hull_2d = ConvexHull(points_2d)
+                    hull_points = boundary_points[hull_2d.vertices]
+                    return hull_points
+            
+            return boundary_points
+        except Exception:
+            return None
 
 
 # ------------------------------------------------------------------------- #
