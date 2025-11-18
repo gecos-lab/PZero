@@ -241,6 +241,7 @@ class MeshItWorkflowGUI(QMainWindow):
         self._color_index = 0 # For assigning colors to datasets
         self.pzero_bridge = None
         self._pending_pzero_bridge = pzero_bridge
+        self.border_extension_factor = 0.2  # Extension factor for boundary faces from PZero (20% default)
         
         self.plotters = {}
         self._updating_coordinates = False  # Flag to prevent recursive updates during coordinate editing
@@ -1148,6 +1149,22 @@ class MeshItWorkflowGUI(QMainWindow):
         bridge_ready = bool(self.pzero_bridge or self._pending_pzero_bridge)
         self.load_from_pzero_btn.setEnabled(bridge_ready)
         file_layout.addWidget(self.load_from_pzero_btn)
+        
+        # Border extension factor control for PZero boundary faces
+        border_ext_layout = QHBoxLayout()
+        border_ext_label = QLabel("Border Extension:")
+        border_ext_label.setToolTip("Extend boundary faces by this factor to ensure proper intersection.\nIncrease if intersection lines are incomplete (default: 0.2 = 20%)")
+        self.border_extension_input = QDoubleSpinBox()
+        self.border_extension_input.setRange(0.0, 2.0)
+        self.border_extension_input.setSingleStep(0.05)
+        self.border_extension_input.setDecimals(2)
+        self.border_extension_input.setValue(self.border_extension_factor)
+        self.border_extension_input.setToolTip("Factor by which to extend border faces (0.2 = 20% extension)")
+        self.border_extension_input.valueChanged.connect(self._on_border_extension_changed)
+        border_ext_layout.addWidget(border_ext_label)
+        border_ext_layout.addWidget(self.border_extension_input)
+        border_ext_layout.addStretch()
+        file_layout.addLayout(border_ext_layout)
         
         
         
@@ -8331,6 +8348,11 @@ segmentation, triangulation, and visualization.
         if bridge:
             self.statusBar().showMessage("Connected to current PZero project")
 
+    def _on_border_extension_changed(self, value: float):
+        """Update border extension factor when user changes the value."""
+        self.border_extension_factor = value
+        logger.info(f"Border extension factor updated to: {value:.2f}")
+
     def _open_pzero_loader_dialog(self):
         """Show a dialog that lets the user pick PZero entities to import."""
         if not self.pzero_bridge:
@@ -8394,11 +8416,13 @@ segmentation, triangulation, and visualization.
                 face_id = getattr(record, 'face_id', None)
                 if face_id is not None:
                     points = self.pzero_bridge.load_points(
-                        record.collection_key, record.uid, face_id=face_id
+                        record.collection_key, record.uid, face_id=face_id,
+                        extension_factor=self.border_extension_factor
                     )
                 else:
                     points = self.pzero_bridge.load_points(
-                        record.collection_key, record.uid
+                        record.collection_key, record.uid,
+                        extension_factor=self.border_extension_factor
                     )
             except Exception as exc:  # pragma: no cover - defensive
                 logger.error(

@@ -97,7 +97,8 @@ class PZeroPymeshitBridge:
         return records
 
     def load_points(
-        self, collection_key: str, uid: str, face_id: Optional[int] = None
+        self, collection_key: str, uid: str, face_id: Optional[int] = None,
+        extension_factor: float = 0.2
     ) -> Optional[np.ndarray]:
         """
         Return the XYZ coordinates for the requested entity, or None.
@@ -110,6 +111,9 @@ class PZeroPymeshitBridge:
             Unique identifier of the entity
         face_id : Optional[int]
             For boundary cubes: 0=bottom, 1=top, 2=front, 3=back, 4=left, 5=right
+        extension_factor : float
+            Factor by which to extend boundary faces (default 0.2 = 20% extension)
+            Only applies to boundary faces. Increase this if intersections are incomplete.
         
         Returns
         -------
@@ -125,7 +129,7 @@ class PZeroPymeshitBridge:
         
         # Extract specific face for boundary cubes
         if face_id is not None and collection_key == "boundary_coll":
-            return _extract_boundary_face(vtk_obj, face_id)
+            return _extract_boundary_face(vtk_obj, face_id, extension_factor)
         
         return _vtk_dataset_to_points(vtk_obj)
 
@@ -172,9 +176,9 @@ def _is_boundary_cube(vtk_obj) -> bool:
     return _count_points(vtk_obj) == 8
 
 
-def _extract_boundary_face(vtk_obj, face_id: int) -> Optional[np.ndarray]:
+def _extract_boundary_face(vtk_obj, face_id: int, extension_factor: float = 0.2) -> Optional[np.ndarray]:
     """
-    Extract one face from a PZero boundary cube.
+    Extract one face from a PZero boundary cube and extend it outward.
     
     The cube has 8 vertices arranged as:
     - Bottom layer (z=bottom): points 0, 1, 2, 3
@@ -199,11 +203,13 @@ def _extract_boundary_face(vtk_obj, face_id: int) -> Optional[np.ndarray]:
         - 3: Back face, max Y (points 3, 2, 6, 7)
         - 4: Left face, min X (points 0, 3, 7, 4)
         - 5: Right face, max X (points 1, 2, 6, 5)
+    extension_factor : float
+        Factor by which to extend the face beyond its original bounds (default 0.2 = 20%)
     
     Returns
     -------
     Optional[np.ndarray]
-        Array of shape (4, 3) containing the 4 corner points of the face,
+        Array of shape (4, 3) containing the 4 corner points of the extended face,
         or None if extraction fails
     """
     all_points = _vtk_dataset_to_points(vtk_obj)
@@ -224,7 +230,43 @@ def _extract_boundary_face(vtk_obj, face_id: int) -> Optional[np.ndarray]:
         return None
     
     indices = face_indices[face_id]
-    face_points = all_points[indices]
+    face_points = all_points[indices].copy()
     
-    return face_points.copy()
+    # Extend the face outward to ensure proper intersection with internal geometry
+    extended_face = _extend_boundary_face(face_points, face_id, extension_factor)
+    
+    return extended_face
+
+
+def _extend_boundary_face(face_points: np.ndarray, face_id: int, extension_factor: float) -> np.ndarray:
+    """
+    Extend a boundary face outward from its center.
+    
+    This ensures that border faces properly cross-cut internal geometry (like faults)
+    during intersection calculations.
+    
+    Parameters
+    ----------
+    face_points : np.ndarray
+        Array of shape (4, 3) containing the 4 corner points of the face
+    face_id : int
+        Face identifier (0-5)
+    extension_factor : float
+        Factor by which to extend the face (0.2 = 20% extension on each side)
+    
+    Returns
+    -------
+    np.ndarray
+        Extended face points (4, 3)
+    """
+    # Calculate face center
+    center = np.mean(face_points, axis=0)
+    
+    # Extend each point away from center
+    extended_points = np.zeros_like(face_points)
+    for i in range(4):
+        direction = face_points[i] - center
+        extended_points[i] = face_points[i] + direction * extension_factor
+    
+    return extended_points
 
