@@ -66,6 +66,7 @@ from pzero.helpers.helper_dialogs import (
     input_text_dialog,
     input_combo_dialog,
     input_checkbox_dialog,
+    options_dialog,
     tic,
     toc,
     progress_dialog,
@@ -1522,19 +1523,14 @@ def project_2_dem(self):
     #         print(" -- Error input type: only PolyLine type -- ")
     #         return
     # Ask if the tool replaces the input entities, or if they shall be preserved
-    replace_on_off = input_text_dialog(
+    replace_on_off = options_dialog(
         title="Project to Surface",
-        label="Replace Original Entities? (YES/NO)",
-        default_text="YES",
+        message="Replace Original Entities?",
+        yes_role="Yes",
+        no_role="No",
+        reject_role=None
     )
     if replace_on_off is None:
-        return
-    if (
-        replace_on_off.lower() != "yes"
-        and replace_on_off.lower() != "y"
-        and replace_on_off.lower() != "no"
-        and replace_on_off.lower() != "n"
-    ):
         return
     # Ask for the DOM (/DEM), source of the projection
     dom_list_uids = self.dom_coll.get_uids
@@ -1586,9 +1582,9 @@ def project_2_dem(self):
         projection.Update()
         # Create deepcopy of the geological entity dictionary.
         obj_dict = deepcopy(self.geol_coll.entity_dict)
-        if replace_on_off == "YES" or replace_on_off == "yes" or replace_on_off == "y":
+        if replace_on_off == 0:  # Yes - replace original entities
             obj_dict["uid"] = uid
-        elif replace_on_off == "NO" or replace_on_off == "no" or replace_on_off == "n":
+        elif replace_on_off == 1:  # No - create new entities
             obj_dict["uid"] = None
         obj_dict["name"] = f"{self.geol_coll.get_uid_name(uid)}_proj_DEM"
         obj_dict["feature"] = self.geol_coll.get_uid_feature(uid)
@@ -1612,12 +1608,12 @@ def project_2_dem(self):
         obj_dict["vtk_obj"].Modified()
         if obj_dict["vtk_obj"] is None:
             return
-        if replace_on_off == "NO" or replace_on_off == "no" or replace_on_off == "n":
+        if replace_on_off == 1:  # No - create new entity
             if obj_dict["vtk_obj"].points_number > 0:
                 self.geol_coll.add_entity_from_dict(obj_dict)
             else:
                 self.print_terminal(" -- empty object -- ")
-        else:
+        else:  # Yes - replace original entity
             self.geol_coll.replace_vtk(uid=uid, vtk_object=obj_dict["vtk_obj"])
             self.geol_coll.set_uid_name(uid=uid, name=obj_dict["name"])
             self.signals.geom_modified.emit([uid], self.geol_coll)
