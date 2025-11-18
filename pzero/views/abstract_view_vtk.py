@@ -56,6 +56,27 @@ class ViewVTK(BaseView):
         super().initialize_menu_tools()
 
         # then add new code specific to this class
+        # Import line drawing functions here to avoid circular imports
+        from ..two_d_lines import draw_line, edit_line, extend_line, draw_line_3d
+        
+        # Add line creation and editing tools for all VTK views
+        self.drawLineButton = QAction("Draw line", self)
+        self.drawLineButton.triggered.connect(lambda: draw_line(self))
+        self.menuCreate.addAction(self.drawLineButton)
+        
+        # Add 3D-specific line drawing tool that uses point picking
+        self.drawLine3DButton = QAction("Draw line (3D mode)", self)
+        self.drawLine3DButton.triggered.connect(lambda: draw_line_3d(self))
+        self.menuCreate.addAction(self.drawLine3DButton)
+        
+        self.editLineButton = QAction("Edit line", self)
+        self.editLineButton.triggered.connect(lambda: edit_line(self))
+        self.menuModify.addAction(self.editLineButton)
+        
+        self.extendLineButton = QAction("Extend line", self)
+        self.extendLineButton.triggered.connect(lambda: extend_line(self))
+        self.menuModify.addAction(self.extendLineButton)
+        
         self.zoomActive = QAction("Zoom to active", self)
         self.zoomActive.triggered.connect(self.zoom_active)
         self.menuView.addAction(self.zoomActive)

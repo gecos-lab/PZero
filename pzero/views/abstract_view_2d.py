@@ -29,13 +29,11 @@ class View2D(ViewVTK):
         # then add new code specific to this class
 
         # import here otherwise a circular reference would occur involving ViewMap and ViewXsection
+        # Note: draw_line, edit_line, and extend_line are now imported in ViewVTK
         from ..two_d_lines import (
-            draw_line,
-            edit_line,
             sort_line_nodes,
             move_line,
             rotate_line,
-            extend_line,
             split_line_line,
             split_line_existing_point,
             merge_lines,
@@ -51,16 +49,8 @@ class View2D(ViewVTK):
         )
 
         # ------------------------------------
-        # CONSIDER MOVING SOME OF THE FOLLOWING METHODS TO VTKView(), IN ORDER TO HAVE THEM ALSO IN 3D VIEWS
+        # Draw line, Edit line, and Extend line have been moved to ViewVTK to be available in all VTK views including 3D
         # ------------------------------------
-
-        self.drawLineButton = QAction("Draw line", self)
-        self.drawLineButton.triggered.connect(lambda: draw_line(self))
-        self.menuCreate.addAction(self.drawLineButton)
-
-        self.editLineButton = QAction("Edit line", self)
-        self.editLineButton.triggered.connect(lambda: edit_line(self))
-        self.menuModify.addAction(self.editLineButton)
 
         self.sortLineButton = QAction("Sort line nodes", self)
         self.sortLineButton.triggered.connect(lambda: sort_line_nodes(self))
@@ -73,10 +63,6 @@ class View2D(ViewVTK):
         self.rotateLineButton = QAction("Rotate line", self)
         self.rotateLineButton.triggered.connect(lambda: rotate_line(self))
         self.menuModify.addAction(self.rotateLineButton)
-
-        self.extendButton = QAction("Extend line", self)
-        self.extendButton.triggered.connect(lambda: extend_line(self))
-        self.menuModify.addAction(self.extendButton)
 
         self.splitLineByLineButton = QAction("Split line-line", self)
         self.splitLineByLineButton.triggered.connect(lambda: split_line_line(self))

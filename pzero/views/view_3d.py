@@ -3550,3 +3550,5 @@ class View3D(ViewVTK):
                 child.setChecked(True)
                 break
         return dialog
+
+

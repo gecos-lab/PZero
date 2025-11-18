@@ -33,11 +33,12 @@ from .helpers.helper_dialogs import (
     input_one_value_dialog,
     message_dialog,
 )
-from .helpers.helper_widgets import Editor, Tracer
+from .helpers.helper_widgets import Editor, Tracer, Tracer3D
 from .helpers.helper_functions import freeze_gui
 from .entities_factory import PolyLine, XsPolyLine
 
 from .views.dock_window import ViewMap, ViewXsection
+from .views.view_3d import View3D
 
 
 def draw_line(self):
@@ -92,11 +93,141 @@ def draw_line(self):
         line_dict["vtk_obj"] = XsPolyLine(
             x_section_uid=self.this_x_section_uid, parent=self.parent
         )
+    elif isinstance(self, View3D):
+        line_dict["topology"] = "PolyLine"
+        line_dict["x_section"] = ""
+        line_dict["vtk_obj"] = PolyLine()
     tracer = Tracer(self)
     tracer.EnabledOn()
     self.plotter.track_click_position(
         side="right", callback=lambda event: end_digitize(event, line_dict)
     )
+
+
+def draw_line_3d(self):
+    """Draw a line in 3D using point clicking. Works like 2D but in 3D space.
+    
+    Usage:
+    - Left-click anywhere to add points (they will project onto the view plane)
+    - Right-click to finish drawing
+    """
+    import numpy as np
+    
+    def on_left_click(click_position):
+        """Handle left-click to add point.
+        
+        Args:
+            click_position: The 3D position returned by PyVista's pick_click_position()
+        """
+        if not tracer_3d.is_active:
+            return
+        
+        # Debug: print what we received
+        self.print_terminal(f"DEBUG: Received click_position: {click_position}, type: {type(click_position)}")
+        
+        # Use the click position directly - PyVista already gives us a 3D point
+        if click_position is not None:
+            try:
+                # Convert to list if it's a numpy array or tuple
+                import numpy as np
+                if isinstance(click_position, (tuple, list, np.ndarray)):
+                    point = list(click_position) if not isinstance(click_position, list) else click_position
+                    if len(point) == 3:
+                        tracer_3d.add_point(point)
+                        self.print_terminal(f"✓ Point {len(tracer_3d.points)} added at ({point[0]:.2f}, {point[1]:.2f}, {point[2]:.2f})")
+                    else:
+                        self.print_terminal(f"ERROR: Point has {len(point)} coordinates, expected 3")
+                else:
+                    self.print_terminal(f"ERROR: click_position is not a valid type: {type(click_position)}")
+            except Exception as e:
+                self.print_terminal(f"ERROR adding point: {e}")
+        else:
+            self.print_terminal("ERROR: click_position is None")
+    
+    def on_right_click(event):
+        """Handle right-click to finish drawing."""
+        if not tracer_3d.is_active:
+            return
+        
+        # Stop tracking clicks
+        self.plotter.untrack_click_position(side="left")
+        self.plotter.untrack_click_position(side="right")
+        
+        # Check if we have enough points
+        if len(tracer_3d.points) < 2:
+            self.print_terminal("Need at least 2 points to create a line")
+            tracer_3d.disable()
+            self.enable_actions()
+            return
+        
+        # Get the polydata from the tracer
+        traced_pld = tracer_3d.get_polydata()
+        
+        if traced_pld and traced_pld.GetNumberOfPoints() > 0:
+            line_dict["vtk_obj"].ShallowCopy(traced_pld)
+            self.parent.geol_coll.add_entity_from_dict(line_dict)
+            self.print_terminal(f"✓ Created line with {len(tracer_3d.points)} points")
+        
+        # Clean up
+        tracer_3d.disable()
+        self.enable_actions()
+    
+    self.disable_actions()
+    
+    # Create deepcopy of the geological entity dictionary
+    line_dict = deepcopy(self.parent.geol_coll.entity_dict)
+    
+    # One dictionary is set as input for a general widget of multiple-value-input
+    line_dict_in = {
+        "name": ["PolyLine name: ", "new_pline"],
+        "role": [
+            "Role: ",
+            self.parent.geol_coll.valid_roles,
+        ],
+        "feature": [
+            "Feature: ",
+            self.parent.geol_coll.legend_df["feature"].tolist(),
+        ],
+        "scenario": [
+            "Scenario: ",
+            list(set(self.parent.geol_coll.legend_df["scenario"].tolist())),
+        ],
+    }
+    
+    line_dict_updt = multiple_input_dialog(
+        title="Digitize new 3D PolyLine", input_dict=line_dict_in
+    )
+    
+    # Check if the output of the widget is empty or not
+    if line_dict_updt is None:
+        self.enable_actions()
+        return
+    
+    # Getting the values that have been typed by the user through the widget
+    for key in line_dict_updt:
+        line_dict[key] = line_dict_updt[key]
+    
+    line_dict["topology"] = "PolyLine"
+    line_dict["x_section"] = ""
+    line_dict["vtk_obj"] = PolyLine()
+    
+    # Create and enable the 3D tracer
+    tracer_3d = Tracer3D(self)
+    tracer_3d.enable()
+    
+    # Set up click handlers using track_click_position
+    self.plotter.track_click_position(
+        side="left", 
+        callback=on_left_click
+    )
+    
+    # Track right-click to finish
+    self.plotter.track_click_position(
+        side="right", 
+        callback=on_right_click
+    )
+    
+    self.print_terminal("3D Line Drawing: Left-click to add points, Right-click to finish")
 
 
 def edit_line(self):
@@ -111,6 +242,8 @@ def edit_line(self):
             vtk_obj = XsPolyLine(
                 x_section_uid=self.this_x_section_uid, parent=self.parent
             )
+        elif isinstance(self, View3D):
+            vtk_obj = PolyLine()
         vtk_obj.ShallowCopy(traced_pld)
         self.parent.geol_coll.replace_vtk(uid=uid, vtk_object=vtk_obj)
         editor.EnabledOff()
@@ -201,7 +334,7 @@ def move_line(self, vector):
 
         points = np_stack((x, y, z), axis=1)
         self.parent.geol_coll.get_uid_vtk_obj(current_uid).points = points
-        left_right(current_uid)
+        left_right(self, uid=current_uid)
         # Deselect input line.
         self.parent.signals.geom_modified.emit([current_uid], self.parent.geol_coll)
     # Deselect input line.
@@ -260,7 +393,7 @@ def rotate_line(self):
             )
         outXYZ = np_column_stack((outX, outY, outZ))
         self.parent.geol_coll.get_uid_vtk_obj(current_uid).points = outXYZ
-        left_right(current_uid)
+        left_right(self, uid=current_uid)
         # emit uid as list to force redraw()
         self.parent.signals.geom_modified.emit([current_uid], self.parent.geol_coll)
     # Deselect input line.
@@ -282,6 +415,8 @@ def extend_line(self):
             vtk_obj = XsPolyLine(
                 x_section_uid=self.this_x_section_uid, parent=self.parent
             )
+        elif isinstance(self, View3D):
+            vtk_obj = PolyLine()
         vtk_obj.ShallowCopy(traced_pld)
 
         self.parent.geol_coll.replace_vtk(uid=uid, vtk_object=vtk_obj)
@@ -1260,7 +1395,7 @@ def copy_parallel(
     # Create entity from the dictionary and run left_right.
     if line_dict["vtk_obj"].points_number > 0:
         output_uid = self.parent.geol_coll.add_entity_from_dict(line_dict)
-        left_right(output_uid)
+        left_right(self, uid=output_uid)
     else:
         self.print_terminal("Empty object")
 
@@ -1374,7 +1509,7 @@ def copy_kink(self):
         # Create entity from the dictionary and run left_right.
         if line_dict["vtk_obj"].points_number > 0:
             output_uid = self.parent.geol_coll.add_entity_from_dict(line_dict)
-            left_right(output_uid)
+            left_right(self, uid=output_uid)
         else:
             self.print_terminal("Empty object")
 
@@ -1450,7 +1585,7 @@ def copy_similar(
     line_dict["name"] = out_line_name
     # Create entity from the dictionary and run left_right.
     output_uid = self.parent.geol_coll.add_entity_from_dict(line_dict)
-    left_right(output_uid)
+    left_right(self, uid=output_uid)
     # Deselect input line.
     if line_dict["vtk_obj"].points_number > 0:
         self.clear_selection()
@@ -1520,6 +1655,9 @@ def left_right(self, uid=None):
     # elif isinstance(self, ViewXsection):
     elif isinstance(self, ViewXsection):
         U_line, V_line = self.parent.geol_coll.get_uid_vtk_obj(uid).world2plane()
+    elif isinstance(self, View3D):
+        # For 3D view, left-right orientation is not meaningful, so return early
+        return
     else:
         return
     if U_line[0] > U_line[-1]:  # reverse if right-to-left
