@@ -1002,11 +1002,20 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
         self.close()
         self.loop.quit()
 
+
 class ShapefileAssignmentDialog(QMainWindow):
     """Dialog to assign shapefile attributes to PZero properties.
     Similar to import_dialog but simplified for shapefile data without preview table."""
 
-    def __init__(self, parent=None, shapefile_df=None, topology_type=None, include_label=False, *args, **kwargs):
+    def __init__(
+        self,
+        parent=None,
+        shapefile_df=None,
+        topology_type=None,
+        include_label=False,
+        *args,
+        **kwargs,
+    ):
         super(ShapefileAssignmentDialog, self).__init__(parent, *args, **kwargs)
         self.loop = QEventLoop()
         self.parent = parent
@@ -1080,7 +1089,9 @@ class ShapefileAssignmentDialog(QMainWindow):
             combo = QComboBox()
             combo.addItems(shapefile_columns)
             combo.setObjectName(f"combo_{field}")
-            combo.currentTextChanged.connect(lambda text, f=field, lbl=label: self._on_combo_changed(f, text, lbl))
+            combo.currentTextChanged.connect(
+                lambda text, f=field, lbl=label: self._on_combo_changed(f, text, lbl)
+            )
 
             main_layout.addWidget(label, row, 0)
             main_layout.addWidget(arrow_label, row, 1)
@@ -1101,7 +1112,9 @@ class ShapefileAssignmentDialog(QMainWindow):
             combo = QComboBox()
             combo.addItems(shapefile_columns)
             combo.setObjectName(f"combo_{field}")
-            combo.currentTextChanged.connect(lambda text, f=field, lbl=label: self._on_combo_changed(f, text, lbl))
+            combo.currentTextChanged.connect(
+                lambda text, f=field, lbl=label: self._on_combo_changed(f, text, lbl)
+            )
 
             main_layout.addWidget(label, row, 0)
             main_layout.addWidget(arrow_label, row, 1)
@@ -1112,6 +1125,7 @@ class ShapefileAssignmentDialog(QMainWindow):
 
         # Buttons
         from PySide6.QtWidgets import QDialogButtonBox
+
         button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         button_box.accepted.connect(self._validate_and_accept)
         button_box.rejected.connect(self.reject)
@@ -1145,7 +1159,6 @@ class ShapefileAssignmentDialog(QMainWindow):
         else:
             self.attribute_mapping[field] = text
 
-
     def _validate_and_accept(self):
         """Validate that all required fields are assigned before accepting."""
         missing_fields = []
@@ -1156,21 +1169,26 @@ class ShapefileAssignmentDialog(QMainWindow):
                 missing_fields.append(field)
 
         if self.topology_type == "Point" and not self.include_label:
-            has_dip_dir = (self.combo_boxes.get("dip_dir") and
-                          self.combo_boxes["dip_dir"].currentText() != "<none>")
-            has_dir = (self.combo_boxes.get("dir") and
-                      self.combo_boxes["dir"].currentText() != "<none>")
+            has_dip_dir = (
+                self.combo_boxes.get("dip_dir")
+                and self.combo_boxes["dip_dir"].currentText() != "<none>"
+            )
+            has_dir = (
+                self.combo_boxes.get("dir")
+                and self.combo_boxes["dir"].currentText() != "<none>"
+            )
 
             if not (has_dip_dir or has_dir):
                 missing_fields.append("dip_dir or dir")
 
         if missing_fields:
             from PySide6.QtWidgets import QMessageBox
+
             QMessageBox.warning(
                 self,
                 "Missing Required Fields",
-                f"The following required fields are not assigned:\n\n" +
-                "\n".join(f"- {field}" for field in missing_fields)
+                f"The following required fields are not assigned:\n\n"
+                + "\n".join(f"- {field}" for field in missing_fields),
             )
             return
 
@@ -1179,7 +1197,6 @@ class ShapefileAssignmentDialog(QMainWindow):
     def accept(self):
         """Accept the dialog and return the mapping."""
         self.result = self.attribute_mapping.copy()
-
 
         self.close()
         self.loop.quit()
@@ -1195,6 +1212,7 @@ class ShapefileAssignmentDialog(QMainWindow):
         self.show()
         self.loop.exec_()
         return self.result
+
 
 class NavigatorWidget(QMainWindow, Ui_NavWindow):
     """Navigator widget prototype for Xsections. This widget can be used to

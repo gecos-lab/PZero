@@ -375,7 +375,9 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                     self.plotter.remove_actor(silh_name)
             if uid in self.selected_uids:
                 self.selected_uids = [
-                    selected_uid for selected_uid in self.selected_uids if selected_uid != uid
+                    selected_uid
+                    for selected_uid in self.selected_uids
+                    if selected_uid != uid
                 ]
         tree.remove_items_from_tree(uids_to_remove=updated_uids)
 

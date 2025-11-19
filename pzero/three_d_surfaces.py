@@ -1528,7 +1528,7 @@ def project_2_dem(self):
         message="Replace Original Entities?",
         yes_role="Yes",
         no_role="No",
-        reject_role=None
+        reject_role=None,
     )
     if replace_on_off is None:
         return
@@ -1586,7 +1586,9 @@ def project_2_dem(self):
             obj_dict["role"] = self.geol_coll.get_uid_role(uid)
             obj_dict["topology"] = self.geol_coll.get_uid_topology(uid)
             obj_dict["properties_names"] = self.geol_coll.get_uid_properties_names(uid)
-            obj_dict["properties_components"] = self.geol_coll.get_uid_properties_components(uid)
+            obj_dict["properties_components"] = (
+                self.geol_coll.get_uid_properties_components(uid)
+            )
 
             # Create VTK object and copy geometry from original
             if isinstance(self.geol_coll.get_uid_vtk_obj(uid), PolyLine):
@@ -1645,9 +1647,13 @@ def project_2_dem(self):
         # Update the entity with projected geometry
         self.geol_coll.replace_vtk(uid=uid_to_project, vtk_object=projected_obj)
         if replace_on_off == 1:  # No - set name for new entity
-            self.geol_coll.set_uid_name(uid=uid_to_project, name=f"{self.geol_coll.get_uid_name(uid)}_proj_DEM")
+            self.geol_coll.set_uid_name(
+                uid=uid_to_project, name=f"{self.geol_coll.get_uid_name(uid)}_proj_DEM"
+            )
         else:  # Yes - set name for original entity
-            self.geol_coll.set_uid_name(uid=uid_to_project, name=f"{self.geol_coll.get_uid_name(uid)}_proj_DEM")
+            self.geol_coll.set_uid_name(
+                uid=uid_to_project, name=f"{self.geol_coll.get_uid_name(uid)}_proj_DEM"
+            )
 
         updated_uids.append(uid_to_project)
         prgs_bar.add_one()
@@ -1661,15 +1667,16 @@ def project_2_dem(self):
 
     # Force rebuild of all views to ensure immediate update (for both Yes and No)
     from pzero.views.dock_window import DockWindow
+
     dock_windows = self.findChildren(DockWindow)
     for dock in dock_windows:
-        if hasattr(dock, 'canvas') and hasattr(dock.canvas, 'rebuild_viewer'):
+        if hasattr(dock, "canvas") and hasattr(dock.canvas, "rebuild_viewer"):
             dock.canvas.rebuild_viewer()
 
     # If we created copies (No), deselect original entities from all views
     if replace_on_off == 1:
         for dock in dock_windows:
-            if hasattr(dock, 'canvas') and hasattr(dock.canvas, 'clear_selection'):
+            if hasattr(dock, "canvas") and hasattr(dock.canvas, "clear_selection"):
                 dock.canvas.clear_selection()
 
 

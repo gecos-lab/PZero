@@ -53,14 +53,16 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
     elif geom_type == "Point":
         topology_type = "Point"
     else:
-        print(f"Only Point and Line geometries can be imported. Found: {geom_type} - aborting.")
+        print(
+            f"Only Point and Line geometries can be imported. Found: {geom_type} - aborting."
+        )
         return
 
     # Create DataFrame with attributes (excluding geometry) for the dialog
-    attrs_df = pd_DataFrame(gdf.drop(columns='geometry'))
+    attrs_df = pd_DataFrame(gdf.drop(columns="geometry"))
 
     # include_label only for Background data (original code handled label only there)
-    include_label = (collection == "Background data")
+    include_label = collection == "Background data"
 
     # Open dialog to assign shapefile attributes to PZero properties
     dialog = ShapefileAssignmentDialog(
@@ -89,7 +91,9 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
         props_allowed.add("scenario")
     props_map = {k: v for k, v in attribute_mapping.items() if k in props_allowed}
     # Include dip, dip_dir, and dir (dir will be converted to dip_dir with +90° rotation)
-    orient_map = {k: v for k, v in attribute_mapping.items() if k in {"dip", "dip_dir", "dir"}}
+    orient_map = {
+        k: v for k, v in attribute_mapping.items() if k in {"dip", "dip_dir", "dir"}
+    }
 
     column_names = list(gdf.columns)
 
@@ -161,7 +165,9 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
                             if pzero_prop == "feature":
                                 curr_obj_dict["feature"] = i
                             else:
-                                curr_obj_dict[pzero_prop] = pd_series(gdf_index.loc[i, shp_col])[0]
+                                curr_obj_dict[pzero_prop] = pd_series(
+                                    gdf_index.loc[i, shp_col]
+                                )[0]
                     curr_obj_dict["topology"] = "VertexSet"
                     curr_obj_dict["vtk_obj"] = vtk_obj
                     # Add a coordinate column in the gdf_index dataframe
@@ -182,7 +188,9 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
                     dip_col = orient_map.get("dip")
                     if dip_col and dip_col in column_names:
                         # Use pd_series constructor and ensure always array with atleast_1d
-                        dip_values = np_atleast_1d(pd_series(gdf_index.loc[i, dip_col]).values)
+                        dip_values = np_atleast_1d(
+                            pd_series(gdf_index.loc[i, dip_col]).values
+                        )
                         curr_obj_dict["vtk_obj"].set_point_data("dip", dip_values)
 
                     # Handle dip_dir or dir (dir needs conversion: dir + 90° = dip_dir)
@@ -192,14 +200,20 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
                         # Convert dir to dip_dir by adding 90 degrees (as in original)
                         dir_values = pd_series(gdf_index.loc[i, dir_col])
                         direction = (dir_values + 90) % 360
-                        curr_obj_dict["vtk_obj"].set_point_data("dip_dir", np_atleast_1d(direction.values))
+                        curr_obj_dict["vtk_obj"].set_point_data(
+                            "dip_dir", np_atleast_1d(direction.values)
+                        )
                         has_angle_data = True
                     else:
                         # Try dip_dir directly
                         dip_dir_col = orient_map.get("dip_dir")
                         if dip_dir_col and dip_dir_col in column_names:
-                            dip_dir_values = np_atleast_1d(pd_series(gdf_index.loc[i, dip_dir_col]).values)
-                            curr_obj_dict["vtk_obj"].set_point_data("dip_dir", dip_dir_values)
+                            dip_dir_values = np_atleast_1d(
+                                pd_series(gdf_index.loc[i, dip_dir_col]).values
+                            )
+                            curr_obj_dict["vtk_obj"].set_point_data(
+                                "dip_dir", dip_dir_values
+                            )
                             has_angle_data = True
 
                     # Calculate normals if we have both dip and angle data
@@ -245,7 +259,9 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
                     self.geol_coll.add_entity_from_dict(curr_obj_dict)
                     del curr_obj_dict
             else:
-                print("Incomplete data. Feature property is required but not found in mapping.")
+                print(
+                    "Incomplete data. Feature property is required but not found in mapping."
+                )
     elif collection == "Fluid contacts":
         print(gdf.geom_type[0])
         if (gdf.geom_type[0] == "LineString") or (
@@ -300,13 +316,19 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
                 for i in feat_list:
                     curr_obj_dict = deepcopy(FluidCollection().entity_dict)
                     dip_col = orient_map.get("dip")
-                    vtk_obj = Attitude() if (dip_col and dip_col in gdf.columns) else VertexSet()
+                    vtk_obj = (
+                        Attitude()
+                        if (dip_col and dip_col in gdf.columns)
+                        else VertexSet()
+                    )
                     for pzero_prop, shp_col in props_map.items():
                         if shp_col in column_names:
                             if pzero_prop == "feature":
                                 curr_obj_dict["feature"] = i
                             else:
-                                curr_obj_dict[pzero_prop] = pd_series(gdf_index.loc[i, shp_col])[0]
+                                curr_obj_dict[pzero_prop] = pd_series(
+                                    gdf_index.loc[i, shp_col]
+                                )[0]
                     curr_obj_dict["topology"] = "VertexSet"
                     curr_obj_dict["vtk_obj"] = vtk_obj
                     # Add a coordinate column in the gdf_index dataframe
@@ -328,7 +350,9 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
                         # Handle dip data
                         dip_col = orient_map.get("dip")
                         if dip_col and dip_col in column_names:
-                            dip_values = np_atleast_1d(pd_series(gdf_index.loc[i, dip_col]).values)
+                            dip_values = np_atleast_1d(
+                                pd_series(gdf_index.loc[i, dip_col]).values
+                            )
                             curr_obj_dict["vtk_obj"].set_point_data("dip", dip_values)
 
                         # Handle dip_dir or dir (dir needs conversion: dir + 90° = dip_dir)
@@ -338,14 +362,20 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
                             # Convert dir to dip_dir by adding 90 degrees
                             dir_values = pd_series(gdf_index.loc[i, dir_col])
                             direction = (dir_values + 90) % 360
-                            curr_obj_dict["vtk_obj"].set_point_data("dip_dir", np_atleast_1d(direction.values))
+                            curr_obj_dict["vtk_obj"].set_point_data(
+                                "dip_dir", np_atleast_1d(direction.values)
+                            )
                             has_angle_data = True
                         else:
                             # Try dip_dir directly
                             dip_dir_col = orient_map.get("dip_dir")
                             if dip_dir_col and dip_dir_col in column_names:
-                                dip_dir_values = np_atleast_1d(pd_series(gdf_index.loc[i, dip_dir_col]).values)
-                                curr_obj_dict["vtk_obj"].set_point_data("dip_dir", dip_dir_values)
+                                dip_dir_values = np_atleast_1d(
+                                    pd_series(gdf_index.loc[i, dip_dir_col]).values
+                                )
+                                curr_obj_dict["vtk_obj"].set_point_data(
+                                    "dip_dir", dip_dir_values
+                                )
                                 has_angle_data = True
 
                         # Calculate normals if we have both dip and angle data
@@ -381,7 +411,9 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
                         self.fluid_coll.add_entity_from_dict(curr_obj_dict)
                         del curr_obj_dict
             else:
-                self.print_terminal("Incomplete data. Feature property is required but not found in mapping.")
+                self.print_terminal(
+                    "Incomplete data. Feature property is required but not found in mapping."
+                )
     elif collection == "Background data":
         if (gdf.geom_type[0] == "LineString") or (
             gdf.geom_type[0] == "MultiLineString"
@@ -454,7 +486,9 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
                             if pzero_prop == "feature":
                                 curr_obj_dict["feature"] = i
                             else:
-                                curr_obj_dict[pzero_prop] = pd_series(gdf_index.loc[i, shp_col])[0]
+                                curr_obj_dict[pzero_prop] = pd_series(
+                                    gdf_index.loc[i, shp_col]
+                                )[0]
                     curr_obj_dict["topology"] = "VertexSet"
                     curr_obj_dict["vtk_obj"] = vtk_obj
                     # Add a coordinate column in the gdf_index dataframe
@@ -483,4 +517,6 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
                         self.backgrnd_coll.add_entity_from_dict(curr_obj_dict)
                     del curr_obj_dict
             else:
-                self.print_terminal("Incomplete data. Feature property is required but not found in mapping.")
+                self.print_terminal(
+                    "Incomplete data. Feature property is required but not found in mapping."
+                )
