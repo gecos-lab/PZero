@@ -1585,6 +1585,8 @@ def project_2_dem(self):
             obj_dict["scenario"] = self.geol_coll.get_uid_scenario(uid)
             obj_dict["role"] = self.geol_coll.get_uid_role(uid)
             obj_dict["topology"] = self.geol_coll.get_uid_topology(uid)
+            obj_dict["properties_names"] = self.geol_coll.get_uid_properties_names(uid)
+            obj_dict["properties_components"] = self.geol_coll.get_uid_properties_components(uid)
 
             # Create VTK object and copy geometry from original
             if isinstance(self.geol_coll.get_uid_vtk_obj(uid), PolyLine):
