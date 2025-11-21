@@ -62,6 +62,7 @@ class TetrahedralMeshGenerator:
         self.plc_edge_constraints = None
         self.plc_edge_markers = None
         self.plc_holes = None  # Store hole points
+        self.region_attribute_map = {}
 
     def generate_tetrahedral_mesh(self, tetgen_switches: str = "pq1.414aAY") -> Optional[pv.UnstructuredGrid]:
         """
@@ -109,7 +110,8 @@ class TetrahedralMeshGenerator:
                     hole_distance_threshold = 5.0  # Minimum distance from hole centers
                     
                     for i, region in enumerate(volumetric_regions):
-                        region_id = int(region[3])  # material attribute
+                        region_id = int(region[3])  # unique TetGen region ID
+                        material_attribute = self.region_attribute_map.get(region_id, region_id)
                         point = (float(region[0]), float(region[1]), float(region[2]))
                         max_vol = float(region[4]) if region[4] > 0 else 0.0  # TetGen expects 0.0 for no constraint
                         
@@ -130,15 +132,24 @@ class TetrahedralMeshGenerator:
                                     break
                         
                         tet.add_region(region_id, point, max_vol)
-                        logger.info(f"Added 3D region {region_id}: point={point}, max_vol={max_vol}")
+                        logger.info(
+                            f"Added 3D region seed {region_id} for material {material_attribute}: "
+                            f"point={point}, max_vol={max_vol}"
+                        )
                     
                     # Log hole information for debugging
                     if hasattr(self, 'plc_holes') and self.plc_holes is not None and len(self.plc_holes) > 0:
-                        logger.info(f"✓ C++ Style: Added {len(volumetric_regions)} 3D regions (units/formations) to TetGen, avoiding {len(self.plc_holes)} holes")
+                        logger.info(
+                            f"✓ C++ Style: Added {len(volumetric_regions)} 3D region seeds "
+                            f"(units/formations) to TetGen, avoiding {len(self.plc_holes)} holes"
+                        )
                         for hole in self.plc_holes:
                             logger.debug(f"Hole at ({hole[0]:.3f}, {hole[1]:.3f}, {hole[2]:.3f})")
                     else:
-                        logger.info(f"✓ C++ Style: Added {len(volumetric_regions)} 3D regions (units/formations) to TetGen")
+                        logger.info(
+                            f"✓ C++ Style: Added {len(volumetric_regions)} 3D region seeds "
+                            f"(units/formations) to TetGen"
+                        )
                     
                 if surface_materials:
                     logger.info(f"✓ C++ Style: {len(surface_materials)} 2D materials (faults) handled as surface constraints")
@@ -169,9 +180,10 @@ class TetrahedralMeshGenerator:
                     # Apply the material attributes to the grid
                     grid = tet.grid
                     if attributes is not None and len(attributes) > 0:
-                        grid.cell_data['MaterialID'] = attributes.astype(int)
                         import numpy as np
-                        unique_materials = np.unique(attributes.astype(int))
+                        mapped_attributes = self._map_region_ids_to_materials(attributes)
+                        grid.cell_data['MaterialID'] = mapped_attributes
+                        unique_materials = np.unique(mapped_attributes)
                         logger.info(f"✓ Applied TetGen material attributes directly: {unique_materials}")
                     else:
                         logger.warning("TetGen returned no material attributes despite having regions")
@@ -741,6 +753,30 @@ class TetrahedralMeshGenerator:
             logger.info(f"Prepared {len(region_attributes_list)} material regions from {len(self.materials)} materials.")
         return region_attributes_list
 
+    def _map_region_ids_to_materials(self, region_ids: Any) -> np.ndarray:
+        """
+        Convert TetGen region IDs back into the geological material attributes defined in the GUI.
+
+        TetGen requires each region seed to have a unique ID, but multiple seeds can belong to the
+        same geological material. This helper remaps the unique region IDs returned by TetGen to the
+        intended material attribute IDs stored in ``self.region_attribute_map``.
+        """
+        if region_ids is None:
+            return None
+
+        region_ids_np = np.asarray(region_ids, dtype=int)
+
+        if not self.region_attribute_map:
+            return region_ids_np
+
+        mapped = region_ids_np.copy()
+        for region_id, material_attr in self.region_attribute_map.items():
+            mask = region_ids_np == int(region_id)
+            if np.any(mask):
+                mapped[mask] = int(material_attr)
+
+        return mapped
+
     def _prepare_materials_cpp_style(self) -> tuple:
         """
         Prepare materials following EXACT C++ MeshIt approach:
@@ -754,6 +790,8 @@ class TetrahedralMeshGenerator:
         """
         volumetric_regions = []
         surface_materials = []
+        self.region_attribute_map = {}
+        region_id_counter = 0
         
         if not self.materials:
             # Default fallback: create one volumetric region at PLC center with material ID = 0
@@ -761,8 +799,10 @@ class TetrahedralMeshGenerator:
                 bounds_min = np.min(self.plc_vertices, axis=0)
                 bounds_max = np.max(self.plc_vertices, axis=0)
                 center = (bounds_min + bounds_max) / 2.0
-                volumetric_regions.append([center[0], center[1], center[2], 0, 0])  # Material ID = 0
+                volumetric_regions.append([center[0], center[1], center[2], region_id_counter, 0])
+                self.region_attribute_map[region_id_counter] = 0
                 logger.info("No materials defined. Using default volumetric material region at PLC center with ID=0")
+                region_id_counter += 1
         else:
             # C++ Style: ALL materials get volumetric regions with SEQUENTIAL indices (0,1,2...)
             # CRITICAL: Sort materials by their attribute to ensure sequential ordering!
@@ -772,7 +812,7 @@ class TetrahedralMeshGenerator:
                 material_name = material.get('name', '').lower()
                 material_type = material.get('type', 'FORMATION')
                 locations = material.get('locations', [])
-                material_attribute = material.get('attribute', 0)  # Use material's attribute as ID
+                material_attribute = material.get('attribute', 0)  # Geological material ID
                 
                 # Check if this is a fault
                 is_fault = (material_type == 'FAULT' or 
@@ -787,12 +827,20 @@ class TetrahedralMeshGenerator:
                 # ONLY formations/units get volumetric regions
                 for loc in locations:
                     if len(loc) >= 3:
-                        # CRITICAL: Use the material's attribute directly (already sequential 0,1,2...)
-                        volumetric_regions.append([float(loc[0]), float(loc[1]), float(loc[2]), material_attribute, 0])
-                        logger.info(f"Added 3D region: '{material.get('name')}' with C++ style ID={material_attribute}")
+                        region_id = region_id_counter
+                        region_id_counter += 1
+                        volumetric_regions.append([float(loc[0]), float(loc[1]), float(loc[2]), region_id, 0])
+                        self.region_attribute_map[region_id] = material_attribute
+                        logger.info(
+                            f"Added 3D region seed {region_id} for '{material.get('name')}' "
+                            f"(material ID {material_attribute})"
+                        )
         
-        max_material_id = max([int(region[3]) for region in volumetric_regions]) if volumetric_regions else -1
-        logger.info(f"✓ TRUE C++ Style: {len(volumetric_regions)} volumetric regions (formations only, TetGen indices 0-{max_material_id})")
+        max_region_id = max([int(region[3]) for region in volumetric_regions]) if volumetric_regions else -1
+        logger.info(
+            f"✓ TRUE C++ Style: {len(volumetric_regions)} volumetric region seeds (region IDs 0-{max_region_id}) "
+            f"covering {len(set(self.region_attribute_map.values()))} formation material(s)"
+        )
         logger.info(f"✓ TRUE C++ Style: {len(surface_materials)} surface materials (faults only, surface constraints)")
         
         return volumetric_regions, surface_materials
@@ -822,7 +870,7 @@ class TetrahedralMeshGenerator:
                 # Use add_region() method for fallback strategies too (C++ style - only volumetric regions)
                 if hasattr(self, 'plc_regions') and self.plc_regions:
                     for region in self.plc_regions:
-                        region_id = int(region[3])  # material attribute
+                        region_id = int(region[3])  # unique TetGen region ID
                         point = (float(region[0]), float(region[1]), float(region[2]))
                         max_vol = float(region[4]) if region[4] > 0 else 0.0
                         tet.add_region(region_id, point, max_vol)
@@ -833,9 +881,10 @@ class TetrahedralMeshGenerator:
                     grid = tet.grid
                     # Apply material attributes from fallback too
                     if attributes is not None and len(attributes) > 0:
-                        grid.cell_data['MaterialID'] = attributes.astype(int)
                         import numpy as np
-                        unique_materials = np.unique(attributes.astype(int))
+                        mapped_attributes = self._map_region_ids_to_materials(attributes)
+                        grid.cell_data['MaterialID'] = mapped_attributes
+                        unique_materials = np.unique(mapped_attributes)
                         logger.info(f"✓ Fallback: Applied TetGen material attributes: {unique_materials}")
                 else:
                     tet.tetrahedralize(switches=switches)
