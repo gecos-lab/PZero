@@ -1330,12 +1330,22 @@ class MeshItWorkflowGUI(QMainWindow):
         # -- File Loading Controls --
         file_group = QGroupBox("Load Data")
         file_layout = QVBoxLayout(file_group)
+         # Horizontal layout for load and delete buttons
+        buttons_layout = QHBoxLayout()
         
         # Button for loading multiple files
         load_multiple_btn = QPushButton("Load Multiple Files...")
         load_multiple_btn.setToolTip("Load points from multiple files as separate datasets")
         load_multiple_btn.clicked.connect(self.load_multiple_files)
-        file_layout.addWidget(load_multiple_btn)
+        buttons_layout.addWidget(load_multiple_btn)
+        
+        # Button for deleting selected surface
+        delete_selected_btn = QPushButton("Delete Selected")
+        delete_selected_btn.setToolTip("Delete the selected surface from the dataset list")
+        delete_selected_btn.clicked.connect(self.delete_selected_surface)
+        buttons_layout.addWidget(delete_selected_btn)
+        
+        file_layout.addLayout(buttons_layout)
 
         self.load_from_pzero_btn = QPushButton("Load From PZero...")
         self.load_from_pzero_btn.setToolTip("Send datasets from the active PZero project directly into PyMeshIt")
@@ -8541,7 +8551,29 @@ segmentation, triangulation, and visualization.
         """Remove the active dataset"""
         if 0 <= self.current_dataset_index < len(self.datasets):
             self._remove_dataset(self.current_dataset_index)
-
+    
+    def delete_selected_surface(self):
+        """Delete the selected surface from the dataset list"""
+        # Get the currently selected item from the dataset list widget
+        current_item = self.dataset_list_widget.currentItem()
+        if current_item is None:
+            QMessageBox.warning(
+                self,
+                "No Selection",
+                "Please select a surface from the dataset list to delete."
+            )
+            return
+        
+        # Get the current row index
+        current_row = self.dataset_list_widget.currentRow()
+        if 0 <= current_row < len(self.datasets):
+            self._remove_dataset(current_row)
+        else:
+            QMessageBox.warning(
+                self,
+                "Invalid Selection",
+                "The selected item is not valid."
+            )
     # ------------------------------------------------------------------ #
     # Integration with PZero
     # ------------------------------------------------------------------ #
