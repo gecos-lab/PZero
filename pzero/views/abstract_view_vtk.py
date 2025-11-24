@@ -179,41 +179,40 @@ class ViewVTK(BaseView):
 
     def set_actor_visible(self, uid=None, visible=None, name=None):
         """Set actor uid visible or invisible (visible = True or False)"""
+        if uid not in self.actors_df["uid"].to_list():
+            return
         collection = self.actors_df.loc[
             self.actors_df["uid"] == uid, "collection"
         ].values[0]
-        actors = self.plotter.renderer.actors
-        this_actor = actors[uid]
+        actors = getattr(self.plotter.renderer, "actors", {})
+
+        def _set_visibility_for(key):
+            try:
+                actors[key].SetVisibility(visible)
+            except Exception:
+                pass
+
+        try:
+            this_actor = actors[uid]
+        except Exception:
+            return
+
         if collection == "well_coll":
-            # case for WELLS
-            if name == "Trace":
-                # case for WELL TRACE
-                if f"{uid}_prop" in actors.keys():
-                    prop_actor = actors[f"{uid}_prop"]
-                    prop_actor.SetVisibility(visible)
-                if f"{uid}_geo" in actors:
-                    geo_actor = actors[f"{uid}_geo"]
-                    geo_actor.SetVisibility(visible)
-                # self.plotter.remove_actor(f'{uid}_prop')
-                # self.plotter.remove_actor(f'{uid}_geo')
-                this_actor.SetVisibility(visible)
-            elif name == "Markers":
-                # case for WELL markers
-                if f"{uid}_marker-labels" in actors.keys():
-                    marker_actor_labels = actors[f"{uid}_marker-labels"]
-                    marker_actor_points = actors[f"{uid}_marker-points"]
-                    marker_actor_labels.SetVisibility(visible)
-                    marker_actor_points.SetVisibility(visible)
+            if name == "Markers":
+                _set_visibility_for(f"{uid}_marker-labels")
+                _set_visibility_for(f"{uid}_marker-points")
+                return
+            # Default behaviour toggles trace and any auxiliary actors (property, geo, litho)
+            this_actor.SetVisibility(visible)
+            _set_visibility_for(f"{uid}_prop")
+            _set_visibility_for(f"{uid}_geo")
+            _set_visibility_for(f"{uid}_litho")
+            return
         elif collection == "backgrnd_coll":
             # case for BACKGROUNDS
-            if f"{uid}_name-labels" in actors.keys():
-                marker_actor_labels = actors[f"{uid}_name-labels"]
-                marker_actor_labels.SetVisibility(visible)
-            this_actor.SetVisibility(visible)
-        else:
-            # case for ALL OTHER COLLECTIONS
-            # self.print_terminal("case for ALL OTHER COLLECTIONS")
-            this_actor.SetVisibility(visible)
+            _set_visibility_for(f"{uid}_name-labels")
+
+        this_actor.SetVisibility(visible)
 
     def remove_actor_in_view(self, uid=None, redraw=False):
         """ "Remove actor from plotter"""
@@ -705,6 +704,7 @@ class ViewVTK(BaseView):
             elif show_property == "MD":
                 show_property = plot_entity.get_point_data(data_key="MD")
             else:
+                self.plotter.remove_actor(f"{uid}_prop")
                 prop = plot_entity.plot_along_trace(
                     show_property, method=self.trace_method, camera=self.plotter.camera
                 )
