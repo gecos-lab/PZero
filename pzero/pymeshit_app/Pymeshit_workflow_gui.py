@@ -8417,16 +8417,32 @@ segmentation, triangulation, and visualization.
             )
 
     def _import_pzero_records(self, records):
-        """Convert selected PZero entities to datasets."""
+        """
+        Convert selected PZero entities to datasets.
+        
+        Parameters
+        ----------
+        records : List[Tuple[PZeroEntityRecord, bool]]
+            List of tuples containing (record, load_as_points) where load_as_points
+            indicates whether TriSurf entities should be loaded as points instead of triangles.
+        """
         loaded = 0
         skipped = 0
 
-        for record in records:
+        for record_tuple in records:
+            # Unpack tuple: (record, load_as_points)
+            if isinstance(record_tuple, tuple) and len(record_tuple) == 2:
+                record, load_as_points = record_tuple
+            else:
+                # Backward compatibility: if it's just a record, treat load_as_points as False
+                record = record_tuple
+                load_as_points = False
+            
             try:
                 # Check if this is a TriSurf entity (already triangulated)
                 is_trisurf = record.topology == "TriSurf"
                 
-                if is_trisurf:
+                if is_trisurf and not load_as_points:
                     # For TriSurf: extract triangles and boundary edges directly
                     tri_data = self.pzero_bridge.load_triangles(
                         record.collection_key, record.uid
@@ -8497,6 +8513,36 @@ segmentation, triangulation, and visualization.
                     logger.info(
                         "Loaded TriSurf %s: %d vertices, %d triangles",
                         record.name, len(vertices), len(triangles)
+                    )
+                    
+                elif is_trisurf and load_as_points:
+                    # Load TriSurf as points when "Load as Points" checkbox is checked
+                    points = self.pzero_bridge.load_points(
+                        record.collection_key, record.uid,
+                        extension_factor=self.border_extension_factor
+                    )
+                    
+                    if points is None or len(points) == 0:
+                        skipped += 1
+                        continue
+                    
+                    dataset_name = self._make_unique_dataset_name(record.name)
+                    dataset = {
+                        "name": dataset_name,
+                        "type": record.topology or "PZERO",
+                        "points": points,
+                        "visible": True,
+                        "color": self._get_next_color(),
+                        "source": "PZERO",
+                        "collection": record.collection_label,
+                        "collection_key": record.collection_key,
+                        "uid": record.uid,
+                    }
+                    self.datasets.append(dataset)
+                    loaded += 1
+                    logger.info(
+                        "Loaded TriSurf %s as points: %d points",
+                        record.name, len(points)
                     )
                     
                 else:
@@ -16920,8 +16966,8 @@ class PZeroEntitySelectionDialog(QDialog):
         )
 
         self.tree = QTreeWidget()
-        self.tree.setColumnCount(4)
-        self.tree.setHeaderLabels(["Collection", "Name", "Type", "Points"])
+        self.tree.setColumnCount(5)
+        self.tree.setHeaderLabels(["Collection", "Name", "Type", "Points", "Load as Points"])
         self.tree.setAlternatingRowColors(True)
         layout.addWidget(self.tree, 1)
 
@@ -16930,18 +16976,20 @@ class PZeroEntitySelectionDialog(QDialog):
             grouped.setdefault(record.collection_label, []).append(record)
 
         for collection_label, records in grouped.items():
-            parent_item = QTreeWidgetItem([collection_label, "", "", ""])
+            parent_item = QTreeWidgetItem([collection_label, "", "", "", ""])
             parent_item.setFirstColumnSpanned(True)
             parent_item.setFlags(Qt.ItemIsEnabled)
             self.tree.addTopLevelItem(parent_item)
 
             for record in records:
+                is_trisurf = record.topology == "TriSurf"
                 child = QTreeWidgetItem(
                     [
                         "",
                         record.name,
                         record.topology or "-",
                         str(record.point_count),
+                        "",  # "Load as Points" column - will be set below
                     ]
                 )
                 child.setData(0, Qt.UserRole, record)
@@ -16951,12 +16999,33 @@ class PZeroEntitySelectionDialog(QDialog):
                     | Qt.ItemIsUserCheckable
                 )
                 child.setCheckState(0, Qt.Unchecked)
+                
+                # Add item to tree first
                 parent_item.addChild(child)
+                
+                # Add "Load as Points" checkbox widget for TriSurf entities after item is added
+                if is_trisurf:
+                    # Clear any text in column 4 to ensure checkbox is visible
+                    child.setText(4, "")
+                    checkbox = QCheckBox(self.tree)  # Parent to tree widget
+                    checkbox.setChecked(False)
+                    checkbox.setToolTip("Load TriSurf as points instead of triangles")
+                    # Ensure checkbox is visible
+                    checkbox.show()
+                    self.tree.setItemWidget(child, 4, checkbox)
+                else:
+                    child.setText(4, "-")  # Show dash for non-TriSurf entities
 
             parent_item.setExpanded(True)
 
         header = self.tree.header()
-        header.setSectionResizeMode(QHeaderView.Stretch)
+        # Set resize modes: Stretch for most columns, but Fixed/Interactive for checkbox column
+        for i in range(5):
+            if i == 4:  # "Load as Points" column
+                header.setSectionResizeMode(i, QHeaderView.Fixed)
+                self.tree.setColumnWidth(i, 120)  # Set explicit width for checkbox column
+            else:
+                header.setSectionResizeMode(i, QHeaderView.Stretch)
 
         button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         button_box.accepted.connect(self.accept)
@@ -16964,14 +17033,30 @@ class PZeroEntitySelectionDialog(QDialog):
         layout.addWidget(button_box)
 
     def selected_records(self):
-        """Return the checked child items."""
+        """
+        Return the checked child items with their load_as_points flag.
+        
+        Returns
+        -------
+        List[Tuple[PZeroEntityRecord, bool]]
+            List of tuples containing (record, load_as_points) where load_as_points
+            is True if the "Load as Points" checkbox is checked for TriSurf entities.
+        """
         selections = []
         for index in range(self.tree.topLevelItemCount()):
             parent = self.tree.topLevelItem(index)
             for child_index in range(parent.childCount()):
                 child = parent.child(child_index)
                 if child.checkState(0) == Qt.Checked:
-                    selections.append(child.data(0, Qt.UserRole))
+                    record = child.data(0, Qt.UserRole)
+                    # Check if "Load as Points" checkbox widget is checked (column 4)
+                    checkbox_widget = self.tree.itemWidget(child, 4)
+                    load_as_points = (
+                        checkbox_widget is not None 
+                        and isinstance(checkbox_widget, QCheckBox)
+                        and checkbox_widget.isChecked()
+                    )
+                    selections.append((record, load_as_points))
         return selections
 
 if __name__ == "__main__":
