@@ -89,6 +89,69 @@ except ImportError as e:
 # Add Scipy import for interpolation
 from scipy.interpolate import griddata
 
+
+def extend_surface_points(points: np.ndarray, extension_factor: float) -> np.ndarray:
+    """
+    Radially extend a surface mesh within its best-fit plane.
+
+    The function keeps the coordinate along the surface normal unchanged and scales the
+    two in-plane components around the centroid. This emulates growing the surface
+    footprint without altering its thickness.
+
+    Parameters
+    ----------
+    points : np.ndarray
+        Nx3 array of vertices that describe the surface.
+    extension_factor : float
+        Fractional growth applied to the in-plane directions (0.1 = 10%).
+
+    Returns
+    -------
+    np.ndarray
+        Extended copy of the input vertices. The original array is not modified.
+    """
+    if points is None:
+        return points
+    if extension_factor <= 0.0:
+        return np.asarray(points, dtype=float).copy()
+
+    pts = np.asarray(points, dtype=float)
+    if pts.ndim != 2 or pts.shape[0] < 3:
+        return pts.copy()
+
+    centroid = pts.mean(axis=0)
+    centered = pts - centroid
+
+    # Degenerate surfaces (all points coincident) cannot be extended meaningfully
+    if np.linalg.norm(centered) < 1e-12:
+        return pts.copy()
+
+    try:
+        _, _, vh = np.linalg.svd(centered, full_matrices=False)
+    except np.linalg.LinAlgError:
+        logger.warning("Surface extension skipped: SVD failed.", exc_info=True)
+        return pts.copy()
+
+    if vh.shape[0] < 3:
+        return pts.copy()
+
+    axis_u, axis_v, normal = vh[0], vh[1], vh[2]
+    scale = 1.0 + extension_factor
+
+    extended = np.empty_like(pts)
+    for idx, vec in enumerate(centered):
+        u = np.dot(vec, axis_u)
+        v = np.dot(vec, axis_v)
+        w = np.dot(vec, normal)
+        extended[idx] = (
+            centroid
+            + axis_u * u * scale
+            + axis_v * v * scale
+            + normal * w
+        )
+
+    return extended
+
 # Worker class for background computations
 class ComputationWorker(QObject):
     dataset_finished = Signal(int, str, bool) # index, name, success
@@ -8425,21 +8488,41 @@ segmentation, triangulation, and visualization.
         
         Parameters
         ----------
-        records : List[Tuple[PZeroEntityRecord, bool]]
-            List of tuples containing (record, load_as_points) where load_as_points
-            indicates whether TriSurf entities should be loaded as points instead of triangles.
+        records : List[Tuple[PZeroEntityRecord, bool, float]]
+            Tuples containing (record, load_as_points, extension_factor). extension_factor
+            defaults to 0.0 for dialogs that do not expose the per-surface control.
         """
         loaded = 0
         skipped = 0
 
         for record_tuple in records:
-            # Unpack tuple: (record, load_as_points)
-            if isinstance(record_tuple, tuple) and len(record_tuple) == 2:
-                record, load_as_points = record_tuple
+            extension_factor = 0.0
+
+            if isinstance(record_tuple, tuple):
+                tuple_len = len(record_tuple)
+                if tuple_len == 3:
+                    record, load_as_points, extension_factor = record_tuple
+                elif tuple_len == 2:
+                    record, load_as_points = record_tuple
+                elif tuple_len == 1:
+                    (record,) = record_tuple
+                    load_as_points = False
+                elif tuple_len == 0:
+                    logger.warning("Skipping empty tuple received from PZero entity selection.")
+                    continue
+                else:
+                    record = record_tuple[0]
+                    load_as_points = False
             else:
-                # Backward compatibility: if it's just a record, treat load_as_points as False
+                # Backward compatibility: single record entry
                 record = record_tuple
                 load_as_points = False
+
+            try:
+                extension_factor = float(extension_factor)
+            except (TypeError, ValueError):
+                extension_factor = 0.0
+            extension_factor = max(0.0, extension_factor)
             
             try:
                 # Check if this is a TriSurf entity (already triangulated)
@@ -8463,6 +8546,8 @@ segmentation, triangulation, and visualization.
                         continue
                     
                     vertices, triangles = tri_data
+                    if extension_factor > 0.0:
+                        vertices = extend_surface_points(vertices, extension_factor)
                     
                     # Create dataset with triangulation already populated
                     dataset_name = self._make_unique_dataset_name(record.name)
@@ -8482,12 +8567,22 @@ segmentation, triangulation, and visualization.
                         },
                         "is_pre_triangulated": True,  # Flag to skip hull/triangulation steps
                     }
+                    if extension_factor > 0.0:
+                        dataset["surface_extension_factor"] = extension_factor
                     
                     # Extract convex hull from boundary edges
-                    if boundary_hull is not None and len(boundary_hull) > 0:
+                    boundary_points_for_dataset = boundary_hull
+                    if (
+                        boundary_points_for_dataset is not None
+                        and len(boundary_points_for_dataset) > 0
+                    ):
+                        if extension_factor > 0.0:
+                            boundary_points_for_dataset = extend_surface_points(
+                                boundary_points_for_dataset, extension_factor
+                            )
                         # Format hull_points as list of [x, y, z, point_type] arrays
                         hull_points_list = []
-                        for pt in boundary_hull:
+                        for pt in boundary_points_for_dataset:
                             hull_points_list.append([float(pt[0]), float(pt[1]), float(pt[2]), "DEFAULT"])
                         dataset["hull_points"] = np.array(hull_points_list, dtype=object)
                         logger.info(
@@ -8528,6 +8623,9 @@ segmentation, triangulation, and visualization.
                     if points is None or len(points) == 0:
                         skipped += 1
                         continue
+
+                    if extension_factor > 0.0:
+                        points = extend_surface_points(points, extension_factor)
                     
                     dataset_name = self._make_unique_dataset_name(record.name)
                     dataset = {
@@ -8541,6 +8639,8 @@ segmentation, triangulation, and visualization.
                         "collection_key": record.collection_key,
                         "uid": record.uid,
                     }
+                    if extension_factor > 0.0:
+                        dataset["surface_extension_factor"] = extension_factor
                     self.datasets.append(dataset)
                     loaded += 1
                     logger.info(
@@ -17179,8 +17279,10 @@ class PZeroEntitySelectionDialog(QDialog):
         )
 
         self.tree = QTreeWidget()
-        self.tree.setColumnCount(5)
-        self.tree.setHeaderLabels(["Collection", "Name", "Type", "Points", "Load as Points"])
+        self.tree.setColumnCount(6)
+        self.tree.setHeaderLabels(
+            ["Collection", "Name", "Type", "Points", "Load as Points", "Extend Factor"]
+        )
         self.tree.setAlternatingRowColors(True)
         layout.addWidget(self.tree, 1)
 
@@ -17203,6 +17305,7 @@ class PZeroEntitySelectionDialog(QDialog):
                         record.topology or "-",
                         str(record.point_count),
                         "",  # "Load as Points" column - will be set below
+                        "",  # Extend factor column - widget added later
                     ]
                 )
                 child.setData(0, Qt.UserRole, record)
@@ -17226,17 +17329,32 @@ class PZeroEntitySelectionDialog(QDialog):
                     # Ensure checkbox is visible
                     checkbox.show()
                     self.tree.setItemWidget(child, 4, checkbox)
+                    spinbox = QDoubleSpinBox(self.tree)
+                    spinbox.setDecimals(2)
+                    spinbox.setRange(0.0, 1.0)
+                    spinbox.setSingleStep(0.05)
+                    spinbox.setValue(0.0)
+                    spinbox.setToolTip(
+                        "Extend this surface footprint by the selected factor (0.2 = 20%)."
+                    )
+                    spinbox.setKeyboardTracking(False)
+                    spinbox.show()
+                    self.tree.setItemWidget(child, 5, spinbox)
                 else:
                     child.setText(4, "-")  # Show dash for non-TriSurf entities
+                    child.setText(5, "-")
 
             parent_item.setExpanded(True)
 
         header = self.tree.header()
         # Set resize modes: Stretch for most columns, but Fixed/Interactive for checkbox column
-        for i in range(5):
+        for i in range(6):
             if i == 4:  # "Load as Points" column
                 header.setSectionResizeMode(i, QHeaderView.Fixed)
                 self.tree.setColumnWidth(i, 120)  # Set explicit width for checkbox column
+            elif i == 5:  # Surface extension column
+                header.setSectionResizeMode(i, QHeaderView.Fixed)
+                self.tree.setColumnWidth(i, 130)
             else:
                 header.setSectionResizeMode(i, QHeaderView.Stretch)
 
@@ -17251,9 +17369,9 @@ class PZeroEntitySelectionDialog(QDialog):
         
         Returns
         -------
-        List[Tuple[PZeroEntityRecord, bool]]
-            List of tuples containing (record, load_as_points) where load_as_points
-            is True if the "Load as Points" checkbox is checked for TriSurf entities.
+        List[Tuple[PZeroEntityRecord, bool, float]]
+            Tuples of (record, load_as_points, extension_factor). extension_factor equals
+            the per-surface extend factor selected in the table (0.0 if not applicable).
         """
         selections = []
         for index in range(self.tree.topLevelItemCount()):
@@ -17269,7 +17387,14 @@ class PZeroEntitySelectionDialog(QDialog):
                         and isinstance(checkbox_widget, QCheckBox)
                         and checkbox_widget.isChecked()
                     )
-                    selections.append((record, load_as_points))
+                    extension_widget = self.tree.itemWidget(child, 5)
+                    extension_factor = 0.0
+                    if (
+                        extension_widget is not None
+                        and isinstance(extension_widget, QDoubleSpinBox)
+                    ):
+                        extension_factor = extension_widget.value()
+                    selections.append((record, load_as_points, extension_factor))
         return selections
 
 if __name__ == "__main__":
