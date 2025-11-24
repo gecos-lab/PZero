@@ -931,8 +931,16 @@ class MeshItWorkflowGUI(QMainWindow):
             )
             return
 
-        # default position = geometric centre of all constrained surfaces
-        new_pt = self._calculate_default_location()
+        # Default position: use first location of current material if available,
+        # otherwise use default location calculation
+        if self.tetra_materials[m].get('locations') and len(self.tetra_materials[m]['locations']) > 0:
+            # Use the first location of the current material
+            first_loc = self.tetra_materials[m]['locations'][0]
+            new_pt = [float(first_loc[0]), float(first_loc[1]), float(first_loc[2])]
+        else:
+            # Fallback to default location calculation
+            new_pt = self._calculate_default_location()
+        
         self.tetra_materials[m]["locations"].append(new_pt)
 
         self.material_location_list.setCurrentRow(
@@ -947,6 +955,76 @@ class MeshItWorkflowGUI(QMainWindow):
         del self.tetra_materials[m]["locations"][l]
         self.material_location_list.setCurrentRow(max(0,len(self.tetra_materials[m]["locations"])-1))
         self._refresh_material_list()
+
+    def _calculate_slider_ranges(self) -> tuple:
+        """
+        Calculate dynamic slider ranges based on all material coordinates.
+        Returns: (x_range, y_range, z_range) where each range is (min, max, center)
+        """
+        # Collect all coordinates from all materials
+        all_x, all_y, all_z = [], [], []
+        
+        if hasattr(self, 'tetra_materials') and self.tetra_materials:
+            for material in self.tetra_materials:
+                for location in material.get('locations', []):
+                    if len(location) >= 3:
+                        all_x.append(float(location[0]))
+                        all_y.append(float(location[1]))
+                        all_z.append(float(location[2]))
+        
+        # Calculate ranges for each axis
+        def get_range(coords, current_value):
+            if not coords:
+                # Default range if no coordinates exist
+                if abs(current_value) < 1.0:
+                    return (-100.0, 100.0, current_value)
+                else:
+                    # Use current value as center with reasonable range
+                    range_size = max(abs(current_value) * 0.2, 100.0)
+                    return (current_value - range_size, current_value + range_size, current_value)
+            
+            min_val = min(coords)
+            max_val = max(coords)
+            center = (min_val + max_val) / 2.0
+            
+            # Add padding (20% of range or minimum 100 units)
+            range_size = max((max_val - min_val) * 0.2, 100.0)
+            if range_size == 0:
+                range_size = max(abs(center) * 0.2, 100.0)
+            
+            return (center - range_size, center + range_size, center)
+        
+        # Get current values if editing
+        m = self.material_list.currentRow()
+        l = self.material_location_list.currentRow()
+        if m >= 0 and l >= 0 and m < len(self.tetra_materials):
+            current_x = float(self.tetra_materials[m]["locations"][l][0])
+            current_y = float(self.tetra_materials[m]["locations"][l][1])
+            current_z = float(self.tetra_materials[m]["locations"][l][2])
+        else:
+            current_x = current_y = current_z = 0.0
+        
+        x_range = get_range(all_x, current_x)
+        y_range = get_range(all_y, current_y)
+        z_range = get_range(all_z, current_z)
+        
+        return (x_range, y_range, z_range)
+    
+    def _value_to_slider(self, value: float, min_val: float, max_val: float) -> int:
+        """Convert a coordinate value to slider position (0-1000000)."""
+        if max_val == min_val:
+            return 500000  # Center position
+        # Map value to slider range [0, 1000000]
+        normalized = (value - min_val) / (max_val - min_val)
+        return int(normalized * 1000000)
+    
+    def _slider_to_value(self, slider_pos: int, min_val: float, max_val: float) -> float:
+        """Convert slider position (0-1000000) to coordinate value."""
+        if max_val == min_val:
+            return min_val
+        # Map slider range [0, 1000000] to value range
+        normalized = slider_pos / 1000000.0
+        return min_val + normalized * (max_val - min_val)
 
     def _update_coordinate_editors(self)->None:
         m=self.material_list.currentRow(); l=self.material_location_list.currentRow()
@@ -965,14 +1043,48 @@ class MeshItWorkflowGUI(QMainWindow):
             # Convert numpy types to regular Python floats
             x, y, z = float(x), float(y), float(z)
             self.locX_val.setValue(x); self.locY_val.setValue(y); self.locZ_val.setValue(z)
-            # Ensure slider values stay within range
-            slider_x = max(-1000000, min(1000000, int(x*1000)))
-            slider_y = max(-1000000, min(1000000, int(y*1000)))
-            slider_z = max(-1000000, min(1000000, int(z*1000)))
-            self.locX_slider.setValue(slider_x); self.locY_slider.setValue(slider_y); self.locZ_slider.setValue(slider_z)
+            
+            # Calculate dynamic slider ranges based on all material coordinates
+            x_range, y_range, z_range = self._calculate_slider_ranges()
+            
+            # Update slider ranges
+            self.locX_slider.setRange(0, 1000000)
+            self.locY_slider.setRange(0, 1000000)
+            self.locZ_slider.setRange(0, 1000000)
+            
+            # Calculate step sizes proportional to range (1% of range)
+            x_step = max(1, int((x_range[1] - x_range[0]) * 0.01))
+            y_step = max(1, int((y_range[1] - y_range[0]) * 0.01))
+            z_step = max(1, int((z_range[1] - z_range[0]) * 0.01))
+            
+            self.locX_slider.setSingleStep(max(1, x_step // 100))
+            self.locY_slider.setSingleStep(max(1, y_step // 100))
+            self.locZ_slider.setSingleStep(max(1, z_step // 100))
+            
+            self.locX_slider.setPageStep(max(10, x_step // 10))
+            self.locY_slider.setPageStep(max(10, y_step // 10))
+            self.locZ_slider.setPageStep(max(10, z_step // 10))
+            
+            # Map coordinate values to slider positions
+            slider_x = self._value_to_slider(x, x_range[0], x_range[1])
+            slider_y = self._value_to_slider(y, y_range[0], y_range[1])
+            slider_z = self._value_to_slider(z, z_range[0], z_range[1])
+            
+            # Store ranges for reverse mapping in slider change handler
+            self._slider_x_range = x_range
+            self._slider_y_range = y_range
+            self._slider_z_range = z_range
+            
+            self.locX_slider.setValue(slider_x)
+            self.locY_slider.setValue(slider_y)
+            self.locZ_slider.setValue(slider_z)
         else:
             self.locX_val.setValue(0); self.locY_val.setValue(0); self.locZ_val.setValue(0)
-            self.locX_slider.setValue(0); self.locY_slider.setValue(0); self.locZ_slider.setValue(0)
+            self.locX_slider.setValue(500000); self.locY_slider.setValue(500000); self.locZ_slider.setValue(500000)
+            # Reset ranges to default
+            self._slider_x_range = (-100.0, 100.0, 0.0)
+            self._slider_y_range = (-100.0, 100.0, 0.0)
+            self._slider_z_range = (-100.0, 100.0, 0.0)
 
         # Unblock signals after programmatic updates
         self.locX_val.blockSignals(False)
@@ -992,7 +1104,23 @@ class MeshItWorkflowGUI(QMainWindow):
     def _coord_slider_changed(self,val:int)->None:
         if self._updating_coordinates:
             return
-        axis=self.sender().property("axis"); self._apply_coord_change(axis,val/1000.0)
+        axis=self.sender().property("axis")
+        
+        # Get the appropriate range for this axis
+        if axis == "X" and hasattr(self, '_slider_x_range'):
+            min_val, max_val, _ = self._slider_x_range
+            value = self._slider_to_value(val, min_val, max_val)
+        elif axis == "Y" and hasattr(self, '_slider_y_range'):
+            min_val, max_val, _ = self._slider_y_range
+            value = self._slider_to_value(val, min_val, max_val)
+        elif axis == "Z" and hasattr(self, '_slider_z_range'):
+            min_val, max_val, _ = self._slider_z_range
+            value = self._slider_to_value(val, min_val, max_val)
+        else:
+            # Fallback to old method if ranges not set
+            value = val / 1000.0
+        
+        self._apply_coord_change(axis, value)
 
     def _apply_coord_change(self,axis:str,value:float)->None:
         m=self.material_list.currentRow(); l=self.material_location_list.currentRow()
@@ -14523,11 +14651,26 @@ segmentation, triangulation, and visualization.
 
     
     def _calculate_default_location(self):
-        """Calculate a default location based on surface centers."""
-        if not self.datasets:
+        """
+        Calculate a default location for new materials.
+        If existing materials exist, use the first location of the first material.
+        Otherwise, use 0,0,0 or surface center if available.
+        """
+        # Priority 1: Use existing material coordinates if available
+        if hasattr(self, 'tetra_materials') and self.tetra_materials:
+            # Get the first location from the first material
+            first_material = self.tetra_materials[0]
+            if first_material.get('locations') and len(first_material['locations']) > 0:
+                first_location = first_material['locations'][0]
+                if len(first_location) >= 3:
+                    # Return coordinates of existing material
+                    return [float(first_location[0]), float(first_location[1]), float(first_location[2])]
+        
+        # Priority 2: Use 0,0,0 if no materials exist
+        if not hasattr(self, 'datasets') or not self.datasets:
             return [0.0, 0.0, 0.0]
         
-        # Use center of all constrained surfaces
+        # Priority 3: Use center of all constrained surfaces as fallback
         all_coords = []
         for dataset in self.datasets:
             if 'constrained_vertices' in dataset:
