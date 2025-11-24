@@ -34,6 +34,7 @@ from ..entities_factory import (
     PCDom,
     MapImage,
     Voxet,
+    TetraSolid,
     Seismics,
     XsImage,
     WellMarker,
@@ -98,7 +99,10 @@ class ViewVTK(BaseView):
         Get an actor by uid in a VTK/PyVista plotter. Here we use self.plotter.renderer.actors
         that is a dictionary with key = uid string and value = actor.
         """
-        return self.plotter.renderer.actors[uid]
+        actors = self.plotter.renderer.actors
+        if uid not in actors:
+            return None
+        return actors[uid]
 
     def get_uid_from_actor(self, actor=None):
         """
@@ -114,7 +118,10 @@ class ViewVTK(BaseView):
 
     def actor_shown(self, uid: str = None):
         """Method to check if an actor is shown in a VTK/PyVista plotter. Returns a boolean."""
-        return self.plotter.renderer.actors[uid].GetVisibility()
+        actors = self.plotter.renderer.actors
+        if uid not in actors:
+            return False
+        return actors[uid].GetVisibility()
 
     def show_actors(self, uids: list = None):
         """Method to show actors in uids list in a VTK/PyVista plotter."""
@@ -183,6 +190,10 @@ class ViewVTK(BaseView):
             self.actors_df["uid"] == uid, "collection"
         ].values[0]
         actors = self.plotter.renderer.actors
+        # Check if actor exists before accessing it (handles race condition during entity addition)
+        if uid not in actors:
+            self.print_terminal(f"Warning: Actor for uid {uid} not found in plotter. It may not be created yet.")
+            return
         this_actor = actors[uid]
         if collection == "well_coll":
             # case for WELLS
@@ -680,6 +691,45 @@ class ViewVTK(BaseView):
                     uid=uid,
                     plot_entity=plot_entity,
                     color_RGB=None,
+                    show_property=show_property,
+                    color_bar_range=None,
+                    show_property_title=show_property_title,
+                    line_thick=line_thick,
+                    plot_texture_option=False,
+                    plot_rgb_option=plot_rgb_option,
+                    visible=visible,
+                    opacity=opacity,
+                )
+            else:
+                this_actor = None
+        elif isinstance(plot_entity, TetraSolid):
+            # Handle TetraSolid (tetrahedral volumetric mesh)
+            plot_rgb_option = None
+            if plot_entity.GetNumberOfCells() > 0:
+                # Check if mesh has cells before plotting
+                if any(
+                    [
+                        show_property == "none",
+                        show_property is None,
+                        show_property == "X",
+                        show_property == "Y",
+                        show_property == "Z",
+                    ]
+                ):
+                    show_property = None
+                else:
+                    # Check if property exists and has 3 components (for RGB)
+                    try:
+                        if plot_entity.GetPointData().GetArray(show_property):
+                            n_comp = plot_entity.GetPointData().GetArray(show_property).GetNumberOfComponents()
+                            if n_comp == 3:
+                                plot_rgb_option = True
+                    except Exception:
+                        pass
+                this_actor = self.plot_mesh(
+                    uid=uid,
+                    plot_entity=plot_entity,
+                    color_RGB=color_RGB,
                     show_property=show_property,
                     color_bar_range=None,
                     show_property_title=show_property_title,

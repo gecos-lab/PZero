@@ -8550,6 +8550,8 @@ segmentation, triangulation, and visualization.
         self.pzero_bridge = bridge
         if hasattr(self, "load_from_pzero_btn"):
             self.load_from_pzero_btn.setEnabled(bool(bridge))
+        if hasattr(self, "export_to_pzero_btn"):
+            self._update_export_to_pzero_button_state()
         if bridge:
             self.statusBar().showMessage("Connected to current PZero project")
 
@@ -12146,6 +12148,12 @@ segmentation, triangulation, and visualization.
         self.export_mesh_btn.setEnabled(False)
         generate_layout.addWidget(self.export_mesh_btn)
         
+        self.export_to_pzero_btn = QPushButton("📤 Export to PZero")
+        self.export_to_pzero_btn.clicked.connect(self._export_to_pzero)
+        self.export_to_pzero_btn.setEnabled(False)
+        self.export_to_pzero_btn.setToolTip("Export tetrahedral mesh to PZero mesh3d collection")
+        generate_layout.addWidget(self.export_to_pzero_btn)
+        
         control_layout.addWidget(generate_group)
         
         control_layout.addStretch()  # Push everything to the top
@@ -12741,6 +12749,7 @@ segmentation, triangulation, and visualization.
             
             QMessageBox.information(self, "Success", "Tetrahedral mesh generated successfully!")
             self.export_mesh_btn.setEnabled(True)
+            self._update_export_to_pzero_button_state()
             self._visualize_tetrahedral_mesh_in_tetra_tab()
             self._update_tetra_stats()
         else:
@@ -13154,6 +13163,142 @@ segmentation, triangulation, and visualization.
             logger.error(f"Export failed: {str(e)}")
             QMessageBox.critical(self, "Export Error", f"Failed to export mesh:\n{str(e)}")
 
+    def _update_export_to_pzero_button_state(self):
+        """Update the enabled state of the Export to PZero button."""
+        has_mesh = hasattr(self, 'tetrahedral_mesh') and self.tetrahedral_mesh is not None
+        has_bridge = self.pzero_bridge is not None
+        if hasattr(self, 'export_to_pzero_btn'):
+            self.export_to_pzero_btn.setEnabled(has_mesh and has_bridge)
+
+    def _export_to_pzero(self):
+        """
+        Export tetrahedral mesh to PZero mesh3d collection.
+        
+        Converts PyVista UnstructuredGrid to TetraSolid and adds it to the mesh3d collection
+        with all properties preserved.
+        """
+        if not hasattr(self, 'tetrahedral_mesh') or not self.tetrahedral_mesh:
+            QMessageBox.warning(self, "No Mesh", "No tetrahedral mesh to export.")
+            return
+        
+        if not self.pzero_bridge:
+            QMessageBox.warning(
+                self, 
+                "Not Connected", 
+                "Not connected to PZero project. Please open PZero and launch this tool from there."
+            )
+            return
+        
+        try:
+            # Get the project window from the bridge
+            project_window = self.pzero_bridge._project
+            
+            # Get the mesh (handle both dict and direct UnstructuredGrid)
+            if isinstance(self.tetrahedral_mesh, dict):
+                mesh = self.tetrahedral_mesh.get('pyvista_grid', self.tetrahedral_mesh)
+            else:
+                mesh = self.tetrahedral_mesh
+            
+            if not isinstance(mesh, pv.UnstructuredGrid):
+                QMessageBox.critical(
+                    self, 
+                    "Invalid Mesh Type", 
+                    f"Expected PyVista UnstructuredGrid, got {type(mesh)}"
+                )
+                return
+            
+            # Import required modules
+            from pzero.entities_factory import TetraSolid
+            from copy import deepcopy
+            from uuid import uuid4
+            
+            # Convert PyVista UnstructuredGrid to VTK UnstructuredGrid
+            # PyVista meshes are already VTK objects, we need to make a copy and change the class
+            # Use DeepCopy to ensure we don't modify the original mesh
+            vtk_mesh = TetraSolid()
+            vtk_mesh.DeepCopy(mesh)
+            
+            # Verify the mesh has cells
+            if vtk_mesh.GetNumberOfCells() == 0:
+                QMessageBox.critical(
+                    self,
+                    "Invalid Mesh",
+                    "The mesh has no cells. Cannot export empty mesh."
+                )
+                return
+            
+            # Extract properties from the mesh
+            properties_names = []
+            properties_components = []
+            properties_types = []
+            
+            # Extract point data properties using VTK methods
+            # Access point data arrays directly from VTK object
+            point_data_obj = vtk_mesh.GetPointData()
+            if point_data_obj:
+                num_arrays = point_data_obj.GetNumberOfArrays()
+                for i in range(num_arrays):
+                    array = point_data_obj.GetArray(i)
+                    if array:
+                        key = array.GetName()
+                        if key and key not in properties_names:
+                            properties_names.append(key)
+                            components = array.GetNumberOfComponents()
+                            properties_components.append(components)
+                            # Get data type
+                            dtype_str = array.GetDataTypeAsString()
+                            properties_types.append(dtype_str)
+            
+            # Extract cell data properties using VTK methods
+            cell_data_obj = vtk_mesh.GetCellData()
+            if cell_data_obj:
+                num_arrays = cell_data_obj.GetNumberOfArrays()
+                for i in range(num_arrays):
+                    array = cell_data_obj.GetArray(i)
+                    if array:
+                        key = array.GetName()
+                        if key and key not in properties_names:
+                            properties_names.append(key)
+                            components = array.GetNumberOfComponents()
+                            properties_components.append(components)
+                            # Get data type
+                            dtype_str = array.GetDataTypeAsString()
+                            properties_types.append(dtype_str)
+            
+            # Create entity dictionary matching mesh3d collection format
+            entity_dict = deepcopy(project_window.mesh3d_coll.entity_dict)
+            entity_dict["uid"] = str(uuid4())
+            entity_dict["name"] = f"TetraMesh_{time.strftime('%Y%m%d_%H%M%S')}"
+            entity_dict["scenario"] = "undef"
+            entity_dict["x_section"] = ""
+            entity_dict["topology"] = "TetraSolid"
+            entity_dict["vtk_obj"] = vtk_mesh
+            entity_dict["properties_names"] = properties_names
+            entity_dict["properties_components"] = properties_components
+            entity_dict["properties_types"] = properties_types
+            
+            # Add to mesh3d collection
+            project_window.mesh3d_coll.add_entity_from_dict(entity_dict=entity_dict)
+            
+            # Show success message
+            QMessageBox.information(
+                self, 
+                "Export Successful", 
+                f"Tetrahedral mesh exported to PZero as:\n{entity_dict['name']}\n\n"
+                f"Vertices: {vtk_mesh.GetNumberOfPoints()}\n"
+                f"Tetrahedra: {vtk_mesh.GetNumberOfCells()}\n"
+                f"Properties: {len(properties_names)}"
+            )
+            
+            logger.info(f"Successfully exported tetrahedral mesh to PZero: {entity_dict['name']}")
+            
+        except Exception as e:
+            logger.error(f"Failed to export mesh to PZero: {str(e)}", exc_info=True)
+            QMessageBox.critical(
+                self, 
+                "Export Error", 
+                f"Failed to export mesh to PZero:\n{str(e)}"
+            )
 
     def _get_border_surface_indices(self) -> set:
         """Extract surface indices from border surfaces list"""
@@ -15293,6 +15438,7 @@ segmentation, triangulation, and visualization.
         
         # Reset mesh data
         self.tetrahedral_mesh = None
+        self._update_export_to_pzero_button_state()
         
         # Reset statistics
         if hasattr(self, 'tetra_stats_label'):
