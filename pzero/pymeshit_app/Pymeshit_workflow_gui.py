@@ -227,6 +227,9 @@ class MeshItWorkflowGUI(QMainWindow):
         """Initialize the GUI"""
         super().__init__()
         
+        # Flag to track if window is closing (prevents operations during cleanup)
+        self._closing = False
+        
         # Set window properties
         self.setWindowTitle("PyMeshIt")
         self.setGeometry(100, 100, 1400, 900) # Increased default size
@@ -10695,8 +10698,20 @@ segmentation, triangulation, and visualization.
 
 
     def closeEvent(self, event):
-        """Handle closing the application, especially if a thread is running."""
+        """
+        Handle closing the application, especially if a thread is running.
+        
+        When embedded in PZero, this ensures proper cleanup without
+        interfering with the parent application's VTK resources.
+        
+        Performs cleanup synchronously before accepting the close event
+        to ensure widgets are properly isolated before Qt deletes them.
+        """
         logger.debug("Close event triggered.")
+        
+        # Mark that we're closing to prevent any further operations
+        self._closing = True
+        
         thread_running = False
         try:
             # Check if a worker thread is running, handle potential AttributeError
@@ -10723,17 +10738,21 @@ segmentation, triangulation, and visualization.
                     self.thread.terminate() # Force stop if it doesn't finish
                     self.thread.wait() # Wait again after termination
 
-                # Clean up all PyVista plotters and OpenGL contexts
-                self._cleanup_pyvista_plotters()
+                # Perform cleanup BEFORE accepting close event
+                self._perform_cleanup()
+                
                 event.accept() # Allow closing
                 logger.info("Application closing after stopping thread.")
             else:
                 logger.info("User chose not to exit.")
+                self._closing = False  # Reset closing flag
                 event.ignore() # Prevent closing
         else:
             logger.debug("No active thread running. Closing application.")
-            # Clean up all PyVista plotters and OpenGL contexts
-            self._cleanup_pyvista_plotters()
+            
+            # Perform cleanup BEFORE accepting close event
+            self._perform_cleanup()
+            
             event.accept() # No thread running, close normally
 
     def compute_intersections(self):
@@ -15127,7 +15146,17 @@ segmentation, triangulation, and visualization.
         dialog.exec()
 
     def _cleanup_pyvista_plotters(self):
-        """Comprehensive cleanup of all PyVista plotters and OpenGL contexts."""
+        """
+        Comprehensive cleanup of all PyVista plotters and OpenGL contexts.
+        
+        This method only cleans up resources owned by this window.
+        It does NOT finalize VTK globally to avoid interfering with
+        parent applications like PZero that may share VTK resources.
+        
+        CRITICAL: For QtInteractor widgets, we must remove them from
+        their parent layouts before closing to prevent Qt from triggering
+        cascade deletion that interferes with PZero's VTK resources.
+        """
         logger.info("Starting comprehensive PyVista plotters cleanup...")
         
         # List of all possible plotter attributes
@@ -15137,11 +15166,98 @@ segmentation, triangulation, and visualization.
             'refine_mesh_plotter',
             'pre_tetramesh_plotter',
             'current_plotter',
-            'pv_plotter'
+            'pv_plotter',
+            'plotter',
+            'intersections_plotter',
+            'meshes_plotter',
+            'segments_plotter'
         ]
         
         # Dictionary of plotters from self.plotters if it exists
         plotters_dict = getattr(self, 'plotters', {})
+        
+        def cleanup_qtinteractor_plotter(plotter, plotter_name=""):
+            """
+            Helper to safely cleanup a QtInteractor plotter.
+            
+            CRITICAL: When embedded in PZero, we must NOT call plotter.close()
+            or any renderer Finalize() methods, as these can interfere with
+            PZero's own VTK render windows. We only remove widgets from the
+            Qt tree and let them be garbage collected.
+            """
+            if plotter is None:
+                return
+            
+            # Check if we're embedded in PZero
+            is_embedded = hasattr(self, 'pzero_bridge') and self.pzero_bridge is not None
+            
+            try:
+                # For QtInteractor objects, remove from parent layout first
+                if hasattr(plotter, 'interactor'):
+                    interactor = plotter.interactor
+                    if interactor is not None:
+                        # Remove from parent layout to prevent cascade deletion
+                        parent = interactor.parent()
+                        if parent is not None:
+                            try:
+                                parent_layout = parent.layout()
+                                if parent_layout is not None:
+                                    parent_layout.removeWidget(interactor)
+                            except (RuntimeError, AttributeError):
+                                # Widget might already be deleted
+                                pass
+                        
+                        # Hide the interactor to stop rendering immediately
+                        try:
+                            interactor.hide()
+                        except (RuntimeError, AttributeError):
+                            pass
+                        
+                        # Disable the interactor to prevent further events
+                        try:
+                            interactor.setEnabled(False)
+                        except (RuntimeError, AttributeError):
+                            pass
+                        
+                        # When embedded, do NOT touch render windows at all
+                        # Just removing the widget is sufficient
+                        
+                        # Set parent to None to isolate from Qt widget tree
+                        # Use deleteLater() to let Qt handle deletion safely
+                        try:
+                            interactor.setParent(None)
+                            # Schedule for deletion instead of immediate deletion
+                            interactor.deleteLater()
+                        except (RuntimeError, AttributeError):
+                            # Widget might already be deleted
+                            pass
+                
+                # When embedded, do NOT call plotter.close() or clear()
+                # These methods can interfere with PZero's render windows
+                # We only remove widgets from Qt tree and let them be GC'd
+                if not is_embedded:
+                    # Only clear/close if running standalone
+                    if hasattr(plotter, 'clear'):
+                        try:
+                            plotter.clear()
+                        except (RuntimeError, AttributeError, Exception):
+                            pass
+                    
+                    if hasattr(plotter, 'close'):
+                        try:
+                            plotter.close()
+                        except (RuntimeError, AttributeError, Exception):
+                            pass
+                # When embedded: do NOT touch renderer or call any VTK methods
+                # Just removing the widget from Qt tree is sufficient
+                # The render window will be cleaned up when the widget is deleted
+                
+                # Do NOT finalize render windows - this can crash PZero
+                # Do NOT call any VTK class-level methods
+                # Just let resources be garbage collected naturally
+                
+            except Exception as e:
+                logger.debug(f"Error cleaning up QtInteractor plotter {plotter_name}: {e}")
         
         # Clean up individual plotter attributes
         for attr_name in plotter_attributes:
@@ -15150,39 +15266,12 @@ segmentation, triangulation, and visualization.
                 if plotter is not None:
                     try:
                         logger.debug(f"Cleaning up {attr_name}...")
-                        
-                        # Clear the plotter content first
-                        if hasattr(plotter, 'clear'):
-                            plotter.clear()
-                        
-                        # Close the plotter properly
-                        if hasattr(plotter, 'close'):
-                            plotter.close()
-                        
-                        # For QtInteractor objects, also clean up the interactor
-                        if hasattr(plotter, 'interactor'):
-                            try:
-                                if hasattr(plotter.interactor, 'close'):
-                                    plotter.interactor.close()
-                                if hasattr(plotter.interactor, 'finalize'):
-                                    plotter.interactor.finalize()
-                            except Exception as e:
-                                logger.warning(f"Error cleaning up {attr_name} interactor: {e}")
-                        
-                        # Clean up render window if available
-                        if hasattr(plotter, 'render_window'):
-                            try:
-                                if hasattr(plotter.render_window, 'finalize'):
-                                    plotter.render_window.finalize()
-                            except Exception as e:
-                                logger.warning(f"Error finalizing {attr_name} render window: {e}")
-                        
+                        cleanup_qtinteractor_plotter(plotter, attr_name)
                         # Set attribute to None
                         setattr(self, attr_name, None)
                         logger.debug(f"Successfully cleaned up {attr_name}")
-                        
                     except Exception as e:
-                        logger.warning(f"Error cleaning up {attr_name}: {e}")
+                        logger.debug(f"Error cleaning up {attr_name}: {e}")
                         # Still set to None even if cleanup failed
                         setattr(self, attr_name, None)
         
@@ -15191,39 +15280,46 @@ segmentation, triangulation, and visualization.
             if plotter is not None:
                 try:
                     logger.debug(f"Cleaning up plotter from dictionary: {plotter_name}...")
-                    
-                    # Clear and close the plotter
-                    if hasattr(plotter, 'clear'):
-                        plotter.clear()
-                    if hasattr(plotter, 'close'):
-                        plotter.close()
-                    
-                    # Clean up interactor
-                    if hasattr(plotter, 'interactor'):
-                        try:
-                            if hasattr(plotter.interactor, 'close'):
-                                plotter.interactor.close()
-                            if hasattr(plotter.interactor, 'finalize'):
-                                plotter.interactor.finalize()
-                        except Exception as e:
-                            logger.warning(f"Error cleaning up {plotter_name} interactor: {e}")
-                    
-                    # Clean up render window
-                    if hasattr(plotter, 'render_window'):
-                        try:
-                            if hasattr(plotter.render_window, 'finalize'):
-                                plotter.render_window.finalize()
-                        except Exception as e:
-                            logger.warning(f"Error finalizing {plotter_name} render window: {e}")
-                    
+                    cleanup_qtinteractor_plotter(plotter, plotter_name)
                     logger.debug(f"Successfully cleaned up plotter: {plotter_name}")
-                    
                 except Exception as e:
-                    logger.warning(f"Error cleaning up plotter {plotter_name}: {e}")
+                    logger.debug(f"Error cleaning up plotter {plotter_name}: {e}")
         
         # Clear the plotters dictionary
         if hasattr(self, 'plotters'):
             self.plotters.clear()
+        
+        # Clear vtk_widget reference if it exists
+        if hasattr(self, 'vtk_widget') and self.vtk_widget is not None:
+            try:
+                widget = self.vtk_widget
+                # Remove from parent if it exists
+                parent = widget.parent()
+                if parent is not None:
+                    try:
+                        parent_layout = parent.layout()
+                        if parent_layout is not None:
+                            parent_layout.removeWidget(widget)
+                    except (RuntimeError, AttributeError):
+                        pass
+                
+                # Hide and disable widget
+                try:
+                    widget.hide()
+                    widget.setEnabled(False)
+                except (RuntimeError, AttributeError):
+                    pass
+                
+                # Isolate from widget tree and schedule for deletion
+                try:
+                    widget.setParent(None)
+                    widget.deleteLater()
+                except (RuntimeError, AttributeError):
+                    pass
+                
+                self.vtk_widget = None
+            except Exception:
+                pass
         
         # Force garbage collection to help clean up VTK objects
         try:
@@ -15231,9 +15327,9 @@ segmentation, triangulation, and visualization.
             gc.collect()
             logger.debug("Forced garbage collection after plotter cleanup")
         except Exception as e:
-            logger.warning(f"Error during garbage collection: {e}")
+            logger.debug(f"Error during garbage collection: {e}")
         
-        # Try to finalize VTK if available
+        # Disable VTK warnings (but don't finalize VTK globally)
         try:
             import vtk
             if hasattr(vtk, 'vtkObject'):
@@ -15242,23 +15338,140 @@ segmentation, triangulation, and visualization.
         except Exception as e:
             logger.debug(f"VTK cleanup not available: {e}")
         
-        logger.info("Completed PyVista plotters cleanup")
+        logger.info("Completed PyVista plotters cleanup (window-local only)")
+    
+    def _perform_cleanup(self):
+        """
+        Perform all cleanup operations synchronously before window deletion.
+        This ensures widgets are properly isolated before Qt deletes them.
+        """
+        try:
+            logger.debug("Starting cleanup...")
+            
+            # Hide window immediately to stop rendering
+            self.hide()
+            
+            # Disconnect all signals first
+            self._disconnect_all_signals()
+            
+            # Clean up PyVista plotters (this isolates widgets from Qt tree)
+            self._cleanup_pyvista_plotters()
+            
+            # Clear bridge reference to avoid dangling pointers
+            self.pzero_bridge = None
+            
+            logger.debug("Cleanup completed")
+        except Exception as e:
+            logger.debug(f"Error during cleanup: {e}")
+            # Continue even if cleanup has errors
+    
+    def _disconnect_all_signals(self):
+        """
+        Disconnect all signal connections to prevent issues when closing the window.
+        This helps prevent crashes when the window is closed while embedded in PZero.
+        """
+        try:
+            logger.debug("Disconnecting all signals...")
+            
+            # Disconnect notebook signals
+            if hasattr(self, 'notebook'):
+                try:
+                    self.notebook.currentChanged.disconnect()
+                except Exception:
+                    pass
+            
+            # Disconnect dataset list signals
+            if hasattr(self, 'dataset_list_widget'):
+                try:
+                    self.dataset_list_widget.itemSelectionChanged.disconnect()
+                    self.dataset_list_widget.customContextMenuRequested.disconnect()
+                except Exception:
+                    pass
+            
+            # Disconnect intersection list signals
+            if hasattr(self, 'intersection_list'):
+                try:
+                    self.intersection_list.itemSelectionChanged.disconnect()
+                except Exception:
+                    pass
+            
+            # Disconnect material and location list signals
+            if hasattr(self, 'material_list'):
+                try:
+                    self.material_list.currentRowChanged.disconnect()
+                except Exception:
+                    pass
+            if hasattr(self, 'material_location_list'):
+                try:
+                    self.material_location_list.currentRowChanged.disconnect()
+                except Exception:
+                    pass
+            
+            # Disconnect worker thread signals if they exist
+            if hasattr(self, 'worker') and self.worker is not None:
+                try:
+                    if hasattr(self.worker, 'dataset_finished'):
+                        self.worker.dataset_finished.disconnect()
+                    if hasattr(self.worker, 'batch_finished'):
+                        self.worker.batch_finished.disconnect()
+                    if hasattr(self.worker, 'error_occurred'):
+                        self.worker.error_occurred.disconnect()
+                except Exception:
+                    pass
+            
+            # Disconnect thread signals if they exist
+            if hasattr(self, 'thread') and self.thread is not None:
+                try:
+                    self.thread.started.disconnect()
+                    self.thread.finished.disconnect()
+                except Exception:
+                    pass
+            
+            # Disconnect progress dialog signals if they exist
+            if hasattr(self, 'progress_dialog') and self.progress_dialog is not None:
+                try:
+                    self.progress_dialog.canceled.disconnect()
+                except Exception:
+                    pass
+            
+            logger.debug("Signal disconnection completed")
+        except Exception as e:
+            logger.debug(f"Error during signal disconnection: {e}")
     
     def _ensure_vtk_cleanup_on_exit(self):
-        """Ensure VTK cleanup is performed when Python exits."""
+        """
+        Ensure VTK cleanup is performed when Python exits.
+        
+        This only runs when Python itself exits, not when the window closes.
+        When embedded in PZero, we avoid global VTK finalization to prevent
+        interfering with the parent application's VTK resources.
+        """
         import atexit
+        
+        # Store whether we're embedded at registration time
+        # This helps determine if we should finalize VTK on exit
+        is_embedded = hasattr(self, 'pzero_bridge') and self.pzero_bridge is not None
         
         def vtk_cleanup():
             try:
-                self._cleanup_pyvista_plotters()
-                # Force VTK cleanup
-                import vtk
-                if hasattr(vtk, 'vtkRenderWindow'):
-                    # Clean up any remaining render windows
-                    try:
-                        vtk.vtkRenderWindow.Finalize()
-                    except:
-                        pass
+                # Only clean up this window's plotters
+                # Check again at exit time in case bridge was cleared
+                currently_embedded = hasattr(self, 'pzero_bridge') and self.pzero_bridge is not None
+                
+                # Only clean up plotters, don't finalize VTK if embedded
+                # When embedded, PZero manages VTK lifecycle
+                if not (is_embedded or currently_embedded):
+                    # Running standalone - safe to finalize VTK
+                    self._cleanup_pyvista_plotters()
+                    import vtk
+                    if hasattr(vtk, 'vtkRenderWindow'):
+                        try:
+                            vtk.vtkRenderWindow.Finalize()
+                        except:
+                            pass
+                else:
+                    # Embedded - only clean up our plotters, don't finalize VTK
+                    self._cleanup_pyvista_plotters()
             except Exception:
                 pass  # Silent cleanup on exit
         

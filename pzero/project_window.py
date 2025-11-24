@@ -12,7 +12,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-from PySide6.QtCore import Signal as pyqtSignal
+from PySide6.QtCore import Signal as pyqtSignal, Qt
 from PySide6.QtCore import QObject
 from PySide6.QtWidgets import QMainWindow, QMessageBox
 from PySide6.QtGui import QAction
@@ -978,20 +978,33 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     self._pymeshit_window = meshit_gui_cls()
                 else:
                     raise
+            
+            # Set window as independent (not parented) to prevent cascade deletion
+            # This ensures closing Pymeshit doesn't affect PZero
+            self._pymeshit_window.setParent(None)
+            self._pymeshit_window.setAttribute(Qt.WA_DeleteOnClose, True)
+            
             attach = getattr(self._pymeshit_window, "attach_pzero_bridge", None)
             if callable(attach):
                 attach(bridge)
+            
+            # Position window relative to project window
             project_geom = self.geometry()
             if project_geom and not project_geom.isNull():
                 self._pymeshit_window.setGeometry(project_geom)
-            self._pymeshit_window.destroyed.connect(
-                lambda _: setattr(self, "_pymeshit_window", None)
-            )
-            cleanup_hook = getattr(
-                self._pymeshit_window, "_ensure_vtk_cleanup_on_exit", None
-            )
-            if callable(cleanup_hook):
-                cleanup_hook()
+            
+            # Connect destroyed signal to clean up reference
+            def cleanup_pymeshit_reference():
+                """Clean up reference when Pymeshit window is destroyed."""
+                if hasattr(self, "_pymeshit_window"):
+                    self._pymeshit_window = None
+            
+            self._pymeshit_window.destroyed.connect(cleanup_pymeshit_reference)
+            
+            # Note: We don't call _ensure_vtk_cleanup_on_exit here because
+            # it's already called in __init__, and we've modified it to be
+            # safe when embedded in PZero
+            
             self._pymeshit_window.show()
             self.print_terminal("Pymeshit GUI opened successfully")
         except Exception as exc:
