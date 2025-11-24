@@ -105,53 +105,73 @@ def draw_line(self):
 
 
 def draw_line_3d(self):
-    """Draw a line in 3D using point clicking. Works like 2D but in 3D space.
+    """Draw a line in 3D using point clicking. Only works on surfaces.
     
     Usage:
-    - Left-click anywhere to add points (they will project onto the view plane)
+    - Left-click on surfaces to add points
     - Right-click to finish drawing
+    - Clicking in void space will not add points
     """
     import numpy as np
+    from vtkmodules.vtkRenderingCore import vtkCellPicker
     
-    def on_left_click(click_position):
-        """Handle left-click to add point.
+    def on_left_click(obj, event):
+        """Handle left-click to add point only if clicking on a surface.
         
         Args:
-            click_position: The 3D position returned by PyVista's pick_click_position()
+            obj: The VTK interactor object
+            event: The VTK event object containing click information
         """
         if not tracer_3d.is_active:
             return
         
-        # Debug: print what we received
-        self.print_terminal(f"DEBUG: Received click_position: {click_position}, type: {type(click_position)}")
+        # Get the event position from the interactor
+        pos = obj.GetEventPosition()
         
-        # Use the click position directly - PyVista already gives us a 3D point
-        if click_position is not None:
+        # Create a cell picker to check if we hit a surface
+        picker = vtkCellPicker()
+        picker.SetTolerance(0.01)
+        
+        # Try to pick an actor at the click position
+        style = obj.GetInteractorStyle()
+        style.SetDefaultRenderer(self.plotter.renderer)
+        picker_output = picker.Pick(pos[0], pos[1], 0, style.GetDefaultRenderer())
+        
+        # Check if we hit a surface (actor)
+        if picker_output and picker.GetActor():
+            # Get the intersection point on the surface
+            picked_position = picker.GetPickPosition()
+            
             try:
-                # Convert to list if it's a numpy array or tuple
-                import numpy as np
-                if isinstance(click_position, (tuple, list, np.ndarray)):
-                    point = list(click_position) if not isinstance(click_position, list) else click_position
+                # Convert to list if needed
+                if isinstance(picked_position, (tuple, list, np.ndarray)):
+                    point = list(picked_position) if not isinstance(picked_position, list) else picked_position
                     if len(point) == 3:
                         tracer_3d.add_point(point)
                         self.print_terminal(f"✓ Point {len(tracer_3d.points)} added at ({point[0]:.2f}, {point[1]:.2f}, {point[2]:.2f})")
                     else:
                         self.print_terminal(f"ERROR: Point has {len(point)} coordinates, expected 3")
                 else:
-                    self.print_terminal(f"ERROR: click_position is not a valid type: {type(click_position)}")
+                    self.print_terminal(f"ERROR: picked_position is not a valid type: {type(picked_position)}")
             except Exception as e:
                 self.print_terminal(f"ERROR adding point: {e}")
         else:
-            self.print_terminal("ERROR: click_position is None")
+            # No surface was hit - inform user
+            self.print_terminal("No surface detected at click position. Click on a surface to add points.")
     
-    def on_right_click(event):
+    # Store observer tags for cleanup
+    observer_tags = {}
+    
+    def on_right_click(obj, event):
         """Handle right-click to finish drawing."""
         if not tracer_3d.is_active:
             return
         
-        # Stop tracking clicks
-        self.plotter.untrack_click_position(side="left")
-        self.plotter.untrack_click_position(side="right")
+        # Remove event observers using stored tags
+        if "left" in observer_tags:
+            self.plotter.iren.interactor.RemoveObserver(observer_tags["left"])
+        if "right" in observer_tags:
+            self.plotter.iren.interactor.RemoveObserver(observer_tags["right"])
         
         # Check if we have enough points
         if len(tracer_3d.points) < 2:
@@ -215,19 +235,11 @@ def draw_line_3d(self):
     tracer_3d = Tracer3D(self)
     tracer_3d.enable()
     
-    # Set up click handlers using track_click_position
-    self.plotter.track_click_position(
-        side="left", 
-        callback=on_left_click
-    )
+    # Set up click handlers using VTK event observers for surface picking
+    observer_tags["left"] = self.plotter.iren.interactor.AddObserver("LeftButtonPressEvent", on_left_click)
+    observer_tags["right"] = self.plotter.iren.interactor.AddObserver("RightButtonPressEvent", on_right_click)
     
-    # Track right-click to finish
-    self.plotter.track_click_position(
-        side="right", 
-        callback=on_right_click
-    )
-    
-    self.print_terminal("3D Line Drawing: Left-click to add points, Right-click to finish")
+    self.print_terminal("3D Line Drawing: Left-click on surfaces to add points, Right-click to finish")
 
 
 def edit_line(self):
