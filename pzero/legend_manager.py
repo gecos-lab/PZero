@@ -1162,7 +1162,7 @@ class Legend(QObject):
         )
         # Signal to update actors in windows. This is emitted only for the modified uid under the 'color' key.
         updated_list = parent.well_coll.df.loc[
-            parent.well_legend_df["Loc ID"] == locid, "uid"
+            parent.well_coll.df["name"] == locid, "uid"
         ].to_list()
         parent.signals.legend_color_modified.emit(updated_list, parent.well_coll)
 
@@ -1177,7 +1177,7 @@ class Legend(QObject):
         ] = line_thick
         # Signal to update actors in windows. This is emitted only for the modified uid under the 'line_thick' key.
         updated_list = parent.well_coll.df.loc[
-            parent.well_coll.df["Loc ID"] == locid, "uid"
+            parent.well_coll.df["name"] == locid, "uid"
         ].to_list()
         # print(updated_list)
         parent.signals.legend_thick_modified.emit(updated_list, parent.well_coll)
@@ -1193,7 +1193,7 @@ class Legend(QObject):
         ] = opacity
         # Signal to update actors in windows. This is emitted only for the modified uid under the 'line_thick' key.
         updated_list = parent.well_coll.df.loc[
-            parent.well_coll.df["Loc ID"] == locid, "uid"
+            parent.well_coll.df["name"] == locid, "uid"
         ].to_list()
         # print(updated_list)
         parent.signals.legend_opacity_modified.emit(updated_list, parent.well_coll)

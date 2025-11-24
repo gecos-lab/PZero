@@ -63,6 +63,16 @@ class WellCollection(BaseCollection):
         self, entity_dict: pd_DataFrame = None, color: np_ndarray = None
     ):
         """Add an entity from a dictionary shaped as self.entity_dict."""
+        # Legacy files sometimes use 'Loc ID' instead of 'name'. Keep backwards compatibility
+        # while ensuring the collection dataframe only exposes the 'name' column.
+        if "Loc ID" in entity_dict:
+            loc_id_value = entity_dict.pop("Loc ID")
+            if (
+                not entity_dict.get("name")
+                or entity_dict.get("name") == "undef"
+                or entity_dict.get("name") == ""
+            ):
+                entity_dict["name"] = loc_id_value
         # Create a new uid if it is not included in the dictionary.
         if not entity_dict["uid"]:
             entity_dict["uid"] = str(uuid4())

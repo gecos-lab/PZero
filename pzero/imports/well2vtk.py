@@ -175,7 +175,6 @@ def well2vtk(self, path=None):
     # Ensure proper identification in WellCollection
     bore_obj_attributes["name"] = well_obj.ID
     bore_obj_attributes["topology"] = "PolyLine"
-    bore_obj_attributes["Loc ID"] = well_obj.ID
     bore_obj_attributes["properties_names"] = trace_keys
     bore_obj_attributes["properties_components"] = components
     bore_obj_attributes["properties_types"] = types
