@@ -7,7 +7,6 @@ from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 from vtkmodules.util.numpy_support import vtk_to_numpy
-from scipy.spatial import ConvexHull
 
 
 @dataclass(frozen=True)
@@ -189,7 +188,11 @@ class PZeroPymeshitBridge:
         self, collection_key: str, uid: str
     ) -> Optional[np.ndarray]:
         """
-        Extract boundary edges from a TriSurf entity and compute convex hull.
+        Extract the actual boundary edges from a TriSurf entity.
+        
+        This extracts the true boundary polylines preserving their exact shape,
+        including concave features. Unlike a convex hull, this captures the
+        actual outline of the surface.
         
         Parameters
         ----------
@@ -201,7 +204,7 @@ class PZeroPymeshitBridge:
         Returns
         -------
         Optional[np.ndarray]
-            Array of shape (N, 3) containing boundary edge points for convex hull,
+            Array of shape (N, 3) containing ordered boundary edge points,
             or None if extraction fails
         """
         collection = getattr(self._project, collection_key, None)
@@ -225,26 +228,10 @@ class PZeroPymeshitBridge:
             if boundary_polydata is None:
                 return None
             
-            # Extract points from boundary polydata
-            boundary_points = _vtk_dataset_to_points(boundary_polydata)
+            # Extract ordered boundary points from the VTK polylines
+            boundary_points = _extract_ordered_boundary_points(boundary_polydata)
             if boundary_points is None or len(boundary_points) == 0:
                 return None
-            
-            # Compute convex hull from boundary points
-            # Use 2D projection if points are coplanar, otherwise use 3D
-            if len(boundary_points) >= 3:
-                try:
-                    # Try 3D convex hull first
-                    hull = ConvexHull(boundary_points)
-                    hull_points = boundary_points[hull.vertices]
-                    return hull_points
-                except Exception:
-                    # If 3D fails (e.g., coplanar points), use 2D projection
-                    # Project to XY plane for convex hull computation
-                    points_2d = boundary_points[:, :2]
-                    hull_2d = ConvexHull(points_2d)
-                    hull_points = boundary_points[hull_2d.vertices]
-                    return hull_points
             
             return boundary_points
         except Exception:
@@ -282,6 +269,87 @@ def _vtk_dataset_to_points(vtk_obj) -> Optional[np.ndarray]:
         return None
     # Always return a float64 copy to avoid dangling references.
     return np.asarray(np_points, dtype=float).copy()
+
+
+def _extract_ordered_boundary_points(boundary_polydata) -> Optional[np.ndarray]:
+    """
+    Extract ordered boundary points from VTK polydata containing polylines.
+    
+    This preserves the exact boundary shape, including concave features,
+    by following the connectivity of the polylines.
+    
+    Parameters
+    ----------
+    boundary_polydata : vtkPolyData
+        VTK polydata containing boundary polylines (from get_clean_boundary)
+    
+    Returns
+    -------
+    Optional[np.ndarray]
+        Array of shape (N, 3) containing ordered boundary points,
+        or None if extraction fails
+    """
+    if boundary_polydata is None:
+        return None
+    
+    # Get all points from the polydata
+    all_points = _vtk_dataset_to_points(boundary_polydata)
+    if all_points is None or len(all_points) == 0:
+        return None
+    
+    # Get the number of cells (polylines)
+    num_cells = boundary_polydata.GetNumberOfCells()
+    if num_cells == 0:
+        return all_points  # Fallback to all points if no cells
+    
+    # Extract ordered points from all polyline cells
+    ordered_points_list = []
+    
+    for cell_idx in range(num_cells):
+        cell = boundary_polydata.GetCell(cell_idx)
+        if cell is None:
+            continue
+        
+        num_points_in_cell = cell.GetNumberOfPoints()
+        if num_points_in_cell < 2:
+            continue
+        
+        # Get point IDs in order from this cell
+        cell_points = []
+        for pt_idx in range(num_points_in_cell):
+            point_id = cell.GetPointId(pt_idx)
+            if point_id >= 0 and point_id < len(all_points):
+                cell_points.append(all_points[point_id])
+        
+        if len(cell_points) >= 2:
+            ordered_points_list.append(np.array(cell_points))
+    
+    if not ordered_points_list:
+        return all_points  # Fallback to all points if no valid cells
+    
+    # Try to connect polylines into a single ordered boundary
+    # Start with the largest ring (most points)
+    ordered_points_list.sort(key=lambda x: len(x), reverse=True)
+    
+    # Concatenate all rings - for complex boundaries with multiple loops,
+    # we include all points to preserve the complete boundary shape
+    result_points = []
+    for ring in ordered_points_list:
+        for pt in ring:
+            # Avoid duplicate consecutive points
+            if len(result_points) == 0 or not np.allclose(result_points[-1], pt, atol=1e-10):
+                result_points.append(pt)
+    
+    if len(result_points) < 3:
+        return all_points  # Fallback if we couldn't extract enough points
+    
+    # Close the boundary if needed (first and last points should match for closed boundary)
+    result = np.array(result_points, dtype=float)
+    
+    # If the boundary should be closed but isn't, don't force it
+    # Let the calling code handle the boundary as-is
+    
+    return result
 
 
 def _is_boundary_cube(vtk_obj) -> bool:
