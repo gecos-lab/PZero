@@ -12186,6 +12186,12 @@ segmentation, triangulation, and visualization.
         self.export_to_pzero_btn.setToolTip("Export tetrahedral mesh to PZero mesh3d collection")
         generate_layout.addWidget(self.export_to_pzero_btn)
         
+        self.generate_stats_btn = QPushButton("📊 Generate Statistics")
+        self.generate_stats_btn.clicked.connect(self._calculate_and_show_statistics)
+        self.generate_stats_btn.setEnabled(False)
+        self.generate_stats_btn.setToolTip("Calculate and display mesh quality metrics (radius-edge ratio, dihedral angles)")
+        generate_layout.addWidget(self.generate_stats_btn)
+        
         control_layout.addWidget(generate_group)
         
         control_layout.addStretch()  # Push everything to the top
@@ -12781,6 +12787,7 @@ segmentation, triangulation, and visualization.
             
             QMessageBox.information(self, "Success", "Tetrahedral mesh generated successfully!")
             self.export_mesh_btn.setEnabled(True)
+            self.generate_stats_btn.setEnabled(True)
             self._update_export_to_pzero_button_state()
             self._visualize_tetrahedral_mesh_in_tetra_tab()
             self._update_tetra_stats()
@@ -13201,6 +13208,8 @@ segmentation, triangulation, and visualization.
         has_bridge = self.pzero_bridge is not None
         if hasattr(self, 'export_to_pzero_btn'):
             self.export_to_pzero_btn.setEnabled(has_mesh and has_bridge)
+        if hasattr(self, 'generate_stats_btn'):
+            self.generate_stats_btn.setEnabled(has_mesh)
 
     def _export_to_pzero(self):
         """
@@ -15456,6 +15465,328 @@ segmentation, triangulation, and visualization.
             
         except Exception as e:
             logger.error(f"Failed to update statistics: {str(e)}")
+    
+    def _calculate_and_show_statistics(self):
+        """
+        Calculate mesh quality metrics and display them in a table dialog.
+        
+        Computes:
+        - Element counts (vertices and tetrahedra)
+        - Radius-edge ratio (min, max, average, percentage < 1.2)
+        - Dihedral angles (min and max)
+        """
+        if not hasattr(self, 'tetrahedral_mesh') or self.tetrahedral_mesh is None:
+            QMessageBox.warning(self, "No Mesh", "No tetrahedral mesh available. Please generate a mesh first.")
+            return
+        
+        try:
+            # Extract mesh data (handle both dict and direct PyVista grid)
+            if isinstance(self.tetrahedral_mesh, dict):
+                mesh = self.tetrahedral_mesh.get('pyvista_grid', self.tetrahedral_mesh)
+            else:
+                mesh = self.tetrahedral_mesh
+            
+            if mesh is None:
+                QMessageBox.warning(self, "No Mesh", "Mesh data is invalid.")
+                return
+            
+            # Get points and extract tetrahedral cells
+            points = mesh.points
+            
+            # Extract only tetrahedral cells (cell type 10 in VTK)
+            tetra_cells = []
+            cell_types = mesh.celltypes
+            cells = mesh.cells
+            
+            idx = 0
+            for i, cell_type in enumerate(cell_types):
+                if cell_type == 10:  # VTK_TETRA
+                    num_points = cells[idx]
+                    if num_points == 4:
+                        tetra_cells.append(cells[idx+1:idx+5])
+                    idx += num_points + 1
+                else:
+                    # Skip non-tetrahedral cells
+                    num_points = cells[idx]
+                    idx += num_points + 1
+            
+            if len(tetra_cells) == 0:
+                QMessageBox.warning(self, "No Tetrahedra", "No tetrahedral elements found in the mesh.")
+                return
+            
+            tetra_cells = np.array(tetra_cells, dtype=np.int32)
+            num_vertices = len(points)
+            num_tetrahedra = len(tetra_cells)
+            
+            # Calculate radius-edge ratios for all tetrahedra
+            radius_edge_ratios = self._calculate_radius_edge_ratios(points, tetra_cells)
+            
+            # Calculate dihedral angles
+            min_dihedral, max_dihedral = self._calculate_dihedral_angles(points, tetra_cells)
+            
+            # Filter out infinite values for statistics
+            finite_ratios = radius_edge_ratios[np.isfinite(radius_edge_ratios)]
+            
+            if len(finite_ratios) == 0:
+                QMessageBox.warning(self, "Invalid Mesh", "All tetrahedra are degenerate (zero volume).")
+                return
+            
+            # Calculate statistics
+            min_ratio = np.min(finite_ratios)
+            max_ratio = np.max(finite_ratios)
+            avg_ratio = np.mean(finite_ratios)
+            ratio_below_1_2 = np.sum(finite_ratios < 1.2) / len(finite_ratios) * 100.0
+            
+            # Display results in a table dialog
+            self._show_statistics_table({
+                'num_vertices': num_vertices,
+                'num_tetrahedra': num_tetrahedra,
+                'min_radius_edge': min_ratio,
+                'max_radius_edge': max_ratio,
+                'avg_radius_edge': avg_ratio,
+                'percent_below_1_2': ratio_below_1_2,
+                'min_dihedral': min_dihedral,
+                'max_dihedral': max_dihedral
+            })
+            
+        except Exception as e:
+            logger.error(f"Error calculating statistics: {str(e)}", exc_info=True)
+            QMessageBox.critical(self, "Error", f"Failed to calculate statistics:\n{str(e)}")
+    
+    def _calculate_radius_edge_ratios(self, points: np.ndarray, tetra_cells: np.ndarray) -> np.ndarray:
+        """
+        Calculate radius-edge ratio for each tetrahedron.
+        
+        Formula: Circumradius / Shortest Edge Length
+        
+        Parameters
+        ----------
+        points : np.ndarray
+            Nx3 array of vertex coordinates
+        tetra_cells : np.ndarray
+            Mx4 array of tetrahedron vertex indices
+        
+        Returns
+        -------
+        np.ndarray
+            Array of radius-edge ratios for each tetrahedron
+        """
+        num_tets = len(tetra_cells)
+        ratios = np.zeros(num_tets)
+        
+        for i, tet in enumerate(tetra_cells):
+            # Get vertices of tetrahedron
+            v0, v1, v2, v3 = points[tet]
+            
+            # Calculate edge lengths
+            edges = np.array([
+                np.linalg.norm(v1 - v0),
+                np.linalg.norm(v2 - v0),
+                np.linalg.norm(v3 - v0),
+                np.linalg.norm(v2 - v1),
+                np.linalg.norm(v3 - v1),
+                np.linalg.norm(v3 - v2)
+            ])
+            shortest_edge = np.min(edges)
+            
+            # Calculate circumradius using standard tetrahedron formula
+            # Edges: a, b, c from v0; d, e, f are opposite edges
+            a = np.linalg.norm(v1 - v0)  # edge v0-v1
+            b = np.linalg.norm(v2 - v0)  # edge v0-v2
+            c = np.linalg.norm(v3 - v0)  # edge v0-v3
+            d = np.linalg.norm(v3 - v2)  # edge v2-v3 (opposite to v0-v1)
+            e = np.linalg.norm(v3 - v1)  # edge v1-v3 (opposite to v0-v2)
+            f = np.linalg.norm(v2 - v1)  # edge v1-v2 (opposite to v0-v3)
+            
+            # Calculate volume using Cayley-Menger determinant
+            cm_matrix = np.array([
+                [0, 1, 1, 1, 1],
+                [1, 0, a**2, b**2, c**2],
+                [1, a**2, 0, f**2, e**2],
+                [1, b**2, f**2, 0, d**2],
+                [1, c**2, e**2, d**2, 0]
+            ])
+            
+            det = np.linalg.det(cm_matrix)
+            volume = np.sqrt(np.abs(det) / 288.0)
+            
+            # Calculate circumradius using formula for tetrahedron:
+            # R = sqrt((a^2*b^2*c^2 + a^2*d^2*e^2 + b^2*d^2*f^2 + c^2*e^2*f^2) / (144 * V^2))
+            if volume > 1e-12:
+                numerator = (a**2 * b**2 * c**2 + 
+                           a**2 * d**2 * e**2 + 
+                           b**2 * d**2 * f**2 + 
+                           c**2 * e**2 * f**2)
+                circumradius = np.sqrt(numerator / (144.0 * volume**2))
+            else:
+                # Degenerate tetrahedron
+                circumradius = np.inf
+            
+            # Calculate radius-edge ratio
+            if shortest_edge > 1e-12:
+                ratios[i] = circumradius / shortest_edge
+            else:
+                ratios[i] = np.inf
+        
+        return ratios
+    
+    def _calculate_dihedral_angles(self, points: np.ndarray, tetra_cells: np.ndarray) -> Tuple[float, float]:
+        """
+        Calculate minimum and maximum dihedral angles in the mesh.
+        
+        Dihedral angle is the angle between two faces of a tetrahedron.
+        
+        Parameters
+        ----------
+        points : np.ndarray
+            Nx3 array of vertex coordinates
+        tetra_cells : np.ndarray
+            Mx4 array of tetrahedron vertex indices
+        
+        Returns
+        -------
+        Tuple[float, float]
+            (minimum_dihedral_angle, maximum_dihedral_angle) in degrees
+        """
+        all_dihedral_angles = []
+        
+        for tet in tetra_cells:
+            v0, v1, v2, v3 = points[tet]
+            
+            # Calculate face normals (pointing outward)
+            # Face 0: v1, v2, v3
+            face0_normal = np.cross(v2 - v1, v3 - v1)
+            face0_normal = face0_normal / (np.linalg.norm(face0_normal) + 1e-12)
+            
+            # Face 1: v0, v2, v3
+            face1_normal = np.cross(v3 - v0, v2 - v0)
+            face1_normal = face1_normal / (np.linalg.norm(face1_normal) + 1e-12)
+            
+            # Face 2: v0, v1, v3
+            face2_normal = np.cross(v1 - v0, v3 - v0)
+            face2_normal = face2_normal / (np.linalg.norm(face2_normal) + 1e-12)
+            
+            # Face 3: v0, v1, v2
+            face3_normal = np.cross(v2 - v0, v1 - v0)
+            face3_normal = face3_normal / (np.linalg.norm(face3_normal) + 1e-12)
+            
+            # Calculate interior dihedral angles along each edge
+            # Dihedral angle = π - angle_between_outward_normals
+            # Edge v0-v1: faces 2 (v0,v1,v3) and 3 (v0,v1,v2)
+            dot_01 = np.clip(np.dot(face2_normal, face3_normal), -1.0, 1.0)
+            angle_01 = np.pi - np.arccos(dot_01)
+            
+            # Edge v0-v2: faces 1 (v0,v2,v3) and 3 (v0,v1,v2)
+            dot_02 = np.clip(np.dot(face1_normal, face3_normal), -1.0, 1.0)
+            angle_02 = np.pi - np.arccos(dot_02)
+            
+            # Edge v0-v3: faces 1 (v0,v2,v3) and 2 (v0,v1,v3)
+            dot_03 = np.clip(np.dot(face1_normal, face2_normal), -1.0, 1.0)
+            angle_03 = np.pi - np.arccos(dot_03)
+            
+            # Edge v1-v2: faces 0 (v1,v2,v3) and 3 (v0,v1,v2)
+            dot_12 = np.clip(np.dot(face0_normal, face3_normal), -1.0, 1.0)
+            angle_12 = np.pi - np.arccos(dot_12)
+            
+            # Edge v1-v3: faces 0 (v1,v2,v3) and 2 (v0,v1,v3)
+            dot_13 = np.clip(np.dot(face0_normal, face2_normal), -1.0, 1.0)
+            angle_13 = np.pi - np.arccos(dot_13)
+            
+            # Edge v2-v3: faces 0 (v1,v2,v3) and 1 (v0,v2,v3)
+            dot_23 = np.clip(np.dot(face0_normal, face1_normal), -1.0, 1.0)
+            angle_23 = np.pi - np.arccos(dot_23)
+            
+            # Convert to degrees and store
+            angles_deg = np.degrees([angle_01, angle_02, angle_03, angle_12, angle_13, angle_23])
+            all_dihedral_angles.extend(angles_deg)
+        
+        if len(all_dihedral_angles) == 0:
+            return 0.0, 180.0
+        
+        min_dihedral = np.min(all_dihedral_angles)
+        max_dihedral = np.max(all_dihedral_angles)
+        
+        return float(min_dihedral), float(max_dihedral)
+    
+    def _show_statistics_table(self, stats: Dict[str, float]):
+        """
+        Display mesh statistics in a formatted table dialog.
+        
+        Parameters
+        ----------
+        stats : Dict[str, float]
+            Dictionary containing all calculated statistics
+        """
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Mesh Quality Statistics")
+        dialog.setMinimumSize(600, 500)
+        
+        layout = QVBoxLayout(dialog)
+        
+        # Title
+        title_label = QLabel("Tetrahedral Mesh Quality Metrics")
+        title_font = QFont()
+        title_font.setPointSize(12)
+        title_font.setBold(True)
+        title_label.setFont(title_font)
+        title_label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(title_label)
+        
+        # Create table
+        table = QTableWidget()
+        table.setColumnCount(2)
+        table.setRowCount(8)
+        table.setHorizontalHeaderLabels(["Metric", "Value"])
+        table.horizontalHeader().setStretchLastSection(True)
+        table.verticalHeader().setVisible(False)
+        table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        
+        # Populate table
+        metrics = [
+            ("Element Counts", ""),
+            ("  Total Vertices (Nodes)", f"{stats['num_vertices']:,}"),
+            ("  Total Tetrahedra (Cells)", f"{stats['num_tetrahedra']:,}"),
+            ("Radius-Edge Ratio", ""),
+            ("  Minimum", f"{stats['min_radius_edge']:.6f}"),
+            ("  Maximum", f"{stats['max_radius_edge']:.6f}"),
+            ("  Average", f"{stats['avg_radius_edge']:.6f}"),
+            ("  Percentage < 1.2", f"{stats['percent_below_1_2']:.2f}%"),
+            ("Dihedral Angles", ""),
+            ("  Minimum (degrees)", f"{stats['min_dihedral']:.4f}°"),
+            ("  Maximum (degrees)", f"{stats['max_dihedral']:.4f}°")
+        ]
+        
+        table.setRowCount(len(metrics))
+        
+        for row, (metric, value) in enumerate(metrics):
+            metric_item = QTableWidgetItem(metric)
+            value_item = QTableWidgetItem(value)
+            
+            # Style header rows (empty value)
+            if value == "":
+                metric_font = QFont()
+                metric_font.setBold(True)
+                metric_item.setFont(metric_font)
+                metric_item.setBackground(QColor(240, 240, 240))
+                value_item.setBackground(QColor(240, 240, 240))
+            
+            table.setItem(row, 0, metric_item)
+            table.setItem(row, 1, value_item)
+        
+        # Resize columns to content
+        table.resizeColumnsToContents()
+        
+        layout.addWidget(table)
+        
+        # Close button
+        button_box = QDialogButtonBox(QDialogButtonBox.Ok)
+        button_box.accepted.connect(dialog.accept)
+        layout.addWidget(button_box)
+        
+        # Show dialog
+        dialog.exec()
+        
         # ------------------------------------------------------------------
     #  render the TetGen result in the central 3-D viewport
     # ------------------------------------------------------------------
