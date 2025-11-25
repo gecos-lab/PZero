@@ -1902,6 +1902,50 @@ class MeshItWorkflowGUI(QMainWindow):
         mesh_settings_group = QGroupBox("Global Mesh Settings")
         mg = QFormLayout(mesh_settings_group)
 
+        # Surface reconstruction method selector
+        self.mesh_reconstruction_combo = QComboBox()
+        self.mesh_reconstruction_combo.addItems([
+            "Planar Projection (Standard)",
+            "Ball Pivoting (Folded Surfaces)",
+            "Alpha Shape 3D (Concave/Wavy)",
+            "Keep Original (Pre-triangulated)"
+        ])
+        self.mesh_reconstruction_combo.setCurrentIndex(0)
+        self.mesh_reconstruction_combo.setToolTip(
+            "Planar: Best for mostly flat surfaces (projects to best-fit plane)\n"
+            "Ball Pivoting: Best for folded/overturned structures (works in 3D)\n"
+            "Alpha Shape 3D: Good for concave/wavy surfaces with holes\n"
+            "Keep Original: Uses existing triangulation from PZero TriSurf"
+        )
+        mg.addRow("Reconstruction", self.mesh_reconstruction_combo)
+
+        # Ball pivoting radius factor (only visible when BPA selected)
+        self.bpa_radius_input = QDoubleSpinBox()
+        self.bpa_radius_input.setRange(0.5, 10.0)
+        self.bpa_radius_input.setValue(2.0)
+        self.bpa_radius_input.setSingleStep(0.5)
+        self.bpa_radius_input.setDecimals(1)
+        self.bpa_radius_input.setToolTip(
+            "Ball radius multiplier for Ball Pivoting Algorithm.\n"
+            "Larger values create smoother surfaces but may miss fine details.\n"
+            "Smaller values capture more detail but may create holes."
+        )
+        mg.addRow("BPA Radius Factor", self.bpa_radius_input)
+
+        # Alpha value for alpha shape (only visible when Alpha Shape selected)
+        self.alpha_value_input = QDoubleSpinBox()
+        self.alpha_value_input.setRange(0.0, 100.0)
+        self.alpha_value_input.setValue(0.0)  # 0 = auto
+        self.alpha_value_input.setSingleStep(1.0)
+        self.alpha_value_input.setDecimals(1)
+        self.alpha_value_input.setToolTip(
+            "Alpha value for Alpha Shape reconstruction.\n"
+            "0 = automatic (based on point density)\n"
+            "Smaller values create tighter fits (more concave)\n"
+            "Larger values create smoother surfaces"
+        )
+        mg.addRow("Alpha Value", self.alpha_value_input)
+
         self.mesh_interp_combo = QComboBox()
         self.mesh_interp_combo.addItems([
             "Thin Plate Spline (TPS)", "IDW (p=4)",
@@ -5569,11 +5613,1134 @@ class MeshItWorkflowGUI(QMainWindow):
         self._populate_surface_selector()
         self._update_refined_visualization()
 
+    # =========================================================================
+    # 3D Surface Reconstruction Methods for Folded/Wavy Surfaces
+    # =========================================================================
+    
+    def _is_point_cloud_coplanar(self, points_3d: np.ndarray, tolerance: float = 1e-6) -> tuple:
+        """
+        Check if a point cloud is nearly coplanar.
+        
+        Returns
+        -------
+        tuple
+            (is_coplanar: bool, normal: np.ndarray or None, d: float or None)
+        """
+        if len(points_3d) < 3:
+            return False, None, None
+        
+        # Use PCA to find principal components
+        centroid = np.mean(points_3d, axis=0)
+        centered = points_3d - centroid
+        
+        # Compute covariance matrix
+        cov = np.cov(centered.T)
+        eigenvalues, eigenvectors = np.linalg.eigh(cov)
+        
+        # Sort by eigenvalue (smallest first)
+        idx = np.argsort(eigenvalues)
+        eigenvalues = eigenvalues[idx]
+        eigenvectors = eigenvectors[:, idx]
+        
+        # If smallest eigenvalue is very small relative to others, points are coplanar
+        ratio = eigenvalues[0] / (eigenvalues[2] + 1e-12)
+        
+        if ratio < tolerance:
+            # Points are coplanar - normal is the eigenvector with smallest eigenvalue
+            normal = eigenvectors[:, 0]
+            d = -np.dot(normal, centroid)
+            return True, normal, d
+        
+        return False, None, None
+
+    def _add_jitter_for_normal_estimation(self, points_3d: np.ndarray, 
+                                           jitter_scale: float = 1e-6) -> np.ndarray:
+        """
+        Add small random jitter to points to break degeneracy for normal estimation.
+        
+        This helps avoid QHull errors with coplanar/cospherical points.
+        """
+        # Scale jitter based on point cloud extent
+        bbox_range = np.ptp(points_3d, axis=0)
+        jitter_magnitude = np.max(bbox_range) * jitter_scale
+        
+        # Add random jitter
+        jitter = np.random.uniform(-jitter_magnitude, jitter_magnitude, points_3d.shape)
+        return points_3d + jitter
+
+    def _reconstruct_surface_ball_pivoting(self, points_3d: np.ndarray, 
+                                            constraint_segments: list,
+                                            radius_factor: float = 2.0) -> tuple:
+        """
+        Reconstruct a surface using Ball Pivoting Algorithm (BPA).
+        
+        This method works directly in 3D space and can handle folded/overturned
+        surfaces where multiple Z values exist for the same (X,Y) position.
+        
+        Parameters
+        ----------
+        points_3d : np.ndarray
+            (N, 3) array of 3D points defining the surface
+        constraint_segments : list
+            List of constraint segments that must be preserved in the mesh
+        radius_factor : float
+            Multiplier for the ball radius (based on point spacing)
+        
+        Returns
+        -------
+        tuple
+            (vertices, triangles) or (None, None) if reconstruction fails
+        """
+        try:
+            import open3d as o3d
+            
+            if points_3d is None or len(points_3d) < 4:
+                logger.warning("Not enough points for Ball Pivoting reconstruction")
+                return None, None
+            
+            # Check for coplanar points - return failure so standard constrained
+            # triangulation is used (which properly respects segment boundaries)
+            is_coplanar, plane_normal, _ = self._is_point_cloud_coplanar(points_3d)
+            if is_coplanar:
+                logger.info("Ball Pivoting: Points are coplanar, deferring to constrained triangulation")
+                return None, None
+            
+            # Create Open3D point cloud with jittered points for normal estimation
+            points_jittered = self._add_jitter_for_normal_estimation(points_3d)
+            pcd = o3d.geometry.PointCloud()
+            pcd.points = o3d.utility.Vector3dVector(points_jittered)
+            
+            # Compute bounding box diagonal for scale-aware radius
+            bbox = pcd.get_axis_aligned_bounding_box()
+            bbox_diag = np.linalg.norm(bbox.get_max_bound() - bbox.get_min_bound())
+            
+            # Compute average point spacing
+            distances = pcd.compute_nearest_neighbor_distance()
+            avg_dist = np.mean(distances)
+            median_dist = np.median(distances)
+            
+            # Use median for more robust estimation (less affected by outliers)
+            base_radius = min(median_dist, avg_dist) * radius_factor
+            
+            # Ensure minimum radius based on bounding box (for very sparse point clouds)
+            min_radius = bbox_diag / max(len(points_3d), 10)
+            base_radius = max(base_radius, min_radius)
+            
+            # Estimate normals with scale-appropriate search radius
+            normal_radius = base_radius * 3.0
+            pcd.estimate_normals(
+                search_param=o3d.geometry.KDTreeSearchParamHybrid(
+                    radius=normal_radius, max_nn=30
+                )
+            )
+            
+            # Try to orient normals - use try/except to handle QHull errors
+            k_orient = min(15, len(points_3d) - 1)
+            if k_orient >= 3:
+                try:
+                    pcd.orient_normals_consistent_tangent_plane(k=k_orient)
+                except RuntimeError as e:
+                    if "QH6239" in str(e) or "cocircular" in str(e) or "cospherical" in str(e):
+                        logger.warning("Normal orientation failed due to coplanar points, using estimated normals")
+                        # Try with more jitter
+                        points_more_jitter = self._add_jitter_for_normal_estimation(points_3d, jitter_scale=1e-4)
+                        pcd.points = o3d.utility.Vector3dVector(points_more_jitter)
+                        pcd.estimate_normals(
+                            search_param=o3d.geometry.KDTreeSearchParamHybrid(
+                                radius=normal_radius, max_nn=30
+                            )
+                        )
+                        try:
+                            pcd.orient_normals_towards_camera_location(np.mean(points_3d, axis=0) + [0, 0, 1000])
+                        except:
+                            pass  # Use normals as-is
+                    else:
+                        raise
+            
+            # Now replace with original (non-jittered) points for mesh creation
+            pcd.points = o3d.utility.Vector3dVector(points_3d)
+            
+            # Ball pivoting radii - use wider range for robustness
+            radii = [
+                base_radius * 0.5,
+                base_radius,
+                base_radius * 2.0,
+                base_radius * 4.0,
+                base_radius * 8.0  # Extra large for filling holes
+            ]
+            
+            logger.info(f"Ball Pivoting: {len(points_3d)} pts, avg_dist={avg_dist:.4f}, base_radius={base_radius:.4f}")
+            
+            # Perform Ball Pivoting Algorithm
+            mesh = o3d.geometry.TriangleMesh.create_from_point_cloud_ball_pivoting(
+                pcd, o3d.utility.DoubleVector(radii)
+            )
+            
+            if mesh.is_empty():
+                logger.warning("Ball Pivoting produced empty mesh, trying Poisson reconstruction")
+                return self._reconstruct_surface_poisson(points_3d, constraint_segments)
+            
+            # Post-process: fill small holes and clean up
+            mesh.remove_degenerate_triangles()
+            mesh.remove_duplicated_triangles()
+            mesh.remove_duplicated_vertices()
+            mesh.remove_non_manifold_edges()
+            
+            # Extract vertices and triangles
+            vertices = np.asarray(mesh.vertices)
+            triangles = np.asarray(mesh.triangles)
+            
+            if len(vertices) < 3 or len(triangles) < 1:
+                logger.warning("Ball Pivoting produced insufficient geometry")
+                return None, None
+            
+            logger.info(f"Ball Pivoting successful: {len(vertices)} vertices, {len(triangles)} triangles")
+            return vertices, triangles
+            
+        except ImportError:
+            logger.warning("Open3D not available for Ball Pivoting. Install with: pip install open3d")
+            # Fallback to Alpha Shape
+            return self._reconstruct_surface_alpha_shape(points_3d, constraint_segments)
+        except Exception as e:
+            logger.error(f"Ball Pivoting reconstruction failed: {e}", exc_info=True)
+            return None, None
+    
+    def _reconstruct_planar_surface(self, points_3d: np.ndarray, 
+                                     plane_normal: np.ndarray) -> tuple:
+        """
+        Reconstruct a planar surface using 2D Delaunay triangulation.
+        
+        For coplanar points, project to 2D, triangulate, and return.
+        
+        NOTE: This is a simple fallback. For proper constraint-respecting
+        triangulation, the caller should use the standard planar workflow
+        which uses constrained Delaunay triangulation.
+        """
+        try:
+            from scipy.spatial import Delaunay
+            
+            if len(points_3d) < 3:
+                return None, None
+            
+            # Create local 2D coordinate system on the plane
+            normal = plane_normal / np.linalg.norm(plane_normal)
+            
+            # Find two orthogonal vectors in the plane
+            if abs(normal[2]) < 0.9:
+                u = np.cross(normal, [0, 0, 1])
+            else:
+                u = np.cross(normal, [1, 0, 0])
+            u = u / np.linalg.norm(u)
+            v = np.cross(normal, u)
+            
+            # Project points to 2D
+            centroid = np.mean(points_3d, axis=0)
+            centered = points_3d - centroid
+            pts_2d = np.column_stack([
+                np.dot(centered, u),
+                np.dot(centered, v)
+            ])
+            
+            # 2D Delaunay triangulation
+            tri = Delaunay(pts_2d)
+            
+            logger.info(f"Planar surface reconstruction: {len(points_3d)} vertices, {len(tri.simplices)} triangles")
+            return points_3d.copy(), tri.simplices.copy()
+            
+        except Exception as e:
+            logger.error(f"Planar surface reconstruction failed: {e}")
+            return None, None
+    
+    def _is_surface_coplanar(self, dataset_idx: int) -> bool:
+        """
+        Check if a surface dataset has coplanar points.
+        Returns True for planar surfaces like boundary box faces.
+        """
+        points_3d = self._collect_all_constraint_points_3d(dataset_idx, self.datasets[dataset_idx])
+        if points_3d is None or len(points_3d) < 4:
+            return False
+        is_coplanar, _, _ = self._is_point_cloud_coplanar(points_3d)
+        return is_coplanar
+    
+    def _reconstruct_surface_poisson(self, points_3d: np.ndarray,
+                                      constraint_segments: list,
+                                      depth: int = 8) -> tuple:
+        """
+        Reconstruct a surface using Poisson Surface Reconstruction.
+        
+        Good for creating smooth watertight surfaces from point clouds.
+        
+        Parameters
+        ----------
+        points_3d : np.ndarray
+            (N, 3) array of 3D points
+        constraint_segments : list
+            Constraint segments (used for post-processing)
+        depth : int
+            Octree depth for reconstruction (higher = more detail)
+        
+        Returns
+        -------
+        tuple
+            (vertices, triangles) or (None, None) if fails
+        """
+        try:
+            import open3d as o3d
+            
+            if points_3d is None or len(points_3d) < 4:
+                return None, None
+            
+            # Check for coplanar points - return failure so standard constrained
+            # triangulation is used (which properly respects segment boundaries)
+            is_coplanar, plane_normal, _ = self._is_point_cloud_coplanar(points_3d)
+            if is_coplanar:
+                logger.info("Poisson: Points are coplanar, deferring to constrained triangulation")
+                return None, None
+            
+            # Use jittered points for normal estimation
+            points_jittered = self._add_jitter_for_normal_estimation(points_3d)
+            pcd = o3d.geometry.PointCloud()
+            pcd.points = o3d.utility.Vector3dVector(points_jittered)
+            pcd.estimate_normals()
+            
+            # Try to orient normals
+            try:
+                pcd.orient_normals_consistent_tangent_plane(k=15)
+            except RuntimeError as e:
+                if "QH6239" in str(e) or "cocircular" in str(e):
+                    logger.warning("Normal orientation failed, using estimated normals")
+                    try:
+                        pcd.orient_normals_towards_camera_location(np.mean(points_3d, axis=0) + [0, 0, 1000])
+                    except:
+                        pass
+                else:
+                    raise
+            
+            # Use original points for mesh creation
+            pcd.points = o3d.utility.Vector3dVector(points_3d)
+            
+            mesh, densities = o3d.geometry.TriangleMesh.create_from_point_cloud_poisson(
+                pcd, depth=depth
+            )
+            
+            # Remove low-density vertices (artifacts)
+            densities = np.asarray(densities)
+            density_threshold = np.quantile(densities, 0.01)
+            vertices_to_remove = densities < density_threshold
+            mesh.remove_vertices_by_mask(vertices_to_remove)
+            
+            vertices = np.asarray(mesh.vertices)
+            triangles = np.asarray(mesh.triangles)
+            
+            logger.info(f"Poisson reconstruction: {len(vertices)} vertices, {len(triangles)} triangles")
+            return vertices, triangles
+            
+        except ImportError:
+            logger.warning("Open3D not available for Poisson reconstruction")
+            return None, None
+        except Exception as e:
+            logger.error(f"Poisson reconstruction failed: {e}")
+            return None, None
+    
+    def _reconstruct_surface_alpha_shape(self, points_3d: np.ndarray,
+                                          constraint_segments: list,
+                                          alpha: float = 0.0) -> tuple:
+        """
+        Reconstruct a surface using 3D Alpha Shape.
+        
+        Good for concave surfaces and surfaces with holes.
+        
+        Note on Open3D alpha parameter:
+        - Alpha is the circumradius threshold
+        - Triangles with circumradius > alpha are removed
+        - LARGER alpha = MORE triangles (looser fit, smoother)
+        - SMALLER alpha = FEWER triangles (tighter fit, more holes)
+        
+        Parameters
+        ----------
+        points_3d : np.ndarray
+            (N, 3) array of 3D points
+        constraint_segments : list
+            Constraint segments (for reference)
+        alpha : float
+            Alpha value (0 = auto-compute based on point density)
+        
+        Returns
+        -------
+        tuple
+            (vertices, triangles) or (None, None) if fails
+        """
+        try:
+            if points_3d is None or len(points_3d) < 4:
+                return None, None
+            
+            # Check for coplanar points - return failure so standard constrained
+            # triangulation is used (which properly respects segment boundaries)
+            is_coplanar, plane_normal, _ = self._is_point_cloud_coplanar(points_3d)
+            if is_coplanar:
+                logger.info("Alpha Shape: Points are coplanar, deferring to constrained triangulation")
+                return None, None
+            
+            # Try Open3D Alpha Shape
+            try:
+                import open3d as o3d
+                
+                pcd = o3d.geometry.PointCloud()
+                pcd.points = o3d.utility.Vector3dVector(points_3d)
+                
+                # Compute point cloud statistics
+                distances = pcd.compute_nearest_neighbor_distance()
+                avg_dist = np.mean(distances)
+                median_dist = np.median(distances)
+                
+                # Get bounding box diagonal for scale reference
+                bbox = pcd.get_axis_aligned_bounding_box()
+                bbox_diag = np.linalg.norm(bbox.get_max_bound() - bbox.get_min_bound())
+                
+                # Auto-compute alpha if not specified
+                if alpha <= 0:
+                    # Use a LARGE alpha to capture more triangles
+                    alpha = max(
+                        median_dist * 10.0,      # 10x median spacing
+                        avg_dist * 8.0,          # 8x average spacing  
+                        bbox_diag / 5.0          # 1/5 of bounding box diagonal
+                    )
+                
+                logger.info(f"Alpha Shape: {len(points_3d)} pts, avg_dist={avg_dist:.2f}, alpha={alpha:.4f}")
+                
+                # Try with computed alpha first
+                mesh = o3d.geometry.TriangleMesh.create_from_point_cloud_alpha_shape(pcd, alpha)
+                
+                # If empty, try progressively larger alpha values
+                if mesh.is_empty():
+                    for multiplier in [2.0, 5.0, 10.0, 50.0]:
+                        test_alpha = alpha * multiplier
+                        logger.info(f"Alpha Shape retry with alpha={test_alpha:.4f}")
+                        mesh = o3d.geometry.TriangleMesh.create_from_point_cloud_alpha_shape(pcd, test_alpha)
+                        if not mesh.is_empty():
+                            break
+                
+                if not mesh.is_empty():
+                    # Post-process mesh
+                    mesh.remove_degenerate_triangles()
+                    mesh.remove_duplicated_triangles()
+                    mesh.remove_duplicated_vertices()
+                    
+                    vertices = np.asarray(mesh.vertices)
+                    triangles = np.asarray(mesh.triangles)
+                    
+                    if len(triangles) >= 1:
+                        logger.info(f"Alpha Shape successful: {len(vertices)} vertices, {len(triangles)} triangles")
+                        return vertices, triangles
+                
+                # Open3D Alpha Shape failed, fall through to scipy
+                logger.warning("Open3D Alpha Shape failed, trying scipy Delaunay")
+                
+            except ImportError:
+                logger.warning("Open3D not available for Alpha Shape")
+            except Exception as e:
+                if "QH6239" in str(e) or "cocircular" in str(e) or "cospherical" in str(e):
+                    logger.warning(f"Alpha Shape QHull error (likely coplanar points): {e}")
+                else:
+                    logger.error(f"Alpha Shape Open3D error: {e}")
+            
+            # Fallback: use scipy Delaunay with alpha filtering
+            return self._reconstruct_surface_scipy_alpha(points_3d, constraint_segments, alpha)
+            
+        except Exception as e:
+            logger.error(f"Alpha Shape reconstruction failed: {e}")
+            return None, None
+    
+    def _reconstruct_surface_scipy_alpha(self, points_3d: np.ndarray,
+                                          constraint_segments: list,
+                                          alpha: float = 0.0) -> tuple:
+        """
+        Fallback 3D surface reconstruction using scipy Delaunay triangulation.
+        
+        Extracts the outer surface (boundary faces) from a 3D Delaunay tetrahedralization.
+        This is a pure Python fallback when Open3D is not available.
+        """
+        try:
+            from scipy.spatial import Delaunay, cKDTree
+            
+            if points_3d is None or len(points_3d) < 4:
+                return None, None
+            
+            # Check for coplanar points - return failure so standard constrained
+            # triangulation is used (which properly respects segment boundaries)
+            is_coplanar, plane_normal, _ = self._is_point_cloud_coplanar(points_3d)
+            if is_coplanar:
+                logger.info("Scipy reconstruction: Points are coplanar, deferring to constrained triangulation")
+                return None, None
+            
+            logger.info(f"Scipy Delaunay reconstruction with {len(points_3d)} points")
+            
+            # Compute 3D Delaunay triangulation (tetrahedra)
+            # Use QJ option to joggle input and handle near-degenerate cases
+            try:
+                tri = Delaunay(points_3d, qhull_options="QJ")
+            except Exception as e1:
+                logger.warning(f"Delaunay with QJ failed: {e1}, trying with Qz")
+                try:
+                    tri = Delaunay(points_3d, qhull_options="Qz")
+                except Exception as e2:
+                    logger.warning(f"Delaunay with Qz failed: {e2}, trying default")
+                    tri = Delaunay(points_3d)
+            
+            # Compute statistics for alpha filtering
+            tree = cKDTree(points_3d)
+            dists, _ = tree.query(points_3d, k=min(8, len(points_3d)))
+            if dists.ndim > 1:
+                avg_dist = np.mean(dists[:, 1]) if dists.shape[1] > 1 else np.mean(dists)
+            else:
+                avg_dist = np.mean(dists)
+            
+            # Set alpha threshold (circumradius threshold)
+            # Larger alpha_threshold = keep more triangles
+            if alpha <= 0:
+                # Auto-compute: use large threshold to keep most triangles
+                alpha_threshold = avg_dist * 20.0
+            else:
+                alpha_threshold = alpha
+            
+            # Extract boundary faces (faces that appear only once across all tetrahedra)
+            face_count = {}
+            
+            for simplex in tri.simplices:
+                # Each tetrahedron has 4 triangular faces
+                faces = [
+                    tuple(sorted([simplex[0], simplex[1], simplex[2]])),
+                    tuple(sorted([simplex[0], simplex[1], simplex[3]])),
+                    tuple(sorted([simplex[0], simplex[2], simplex[3]])),
+                    tuple(sorted([simplex[1], simplex[2], simplex[3]]))
+                ]
+                
+                for face in faces:
+                    face_count[face] = face_count.get(face, 0) + 1
+            
+            # Boundary faces appear exactly once (not shared between tetrahedra)
+            boundary_faces = [face for face, count in face_count.items() if count == 1]
+            
+            # Apply alpha criterion to filter out large triangles
+            kept_triangles = []
+            for face in boundary_faces:
+                p0, p1, p2 = points_3d[face[0]], points_3d[face[1]], points_3d[face[2]]
+                a = np.linalg.norm(p1 - p2)
+                b = np.linalg.norm(p0 - p2)
+                c = np.linalg.norm(p0 - p1)
+                s2 = max((a + b + c) * (b + c - a) * (a + c - b) * (a + b - c), 0.0)
+                if s2 > 1e-20:
+                    area = 0.25 * np.sqrt(s2)
+                    circumradius = (a * b * c) / (4.0 * area)
+                    # Keep triangles with circumradius below threshold
+                    if circumradius <= alpha_threshold:
+                        kept_triangles.append(face)
+            
+            # If alpha filtering removed too many, use all boundary faces
+            if len(kept_triangles) < len(boundary_faces) * 0.5:
+                logger.info("Alpha filter too aggressive, using all boundary faces")
+                kept_triangles = boundary_faces
+            
+            if not kept_triangles:
+                logger.warning("Scipy reconstruction produced no triangles")
+                return None, None
+            
+            triangles = np.array(kept_triangles, dtype=np.int32)
+            logger.info(f"Scipy reconstruction: {len(points_3d)} vertices, {len(triangles)} triangles")
+            return points_3d.copy(), triangles
+            
+        except Exception as e:
+            logger.error(f"Scipy reconstruction failed: {e}", exc_info=True)
+            return None, None
+    
+    def _extract_xyz_from_point(self, pt) -> tuple:
+        """
+        Safely extract (x, y, z) coordinates from various point formats.
+        
+        Handles:
+        - Vector3D objects (with .x, .y, .z attributes)
+        - Numpy arrays [x, y, z] or [x, y, z, type_string]
+        - Lists/tuples [x, y, z] or [x, y, z, type_string]
+        
+        Returns (x, y, z) tuple or None if extraction fails.
+        """
+        try:
+            # Vector3D object
+            if hasattr(pt, 'x') and hasattr(pt, 'y') and hasattr(pt, 'z'):
+                return (float(pt.x), float(pt.y), float(pt.z))
+            
+            # Array/list/tuple
+            if hasattr(pt, '__iter__') and not isinstance(pt, str):
+                pt_list = list(pt)
+                if len(pt_list) >= 3:
+                    # Extract first 3 elements, ensuring they're numeric
+                    x, y, z = pt_list[0], pt_list[1], pt_list[2]
+                    # Skip if any coordinate is a string (like point type labels)
+                    if isinstance(x, str) or isinstance(y, str) or isinstance(z, str):
+                        return None
+                    return (float(x), float(y), float(z))
+            
+            return None
+        except (TypeError, ValueError, IndexError):
+            return None
+
+    def _is_hull_selected_for_surface(self, surface_idx: int) -> bool:
+        """
+        Check if hull constraints are selected for a surface in the constraint tree.
+        
+        Returns True if hull is selected, False otherwise.
+        """
+        if not hasattr(self, 'refine_constraint_tree'):
+            return True  # Default to including hull if no tree exists
+        
+        tree = self.refine_constraint_tree
+        
+        # Walk through the tree to find hull constraints for this surface
+        def check_hull_selected(item):
+            data = item.data(0, Qt.UserRole)
+            if data:
+                # Check for constraint with hull type
+                if isinstance(data, dict):
+                    if data.get("type") == "constraint" and data.get("surface_idx") == surface_idx:
+                        seg_uid = data.get("seg_uid")
+                        if seg_uid and (surface_idx, seg_uid) in getattr(self, '_refine_segment_map', {}):
+                            seg_info = self._refine_segment_map[(surface_idx, seg_uid)]
+                            seg_type = str(seg_info.get("type", "")).lower()
+                            if seg_type == "hull" and item.checkState(0) == Qt.Checked:
+                                return True
+                # Check for hull group items
+                if "hull" in item.text(0).lower() and item.checkState(0) == Qt.Checked:
+                    return True
+            
+            # Check children
+            for i in range(item.childCount()):
+                if check_hull_selected(item.child(i)):
+                    return True
+            return False
+        
+        for i in range(tree.topLevelItemCount()):
+            surface_item = tree.topLevelItem(i)
+            # Find the surface item for this index
+            item_data = surface_item.data(0, Qt.UserRole)
+            if item_data:
+                if isinstance(item_data, dict) and item_data.get("surface_idx") == surface_idx:
+                    if check_hull_selected(surface_item):
+                        return True
+                elif isinstance(item_data, tuple) and len(item_data) >= 2 and item_data[1] == surface_idx:
+                    if check_hull_selected(surface_item):
+                        return True
+        
+        return False
+
+    def _collect_all_constraint_points_3d(self, dataset_idx: int, dataset: dict) -> np.ndarray:
+        """
+        Collect 3D points for reconstruction based on selected constraints.
+        
+        This respects the constraint tree selection:
+        - If hull is selected: include hull points + scattered data
+        - If only intersection constraints: include only intersection points
+        
+        This makes 3D reconstruction behave like planar triangulation
+        in terms of respecting constraint selection.
+        
+        Returns combined unique point cloud for 3D reconstruction.
+        """
+        all_points = []
+        
+        # Check if hull is selected for this surface
+        hull_selected = self._is_hull_selected_for_surface(dataset_idx)
+        
+        # 1. Original scattered data points - only include if hull is selected
+        # (scattered data is part of the surface interior, bounded by hull)
+        if hull_selected:
+            points = dataset.get('points')
+            if points is not None and len(points) > 0:
+                try:
+                    for pt in points:
+                        coords = self._extract_xyz_from_point(pt)
+                        if coords:
+                            all_points.append(coords)
+                except Exception as e:
+                    logger.debug(f"Error extracting scattered points: {e}")
+            
+            # 2. Hull boundary points (format: [[x, y, z, "TYPE"], ...])
+            hull_points = dataset.get('hull_points', [])
+            if hull_points is not None and len(hull_points) > 0:
+                for pt in hull_points:
+                    coords = self._extract_xyz_from_point(pt)
+                    if coords:
+                        all_points.append(coords)
+        
+        # 3. Selected constraint segment points (the refined intersection lines)
+        # These are always included if selected
+        seg_lists = self._collect_selected_refine_segments(dataset_idx)
+        intersection_point_count = 0
+        if seg_lists:
+            for seg_list in seg_lists:
+                if seg_list is None:
+                    continue
+                # seg_list is a list of points for one segment
+                if hasattr(seg_list, '__iter__') and not isinstance(seg_list, str):
+                    for pt in seg_list:
+                        coords = self._extract_xyz_from_point(pt)
+                        if coords:
+                            all_points.append(coords)
+                            intersection_point_count += 1
+        
+        # 4. Intersection points from datasets_intersections (fallback)
+        if hasattr(self, 'datasets_intersections') and dataset_idx in self.datasets_intersections:
+            for intersection in self.datasets_intersections[dataset_idx]:
+                inter_pts = intersection.get('points', [])
+                if inter_pts:
+                    for pt in inter_pts:
+                        coords = self._extract_xyz_from_point(pt)
+                        if coords:
+                            all_points.append(coords)
+                            intersection_point_count += 1
+        
+        # Log what was collected
+        if hull_selected:
+            logger.debug(f"Dataset {dataset_idx}: Hull selected - included hull and scattered data points")
+        else:
+            logger.info(f"Dataset {dataset_idx}: Hull NOT selected - using only {intersection_point_count} intersection constraint points")
+        
+        if not all_points:
+            logger.warning(f"No points collected for dataset {dataset_idx} (hull_selected={hull_selected})")
+            return np.array([])
+        
+        # Convert to numpy array
+        combined = np.array(all_points, dtype=float)
+        
+        # Remove duplicates using a tolerance
+        if len(combined) > 0:
+            from scipy.spatial import cKDTree
+            try:
+                tree = cKDTree(combined)
+                # Group points within tolerance
+                unique_mask = np.ones(len(combined), dtype=bool)
+                for i in range(len(combined)):
+                    if unique_mask[i]:
+                        neighbors = tree.query_ball_point(combined[i], r=1e-8)
+                        for j in neighbors:
+                            if j > i:
+                                unique_mask[j] = False
+                combined = combined[unique_mask]
+            except Exception as e:
+                logger.debug(f"Deduplication failed: {e}")
+        
+        logger.info(f"Collected {len(combined)} unique constraint points for dataset {dataset_idx}")
+        return combined
+
+    def _get_full_surface_points_for_3d_reconstruction(self, dataset_idx: int, dataset: dict) -> np.ndarray:
+        """
+        Get surface points for 3D reconstruction (Ball Pivoting, Alpha Shape).
+        
+        This method implements smart point selection based on constraint selection:
+        
+        If HULL is selected: Use all surface points (full mesh)
+        If only INTERSECTIONS selected: 
+            - Use intersection lines as BOUNDARY
+            - Filter original surface points to only those INSIDE the boundary
+            - This creates a naturally bounded mesh (like CDT does for triangulation)
+        
+        This is the key insight: instead of meshing all points then trimming,
+        we filter points FIRST so Ball Pivoting only meshes the interior.
+        
+        Returns
+        -------
+        np.ndarray
+            Surface points for 3D reconstruction (filtered if only intersections selected)
+        """
+        from scipy.spatial import cKDTree
+        
+        # Check if hull is selected
+        hull_selected = self._is_hull_selected_for_surface(dataset_idx)
+        
+        # Step 1: Get intersection constraint points (these form the BOUNDARY)
+        constraint_points = []
+        seg_lists = self._collect_selected_refine_segments(dataset_idx)
+        if seg_lists:
+            for seg_list in seg_lists:
+                if seg_list is None:
+                    continue
+                if hasattr(seg_list, '__iter__') and not isinstance(seg_list, str):
+                    for pt in seg_list:
+                        coords = self._extract_xyz_from_point(pt)
+                        if coords:
+                            constraint_points.append(coords)
+        
+        # Also from datasets_intersections
+        if hasattr(self, 'datasets_intersections') and dataset_idx in self.datasets_intersections:
+            for intersection in self.datasets_intersections[dataset_idx]:
+                inter_pts = intersection.get('points', [])
+                if inter_pts:
+                    for pt in inter_pts:
+                        coords = self._extract_xyz_from_point(pt)
+                        if coords:
+                            constraint_points.append(coords)
+        
+        # Step 2: Get all original surface points
+        all_surface_points = []
+        
+        # From original triangulation
+        tri_result = dataset.get('triangulation_result')
+        if tri_result is not None:
+            vertices = tri_result.get('vertices')
+            if vertices is not None and len(vertices) > 0:
+                try:
+                    vertices_array = np.asarray(vertices, dtype=float)
+                    if vertices_array.ndim == 2 and vertices_array.shape[1] >= 3:
+                        for pt in vertices_array[:, :3]:
+                            all_surface_points.append(tuple(pt))
+                        logger.debug(f"Dataset {dataset_idx}: Got {len(vertices_array)} vertices from original triangulation")
+                except Exception as e:
+                    logger.debug(f"Error extracting triangulation vertices: {e}")
+        
+        # If no triangulation, use scattered points
+        if len(all_surface_points) == 0:
+            points = dataset.get('points')
+            if points is not None and len(points) > 0:
+                try:
+                    for pt in points:
+                        coords = self._extract_xyz_from_point(pt)
+                        if coords:
+                            all_surface_points.append(coords)
+                except Exception as e:
+                    logger.debug(f"Error extracting scattered points: {e}")
+        
+        # Add hull points if hull is selected
+        if hull_selected:
+            hull_points = dataset.get('hull_points', [])
+            if hull_points is not None and len(hull_points) > 0:
+                for pt in hull_points:
+                    coords = self._extract_xyz_from_point(pt)
+                    if coords:
+                        all_surface_points.append(coords)
+        
+        # Step 3: If hull NOT selected, filter surface points to only those INSIDE constraint boundary
+        if not hull_selected and len(constraint_points) >= 3:
+            constraint_array = np.array(constraint_points, dtype=float)
+            
+            # Compute bounding box of constraints (this is the boundary)
+            bbox_min = np.min(constraint_array, axis=0)
+            bbox_max = np.max(constraint_array, axis=0)
+            bbox_size = bbox_max - bbox_min
+            
+            # Add small tolerance
+            tolerance = bbox_size * 0.01
+            tolerance = np.maximum(tolerance, 1e-6)
+            bbox_min_tol = bbox_min - tolerance
+            bbox_max_tol = bbox_max + tolerance
+            
+            logger.info(f"Dataset {dataset_idx}: Filtering surface points to constraint bbox")
+            logger.info(f"  Constraint bbox: [{bbox_min}] to [{bbox_max}]")
+            
+            # Filter surface points to only those inside the constraint bbox
+            filtered_points = []
+            for pt in all_surface_points:
+                pt_arr = np.array(pt)
+                if np.all(pt_arr >= bbox_min_tol) and np.all(pt_arr <= bbox_max_tol):
+                    filtered_points.append(pt)
+            
+            logger.info(f"  Filtered {len(all_surface_points)} surface points to {len(filtered_points)} inside constraint bbox")
+            
+            # Combine: filtered internal points + constraint boundary points
+            # The constraint points ARE the boundary - they must be included!
+            final_points = filtered_points + constraint_points
+            
+        else:
+            # Hull selected or no constraints - use all surface points + constraints
+            final_points = all_surface_points + constraint_points
+        
+        if not final_points:
+            logger.warning(f"No surface points collected for dataset {dataset_idx}")
+            return np.array([])
+        
+        # Convert and deduplicate
+        combined = np.array(final_points, dtype=float)
+        
+        if len(combined) > 0:
+            try:
+                tree = cKDTree(combined)
+                unique_mask = np.ones(len(combined), dtype=bool)
+                for i in range(len(combined)):
+                    if unique_mask[i]:
+                        neighbors = tree.query_ball_point(combined[i], r=1e-8)
+                        for j in neighbors:
+                            if j > i:
+                                unique_mask[j] = False
+                combined = combined[unique_mask]
+            except Exception as e:
+                logger.debug(f"Deduplication failed: {e}")
+        
+        logger.info(f"Collected {len(combined)} total surface points for 3D reconstruction of dataset {dataset_idx}")
+        return combined
+
+    def _get_constraint_boundary_polygon(self, dataset_idx: int) -> list:
+        """
+        Get the constraint boundary polygon for trimming 3D reconstructed meshes.
+        
+        This collects the selected constraint segments and attempts to form
+        a closed boundary polygon for mesh trimming.
+        
+        Returns
+        -------
+        list
+            List of boundary segments as [[p1, p2], [p2, p3], ...] or empty if no constraints
+        """
+        boundary_segments = []
+        
+        seg_lists = self._collect_selected_refine_segments(dataset_idx)
+        if not seg_lists:
+            return []
+        
+        for seg_list in seg_lists:
+            if seg_list is None or len(seg_list) < 2:
+                continue
+            
+            # Convert to numpy points
+            seg_points = []
+            for pt in seg_list:
+                coords = self._extract_xyz_from_point(pt)
+                if coords:
+                    seg_points.append(np.array(coords))
+            
+            # Create segments from consecutive points
+            for i in range(len(seg_points) - 1):
+                boundary_segments.append([seg_points[i], seg_points[i + 1]])
+        
+        return boundary_segments
+
+    def _trim_mesh_to_constraint_boundary(self, vertices: np.ndarray, triangles: np.ndarray,
+                                           dataset_idx: int) -> tuple:
+        """
+        Trim a 3D reconstructed mesh to only include triangles INSIDE the constraint boundary.
+        
+        For folded surfaces with intersection line constraints:
+        - The constraint points define the boundaries (where surface meets box faces)
+        - The "inside" region is where we want the mesh
+        - Keep triangles where ALL THREE vertices are within the constraint bounding box
+        
+        This is similar to how triangulation respects constraints - triangulation only
+        creates triangles inside the constraint boundaries. Here we filter after meshing.
+        
+        Parameters
+        ----------
+        vertices : np.ndarray
+            Mesh vertices (N, 3)
+        triangles : np.ndarray
+            Mesh triangles (M, 3) - indices into vertices
+        dataset_idx : int
+            Dataset index for getting constraint boundary
+        
+        Returns
+        -------
+        tuple
+            (trimmed_vertices, trimmed_triangles) or original if trimming fails/skipped
+        """
+        try:
+            if vertices is None or triangles is None:
+                return vertices, triangles
+            
+            if len(vertices) == 0 or len(triangles) == 0:
+                return vertices, triangles
+            
+            # Get constraint segments
+            boundary_segments = self._get_constraint_boundary_polygon(dataset_idx)
+            if not boundary_segments:
+                logger.debug(f"No constraint boundary for trimming dataset {dataset_idx}")
+                return vertices, triangles
+            
+            # Collect all constraint points
+            constraint_points = []
+            for seg in boundary_segments:
+                for pt in seg:
+                    constraint_points.append(pt)
+            
+            if len(constraint_points) < 3:
+                logger.info(f"Dataset {dataset_idx}: Too few constraint points ({len(constraint_points)}), skipping trimming")
+                return vertices, triangles
+            
+            constraint_array = np.array(constraint_points)
+            
+            # Compute the bounding box of constraint points
+            # This defines the INTERIOR region - triangulation does the same thing
+            bbox_min = np.min(constraint_array, axis=0)
+            bbox_max = np.max(constraint_array, axis=0)
+            bbox_size = bbox_max - bbox_min
+            
+            # Add small tolerance (1% of size) to handle points exactly on boundary
+            tolerance = bbox_size * 0.01
+            # Minimum tolerance for very thin dimensions
+            tolerance = np.maximum(tolerance, 1e-6)
+            
+            bbox_min_tol = bbox_min - tolerance
+            bbox_max_tol = bbox_max + tolerance
+            
+            logger.info(f"Dataset {dataset_idx}: Constraint bbox = [{bbox_min}] to [{bbox_max}]")
+            
+            # For each triangle, check if ALL THREE vertices are inside the bounding box
+            # This ensures we only keep triangles fully inside the constraint boundary
+            keep_mask = np.zeros(len(triangles), dtype=bool)
+            
+            for i, tri in enumerate(triangles):
+                # Get all three vertices
+                v0, v1, v2 = vertices[tri[0]], vertices[tri[1]], vertices[tri[2]]
+                
+                # Check if all vertices are inside the bounding box
+                v0_inside = np.all(v0 >= bbox_min_tol) and np.all(v0 <= bbox_max_tol)
+                v1_inside = np.all(v1 >= bbox_min_tol) and np.all(v1 <= bbox_max_tol)
+                v2_inside = np.all(v2 >= bbox_min_tol) and np.all(v2 <= bbox_max_tol)
+                
+                if v0_inside and v1_inside and v2_inside:
+                    keep_mask[i] = True
+            
+            kept_count = np.sum(keep_mask)
+            logger.info(f"Dataset {dataset_idx}: Bounding box filter kept {kept_count}/{len(triangles)} triangles")
+            
+            # If we kept too few triangles, there might be an issue
+            if kept_count == 0:
+                logger.warning(f"Dataset {dataset_idx}: Bounding box trimming removed ALL triangles!")
+                logger.warning(f"  Vertices range: [{np.min(vertices, axis=0)}] to [{np.max(vertices, axis=0)}]")
+                logger.warning(f"  Constraint bbox: [{bbox_min}] to [{bbox_max}]")
+                return vertices, triangles
+            
+            # If we kept almost all triangles, check if constraint selection is meaningful
+            if kept_count > len(triangles) * 0.95:
+                logger.info(f"Dataset {dataset_idx}: Kept {kept_count}/{len(triangles)} triangles (>95%), constraint bbox covers most of mesh")
+            
+            # Filter triangles
+            kept_triangles = triangles[keep_mask]
+            
+            # Reindex vertices (remove unused vertices)
+            used_vertex_indices = np.unique(kept_triangles.flatten())
+            new_vertex_indices = np.full(len(vertices), -1, dtype=int)
+            new_vertex_indices[used_vertex_indices] = np.arange(len(used_vertex_indices))
+            
+            new_vertices = vertices[used_vertex_indices]
+            new_triangles = new_vertex_indices[kept_triangles]
+            
+            logger.info(f"Trimmed mesh from {len(triangles)} to {len(new_triangles)} triangles for dataset {dataset_idx}")
+            return new_vertices, new_triangles
+            
+        except Exception as e:
+            logger.warning(f"Mesh trimming failed: {e}, keeping original mesh")
+            import traceback
+            logger.debug(traceback.format_exc())
+            return vertices, triangles
+
+    def _apply_3d_reconstruction(self, dataset_idx: int, dataset: dict, 
+                                  method: str, config: dict) -> tuple:
+        """
+        Apply selected 3D reconstruction method to a dataset.
+        
+        For coplanar surfaces (like boundary box faces), this returns failure
+        so the standard constrained triangulation workflow is used instead.
+        The standard workflow properly respects segment constraints.
+        
+        For non-coplanar surfaces (folded/wavy), uses full surface points for
+        reconstruction, then trims the result to constraint boundaries.
+        
+        Parameters
+        ----------
+        dataset_idx : int
+            Index of the dataset
+        dataset : dict
+            Dataset dictionary
+        method : str
+            Reconstruction method name
+        config : dict
+            Configuration dictionary
+        
+        Returns
+        -------
+        tuple
+            (vertices, triangles, success_flag)
+        """
+        # For checking coplanarity, use constraint points
+        check_points = self._collect_all_constraint_points_3d(dataset_idx, dataset)
+        
+        if check_points is None or len(check_points) < 4:
+            logger.warning(f"Insufficient points for 3D reconstruction: dataset {dataset_idx} has {len(check_points) if check_points is not None else 0} points")
+            return None, None, False
+        
+        # Check if surface is coplanar - if so, use standard constrained triangulation
+        # which properly respects segment boundaries
+        is_coplanar, _, _ = self._is_point_cloud_coplanar(check_points)
+        if is_coplanar:
+            logger.info(f"Dataset {dataset_idx}: Surface is coplanar, using standard constrained triangulation")
+            return None, None, False  # Fall back to planar workflow
+        
+        # Get constraint segments for edge preservation
+        segments = self._collect_selected_refine_segments(dataset_idx) or []
+        
+        # Apply selected method (only for truly 3D non-planar surfaces)
+        if "Ball Pivoting" in method:
+            # Get surface points - these are already filtered to constraint bbox if hull not selected
+            # This is the key: we filter points BEFORE meshing, so the mesh is naturally bounded
+            full_points = self._get_full_surface_points_for_3d_reconstruction(dataset_idx, dataset)
+            
+            if full_points is None or len(full_points) < 4:
+                logger.warning(f"Insufficient surface points for Ball Pivoting: {len(full_points) if full_points is not None else 0}")
+                return None, None, False
+            
+            radius_factor = float(self.bpa_radius_input.value())
+            vertices, triangles = self._reconstruct_surface_ball_pivoting(
+                full_points, segments, radius_factor
+            )
+            # No post-trimming needed - points are pre-filtered to constraint boundary
+                
+        elif "Alpha Shape" in method:
+            # Get surface points - these are already filtered to constraint bbox if hull not selected
+            full_points = self._get_full_surface_points_for_3d_reconstruction(dataset_idx, dataset)
+            
+            if full_points is None or len(full_points) < 4:
+                logger.warning(f"Insufficient surface points for Alpha Shape: {len(full_points) if full_points is not None else 0}")
+                return None, None, False
+            
+            alpha = float(self.alpha_value_input.value())
+            vertices, triangles = self._reconstruct_surface_alpha_shape(
+                full_points, segments, alpha
+            )
+            # No post-trimming needed - points are pre-filtered to constraint boundary
+                
+        elif "Keep Original" in method:
+            # Use existing triangulation from PZero if available
+            tri_result = dataset.get('triangulation_result')
+            if tri_result:
+                vertices = tri_result.get('vertices')
+                triangles = tri_result.get('triangles')
+                if vertices is not None and triangles is not None:
+                    logger.info(f"Using original triangulation for dataset {dataset_idx}")
+                    vertices = np.asarray(vertices)
+                    triangles = np.asarray(triangles)
+                    
+                    # If hull is NOT selected, trim to constraint boundaries
+                    # For "Keep Original", we need post-trimming since we're using pre-existing mesh
+                    if not self._is_hull_selected_for_surface(dataset_idx):
+                        vertices, triangles = self._trim_mesh_to_constraint_boundary(
+                            vertices, triangles, dataset_idx
+                        )
+                    
+                    return vertices, triangles, True
+            return None, None, False
+        else:
+            # Planar projection (standard) - return None to use existing workflow
+            return None, None, False
+        
+        if vertices is not None and triangles is not None:
+            return vertices, triangles, True
+        return None, None, False
+
     def _generate_conforming_meshes_action(self):
         """Generate conforming surface meshes from currently checked segments."""
         import numpy as np
         # Keep status/log but compute per-surface target size below
         self.statusBar().showMessage("Generating conforming surface meshes…")
+        
+        # Get the selected reconstruction method
+        reconstruction_method = self.mesh_reconstruction_combo.currentText()
+        use_3d_reconstruction = "Planar" not in reconstruction_method
 
         ok, total, fails = 0, 0, []
         for s_idx, ds in enumerate(self.datasets):
@@ -5603,30 +6770,48 @@ class MeshItWorkflowGUI(QMainWindow):
                     "smoothing":  float(self.mesh_smoothing_input.value()),
                 }
 
-                surf_data = self._prepare_surface_data_for_triangulation(s_idx, ds, cfg)
-                if not surf_data:
-                    raise RuntimeError("surface-data prep failed")
+                # Try 3D reconstruction methods for folded/wavy surfaces
+                v3d, tris = None, None
+                holes = []  # Initialize holes to empty list for 3D reconstruction case
+                used_3d_reconstruction = False
+                
+                if use_3d_reconstruction:
+                    v3d, tris, success = self._apply_3d_reconstruction(
+                        s_idx, ds, reconstruction_method, cfg
+                    )
+                    if success:
+                        logger.info(f"✓ 3D reconstruction ({reconstruction_method}) successful for '{name}'")
+                        used_3d_reconstruction = True
+                    else:
+                        logger.info(f"3D reconstruction failed for '{name}', falling back to planar projection")
+                        v3d, tris = None, None
+                
+                # Fall back to standard planar projection if 3D reconstruction wasn't used or failed
+                if v3d is None or tris is None:
+                    surf_data = self._prepare_surface_data_for_triangulation(s_idx, ds, cfg)
+                    if not surf_data:
+                        raise RuntimeError("surface-data prep failed")
 
-                pts3d, seg_arr, holes = self._build_plc_from_selection(s_idx)
-                if len(pts3d) < 3 or len(seg_arr) < 3:
-                    raise RuntimeError("too few PLC entities")
+                    pts3d, seg_arr, holes = self._build_plc_from_selection(s_idx)
+                    if len(pts3d) < 3 or len(seg_arr) < 3:
+                        raise RuntimeError("too few PLC entities")
 
-                proj = surf_data["projection_params"]
-                centroid = np.asarray(proj["centroid"])
-                basis = np.asarray(proj["basis"])
-                pts2d = (np.array([[p.x, p.y, p.z] for p in pts3d]) - centroid) @ basis.T
-                pts2d = pts2d[:, :2]
+                    proj = surf_data["projection_params"]
+                    centroid = np.asarray(proj["centroid"])
+                    basis = np.asarray(proj["basis"])
+                    pts2d = (np.array([[p.x, p.y, p.z] for p in pts3d]) - centroid) @ basis.T
+                    pts2d = pts2d[:, :2]
 
-                holes_2d = []
-                if holes:
-                    holes_3d = np.array([[h.x, h.y, h.z] for h in holes])
-                    holes_2d = (holes_3d - centroid) @ basis.T
-                    holes_2d = holes_2d[:, :2]
+                    holes_2d = []
+                    if holes:
+                        holes_3d = np.array([[h.x, h.y, h.z] for h in holes])
+                        holes_2d = (holes_3d - centroid) @ basis.T
+                        holes_2d = holes_2d[:, :2]
 
-                v3d, tris, _ = run_constrained_triangulation_py(
-                    pts2d, seg_arr, holes_2d, proj,
-                    np.array([[p.x, p.y, p.z] for p in pts3d]), cfg
-                )
+                    v3d, tris, _ = run_constrained_triangulation_py(
+                        pts2d, seg_arr, holes_2d, proj,
+                        np.array([[p.x, p.y, p.z] for p in pts3d]), cfg
+                    )
 
                 if v3d is None or len(v3d) == 0 or tris is None or len(tris) == 0:
                     raise RuntimeError("triangulation returned empty result")
@@ -5634,7 +6819,11 @@ class MeshItWorkflowGUI(QMainWindow):
                 ds.setdefault("conforming_mesh", {})
                 ds["conforming_mesh"]["vertices"] = v3d
                 ds["conforming_mesh"]["triangles"] = tris
-                ds["conforming_mesh"]["holes"] = [[h.x, h.y, h.z] for h in holes] if holes else []
+                # For 3D reconstruction, holes are not applicable (already handled in reconstruction)
+                if not used_3d_reconstruction and holes:
+                    ds["conforming_mesh"]["holes"] = [[h.x, h.y, h.z] for h in holes]
+                else:
+                    ds["conforming_mesh"]["holes"] = []
 
                 ok += 1
                 logger.info(f"✓ Conforming mesh generated for '{name}': {len(v3d)} vertices, {len(tris)} triangles")
@@ -17723,4 +18912,5 @@ if __name__ == "__main__":
     window = MeshItWorkflowGUI()
     window._ensure_vtk_cleanup_on_exit()  # Register VTK cleanup on exit
     window.show()
+    sys.exit(app.exec_())
     sys.exit(app.exec_())
