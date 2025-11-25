@@ -156,7 +156,7 @@ class Editor(vtkContourWidget):
             self._event_translator.RemoveTranslation(vtkCommand.RightButtonPressEvent)
             self._event_translator.RemoveTranslation(vtkCommand.LeftButtonPressEvent)
             self.Render()
-            self.parent.plotter.track_click_position(
+            self._parent.plotter.track_click_position(
                 side="left", callback=self.select_point, viewport=True
             )
 
