@@ -1634,9 +1634,14 @@ def project_2_dem(self):
             prgs_bar.add_one()
             continue
 
-        # Apply projection
-        projected_obj.ShallowCopy(projection.GetOutput())
-        projected_obj.points[:, 2] = projected_obj.get_point_data("elevation")
+        # Apply projection - use DeepCopy to ensure complete copy of geometry
+        projected_obj.DeepCopy(projection.GetOutput())
+        # Update Z coordinates with elevation data - recreate points array to ensure VTK recognizes the change
+        elevation = projected_obj.get_point_data("elevation")
+        new_points = projected_obj.points.copy()
+        new_points[:, 2] = elevation
+        projected_obj.points = new_points
+        # Force update of internal VTK structures
         projected_obj.Modified()
 
         if projected_obj.points_number == 0:
@@ -1645,7 +1650,10 @@ def project_2_dem(self):
             continue
 
         # Update the entity with projected geometry
+        # Note: replace_vtk already emits geom_modified signal
         self.geol_coll.replace_vtk(uid=uid_to_project, vtk_object=projected_obj)
+
+        # Update entity name
         if replace_on_off == 1:  # No - set name for new entity
             self.geol_coll.set_uid_name(
                 uid=uid_to_project, name=f"{self.geol_coll.get_uid_name(uid)}_proj_DEM"
@@ -1660,24 +1668,24 @@ def project_2_dem(self):
 
     prgs_bar.close()
 
-    # Update views for all modified entities (emit signals AFTER progress bar is closed)
+    # Emit metadata_modified signal for name changes (geom_modified already emitted by replace_vtk)
     if updated_uids:
-        self.signals.geom_modified.emit(updated_uids, self.geol_coll)
         self.signals.metadata_modified.emit(updated_uids, self.geol_coll)
 
-    # Force rebuild of all views to ensure immediate update (for both Yes and No)
+    # Force render in all views to ensure visual update
     from pzero.views.dock_window import DockWindow
-
     dock_windows = self.findChildren(DockWindow)
     for dock in dock_windows:
-        if hasattr(dock, "canvas") and hasattr(dock.canvas, "rebuild_viewer"):
-            dock.canvas.rebuild_viewer()
+        if hasattr(dock, "canvas") and hasattr(dock.canvas, "plotter"):
+            try:
+                dock.canvas.plotter.render()
+            except Exception:
+                pass  # Ignore if render fails
 
-    # If we created copies (No), deselect original entities from all views
-    if replace_on_off == 1:
-        for dock in dock_windows:
-            if hasattr(dock, "canvas") and hasattr(dock.canvas, "clear_selection"):
-                dock.canvas.clear_selection()
+    # Clear selection in all views after projection
+    for dock in dock_windows:
+        if hasattr(dock, "canvas") and hasattr(dock.canvas, "clear_selection"):
+            dock.canvas.clear_selection()
 
 
 @freeze_gui
