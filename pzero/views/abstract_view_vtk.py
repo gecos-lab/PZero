@@ -703,6 +703,12 @@ class ViewVTK(BaseView):
                 show_property = plot_entity.points_Z
             elif show_property == "MD":
                 show_property = plot_entity.get_point_data(data_key="MD")
+            elif isinstance(show_property, str) and show_property.strip().upper().startswith("LITHOLOGY"):
+                # LITHOLOGY RGB property stored as point_data (handles [0], [1], [2] suffixes for RGB components)
+                self.plotter.remove_actor(f"{uid}_prop")
+                # Use original property name for lookup
+                show_property = plot_entity.get_point_data(data_key="LITHOLOGY")
+                plot_rgb_option = True
             else:
                 self.plotter.remove_actor(f"{uid}_prop")
                 prop = plot_entity.plot_along_trace(
@@ -857,10 +863,16 @@ class ViewVTK(BaseView):
             # the scene to a very distant place or to the origin that is the default position before any mesh is plotted.
             camera_position = self.plotter.camera_position
         if show_property_title is not None and show_property_title != "none":
-            show_property_cmap = self.parent.prop_legend_df.loc[
+            # Check if the property exists in prop_legend_df
+            matching_props = self.parent.prop_legend_df.loc[
                 self.parent.prop_legend_df["property_name"] == show_property_title,
                 "colormap",
-            ].values[0]
+            ]
+            if len(matching_props) > 0:
+                show_property_cmap = matching_props.values[0]
+            else:
+                # Property not in legend (e.g., RGB properties like LITHOLOGY)
+                show_property_cmap = None
         else:
             show_property_cmap = None
 

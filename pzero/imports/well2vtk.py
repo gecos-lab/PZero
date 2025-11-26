@@ -123,6 +123,9 @@ def well2vtk(self, path=None):
                         color_val = color_dict[value]
 
                         tr_data[start_idx:end_idx] = color_val
+
+                # Save as point_data for direct coloring
+                well_obj.trace.set_point_data(data_key=f"{key}", attribute_matrix=tr_data)
             else:
                 tr_data = np_zeros(shape=points)
                 for row, (start, end, value) in prop.iterrows():
@@ -130,9 +133,10 @@ def well2vtk(self, path=None):
                     end_idx = np_argmin(np_abs(arr - end))
                     tr_data[start_idx:end_idx] = value
                     # tr_data.insert(0,0)
-            well_obj.add_trace_data(
-                name=f"{key}", tr_data=tr_data, xyz=well_obj.trace.points
-            )
+                # Other interval data use add_trace_data
+                well_obj.add_trace_data(
+                    name=f"{key}", tr_data=tr_data, xyz=well_obj.trace.points
+                )
         elif "MD_point" in prop.columns:
             prop = prop.set_index("MD_point")
             for col in prop.columns:
@@ -169,6 +173,13 @@ def well2vtk(self, path=None):
     for key in trace_keys:
         components.append(well_obj.trace.get_field_data_shape(key)[1])
         types.append(well_obj.trace.get_field_data_type(key))
+
+    # Add LITHOLOGY to properties if present (GEOLOGY is only for coloring, not in properties)
+    point_data_keys = well_obj.trace.point_data_keys
+    if "LITHOLOGY" in point_data_keys:
+        trace_keys.append("LITHOLOGY")
+        components.append(3)  # RGB has 3 components
+        types.append("float64")
 
     bore_obj_attributes = deepcopy(WellCollection().entity_dict)
     bore_obj_attributes["uid"] = well_uid
