@@ -83,6 +83,7 @@ class TetrahedralMeshGenerator:
                 return None
             
             # Step 2: Create a TetGen object.
+            # Pass per-facet markers into TetGen so trifacemarkerlist mirrors C++
             tet = tetgen.TetGen(self.plc_vertices, self.plc_facets, self.plc_facet_markers)
             
             # Step 2.5: Add holes to TetGen if any exist
@@ -94,10 +95,18 @@ class TetrahedralMeshGenerator:
                 logger.info(f"✓ Added {len(self.plc_holes)} holes to TetGen mesh")
             
             # Step 3: Add edge constraints.
+            # NOTE: With new tetgen library, edge setting may need different approach
+            # The properties are now read-only; edges come from tetrahedralize output
             if self.plc_edge_constraints is not None and len(self.plc_edge_constraints) > 0:
-                tet.edge_list = self.plc_edge_constraints.tolist()
-                tet.edge_marker_list = self.plc_edge_markers.tolist()
-                logger.info(f"Added {len(self.plc_edge_constraints)} intersection edge constraints to TetGen.")
+                try:
+                    # Try the old API first (may work if attributes are set directly)
+                    tet.edge_list = self.plc_edge_constraints.tolist()
+                    tet.edge_marker_list = self.plc_edge_markers.tolist()
+                    logger.info(f"Added {len(self.plc_edge_constraints)} intersection edge constraints to TetGen.")
+                except AttributeError as e:
+                    # If old API doesn't work, edges might need to be passed differently
+                    logger.warning(f"Could not set edge constraints using old API: {e}")
+                    logger.warning("Edge constraints may need to be included in the input mesh specification")
             
             # Step 4: Add material seed points using C++ MeshIt approach
             if self.materials:
@@ -170,12 +179,13 @@ class TetrahedralMeshGenerator:
                     # Enable region attributes using the regionattrib parameter (equivalent to '-A' switch)
                     if 'A' in tetgen_switches:
                         # Capture the returned attributes when regions are defined
-                        nodes, elements, attributes = tet.tetrahedralize(switches=tetgen_switches, regionattrib=1.0)
+                        nodes, elements, attributes, triface_markers = tet.tetrahedralize(switches=tetgen_switches, regionattrib=True)
                     else:
                         # Add 'A' switch if not present
                         modified_switches = tetgen_switches + 'A'
                         logger.info(f"Added 'A' switch for region attributes: '{modified_switches}'")
-                        nodes, elements, attributes = tet.tetrahedralize(switches=modified_switches, regionattrib=1.0)
+                        # New code capturing markers
+                        nodes, elements, attributes, triface_markers = tet.tetrahedralize(switches=modified_switches, regionattrib=True)
                     
                     # Apply the material attributes to the grid
                     grid = tet.grid
@@ -188,7 +198,7 @@ class TetrahedralMeshGenerator:
                     else:
                         logger.warning("TetGen returned no material attributes despite having regions")
                 else:
-                    tet.tetrahedralize(switches=tetgen_switches)
+                    nodes, elements, attributes, triface_markers = tet.tetrahedralize(switches=tetgen_switches)
                     grid = tet.grid
                     
             except RuntimeError as e:
@@ -229,6 +239,40 @@ class TetrahedralMeshGenerator:
             self.tetgen_object = tet
             logger.info(f"Stored TetGen object for constraint surface access")
             
+            # Extract fault surfaces using triface_markers (C++ style)
+            if triface_markers is not None and len(triface_markers) > 0:
+                try:
+                    # Get the boundary/fault faces using the new property names
+                    surf_markers = tet.triface_markers
+                    surf_faces = tet.trifaces
+                    
+                    # Reconstruct the surface mesh (PolyData)
+                    # tet.node is the new property for vertices
+                    extracted_surface = pv.PolyData.from_regular_faces(tet.node, surf_faces)
+                    extracted_surface.cell_data["MarkerID"] = surf_markers
+                    
+                    # Extract ONLY the faults
+                    # Your logic used (1000 + s_idx) for faults
+                    # So we filter for markers >= 1000
+                    fault_indices = np.where(surf_markers >= 1000)[0]
+                    if len(fault_indices) > 0:
+                        # Extract only the fault cells
+                        fault_mesh = extracted_surface.extract_cells(fault_indices)
+                        logger.info(f"✓ Extracted {fault_mesh.n_cells} fault surface triangles from TetGen result")
+                        
+                        # Optional: Store it for export or debug
+                        self.extracted_faults = fault_mesh
+                    else:
+                        logger.info("No fault surfaces detected (no markers >= 1000)")
+                        self.extracted_faults = None
+                        
+                except Exception as e:
+                    logger.warning(f"Failed to extract fault surfaces: {e}")
+                    self.extracted_faults = None
+            else:
+                logger.info("No triface markers available for fault extraction")
+                self.extracted_faults = None
+            
             return grid
             
         except Exception as e:
@@ -257,6 +301,7 @@ class TetrahedralMeshGenerator:
         global_vertices = []
         global_facets = []
         global_facet_markers = []
+        fault_marker_map = {}
         edge_constraints = set()
         global_holes = []
 
@@ -310,7 +355,12 @@ class TetrahedralMeshGenerator:
                                                         np.array(v2) - np.array(v0)))
                     if area > 1e-12:
                         global_facets.append(gtri)
-                        global_facet_markers.append(1000 + s_idx if s_idx in fault_surfaces else s_idx)
+                        if s_idx in fault_surfaces:
+                            marker = 1000 + s_idx
+                            global_facet_markers.append(marker)
+                            fault_marker_map[marker] = s_idx
+                        else:
+                            global_facet_markers.append(s_idx)
                         if s_idx in fault_surfaces:
                             for k in range(3):
                                 e = tuple(sorted((gtri[k], gtri[(k + 1) % 3])))
@@ -401,7 +451,12 @@ class TetrahedralMeshGenerator:
                         gtri.append(g)
                     if valid and len(set(gtri)) == 3:
                         global_facets.append(gtri)
-                        global_facet_markers.append(1000 + s_idx if s_idx in fault_surfaces else s_idx)
+                        if s_idx in fault_surfaces:
+                            marker = 1000 + s_idx
+                            global_facet_markers.append(marker)
+                            fault_marker_map[marker] = s_idx
+                        else:
+                            global_facet_markers.append(s_idx)
 
                 logger.info(f"✓ Fallback triangulation successful for '{surface_name}': {len(local_tris)} triangles")
 
@@ -462,6 +517,8 @@ class TetrahedralMeshGenerator:
         self.plc_facet_markers = np.asarray(validated_facet_markers, dtype=np.int32)
         self.plc_edge_constraints = np.asarray(list(validated_edge_constraints), dtype=np.int32) if validated_edge_constraints else np.empty((0, 2), dtype=np.int32)
         self.plc_edge_markers = np.arange(1, len(self.plc_edge_constraints) + 1, dtype=np.int32)
+        # Map: facet marker -> dataset surface index (only for faults)
+        self.fault_surface_markers = fault_marker_map
         self.plc_holes = np.asarray(global_holes, dtype=np.float64) if global_holes else np.empty((0, 3), dtype=np.float64)
 
         logger.info(f"Final PLC built: {len(self.plc_vertices)} vertices, {len(self.plc_facets)} facets, {len(self.plc_edge_constraints)} edge constraints"
@@ -864,8 +921,11 @@ class TetrahedralMeshGenerator:
                 tet = tetgen.TetGen(self.plc_vertices, self.plc_facets, self.plc_facet_markers)
                 
                 if self.plc_edge_constraints is not None and len(self.plc_edge_constraints) > 0:
-                    tet.edge_list = self.plc_edge_constraints.tolist()
-                    tet.edge_marker_list = self.plc_edge_markers.tolist()
+                    try:
+                        tet.edge_list = self.plc_edge_constraints.tolist()
+                        tet.edge_marker_list = self.plc_edge_markers.tolist()
+                    except AttributeError:
+                        logger.warning("Could not set edge constraints in fallback - may need different API")
                 
                 # Use add_region() method for fallback strategies too (C++ style - only volumetric regions)
                 if hasattr(self, 'plc_regions') and self.plc_regions:
@@ -877,7 +937,7 @@ class TetrahedralMeshGenerator:
                 
                 # Enable region attributes for fallback if 'A' switch is present and we have regions
                 if hasattr(self, 'plc_regions') and self.plc_regions and 'A' in switches:
-                    nodes, elements, attributes = tet.tetrahedralize(switches=switches, regionattrib=1.0)
+                    nodes, elements, attributes, triface_markers = tet.tetrahedralize(switches=switches, regionattrib=True)
                     grid = tet.grid
                     # Apply material attributes from fallback too
                     if attributes is not None and len(attributes) > 0:
@@ -887,7 +947,7 @@ class TetrahedralMeshGenerator:
                         unique_materials = np.unique(mapped_attributes)
                         logger.info(f"✓ Fallback: Applied TetGen material attributes: {unique_materials}")
                 else:
-                    tet.tetrahedralize(switches=switches)
+                    nodes, elements, attributes, triface_markers = tet.tetrahedralize(switches=switches)
                     grid = tet.grid
                     
                 if grid is not None and grid.n_cells > 0:

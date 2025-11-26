@@ -14328,11 +14328,12 @@ segmentation, triangulation, and visualization.
             return None
 
         # --------------- direct probe ------------- #
-        known_face_names   = ("f", "faces", "trifaces", "triangle_faces",
+        # NOTE: New tetgen library (v0.8+) removed aliases and uses only 'trifaces' and 'triface_markers'
+        # Old aliases: face_markers, trifacemarkers, facetmarkerlist, etc. - kept for backward compatibility
+        known_face_names   = ("trifaces", "f", "faces", "triangle_faces",
                               "shellfaces", "triface_list")
-        known_marker_names = ("face_markers", "trifacemarkers", "facetmarkerlist",
-                              "face_marker_list", "shell_face_markers",
-                              "triface_markers", "face_attributes")
+        known_marker_names = ("triface_markers", "face_markers", "trifacemarkers", "facetmarkerlist",
+                              "face_marker_list", "shell_face_markers", "face_attributes")
 
         faces = None
         marks = None
@@ -14346,15 +14347,43 @@ segmentation, triangulation, and visualization.
                 break
 
         if _faces_ok(faces) and _marks_ok(marks, len(faces)):
+            # Keep only faces on input facets (positive markers)
+            pos = np.where(marks > 0)[0]
+            if pos.size:
+                faces = faces[pos]
+                marks = marks[pos]
             idx = np.where(marks == plc_marker)[0]
             if idx.size:
-                pts = _arr(getattr(tet, "v", None)) \
-                      or _arr(getattr(tet, "points", None)) \
-                      or _arr(getattr(tet, "node", None))
-                if pts is not None:
+                # Always pair trifaces with TetGen OUTPUT nodes, not input vertices
+                pts = _arr(getattr(tet, "node", None))
+                if pts is None or (hasattr(pts, "size") and pts.size == 0):
+                    # Back-compat alias added in wrapper
+                    pts = _arr(getattr(tet, "points", None))
+                if (pts is None or (hasattr(pts, "size") and pts.size == 0)) and hasattr(tet, "v"):
+                    # As a last resort only, try inputs (may be invalid if Steiner points exist)
+                    pts = _arr(getattr(tet, "v", None))
+                if pts is not None and (not hasattr(pts, "size") or pts.size > 0):
                     log.info("Direct TetGen arrays (%s/%s) used for fault marker %s.",
                              fn, mn, plc_marker)
-                    return _build(pts, faces[idx])
+                    # Optional cleaning: remove degenerate/near-zero area triangles
+                    tris = faces[idx]
+                    # Safety: if any index exceeds available points, force use of output nodes
+                    try:
+                        if pts.shape[0] <= np.max(tris):
+                            pts = _arr(getattr(tet, "node", None)) or pts
+                    except Exception:
+                        pass
+                    try:
+                        v0 = pts[tris[:, 0]]; v1 = pts[tris[:, 1]]; v2 = pts[tris[:, 2]]
+                        area = np.linalg.norm(np.cross(v1 - v0, v2 - v0), axis=1) * 0.5
+                        keep = area > 1e-12
+                        tris = tris[keep]
+                        if tris.shape[0] == 0:
+                            log.info("All selected face tris filtered as degenerate; falling back.")
+                            raise Exception()
+                    except Exception:
+                        pass
+                    return _build(pts, tris)
                 log.info("Face/marker pair found but point array missing – skipping.")
             else:
                 log.info("Face/marker pair found but marker %s not present.", plc_marker)
