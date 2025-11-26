@@ -488,7 +488,9 @@ class ViewMap(View2D):
                 show_property = plot_entity.points_Z
             elif show_property == "MD":
                 show_property = plot_entity.get_point_data(data_key="MD")
-            elif isinstance(show_property, str) and show_property.strip().upper().startswith("LITHOLOGY"):
+            elif isinstance(
+                show_property, str
+            ) and show_property.strip().upper().startswith("LITHOLOGY"):
                 # LITHOLOGY RGB property stored as point_data (handles [0], [1], [2] suffixes for RGB components)
                 # Use original property name for lookup
                 show_property = plot_entity.get_point_data(data_key="LITHOLOGY")

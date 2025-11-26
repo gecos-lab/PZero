@@ -125,7 +125,9 @@ def well2vtk(self, path=None):
                         tr_data[start_idx:end_idx] = color_val
 
                 # Save as point_data for direct coloring
-                well_obj.trace.set_point_data(data_key=f"{key}", attribute_matrix=tr_data)
+                well_obj.trace.set_point_data(
+                    data_key=f"{key}", attribute_matrix=tr_data
+                )
             else:
                 tr_data = np_zeros(shape=points)
                 for row, (start, end, value) in prop.iterrows():
