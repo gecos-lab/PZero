@@ -713,11 +713,13 @@ class MeshItWorkflowGUI(QMainWindow):
     # 4)  INTERNAL HELPERS / SLOTS
     # ──────────────────────────────────────────────────────────────────────
     def _ensure_default_material(self) -> None:
+        """Ensure at least one material exists (C++ MeshIt style)."""
         if not self.tetra_materials:
             self.tetra_materials.append({
-                "name":"Material_1",
-                "locations":[self._calculate_default_location()],
-                "attribute":1
+                "name": "Material_1",
+                "locations": [self._calculate_default_location()],
+                "attribute": 1,
+                "type": "FORMATION"  # Default to formation (3D volumetric region)
             })
         self._refresh_material_list()
 
@@ -904,14 +906,21 @@ class MeshItWorkflowGUI(QMainWindow):
     def _on_location_selected(self,row:int)->None:
         self._update_coordinate_editors()
 
-    def _add_material(self)->None:
-        idx=len(self.tetra_materials)+1
+    def _add_material(self, material_type: str = "FORMATION") -> None:
+        """Add a new material.
+        
+        Args:
+            material_type: Type of material - 'FORMATION' for 3D volumetric regions,
+                          'FAULT' for 2D surface constraints (C++ MeshIt style)
+        """
+        idx = len(self.tetra_materials) + 1
         self.tetra_materials.append({
-            "name":f"Material_{idx}",
-            "locations":[self._calculate_default_location()],
-            "attribute":idx
+            "name": f"Material_{idx}",
+            "locations": [self._calculate_default_location()],
+            "attribute": idx,
+            "type": material_type  # C++ style: FORMATION or FAULT
         })
-        self.material_list.setCurrentRow(len(self.tetra_materials)-1)
+        self.material_list.setCurrentRow(len(self.tetra_materials) - 1)
         self._refresh_material_list()
 
     def _remove_material(self)->None:
@@ -12135,28 +12144,59 @@ segmentation, triangulation, and visualization.
         cpp_info.setWordWrap(True)
         material_layout.addWidget(cpp_info)
         
-        # Surface type classification
+        # Surface type classification (for display only)
         self.border_surfaces_list = QListWidget()
-        self.border_surfaces_list.setMaximumHeight(80)
+        self.border_surfaces_list.setMaximumHeight(60)
         self.unit_surfaces_list = QListWidget()
-        self.unit_surfaces_list.setMaximumHeight(80)
-        self.fault_surfaces_list = QListWidget()
-        self.fault_surfaces_list.setMaximumHeight(80)
+        self.unit_surfaces_list.setMaximumHeight(60)
         
+        # Hidden fault list for compatibility (populated from checkbox selections)
+        self.fault_surfaces_list = QListWidget()
+        self.fault_surfaces_list.setVisible(False)  # Hidden - replaced by checkbox list
+
         material_layout.addWidget(QLabel("Border Surfaces:"))
         material_layout.addWidget(self.border_surfaces_list)
-        material_layout.addWidget(QLabel("Unit Surfaces:"))
+        material_layout.addWidget(QLabel("Unit Surfaces (3D Materials):"))
         material_layout.addWidget(self.unit_surfaces_list)
-        material_layout.addWidget(QLabel("Fault Surfaces:"))
-        material_layout.addWidget(self.fault_surfaces_list)
-        
-        # Auto-classify button
-        self.auto_classify_btn = QPushButton("🏷️ Auto-Classify by Name")
-        self.auto_classify_btn.setToolTip("Automatically classify surfaces based on their names (border, unit, fault)")
+
+
+
+        # Auto-classify button (only for borders/units now)
+        self.auto_classify_btn = QPushButton("🏷️ Auto-Classify Borders/Units")
+        self.auto_classify_btn.setToolTip("Automatically classify border and unit surfaces based on their names")
         self.auto_classify_btn.clicked.connect(self._auto_classify_surfaces)
         material_layout.addWidget(self.auto_classify_btn)
-        
+
         control_layout.addWidget(material_group)
+
+        # --- 2D Material (Fault) Selection Group (C++ Style) ---
+        fault_material_group = QGroupBox("2D Material Surfaces (Faults) - Manual Selection")
+        fault_material_layout = QVBoxLayout(fault_material_group)
+        
+        fault_info = QLabel("✓ Check surfaces to mark as 2D faults (surface constraints only)")
+        fault_info.setStyleSheet("color: #D32F2F; font-style: italic; background: #FFEBEE; padding: 5px; border-radius: 3px;")
+        fault_info.setWordWrap(True)
+        fault_material_layout.addWidget(fault_info)
+        
+        # Checkbox list for fault selection (like C++ material2dList)
+        self.material2d_list = QListWidget()
+        self.material2d_list.setMaximumHeight(120)
+        self.material2d_list.setToolTip("Check surfaces to treat them as 2D fault materials (no volumetric regions)")
+        self.material2d_list.itemChanged.connect(self._on_fault_checkbox_changed)
+        fault_material_layout.addWidget(self.material2d_list)
+        
+        # Quick selection buttons
+        fault_btn_layout = QHBoxLayout()
+        self.select_all_faults_btn = QPushButton("Select All")
+        self.select_all_faults_btn.clicked.connect(self._select_all_faults)
+        self.clear_all_faults_btn = QPushButton("Clear All")
+        self.clear_all_faults_btn.clicked.connect(self._clear_all_faults)
+        fault_btn_layout.addWidget(self.select_all_faults_btn)
+        fault_btn_layout.addWidget(self.clear_all_faults_btn)
+        fault_material_layout.addLayout(fault_btn_layout)
+        
+        control_layout.addWidget(fault_material_group)
+        
         
         # --- Generation Controls ---
         generate_group = QGroupBox("Tetrahedral Mesh Generation")
@@ -12429,10 +12469,20 @@ segmentation, triangulation, and visualization.
                         
                         self.tetra_selected_surfaces.add(surface_idx)
                         # Store a direct reference to the conforming mesh data
+                        tris = conforming_mesh['triangles']
+                        # Compute consistent facet markers here so both PLC paths carry markers to TetGen
+                        try:
+                            fault_set = set(self._get_fault_surface_indices())
+                        except Exception:
+                            fault_set = set()
+                        marker = (1000 + surface_idx) if surface_idx in fault_set else surface_idx
+                        facet_markers = np.full(len(tris), marker, dtype=np.int32)
+
                         self.tetra_surface_data[surface_idx] = {
                             'name': surface_name,
                             'vertices': conforming_mesh['vertices'],
-                            'triangles': conforming_mesh['triangles'],
+                            'triangles': tris,
+                            'facet_markers': facet_markers,
                             'original_dataset_index': surface_idx,
                             'conforming_mesh_source': True,
                             'mesh_metadata': conforming_mesh  # Store full metadata
@@ -12466,7 +12516,6 @@ segmentation, triangulation, and visualization.
         except Exception as e:
             logger.error(f"Error loading conforming meshes: {e}")
             QMessageBox.critical(self, "Load Error", f"Failed to load conforming meshes: {str(e)}")
-    
     def _get_selected_surfaces_from_conforming_tree(self):
         """Get selected surface indices from Pre-Tetra tab's surface tree"""
         selected_indices = []
@@ -12493,33 +12542,241 @@ segmentation, triangulation, and visualization.
         return selected_indices
 
     def _auto_classify_surfaces(self):
-        """Automatically classify loaded surfaces based on their names"""
+        """Automatically classify loaded surfaces based on their names (borders/units only).
+        Fault selection is now manual via checkboxes (C++ MeshIt style).
+        """
         # Clear existing classifications
         self.border_surfaces_list.clear()
         self.unit_surfaces_list.clear()
+        self.fault_surfaces_list.clear()  # Hidden list - populated from checkboxes
+        
+        # Block signals while populating the 2D material checkbox list
+        self.material2d_list.blockSignals(True)
+        self.material2d_list.clear()
+
+        for surface_idx in self.tetra_selected_surfaces:
+            surface_data = self.tetra_surface_data[surface_idx]
+            surface_name = surface_data['name'].lower()
+            original_name = surface_data['name']
+
+            # Create display item
+            display_text = f"{original_name} (Surface {surface_idx})"
+
+            # Classify borders and units based on name (NOT faults - those are manual)
+            if any(keyword in surface_name for keyword in ['border', 'boundary', 'outer']):
+                self.border_surfaces_list.addItem(display_text)
+
+
+
+
+            else:
+                # Everything else goes to unit surfaces by default
+                self.unit_surfaces_list.addItem(display_text)
+            
+            # Add ALL surfaces to the 2D material checkbox list (C++ style)
+            # C++ STYLE: All surfaces start UNCHECKED - user must manually select faults
+            checkbox_item = QListWidgetItem(display_text)
+            checkbox_item.setFlags(checkbox_item.flags() | Qt.ItemIsUserCheckable)
+            checkbox_item.setCheckState(Qt.Unchecked)  # Default: NOT a fault (user must check manually)
+            checkbox_item.setData(Qt.UserRole, surface_idx)  # Store surface index
+            
+            # Set icon based on surface type (for visual guidance only, no auto-selection)
+            if any(keyword in surface_name for keyword in ['border', 'boundary', 'outer']):
+                checkbox_item.setIcon(QIcon(":/images/borders.png") if hasattr(self, 'borders_icon') else QIcon())
+            elif any(keyword in surface_name for keyword in ['fault', 'fracture', 'crack', 'fissure']):
+                # NOTE: Do NOT pre-check - just show the icon as a hint
+                # User must MANUALLY check to mark as fault (C++ style)
+                checkbox_item.setIcon(QIcon(":/images/faults.png") if hasattr(self, 'faults_icon') else QIcon())
+            else:
+                checkbox_item.setIcon(QIcon(":/images/units.png") if hasattr(self, 'units_icon') else QIcon())
+            
+            self.material2d_list.addItem(checkbox_item)
+        
+        self.material2d_list.blockSignals(False)
+        
+        # Update the fault list based on current checkbox states
+        self._update_fault_list_from_checkboxes()
+
+        logger.info(f"Auto-classified surfaces: {self.border_surfaces_list.count()} border, "
+                   f"{self.unit_surfaces_list.count()} unit (potential). "
+                   f"Manual fault selection available for {self.material2d_list.count()} surfaces.")
+    
+    def _on_fault_checkbox_changed(self, item):
+        """Handle checkbox state change for fault selection (C++ style material2dUpdate)"""
+        self._update_fault_list_from_checkboxes()
+        
+        surface_idx = item.data(Qt.UserRole)
+        is_fault = item.checkState() == Qt.Checked
+        
+        logger.debug(f"Surface {surface_idx} fault status changed to: {is_fault}")
+        
+        # Update the unit surfaces list (remove from units if marked as fault)
+        self._refresh_unit_surfaces_list()
+    
+    def _update_fault_list_from_checkboxes(self):
+        """Update the hidden fault_surfaces_list from checkbox selections"""
         self.fault_surfaces_list.clear()
+        
+        for i in range(self.material2d_list.count()):
+            item = self.material2d_list.item(i)
+            if item.checkState() == Qt.Checked:
+                self.fault_surfaces_list.addItem(item.text())
+        
+        fault_count = self.fault_surfaces_list.count()
+        logger.debug(f"Fault surfaces updated: {fault_count} surfaces marked as 2D faults")
+    
+    def _refresh_unit_surfaces_list(self):
+        """Refresh the unit surfaces list, excluding checked faults"""
+        self.unit_surfaces_list.clear()
+        
+        fault_indices = self._get_fault_surface_indices()
         
         for surface_idx in self.tetra_selected_surfaces:
             surface_data = self.tetra_surface_data[surface_idx]
             surface_name = surface_data['name'].lower()
+            original_name = surface_data['name']
+            display_text = f"{original_name} (Surface {surface_idx})"
             
-            # Create display item
-            display_text = f"{surface_data['name']} (Surface {surface_idx})"
-            
-            # Classify based on name
+            # Skip borders and faults - only add non-fault, non-border surfaces as units
             if any(keyword in surface_name for keyword in ['border', 'boundary', 'outer']):
-                self.border_surfaces_list.addItem(display_text)
-            elif any(keyword in surface_name for keyword in ['unit', 'inner', 'volume']):
-                self.unit_surfaces_list.addItem(display_text)
-            elif any(keyword in surface_name for keyword in ['fault', 'fracture', 'crack']):
-                self.fault_surfaces_list.addItem(display_text)
-            else:
-                # Default classification - add to unit surfaces
-                self.unit_surfaces_list.addItem(display_text)
+                continue
+            if surface_idx in fault_indices:
+                continue
+            
+            self.unit_surfaces_list.addItem(display_text)
+    
+    def _select_all_faults(self):
+        """Select all surfaces as faults"""
+        self.material2d_list.blockSignals(True)
+        for i in range(self.material2d_list.count()):
+            self.material2d_list.item(i).setCheckState(Qt.Checked)
+        self.material2d_list.blockSignals(False)
+        self._update_fault_list_from_checkboxes()
+        self._refresh_unit_surfaces_list()
+        logger.info("All surfaces marked as 2D faults")
+    
+    def _clear_all_faults(self):
+        """Clear all fault selections"""
+        self.material2d_list.blockSignals(True)
+        for i in range(self.material2d_list.count()):
+            self.material2d_list.item(i).setCheckState(Qt.Unchecked)
+        self.material2d_list.blockSignals(False)
+        self._update_fault_list_from_checkboxes()
+        self._refresh_unit_surfaces_list()
+        logger.info("All fault selections cleared")
+    
+    def _extract_fault_materials_from_tetgen_output(self, fault_indices: set) -> None:
+        """
+        Extract fault materials from TetGen output triface_markers (C++ MeshIt style).
         
-        logger.info(f"Auto-classified surfaces: {self.border_surfaces_list.count()} border, "
-                   f"{self.unit_surfaces_list.count()} unit, {self.fault_surfaces_list.count()} fault")
-
+        In C++ MeshIt, after TetGen runs, the trifacemarkerlist contains markers for
+        boundary faces. Faults are marked with (1000 + surface_idx). This function
+        extracts those markers and creates fault materials that appear in the dropdown.
+        
+        Args:
+            fault_indices: Set of surface indices that were marked as faults via checkboxes
+        """
+        import numpy as np
+        
+        if not fault_indices:
+            logger.info("No fault surfaces selected - skipping fault material extraction")
+            return
+        
+        if not hasattr(self, 'tetra_mesh_generator') or not self.tetra_mesh_generator:
+            logger.warning("No TetGen mesh generator available - cannot extract fault materials")
+            return
+        
+        gen = self.tetra_mesh_generator
+        tet = getattr(gen, 'tetgen_object', None)
+        
+        if tet is None:
+            logger.warning("No TetGen object stored - cannot extract fault materials from output")
+            return
+        
+        try:
+            # Get triface_markers from TetGen output (C++ style: trifacemarkerlist)
+            triface_markers = getattr(tet, 'triface_markers', None)
+            trifaces = getattr(tet, 'trifaces', None)
+            nodes = getattr(tet, 'node', None)
+            
+            if triface_markers is None or len(triface_markers) == 0:
+                logger.warning("No triface_markers in TetGen output - fault extraction not possible")
+                return
+            
+            logger.info(f"TetGen output: {len(triface_markers)} triface markers, {len(trifaces) if trifaces is not None else 0} faces")
+            
+            # Remove existing fault materials to avoid duplicates
+            self.tetra_materials = [m for m in self.tetra_materials if m.get('type') != 'FAULT']
+            
+            # Determine the next available material attribute ID
+            existing_attrs = [m.get('attribute', 0) for m in self.tetra_materials]
+            next_attr = max(existing_attrs) + 1 if existing_attrs else 0
+            
+            # Extract faults from triface_markers (markers >= 1000 are faults: 1000 + surface_idx)
+            unique_markers = np.unique(triface_markers)
+            fault_markers = [m for m in unique_markers if m >= 1000]
+            
+            logger.info(f"Found {len(fault_markers)} unique fault markers in TetGen output: {fault_markers}")
+            
+            for marker in sorted(fault_markers):
+                # Extract surface index from marker (marker = 1000 + surface_idx)
+                surface_idx = marker - 1000
+                
+                # Verify this surface was actually selected as a fault
+                if surface_idx not in fault_indices:
+                    logger.debug(f"Marker {marker} (surface {surface_idx}) not in fault_indices - skipping")
+                    continue
+                
+                # Get fault face indices
+                fault_face_mask = triface_markers == marker
+                fault_face_count = np.sum(fault_face_mask)
+                
+                if fault_face_count == 0:
+                    continue
+                
+                # Get surface name
+                surface_name = f"Surface_{surface_idx}"
+                if surface_idx in self.tetra_surface_data:
+                    surface_name = self.tetra_surface_data[surface_idx].get('name', surface_name)
+                elif surface_idx < len(self.datasets):
+                    surface_name = self.datasets[surface_idx].get('name', surface_name)
+                
+                # Calculate fault center from TetGen output faces
+                fault_center = [0.0, 0.0, 0.0]
+                if trifaces is not None and nodes is not None:
+                    fault_faces = trifaces[fault_face_mask]
+                    if len(fault_faces) > 0:
+                        # Get all vertices of fault faces
+                        fault_vertex_indices = np.unique(fault_faces.flatten())
+                        fault_vertices = nodes[fault_vertex_indices]
+                        fault_center = np.mean(fault_vertices, axis=0).tolist()
+                
+                # Create fault material from TetGen output (C++ style)
+                fault_material = {
+                    "name": f"Fault_{surface_name}",
+                    "locations": [fault_center],
+                    "attribute": next_attr,
+                    "type": "FAULT",
+                    "surface_idx": surface_idx,
+                    "marker": marker,  # Store the TetGen marker
+                    "face_count": int(fault_face_count)  # Number of faces in TetGen output
+                }
+                
+                self.tetra_materials.append(fault_material)
+                logger.info(f"✓ Extracted fault from TetGen: {fault_material['name']} "
+                           f"(ID {next_attr}, marker {marker}, {fault_face_count} faces)")
+                next_attr += 1
+            
+            extracted_count = sum(1 for m in self.tetra_materials if m.get('type') == 'FAULT')
+            logger.info(f"✓ Extracted {extracted_count} fault materials from TetGen triface_markers")
+            
+            # Refresh the material list UI to show fault materials
+            self._refresh_material_list()
+            
+        except Exception as e:
+            logger.error(f"Failed to extract fault materials from TetGen output: {e}")
+            import traceback
+            traceback.print_exc()
     def _visualize_loaded_surfaces(self):
         """Visualize the loaded constrained surfaces in the 3D viewer"""
         if not self.tetra_plotter:
@@ -12642,10 +12899,10 @@ segmentation, triangulation, and visualization.
             return
 
         try:
-            # Clear existing tetrahedral mesh actors
+            # Clear existing tetrahedral mesh actors AND fault overlays
             actors_to_remove = []
             for name in list(self.tetra_plotter.actors.keys()):
-                if 'tetrahedral' in name:
+                if 'tetrahedral' in name or 'fault_overlay' in name:
                     actors_to_remove.append(name)
 
             for name in actors_to_remove:
@@ -12662,6 +12919,7 @@ segmentation, triangulation, and visualization.
 
         except Exception as e:
             logger.error(f"Error refreshing tetrahedral visualization: {e}")
+
 
 
 
@@ -12717,7 +12975,7 @@ segmentation, triangulation, and visualization.
 
     def _generate_tetrahedral_mesh_action(self) -> None:
         """
-        Slot connected to the “Generate Tetrahedral Mesh” button.
+        Slot connected to the "Generate Tetrahedral Mesh" button.
         """
         if not self.tetra_selected_surfaces:
             QMessageBox.warning(self, "No Surfaces Loaded", "Please load conforming surfaces into this tab first.")
@@ -12728,6 +12986,11 @@ segmentation, triangulation, and visualization.
         border_indices = self._get_border_surface_indices()
         unit_indices = self._get_unit_surface_indices()
         fault_indices = self._get_fault_surface_indices()
+        
+        logger.info(f"Mesh generation - Borders: {len(border_indices)}, Units: {len(unit_indices)}, Faults: {len(fault_indices)}")
+
+        # NOTE: Fault materials will be extracted from TetGen output AFTER mesh generation
+        # (not before - this matches C++ MeshIt behavior where trifacemarkerlist is used)
 
         # *** CRITICAL CHANGE HERE ***
         # The `self.tetra_surface_data` attribute should already contain the
@@ -12758,6 +13021,9 @@ segmentation, triangulation, and visualization.
         if grid:
             self.tetrahedral_mesh = grid
             
+            # *** C++ STYLE: Extract fault materials from TetGen output triface_markers ***
+            self._extract_fault_materials_from_tetgen_output(fault_indices)
+            
             # MATERIAL ASSIGNMENT: Apply manual material assignment if needed
             if not hasattr(grid, 'cell_data') or 'MaterialID' not in grid.cell_data:
                 logger.info("No MaterialID found in mesh - applying manual material assignment")
@@ -12787,8 +13053,6 @@ segmentation, triangulation, and visualization.
             
             QMessageBox.information(self, "Success", "Tetrahedral mesh generated successfully!")
             self.export_mesh_btn.setEnabled(True)
-            self.generate_stats_btn.setEnabled(True)
-            self._update_export_to_pzero_button_state()
             self._visualize_tetrahedral_mesh_in_tetra_tab()
             self._update_tetra_stats()
         else:
@@ -13023,49 +13287,89 @@ segmentation, triangulation, and visualization.
         # Additionally show internal structure if enabled
         if show_internal:
             self._add_internal_structure_visualization(processed_mesh, show_materials, opacity)
-
+        
+        # *** FIX: Overlay fault surfaces when viewing "All Materials" ***
+        if selected_material_id == -1:  # All materials selected
+            self._add_fault_overlays(opacity, show_wireframe, show_materials)
+            
     def _add_surface_visualization(self, mesh, show_materials, opacity, show_wireframe=False):
-        """Add surface visualization (external boundary)"""
+        """Add surface visualization (external boundary) - C++ MeshIt style"""
         import pyvista as pv
+        import numpy as np
 
-        # Extract surface
-        surface_mesh = mesh.extract_surface()
+        # Handle empty mesh
+        if mesh is None or mesh.n_cells == 0:
+            logger.debug("Empty mesh in _add_surface_visualization")
+            return
+
+        # Extract surface (handle both UnstructuredGrid and PolyData)
+        if hasattr(mesh, 'extract_surface'):
+            surface_mesh = mesh.extract_surface()
+        else:
+            surface_mesh = mesh  # Already a surface
+
+        if surface_mesh is None or surface_mesh.n_cells == 0:
+            logger.debug("Empty surface mesh")
+            return
 
         # Configure scalars and colormap
         scalars = None
         cmap = None
         clim = None
         show_scalar_bar = False
+        single_material_color = None  # For single material visualization
+        use_scalars_coloring = False  # Whether to use scalar colormap
 
-        if show_materials and 'MaterialID' in mesh.cell_data:
-            # Map material IDs from cells to surface only when materials are enabled
-            if hasattr(surface_mesh, 'cell_data') and 'MaterialID' in surface_mesh.cell_data:
-                scalars = 'MaterialID'
-                cmap = self._get_selected_colormap()  # Use user-selected colormap
-                # *** CRITICAL FIX: Use full material range for consistent colors ***
-                clim = self._get_full_material_clim()
-                show_scalar_bar = True
+        # Get selected material for color calculation
+        selected_material_id = self._get_selected_material_id()
+
+        if show_materials:
+            # Check if MaterialID exists in surface mesh
+            has_material_id = hasattr(surface_mesh, 'cell_data') and 'MaterialID' in surface_mesh.cell_data
+            
+            if has_material_id:
+                unique_ids = np.unique(surface_mesh.cell_data['MaterialID'])
+                if len(unique_ids) > 1:
+                    # Multiple different material IDs - use colormap (only for solid mode)
+                    scalars = 'MaterialID'
+                    cmap = self._get_selected_colormap()
+                    clim = self._get_full_material_clim()
+                    show_scalar_bar = True
+                    use_scalars_coloring = True
+                else:
+                    # Single material ID - compute color
+                    single_material_color = self._get_material_color(int(unique_ids[0]))
+                    logger.debug(f"Single MaterialID {unique_ids[0]} -> color: {single_material_color}")
+            
+            # Always compute color for selected material (for wireframe mode)
+            if selected_material_id != -1 and single_material_color is None:
+                single_material_color = self._get_material_color(selected_material_id)
+                logger.debug(f"Selected material {selected_material_id} -> color: {single_material_color}")
+
+        # Determine display color (for wireframe and single-material solid modes)
+        display_color = single_material_color if single_material_color else 'lightgray'
+        logger.debug(f"Surface viz: wireframe={show_wireframe}, materials={show_materials}, color={display_color}")
 
         # Add surface mesh (external boundary)
         if show_wireframe:
-            # Wireframe mode: show edges only, no coloring
+            # Wireframe mode - use material color
             self.tetra_plotter.add_mesh(
                 surface_mesh,
                 style='wireframe',
-                color='lightgray',  # Use consistent gray color when not showing materials
+                color=display_color,
                 opacity=1.0,
                 line_width=1.5,
                 name='tetrahedral_surface'
             )
         else:
-            # Solid mode: show faces with edges
-            if scalars is not None and show_scalar_bar:
-                # Show with material coloring and scalar bar
+            # Solid mode
+            if use_scalars_coloring and scalars is not None:
+                # Multiple materials - use colormap with scalar bar
                 self.tetra_plotter.add_mesh(
                     surface_mesh,
                     scalars=scalars,
                     cmap=cmap,
-                    clim=clim,  # Use full material range for consistent colors
+                    clim=clim,
                     opacity=opacity,
                     show_edges=True,
                     edge_color='black',
@@ -13073,11 +13377,22 @@ segmentation, triangulation, and visualization.
                     scalar_bar_args={'title': 'Material ID'},
                     name='tetrahedral_surface'
                 )
-            else:
-                # Show without material coloring
+            elif single_material_color is not None:
+                # Single material - use computed color
                 self.tetra_plotter.add_mesh(
                     surface_mesh,
-                    color='lightgray',  # Use consistent gray color when not showing materials
+                    color=single_material_color,
+                    opacity=opacity,
+                    show_edges=True,
+                    edge_color='black',
+                    line_width=0.5,
+                    name='tetrahedral_surface'
+                )
+            else:
+                # No material coloring
+                self.tetra_plotter.add_mesh(
+                    surface_mesh,
+                    color='lightgray',
                     opacity=opacity,
                     show_edges=True,
                     edge_color='black',
@@ -13085,6 +13400,77 @@ segmentation, triangulation, and visualization.
                     name='tetrahedral_surface'
                 )
 
+    def _add_fault_overlays(self, opacity, show_wireframe, show_materials):
+        """
+        Add fault surface overlays when viewing 'All Materials'.
+        Faults are 2D surfaces (not 3D volumes), so they need to be overlaid separately
+        with their proper colors from the colormap.
+        
+        *** C++ MeshIt style: Faults respect cutting planes and display settings ***
+        """
+        import pyvista as pv
+        import numpy as np
+        
+        if not hasattr(self, 'tetra_materials'):
+            return
+        
+        # Find all fault materials
+        fault_materials = [m for m in self.tetra_materials if m.get('type') == 'FAULT']
+        
+        if not fault_materials:
+            logger.debug("No fault materials to overlay")
+            return
+        
+        logger.info(f"Overlaying {len(fault_materials)} fault surfaces on 'All Materials' view")
+        
+        for i, fault_mat in enumerate(fault_materials):
+            material_id = fault_mat.get('attribute')
+            if material_id is None:
+                continue
+            
+            try:
+                # Extract the fault surface from TetGen output
+                fault_mesh = self._extract_fault_surface_from_tetgen(material_id)
+                
+                if fault_mesh is None or fault_mesh.n_cells == 0:
+                    logger.debug(f"No surface found for fault material {material_id}")
+                    continue
+                
+                # *** C++ STYLE: Apply cutting planes to fault surfaces ***
+                fault_mesh = self._apply_cutting_planes(fault_mesh)
+                
+                if fault_mesh is None or fault_mesh.n_cells == 0:
+                    logger.debug(f"Fault {material_id} completely clipped by cutting planes")
+                    continue
+                
+                # Get the color for this fault from the colormap
+                fault_color = self._get_material_color(material_id) if show_materials else 'gray'
+                
+                if show_wireframe:
+                    self.tetra_plotter.add_mesh(
+                        fault_mesh,
+                        style='wireframe',
+                        color=fault_color,
+                        opacity=1.0,
+                        line_width=2.0,
+                        name=f'fault_overlay_{i}'
+                    )
+                else:
+                    self.tetra_plotter.add_mesh(
+                        fault_mesh,
+                        color=fault_color,
+                        opacity=min(opacity + 0.2, 1.0),  # Slightly more opaque for visibility
+                        show_edges=True,
+                        edge_color='darkgray',
+                        line_width=0.8,
+                        name=f'fault_overlay_{i}'
+                    )
+                
+                logger.debug(f"Added fault overlay {material_id} with color {fault_color}")
+                
+            except Exception as e:
+                logger.warning(f"Could not overlay fault {material_id}: {e}")
+    
     def _add_internal_structure_visualization(self, mesh, show_materials, opacity):
         """Add internal structure visualization like C++ version"""
         import pyvista as pv
@@ -13139,29 +13525,44 @@ segmentation, triangulation, and visualization.
                     )
 
     def _apply_cutting_planes(self, mesh):
-        """Apply cutting planes to mesh like C++ version"""
+        """Apply cutting planes to mesh like C++ version.
+        Uses full mesh bounds for consistent cutting across all materials."""
         if not hasattr(self, 'x_cut_enable'):
             return mesh
         
+        if mesh is None or mesh.n_cells == 0:
+            return mesh
+        
+        # *** C++ STYLE: Use full mesh bounds for consistent cutting ***
+        if hasattr(self, 'full_tetra_mesh') and self.full_tetra_mesh is not None:
+            bounds = self.full_tetra_mesh.bounds
+        else:
+            bounds = mesh.bounds
+        
         processed_mesh = mesh
-        bounds = mesh.bounds
         
-        # Apply X cutting plane
-        if self.x_cut_enable.isChecked():
-            x_pos = bounds[0] + (bounds[1] - bounds[0]) * (self.x_cut_slider.value() / 100.0)
-            processed_mesh = processed_mesh.clip('x', value=x_pos)
-        
-        # Apply Y cutting plane  
-        if self.y_cut_enable.isChecked():
-            y_pos = bounds[2] + (bounds[3] - bounds[2]) * (self.y_cut_slider.value() / 100.0)
-            processed_mesh = processed_mesh.clip('y', value=y_pos)
-        
-        # Apply Z cutting plane
-        if self.z_cut_enable.isChecked():
-            z_pos = bounds[4] + (bounds[5] - bounds[4]) * (self.z_cut_slider.value() / 100.0)
-            processed_mesh = processed_mesh.clip('z', value=z_pos)
+        try:
+            # Apply X cutting plane
+            if self.x_cut_enable.isChecked():
+                x_pos = bounds[0] + (bounds[1] - bounds[0]) * (self.x_cut_slider.value() / 100.0)
+                processed_mesh = processed_mesh.clip('x', value=x_pos)
+            
+            # Apply Y cutting plane  
+            if self.y_cut_enable.isChecked():
+                y_pos = bounds[2] + (bounds[3] - bounds[2]) * (self.y_cut_slider.value() / 100.0)
+                processed_mesh = processed_mesh.clip('y', value=y_pos)
+            
+            # Apply Z cutting plane
+            if self.z_cut_enable.isChecked():
+                z_pos = bounds[4] + (bounds[5] - bounds[4]) * (self.z_cut_slider.value() / 100.0)
+                processed_mesh = processed_mesh.clip('z', value=z_pos)
+        except Exception as e:
+            logger.warning(f"Error applying cutting planes: {e}")
+            return mesh
         
         return processed_mesh
+
+
 
 
     
@@ -13176,8 +13577,8 @@ segmentation, triangulation, and visualization.
         file_path, file_filter = QFileDialog.getSaveFileName(
             self,
             "Export Tetrahedral Mesh",
-            "tetrahedral_mesh.vtk",
-            "VTK files (*.vtk);;VTU files (*.vtu);;PLY files (*.ply);;STL files (*.stl);;NetCDF files (*.nc);;EXODUS files (*.exo);;All files (*.*)"
+            "tetrahedral_mesh.vtm",
+            "VTM Multi-Block files (*.vtm);;VTK files (*.vtk);;VTU files (*.vtu);;PLY files (*.ply);;STL files (*.stl);;NetCDF files (*.nc);;EXODUS files (*.exo);;All files (*.*)"
         )
         
         if not file_path:
@@ -13198,15 +13599,41 @@ segmentation, triangulation, and visualization.
                 return
 
         try:
+            # Update generator with current materials (including faults with markers)
+            if hasattr(self, 'tetra_materials'):
+                self.tetra_mesh_generator.tetra_materials = self.tetra_materials
+                logger.info(f"Updated generator with {len(self.tetra_materials)} materials for export")
+                
+                # Debug: Log fault materials specifically
+                fault_mats = [m for m in self.tetra_materials if m.get('type') == 'FAULT']
+                logger.info(f"DEBUG: Found {len(fault_mats)} fault materials for export")
+                for fm in fault_mats:
+                    logger.info(f"DEBUG: Fault {fm.get('name')}: attribute={fm.get('attribute')}, marker={fm.get('marker')}")
+            else:
+                logger.warning("WARNING: tetra_materials attribute not found!")
+            
             success = self.tetra_mesh_generator.export_mesh(file_path, self.tetrahedral_mesh)
             if success:
-                QMessageBox.information(self, "Export Successful", f"Tetrahedral mesh exported to:\n{file_path}")
+                # Provide helpful message about viewing in ParaView
+                file_ext = file_path.lower().split('.')[-1]
+                msg = f"Tetrahedral mesh exported to:\n{file_path}\n\n"
+                
+                if file_ext in ['vtm', 'vtu', 'vtk']:
+                    msg += "ParaView Tips:\n"
+                    msg += "• Color by 'MaterialID' to see different materials\n"
+                    msg += "• Color by 'CellType' to see tetrahedra(0) vs faults(1)\n"
+                    msg += "• Faults are embedded as triangles within the volume\n"
+                    msg += "• Use 'Extract Surface' or wireframe to see fault outlines\n"
+                    msg += "• Use 'Threshold' on MaterialID to isolate materials"
+                
+                QMessageBox.information(self, "Export Successful", msg)
             else:
                 QMessageBox.critical(self, "Export Error", "Failed to export mesh. Check logs for details.")
                 
         except Exception as e:
             logger.error(f"Export failed: {str(e)}")
             QMessageBox.critical(self, "Export Error", f"Failed to export mesh:\n{str(e)}")
+
 
     def _update_export_to_pzero_button_state(self):
         """Update the enabled state of the Export to PZero button."""
@@ -13376,8 +13803,24 @@ segmentation, triangulation, and visualization.
         return indices
     
     def _get_fault_surface_indices(self) -> set:
-        """Extract surface indices from fault surfaces list"""
+        """Extract surface indices from manually selected fault checkboxes (C++ MeshIt style).
+        
+        This reads directly from the material2d_list checkbox widget, which allows
+        users to manually mark surfaces as 2D faults (surface constraints only).
+        """
         indices = set()
+        
+        # Primary method: Read from checkbox list (C++ style)
+        if hasattr(self, 'material2d_list') and self.material2d_list.count() > 0:
+            for i in range(self.material2d_list.count()):
+                item = self.material2d_list.item(i)
+                if item.checkState() == Qt.Checked:
+                    surface_idx = item.data(Qt.UserRole)
+                    if surface_idx is not None:
+                        indices.add(surface_idx)
+            return indices
+        
+        # Fallback: Read from hidden fault_surfaces_list (backwards compatibility)
         for i in range(self.fault_surfaces_list.count()):
             item_text = self.fault_surfaces_list.item(i).text()
             # Extract surface index from text like "surface_name (Surface 0)"
@@ -13389,6 +13832,52 @@ segmentation, triangulation, and visualization.
                     pass
         return indices
 
+    def _get_material_color(self, material_id: int) -> str:
+        """
+        Get the color for a specific material ID based on the selected colormap.
+        This ensures individual material visualization uses consistent colors with 'All Materials' view.
+        
+        Args:
+            material_id: The material ID to get the color for
+            
+        Returns:
+            Hex color string (e.g., '#FF5733')
+        """
+        import matplotlib.pyplot as plt
+        import numpy as np
+        
+        # Get the colormap
+        cmap_name = self._get_selected_colormap()
+        try:
+            cmap = plt.get_cmap(cmap_name)
+        except ValueError:
+            cmap = plt.get_cmap('viridis')  # Fallback
+        
+        # Get the full material range
+        clim = self._get_full_material_clim()
+        min_id, max_id = clim
+        
+        # Normalize the material_id to [0, 1] range based on full material range
+        if max_id != min_id:
+            normalized = (material_id - min_id) / (max_id - min_id)
+        else:
+            normalized = 0.5
+        
+        # Clamp to [0, 1]
+        normalized = max(0.0, min(1.0, normalized))
+        
+        # Get RGBA color from colormap
+        rgba = cmap(normalized)
+        
+        # Convert to hex color string
+        hex_color = '#{:02x}{:02x}{:02x}'.format(
+            int(rgba[0] * 255),
+            int(rgba[1] * 255),
+            int(rgba[2] * 255)
+        )
+        
+        logger.debug(f"Material {material_id}: normalized={normalized:.3f}, color={hex_color} (clim={clim})")
+        return hex_color
     
 
     def _calculate_mesh_center(self, selected_surfaces: set) -> list:
@@ -14296,6 +14785,10 @@ segmentation, triangulation, and visualization.
                 # ✅ FAULT: Use TetGen constraint surface triangles (C++ MeshIt style)
                 fault_mesh = self._extract_fault_surface_from_tetgen(material_id)
                 if fault_mesh is not None and fault_mesh.n_cells > 0:
+                    # *** FIX: Add MaterialID to fault mesh for consistent coloring ***
+                    if 'MaterialID' not in fault_mesh.cell_data:
+                        fault_mesh.cell_data['MaterialID'] = np.full(fault_mesh.n_cells, material_id, dtype=np.int32)
+                        logger.debug(f"Added MaterialID {material_id} to fault mesh cells")
                     logger.info(f"✅ Material {material_id} (Fault): Using TetGen constraint surface with {fault_mesh.n_cells} triangles")
                     return fault_mesh
                 else:
@@ -14364,20 +14857,40 @@ segmentation, triangulation, and visualization.
             return None
 
         plc_marker = None
-        fault_marker_map = getattr(gen, "fault_surface_markers", {})
+        fault_material = None
+        
+        # Find the fault material by ID
+        log.info(f"Searching for fault material with ID {material_id}")
+        log.debug(f"Available materials: {[(m.get('name'), m.get('attribute'), m.get('type'), m.get('marker')) for m in getattr(self, 'tetra_materials', [])]}")
+        
         for mat in getattr(self, "tetra_materials", []):
             if mat.get("attribute") == material_id and mat.get("type") == "FAULT":
+                fault_material = mat
+                # *** C++ STYLE: Use marker stored from TetGen output extraction ***
+                plc_marker = mat.get("marker")
+                if plc_marker is not None:
+                    log.info(f"Found fault material: name={mat.get('name')}, attr={material_id}, marker={plc_marker}")
+                    break
+                    
+                # Fallback: Try to find marker from fault_marker_map
                 name = mat.get("name", "").lower().removeprefix("fault_")
+                fault_marker_map = getattr(gen, "fault_surface_markers", {})
+                for mk, sidx in fault_marker_map.items():
+                    if sidx < len(self.datasets) and self.datasets[sidx]["name"].lower() == name:
+                        plc_marker = mk
+                        log.info(f"Found marker {mk} from fault_marker_map for {name}")
+                        break
                 break
-        else:
+        
+        if fault_material is None:
+            log.warning(f"No fault material found with ID {material_id}")
             return None
-
-        for mk, sidx in fault_marker_map.items():
-            if self.datasets[sidx]["name"].lower() == name:
-                plc_marker = mk
-                break
+            
         if plc_marker is None:
+            log.warning(f"No marker found for fault material {material_id}")
             return None
+        
+        log.info(f"Extracting fault surface with plc_marker={plc_marker}")
 
         # --------------- direct probe ------------- #
         # NOTE: New tetgen library (v0.8+) removed aliases and uses only 'trifaces' and 'triface_markers'
@@ -14405,6 +14918,8 @@ segmentation, triangulation, and visualization.
                 faces = faces[pos]
                 marks = marks[pos]
             idx = np.where(marks == plc_marker)[0]
+            log.info(f"Marker {plc_marker}: found {len(idx)} matching faces out of {len(marks)} total faces")
+            log.debug(f"Unique markers in output: {np.unique(marks).tolist()}")
             if idx.size:
                 # Always pair trifaces with TetGen OUTPUT nodes, not input vertices
                 pts = _arr(getattr(tet, "node", None))
@@ -15008,8 +15523,11 @@ segmentation, triangulation, and visualization.
         """
         Automatically assign materials based on C++ MeshIt approach:
         - Exactly 2 formation materials for 3 surfaces (excluding borders)
-        - Each fault gets its own material at proper position
+        - Each fault gets its own material at proper position (ONLY if manually selected via checkboxes)
         - Respects surface geometry and boundary constraints
+        
+        NOTE: Fault detection now uses MANUAL checkbox selection (C++ style),
+        not automatic name-based detection.
         """
         # Check if we're in tetra mesh tab with loaded surface data
         if hasattr(self, 'tetra_surface_data') and self.tetra_surface_data:
@@ -15029,10 +15547,14 @@ segmentation, triangulation, and visualization.
             # Fresh start
             self.tetra_materials.clear()
 
-            # *** CRITICAL FIX: Auto-classify surfaces by names (not broken UI methods) ***
-            border_surfaces = set()
-            unit_surfaces = set()
-            fault_surfaces = set()
+            # *** C++ STYLE: Read fault selections from checkboxes, NOT from name auto-detection ***
+            # Get manually selected fault surfaces from the checkbox list
+            fault_surfaces = self._get_fault_surface_indices()
+            border_surfaces = self._get_border_surface_indices()
+            unit_surfaces = self._get_unit_surface_indices()
+            
+            # Log the selections
+            logger.info(f"Manual selections - Borders: {len(border_surfaces)}, Units: {len(unit_surfaces)}, Faults: {len(fault_surfaces)}")
             
             # Get all surface geometry for analysis
             valid_surfaces = []
@@ -15065,20 +15587,22 @@ segmentation, triangulation, and visualization.
                 if len(verts_np) > 0 and len(verts_np.shape) == 2 and verts_np.shape[1] >= 3:
                     valid_surfaces.append((surface_idx, surface_data_item, verts_np, surface_name))
                     
-                    # *** FIXED: Auto-classify based on surface names ***
-                    name_lower = surface_name.lower()
-                    if any(keyword in name_lower for keyword in ["border", "boundary", "outer", "convex"]):
-                        border_surfaces.add(surface_idx)
-                    elif any(keyword in name_lower for keyword in ["fault", "fracture", "crack"]):
-                        fault_surfaces.add(surface_idx)
-                    else:
-                        unit_surfaces.add(surface_idx)  # Everything else (including .dat files)
+                    # *** C++ STYLE: Use existing checkbox selections, classify remaining as units ***
+                    # Only auto-classify as border if not already classified
+                    if surface_idx not in fault_surfaces and surface_idx not in border_surfaces and surface_idx not in unit_surfaces:
+                        # For surfaces not in any list, classify by name (only borders)
+                        name_lower = surface_name.lower()
+                        if any(keyword in name_lower for keyword in ["border", "boundary", "outer", "convex"]):
+                            border_surfaces.add(surface_idx)
+                        else:
+                            # Default to unit (NOT fault - faults must be manually selected)
+                            unit_surfaces.add(surface_idx)
             
             if not valid_surfaces:
                 QMessageBox.warning(self, "No valid surfaces", "No surfaces with valid geometry found.")
                 return
             
-            logger.info(f"Auto-classified surfaces: {len(border_surfaces)} borders, {len(unit_surfaces)} units, {len(fault_surfaces)} faults")
+            logger.info(f"Final classification: {len(border_surfaces)} borders, {len(unit_surfaces)} units, {len(fault_surfaces)} faults (from checkboxes)")
             
             # Calculate overall domain bounds
             all_verts = np.vstack([verts for _, _, verts, _ in valid_surfaces])

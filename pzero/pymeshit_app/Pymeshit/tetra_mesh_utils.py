@@ -842,6 +842,11 @@ class TetrahedralMeshGenerator:
         - Material IDs MUST be sequential indices (0, 1, 2...) like C++ Mats array
         - This matches C++ where faults are facetmarkerlist[], formations are regionlist[]
         
+        NOTE: Fault detection is now MANUAL via GUI checkboxes (C++ style).
+        No automatic name-based fault detection. A material is only a fault if:
+        - Its 'type' field is explicitly set to 'FAULT'
+        - OR its surface index is in self.fault_surface_indices (from GUI checkboxes)
+        
         Returns:
             tuple: (volumetric_regions, surface_materials)
         """
@@ -866,19 +871,19 @@ class TetrahedralMeshGenerator:
             sorted_materials = sorted(self.materials, key=lambda m: m.get('attribute', 0))
             
             for material in sorted_materials:
-                material_name = material.get('name', '').lower()
+                material_name = material.get('name', '')
                 material_type = material.get('type', 'FORMATION')
                 locations = material.get('locations', [])
                 material_attribute = material.get('attribute', 0)  # Geological material ID
                 
-                # Check if this is a fault
-                is_fault = (material_type == 'FAULT' or 
-                           any(keyword in material_name for keyword in ['fault', 'fracture', 'crack', 'fissure']))
+                # Check if this is a fault - ONLY by explicit type, NOT by name (C++ style manual selection)
+                # Faults are marked via GUI checkboxes which set type='FAULT'
+                is_fault = (material_type == 'FAULT')
                 
                 if is_fault:
                     # CRITICAL: Faults are ONLY surface constraints - NO volumetric regions!
                     surface_materials.append(material)
-                    logger.info(f"Material {material_attribute} '{material_name}' -> FAULT (surface constraint only)")
+                    logger.info(f"Material {material_attribute} '{material_name}' -> FAULT (surface constraint only, manually selected)")
                     continue
                 
                 # ONLY formations/units get volumetric regions
@@ -889,16 +894,17 @@ class TetrahedralMeshGenerator:
                         volumetric_regions.append([float(loc[0]), float(loc[1]), float(loc[2]), region_id, 0])
                         self.region_attribute_map[region_id] = material_attribute
                         logger.info(
-                            f"Added 3D region seed {region_id} for '{material.get('name')}' "
+                            f"Added 3D region seed {region_id} for '{material_name}' "
                             f"(material ID {material_attribute})"
                         )
         
         max_region_id = max([int(region[3]) for region in volumetric_regions]) if volumetric_regions else -1
         logger.info(
-            f"✓ TRUE C++ Style: {len(volumetric_regions)} volumetric region seeds (region IDs 0-{max_region_id}) "
+            f"✓ C++ Style: {len(volumetric_regions)} volumetric region seeds (region IDs 0-{max_region_id}) "
             f"covering {len(set(self.region_attribute_map.values()))} formation material(s)"
         )
-        logger.info(f"✓ TRUE C++ Style: {len(surface_materials)} surface materials (faults only, surface constraints)")
+        logger.info(f"✓ C++ Style: {len(surface_materials)} surface materials (faults only, manually selected)")
+        logger.info(f"✓ C++ Style: {len(self.fault_surface_indices)} surface indices marked as faults via GUI")
         
         return volumetric_regions, surface_materials
 
@@ -1140,14 +1146,305 @@ class TetrahedralMeshGenerator:
                     # Use NetCDF/EXODUS export
                     return self._export_netcdf(file_path, mesh_data)
                 else:
-                    # Use PyVista's built-in export for other formats
-                    mesh_data.save(file_path)
-                    logger.info(f"Tetrahedral mesh exported to: {file_path}")
-                    return True
+                    # Enhanced export for VTK/VTU formats with material information
+                    return self._export_with_materials(file_path, mesh_data)
         except Exception as e:
             logger.error(f"Export failed: {str(e)}")
             return False
         return False
+    
+    def _export_with_materials(self, file_path: str, mesh_data: pv.UnstructuredGrid) -> bool:
+        """
+        Export mesh with proper material information for ParaView visualization.
+        Combines volumetric tetrahedra AND fault surfaces into a single mesh (C++ style).
+        This ensures faults appear as embedded constraint surfaces in ParaView.
+        """
+        try:
+            import numpy as np
+            import pyvista as pv
+            
+            logger.info("Exporting tetrahedral mesh with embedded fault surfaces (C++ MeshIt style)...")
+            
+            # Start with the volumetric tetrahedral mesh
+            volume_mesh = mesh_data.copy()
+            
+            # Extract all fault surfaces from TetGen and merge with volume
+            fault_surfaces_added = 0
+            if hasattr(self, 'tetgen_object') and self.tetgen_object is not None:
+                logger.info("DEBUG: TetGen object is available for fault extraction")
+                
+                # Check BOTH materials lists (self.materials and tetra_materials)
+                fault_materials = []
+                
+                # Check self.materials (from PLC generation)
+                if hasattr(self, 'materials') and self.materials:
+                    self_faults = [m for m in self.materials if m.get('type') == 'FAULT']
+                    fault_materials.extend(self_faults)
+                    logger.info(f"DEBUG: Found {len(self_faults)} faults in self.materials")
+                else:
+                    logger.info("DEBUG: No self.materials or it's empty")
+                
+                # Check tetra_materials (from GUI, includes TetGen markers)
+                if hasattr(self, 'tetra_materials') and self.tetra_materials:
+                    tetra_faults = [m for m in self.tetra_materials if m.get('type') == 'FAULT']
+                    logger.info(f"DEBUG: Found {len(tetra_faults)} faults in self.tetra_materials")
+                    # Add only if not already in fault_materials
+                    for tf in tetra_faults:
+                        if not any(f.get('attribute') == tf.get('attribute') for f in fault_materials):
+                            fault_materials.append(tf)
+                            logger.info(f"DEBUG: Added fault from tetra_materials: {tf.get('name')}")
+                else:
+                    logger.info("DEBUG: No self.tetra_materials or it's empty")
+                
+                logger.info(f"Found {len(fault_materials)} fault materials for export")
+                for fm in fault_materials:
+                    logger.info(f"  Fault: {fm.get('name')} (ID {fm.get('attribute')}, marker {fm.get('marker')})")
+                
+                # Collect all fault triangles
+                all_fault_points = []
+                all_fault_cells = []
+                all_fault_material_ids = []
+                
+                for fault_mat in fault_materials:
+                    mat_id = fault_mat.get('attribute')
+                    if mat_id is None:
+                        continue
+                    
+                    # Extract fault surface from TetGen output
+                    fault_surface = self._extract_fault_surface_for_export(mat_id)
+                    
+                    if fault_surface is not None and fault_surface.n_cells > 0:
+                        # Get fault triangles
+                        n_triangles = fault_surface.n_cells
+                        
+                        # Add MaterialID for this fault
+                        fault_material_ids = np.full(n_triangles, mat_id, dtype=np.int32)
+                        all_fault_material_ids.append(fault_material_ids)
+                        
+                        # Store the fault surface for merging
+                        all_fault_points.append(fault_surface.points)
+                        all_fault_cells.append(fault_surface.faces)
+                        
+                        fault_surfaces_added += 1
+                        mat_name = fault_mat.get('name', f'Fault_{mat_id}')
+                        logger.info(f"Extracted fault surface: {mat_name} (ID {mat_id}) with {n_triangles} triangles")
+                
+                # Merge fault surfaces with volume mesh (C++ style: single combined mesh)
+                if fault_surfaces_added > 0:
+                    logger.info(f"Merging {fault_surfaces_added} fault surfaces with volume mesh...")
+                    
+                    # Create a combined UnstructuredGrid with both tetrahedra and triangles
+                    # This is the C++ MeshIt approach: mixed element types in one mesh
+                    
+                    # Get volume data
+                    volume_points = volume_mesh.points
+                    volume_cells = volume_mesh.cells
+                    volume_cell_types = volume_mesh.celltypes
+                    
+                    # Prepare merged mesh arrays
+                    merged_points = [volume_points]
+                    merged_cells = [volume_cells]
+                    merged_cell_types = [volume_cell_types]
+                    
+                    # Prepare MaterialID array (start with volume MaterialID)
+                    if 'MaterialID' in volume_mesh.cell_data:
+                        merged_material_ids = [volume_mesh.cell_data['MaterialID']]
+                    else:
+                        merged_material_ids = [np.zeros(volume_mesh.n_cells, dtype=np.int32)]
+                    
+                    # Add each fault surface
+                    current_point_offset = len(volume_points)
+                    
+                    for i, (fault_pts, fault_cells, fault_mat_ids) in enumerate(zip(all_fault_points, all_fault_cells, all_fault_material_ids)):
+                        # Reindex fault cells to account for point offset
+                        fault_cells_array = np.array(fault_cells)
+                        
+                        # Parse VTK face format: [n, i1, i2, i3, n, i1, i2, i3, ...]
+                        reindexed_cells = []
+                        idx = 0
+                        n_fault_triangles = 0
+                        while idx < len(fault_cells_array):
+                            n_pts = fault_cells_array[idx]
+                            reindexed_cells.append(n_pts)
+                            for j in range(1, n_pts + 1):
+                                reindexed_cells.append(fault_cells_array[idx + j] + current_point_offset)
+                            idx += n_pts + 1
+                            n_fault_triangles += 1
+                        
+                        merged_points.append(fault_pts)
+                        merged_cells.append(np.array(reindexed_cells))
+                        merged_cell_types.append(np.full(n_fault_triangles, 5, dtype=np.uint8))  # VTK_TRIANGLE = 5
+                        merged_material_ids.append(fault_mat_ids)
+                        
+                        current_point_offset += len(fault_pts)
+                    
+                    # Combine all arrays
+                    final_points = np.vstack(merged_points)
+                    final_cells = np.hstack(merged_cells)
+                    final_cell_types = np.hstack(merged_cell_types)
+                    final_material_ids = np.hstack(merged_material_ids)
+                    
+                    # Create the combined unstructured grid
+                    combined_mesh = pv.UnstructuredGrid(final_cells, final_cell_types, final_points)
+                    combined_mesh.cell_data['MaterialID'] = final_material_ids
+                    
+                    # Add a CellType array to distinguish tetrahedra from triangles in ParaView
+                    cell_type_names = np.where(final_cell_types == 10, 0, 1)  # 0=Tetrahedra, 1=Triangle(Fault)
+                    combined_mesh.cell_data['CellType'] = cell_type_names
+                    
+                    logger.info(f"✓ Created combined mesh: {combined_mesh.n_cells} cells ({volume_mesh.n_cells} tetrahedra + {combined_mesh.n_cells - volume_mesh.n_cells} fault triangles)")
+                    logger.info(f"✓ Total points: {combined_mesh.n_points}")
+                    
+                    # Use the combined mesh for export
+                    volume_mesh = combined_mesh
+                else:
+                    logger.info("No fault surfaces found - exporting volume mesh only")
+            
+            # Save the combined mesh
+            file_ext = file_path.lower().split('.')[-1]
+            
+            if file_ext in ['vtu', 'vtk']:
+                volume_mesh.save(file_path)
+                logger.info(f"Saved combined mesh (volume + embedded faults) to {file_ext.upper()} format: {file_path}")
+            elif file_ext == 'vtm':
+                # For VTM, create a multiblock with the combined mesh
+                multi_block = pv.MultiBlock()
+                multi_block.append(volume_mesh, "Combined_Mesh")
+                multi_block.save(file_path)
+                logger.info(f"Saved combined mesh in VTM format: {file_path}")
+            else:
+                # For other formats, use PyVista's default
+                volume_mesh.save(file_path)
+                logger.info(f"Saved mesh to {file_ext.upper()} format: {file_path}")
+            
+            logger.info(f"✓ Tetrahedral mesh exported successfully!")
+            logger.info(f"  ParaView Tips:")
+            logger.info(f"  • Color by 'MaterialID' to see different materials")
+            logger.info(f"  • Color by 'CellType' to distinguish tetrahedra (0) from faults (1)")
+            logger.info(f"  • Use 'Extract Surface' filter to see fault outlines")
+            logger.info(f"  • Use 'Threshold' filter on MaterialID to isolate specific materials")
+            logger.info(f"  • Faults will appear as embedded surfaces (wireframe) within the volume")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Enhanced export failed: {e}", exc_info=True)
+            # Fallback to simple export
+            try:
+                mesh_data.save(file_path)
+                logger.warning("Fell back to simple export without material blocks")
+                return True
+            except Exception as e2:
+                logger.error(f"Simple export also failed: {e2}")
+                return False
+    
+    def _extract_fault_surface_for_export(self, material_id: int):
+        """Extract fault surface from TetGen for export (similar to GUI extraction)."""
+        try:
+            import numpy as np
+            import pyvista as pv
+            
+            tet = self.tetgen_object
+            if tet is None:
+                logger.debug(f"No TetGen object available for fault {material_id}")
+                return None
+            
+            # Find the PLC marker for this fault
+            plc_marker = None
+            
+            # First check materials list
+            for mat in self.materials:
+                if mat.get('attribute') == material_id and mat.get('type') == 'FAULT':
+                    plc_marker = mat.get('marker')
+                    logger.debug(f"Found marker {plc_marker} for fault {material_id} in materials list")
+                    break
+            
+            # If not found, check tetra_materials (GUI materials)
+            if plc_marker is None and hasattr(self, 'tetra_materials'):
+                for mat in self.tetra_materials:
+                    if mat.get('attribute') == material_id and mat.get('type') == 'FAULT':
+                        plc_marker = mat.get('marker')
+                        logger.debug(f"Found marker {plc_marker} for fault {material_id} in tetra_materials")
+                        break
+            
+            if plc_marker is None:
+                logger.warning(f"No marker found for fault material {material_id}")
+                return None
+            
+            # Try to get trifaces and markers from TetGen
+            faces = None
+            marks = None
+            
+            for fn in ('trifaces', 'f', 'faces', 'triangle_faces'):
+                if hasattr(tet, fn):
+                    faces = np.asarray(getattr(tet, fn))
+                    if faces is not None and faces.ndim == 2 and faces.shape[1] == 3:
+                        logger.debug(f"Got faces from TetGen.{fn}: {len(faces)} faces")
+                        break
+            
+            for mn in ('triface_markers', 'face_markers', 'trifacemarkers', 'facetmarkerlist'):
+                if hasattr(tet, mn):
+                    marks = np.asarray(getattr(tet, mn))
+                    if marks is not None and marks.ndim == 1:
+                        logger.debug(f"Got markers from TetGen.{mn}: {len(marks)} markers")
+                        break
+            
+            if faces is not None and marks is not None and len(faces) == len(marks):
+                # Keep only faces on input facets (positive markers)
+                pos = np.where(marks > 0)[0]
+                if len(pos) > 0:
+                    faces = faces[pos]
+                    marks = marks[pos]
+                    logger.debug(f"Filtered to {len(faces)} constraint faces (positive markers)")
+                
+                # Filter faces by marker
+                idx = np.where(marks == plc_marker)[0]
+                logger.info(f"Export: Found {len(idx)} faces for fault {material_id} with marker {plc_marker}")
+                
+                if len(idx) > 0:
+                    # Get vertices
+                    pts = None
+                    for pn in ('node', 'points', 'v'):
+                        if hasattr(tet, pn):
+                            pts = np.asarray(getattr(tet, pn))
+                            if pts is not None and pts.size > 0:
+                                logger.debug(f"Got {len(pts)} points from TetGen.{pn}")
+                                break
+                    
+                    if pts is not None:
+                        fault_faces = faces[idx]
+                        # Create PolyData
+                        faces_vtk = np.hstack((np.full((fault_faces.shape[0], 1), 3, np.int32), fault_faces)).ravel()
+                        fault_mesh = pv.PolyData(pts, faces_vtk)
+                        logger.info(f"✓ Created fault surface for export: {fault_mesh.n_cells} triangles, {fault_mesh.n_points} points")
+                        return fault_mesh
+                    else:
+                        logger.warning(f"No points found in TetGen object")
+                else:
+                    logger.warning(f"No faces found with marker {plc_marker}")
+            else:
+                logger.warning(f"Face/marker mismatch or not found: faces={faces is not None}, marks={marks is not None}")
+            
+            return None
+            
+        except Exception as e:
+            logger.error(f"Failed to extract fault surface for material {material_id}: {e}", exc_info=True)
+            return None
+    
+    def _get_material_type_by_id(self, material_id: int) -> str:
+        """Get material type by ID."""
+        if hasattr(self, 'materials') and self.materials:
+            for mat in self.materials:
+                if mat.get('attribute') == material_id:
+                    return mat.get('type', 'FORMATION')
+        return 'FORMATION'
+    
+    def _get_material_name_by_id(self, material_id: int) -> str:
+        """Get material name by ID."""
+        if hasattr(self, 'materials') and self.materials:
+            for mat in self.materials:
+                if mat.get('attribute') == material_id:
+                    return mat.get('name', f'Material_{material_id}')
+        return f'Material_{material_id}'
 
     def get_mesh_statistics(self, mesh_data: Optional[Dict] = None) -> Dict[str, Union[int, float]]:
         if mesh_data is None: mesh_data = self.tetrahedral_mesh
