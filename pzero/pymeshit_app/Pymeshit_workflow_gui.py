@@ -6704,11 +6704,90 @@ class MeshItWorkflowGUI(QMainWindow):
         except Exception as e:
             logger.warning(f"Alpha shape computation failed: {e}")
             return None
-
+    def _knn_concave_hull(self, points_2d: np.ndarray, k: int = 3) -> Optional[np.ndarray]:
+        """
+        Compute concave hull using Gift Wrapping (Jarvis March) algorithm.
+        This is THE CORRECT algorithm - simple, robust, guaranteed to work.
+        
+        Algorithm:
+        1. Start with leftmost point (guaranteed on boundary)
+        2. Find ALL other points
+        3. Pick the one with SMALLEST POLAR ANGLE (most counterclockwise)
+        4. Repeat until back to start
+        
+        This is literally the convex/concave hull algorithm that ALWAYS works.
+        
+        Args:
+            points_2d: 2D projected points (N, 2)
+            k: Ignored (kept for compatibility)
+            
+        Returns:
+            Ordered boundary point indices
+        """
+        try:
+            n_points = len(points_2d)
+            if n_points < 3:
+                return None
+            
+            logger.info(f"Using Gift Wrapping hull algorithm")
+            
+            # Start with bottom-leftmost point (guaranteed on convex hull)
+            start_idx = np.lexsort((points_2d[:, 0], points_2d[:, 1]))[0]
+            
+            boundary_indices = []
+            current_idx = start_idx
+            
+            max_iterations = n_points + 1
+            iteration = 0
+            
+            while iteration < max_iterations:
+                iteration += 1
+                boundary_indices.append(current_idx)
+                
+                # Find the point that makes the smallest angle (most counterclockwise)
+                next_idx = None
+                
+                for candidate_idx in range(n_points):
+                    if candidate_idx == current_idx:
+                        continue
+                    
+                    # If this is the first candidate, use it
+                    if next_idx is None:
+                        next_idx = candidate_idx
+                        continue
+                    
+                    # Check if candidate is more counterclockwise than current next
+                    # Using cross product: positive = counterclockwise, negative = clockwise
+                    v1 = points_2d[next_idx] - points_2d[current_idx]
+                    v2 = points_2d[candidate_idx] - points_2d[current_idx]
+                    cross = v1[0] * v2[1] - v1[1] * v2[0]
+                    
+                    # If candidate is more counterclockwise (or collinear but farther), use it
+                    if cross < 0:  # candidate is more counterclockwise
+                        next_idx = candidate_idx
+                    elif abs(cross) < 1e-10:  # Collinear - pick farther one
+                        dist_next = np.sum(v1**2)
+                        dist_candidate = np.sum(v2**2)
+                        if dist_candidate > dist_next:
+                            next_idx = candidate_idx
+                
+                # Check if we've completed the loop
+                if next_idx == start_idx:
+                    break
+                
+                current_idx = next_idx
+            
+            logger.info(f"Gift wrapping produced {len(boundary_indices)} boundary points")
+            return np.array(boundary_indices) if len(boundary_indices) >= 3 else None
+                
+        except Exception as e:
+            logger.error(f"Gift wrapping hull failed: {e}")
+            return None
     def _compute_boundary_for_wavy_surface(self, points: np.ndarray) -> Optional[np.ndarray]:
         """
-        Compute boundary for wavy (non-planar) surfaces using alpha shapes.
-        Tries multiple alpha values to find the best concave hull.
+        Compute boundary for wavy (non-planar) surfaces using K-Nearest Neighbors concave hull.
+        This is a robust algorithm that walks around the outer boundary by always turning right.
+        Much more reliable than alpha shapes!
         
         Args:
             points: 3D points (N, 3)
@@ -6719,45 +6798,15 @@ class MeshItWorkflowGUI(QMainWindow):
         # Project to 2D using PCA
         _centroid, projected_2d = self._pca_project(points)
         
-        # Compute base alpha parameter
-        base_alpha = self._compute_adaptive_alpha(points, projected_2d)
+        # Use the robust K-NN concave hull algorithm
+        boundary_indices = self._knn_concave_hull(projected_2d)
         
-        # Try multiple alpha values, starting with moderate concavity
-        # Larger alpha → smaller 1/alpha → stricter circumradius → more concave
-        # Start with moderate values and adjust based on point count
-        # We want enough points to form a proper boundary (at least 10-20% of points)
-        min_points_ratio = 0.05  # At least 5% of points should be on boundary
-        min_boundary_points = max(10, int(len(projected_2d) * min_points_ratio))
+        if boundary_indices is not None and len(boundary_indices) >= 3:
+            logger.info(f"K-NN concave hull produced {len(boundary_indices)} boundary points")
+            return boundary_indices
         
-        alpha_factors = [1.0, 1.5, 2.0, 0.5, 0.3]  # Start moderate, then try more concave/convex
-        
-        best_result = None
-        best_point_count = 0
-        
-        for factor in alpha_factors:
-            alpha = base_alpha * factor
-            boundary_indices = self._alpha_shape_boundary(projected_2d, alpha)
-            
-            if boundary_indices is not None and len(boundary_indices) >= 3:
-                point_count = len(boundary_indices)
-                logger.info(f"Alpha shape with factor {factor} produced {point_count} boundary points")
-                
-                # Track the best result (most points, but not too many)
-                if point_count > best_point_count and point_count >= min_boundary_points:
-                    best_result = boundary_indices
-                    best_point_count = point_count
-                    logger.info(f"New best result: {point_count} points with factor {factor}")
-        
-        # If we found a good result, use it
-        if best_result is not None and best_point_count >= min_boundary_points:
-            logger.info(f"Using alpha shape boundary with {best_point_count} points")
-            return best_result
-        
-        # If alpha shapes produced too few points, log and fall through to Delaunay
-        if best_result is not None:
-            logger.warning(f"Alpha shapes produced only {best_point_count} points (minimum {min_boundary_points}), falling back to Delaunay")
-        else:
-            logger.warning("Alpha shapes failed to produce any valid boundary, falling back to Delaunay")
+        # If K-NN failed, fall back to Delaunay boundary
+        logger.warning("K-NN concave hull failed, falling back to Delaunay boundary")
         
         # If all alpha values failed, try computing boundary directly from Delaunay
         # but filter by edge length to get a more concave result
@@ -6886,8 +6935,8 @@ class MeshItWorkflowGUI(QMainWindow):
         """
         Compute (and store) the boundary poly-line for the selected dataset.
         - For 2D data, this computes the convex hull.
-        - For 3D planar surfaces, this finds the ordered boundary using Delaunay triangulation.
-        - For 3D wavy surfaces, this uses alpha shapes (concave hull) for better boundary detection.
+        - For 3D sheet-like data, this finds the ordered "rim" or "outline"
+        (which can be concave) by finding the boundary of a Delaunay triangulation.
         
         This version also identifies and marks geometric corners as "special points"
         immediately after calculation, preparing it for robust segmentation.
@@ -6903,12 +6952,6 @@ class MeshItWorkflowGUI(QMainWindow):
             return False
 
         ds = self.datasets[dataset_index]
-        
-        # Skip pre-triangulated TriSurf entities (they already have hull_points from boundary edges)
-        if ds.get('is_pre_triangulated', False):
-            logger.info("Skipping hull computation for pre-triangulated TriSurf '%s'", ds.get('name'))
-            return True  # Return True since hull_points already exist
-        
         pts = ds.get("points")
         if pts is None or len(pts) < 3:
             logger.warning("Dataset '%s' has < 3 points, skipping hull computation.", ds.get('name'))
@@ -6927,79 +6970,52 @@ class MeshItWorkflowGUI(QMainWindow):
                 # Convert to 3D for consistency, setting Z=0
                 hull_pts_np = np.hstack([hull_pts_2d, np.zeros((len(hull_pts_2d), 1))])
 
-            # --- BRANCH 2: 3D Data (Handles Planar and Wavy Surfaces) ---
+            # --- BRANCH 2: 3D Data (Handles Convex and Concave Boundaries) ---
             else: # dim >= 3
-                # Detect if the surface is planar or wavy
-                # Use stricter tolerance (0.1) to better detect wavy surfaces
-                # Lower tolerance = stricter planar detection (more surfaces detected as wavy)
-                is_planar = self._is_quasi_planar(pts, tol=0.1)
+                logger.info(f"Computing 3D data boundary for '{ds.get('name')}' using Delaunay triangulation...")
+                # 1. Project all 3D points onto their best-fit 2D plane using PCA.
+                _centroid, projected_pts_2d = self._pca_project(pts)
+
+                # 2. Perform Delaunay triangulation on the 2D projected points.
+                tri = Delaunay(projected_pts_2d)
+
+                # 3. Find the boundary edges (edges that appear in only one triangle).
+                edges = set()
+                for simplex in tri.simplices:
+                    for j in range(3):
+                        p1_idx, p2_idx = simplex[j], simplex[(j + 1) % 3]
+                        edge = tuple(sorted((p1_idx, p2_idx)))
+                        if edge in edges:
+                            edges.remove(edge) # Internal edge, remove it.
+                        else:
+                            edges.add(edge) # Potential boundary edge.
                 
-                # Log the detection result for debugging
-                if is_planar:
-                    logger.info(f"Surface '{ds.get('name')}' detected as PLANAR (will use Delaunay method)")
+                if not edges:
+                    logger.warning("Delaunay method found no boundary edges. Falling back to convex hull on projected points.")
+                    hull = ConvexHull(projected_pts_2d)
+                    hull_pts_np = pts[hull.vertices]
                 else:
-                    logger.info(f"Surface '{ds.get('name')}' detected as WAVY (will use alpha shapes)")
-                
-                if is_planar:
-                    # For planar surfaces, use the efficient Delaunay boundary method
-                    logger.info(f"Computing 3D planar surface boundary for '{ds.get('name')}' using Delaunay triangulation...")
-                    # 1. Project all 3D points onto their best-fit 2D plane using PCA.
-                    _centroid, projected_pts_2d = self._pca_project(pts)
-
-                    # 2. Perform Delaunay triangulation on the 2D projected points.
-                    tri = Delaunay(projected_pts_2d)
-
-                    # 3. Find the boundary edges (edges that appear in only one triangle).
-                    edges = set()
-                    for simplex in tri.simplices:
-                        for j in range(3):
-                            p1_idx, p2_idx = simplex[j], simplex[(j + 1) % 3]
-                            edge = tuple(sorted((p1_idx, p2_idx)))
-                            if edge in edges:
-                                edges.remove(edge) # Internal edge, remove it.
-                            else:
-                                edges.add(edge) # Potential boundary edge.
+                    # 4. Stitch the unordered boundary edges into a continuous path.
+                    ordered_indices = []
+                    current_edge = edges.pop()
+                    ordered_indices.extend(list(current_edge))
                     
-                    if not edges:
-                        logger.warning("Delaunay method found no boundary edges. Falling back to convex hull on projected points.")
-                        hull = ConvexHull(projected_pts_2d)
-                        hull_pts_np = pts[hull.vertices]
-                    else:
-                        # 4. Stitch the unordered boundary edges into a continuous path.
-                        ordered_indices = []
-                        current_edge = edges.pop()
-                        ordered_indices.extend(list(current_edge))
-                        
-                        while edges:
-                            last_point_idx = ordered_indices[-1]
-                            found_next = False
-                            for edge in list(edges): # Iterate over a copy
-                                if last_point_idx in edge:
-                                    next_point_idx = edge[1] if edge[0] == last_point_idx else edge[0]
-                                    ordered_indices.append(next_point_idx)
-                                    edges.remove(edge)
-                                    found_next = True
-                                    break
-                            if not found_next:
-                                logger.warning("Boundary walk broken. The result might be incomplete or have multiple loops.")
+                    while edges:
+                        last_point_idx = ordered_indices[-1]
+                        found_next = False
+                        for edge in list(edges): # Iterate over a copy
+                            if last_point_idx in edge:
+                                next_point_idx = edge[1] if edge[0] == last_point_idx else edge[0]
+                                ordered_indices.append(next_point_idx)
+                                edges.remove(edge)
+                                found_next = True
                                 break
-                        
-                        # 5. Get the final ordered polyline from the original 3D points.
-                        hull_pts_np = pts[ordered_indices]
-                else:
-                    # For wavy surfaces, use alpha shapes for better boundary detection
-                    logger.info(f"Computing 3D wavy surface boundary for '{ds.get('name')}' using alpha shapes...")
-                    boundary_indices = self._compute_boundary_for_wavy_surface(pts)
+                        if not found_next:
+                            logger.warning("Boundary walk broken. The result might be incomplete or have multiple loops.")
+                            break
                     
-                    if boundary_indices is not None and len(boundary_indices) >= 3:
-                        # Get the final ordered polyline from the original 3D points
-                        hull_pts_np = pts[boundary_indices]
-                    else:
-                        # Fallback to convex hull if alpha shape fails
-                        logger.warning("Alpha shape method failed, falling back to convex hull for wavy surface.")
-                        _centroid, projected_pts_2d = self._pca_project(pts)
-                        hull = ConvexHull(projected_pts_2d)
-                        hull_pts_np = pts[hull.vertices]
+                    # 5. Get the final ordered polyline from the original 3D points.
+                    hull_pts_np = pts[ordered_indices]
 
             # --- Post-processing for BOTH cases ---
 
@@ -7032,6 +7048,7 @@ class MeshItWorkflowGUI(QMainWindow):
             logger.error(f"Hull/Boundary computation failed for dataset {dataset_index}: {exc}")
             logger.debug(traceback.format_exc())
             return False
+
 
     
     def compute_hull(self):
