@@ -537,7 +537,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             )
         else:
             self.print_terminal(
-                "Selected entities have mixed xsection_uids. Please select entities with the same xsection_uid or that don't belong to any x_section."
+                "Selected entities have mixed parent uids. Please select entities with the same parent_uid or that don't belong to any x-section or well."
             )
             return
 
@@ -571,7 +571,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 "role": ["Role: ", role_list],
                 "feature": ["Feature: ", feature_list],
                 "scenario": ["Scenario: ", scenario_list],
-                "x_section": ["XSection: ", xsect_list],
+                "parent_uid": ["XSection: ", xsect_list],
             }
         elif self.shown_table == "tabDOMs":
             collection = self.dom_coll
@@ -590,7 +590,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             input_dict = {
                 "name": ["New name: ", name_list],
                 "topology": ["Topology", topology_list],
-                "x_section": ["XSection: ", xsect_list],
+                "parent_uid": ["XSection: ", xsect_list],
             }
         else:
             return
@@ -1209,7 +1209,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
 
         # --------------------- SAVE tables ---------------------
 
-        # Save x_section table to JSON file.
+        # Save x-section table to JSON file.
         out_cols = list(self.xsect_coll.df.columns)
         out_cols.remove("vtk_plane")
         out_cols.remove("vtk_frame")
@@ -1486,7 +1486,6 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
 
         # use try - except to avoid crashing in case a corrupted project is opened
         try:
-
             # Read name of last revision in project file. This opens the last revision.
             # To open a different one, edit the project file.
             # ___________________________________ IN THE FUTURE an option to open a specific revision could be added
@@ -1693,7 +1692,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
 
             # --------------------- READ TABLES ---------------------
 
-            # Read x_section table and build cross-sections. Note beginResetModel() and endResetModel().
+            # Read x-section table and build cross-sections. Note beginResetModel() and endResetModel().
             if os.path.isfile((in_dir_name + "/xsection_table.csv")) or os.path.isfile(
                 (in_dir_name + "/xsection_table.json")
             ):
@@ -1794,6 +1793,13 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                         )
                         self.print_terminal(
                             "column texture_uid renamed as textures in dom table"
+                        )
+                    if "x_section" in new_dom_coll_df.columns:
+                        new_dom_coll_df.rename(
+                            columns={"x_section": "parent_uid"}, inplace=True
+                        )
+                        self.print_terminal(
+                            "column x_section renamed as parent_uid in dom table"
                         )
 
                     if None in new_dom_coll_df["textures"].to_list():
@@ -1906,6 +1912,13 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 new_image_coll_df.reset_index(drop=True, inplace=True)
 
                 if not new_image_coll_df.empty:
+                    if "x_section" in new_image_coll_df.columns:
+                        new_image_coll_df.rename(
+                            columns={"x_section": "parent_uid"}, inplace=True
+                        )
+                        self.print_terminal(
+                            "column x_section renamed as parent_uid in image table"
+                        )
 
                     for new_column in new_image_coll_df.columns.values.tolist():
                         if new_column not in self.image_coll.df.columns.values.tolist():
@@ -1962,7 +1975,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                         vtk_object = XsImage(
                             parent=self,
                             x_section_uid=self.image_coll.df.loc[
-                                self.image_coll.df["uid"] == uid, "x_section"
+                                self.image_coll.df["uid"] == uid, "parent_uid"
                             ].values[0],
                         )
                         im_reader = vtkXMLImageDataReader()
@@ -2011,6 +2024,13 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 new_mesh3d_coll_df.reset_index(drop=True, inplace=True)
 
                 if not new_mesh3d_coll_df.empty:
+                    if "x_section" in new_mesh3d_coll_df.columns:
+                        new_mesh3d_coll_df.rename(
+                            columns={"x_section": "parent_uid"}, inplace=True
+                        )
+                        self.print_terminal(
+                            "column x_section renamed as parent_uid in mesh3d table"
+                        )
 
                     for new_column in new_mesh3d_coll_df.columns.values.tolist():
                         if (
@@ -2071,7 +2091,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                             return
                         vtk_object = XsVoxet(
                             x_section_uid=self.mesh3d_coll.df.loc[
-                                self.mesh3d_coll.df["uid"] == uid, "x_section"
+                                self.mesh3d_coll.df["uid"] == uid, "parent_uid"
                             ].values[0],
                             parent=self,
                         )
@@ -2109,6 +2129,13 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 new_boundary_coll_df.reset_index(drop=True, inplace=True)
 
                 if not new_boundary_coll_df.empty:
+                    if "x_section" in new_boundary_coll_df.columns:
+                        new_boundary_coll_df.rename(
+                            columns={"x_section": "parent_uid"}, inplace=True
+                        )
+                        self.print_terminal(
+                            "column x_section renamed as parent_uid in boundary table"
+                        )
 
                     for new_column in new_boundary_coll_df.columns.values.tolist():
                         if (
@@ -2192,6 +2219,13 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 new_well_coll_df.reset_index(drop=True, inplace=True)
 
                 if not new_well_coll_df.empty:
+                    if "x_section" in new_well_coll_df.columns:
+                        new_well_coll_df.rename(
+                            columns={"x_section": "parent_uid"}, inplace=True
+                        )
+                        self.print_terminal(
+                            "column x_section renamed as parent_uid in wells table"
+                        )
 
                     for new_column in new_well_coll_df.columns.values.tolist():
                         if new_column not in self.well_coll.df.columns.values.tolist():
@@ -2269,6 +2303,13 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 new_geol_coll_df.reset_index(drop=True, inplace=True)
 
                 if not new_geol_coll_df.empty:
+                    if "x_section" in new_geol_coll_df.columns:
+                        new_geol_coll_df.rename(
+                            columns={"x_section": "parent_uid"}, inplace=True
+                        )
+                        self.print_terminal(
+                            "column x_section renamed as parent_uid in geology table"
+                        )
 
                     for new_column in new_geol_coll_df.columns.values.tolist():
                         if new_column not in self.geol_coll.df.columns.values.tolist():
@@ -2362,6 +2403,13 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 new_fluids_coll_df.reset_index(drop=True, inplace=True)
 
                 if not new_fluids_coll_df.empty:
+                    if "x_section" in new_fluids_coll_df.columns:
+                        new_fluids_coll_df.rename(
+                            columns={"x_section": "parent_uid"}, inplace=True
+                        )
+                        self.print_terminal(
+                            "column x_section renamed as parent_uid in fluids table"
+                        )
 
                     for new_column in new_fluids_coll_df.columns.values.tolist():
                         if new_column not in self.fluid_coll.df.columns.values.tolist():
@@ -2452,6 +2500,13 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 new_backgrounds_coll_df.reset_index(drop=True, inplace=True)
 
                 if not new_backgrounds_coll_df.empty:
+                    if "x_section" in new_backgrounds_coll_df.columns:
+                        new_backgrounds_coll_df.rename(
+                            columns={"x_section": "parent_uid"}, inplace=True
+                        )
+                        self.print_terminal(
+                            "column x_section renamed as parent_uid in background table"
+                        )
 
                     for new_column in new_backgrounds_coll_df.columns.values.tolist():
                         if (
@@ -2882,7 +2937,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.others_legend_df.to_json(
             out_dir_name + "/others_legend_table.json", orient="index"
         )
-        # Save x_section table to CSV and JSON files.
+        # Save x-section table to CSV and JSON files.
         out_cols = list(self.xsect_coll.df.columns)
         out_cols.remove("vtk_plane")
         out_cols.remove("vtk_frame")

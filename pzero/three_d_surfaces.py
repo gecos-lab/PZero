@@ -1175,7 +1175,7 @@ def intersection_xs(self):
                             # Create new dict for the new XsVertexSet
 
                             obj_dict = deepcopy(self.geol_coll.entity_dict)
-                            obj_dict["x_section"] = xsect_uid
+                            obj_dict["parent_uid"] = xsect_uid
                             obj_dict["topology"] = "XsVertexSet"
                             obj_dict["vtk_obj"] = XsVertexSet(
                                 x_section_uid=xsect_uid, parent=self
@@ -1268,7 +1268,7 @@ def intersection_xs(self):
                             if connectivity_clean.GetOutput().GetNumberOfPoints() > 0:
                                 # Create new dict for the new XsPolyLine
                                 obj_dict = deepcopy(self.geol_coll.entity_dict)
-                                obj_dict["x_section"] = xsect_uid
+                                obj_dict["parent_uid"] = xsect_uid
                                 obj_dict["topology"] = "XsPolyLine"
                                 obj_dict["vtk_obj"] = XsPolyLine(
                                     x_section_uid=xsect_uid, parent=self
@@ -1451,7 +1451,7 @@ def intersection_xs(self):
                         obj_dict["properties_components"] = (
                             self.mesh3d_coll.get_uid_properties_components(uid)
                         )
-                        obj_dict["x_section"] = xsect_uid
+                        obj_dict["parent_uid"] = xsect_uid
                         obj_dict["vtk_obj"] = XsVoxet(
                             x_section_uid=xsect_uid, parent=self
                         )
@@ -1480,7 +1480,7 @@ def intersection_xs(self):
                     obj_dict["properties_components"] = (
                         self.dom_coll.get_uid_properties_components(uid)
                     )
-                    obj_dict["x_section"] = xsect_uid
+                    obj_dict["parent_uid"] = xsect_uid
                     obj_dict["vtk_obj"] = XsPolyLine(
                         x_section_uid=xsect_uid, parent=self
                     )
@@ -1714,7 +1714,7 @@ def project_2_xs(self):
         entity_dict["properties_components"] = (
             self.geol_coll.get_uid_properties_components(uid)
         )
-        entity_dict["x_section"] = xs_uid
+        entity_dict["parent_uid"] = xs_uid
         if self.geol_coll.get_uid_topology(uid) == "VertexSet":
             entity_dict["topology"] = "XsVertexSet"
             out_vtk = XsVertexSet(x_section_uid=xs_uid, parent=self)

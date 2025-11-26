@@ -43,7 +43,7 @@ class ViewXsection(View2D):
         # Note that this filter does not return the cross section itself. If we want its frame to be shown we must
         # find a different solution to add it to the plotter.
         self.view_filter = (
-            f'x_section.str.contains("{self.this_x_section_uid}", na=False)'
+            f'parent_uid.str.contains("{self.this_x_section_uid}", na=False)'
         )
 
         # Super here after having set the x_section_uid and _name

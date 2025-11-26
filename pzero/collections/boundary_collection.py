@@ -163,7 +163,7 @@ class BoundaryCollection(BaseCollection):
             "uid": "",
             "name": "undef",
             "scenario": "undef",
-            "x_section": "",  # this is the uid of the cross section for "XsVertexSet", "XsPolyLine", and "XsImage", empty for all others
+            "parent_uid": "",  # this is the uid of the cross section for "XsVertexSet", "XsPolyLine", and "XsImage", empty for all others
             "topology": "undef",
             "vtk_obj": None,
         }
@@ -172,7 +172,7 @@ class BoundaryCollection(BaseCollection):
             "uid": str,
             "name": str,
             "scenario": str,
-            "x_section": str,
+            "parent_uid": str,
             "topology": str,
             "vtk_obj": object,
         }

@@ -499,7 +499,7 @@ def gocad2vtk_section(
             # then we will fill its components in the next lines. Use deepcopy otherwise the
             # original dictionary would be altered.
             curr_obj_dict = deepcopy(self.geol_coll.entity_dict)
-            curr_obj_dict["x_section"] = x_section_uid
+            curr_obj_dict["parent_uid"] = x_section_uid
             curr_obj_dict["scenario"] = scenario_default
             # Store uid and topological type of new entity.
             curr_obj_dict["uid"] = str(uuid4())
@@ -805,7 +805,7 @@ def gocad2vtk_section(
     # including new and old entities for in case entities are appended to an old XSection.
     vtkappend_all = vtkAppendPolyData()
     for uid in self.geol_coll.df.loc[
-        self.geol_coll.df["x_section"] == x_section_uid, "uid"
+        self.geol_coll.df["parent_uid"] == x_section_uid, "uid"
     ].tolist():
         vtkappend_all.AddInputData(self.geol_coll.get_uid_vtk_obj(uid))
     vtkappend_all.Update()

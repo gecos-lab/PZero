@@ -226,7 +226,7 @@ def xs_image2vtk(self=None, in_file_name=None, x_section_uid=None):
         curr_obj_dict["properties_names"] = ["RGB"]
     curr_obj_dict["properties_components"] = vtk_image.properties_components
     curr_obj_dict["properties_types"] = vtk_image.properties_types
-    curr_obj_dict["x_section"] = x_section_uid
+    curr_obj_dict["parent_uid"] = x_section_uid
     curr_obj_dict["vtk_obj"] = vtk_image
     # Add to entity collection.
     self.image_coll.add_entity_from_dict(entity_dict=curr_obj_dict)

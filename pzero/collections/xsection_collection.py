@@ -556,7 +556,7 @@ class XSectionCollection(BaseCollection):
         self.df.loc[self.df["uid"] == uid, "bottom"] = bottom
 
     def set_from_table(self, uid=None):
-        """Get parameters from x_section table and set them on x_section"""
+        """Get parameters from x-section table and set them on x-section"""
         self.set_geometry(uid=uid)
 
     def get_XY_from_W(self, section_uid=None, W=None):

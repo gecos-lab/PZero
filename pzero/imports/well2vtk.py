@@ -98,7 +98,7 @@ def well2vtk(self, path=None):
                             marker_obj_dict["name"] = f"marker_{value}"
                             marker_obj_dict["role"] = "top"
                             marker_obj_dict["feature"] = value
-                            marker_obj_dict["x_section"] = well_uid
+                            marker_obj_dict["parent_uid"] = well_uid
                             marker_obj_dict["vtk_obj"] = marker_obj
                             self.geol_coll.add_entity_from_dict(marker_obj_dict)
                             color_R = (
@@ -320,7 +320,7 @@ def well2vtk(self, path=None):
     #     # marker_obj_attributes['properties_names'] = []
     #     # marker_obj_attributes['properties_components'] = []
     #     # marker_obj_attributes['properties_types'] = []
-    #     # marker_obj_attributes['x_section'] = curr_obj_attributes['uid']
+    #     # marker_obj_attributes['parent_uid'] = curr_obj_attributes['uid']
     #     # marker_obj_attributes['vtk_obj'] = well_marker
 
     #     # self.geol_coll.add_entity_from_dict(entity_dict=marker_obj_attributes)
