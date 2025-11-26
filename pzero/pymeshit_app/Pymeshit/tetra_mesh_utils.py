@@ -1131,41 +1131,32 @@ class TetrahedralMeshGenerator:
             logger.error(f"NetCDF export failed: {str(e)}")
             return False
 
-    def export_mesh(self, file_path: str, mesh_data: Optional[Dict] = None) -> bool:
-        if mesh_data is None: mesh_data = self.tetrahedral_mesh
+    def get_mesh_with_embedded_faults(self, mesh_data: Optional[pv.UnstructuredGrid] = None) -> Optional[pv.UnstructuredGrid]:
+        """
+        Create a combined mesh with embedded fault surfaces (C++ MeshIt style).
+        
+        This method extracts fault surfaces from TetGen and merges them with the volumetric
+        tetrahedral mesh, creating a single UnstructuredGrid with both tetrahedra and
+        fault triangles. This is the same approach used by C++ MeshIt.
+        
+        Args:
+            mesh_data: The tetrahedral mesh to process. If None, uses self.tetrahedral_mesh
+            
+        Returns:
+            Combined PyVista UnstructuredGrid with embedded faults, or the original mesh if
+            no faults are found or if fault extraction fails.
+        """
+        if mesh_data is None:
+            mesh_data = self.tetrahedral_mesh
         if not mesh_data:
-            logger.error("No tetrahedral mesh to export")
-            return False
-
-        try:
-            if isinstance(mesh_data, pv.UnstructuredGrid):
-                # Check file extension to determine export format
-                file_ext = file_path.lower().split('.')[-1]
-
-                if file_ext in ['nc', 'nc4', 'cdf', 'exo']:
-                    # Use NetCDF/EXODUS export
-                    return self._export_netcdf(file_path, mesh_data)
-                else:
-                    # Enhanced export for VTK/VTU formats with material information
-                    return self._export_with_materials(file_path, mesh_data)
-        except Exception as e:
-            logger.error(f"Export failed: {str(e)}")
-            return False
-        return False
-    
-    def _export_with_materials(self, file_path: str, mesh_data: pv.UnstructuredGrid) -> bool:
-        """
-        Export mesh with proper material information for ParaView visualization.
-        Combines volumetric tetrahedra AND fault surfaces into a single mesh (C++ style).
-        This ensures faults appear as embedded constraint surfaces in ParaView.
-        """
+            logger.error("No tetrahedral mesh available")
+            return None
+            
         try:
             import numpy as np
             import pyvista as pv
             
-            logger.info("Exporting tetrahedral mesh with embedded fault surfaces (C++ MeshIt style)...")
-            
-            # Start with the volumetric tetrahedral mesh
+            # Start with a copy of the volumetric tetrahedral mesh
             volume_mesh = mesh_data.copy()
             
             # Extract all fault surfaces from TetGen and merge with volume
@@ -1196,7 +1187,7 @@ class TetrahedralMeshGenerator:
                 else:
                     logger.info("DEBUG: No self.tetra_materials or it's empty")
                 
-                logger.info(f"Found {len(fault_materials)} fault materials for export")
+                logger.info(f"Found {len(fault_materials)} fault materials for embedding")
                 for fm in fault_materials:
                     logger.info(f"  Fault: {fm.get('name')} (ID {fm.get('attribute')}, marker {fm.get('marker')})")
                 
@@ -1232,9 +1223,6 @@ class TetrahedralMeshGenerator:
                 # Merge fault surfaces with volume mesh (C++ style: single combined mesh)
                 if fault_surfaces_added > 0:
                     logger.info(f"Merging {fault_surfaces_added} fault surfaces with volume mesh...")
-                    
-                    # Create a combined UnstructuredGrid with both tetrahedra and triangles
-                    # This is the C++ MeshIt approach: mixed element types in one mesh
                     
                     # Get volume data
                     volume_points = volume_mesh.points
@@ -1288,17 +1276,62 @@ class TetrahedralMeshGenerator:
                     combined_mesh = pv.UnstructuredGrid(final_cells, final_cell_types, final_points)
                     combined_mesh.cell_data['MaterialID'] = final_material_ids
                     
-                    # Add a CellType array to distinguish tetrahedra from triangles in ParaView
+                    # Add a CellType array to distinguish tetrahedra from triangles
                     cell_type_names = np.where(final_cell_types == 10, 0, 1)  # 0=Tetrahedra, 1=Triangle(Fault)
                     combined_mesh.cell_data['CellType'] = cell_type_names
                     
                     logger.info(f"✓ Created combined mesh: {combined_mesh.n_cells} cells ({volume_mesh.n_cells} tetrahedra + {combined_mesh.n_cells - volume_mesh.n_cells} fault triangles)")
                     logger.info(f"✓ Total points: {combined_mesh.n_points}")
                     
-                    # Use the combined mesh for export
-                    volume_mesh = combined_mesh
+                    return combined_mesh
                 else:
-                    logger.info("No fault surfaces found - exporting volume mesh only")
+                    logger.info("No fault surfaces found - returning volume mesh only")
+                    return volume_mesh
+            else:
+                logger.warning("No TetGen object available - returning volume mesh without faults")
+                return volume_mesh
+                
+        except Exception as e:
+            logger.error(f"Failed to create mesh with embedded faults: {e}", exc_info=True)
+            # Return original mesh on error
+            return volume_mesh if 'volume_mesh' in locals() else mesh_data
+    
+    def export_mesh(self, file_path: str, mesh_data: Optional[Dict] = None) -> bool:
+        if mesh_data is None: mesh_data = self.tetrahedral_mesh
+        if not mesh_data:
+            logger.error("No tetrahedral mesh to export")
+            return False
+
+        try:
+            if isinstance(mesh_data, pv.UnstructuredGrid):
+                # Check file extension to determine export format
+                file_ext = file_path.lower().split('.')[-1]
+
+                if file_ext in ['nc', 'nc4', 'cdf', 'exo']:
+                    # Use NetCDF/EXODUS export
+                    return self._export_netcdf(file_path, mesh_data)
+                else:
+                    # Enhanced export for VTK/VTU formats with material information
+                    return self._export_with_materials(file_path, mesh_data)
+        except Exception as e:
+            logger.error(f"Export failed: {str(e)}")
+            return False
+        return False
+    
+    def _export_with_materials(self, file_path: str, mesh_data: pv.UnstructuredGrid) -> bool:
+        """
+        Export mesh with proper material information for ParaView visualization.
+        Combines volumetric tetrahedra AND fault surfaces into a single mesh (C++ style).
+        This ensures faults appear as embedded constraint surfaces in ParaView.
+        """
+        try:
+            import numpy as np
+            import pyvista as pv
+            
+            logger.info("Exporting tetrahedral mesh with embedded fault surfaces (C++ MeshIt style)...")
+            
+            # Use the helper method to get mesh with embedded faults
+            volume_mesh = self.get_mesh_with_embedded_faults(mesh_data)
             
             # Save the combined mesh
             file_ext = file_path.lower().split('.')[-1]

@@ -13053,6 +13053,7 @@ segmentation, triangulation, and visualization.
             
             QMessageBox.information(self, "Success", "Tetrahedral mesh generated successfully!")
             self.export_mesh_btn.setEnabled(True)
+            self._update_export_to_pzero_button_state()  # Enable Export to PZero and Generate Statistics buttons
             self._visualize_tetrahedral_mesh_in_tetra_tab()
             self._update_tetra_stats()
         else:
@@ -13681,6 +13682,25 @@ segmentation, triangulation, and visualization.
                 )
                 return
             
+            # Update generator with current materials (including faults with markers)
+            if hasattr(self, 'tetra_materials') and hasattr(self, 'tetra_mesh_generator'):
+                self.tetra_mesh_generator.tetra_materials = self.tetra_materials
+                logger.info(f"Updated generator with {len(self.tetra_materials)} materials for PZero export")
+                
+                # Debug: Log fault materials specifically
+                fault_mats = [m for m in self.tetra_materials if m.get('type') == 'FAULT']
+                logger.info(f"DEBUG: Found {len(fault_mats)} fault materials for PZero export")
+                for fm in fault_mats:
+                    logger.info(f"DEBUG: Fault {fm.get('name')}: attribute={fm.get('attribute')}, marker={fm.get('marker')}")
+            
+            # Get mesh with embedded faults (C++ MeshIt style)
+            logger.info("Creating combined mesh with embedded faults for PZero export...")
+            combined_mesh = self.tetra_mesh_generator.get_mesh_with_embedded_faults(mesh)
+            
+            if combined_mesh is None:
+                logger.warning("Failed to create mesh with embedded faults, using original mesh")
+                combined_mesh = mesh
+            
             # Import required modules
             from pzero.entities_factory import TetraSolid
             from copy import deepcopy
@@ -13690,7 +13710,7 @@ segmentation, triangulation, and visualization.
             # PyVista meshes are already VTK objects, we need to make a copy and change the class
             # Use DeepCopy to ensure we don't modify the original mesh
             vtk_mesh = TetraSolid()
-            vtk_mesh.DeepCopy(mesh)
+            vtk_mesh.DeepCopy(combined_mesh)
             
             # Verify the mesh has cells
             if vtk_mesh.GetNumberOfCells() == 0:
@@ -13754,17 +13774,37 @@ segmentation, triangulation, and visualization.
             # Add to mesh3d collection
             project_window.mesh3d_coll.add_entity_from_dict(entity_dict=entity_dict)
             
-            # Show success message
-            QMessageBox.information(
-                self, 
-                "Export Successful", 
-                f"Tetrahedral mesh exported to PZero as:\n{entity_dict['name']}\n\n"
-                f"Vertices: {vtk_mesh.GetNumberOfPoints()}\n"
-                f"Tetrahedra: {vtk_mesh.GetNumberOfCells()}\n"
-                f"Properties: {len(properties_names)}"
-            )
+            # Count faults and tetrahedra
+            import numpy as np
+            num_tetrahedra = 0
+            num_fault_triangles = 0
+            if 'CellType' in properties_names:
+                # CellType: 0=Tetrahedra, 1=Triangle(Fault)
+                cell_type_array = vtk_mesh.GetCellData().GetArray('CellType')
+                if cell_type_array:
+                    cell_types = np.array([cell_type_array.GetValue(i) for i in range(cell_type_array.GetNumberOfTuples())])
+                    num_tetrahedra = np.sum(cell_types == 0)
+                    num_fault_triangles = np.sum(cell_types == 1)
+            else:
+                num_tetrahedra = vtk_mesh.GetNumberOfCells()
             
-            logger.info(f"Successfully exported tetrahedral mesh to PZero: {entity_dict['name']}")
+            # Show success message with fault info
+            success_msg = f"Tetrahedral mesh exported to PZero as:\n{entity_dict['name']}\n\n"
+            success_msg += f"Vertices: {vtk_mesh.GetNumberOfPoints()}\n"
+            if num_fault_triangles > 0:
+                success_msg += f"Tetrahedra: {num_tetrahedra}\n"
+                success_msg += f"Fault Triangles: {num_fault_triangles}\n"
+                success_msg += f"Total Cells: {vtk_mesh.GetNumberOfCells()}\n"
+            else:
+                success_msg += f"Tetrahedra: {num_tetrahedra}\n"
+            success_msg += f"Properties: {len(properties_names)}\n\n"
+            if num_fault_triangles > 0:
+                success_msg += "✓ Faults are embedded as triangles within the mesh\n"
+                success_msg += "Tip: Color by 'MaterialID' or 'CellType' to visualize faults"
+            
+            QMessageBox.information(self, "Export Successful", success_msg)
+            
+            logger.info(f"Successfully exported tetrahedral mesh to PZero: {entity_dict['name']} ({num_tetrahedra} tetrahedra, {num_fault_triangles} fault triangles)")
             
         except Exception as e:
             logger.error(f"Failed to export mesh to PZero: {str(e)}", exc_info=True)
