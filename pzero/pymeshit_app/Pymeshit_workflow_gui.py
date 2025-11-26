@@ -13042,6 +13042,8 @@ segmentation, triangulation, and visualization.
             if hasattr(surface_mesh, 'cell_data') and 'MaterialID' in surface_mesh.cell_data:
                 scalars = 'MaterialID'
                 cmap = self._get_selected_colormap()  # Use user-selected colormap
+                # *** CRITICAL FIX: Use full material range for consistent colors ***
+                clim = self._get_full_material_clim()
                 show_scalar_bar = True
 
         # Add surface mesh (external boundary)
@@ -13063,6 +13065,7 @@ segmentation, triangulation, and visualization.
                     surface_mesh,
                     scalars=scalars,
                     cmap=cmap,
+                    clim=clim,  # Use full material range for consistent colors
                     opacity=opacity,
                     show_edges=True,
                     edge_color='black',
@@ -13113,10 +13116,13 @@ segmentation, triangulation, and visualization.
                 # Also add very transparent faces to show volume structure
                 if show_materials and 'MaterialID' in internal_cells.cell_data:
                     # Show material colors on internal faces (no scalar bar to avoid duplicates)
+                    # *** CRITICAL FIX: Use full material range for consistent colors ***
+                    clim = self._get_full_material_clim()
                     self.tetra_plotter.add_mesh(
                         internal_cells,
                         scalars='MaterialID',
                         cmap=self._get_selected_colormap(),  # Use user-selected colormap
+                        clim=clim,  # Use full material range for consistent colors
                         opacity=0.12,  # Very transparent to see through
                         show_edges=False,
                         show_scalar_bar=False,  # Prevent duplicate scalar bars
@@ -14223,6 +14229,52 @@ segmentation, triangulation, and visualization.
                 pass
                 
         return -1  # Show all materials if can't determine
+
+    def _get_full_material_clim(self) -> tuple:
+        """
+        Get the full range of material IDs for consistent colormap distribution.
+        Returns (min_id, max_id) tuple to use as clim for visualizations.
+        This ensures colors remain consistent when viewing individual materials.
+        """
+        import numpy as np
+        
+        min_id, max_id = 0, 1  # Default fallback
+        
+        # Priority 1: Get range from the full mesh (most accurate)
+        if hasattr(self, 'full_tetra_mesh') and self.full_tetra_mesh is not None:
+            mesh = self.full_tetra_mesh
+            if hasattr(mesh, 'cell_data') and 'MaterialID' in mesh.cell_data:
+                material_ids = mesh.cell_data['MaterialID']
+                if len(material_ids) > 0:
+                    min_id = int(np.min(material_ids))
+                    max_id = int(np.max(material_ids))
+                    logger.debug(f"Material clim from full_tetra_mesh: [{min_id}, {max_id}]")
+                    return (min_id, max_id)
+        
+        # Priority 2: Get range from tetra_materials list
+        if hasattr(self, 'tetra_materials') and self.tetra_materials:
+            attributes = [m.get('attribute', 0) for m in self.tetra_materials]
+            if attributes:
+                min_id = min(attributes)
+                max_id = max(attributes)
+                logger.debug(f"Material clim from tetra_materials: [{min_id}, {max_id}]")
+                return (min_id, max_id)
+        
+        # Priority 3: Get range from tetrahedral_mesh
+        if hasattr(self, 'tetrahedral_mesh') and self.tetrahedral_mesh is not None:
+            mesh = self.tetrahedral_mesh
+            if isinstance(mesh, dict):
+                mesh = mesh.get('pyvista_grid')
+            if mesh and hasattr(mesh, 'cell_data') and 'MaterialID' in mesh.cell_data:
+                material_ids = mesh.cell_data['MaterialID']
+                if len(material_ids) > 0:
+                    min_id = int(np.min(material_ids))
+                    max_id = int(np.max(material_ids))
+                    logger.debug(f"Material clim from tetrahedral_mesh: [{min_id}, {max_id}]")
+                    return (min_id, max_id)
+        
+        logger.debug(f"Material clim fallback: [{min_id}, {max_id}]")
+        return (min_id, max_id)
 
     def _filter_mesh_by_material(self, mesh, material_id: int):
         """
