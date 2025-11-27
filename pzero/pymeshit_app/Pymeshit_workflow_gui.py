@@ -311,6 +311,7 @@ class MeshItWorkflowGUI(QMainWindow):
         
         self.plotters = {}
         self._updating_coordinates = False  # Flag to prevent recursive updates during coordinate editing
+        self._allow_camera_reset = True  # Flag to control camera resets globally
         # Visualization placeholders and state
         self.points = None
         self.hull_points = None
@@ -897,14 +898,19 @@ class MeshItWorkflowGUI(QMainWindow):
         self.material_location_list.blockSignals(False)
 
         self._update_coordinate_editors()
-        self._update_material_visualisation()
+        # Don't call _update_material_visualisation() here - it causes camera resets
+        # Material visualization is handled by highlight functions and _update_single_material_seed
     @Slot(int)
     def _on_material_selected(self,row:int)->None:
-        self._refresh_material_list()
+        # Refresh location list for the newly selected material
+        self._refresh_location_list_only()
+        # Update the highlight to show the selected material's first location
+        self._highlight_selected_material()
 
     @Slot(int)
     def _on_location_selected(self,row:int)->None:
         self._update_coordinate_editors()
+        self._highlight_selected_material()
 
     def _add_material(self, material_type: str = "FORMATION") -> None:
         """Add a new material.
@@ -1147,8 +1153,9 @@ class MeshItWorkflowGUI(QMainWindow):
             if axis=="Z": xyz[2]=value
             self.tetra_materials[m]["locations"][l]=xyz
             self._update_coordinate_editors()
-            self._refresh_material_list()
-            self._update_material_visualisation()
+            
+            # Use lightweight update that only moves the seed point (no full redraw)
+            self._update_single_material_seed(m, l, xyz)
         finally:
             self._updating_coordinates = False
 
@@ -1162,9 +1169,9 @@ class MeshItWorkflowGUI(QMainWindow):
         if not plotter:
             return
 
-        # remove previous seed actors
+        # remove previous seed actors and highlights
         for actor_name in list(plotter.actors.keys()):
-            if actor_name.startswith("mat_seed_"):
+            if actor_name.startswith("mat_seed_") or actor_name.startswith("mat_highlight"):
                 plotter.remove_actor(actor_name)
 
         colours = ['red','blue','green','yellow','purple','cyan','orange','magenta']
@@ -1178,9 +1185,162 @@ class MeshItWorkflowGUI(QMainWindow):
                     name=f"mat_seed_{midx}_{lidx}",
                     render_points_as_spheres=True,
                     point_size=12,
-                    color=colour
+                    color=colour,
+                    reset_camera=False  # Don't reset camera when adding points
                 )
         plotter.render()
+    def _highlight_selected_material(self) -> None:
+        """
+        Highlight the currently selected material and location with a larger, 
+        brighter sphere to show which seed point is active.
+        """
+        plotter = getattr(self, "constraint_plotter", None) or getattr(self, "tetra_plotter", None)
+        if not plotter:
+            return
+        
+        # Remove previous highlights
+        for actor_name in ["mat_highlight", "mat_highlight_sphere"]:
+            if actor_name in plotter.actors:
+                plotter.remove_actor(actor_name)
+        
+        # Get selected material and location
+        mat_idx = self.material_list.currentRow()
+        loc_idx = self.material_location_list.currentRow()
+        
+        if mat_idx < 0 or mat_idx >= len(self.tetra_materials):
+            plotter.render()
+            return
+        
+        mat = self.tetra_materials[mat_idx]
+        if loc_idx < 0 or loc_idx >= len(mat["locations"]):
+            # If no location selected, highlight the first one by default
+            loc_idx = 0
+        
+        if loc_idx >= len(mat["locations"]):
+            plotter.render()
+            return
+        
+        # Add highlight sphere at selected location
+        import pyvista as pv
+        xyz = mat["locations"][loc_idx]
+        cloud = pv.PolyData([xyz])
+        
+        # Use bright yellow/gold color for highlight
+        plotter.add_points(
+            cloud,
+            name="mat_highlight",
+            render_points_as_spheres=True,
+            point_size=25,  # Larger than regular seeds
+            color='gold',
+            opacity=1.0,
+            reset_camera=False  # Don't reset camera
+        )
+        
+        # Also add a wireframe sphere around it for extra visibility
+        # Calculate appropriate radius based on the scene scale
+        # Get bounds from plotter to compute adaptive radius
+        try:
+            bounds = plotter.bounds
+            if bounds:
+                # Use 1% of the diagonal as sphere radius
+                diagonal = ((bounds[1]-bounds[0])**2 + (bounds[3]-bounds[2])**2 + (bounds[5]-bounds[4])**2)**0.5
+                sphere_radius = max(diagonal * 0.01, 1.0)  # At least 1 unit
+            else:
+                sphere_radius = 10  # Fallback
+        except:
+            sphere_radius = 10  # Fallback
+        
+        sphere = pv.Sphere(radius=sphere_radius, center=xyz)
+        plotter.add_mesh(
+            sphere,
+            name="mat_highlight_sphere",
+            style='wireframe',
+            color='yellow',
+            line_width=3,
+            opacity=0.6,
+            reset_camera=False  # CRITICAL: Don't reset camera when adding mesh
+        )
+        
+        # Render without auto-reset
+        if hasattr(plotter, 'render'):
+            plotter.render()
+        logger.info(f"Highlighted material {mat_idx} ('{mat['name']}'), location {loc_idx} at {xyz}")
+    
+    def _update_single_material_seed(self, mat_idx: int, loc_idx: int, new_xyz: list) -> None:
+        """
+        Lightweight update that only moves a single seed point without redrawing everything.
+        This makes slider movement smooth and prevents camera resets.
+        """
+        plotter = getattr(self, "constraint_plotter", None) or getattr(self, "tetra_plotter", None)
+        if not plotter:
+            return
+        
+        import pyvista as pv
+        
+        # Update only the specific seed actor
+        actor_name = f"mat_seed_{mat_idx}_{loc_idx}"
+        
+        # Remove old seed actor
+        if actor_name in plotter.actors:
+            plotter.remove_actor(actor_name)
+        
+        # Add updated seed actor
+        colours = ['red','blue','green','yellow','purple','cyan','orange','magenta']
+        colour = colours[mat_idx % len(colours)]
+        cloud = pv.PolyData([new_xyz])
+        plotter.add_points(
+            cloud,
+            name=actor_name,
+            render_points_as_spheres=True,
+            point_size=12,
+            color=colour,
+            reset_camera=False  # Don't reset camera
+        )
+        
+        # Update highlight to follow the moved seed
+        # Remove old highlights
+        for highlight_name in ["mat_highlight", "mat_highlight_sphere"]:
+            if highlight_name in plotter.actors:
+                plotter.remove_actor(highlight_name)
+        
+        # Add new highlight at updated position
+        highlight_cloud = pv.PolyData([new_xyz])
+        plotter.add_points(
+            highlight_cloud,
+            name="mat_highlight",
+            render_points_as_spheres=True,
+            point_size=25,
+            color='gold',
+            opacity=1.0,
+            reset_camera=False  # Don't reset camera
+        )
+        
+        # Add wireframe sphere with adaptive radius
+        try:
+            bounds = plotter.bounds
+            if bounds:
+                diagonal = ((bounds[1]-bounds[0])**2 + (bounds[3]-bounds[2])**2 + (bounds[5]-bounds[4])**2)**0.5
+                sphere_radius = max(diagonal * 0.01, 1.0)
+            else:
+                sphere_radius = 10
+        except:
+            sphere_radius = 10
+        
+        sphere = pv.Sphere(radius=sphere_radius, center=new_xyz)
+        plotter.add_mesh(
+            sphere,
+            name="mat_highlight_sphere",
+            style='wireframe',
+            color='yellow',
+            line_width=3,
+            opacity=0.6,
+            reset_camera=False  # CRITICAL: Don't reset camera when adding mesh
+        )
+        
+        # Render without resetting camera
+        if hasattr(plotter, 'render'):
+            plotter.render()
+    
     def _create_menu_bar(self):
         """Create the menu bar"""
         menu_bar = self.menuBar()
@@ -10638,7 +10798,7 @@ segmentation, triangulation, and visualization.
             if hasattr(self, 'tetrahedral_mesh') and self.tetrahedral_mesh:
                 self._visualize_tetrahedral_mesh_in_tetra_tab()
             elif hasattr(self, 'tetra_selected_surfaces') and self.tetra_selected_surfaces:
-                self._visualize_loaded_surfaces()
+                self._visualize_loaded_surfaces(reset_camera=False)  # Don't reset camera when switching tabs
             else:
                 if hasattr(self, 'tetra_plotter') and self.tetra_plotter:
                     self.tetra_plotter.clear()
@@ -10648,7 +10808,6 @@ segmentation, triangulation, and visualization.
     # ... rest of the class methods (_get_next_color, _create_main_layout, etc.) ...
 
 
-    
     
     
     
@@ -12514,7 +12673,7 @@ segmentation, triangulation, and visualization.
             if loaded_count > 0:
                 self.generate_tetra_mesh_btn.setEnabled(True)
                 self._auto_classify_surfaces()  # Auto-classify the loaded surfaces
-                self._visualize_loaded_surfaces()  # Show them in 3D viewer
+                self._visualize_loaded_surfaces(reset_camera=True)  # Show them in 3D viewer with initial camera reset
                 
                 QMessageBox.information(
                     self, "Conforming Meshes Loaded", 
@@ -12533,6 +12692,7 @@ segmentation, triangulation, and visualization.
         except Exception as e:
             logger.error(f"Error loading conforming meshes: {e}")
             QMessageBox.critical(self, "Load Error", f"Failed to load conforming meshes: {str(e)}")
+    
     def _get_selected_surfaces_from_conforming_tree(self):
         """Get selected surface indices from Pre-Tetra tab's surface tree"""
         selected_indices = []
@@ -12794,8 +12954,12 @@ segmentation, triangulation, and visualization.
             logger.error(f"Failed to extract fault materials from TetGen output: {e}")
             import traceback
             traceback.print_exc()
-    def _visualize_loaded_surfaces(self):
-        """Visualize the loaded constrained surfaces in the 3D viewer"""
+    def _visualize_loaded_surfaces(self, reset_camera=False):
+        """Visualize the loaded constrained surfaces in the 3D viewer
+        
+        Args:
+            reset_camera: If True, reset camera after visualization. Default False to preserve user's view.
+        """
         if not self.tetra_plotter:
             return
             
@@ -12839,10 +13003,14 @@ segmentation, triangulation, and visualization.
                     label=surface_data['name']
                 )
             
-            # Add legend and reset camera
+            # Add legend and optionally reset camera
             if self.tetra_selected_surfaces:
                 self.tetra_plotter.add_legend()
-                self.tetra_plotter.reset_camera()
+                # Only reset camera if explicitly requested AND globally allowed
+                if reset_camera and self._allow_camera_reset:
+                    self.tetra_plotter.reset_camera()
+                    # After first reset, disable further resets to preserve user's view
+                    self._allow_camera_reset = False
             else:
                 self.tetra_plotter.add_text("No surfaces loaded", position='upper_edge', color='white')
             
@@ -12852,6 +13020,7 @@ segmentation, triangulation, and visualization.
         except Exception as e:
             logger.error(f"Error visualizing surfaces: {e}")
             self.tetra_plotter.add_text(f"Visualization error: {str(e)}", position='upper_edge', color='red')
+
 
     def _toggle_tetra_wireframe(self, enabled):
         """Toggle wireframe display for loaded surfaces and tetrahedral mesh"""
@@ -15735,6 +15904,11 @@ segmentation, triangulation, and visualization.
             self._refresh_material_list()
             if hasattr(self, 'material_list') and self.material_list.count() > 0:
                 self.material_list.setCurrentRow(0)
+            
+            # Now visualize all materials with ONE camera reset
+            if self._allow_camera_reset:
+                self._update_material_visualisation()
+                self._allow_camera_reset = False  # Lock camera after this
 
             QMessageBox.information(
                 self, "Auto Materials Complete",
@@ -15749,6 +15923,7 @@ segmentation, triangulation, and visualization.
         except Exception as e:
             logger.error(f"Auto material placement failed: {e}", exc_info=True)
             QMessageBox.critical(self, "Auto Materials Error", f"Failed to automatically place materials:\n{str(e)}")
+
 
     def _estimate_surface_normal(self, vertices):
         """Estimate surface normal using cross product of two edge vectors."""
