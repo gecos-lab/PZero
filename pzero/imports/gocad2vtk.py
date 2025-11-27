@@ -808,7 +808,9 @@ def gocad2vtk_section(
         # case for 2nd quadrant
         self.xsect_coll.set_uid_origin_y(x_section_uid, max(append_points_all[:, 1]))
         # self.xsect_coll.set_uid_end_y(x_section_uid, min(append_points_all[:, 1]))
-    self.xsect_coll.set_length(x_section_uid)  # THIS MUST BE REIMPLEMENTED _____________________________
+    self.xsect_coll.set_length(
+        x_section_uid
+    )  # THIS MUST BE REIMPLEMENTED _____________________________
     height_buffer = (max(append_points_all[:, 2]) - min(append_points_all[:, 2])) * 0.05
     self.xsect_coll.set_uid_top(
         x_section_uid, max(append_points_all[:, 2]) + height_buffer
