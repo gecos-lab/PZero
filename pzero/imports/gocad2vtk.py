@@ -774,12 +774,12 @@ def gocad2vtk_section(
         )
         origin = (
             (
-                self.xsect_coll.get_uid_base_x(x_section_uid)
+                self.xsect_coll.get_uid_origin_x(x_section_uid)
                 + self.xsect_coll.get_uid_end_x(x_section_uid)
             )
             / 2,
             (
-                self.xsect_coll.get_uid_base_y(x_section_uid)
+                self.xsect_coll.get_uid_origin_y(x_section_uid)
                 + self.xsect_coll.get_uid_end_y(x_section_uid)
             )
             / 2,
@@ -810,15 +810,15 @@ def gocad2vtk_section(
         vtkappend_all.AddInputData(self.geol_coll.get_uid_vtk_obj(uid))
     vtkappend_all.Update()
     append_points_all = WrapDataObject(vtkappend_all.GetOutput()).Points
-    self.xsect_coll.set_uid_base_x(x_section_uid, min(append_points_all[:, 0]))
+    self.xsect_coll.set_uid_origin_x(x_section_uid, min(append_points_all[:, 0]))
     self.xsect_coll.set_uid_end_x(x_section_uid, max(append_points_all[:, 0]))
     if azimuth <= 90:
         # case for 1st quadrant
-        self.xsect_coll.set_uid_base_y(x_section_uid, min(append_points_all[:, 1]))
+        self.xsect_coll.set_uid_origin_y(x_section_uid, min(append_points_all[:, 1]))
         self.xsect_coll.set_uid_end_y(x_section_uid, max(append_points_all[:, 1]))
     else:
         # case for 2nd quadrant
-        self.xsect_coll.set_uid_base_y(x_section_uid, max(append_points_all[:, 1]))
+        self.xsect_coll.set_uid_origin_y(x_section_uid, max(append_points_all[:, 1]))
         self.xsect_coll.set_uid_end_y(x_section_uid, min(append_points_all[:, 1]))
     self.xsect_coll.set_length(x_section_uid)
     height_buffer = (max(append_points_all[:, 2]) - min(append_points_all[:, 2])) * 0.05

@@ -37,7 +37,7 @@ from .AbstractCollection import BaseCollection
 
 
 def section_from_azimuth(self, vector):
-    """Create cross section from one point and azimuth."""
+    """Create a cross-section from one point and azimuth."""
     section_dict = deepcopy(self.parent.xsect_coll.entity_dict)
     self.plotter.untrack_click_position(side="left")
 
@@ -50,8 +50,8 @@ def section_from_azimuth(self, vector):
             "QLabel",
         ],
         "name": ["Insert Xsection name", "new_section", "QLineEdit"],
-        "base_x": ["Insert origin X coord", vector.p1[0], "QLineEdit"],
-        "base_y": ["Insert origin Y coord", vector.p1[1], "QLineEdit"],
+        "origin_x": ["Insert origin X coord", vector.p1[0], "QLineEdit"],
+        "origin_y": ["Insert origin Y coord", vector.p1[1], "QLineEdit"],
         "end_x": ["Insert end X coord", vector.p2[0], "QLineEdit"],
         "end_y": ["Insert end Y coord", vector.p2[1], "QLineEdit"],
         "azimuth": ["Insert azimuth", vector.azimuth, "QLineEdit"],
@@ -92,7 +92,7 @@ def section_from_azimuth(self, vector):
     section_dict.pop("multiple", None)
     section_dict.pop("num_xs", None)
     # Define other (redundant) section parameters.
-    section_dict["base_z"] = section_dict["bottom"]
+    section_dict["origin_z"] = section_dict["bottom"]
     section_dict["end_z"] = section_dict["top"]
     # Calculate normals.
     normals = dip_directions2normals(
@@ -133,9 +133,9 @@ def section_from_azimuth(self, vector):
             frame = self.parent.xsect_coll.get_uid_vtk_obj(uid)
             homo_points = frame.get_homo_points()
             new_points = np_matmul(homo_points, trans_mat)[:, :-1]
-            section_dict["base_x"] = new_points[0, 0]
-            section_dict["base_y"] = new_points[0, 1]
-            section_dict["base_z"] = new_points[0, 2]
+            section_dict["origin_x"] = new_points[0, 0]
+            section_dict["origin_y"] = new_points[0, 1]
+            section_dict["origin_z"] = new_points[0, 2]
             section_dict["end_x"] = new_points[3, 0]
             section_dict["end_y"] = new_points[3, 1]
             section_dict["end_z"] = new_points[3, 2]
@@ -166,8 +166,8 @@ def sections_from_file(self):
     section_dict = deepcopy(self.parent.xsect_coll.entity_dict)
     section_dict_updt = {
         "name": "",
-        "base_x": 0,
-        "base_y": 0,
+        "origin_x": 0,
+        "origin_y": 0,
         "end_x": 0,
         "end_y": 0,
         "dip": 90.0,
@@ -206,15 +206,15 @@ def sections_from_file(self):
                         section_dict["name"] = line_data[1]
                     elif "VRTX 1" in line:
                         line_data = line.strip().split()
-                        section_dict["base_x"] = float(line_data[2])
-                        section_dict["base_y"] = float(line_data[3])
+                        section_dict["origin_x"] = float(line_data[2])
+                        section_dict["origin_y"] = float(line_data[3])
                     elif "VRTX 2" in line:
                         line_data = line.strip().split()
                         section_dict["end_x"] = float(line_data[2])
                         section_dict["end_y"] = float(line_data[3])
                     elif line.strip() == "END":
                         # When the END line is reached create a section
-                        section_dict["base_z"] = top_bottom["bottom"]
+                        section_dict["origin_z"] = top_bottom["bottom"]
                         section_dict["bottom"] = top_bottom["bottom"]
                         section_dict["end_z"] = top_bottom["top"]
                         section_dict["top"] = top_bottom["top"]
@@ -232,13 +232,13 @@ def sections_from_file(self):
             unique_traces = pd_unique(pd_df["Name"])
             for trace in unique_traces:
                 section_dict["name"] = trace
-                section_dict["base_x"] = pd_df.loc[
+                section_dict["origin_x"] = pd_df.loc[
                     (pd_df["Name"] == trace) & (pd_df["Vertex Index"] == 1)
                 ]["x"].values
-                section_dict["base_y"] = pd_df.loc[
+                section_dict["origin_y"] = pd_df.loc[
                     (pd_df["Name"] == trace) & (pd_df["Vertex Index"] == 1)
                 ]["y"].values
-                section_dict["base_z"] = pd_df.loc[
+                section_dict["origin_z"] = pd_df.loc[
                     (pd_df["Name"] == trace) & (pd_df["Vertex Index"] == 1)
                 ]["y"].values
                 section_dict["end_x"] = pd_df.loc[
@@ -247,7 +247,7 @@ def sections_from_file(self):
                 section_dict["end_y"] = pd_df.loc[
                     (pd_df["Name"] == trace) & (pd_df["Vertex Index"] == 2)
                 ]["y"].values
-                section_dict["base_z"] = top_bottom["bottom"]
+                section_dict["origin_z"] = top_bottom["bottom"]
                 section_dict["bottom"] = top_bottom["bottom"]
                 section_dict["end_z"] = top_bottom["top"]
                 section_dict["top"] = top_bottom["top"]
@@ -261,11 +261,11 @@ def sections_from_file(self):
             pd_df = pd_read_csv(file, sep=sep)
             for index, sec in pd_df.iterrows():
                 section_dict["name"] = sec["name"]
-                section_dict["base_x"] = sec["base_x"]
-                section_dict["base_y"] = sec["base_y"]
+                section_dict["origin_x"] = sec["origin_x"]
+                section_dict["origin_y"] = sec["origin_y"]
                 section_dict["end_x"] = sec["end_x"]
                 section_dict["end_y"] = sec["end_y"]
-                section_dict["base_z"] = top_bottom["bottom"]
+                section_dict["origin_z"] = top_bottom["bottom"]
                 section_dict["bottom"] = top_bottom["bottom"]
                 section_dict["end_z"] = top_bottom["top"]
                 section_dict["top"] = top_bottom["top"]
@@ -286,9 +286,9 @@ class XSectionCollection(BaseCollection):
             "uid": "",
             "name": "undef",
             "scenario": "undef",
-            "base_x": 0.0,
-            "base_y": 0.0,
-            "base_z": 0.0,
+            "origin_x": 0.0,
+            "origin_y": 0.0,
+            "origin_z": 0.0,
             "end_x": 0.0,
             "end_y": 0.0,
             "end_z": 0.0,
@@ -308,9 +308,9 @@ class XSectionCollection(BaseCollection):
             "uid": str,
             "name": str,
             "scenario": "undef",
-            "base_x": float,
-            "base_y": float,
-            "base_z": float,
+            "origin_x": float,
+            "origin_y": float,
+            "origin_z": float,
             "end_x": float,
             "end_y": float,
             "end_z": float,
@@ -397,29 +397,29 @@ class XSectionCollection(BaseCollection):
 
     # =================================== Additional methods ===========================================
 
-    def get_uid_base_x(self, uid=None):
+    def get_uid_origin_x(self, uid=None):
         """Get value(s) stored in dataframe (as pointer) from uid."""
-        return self.df.loc[self.df["uid"] == uid, "base_x"].values[0]
+        return self.df.loc[self.df["uid"] == uid, "origin_x"].values[0]
 
-    def set_uid_base_x(self, uid=None, base_x=None):
+    def set_uid_origin_x(self, uid=None, origin_x=None):
         """Set value(s) stored in dataframe (as pointer) from uid."""
-        self.df.loc[self.df["uid"] == uid, "base_x"] = base_x
+        self.df.loc[self.df["uid"] == uid, "origin_x"] = origin_x
 
-    def get_uid_base_y(self, uid=None):
+    def get_uid_origin_y(self, uid=None):
         """Get value(s) stored in dataframe (as pointer) from uid."""
-        return self.df.loc[self.df["uid"] == uid, "base_y"].values[0]
+        return self.df.loc[self.df["uid"] == uid, "origin_y"].values[0]
 
-    def set_uid_base_y(self, uid=None, base_y=None):
+    def set_uid_origin_y(self, uid=None, origin_y=None):
         """Set value(s) stored in dataframe (as pointer) from uid."""
-        self.df.loc[self.df["uid"] == uid, "base_y"] = base_y
+        self.df.loc[self.df["uid"] == uid, "origin_y"] = origin_y
 
-    def get_uid_base_z(self, uid=None):
+    def get_uid_origin_z(self, uid=None):
         """Get value(s) stored in dataframe (as pointer) from uid."""
-        return self.df.loc[self.df["uid"] == uid, "base_z"].values[0]
+        return self.df.loc[self.df["uid"] == uid, "origin_z"].values[0]
 
-    def set_uid_base_z(self, uid=None, base_z=None):
+    def set_uid_origin_z(self, uid=None, origin_z=None):
         """Set value(s) stored in dataframe (as pointer) from uid."""
-        self.df.loc[self.df["uid"] == uid, "base_z"] = base_z
+        self.df.loc[self.df["uid"] == uid, "origin_z"] = origin_z
 
     def get_uid_end_x(self, uid=None):
         """Get value(s) stored in dataframe (as pointer) from uid."""
@@ -541,9 +541,9 @@ class XSectionCollection(BaseCollection):
     ):
         """Write parameters in Xsections Pandas dataframe"""
         self.df.loc[self.df["uid"] == uid, "name"] = name
-        self.df.loc[self.df["uid"] == uid, "base_x"] = base_point[0]
-        self.df.loc[self.df["uid"] == uid, "base_y"] = base_point[1]
-        self.df.loc[self.df["uid"] == uid, "base_z"] = base_point[2]
+        self.df.loc[self.df["uid"] == uid, "origin_x"] = base_point[0]
+        self.df.loc[self.df["uid"] == uid, "origin_y"] = base_point[1]
+        self.df.loc[self.df["uid"] == uid, "origin_z"] = base_point[2]
         self.df.loc[self.df["uid"] == uid, "end_x"] = end_point[0]
         self.df.loc[self.df["uid"] == uid, "end_y"] = end_point[1]
         self.df.loc[self.df["uid"] == uid, "end_z"] = end_point[2]
@@ -564,24 +564,24 @@ class XSectionCollection(BaseCollection):
         Should work for a single W value or for an array, in which case should return X, Y as arrays.
         """
         azimuth = self.df.loc[self.df["uid"] == section_uid, "azimuth"].values[0]
-        base_x = self.df.loc[self.df["uid"] == section_uid, "base_x"].values[0]
-        base_y = self.df.loc[self.df["uid"] == section_uid, "base_y"].values[0]
-        X = W * np_sin(azimuth * np_pi / 180) + base_x
-        Y = W * np_cos(azimuth * np_pi / 180) + base_y
+        origin_x = self.df.loc[self.df["uid"] == section_uid, "origin_x"].values[0]
+        origin_y = self.df.loc[self.df["uid"] == section_uid, "origin_y"].values[0]
+        X = W * np_sin(azimuth * np_pi / 180) + origin_x
+        Y = W * np_cos(azimuth * np_pi / 180) + origin_y
         return X, Y
 
     def get_W_from_XY(self, section_uid=None, X=None, Y=None):
         """Gets W coordinate (distance along the Xsection horizontal axis) from X, Y coordinates.
         Should work for a single W value or for an array, in which case should return X, Y as arrays.
         """
-        base_x = self.df.loc[self.df["uid"] == section_uid, "base_x"].values[0]
-        base_y = self.df.loc[self.df["uid"] == section_uid, "base_y"].values[0]
+        origin_x = self.df.loc[self.df["uid"] == section_uid, "origin_x"].values[0]
+        origin_y = self.df.loc[self.df["uid"] == section_uid, "origin_y"].values[0]
         end_x = self.df.loc[self.df["uid"] == section_uid, "end_x"].values[0]
         end_y = self.df.loc[self.df["uid"] == section_uid, "end_y"].values[0]
         sense = np_sign(
-            (X - base_x) * (end_x - base_x) + (Y - base_y) * (end_y - base_y)
+            (X - origin_x) * (end_x - origin_x) + (Y - origin_y) * (end_y - origin_y)
         )
-        W = np_sqrt((X - base_x) ** 2 + (Y - base_y) ** 2) * sense
+        W = np_sqrt((X - origin_x) ** 2 + (Y - origin_y) ** 2) * sense
         return W
 
     def get_deltaXY_from_deltaW(self, section_uid=None, deltaW=None):
@@ -612,13 +612,13 @@ class XSectionCollection(BaseCollection):
             return X[:, 0], X[:, 1], X[:, 2]
 
     def set_geometry(self, uid=None):
-        """ "Given all parameters, sets the vtkPlane origin and normal properties, and builds the frame used for
+        """Given all parameters, sets the vtkPlane origin and normal properties, and builds the frame used for
         visualization"""
 
         base_point = [
-            self.df.loc[self.df["uid"] == uid, "base_x"].values[0],
-            self.df.loc[self.df["uid"] == uid, "base_y"].values[0],
-            self.df.loc[self.df["uid"] == uid, "base_z"].values[0],
+            self.df.loc[self.df["uid"] == uid, "origin_x"].values[0],
+            self.df.loc[self.df["uid"] == uid, "origin_y"].values[0],
+            self.df.loc[self.df["uid"] == uid, "origin_z"].values[0],
         ]
         end_point = [
             self.df.loc[self.df["uid"] == uid, "end_x"].values[0],
@@ -681,12 +681,12 @@ class XSectionCollection(BaseCollection):
     def set_length(self, uid=None):
         self.df.loc[self.df["uid"] == uid, "length"] = np_sqrt(
             (
-                self.df.loc[self.df["uid"] == uid, "base_x"]
+                self.df.loc[self.df["uid"] == uid, "origin_x"]
                 - self.df.loc[self.df["uid"] == uid, "end_x"]
             )
             ** 2
             + (
-                self.df.loc[self.df["uid"] == uid, "base_y"]
+                self.df.loc[self.df["uid"] == uid, "origin_y"]
                 - self.df.loc[self.df["uid"] == uid, "end_y"]
             )
             ** 2

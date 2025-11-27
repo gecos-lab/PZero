@@ -1689,8 +1689,8 @@ def project_2_xs(self):
         )
         return
     # Get cross section start and end points (float64 needed for "t" afterwards).
-    xa = np_float64(self.xsect_coll.get_uid_base_x(xs_uid))
-    ya = np_float64(self.xsect_coll.get_uid_base_y(xs_uid))
+    xa = np_float64(self.xsect_coll.get_uid_origin_x(xs_uid))
+    ya = np_float64(self.xsect_coll.get_uid_origin_y(xs_uid))
     xb = np_float64(self.xsect_coll.get_uid_end_x(xs_uid))
     yb = np_float64(self.xsect_coll.get_uid_end_y(xs_uid))
 

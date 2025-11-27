@@ -1715,6 +1715,27 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 # reindex new_dom_coll_df to catch any problem with non-consecutive indices
                 new_xsect_coll_df.reset_index(drop=True, inplace=True)
                 if not new_xsect_coll_df.empty:
+                    if "base_x" in new_xsect_coll_df.columns:
+                        new_xsect_coll_df.rename(
+                            columns={"base_x": "origin_x"}, inplace=True
+                        )
+                        self.print_terminal(
+                            "column base_x renamed as origin_x in x-section table"
+                        )
+                    if "base_y" in new_xsect_coll_df.columns:
+                        new_xsect_coll_df.rename(
+                            columns={"base_y": "origin_y"}, inplace=True
+                        )
+                        self.print_terminal(
+                            "column base_y renamed as origin_y in x-section table"
+                        )
+                    if "base_z" in new_xsect_coll_df.columns:
+                        new_xsect_coll_df.rename(
+                            columns={"base_z": "origin_z"}, inplace=True
+                        )
+                        self.print_terminal(
+                            "column base_z renamed as origin_z in x-section table"
+                        )
                     # keep this workaround until x-section table is simplified by removing redundant columns ______________
                     if not "width" in new_xsect_coll_df:
                         new_xsect_coll_df.insert(
