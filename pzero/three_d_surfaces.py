@@ -1688,11 +1688,18 @@ def project_2_xs(self):
             "Plunge too close to being parallel to XSection (angle < 10°)"
         )
         return
-    # Get cross section start and end points (float64 needed for "t" afterwards).
-    xa = np_float64(self.xsect_coll.get_uid_origin_x(xs_uid))
-    ya = np_float64(self.xsect_coll.get_uid_origin_y(xs_uid))
-    xb = np_float64(self.xsect_coll.get_uid_end_x(xs_uid))
-    yb = np_float64(self.xsect_coll.get_uid_end_y(xs_uid))
+    # # Get cross section start and end points (float64 needed for "t" afterwards).
+    # xa = np_float64(self.xsect_coll.get_uid_origin_x(xs_uid))
+    # ya = np_float64(self.xsect_coll.get_uid_origin_y(xs_uid))
+    # xb = np_float64(self.xsect_coll.get_uid_end_x(xs_uid))
+    # yb = np_float64(self.xsect_coll.get_uid_end_y(xs_uid))
+    # Get cross section origin and normals (float64 needed for "t" afterwards).
+    ox = np_float64(self.xsect_coll.get_uid_origin_x(xs_uid))
+    oy = np_float64(self.xsect_coll.get_uid_origin_y(xs_uid))
+    oz = np_float64(self.xsect_coll.get_uid_origin_z(xs_uid))
+    nx = np_float64(self.xsect_coll.get_uid_normal_x(xs_uid))
+    ny = np_float64(self.xsect_coll.get_uid_normal_y(xs_uid))
+    nz = np_float64(self.xsect_coll.get_uid_normal_z(xs_uid))
 
     # Calculate projection direction cosines (float64 needed for "t" afterwards).
     alpha = np_float64(
@@ -1736,9 +1743,10 @@ def project_2_xs(self):
         xo = out_vtk.points_X.astype(np_float64)
         yo = out_vtk.points_Y.astype(np_float64)
         zo = out_vtk.points_Z.astype(np_float64)
-        t = (-xo * (yb - ya) - yo * (xa - xb) - ya * xb + yb * xa) / (
-            alpha * (yb - ya) + beta * (xa - xb)
-        )
+        # t = (-xo * (yb - ya) - yo * (xa - xb) - ya * xb + yb * xa) / (
+        #     alpha * (yb - ya) + beta * (xa - xb)
+        # )
+        t = (nx * (ox - xo) + ny * (oy - yo) + nz * (oz - zo)) / (nx * alpha + ny * beta + nz * gamma)
 
         out_vtk.points_X[:] = (xo + alpha * t).astype(np_float32)
         out_vtk.points_Y[:] = (yo + beta * t).astype(np_float32)

@@ -52,8 +52,8 @@ def section_from_azimuth(self, vector):
         "name": ["Insert Xsection name", "new_section", "QLineEdit"],
         "origin_x": ["Insert origin X coord", vector.p1[0], "QLineEdit"],
         "origin_y": ["Insert origin Y coord", vector.p1[1], "QLineEdit"],
-        "end_x": ["Insert end X coord", vector.p2[0], "QLineEdit"],
-        "end_y": ["Insert end Y coord", vector.p2[1], "QLineEdit"],
+        # "end_x": ["Insert end X coord", vector.p2[0], "QLineEdit"],
+        # "end_y": ["Insert end Y coord", vector.p2[1], "QLineEdit"],
         "azimuth": ["Insert azimuth", vector.azimuth, "QLineEdit"],
         "dip": ["Insert dip", 90.0, "QLineEdit"],
         "length": ["Insert length", vector.length, "QLineEdit"],
@@ -136,9 +136,9 @@ def section_from_azimuth(self, vector):
             section_dict["origin_x"] = new_points[0, 0]
             section_dict["origin_y"] = new_points[0, 1]
             section_dict["origin_z"] = new_points[0, 2]
-            section_dict["end_x"] = new_points[3, 0]
-            section_dict["end_y"] = new_points[3, 1]
-            section_dict["end_z"] = new_points[3, 2]
+            # section_dict["end_x"] = new_points[3, 0]
+            # section_dict["end_y"] = new_points[3, 1]
+            # section_dict["end_z"] = new_points[3, 2]
             section_dict["bottom"] = new_points[0, 2]
             section_dict["top"] = new_points[3, 2]
             section_dict["uid"] = None
@@ -147,132 +147,133 @@ def section_from_azimuth(self, vector):
     self.enable_actions()
 
 
-def sections_from_file(self):
-    """Create cross section from file."""
-    # Read GOCAD ASCII (.pl) or ASCII files (.dat) to extract the data necessary to create a section (or
-    # multiple sections). The necessary keys are defined in the section_dict_updt dict.
-    # For GOCAD ASCII the file is parsed for every line searching for key words that define the line containing the data.
-    # For normal ASCII files exported from MOVE the data is registered as a csv and so the pd_read_csv function can be
-    # used. The separator is automatically extracted using csv.Sniffer() (auto_sep helper function).
-    # For both importing methods the user must define the top and bottom values of the section.
-
-    # section_from_points IS MISSING! BUT IT IS NOT NECESSARY. SIMILAR FUNCTIONALITY
-    # IS ALREADY PRESENT IN section_from_azimuth
-    # USE THAT OR EXTRACT "FROM POINTS" IN A SEPARATE FUNCTION
-    # OR CREATE A METHOD TO FILL MISSING PARAMETERS IN THE COLLECTION??
-
-    from os.path import splitext
-
-    section_dict = deepcopy(self.parent.xsect_coll.entity_dict)
-    section_dict_updt = {
-        "name": "",
-        "origin_x": 0,
-        "origin_y": 0,
-        "end_x": 0,
-        "end_y": 0,
-        "dip": 90.0,
-        "top": 0,
-        "bottom": 0,
-    }
-    files = open_file_dialog(
-        parent=self,
-        caption="Import section traces",
-        filter="GOCAD ASCII (*.*);;ASCII (*.dat);;CSV (*.csv)",
-        multiple=True,
-    )
-    # return file and extension list
-    # This could be implemented automatically in open_file_dialog
-    name, extension = splitext(files[0])
-    section_dict_in = {
-        "warning": [
-            "XSection from file",
-            "Build new XSection from a GOCAD ASCII or simple ASCII file.\nChoose the top and bottom limit of the sections to continue",
-            "QLabel",
-        ],
-        "top": ["Insert top", 0.0, "QLineEdit"],
-        "bottom": ["Insert bottom", 0.0, "QLineEdit"],
-    }
-    for file in files:
-        # Check the file type and import accordingly
-        # If no valid type is found, do nothing.
-        if extension == ".pl":
-            top_bottom = general_input_dialog(
-                title="XSection from files", input_dict=section_dict_in
-            )
-            with open(file, "r") as IN:
-                for line in IN:
-                    if "name:" in line:
-                        line_data = line.strip().split(":")
-                        section_dict["name"] = line_data[1]
-                    elif "VRTX 1" in line:
-                        line_data = line.strip().split()
-                        section_dict["origin_x"] = float(line_data[2])
-                        section_dict["origin_y"] = float(line_data[3])
-                    elif "VRTX 2" in line:
-                        line_data = line.strip().split()
-                        section_dict["end_x"] = float(line_data[2])
-                        section_dict["end_y"] = float(line_data[3])
-                    elif line.strip() == "END":
-                        # When the END line is reached create a section
-                        section_dict["origin_z"] = top_bottom["bottom"]
-                        section_dict["bottom"] = top_bottom["bottom"]
-                        section_dict["end_z"] = top_bottom["top"]
-                        section_dict["top"] = top_bottom["top"]
-                        # UPDATE OTHER PARAMETERS BEFORE CREATING SECTION _______________________________________
-                        uid = self.parent.xsect_coll.add_entity_from_dict(
-                            entity_dict=section_dict
-                        )
-
-        elif extension == ".dat":
-            top_bottom = general_input_dialog(
-                title="XSection from files", input_dict=section_dict_in
-            )
-            sep = auto_sep(file)
-            pd_df = pd_read_csv(file, sep=sep)
-            unique_traces = pd_unique(pd_df["Name"])
-            for trace in unique_traces:
-                section_dict["name"] = trace
-                section_dict["origin_x"] = pd_df.loc[
-                    (pd_df["Name"] == trace) & (pd_df["Vertex Index"] == 1)
-                ]["x"].values
-                section_dict["origin_y"] = pd_df.loc[
-                    (pd_df["Name"] == trace) & (pd_df["Vertex Index"] == 1)
-                ]["y"].values
-                section_dict["origin_z"] = pd_df.loc[
-                    (pd_df["Name"] == trace) & (pd_df["Vertex Index"] == 1)
-                ]["y"].values
-                section_dict["end_x"] = pd_df.loc[
-                    (pd_df["Name"] == trace) & (pd_df["Vertex Index"] == 2)
-                ]["x"].values
-                section_dict["end_y"] = pd_df.loc[
-                    (pd_df["Name"] == trace) & (pd_df["Vertex Index"] == 2)
-                ]["y"].values
-                section_dict["origin_z"] = top_bottom["bottom"]
-                section_dict["bottom"] = top_bottom["bottom"]
-                section_dict["end_z"] = top_bottom["top"]
-                section_dict["top"] = top_bottom["top"]
-                # UPDATE OTHER PARAMETERS BEFORE CREATING SECTION _______________________________________
-                uid = self.parent.xsect_coll.add_entity_from_dict(
-                    entity_dict=section_dict
-                )
-
-        elif extension == ".csv":
-            sep = auto_sep(file)
-            pd_df = pd_read_csv(file, sep=sep)
-            for index, sec in pd_df.iterrows():
-                section_dict["name"] = sec["name"]
-                section_dict["origin_x"] = sec["origin_x"]
-                section_dict["origin_y"] = sec["origin_y"]
-                section_dict["end_x"] = sec["end_x"]
-                section_dict["end_y"] = sec["end_y"]
-                section_dict["origin_z"] = top_bottom["bottom"]
-                section_dict["bottom"] = top_bottom["bottom"]
-                section_dict["end_z"] = top_bottom["top"]
-                section_dict["top"] = top_bottom["top"]
-                # UPDATE OTHER PARAMETERS BEFORE CREATING SECTION _______________________________________
-                uid = self.parent.xsect_coll.add_entity_from_dict(
-                    entity_dict=section_dict
-                )
+# def sections_from_file(self):
+#     """Create cross section from file."""
+#     # Read GOCAD ASCII (.pl) or ASCII files (.dat) to extract the data necessary to create a section (or
+#     # multiple sections). The necessary keys are defined in the section_dict_updt dict.
+#     # For GOCAD ASCII the file is parsed for every line searching for key words that define the line containing the data.
+#     # For normal ASCII files exported from MOVE the data is registered as a csv and so the pd_read_csv function can be
+#     # used. The separator is automatically extracted using csv.Sniffer() (auto_sep helper function).
+#     # For both importing methods the user must define the top and bottom values of the section.
+#
+#     # section_from_points IS MISSING! BUT IT IS NOT NECESSARY. SIMILAR FUNCTIONALITY
+#     # IS ALREADY PRESENT IN section_from_azimuth
+#     # USE THAT OR EXTRACT "FROM POINTS" IN A SEPARATE FUNCTION
+#     # OR CREATE A METHOD TO FILL MISSING PARAMETERS IN THE COLLECTION??
+#
+#     from os.path import splitext
+#
+#     section_dict = deepcopy(self.parent.xsect_coll.entity_dict)
+#     section_dict_updt = {
+#         "name": "",
+#         "origin_x": 0,
+#         "origin_y": 0,
+#         # "end_x": 0,
+#         # "end_y": 0,
+#         "dip": 90.0,
+#         "top": 0,
+#         "bottom": 0,
+#     }
+#     files = open_file_dialog(
+#         parent=self,
+#         caption="Import section traces",
+#         filter="GOCAD ASCII (*.*);;ASCII (*.dat);;CSV (*.csv)",
+#         multiple=True,
+#     )
+#     # return file and extension list
+#     # This could be implemented automatically in open_file_dialog
+#     name, extension = splitext(files[0])
+#     section_dict_in = {
+#         "warning": [
+#             "XSection from file",
+#             "Build new XSection from a GOCAD ASCII or simple ASCII file.\nChoose the top and bottom limit of the sections to continue",
+#             "QLabel",
+#         ],
+#         "top": ["Insert top", 0.0, "QLineEdit"],
+#         "bottom": ["Insert bottom", 0.0, "QLineEdit"],
+#     }
+#     for file in files:
+#         # Check the file type and import accordingly
+#         # If no valid type is found, do nothing.
+#         if extension == ".pl":
+#             top_bottom = general_input_dialog(
+#                 title="XSection from files", input_dict=section_dict_in
+#             )
+#             with open(file, "r") as IN:
+#                 for line in IN:
+#                     if "name:" in line:
+#                         line_data = line.strip().split(":")
+#                         section_dict["name"] = line_data[1]
+#                     elif "VRTX 1" in line:
+#                         line_data = line.strip().split()
+#                         section_dict["origin_x"] = float(line_data[2])
+#                         section_dict["origin_y"] = float(line_data[3])
+#                     elif "VRTX 2" in line:
+#                         line_data = line.strip().split()
+#                         section_dict["end_x"] = float(line_data[2])
+#                         section_dict["end_y"] = float(line_data[3])
+#                     elif line.strip() == "END":
+#                         # When the END line is reached create a section
+#                         section_dict["origin_z"] = top_bottom["bottom"]
+#                         section_dict["bottom"] = top_bottom["bottom"]
+#                         section_dict["end_z"] = top_bottom["top"]
+#                         section_dict["top"] = top_bottom["top"]
+#                         # UPDATE OTHER PARAMETERS BEFORE CREATING SECTION _______________________________________
+#                         uid = self.parent.xsect_coll.add_entity_from_dict(
+#                             entity_dict=section_dict
+#                         )
+#
+#         elif extension == ".dat":
+#             top_bottom = general_input_dialog(
+#                 title="XSection from files", input_dict=section_dict_in
+#             )
+#             sep = auto_sep(file)
+#             pd_df = pd_read_csv(file, sep=sep)
+#             unique_traces = pd_unique(pd_df["Name"])
+#             for trace in unique_traces:
+#                 section_dict["name"] = trace
+#                 section_dict["origin_x"] = pd_df.loc[
+#                     (pd_df["Name"] == trace) & (pd_df["Vertex Index"] == 1)
+#                 ]["x"].values
+#                 section_dict["origin_y"] = pd_df.loc[
+#                     (pd_df["Name"] == trace) & (pd_df["Vertex Index"] == 1)
+#                 ]["y"].values
+#                 section_dict["origin_z"] = pd_df.loc[
+#                     (pd_df["Name"] == trace) & (pd_df["Vertex Index"] == 1)
+#                 ]["y"].values
+#                 section_dict["end_x"] = pd_df.loc[
+#                     (pd_df["Name"] == trace) & (pd_df["Vertex Index"] == 2)
+#                 ]["x"].values
+#                 section_dict["end_y"] = pd_df.loc[
+#                     (pd_df["Name"] == trace) & (pd_df["Vertex Index"] == 2)
+#                 ]["y"].values
+#                 section_dict["origin_z"] = top_bottom["bottom"]
+#                 section_dict["bottom"] = top_bottom["bottom"]
+#                 section_dict["end_z"] = top_bottom["top"]
+#                 section_dict["top"] = top_bottom["top"]
+#                 # UPDATE OTHER PARAMETERS BEFORE CREATING SECTION _______________________________________
+#                 uid = self.parent.xsect_coll.add_entity_from_dict(
+#                     entity_dict=section_dict
+#                 )
+#
+#         elif extension == ".csv":
+#             sep = auto_sep(file)
+#             pd_df = pd_read_csv(file, sep=sep)
+#             for index, sec in pd_df.iterrows():
+#                 section_dict["name"] = sec["name"]
+#                 section_dict["origin_x"] = sec["origin_x"]
+#                 section_dict["origin_y"] = sec["origin_y"]
+#                 section_dict["end_x"] = sec["end_x"]
+#                 section_dict["end_y"] = sec["end_y"]
+#                 section_dict["origin_z"] = top_bottom["bottom"]
+#                 section_dict["bottom"] = top_bottom["bottom"]
+#                 section_dict["end_z"] = top_bottom["top"]
+#                 section_dict["top"] = top_bottom["top"]
+#                 # UPDATE OTHER PARAMETERS BEFORE CREATING SECTION _______________________________________
+#                 uid = self.parent.xsect_coll.add_entity_from_dict(
+#                     entity_dict=section_dict
+#                 )
+#
 
 
 class XSectionCollection(BaseCollection):
@@ -282,6 +283,12 @@ class XSectionCollection(BaseCollection):
         super(XSectionCollection, self).__init__(parent, *args, **kwargs)
 
         # Initialize properties required by the abstract superclass.
+        # Azimuth for vertical cross-sections is the azimuth of a horizontal vector going from the origin point
+        # towards increasing W coordinates, i.e. towards the end point in a map view. For dipping cross-sections,
+        # this corresponds to a right-handed strike direction (where the thumb of the right hand points towards
+        # strike if the other fingers point down-dip).
+        # Length and height are defined as for a fault surface, with length along strike and height along dip. Both
+        # are distances, so they cannot be negative, and the orientation is defined by strike and dip.
         self.entity_dict = {
             "uid": "",
             "name": "undef",
@@ -289,17 +296,17 @@ class XSectionCollection(BaseCollection):
             "origin_x": 0.0,
             "origin_y": 0.0,
             "origin_z": 0.0,
-            "end_x": 0.0,
-            "end_y": 0.0,
-            "end_z": 0.0,
-            "normal_x": 0.0,
+            # "end_x": 0.0,  # to be removed
+            # "end_y": 0.0,
+            # "end_z": 0.0,
+            "normal_x": 0.0,  # to be removed
             "normal_y": 0.0,
             "normal_z": 0.0,
-            "azimuth": 0.0,
+            "azimuth": 0.0,  # right-handed strike direction
             "dip": 90.0,
             "length": 0.0,
-            "width": 0.0,
-            "top": 0.0,
+            "width": 0.0,  # convert to height
+            "top": 0.0,  # to be removed
             "bottom": 0.0,
             "vtk_plane": None,  # None to avoid errors with deepcopy
             "vtk_frame": None,  # None to avoid errors with deepcopy
@@ -311,9 +318,9 @@ class XSectionCollection(BaseCollection):
             "origin_x": float,
             "origin_y": float,
             "origin_z": float,
-            "end_x": float,
-            "end_y": float,
-            "end_z": float,
+            # "end_x": float,
+            # "end_y": float,
+            # "end_z": float,
             "normal_x": float,
             "normal_y": float,
             "normal_z": float,
@@ -334,15 +341,11 @@ class XSectionCollection(BaseCollection):
     def add_entity_from_dict(
         self, entity_dict: pd_DataFrame = None, color: np_ndarray = None
     ):
-        """Add new cross-section from a suitable dictionary shaped like self.entity_dict."""
+        """Add a new cross-section from a suitable dictionary shaped like self.entity_dict."""
         # Create a new uid if it is not included in the dictionary.
         if not entity_dict["uid"]:
             entity_dict["uid"] = str(uuid.uuid4())
-        # Append new row to dataframe. Note that the 'append()' method for Pandas dataframes DOES NOT
-        # work in place, hence a NEW dataframe is created every time and then substituted to the old one.
-        # Old and less efficient syntax used up to Pandas 1.5.3:
-        # self.df = self.df.append(entity_dict, ignore_index=True)
-        # New syntax with Pandas >= 2.0.0:
+        # Append new row to dataframe with Pandas >= 2.0.0 syntax.
         self.df = pd_concat([self.df, pd_DataFrame([entity_dict])], ignore_index=True)
         self.set_geometry(uid=entity_dict["uid"])
         # Reset data model
@@ -352,8 +355,10 @@ class XSectionCollection(BaseCollection):
         return entity_dict["uid"]
 
     def remove_entity(self, uid: str = None) -> str:
-        """Remove row from dataframe and reset data model. NOTE THAT AT THE MOMENT
-        REMOVING A SECTION DOES NOT REMOVE THE ASSOCIATED OBJECTS."""
+        """
+        Remove row from dataframe and reset data model.
+        NOTE THAT AT THE MOMENT REMOVING A SECTION DOES NOT REMOVE THE ASSOCIATED OBJECTS.
+        """
         if uid not in self.get_uids:
             return
         self.df.drop(self.df[self.df["uid"] == uid].index, inplace=True)
@@ -363,20 +368,26 @@ class XSectionCollection(BaseCollection):
         return uid
 
     def clone_entity(self, uid: str = None) -> str:
-        """Not implemented for XSectionCollection, but required by the abstract superclass."""
+        """Not implemented for XSectionCollection but required by the abstract superclass."""
         pass
 
     def attr_modified_update_legend_table(self):
-        """Not implemented for XSectionCollection, but required by the abstract superclass."""
+        """Not implemented for XSectionCollection but required by the abstract superclass."""
         pass
 
     def remove_unused_from_legend(self):
-        """Remove unused types / features from a legend table."""
+        """
+        Remove unused types / features from a legend table.
+        Not implemented for XSectionCollection but required by the abstract superclass, just returns 'False'.
+        """
         legend_updated: bool = False
         return legend_updated
 
     def get_uid_legend(self, uid: str = None) -> dict:
-        """Supposed to get legend for a particular uid, in this case gets legend for XSection that are all the same."""
+        """
+        Supposed to get legend for a particular uid, in this case gets
+        the legend for XSection's, which are all the same.
+        """
         legend_dict = self.parent.others_legend_df.loc[
             self.parent.others_legend_df["other_collection"] == "XSection"
         ].to_dict("records")
@@ -392,58 +403,58 @@ class XSectionCollection(BaseCollection):
         point_size: float = None,
         opacity: float = None,
     ):
-        """Not implemented for XSectionCollection, but required by the abstract superclass."""
+        """Not implemented for XSectionCollection but required by the abstract superclass."""
         pass
 
     # =================================== Additional methods ===========================================
 
     def get_uid_origin_x(self, uid=None):
-        """Get value(s) stored in dataframe (as pointer) from uid."""
+        """Get value(s) stored in the dataframe (as a pointer) from uid."""
         return self.df.loc[self.df["uid"] == uid, "origin_x"].values[0]
 
     def set_uid_origin_x(self, uid=None, origin_x=None):
-        """Set value(s) stored in dataframe (as pointer) from uid."""
+        """Set value(s) stored in the dataframe from uid."""
         self.df.loc[self.df["uid"] == uid, "origin_x"] = origin_x
 
     def get_uid_origin_y(self, uid=None):
-        """Get value(s) stored in dataframe (as pointer) from uid."""
+        """Get value(s) stored in the dataframe (as a pointer) from uid."""
         return self.df.loc[self.df["uid"] == uid, "origin_y"].values[0]
 
     def set_uid_origin_y(self, uid=None, origin_y=None):
-        """Set value(s) stored in dataframe (as pointer) from uid."""
+        """Set value(s) stored in the dataframe from uid."""
         self.df.loc[self.df["uid"] == uid, "origin_y"] = origin_y
 
     def get_uid_origin_z(self, uid=None):
-        """Get value(s) stored in dataframe (as pointer) from uid."""
+        """Get value(s) stored in the dataframe (as a pointer) from uid."""
         return self.df.loc[self.df["uid"] == uid, "origin_z"].values[0]
 
     def set_uid_origin_z(self, uid=None, origin_z=None):
-        """Set value(s) stored in dataframe (as pointer) from uid."""
+        """Set value(s) stored in the dataframe from uid."""
         self.df.loc[self.df["uid"] == uid, "origin_z"] = origin_z
 
-    def get_uid_end_x(self, uid=None):
-        """Get value(s) stored in dataframe (as pointer) from uid."""
-        return self.df.loc[self.df["uid"] == uid, "end_x"].values[0]
-
-    def set_uid_end_x(self, uid=None, end_x=None):
-        """Set value(s) stored in dataframe (as pointer) from uid."""
-        self.df.loc[self.df["uid"] == uid, "end_x"] = end_x
-
-    def get_uid_end_y(self, uid=None):
-        """Get value(s) stored in dataframe (as pointer) from uid."""
-        return self.df.loc[self.df["uid"] == uid, "end_y"].values[0]
-
-    def set_uid_end_y(self, uid=None, end_y=None):
-        """Set value(s) stored in dataframe (as pointer) from uid."""
-        self.df.loc[self.df["uid"] == uid, "end_y"] = end_y
-
-    def get_uid_end_z(self, uid=None):
-        """Get value(s) stored in dataframe (as pointer) from uid."""
-        return self.df.loc[self.df["uid"] == uid, "end_z"].values[0]
-
-    def set_uid_end_z(self, uid=None, end_z=None):
-        """Set value(s) stored in dataframe (as pointer) from uid."""
-        self.df.loc[self.df["uid"] == uid, "end_z"] = end_z
+    # def get_uid_end_x(self, uid=None):
+    #     """Get value(s) stored in the dataframe (as a pointer) from uid."""
+    #     return self.df.loc[self.df["uid"] == uid, "end_x"].values[0]
+    #
+    # def set_uid_end_x(self, uid=None, end_x=None):
+    #     """Set value(s) stored in dataframe (as pointer) from uid."""
+    #     self.df.loc[self.df["uid"] == uid, "end_x"] = end_x
+    #
+    # def get_uid_end_y(self, uid=None):
+    #     """Get value(s) stored in dataframe (as pointer) from uid."""
+    #     return self.df.loc[self.df["uid"] == uid, "end_y"].values[0]
+    #
+    # def set_uid_end_y(self, uid=None, end_y=None):
+    #     """Set value(s) stored in dataframe (as pointer) from uid."""
+    #     self.df.loc[self.df["uid"] == uid, "end_y"] = end_y
+    #
+    # def get_uid_end_z(self, uid=None):
+    #     """Get value(s) stored in dataframe (as pointer) from uid."""
+    #     return self.df.loc[self.df["uid"] == uid, "end_z"].values[0]
+    #
+    # def set_uid_end_z(self, uid=None, end_z=None):
+    #     """Set value(s) stored in dataframe (as pointer) from uid."""
+    #     self.df.loc[self.df["uid"] == uid, "end_z"] = end_z
 
     def get_uid_normal_x(self, uid=None):
         """Get value(s) stored in dataframe (as pointer) from uid."""
@@ -527,33 +538,33 @@ class XSectionCollection(BaseCollection):
 
     """Methods used to set parameters and the geometry of a single cross section."""
 
-    def set_parameters_in_table(
-        self,
-        uid=None,
-        name=None,
-        base_point=None,
-        end_point=None,
-        normal=None,
-        azimuth=None,
-        length=None,
-        top=None,
-        bottom=None,
-    ):
-        """Write parameters in Xsections Pandas dataframe"""
-        self.df.loc[self.df["uid"] == uid, "name"] = name
-        self.df.loc[self.df["uid"] == uid, "origin_x"] = base_point[0]
-        self.df.loc[self.df["uid"] == uid, "origin_y"] = base_point[1]
-        self.df.loc[self.df["uid"] == uid, "origin_z"] = base_point[2]
-        self.df.loc[self.df["uid"] == uid, "end_x"] = end_point[0]
-        self.df.loc[self.df["uid"] == uid, "end_y"] = end_point[1]
-        self.df.loc[self.df["uid"] == uid, "end_z"] = end_point[2]
-        self.df.loc[self.df["uid"] == uid, "normal_x"] = normal[0]
-        self.df.loc[self.df["uid"] == uid, "normal_y"] = normal[1]
-        self.df.loc[self.df["uid"] == uid, "normal_z"] = normal[2]
-        self.df.loc[self.df["uid"] == uid, "azimuth"] = azimuth
-        self.df.loc[self.df["uid"] == uid, "length"] = length
-        self.df.loc[self.df["uid"] == uid, "top"] = top
-        self.df.loc[self.df["uid"] == uid, "bottom"] = bottom
+    # def set_parameters_in_table(
+    #     self,
+    #     uid=None,
+    #     name=None,
+    #     origin=None,
+    #     end_point=None,
+    #     normal=None,
+    #     azimuth=None,
+    #     length=None,
+    #     top=None,
+    #     bottom=None,
+    # ):
+    #     """Write parameters in Xsections Pandas dataframe"""
+    #     self.df.loc[self.df["uid"] == uid, "name"] = name
+    #     self.df.loc[self.df["uid"] == uid, "origin_x"] = origin[0]
+    #     self.df.loc[self.df["uid"] == uid, "origin_y"] = origin[1]
+    #     self.df.loc[self.df["uid"] == uid, "origin_z"] = origin[2]
+    #     # self.df.loc[self.df["uid"] == uid, "end_x"] = end_point[0]
+    #     # self.df.loc[self.df["uid"] == uid, "end_y"] = end_point[1]
+    #     # self.df.loc[self.df["uid"] == uid, "end_z"] = end_point[2]
+    #     # self.df.loc[self.df["uid"] == uid, "normal_x"] = normal[0]
+    #     # self.df.loc[self.df["uid"] == uid, "normal_y"] = normal[1]
+    #     # self.df.loc[self.df["uid"] == uid, "normal_z"] = normal[2]
+    #     self.df.loc[self.df["uid"] == uid, "azimuth"] = azimuth
+    #     self.df.loc[self.df["uid"] == uid, "length"] = length
+    #     # self.df.loc[self.df["uid"] == uid, "top"] = top
+    #     # self.df.loc[self.df["uid"] == uid, "bottom"] = bottom
 
     def set_from_table(self, uid=None):
         """Get parameters from x-section table and set them on x-section"""
@@ -576,10 +587,15 @@ class XSectionCollection(BaseCollection):
         """
         origin_x = self.df.loc[self.df["uid"] == section_uid, "origin_x"].values[0]
         origin_y = self.df.loc[self.df["uid"] == section_uid, "origin_y"].values[0]
-        end_x = self.df.loc[self.df["uid"] == section_uid, "end_x"].values[0]
-        end_y = self.df.loc[self.df["uid"] == section_uid, "end_y"].values[0]
+        # end_x = self.df.loc[self.df["uid"] == section_uid, "end_x"].values[0]
+        # end_y = self.df.loc[self.df["uid"] == section_uid, "end_y"].values[0]
+        azimuth = self.df.loc[self.df["uid"] == section_uid, "azimuth"].values[0]
+        length = self.df.loc[self.df["uid"] == section_uid, "length"].values[0]
+        # the following is the dot product between the vector from origin to end of the x-section and the vector
+        # from origin to X, Y, and it is positive if both point in the same direction, negative otherwise
         sense = np_sign(
-            (X - origin_x) * (end_x - origin_x) + (Y - origin_y) * (end_y - origin_y)
+            (X - origin_x) * np_sin(azimuth) * length
+            + (Y - origin_y) * np_cos(azimuth) * length
         )
         W = np_sqrt((X - origin_x) ** 2 + (Y - origin_y) ** 2) * sense
         return W
@@ -620,11 +636,16 @@ class XSectionCollection(BaseCollection):
             self.df.loc[self.df["uid"] == uid, "origin_y"].values[0],
             self.df.loc[self.df["uid"] == uid, "origin_z"].values[0],
         ]
-        end_point = [
-            self.df.loc[self.df["uid"] == uid, "end_x"].values[0],
-            self.df.loc[self.df["uid"] == uid, "end_y"].values[0],
-            self.df.loc[self.df["uid"] == uid, "end_z"].values[0],
-        ]
+        # end_point = [
+        #     self.df.loc[self.df["uid"] == uid, "end_x"].values[0],
+        #     self.df.loc[self.df["uid"] == uid, "end_y"].values[0],
+        #     self.df.loc[self.df["uid"] == uid, "end_z"].values[0],
+        # ]
+        # end_point = [
+        #     self.df.loc[self.df["uid"] == uid, "origin_x"].values[0] + self.df.loc[self.df["uid"] == uid, "length"].values[0] * np_sin(self.df.loc[self.df["uid"] == uid, "azimuth"].values[0] * np_pi / 180),
+        #     self.df.loc[self.df["uid"] == uid, "origin_y"].values[0] + self.df.loc[self.df["uid"] == uid, "length"].values[0] * np_cos(self.df.loc[self.df["uid"] == uid, "azimuth"].values[0] * np_pi / 180),
+        #     self.df.loc[self.df["uid"] == uid, "origin_z"].values[0],
+        # ]
         normal = [
             self.df.loc[self.df["uid"] == uid, "normal_x"].values[0],
             self.df.loc[self.df["uid"] == uid, "normal_y"].values[0],
@@ -632,31 +653,39 @@ class XSectionCollection(BaseCollection):
         ]
 
         dip = np_deg2rad(self.df.loc[self.df["uid"] == uid, "dip"].values[0])
-        azimuth = np_deg2rad(
-            (self.df.loc[self.df["uid"] == uid, "azimuth"].values[0] + 180) % 360
-        )
+        azi_r = np_deg2rad(self.df.loc[self.df["uid"] == uid, "azimuth"].values[0])
 
         width = self.df.loc[self.df["uid"] == uid, "width"].values[0]
-        bottom = self.df.loc[self.df["uid"] == uid, "bottom"].values[0]
+        length = self.df.loc[self.df["uid"] == uid, "length"].values[0]
+        # bottom = self.df.loc[self.df["uid"] == uid, "bottom"].values[0]
 
         vtk_frame = XsPolyLine(x_section_uid=uid, parent=self.parent)
 
         frame_points = vtkPoints()
         frame_cells = vtkCellArray()
-        frame_points.InsertPoint(0, base_point[0], base_point[1], bottom)
+        frame_points.InsertPoint(0, base_point[0], base_point[1], base_point[2])
         frame_points.InsertPoint(
             1,
-            base_point[0] + width * np_cos(dip) * np_cos(-azimuth),
-            base_point[1] + width * np_cos(dip) * np_sin(-azimuth),
-            bottom + width * np_sin(dip),
+            base_point[0] + width * np_cos(dip) * np_cos(-azi_r),
+            base_point[1] + width * np_cos(dip) * np_sin(-azi_r),
+            base_point[2] + width * np_sin(dip),
         )
         frame_points.InsertPoint(
             2,
-            end_point[0] + width * np_cos(dip) * np_cos(-azimuth),
-            end_point[1] + width * np_cos(dip) * np_sin(-azimuth),
-            bottom + width * np_sin(dip),
+            base_point[0]
+            + length * np_sin(azi_r)
+            + width * np_cos(dip) * np_cos(-azi_r),
+            base_point[1]
+            + length * np_cos(azi_r)
+            + width * np_cos(dip) * np_sin(-azi_r),
+            base_point[2] + width * np_sin(dip),
         )
-        frame_points.InsertPoint(3, end_point[0], end_point[1], bottom)
+        frame_points.InsertPoint(
+            3,
+            base_point[0] + length * np_sin(azi_r),
+            base_point[1] + length * np_cos(azi_r),
+            base_point[2],
+        )
         line = vtkLine()
         line.GetPointIds().SetId(0, 0)
         line.GetPointIds().SetId(1, 1)
@@ -678,19 +707,19 @@ class XSectionCollection(BaseCollection):
         self.df.loc[self.df["uid"] == uid, "vtk_plane"] = vtk_plane
         self.df.loc[self.df["uid"] == uid, "vtk_frame"] = vtk_frame
 
-    def set_length(self, uid=None):
-        self.df.loc[self.df["uid"] == uid, "length"] = np_sqrt(
-            (
-                self.df.loc[self.df["uid"] == uid, "origin_x"]
-                - self.df.loc[self.df["uid"] == uid, "end_x"]
-            )
-            ** 2
-            + (
-                self.df.loc[self.df["uid"] == uid, "origin_y"]
-                - self.df.loc[self.df["uid"] == uid, "end_y"]
-            )
-            ** 2
-        )
+    # def set_length(self, uid=None):
+    #     self.df.loc[self.df["uid"] == uid, "length"] = np_sqrt(
+    #         (
+    #             self.df.loc[self.df["uid"] == uid, "origin_x"]
+    #             - self.df.loc[self.df["uid"] == uid, "end_x"]
+    #         )
+    #         ** 2
+    #         + (
+    #             self.df.loc[self.df["uid"] == uid, "origin_y"]
+    #             - self.df.loc[self.df["uid"] == uid, "end_y"]
+    #         )
+    #         ** 2
+    #     )
 
     def set_width(self, uid=None):
         self.df.loc[self.df["uid"] == uid, "width"] = (

@@ -1748,79 +1748,79 @@ class XsVoxet(Voxet):
     def rows_n(self):
         return self.GetDimensions()[1]
 
-    @property
-    def xs_bounds(self):
-        """Returns a list with W_min, W_max, Z_min, Z_max in the cross section reference frame"""
-        x_section_origin_x = self.parent.xsect_coll.get_uid_origin_x(self.x_section_uid)
-        x_section_origin_y = self.parent.xsect_coll.get_uid_origin_y(self.x_section_uid)
-        x_section_end_x = self.parent.xsect_coll.get_uid_end_x(self.x_section_uid)
-        x_section_end_y = self.parent.xsect_coll.get_uid_end_y(self.x_section_uid)
-        x_section_azimuth = self.parent.xsect_coll.get_uid_azimuth(self.x_section_uid)
-        if (0 <= x_section_azimuth <= 90) or (180 < x_section_azimuth <= 270):
-            sense_min = np_sign(
-                (self.bounds[0] - x_section_origin_x)
-                * (x_section_end_x - x_section_origin_x)
-                + (self.bounds[2] - x_section_origin_y)
-                * (x_section_end_y - x_section_origin_y)
-            )
-            sense_max = np_sign(
-                (self.bounds[1] - x_section_origin_x)
-                * (x_section_end_x - x_section_origin_x)
-                + (self.bounds[3] - x_section_origin_y)
-                * (x_section_end_y - x_section_origin_y)
-            )
-            W_min = (
-                np_sqrt(
-                    (self.bounds[0] - x_section_origin_x) ** 2
-                    + (self.bounds[2] - x_section_origin_y) ** 2
-                )
-                * sense_min
-            )
-            W_max = (
-                np_sqrt(
-                    (self.bounds[1] - x_section_origin_x) ** 2
-                    + (self.bounds[3] - x_section_origin_y) ** 2
-                )
-                * sense_max
-            )
-        else:
-            sense_min = np_sign(
-                (self.bounds[0] - x_section_origin_x)
-                * (x_section_end_x - x_section_origin_x)
-                + (self.bounds[3] - x_section_origin_y)
-                * (x_section_end_y - x_section_origin_y)
-            )
-            sense_max = np_sign(
-                (self.bounds[1] - x_section_origin_x)
-                * (x_section_end_x - x_section_origin_x)
-                + (self.bounds[2] - x_section_origin_y)
-                * (x_section_end_y - x_section_origin_y)
-            )
-            W_min = (
-                np_sqrt(
-                    (self.bounds[0] - x_section_origin_x) ** 2
-                    + (self.bounds[3] - x_section_origin_y) ** 2
-                )
-                * sense_min
-            )
-            W_max = (
-                np_sqrt(
-                    (self.bounds[1] - x_section_origin_x) ** 2
-                    + (self.bounds[2] - x_section_origin_y) ** 2
-                )
-                * sense_max
-            )
-        Z_min = self.bounds[4]
-        Z_max = self.bounds[5]
-        if W_min > W_max:
-            W_tmp = W_max
-            W_max = W_min
-            W_min = W_tmp
-        if Z_min > Z_max:
-            Z_tmp = Z_max
-            Z_max = Z_min
-            Z_min = Z_tmp
-        return [W_min, W_max, Z_min, Z_max]
+    # @property
+    # def xs_bounds(self):
+    #     """Returns a list with W_min, W_max, Z_min, Z_max in the cross section reference frame"""
+    #     x_section_origin_x = self.parent.xsect_coll.get_uid_origin_x(self.x_section_uid)
+    #     x_section_origin_y = self.parent.xsect_coll.get_uid_origin_y(self.x_section_uid)
+    #     x_section_end_x = self.parent.xsect_coll.get_uid_end_x(self.x_section_uid)
+    #     x_section_end_y = self.parent.xsect_coll.get_uid_end_y(self.x_section_uid)
+    #     x_section_azimuth = self.parent.xsect_coll.get_uid_azimuth(self.x_section_uid)
+    #     if (0 <= x_section_azimuth <= 90) or (180 < x_section_azimuth <= 270):
+    #         sense_min = np_sign(
+    #             (self.bounds[0] - x_section_origin_x)
+    #             * (x_section_end_x - x_section_origin_x)
+    #             + (self.bounds[2] - x_section_origin_y)
+    #             * (x_section_end_y - x_section_origin_y)
+    #         )
+    #         sense_max = np_sign(
+    #             (self.bounds[1] - x_section_origin_x)
+    #             * (x_section_end_x - x_section_origin_x)
+    #             + (self.bounds[3] - x_section_origin_y)
+    #             * (x_section_end_y - x_section_origin_y)
+    #         )
+    #         W_min = (
+    #             np_sqrt(
+    #                 (self.bounds[0] - x_section_origin_x) ** 2
+    #                 + (self.bounds[2] - x_section_origin_y) ** 2
+    #             )
+    #             * sense_min
+    #         )
+    #         W_max = (
+    #             np_sqrt(
+    #                 (self.bounds[1] - x_section_origin_x) ** 2
+    #                 + (self.bounds[3] - x_section_origin_y) ** 2
+    #             )
+    #             * sense_max
+    #         )
+    #     else:
+    #         sense_min = np_sign(
+    #             (self.bounds[0] - x_section_origin_x)
+    #             * (x_section_end_x - x_section_origin_x)
+    #             + (self.bounds[3] - x_section_origin_y)
+    #             * (x_section_end_y - x_section_origin_y)
+    #         )
+    #         sense_max = np_sign(
+    #             (self.bounds[1] - x_section_origin_x)
+    #             * (x_section_end_x - x_section_origin_x)
+    #             + (self.bounds[2] - x_section_origin_y)
+    #             * (x_section_end_y - x_section_origin_y)
+    #         )
+    #         W_min = (
+    #             np_sqrt(
+    #                 (self.bounds[0] - x_section_origin_x) ** 2
+    #                 + (self.bounds[3] - x_section_origin_y) ** 2
+    #             )
+    #             * sense_min
+    #         )
+    #         W_max = (
+    #             np_sqrt(
+    #                 (self.bounds[1] - x_section_origin_x) ** 2
+    #                 + (self.bounds[2] - x_section_origin_y) ** 2
+    #             )
+    #             * sense_max
+    #         )
+    #     Z_min = self.bounds[4]
+    #     Z_max = self.bounds[5]
+    #     if W_min > W_max:
+    #         W_tmp = W_max
+    #         W_max = W_min
+    #         W_min = W_tmp
+    #     if Z_min > Z_max:
+    #         Z_tmp = Z_max
+    #         Z_max = Z_min
+    #         Z_min = Z_tmp
+    #     return [W_min, W_max, Z_min, Z_max]
 
     def image_data(self, show_property=None):
         # _____________________ THERE WAS A NOTE SAYING "CHECK THIS" BUT IT IS PROBABLY OK
@@ -2557,79 +2557,79 @@ class XsImage(Image):
     def rows_n(self):
         return self.V_n
 
-    @property
-    def xs_bounds(self):
-        """Returns a list with W_min, W_max, Z_min, Z_max in the cross section reference frame"""
-        x_section_origin_x = self.parent.xsect_coll.get_uid_origin_x(self.x_section_uid)
-        x_section_origin_y = self.parent.xsect_coll.get_uid_origin_y(self.x_section_uid)
-        x_section_end_x = self.parent.xsect_coll.get_uid_end_x(self.x_section_uid)
-        x_section_end_y = self.parent.xsect_coll.get_uid_end_y(self.x_section_uid)
-        x_section_azimuth = self.parent.xsect_coll.get_uid_azimuth(self.x_section_uid)
-        if (0 <= x_section_azimuth <= 90) or (180 < x_section_azimuth <= 270):
-            sense_min = np_sign(
-                (self.bounds[0] - x_section_origin_x)
-                * (x_section_end_x - x_section_origin_x)
-                + (self.bounds[2] - x_section_origin_y)
-                * (x_section_end_y - x_section_origin_y)
-            )
-            sense_max = np_sign(
-                (self.bounds[1] - x_section_origin_x)
-                * (x_section_end_x - x_section_origin_x)
-                + (self.bounds[3] - x_section_origin_y)
-                * (x_section_end_y - x_section_origin_y)
-            )
-            W_min = (
-                np_sqrt(
-                    (self.bounds[0] - x_section_origin_x) ** 2
-                    + (self.bounds[2] - x_section_origin_y) ** 2
-                )
-                * sense_min
-            )
-            W_max = (
-                np_sqrt(
-                    (self.bounds[1] - x_section_origin_x) ** 2
-                    + (self.bounds[3] - x_section_origin_y) ** 2
-                )
-                * sense_max
-            )
-        else:
-            sense_min = np_sign(
-                (self.bounds[0] - x_section_origin_x)
-                * (x_section_end_x - x_section_origin_x)
-                + (self.bounds[3] - x_section_origin_y)
-                * (x_section_end_y - x_section_origin_y)
-            )
-            sense_max = np_sign(
-                (self.bounds[1] - x_section_origin_x)
-                * (x_section_end_x - x_section_origin_x)
-                + (self.bounds[2] - x_section_origin_y)
-                * (x_section_end_y - x_section_origin_y)
-            )
-            W_min = (
-                np_sqrt(
-                    (self.bounds[0] - x_section_origin_x) ** 2
-                    + (self.bounds[3] - x_section_origin_y) ** 2
-                )
-                * sense_min
-            )
-            W_max = (
-                np_sqrt(
-                    (self.bounds[1] - x_section_origin_x) ** 2
-                    + (self.bounds[2] - x_section_origin_y) ** 2
-                )
-                * sense_max
-            )
-        Z_min = self.bounds[4]
-        Z_max = self.bounds[5]
-        if W_min > W_max:
-            W_tmp = W_max
-            W_max = W_min
-            W_min = W_tmp
-        if Z_min > Z_max:
-            Z_tmp = Z_max
-            Z_max = Z_min
-            Z_min = Z_tmp
-        return [W_min, W_max, Z_min, Z_max]
+    # @property
+    # def xs_bounds(self):
+    #     """Returns a list with W_min, W_max, Z_min, Z_max in the cross section reference frame"""
+    #     x_section_origin_x = self.parent.xsect_coll.get_uid_origin_x(self.x_section_uid)
+    #     x_section_origin_y = self.parent.xsect_coll.get_uid_origin_y(self.x_section_uid)
+    #     x_section_end_x = self.parent.xsect_coll.get_uid_end_x(self.x_section_uid)
+    #     x_section_end_y = self.parent.xsect_coll.get_uid_end_y(self.x_section_uid)
+    #     x_section_azimuth = self.parent.xsect_coll.get_uid_azimuth(self.x_section_uid)
+    #     if (0 <= x_section_azimuth <= 90) or (180 < x_section_azimuth <= 270):
+    #         sense_min = np_sign(
+    #             (self.bounds[0] - x_section_origin_x)
+    #             * (x_section_end_x - x_section_origin_x)
+    #             + (self.bounds[2] - x_section_origin_y)
+    #             * (x_section_end_y - x_section_origin_y)
+    #         )
+    #         sense_max = np_sign(
+    #             (self.bounds[1] - x_section_origin_x)
+    #             * (x_section_end_x - x_section_origin_x)
+    #             + (self.bounds[3] - x_section_origin_y)
+    #             * (x_section_end_y - x_section_origin_y)
+    #         )
+    #         W_min = (
+    #             np_sqrt(
+    #                 (self.bounds[0] - x_section_origin_x) ** 2
+    #                 + (self.bounds[2] - x_section_origin_y) ** 2
+    #             )
+    #             * sense_min
+    #         )
+    #         W_max = (
+    #             np_sqrt(
+    #                 (self.bounds[1] - x_section_origin_x) ** 2
+    #                 + (self.bounds[3] - x_section_origin_y) ** 2
+    #             )
+    #             * sense_max
+    #         )
+    #     else:
+    #         sense_min = np_sign(
+    #             (self.bounds[0] - x_section_origin_x)
+    #             * (x_section_end_x - x_section_origin_x)
+    #             + (self.bounds[3] - x_section_origin_y)
+    #             * (x_section_end_y - x_section_origin_y)
+    #         )
+    #         sense_max = np_sign(
+    #             (self.bounds[1] - x_section_origin_x)
+    #             * (x_section_end_x - x_section_origin_x)
+    #             + (self.bounds[2] - x_section_origin_y)
+    #             * (x_section_end_y - x_section_origin_y)
+    #         )
+    #         W_min = (
+    #             np_sqrt(
+    #                 (self.bounds[0] - x_section_origin_x) ** 2
+    #                 + (self.bounds[3] - x_section_origin_y) ** 2
+    #             )
+    #             * sense_min
+    #         )
+    #         W_max = (
+    #             np_sqrt(
+    #                 (self.bounds[1] - x_section_origin_x) ** 2
+    #                 + (self.bounds[2] - x_section_origin_y) ** 2
+    #             )
+    #             * sense_max
+    #         )
+    #     Z_min = self.bounds[4]
+    #     Z_max = self.bounds[5]
+    #     if W_min > W_max:
+    #         W_tmp = W_max
+    #         W_max = W_min
+    #         W_min = W_tmp
+    #     if Z_min > Z_max:
+    #         Z_tmp = Z_max
+    #         Z_max = Z_min
+    #         Z_min = Z_tmp
+    #     return [W_min, W_max, Z_min, Z_max]
 
     @property
     def frame(self):
