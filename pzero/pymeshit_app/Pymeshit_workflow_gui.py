@@ -10069,13 +10069,25 @@ segmentation, triangulation, and visualization.
                         pass
                     return None
 
-                p1 = to_xyz(pts[0]); p2 = to_xyz(pts[-1])
-                if p1 is None or p2 is None:
+                # Convert all points to xyz
+                xyz_pts = []
+                for p in pts:
+                    xyz = to_xyz(p)
+                    if xyz is not None:
+                        xyz_pts.append(xyz)
+                
+                if len(xyz_pts) < 2:
                     continue
 
                 import numpy as np, pyvista as pv
-                poly = pv.PolyData(np.array([p1, p2], dtype=float))
-                poly.lines = np.array([2, 0, 1], dtype=np.int64)
+                # Create polyline through all points
+                poly = pv.PolyData(np.array(xyz_pts, dtype=float))
+                # Create line connectivity for all points
+                n_pts = len(xyz_pts)
+                lines = np.zeros(n_pts + 1, dtype=np.int64)
+                lines[0] = n_pts  # Number of points in the line
+                lines[1:] = np.arange(n_pts)  # Point indices
+                poly.lines = lines
 
                 rgb, lw, pattern = self._segment_vis_props(surf_idx, seg_uid)
                 actor = plotter.add_mesh(
@@ -10132,6 +10144,8 @@ segmentation, triangulation, and visualization.
         plotter.add_axes()
         plotter.reset_camera()
         plotter.render()
+        # =====================================
+
         # =====================================
 
     # ======================================================================
@@ -17656,13 +17670,21 @@ segmentation, triangulation, and visualization.
         seg_uid = 0
 
         def get_type(p):
-            # Works for Vector3D or [x, y, z, type]
+            # Works for Vector3D or [x, y, z, type] or numpy arrays
             if hasattr(p, "point_type") and p.point_type is not None:
                 return p.point_type
             if hasattr(p, "type") and p.type is not None:
                 return p.type
-            if isinstance(p, (list, tuple)) and len(p) > 3:
-                return p[3]
+            # Handle numpy arrays, lists, and tuples
+            try:
+                if hasattr(p, '__len__') and len(p) > 3:
+                    pt_type = p[3]
+                    # Handle numpy string types
+                    if hasattr(pt_type, 'item'):
+                        pt_type = pt_type.item()
+                    return str(pt_type) if pt_type else "DEFAULT"
+            except (IndexError, TypeError):
+                pass
             return "DEFAULT"
 
         def is_closed_loop(pts):
@@ -17741,6 +17763,60 @@ segmentation, triangulation, and visualization.
 
             return segments
 
+        def is_special_hull_point(p):
+            """Check if a point is a special hull point (CORNER or COMMON_INTERSECTION_CONVEXHULL_POINT)"""
+            pt_type = get_type(p)
+            return pt_type in ("CORNER", "CORNER_POINT", "COMMON_INTERSECTION_CONVEXHULL_POINT")
+
+        def segment_hull_by_special_points(pts):
+            """
+            Split hull into segments at special points (CORNER and COMMON_INTERSECTION_CONVEXHULL_POINT).
+            Similar to segment_by_triples but for hull points.
+            The hull is always a closed loop, so we wrap around.
+            """
+            if len(pts) < 3:
+                return []
+
+            n = len(pts)
+            # Find indices of special points
+            special_indices = [i for i, p in enumerate(pts) if is_special_hull_point(p)]
+
+            segments = []
+
+            # No special points: entire hull as one segment
+            if not special_indices:
+                # Return the whole hull as a single closed segment
+                seg = list(pts) + [pts[0]]  # Close the loop
+                segments.append(seg)
+                return segments
+
+            # At least one special point: segment between consecutive special points
+            special_indices = sorted(set(special_indices))
+            
+            if len(special_indices) == 1:
+                # Only one special point: whole hull as one segment starting/ending at that point
+                idx = special_indices[0]
+                # Reorder hull to start at the special point
+                seg = list(pts[idx:]) + list(pts[:idx+1])
+                segments.append(seg)
+                return segments
+
+            # Multiple special points: create segments between consecutive special points
+            for i in range(len(special_indices)):
+                a = special_indices[i]
+                b = special_indices[(i + 1) % len(special_indices)]
+
+                if a < b:
+                    seg = list(pts[a:b+1])
+                else:
+                    # Wrap around the end of the array
+                    seg = list(pts[a:]) + list(pts[:b+1])
+
+                if len(seg) >= 2:
+                    segments.append(seg)
+
+            return segments
+
         for s_idx, ds in enumerate(self.datasets):
             if ds.get("type") == "polyline":
                 continue
@@ -17754,6 +17830,13 @@ segmentation, triangulation, and visualization.
             # ----------------------- hull ---------------------------------------
             hull = ds.get("hull_points", [])
             if hull is not None and len(hull) >= 3:
+                # Debug: Count special points in hull
+                special_count = sum(1 for p in hull if is_special_hull_point(p))
+                special_types = [get_type(p) for p in hull if is_special_hull_point(p)]
+                logger.info(f"Surface {s_idx} ({ds.get('name', 'unknown')}): hull has {len(hull)} points, {special_count} special points")
+                if special_count > 0:
+                    logger.info(f"  Special point types: {set(special_types)}")
+                
                 hull_item = QTreeWidgetItem(surf_item)
                 hull_item.setText(0, "Hull segments")
                 hull_item.setFlags(hull_item.flags() | Qt.ItemIsUserCheckable)
@@ -17762,10 +17845,24 @@ segmentation, triangulation, and visualization.
                 hull_item.setCheckState(4, Qt.Unchecked)
                 hull_item.setData(0, Qt.UserRole, {"type": "hull_group", "surface_idx": s_idx})
 
-                for i in range(len(hull)):
-                    p1, p2 = hull[i], hull[(i + 1) % len(hull)]
+                # Segment hull by special points (CORNER and COMMON_INTERSECTION_CONVEXHULL_POINT)
+                hull_seg_lists = segment_hull_by_special_points(hull)
+                logger.info(f"  Hull segmented into {len(hull_seg_lists)} segments")
+                
+                for k, seg_pts in enumerate(hull_seg_lists):
                     seg_item = QTreeWidgetItem(hull_item)
-                    seg_item.setText(0, f"Seg {i}")
+                    # Get descriptive name for the segment based on endpoint types
+                    start_type = get_type(seg_pts[0]) if seg_pts else "DEFAULT"
+                    end_type = get_type(seg_pts[-1]) if seg_pts else "DEFAULT"
+                    # Shorten type names for display
+                    def short_type(t):
+                        if t == "COMMON_INTERSECTION_CONVEXHULL_POINT":
+                            return "INT-HULL"
+                        elif t in ("CORNER", "CORNER_POINT"):
+                            return "CORNER"
+                        else:
+                            return t[:6] if len(t) > 6 else t
+                    seg_item.setText(0, f"Seg {k} ({short_type(start_type)}→{short_type(end_type)})")
                     seg_item.setText(1, "HULL")  # Set type column
                     seg_item.setFlags(seg_item.flags() | Qt.ItemIsUserCheckable)
                     seg_item.setCheckState(0, Qt.Checked)
@@ -17778,7 +17875,7 @@ segmentation, triangulation, and visualization.
                         "seg_uid": seg_uid
                     })
                     self._refine_segment_map[(s_idx, seg_uid)] = {
-                        "points": [p1, p2],
+                        "points": seg_pts,  # Store all points in the segment, not just pairs
                         "type": "HULL",     # normalized
                         "ctype": "HULL",    # keep for compatibility
                         "is_hole": False,
