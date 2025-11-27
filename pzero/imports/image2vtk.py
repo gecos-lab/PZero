@@ -10,13 +10,10 @@ from copy import deepcopy
 from rasterio import open as rio_open
 import rasterio.plot as rio_plt
 
-from numpy import abs as np_abs
 from numpy import cos as np_cos
 from numpy import dstack as np_dstack
 from numpy import pi as np_pi
 from numpy import sin as np_sin
-from numpy import nan_to_num as np_nan_to_num
-from numpy import uint8 as np_uint8
 
 from vtkmodules.util import numpy_support
 
@@ -104,17 +101,16 @@ def geo_image2vtk(self=None, in_file_name=None):
         map_image.GetPointData().AddArray(vtk_array)
         map_image.GetPointData().SetActiveScalars(vtk_array.GetName())
 
-        # Create dictionary
-        curr_obj_dict = {
-            "uid": str(uuid4()),
-            "name": os.path.basename(in_file_name),
-            "topology": "MapImage",
-            "x_section": None,
-            "vtk_obj": map_image,
-            "properties_components": map_image.properties_components,
-            "properties_types": map_image.properties_types,
-            "properties_names": [vtk_array.GetName()],
-        }
+        # Create dictionary.
+        curr_obj_dict = deepcopy(ImageCollection().entity_dict)
+        curr_obj_dict["uid"] = str(uuid4())
+        curr_obj_dict["name"] = os.path.basename(in_file_name)
+        curr_obj_dict["topology"] = "MapImage"
+        curr_obj_dict["x_section"] = None
+        curr_obj_dict["vtk_obj"] = map_image
+        curr_obj_dict["properties_components"] = map_image.properties_components
+        curr_obj_dict["properties_types"] = map_image.properties_types
+        curr_obj_dict["properties_names"] = [vtk_array.GetName()]
 
         # Add to entity collection.
         self.image_coll.add_entity_from_dict(entity_dict=curr_obj_dict)
@@ -204,17 +200,16 @@ def xs_image2vtk(self=None, in_file_name=None, x_section_uid=None):
         xs_image.GetPointData().SetActiveScalars(vtk_array.GetName())
 
         # Create dictionary
-        curr_obj_dict = {
-            "uid": str(uuid4()),
-            "name": os.path.basename(in_file_name),
-            "topology": "XsImage",
-            "x_section": x_section_uid,
-            "vtk_obj": xs_image,
-            "properties_components": xs_image.properties_components,
-            "properties_types": xs_image.properties_types,
-            "properties_names": [vtk_array.GetName()],
-        }
-
+        # Create dictionary.
+        curr_obj_dict = deepcopy(ImageCollection().entity_dict)
+        curr_obj_dict["uid"] = str(uuid4())
+        curr_obj_dict["name"] = os.path.basename(in_file_name)
+        curr_obj_dict["topology"] = "XsImage"
+        curr_obj_dict["x_section"] = x_section_uid
+        curr_obj_dict["vtk_obj"] = xs_image
+        curr_obj_dict["properties_components"] = xs_image.properties_components
+        curr_obj_dict["properties_types"] = xs_image.properties_types
+        curr_obj_dict["properties_names"] = [vtk_array.GetName()]
         # Add to entity collection.
         self.image_coll.add_entity_from_dict(entity_dict=curr_obj_dict)
         # Cleaning (probably not necessary).
