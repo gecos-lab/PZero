@@ -33,7 +33,7 @@ from ..entities_factory import (
     Attitude,
 )
 from ..orientation_analysis import get_dip_dir_vectors
-from ..collections.xsection_collection import section_from_azimuth
+from ..collections.xsection_collection import section_from_strike
 from ..collections.boundary_collection import boundary_from_points
 
 
@@ -57,11 +57,11 @@ class ViewMap(View2D):
         super().initialize_menu_tools()
 
         # then add new code specific to this class
-        self.sectionFromAzimuthButton = QAction("Section from azimuth", self)
-        self.sectionFromAzimuthButton.triggered.connect(
-            lambda: self.vector_by_mouse(section_from_azimuth)
+        self.sectionFromStrikeButton = QAction("Section from strike", self)
+        self.sectionFromStrikeButton.triggered.connect(
+            lambda: self.vector_by_mouse(section_from_strike)
         )
-        self.menuCreate.addAction(self.sectionFromAzimuthButton)
+        self.menuCreate.addAction(self.sectionFromStrikeButton)
 
         self.boundaryFromPointsButton = QAction("Boundary from 2 points", self)
         self.boundaryFromPointsButton.triggered.connect(

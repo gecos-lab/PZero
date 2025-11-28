@@ -10,10 +10,14 @@ from numpy import ndarray as np_ndarray
 from numpy import cos as np_cos
 from numpy import deg2rad as np_deg2rad
 from numpy import dot as np_dot
+from numpy import cross as np_cross
 from numpy import matmul as np_matmul
 from numpy import pi as np_pi
 from numpy import repeat as np_repeat
 from numpy import sin as np_sin
+from numpy import rad2deg as np_rad2deg
+from numpy import arctan2 as np_arctan2
+from numpy import arcsin as np_arcsin
 from numpy import sqrt as np_sqrt
 from numpy import sign as np_sign
 from numpy.linalg import inv as np_linalg_inv
@@ -24,10 +28,12 @@ from pandas import unique as pd_unique
 from pandas import concat as pd_concat
 
 from vtk import vtkPoints, vtkCellArray, vtkLine
+from vtkmodules.numpy_interface.dataset_adapter import WrapDataObject
+from vtkmodules.vtkFiltersCore import vtkAppendPolyData
 
 from pzero.entities_factory import Plane, XsPolyLine
 from pzero.helpers.helper_dialogs import general_input_dialog, open_file_dialog
-from pzero.helpers.helper_functions import auto_sep
+from pzero.helpers.helper_functions import auto_sep, best_fitting_plane
 from pzero.orientation_analysis import dip_directions2normals, get_dip_dir_vectors
 
 from .AbstractCollection import BaseCollection
@@ -36,8 +42,8 @@ from .AbstractCollection import BaseCollection
 # =================================== Methods used to create cross sections ===========================================
 
 
-def section_from_azimuth(self, vector):
-    """Create a cross-section from one point and azimuth."""
+def section_from_strike(self, vector):
+    """Create a cross-section from one point and strike."""
     section_dict = deepcopy(self.parent.xsect_coll.entity_dict)
     self.plotter.untrack_click_position(side="left")
 
@@ -45,7 +51,7 @@ def section_from_azimuth(self, vector):
 
     section_dict_in = {
         "warning": [
-            "XSection from azimuth",
+            "XSection from strike",
             "Build new XSection from a user-drawn line.\nOnce drawn, values can be modified from keyboard\nor by drawing another vector.",
             "QLabel",
         ],
@@ -54,7 +60,7 @@ def section_from_azimuth(self, vector):
         "origin_y": ["Insert origin Y coord", vector.p1[1], "QLineEdit"],
         # "end_x": ["Insert end X coord", vector.p2[0], "QLineEdit"],
         # "end_y": ["Insert end Y coord", vector.p2[1], "QLineEdit"],
-        "azimuth": ["Insert azimuth", vector.azimuth, "QLineEdit"],
+        "strike": ["Insert strike", vector.azimuth, "QLineEdit"],
         "dip": ["Insert dip", 90.0, "QLineEdit"],
         "length": ["Insert length", vector.length, "QLineEdit"],
         "width": ["Insert width", 0.0, "QLineEdit"],
@@ -66,7 +72,7 @@ def section_from_azimuth(self, vector):
         ],
         "spacing": ["Spacing", 1000.0, "QLineEdit"],
         "num_xs": ["Number of XSections", 5, "QLineEdit"],
-        "along": ["Repeat parallel to:", ["Normal", "Azimuth"], "QComboBox"],
+        "along": ["Repeat parallel to:", ["Normal", "strike"], "QComboBox"],
     }
     section_dict_updt = general_input_dialog(
         title="New XSection from points", input_dict=section_dict_in
@@ -96,7 +102,7 @@ def section_from_azimuth(self, vector):
     section_dict["end_z"] = section_dict["top"]
     # Calculate normals.
     normals = dip_directions2normals(
-        dips=section_dict["dip"], directions=(section_dict["azimuth"] + 90) % 360
+        dips=section_dict["dip"], directions=(section_dict["strike"] + 90) % 360
     )
     section_dict["normal_x"] = normals[0]
     section_dict["normal_y"] = normals[1]
@@ -157,7 +163,7 @@ def section_from_azimuth(self, vector):
 #     # For both importing methods the user must define the top and bottom values of the section.
 #
 #     # section_from_points IS MISSING! BUT IT IS NOT NECESSARY. SIMILAR FUNCTIONALITY
-#     # IS ALREADY PRESENT IN section_from_azimuth
+#     # IS ALREADY PRESENT IN section_from_strike
 #     # USE THAT OR EXTRACT "FROM POINTS" IN A SEPARATE FUNCTION
 #     # OR CREATE A METHOD TO FILL MISSING PARAMETERS IN THE COLLECTION??
 #
@@ -277,18 +283,44 @@ def section_from_azimuth(self, vector):
 
 
 class XSectionCollection(BaseCollection):
-    """Cross-section collection."""
+    """
+    Cross-section collection.
+
+    A cross-section is a 2D surface defined by an origin and a right-handed orthonormal basis of three vectors,
+    in order the strike vector of the cross-section, the dip vector, and the normal vector. These vectors follow
+    the standard right-handed geological convention, therefore dip points down-dip (along the slope for a dipping
+    section or vertically downwards for a vertica section), strike points to the left if we look down-dip, and
+    normal points downwards in the opposite quadrant with respect to dip.
+
+    Child entities of a cross-section can return their UV coordinates in the cross-section local reference, with
+    U measured as the distance to the cross-section origin parallel to the strike vector,
+    and V measured parallel to the dip vector. Also W - measured parallel to the normal vector - could be
+    returned in theory, but it should be zero for entities belonging to the section.
+
+    Note that due to this convention the origin is in the upper left corner of a section, seen from the front
+    with strike pointing to the right and dip pointing downwards, and that U increases to the right and
+    V increases downwards. The latter could be a bit confusing but allows using the right-hand convention
+    everywhere.
+
+    The data stored in files and required to define a cross-section are the origin point (x, y, z), the strike
+    azimuth angle, the dip angle, and the cross-section length and height (along strike and dip as for e.g.
+    geological faults). Other parameters are calculated on the fly.
+
+    Other metadata stored in files are the uid (immutable), name (editable), and scenario (editable).
+
+    VTK objects vtk_plane and vtk_frame are created on the fly when the cross-section is added to the collection,
+    then stored in the dataframe.
+
+    In older code U was called W, strike was called azimuth, and height was called width.
+
+    Some older files have origin_z = 0.0 and bottom and top = some other value. We provide a small check
+    to detect and correct this problem when opening old projects, but it is not always guaranteed.
+    """
 
     def __init__(self, parent=None, *args, **kwargs):
         super(XSectionCollection, self).__init__(parent, *args, **kwargs)
 
         # Initialize properties required by the abstract superclass.
-        # Azimuth for vertical cross-sections is the azimuth of a horizontal vector going from the origin point
-        # towards increasing W coordinates, i.e. towards the end point in a map view. For dipping cross-sections,
-        # this corresponds to a right-handed strike direction (where the thumb of the right hand points towards
-        # strike if the other fingers point down-dip).
-        # Length and height are defined as for a fault surface, with length along strike and height along dip. Both
-        # are distances, so they cannot be negative, and the orientation is defined by strike and dip.
         self.entity_dict = {
             "uid": "",
             "name": "undef",
@@ -302,10 +334,10 @@ class XSectionCollection(BaseCollection):
             "normal_x": 0.0,  # to be removed
             "normal_y": 0.0,
             "normal_z": 0.0,
-            "azimuth": 0.0,  # right-handed strike direction
+            "strike": 0.0,  # right-handed strike direction, rename as strike
             "dip": 90.0,
             "length": 0.0,
-            "width": 0.0,  # convert to height
+            "width": 0.0,  # rename to height
             "top": 0.0,  # to be removed
             "bottom": 0.0,
             "vtk_plane": None,  # None to avoid errors with deepcopy
@@ -324,7 +356,7 @@ class XSectionCollection(BaseCollection):
             "normal_x": float,
             "normal_y": float,
             "normal_z": float,
-            "azimuth": float,
+            "strike": float,
             "dip": float,
             "length": float,
             "width": float,
@@ -408,6 +440,16 @@ class XSectionCollection(BaseCollection):
 
     # =================================== Additional methods ===========================================
 
+    def get_uid_origin(self, uid=None):
+        """Get value(s) stored in the dataframe (as a pointer) from uid."""
+        return np_array(
+            [
+                self.get_uid_origin_x(uid),
+                self.get_uid_origin_y(uid),
+                self.get_uid_origin_z(uid),
+            ]
+        )
+
     def get_uid_origin_x(self, uid=None):
         """Get value(s) stored in the dataframe (as a pointer) from uid."""
         return self.df.loc[self.df["uid"] == uid, "origin_x"].values[0]
@@ -456,37 +498,21 @@ class XSectionCollection(BaseCollection):
     #     """Set value(s) stored in dataframe (as pointer) from uid."""
     #     self.df.loc[self.df["uid"] == uid, "end_z"] = end_z
 
-    def get_uid_normal_x(self, uid=None):
+    def get_uid_strike(self, uid=None):
         """Get value(s) stored in dataframe (as pointer) from uid."""
-        return self.df.loc[self.df["uid"] == uid, "normal_x"].values[0]
+        return self.df.loc[self.df["uid"] == uid, "strike"].values[0]
 
-    def set_uid_normal_x(self, uid=None, normal_x=None):
+    def set_uid_strike(self, uid=None, strike=None):
         """Set value(s) stored in dataframe (as pointer) from uid."""
-        self.df.loc[self.df["uid"] == uid, "normal_x"] = normal_x
+        self.df.loc[self.df["uid"] == uid, "strike"] = strike
 
-    def get_uid_normal_y(self, uid=None):
+    def get_uid_dip(self, uid=None):
         """Get value(s) stored in dataframe (as pointer) from uid."""
-        return self.df.loc[self.df["uid"] == uid, "normal_y"].values[0]
+        return self.df.loc[self.df["uid"] == uid, "dip"].values[0]
 
-    def set_uid_normal_y(self, uid=None, normal_y=None):
+    def set_uid_dip(self, uid=None, dip=None):
         """Set value(s) stored in dataframe (as pointer) from uid."""
-        self.df.loc[self.df["uid"] == uid, "normal_y"] = normal_y
-
-    def get_uid_normal_z(self, uid=None):
-        """Get value(s) stored in dataframe (as pointer) from uid."""
-        return self.df.loc[self.df["uid"] == uid, "normal_z"].values[0]
-
-    def set_uid_normal_z(self, uid=None, normal_z=None):
-        """Set value(s) stored in dataframe (as pointer) from uid."""
-        self.df.loc[self.df["uid"] == uid, "normal_z"] = normal_z
-
-    def get_uid_azimuth(self, uid=None):
-        """Get value(s) stored in dataframe (as pointer) from uid."""
-        return self.df.loc[self.df["uid"] == uid, "azimuth"].values[0]
-
-    def set_uid_azimuth(self, uid=None, azimuth=None):
-        """Set value(s) stored in dataframe (as pointer) from uid."""
-        self.df.loc[self.df["uid"] == uid, "azimuth"] = azimuth
+        self.df.loc[self.df["uid"] == uid, "dip"] = dip
 
     def get_uid_length(self, uid=None):
         """Get value(s) stored in dataframe (as pointer) from uid."""
@@ -545,7 +571,7 @@ class XSectionCollection(BaseCollection):
     #     origin=None,
     #     end_point=None,
     #     normal=None,
-    #     azimuth=None,
+    #     strike=None,
     #     length=None,
     #     top=None,
     #     bottom=None,
@@ -561,7 +587,7 @@ class XSectionCollection(BaseCollection):
     #     # self.df.loc[self.df["uid"] == uid, "normal_x"] = normal[0]
     #     # self.df.loc[self.df["uid"] == uid, "normal_y"] = normal[1]
     #     # self.df.loc[self.df["uid"] == uid, "normal_z"] = normal[2]
-    #     self.df.loc[self.df["uid"] == uid, "azimuth"] = azimuth
+    #     self.df.loc[self.df["uid"] == uid, "strike"] = strike
     #     self.df.loc[self.df["uid"] == uid, "length"] = length
     #     # self.df.loc[self.df["uid"] == uid, "top"] = top
     #     # self.df.loc[self.df["uid"] == uid, "bottom"] = bottom
@@ -574,11 +600,11 @@ class XSectionCollection(BaseCollection):
         """Gets X, Y coordinates from W coordinate (distance along the Xsection horizontal axis).
         Should work for a single W value or for an array, in which case should return X, Y as arrays.
         """
-        azimuth = self.df.loc[self.df["uid"] == section_uid, "azimuth"].values[0]
+        strike = self.df.loc[self.df["uid"] == section_uid, "strike"].values[0]
         origin_x = self.df.loc[self.df["uid"] == section_uid, "origin_x"].values[0]
         origin_y = self.df.loc[self.df["uid"] == section_uid, "origin_y"].values[0]
-        X = W * np_sin(azimuth * np_pi / 180) + origin_x
-        Y = W * np_cos(azimuth * np_pi / 180) + origin_y
+        X = W * np_sin(strike * np_pi / 180) + origin_x
+        Y = W * np_cos(strike * np_pi / 180) + origin_y
         return X, Y
 
     def get_W_from_XY(self, section_uid=None, X=None, Y=None):
@@ -589,103 +615,151 @@ class XSectionCollection(BaseCollection):
         origin_y = self.df.loc[self.df["uid"] == section_uid, "origin_y"].values[0]
         # end_x = self.df.loc[self.df["uid"] == section_uid, "end_x"].values[0]
         # end_y = self.df.loc[self.df["uid"] == section_uid, "end_y"].values[0]
-        azimuth = self.df.loc[self.df["uid"] == section_uid, "azimuth"].values[0]
+        strike = self.df.loc[self.df["uid"] == section_uid, "strike"].values[0]
         length = self.df.loc[self.df["uid"] == section_uid, "length"].values[0]
         # the following is the dot product between the vector from origin to end of the x-section and the vector
         # from origin to X, Y, and it is positive if both point in the same direction, negative otherwise
         sense = np_sign(
-            (X - origin_x) * np_sin(azimuth) * length
-            + (Y - origin_y) * np_cos(azimuth) * length
+            (X - origin_x) * np_sin(strike) * length
+            + (Y - origin_y) * np_cos(strike) * length
         )
         W = np_sqrt((X - origin_x) ** 2 + (Y - origin_y) ** 2) * sense
         return W
 
     def get_deltaXY_from_deltaW(self, section_uid=None, deltaW=None):
         """Gets X, Y coordinates from W coordinate (distance along the Xsection horizontal axis)"""
-        azimuth = self.df.loc[self.df["uid"] == section_uid, "azimuth"].values[0]
-        deltaX = deltaW * np_sin(azimuth * np_pi / 180)
-        deltaY = deltaW * np_cos(azimuth * np_pi / 180)
+        strike = self.df.loc[self.df["uid"] == section_uid, "strike"].values[0]
+        deltaX = deltaW * np_sin(strike * np_pi / 180)
+        deltaY = deltaW * np_cos(strike * np_pi / 180)
         return deltaX, deltaY
 
-    def plane2world(self, section_uid=None, u=None, v=None, as_arr=False):
-        n_points = len(u)
-        plane = self.get_uid_vtk_plane(section_uid)
+    def get_uid_strike_vect(self, section_uid=None):
+        strike = self.df.loc[self.df["uid"] == section_uid, "strike"].values[0]
+        return np_array([np_sin(np_deg2rad(strike)), np_cos(np_deg2rad(strike)), 0.0])
 
-        normal = np_array(plane.GetNormal())
-        origin = np_array(plane.GetOrigin())
-        d = np_repeat(np_dot(normal, origin), n_points)
+    def get_uid_dip_vect(self, section_uid=None):
+        strike = self.df.loc[self.df["uid"] == section_uid, "strike"].values[0]
+        dip = self.df.loc[self.df["uid"] == section_uid, "dip"].values[0]
+        return np_array(
+            [
+                np_sin(np_deg2rad(strike + 90)) * np_cos(np_deg2rad(dip)),
+                np_cos(np_deg2rad(strike + 90)) * np_cos(np_deg2rad(dip)),
+                -np_sin(np_deg2rad(dip)),
+            ]
+        )
 
-        dip_vec, dir_vec = get_dip_dir_vectors(np_array([normal]))
-        A = np_array([dir_vec[0], dip_vec[0], normal])
-        B = np_array(
-            [u, -v, d]
-        )  # this should be [-u +v -d] (because we calculated -v) but it is opposite because of the right hand rule
-        X = np_linalg_inv(A).dot(B).T
+    def get_uid_normal_vect(self, section_uid=None):
+        strike_vct = self.get_uid_strike_vect(section_uid=section_uid)
+        dip_vct = self.get_uid_dip_vect(section_uid=section_uid)
+        return np_cross(strike_vct, dip_vct)
+
+    def get_uid_normal_x(self, uid=None):
+        return self.get_uid_normal_x(uid)[0]
+
+    def get_uid_normal_y(self, uid=None):
+        return self.get_uid_normal_x(uid)[1]
+
+    def get_uid_normal_z(self, uid=None):
+        return self.get_uid_normal_x(uid)[2]
+
+    def world2plane(self, section_uid=None, X=None, Y=None, Z=None, as_arr=False):
+        """Get UV cross-section plane coordinates from XYZ world coordinates."""
+        # the following are strike, dip, normal unit vectors and the
+        # position vector origin of the cross-section plane in world XYZ coordinates
+        strike_vct = self.get_uid_strike_vect(section_uid=section_uid)
+        dip_vct = self.get_uid_dip_vect(section_uid=section_uid)
+        normal_vct = self.get_uid_normal_vect(section_uid=section_uid)
+        origin = self.get_uid_origin(uid=section_uid)
+        # the following is the vector from the origin of the cross-section plane
+        # to the point XYZ, still in world XYZ coordinates
+        origin_2_point = np_array([X, Y, Z]) - origin
+        # and here we convert to the UVW coordinates of the cross-section plane with dot products
+        # W is just to check and can be commented in the future
+        U = np_dot(strike_vct, origin_2_point)
+        V = np_dot(dip_vct, origin_2_point)
+        W = np_dot(normal_vct, origin_2_point)
+        print("check W (should be zero): ", W)
 
         if as_arr:
-            return X
+            return np_array([U, V])
         else:
-            return X[:, 0], X[:, 1], X[:, 2]
+            return U, V
+
+    def plane2world(self, section_uid=None, U=None, V=None, as_arr=False):
+        """Get XYZ world coordinates from UV cross-section plane coordinates."""
+        # the following are strike, dip, normal unit vectors and the
+        # position vector origin of the cross-section plane in world XYZ coordinates
+        strike_vct = self.get_uid_strike_vect(section_uid=section_uid)
+        dip_vct = self.get_uid_dip_vect(section_uid=section_uid)
+        origin = self.get_uid_origin(uid=section_uid)
+        # the following is the vector from the origin of the cross-section plane
+        # to the point UV, already in world XYZ coordinates
+        origin_2_point = strike_vct * U + dip_vct * V
+        # then we add the vector from the origin of the cross-section plane to
+        # world coordinates origin (0,0,0), and we get the position in world XYZ coordinates
+        XYZ = origin_2_point + origin
+        X = XYZ[:, 0]
+        Y = XYZ[:, 1]
+        Z = XYZ[:, 2]
+        if as_arr:
+            return XYZ
+        else:
+            return X, Y, Z
 
     def set_geometry(self, uid=None):
         """Given all parameters, sets the vtkPlane origin and normal properties, and builds the frame used for
         visualization"""
 
-        base_point = [
-            self.df.loc[self.df["uid"] == uid, "origin_x"].values[0],
-            self.df.loc[self.df["uid"] == uid, "origin_y"].values[0],
-            self.df.loc[self.df["uid"] == uid, "origin_z"].values[0],
-        ]
+        # origin = [
+        #     self.df.loc[self.df["uid"] == uid, "origin_x"].values[0],
+        #     self.df.loc[self.df["uid"] == uid, "origin_y"].values[0],
+        #     self.df.loc[self.df["uid"] == uid, "origin_z"].values[0],
+        # ]
+        origin = self.get_uid_origin(uid=uid)
         # end_point = [
         #     self.df.loc[self.df["uid"] == uid, "end_x"].values[0],
         #     self.df.loc[self.df["uid"] == uid, "end_y"].values[0],
         #     self.df.loc[self.df["uid"] == uid, "end_z"].values[0],
         # ]
         # end_point = [
-        #     self.df.loc[self.df["uid"] == uid, "origin_x"].values[0] + self.df.loc[self.df["uid"] == uid, "length"].values[0] * np_sin(self.df.loc[self.df["uid"] == uid, "azimuth"].values[0] * np_pi / 180),
-        #     self.df.loc[self.df["uid"] == uid, "origin_y"].values[0] + self.df.loc[self.df["uid"] == uid, "length"].values[0] * np_cos(self.df.loc[self.df["uid"] == uid, "azimuth"].values[0] * np_pi / 180),
+        #     self.df.loc[self.df["uid"] == uid, "origin_x"].values[0] + self.df.loc[self.df["uid"] == uid, "length"].values[0] * np_sin(self.df.loc[self.df["uid"] == uid, "strike"].values[0] * np_pi / 180),
+        #     self.df.loc[self.df["uid"] == uid, "origin_y"].values[0] + self.df.loc[self.df["uid"] == uid, "length"].values[0] * np_cos(self.df.loc[self.df["uid"] == uid, "strike"].values[0] * np_pi / 180),
         #     self.df.loc[self.df["uid"] == uid, "origin_z"].values[0],
         # ]
-        normal = [
-            self.df.loc[self.df["uid"] == uid, "normal_x"].values[0],
-            self.df.loc[self.df["uid"] == uid, "normal_y"].values[0],
-            self.df.loc[self.df["uid"] == uid, "normal_z"].values[0],
-        ]
+        # normal = [
+        #     self.df.loc[self.df["uid"] == uid, "normal_x"].values[0],
+        #     self.df.loc[self.df["uid"] == uid, "normal_y"].values[0],
+        #     self.df.loc[self.df["uid"] == uid, "normal_z"].values[0],
+        # ]
+        normal = self.get_uid_normal_vect(section_uid=uid)
 
-        dip = np_deg2rad(self.df.loc[self.df["uid"] == uid, "dip"].values[0])
-        azi_r = np_deg2rad(self.df.loc[self.df["uid"] == uid, "azimuth"].values[0])
+        # dip = np_deg2rad(self.df.loc[self.df["uid"] == uid, "dip"].values[0])
+        # azi_r = np_deg2rad(self.df.loc[self.df["uid"] == uid, "strike"].values[0])
 
         width = self.df.loc[self.df["uid"] == uid, "width"].values[0]
         length = self.df.loc[self.df["uid"] == uid, "length"].values[0]
         # bottom = self.df.loc[self.df["uid"] == uid, "bottom"].values[0]
 
+        strike_vct = self.get_uid_strike_vect(section_uid=uid)
+        dip_vct = self.get_uid_dip_vect(section_uid=uid)
+        normal_vct = self.get_uid_normal_vect(section_uid=uid)
+
+        # frame is a polyline ordered according the right-hand rule, with the thumb pointing as the
+        # cross-section normal unit vector, and the first point in the origin, so the second
+        # point is given by origin + strike vector * length, etc. as follows
+
+        second_point = origin + strike_vct * length
+        third_point = origin + strike_vct * length + dip_vct * width
+        fourth_point = origin + dip_vct * width
+
         vtk_frame = XsPolyLine(x_section_uid=uid, parent=self.parent)
 
         frame_points = vtkPoints()
         frame_cells = vtkCellArray()
-        frame_points.InsertPoint(0, base_point[0], base_point[1], base_point[2])
-        frame_points.InsertPoint(
-            1,
-            base_point[0] + width * np_cos(dip) * np_cos(-azi_r),
-            base_point[1] + width * np_cos(dip) * np_sin(-azi_r),
-            base_point[2] + width * np_sin(dip),
-        )
-        frame_points.InsertPoint(
-            2,
-            base_point[0]
-            + length * np_sin(azi_r)
-            + width * np_cos(dip) * np_cos(-azi_r),
-            base_point[1]
-            + length * np_cos(azi_r)
-            + width * np_cos(dip) * np_sin(-azi_r),
-            base_point[2] + width * np_sin(dip),
-        )
-        frame_points.InsertPoint(
-            3,
-            base_point[0] + length * np_sin(azi_r),
-            base_point[1] + length * np_cos(azi_r),
-            base_point[2],
-        )
+        frame_points.InsertPoint(0, origin[0], origin[1], origin[2])
+        frame_points.InsertPoint(1, second_point[0], second_point[1], second_point[2])
+        frame_points.InsertPoint(2, third_point[0], third_point[1], third_point[2])
+        frame_points.InsertPoint(3, fourth_point[0], fourth_point[1], fourth_point[2])
         line = vtkLine()
         line.GetPointIds().SetId(0, 0)
         line.GetPointIds().SetId(1, 1)
@@ -702,7 +776,7 @@ class XSectionCollection(BaseCollection):
         vtk_frame.SetPoints(frame_points)
         vtk_frame.SetLines(frame_cells)
         vtk_plane = Plane()
-        vtk_plane.SetOrigin(base_point)
+        vtk_plane.SetOrigin(origin)
         vtk_plane.SetNormal(normal)
         self.df.loc[self.df["uid"] == uid, "vtk_plane"] = vtk_plane
         self.df.loc[self.df["uid"] == uid, "vtk_frame"] = vtk_frame
@@ -735,3 +809,83 @@ class XSectionCollection(BaseCollection):
             if coll_name != "xsect_coll":
                 all_entities[coll_name] = coll.get_xuid_uid(xuid=xuid)
         return all_entities
+
+    def fit_to_entities(self, xuid=None, fit_method=None):
+        """
+        Fit the xsection geometry to its child entities.
+        fit_method could be 'all', 'vertical' or 'frame', and in the second case only length, height, and the frame
+        are resized, but strike, dip, and origin are kept unchanged.
+        """
+        if not any(
+            [fit_method == "all", fit_method == "vertical", fit_method == "frame"]
+        ):
+            return
+        # collect all entities belonging to the cross-section in a dictionary sorted by collection
+        all_entities = self.get_all_xsect_entities(xuid=xuid)
+        # create a temporary point cloud appending all points belonging to all entities
+        vtkappend = vtkAppendPolyData()
+        for coll_name in all_entities.keys():
+            coll = eval(f"self.parent.{coll_name}")
+            for uid in all_entities[coll_name]:
+                if coll.get_uid_topology(uid=uid) in [
+                    "XsVertexSet",
+                    "XsPolyLine",
+                    "XsTriSurf",
+                    "XsAttitude",
+                ]:
+                    vtkappend.AddInputData(coll.get_uid_vtk_obj(uid))
+                elif coll.get_uid_topology(uid=uid) in ["XsVoxet", "XsImage"]:
+                    vtkappend.AddInputData(
+                        coll.coll.get_uid_vtk_obj(uid).frame.GetOutput()
+                    )
+        vtkappend.Update()
+        append_points = WrapDataObject(vtkappend.GetOutput()).Points
+        if append_points.GetNumberOfPoints() == 0:
+            return
+        # get the best fitting plane parameters
+        origin, normal = best_fitting_plane(append_points)
+        # now fit origin, strike and dip if the 'all' option is selected
+        if any([fit_method == "all", fit_method == "vertical"]):
+            if normal[2] > 0:
+                # force cross-section plane to dip with geological convention, i.e. normal points downwards
+                normal = -normal
+            if fit_method == "vertical":
+                # force normal to be horizontal -> dip = 90 deg
+                normal[0] /= np_sqrt(normal[0] ** 2 + normal[1] ** 2)
+                normal[1] /= np_sqrt(normal[0] ** 2 + normal[1] ** 2)
+                normal[2] = 0
+            strike = (np_rad2deg(np_arctan2(normal[0], normal[1])) - 90) % 360
+            dip = 90 - np_rad2deg(np_arcsin(-normal[2]))
+            # set normal, strike and dip in XSection
+            self.set_uid_strike(xuid, strike)
+            self.set_uid_dip(xuid, dip)
+            self.set_uid_origin_x(origin[0])
+            self.set_uid_origin_y(origin[1])
+            self.set_uid_origin_z(origin[2])
+
+        # now for all options we resize the cross-section frame, length, height and origin to fit the child entities
+        append_points_X = append_points.GetData()[0]
+        append_points_Y = append_points.GetData()[1]
+        append_points_Z = append_points.GetData()[2]
+        append_points_U, append_points_V = self.world2plane(
+            section_uid=xuid, X=append_points_X, Y=append_points_Y, Z=append_points_Z
+        )
+        max_U = max(append_points_U)
+        min_U = min(append_points_U)
+        max_V = max(append_points_V)
+        min_V = min(append_points_V)
+        new_length = max_U - min_U
+        new_height = max_V - min_V
+        strike_vct = self.get_uid_strike_vect(section_uid=xuid)
+        dip_vct = self.get_uid_dip_vect(section_uid=xuid)
+        # here we shift the origin of the cross-section by vector summation of a vector with
+        # components U along strike and V along dip
+        new_origin = origin + min_U * strike_vct + min_V * dip_vct
+        self.set_uid_length(xuid, new_length)
+        self.set_uid_width(xuid, new_height)
+        self.set_uid_origin_x(xuid, new_origin[0])
+        self.set_uid_origin_y(xuid, new_origin[1])
+        self.set_uid_origin_z(xuid, new_origin[2])
+
+        # optionally here at the end we could ensure all child entities are exactly aligned with the
+        # cross-section plane by projecting them along the normal vector - not yet implemented

@@ -1327,7 +1327,7 @@ def intersection_xs(self):
                             (cutter_bounds[1] - cutter_bounds[0]) ** 2
                             + (cutter_bounds[3] - cutter_bounds[2]) ** 2
                         ) / (dim_W - 1)
-                        azimuth = self.xsect_coll.get_uid_azimuth(xsect_uid)
+                        strike = self.xsect_coll.get_uid_strike(xsect_uid)
                         # The direction matrix is a 3x3 transformation matrix supporting scaling and rotation.
                         # (double  	e00,
                         # double  	e01,
@@ -1338,53 +1338,53 @@ def intersection_xs(self):
                         # double  	e20,
                         # double  	e21,
                         # double  	e22)
-                        if azimuth <= 90:
+                        if strike <= 90:
                             origin = [
                                 cutter_bounds[0],
                                 cutter_bounds[2],
                                 cutter_bounds[4],
                             ]
                             direction_matrix = [
-                                np_sin(azimuth * np_pi / 180),
+                                np_sin(strike * np_pi / 180),
                                 0,
-                                -(np_cos(azimuth * np_pi / 180)),
-                                np_cos(azimuth * np_pi / 180),
+                                -(np_cos(strike * np_pi / 180)),
+                                np_cos(strike * np_pi / 180),
                                 0,
-                                np_sin(azimuth * np_pi / 180),
+                                np_sin(strike * np_pi / 180),
                                 0,
                                 1,
                                 0,
                             ]
-                        elif azimuth <= 180:
+                        elif strike <= 180:
                             origin = [
                                 cutter_bounds[1],
                                 cutter_bounds[2],
                                 cutter_bounds[4],
                             ]
                             direction_matrix = [
-                                -(np_sin(azimuth * np_pi / 180)),
+                                -(np_sin(strike * np_pi / 180)),
                                 0,
-                                -(np_cos(azimuth * np_pi / 180)),
-                                -(np_cos(azimuth * np_pi / 180)),
+                                -(np_cos(strike * np_pi / 180)),
+                                -(np_cos(strike * np_pi / 180)),
                                 0,
-                                np_sin(azimuth * np_pi / 180),
+                                np_sin(strike * np_pi / 180),
                                 0,
                                 1,
                                 0,
                             ]
-                        elif azimuth <= 270:
+                        elif strike <= 270:
                             origin = [
                                 cutter_bounds[0],
                                 cutter_bounds[2],
                                 cutter_bounds[4],
                             ]
                             direction_matrix = [
-                                -(np_sin(azimuth * np_pi / 180)),
+                                -(np_sin(strike * np_pi / 180)),
                                 0,
-                                -(np_cos(azimuth * np_pi / 180)),
-                                -(np_cos(azimuth * np_pi / 180)),
+                                -(np_cos(strike * np_pi / 180)),
+                                -(np_cos(strike * np_pi / 180)),
                                 0,
-                                np_sin(azimuth * np_pi / 180),
+                                np_sin(strike * np_pi / 180),
                                 0,
                                 1,
                                 0,
@@ -1396,12 +1396,12 @@ def intersection_xs(self):
                                 cutter_bounds[4],
                             ]
                             direction_matrix = [
-                                np_sin(azimuth * np_pi / 180),
+                                np_sin(strike * np_pi / 180),
                                 0,
-                                -(np_cos(azimuth * np_pi / 180)),
-                                np_cos(azimuth * np_pi / 180),
+                                -(np_cos(strike * np_pi / 180)),
+                                np_cos(strike * np_pi / 180),
                                 0,
-                                np_sin(azimuth * np_pi / 180),
+                                np_sin(strike * np_pi / 180),
                                 0,
                                 1,
                                 0,
@@ -1681,8 +1681,8 @@ def project_2_xs(self):
         proj_plunge = -proj_plunge
     # Check for projection trend parallel to cross section.
     if (
-        abs(self.xsect_coll.get_uid_azimuth(xs_uid) - proj_trend) < 10.0
-        or abs(self.xsect_coll.get_uid_azimuth(xs_uid) - 180.0 - proj_trend) < 10.0
+        abs(self.xsect_coll.get_uid_strike(xs_uid) - proj_trend) < 10.0
+        or abs(self.xsect_coll.get_uid_strike(xs_uid) - 180.0 - proj_trend) < 10.0
     ):
         self.print_terminal(
             "Plunge too close to being parallel to XSection (angle < 10°)"

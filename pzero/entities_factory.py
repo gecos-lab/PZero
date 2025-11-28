@@ -1130,10 +1130,10 @@ class XsVertexSet(VertexSet):
     def points_xs_app_dip(self):
         """Returns apparent dip as Numpy array for map plotting if points have Normals property."""
         if "Normals" in self.point_data_keys:
-            xs_azimuth = self.parent.xsect_coll.get_uid_azimuth(self.x_section_uid)
+            xs_strike = self.parent.xsect_coll.get_uid_strike(self.x_section_uid)
             app_dip = np_arctan(
                 np_tan(self.points_map_dip * np_pi / 180)
-                * np_cos((self.points_map_dip_azimuth - xs_azimuth) * np_pi / 180)
+                * np_cos((self.points_map_dip_azimuth - xs_strike) * np_pi / 180)
                 * 180
                 / np_pi
             )
@@ -1145,10 +1145,10 @@ class XsVertexSet(VertexSet):
     def points_xs_app_plunge(self):
         """Returns apparent plunge as Numpy array for map plotting if points have Lineations property."""
         if "Lineations" in self.point_data_keys:
-            xs_azimuth = self.parent.xsect_coll.get_uid_azimuth(self.x_section_uid)
+            xs_strike = self.parent.xsect_coll.get_uid_strike(self.x_section_uid)
             app_plunge = np_arctan(
                 np_tan(self.points_map_plunge * np_pi / 180)
-                * np_cos((self.points_map_trend - xs_azimuth) * np_pi / 180)
+                * np_cos((self.points_map_trend - xs_strike) * np_pi / 180)
                 * 180
                 / np_pi
             )
@@ -1194,10 +1194,10 @@ class XsPolyLine(PolyLine):
     def points_xs_app_dip(self):
         """Returns apparent dip as Numpy array for map plotting if points have Normals property."""
         if "Normals" in self.point_data_keys:
-            xs_azimuth = self.parent.xsect_coll.get_uid_azimuth(self.x_section_uid)
+            xs_strike = self.parent.xsect_coll.get_uid_strike(self.x_section_uid)
             app_dip = np_arctan(
                 np_tan(self.points_map_dip * np_pi / 180)
-                * np_cos((self.points_map_dip_azimuth - xs_azimuth) * np_pi / 180)
+                * np_cos((self.points_map_dip_azimuth - xs_strike) * np_pi / 180)
                 * 180
                 / np_pi
             )
@@ -1209,10 +1209,10 @@ class XsPolyLine(PolyLine):
     def points_xs_app_plunge(self):
         """Returns apparent plunge as Numpy array for map plotting if points have Lineations property."""
         if "Lineations" in self.point_data_keys:
-            xs_azimuth = self.parent.xsect_coll.get_uid_azimuth(self.x_section_uid)
+            xs_strike = self.parent.xsect_coll.get_uid_strike(self.x_section_uid)
             app_plunge = np_arctan(
                 np_tan(self.points_map_plunge * np_pi / 180)
-                * np_cos((self.points_map_trend - xs_azimuth) * np_pi / 180)
+                * np_cos((self.points_map_trend - xs_strike) * np_pi / 180)
                 * 180
                 / np_pi
             )
@@ -1340,10 +1340,10 @@ class XsTriSurf(TriSurf):
     def points_xs_app_dip(self):
         """Returns apparent dip as Numpy array for map plotting if points have Normals property."""
         if "Normals" in self.point_data_keys:
-            xs_azimuth = self.parent.xsect_coll.get_uid_azimuth(self.x_section_uid)
+            xs_strike = self.parent.xsect_coll.get_uid_strike(self.x_section_uid)
             app_dip = np_arctan(
                 np_tan(self.points_map_dip * np_pi / 180)
-                * np_cos((self.points_map_dip_azimuth - xs_azimuth) * np_pi / 180)
+                * np_cos((self.points_map_dip_azimuth - xs_strike) * np_pi / 180)
                 * 180
                 / np_pi
             )
@@ -1355,10 +1355,10 @@ class XsTriSurf(TriSurf):
     def points_xs_app_plunge(self):
         """Returns apparent plunge as Numpy array for map plotting if points have Lineations property."""
         if "Lineations" in self.point_data_keys:
-            xs_azimuth = self.parent.xsect_coll.get_uid_azimuth(self.x_section_uid)
+            xs_strike = self.parent.xsect_coll.get_uid_strike(self.x_section_uid)
             app_plunge = np_arctan(
                 np_tan(self.points_map_plunge * np_pi / 180)
-                * np_cos((self.points_map_trend - xs_azimuth) * np_pi / 180)
+                * np_cos((self.points_map_trend - xs_strike) * np_pi / 180)
                 * 180
                 / np_pi
             )
@@ -1755,8 +1755,8 @@ class XsVoxet(Voxet):
     #     x_section_origin_y = self.parent.xsect_coll.get_uid_origin_y(self.x_section_uid)
     #     x_section_end_x = self.parent.xsect_coll.get_uid_end_x(self.x_section_uid)
     #     x_section_end_y = self.parent.xsect_coll.get_uid_end_y(self.x_section_uid)
-    #     x_section_azimuth = self.parent.xsect_coll.get_uid_azimuth(self.x_section_uid)
-    #     if (0 <= x_section_azimuth <= 90) or (180 < x_section_azimuth <= 270):
+    #     x_section_strike = self.parent.xsect_coll.get_uid_strike(self.x_section_uid)
+    #     if (0 <= x_section_strike <= 90) or (180 < x_section_strike <= 270):
     #         sense_min = np_sign(
     #             (self.bounds[0] - x_section_origin_x)
     #             * (x_section_end_x - x_section_origin_x)
@@ -2564,8 +2564,8 @@ class XsImage(Image):
     #     x_section_origin_y = self.parent.xsect_coll.get_uid_origin_y(self.x_section_uid)
     #     x_section_end_x = self.parent.xsect_coll.get_uid_end_x(self.x_section_uid)
     #     x_section_end_y = self.parent.xsect_coll.get_uid_end_y(self.x_section_uid)
-    #     x_section_azimuth = self.parent.xsect_coll.get_uid_azimuth(self.x_section_uid)
-    #     if (0 <= x_section_azimuth <= 90) or (180 < x_section_azimuth <= 270):
+    #     x_section_strike = self.parent.xsect_coll.get_uid_strike(self.x_section_uid)
+    #     if (0 <= x_section_strike <= 90) or (180 < x_section_strike <= 270):
     #         sense_min = np_sign(
     #             (self.bounds[0] - x_section_origin_x)
     #             * (x_section_end_x - x_section_origin_x)
@@ -2634,18 +2634,18 @@ class XsImage(Image):
     @property
     def frame(self):
         """Create rectangular frame to be textured."""
-        x_section_azimuth = self.parent.xsect_coll.get_uid_azimuth(self.x_section_uid)
-        if 0 <= x_section_azimuth <= 90:
+        x_section_strike = self.parent.xsect_coll.get_uid_strike(self.x_section_uid)
+        if 0 <= x_section_strike <= 90:
             left_x = self.bounds[0]
             left_y = self.bounds[2]
             right_x = self.bounds[1]
             right_y = self.bounds[3]
-        elif 90 < x_section_azimuth <= 180:
+        elif 90 < x_section_strike <= 180:
             left_x = self.bounds[0]
             left_y = self.bounds[3]
             right_x = self.bounds[1]
             right_y = self.bounds[2]
-        elif 180 < x_section_azimuth <= 270:
+        elif 180 < x_section_strike <= 270:
             left_x = self.bounds[1]
             left_y = self.bounds[3]
             right_x = self.bounds[0]

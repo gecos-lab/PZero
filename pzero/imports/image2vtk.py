@@ -128,8 +128,8 @@ def xs_image2vtk(self=None, in_file_name=None, x_section_uid=None):
     # Image size as read by rasterio.
     dim_W = xs_image.width
     dim_Z = xs_image.height
-    # Cross-section azimuth
-    azimuth = self.xsect_coll.get_uid_azimuth(x_section_uid)
+    # Cross-section strike
+    strike = self.xsect_coll.get_uid_strike(x_section_uid)
     origin_z = self.xsect_coll.get_uid_bottom(x_section_uid)
     width = self.xsect_coll.get_uid_length(x_section_uid)
     height = np_abs(self.xsect_coll.get_uid_top(x_section_uid)) - np_abs(
@@ -174,12 +174,12 @@ def xs_image2vtk(self=None, in_file_name=None, x_section_uid=None):
     # double  	e22)
     # CHECK THIS FOR VARIOUS SECTION ORIENTATIONS______________________________________________________________
     direction_matrix = [
-        np_sin(azimuth * np_pi / 180),
+        np_sin(strike * np_pi / 180),
         0,
-        -(np_cos(azimuth * np_pi / 180)),
-        np_cos(azimuth * np_pi / 180),
+        -(np_cos(strike * np_pi / 180)),
+        np_cos(strike * np_pi / 180),
         0,
-        np_sin(azimuth * np_pi / 180),
+        np_sin(strike * np_pi / 180),
         0,
         1,
         0,

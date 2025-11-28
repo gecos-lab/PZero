@@ -1715,6 +1715,13 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 # reindex new_dom_coll_df to catch any problem with non-consecutive indices
                 new_xsect_coll_df.reset_index(drop=True, inplace=True)
                 if not new_xsect_coll_df.empty:
+                    if "azimuth" in new_xsect_coll_df.columns:
+                        new_xsect_coll_df.rename(
+                            columns={"azimuth": "strike"}, inplace=True
+                        )
+                        self.print_terminal(
+                            "column azimuth renamed as strike in x-section table"
+                        )
                     if "base_x" in new_xsect_coll_df.columns:
                         new_xsect_coll_df.rename(
                             columns={"base_x": "origin_x"}, inplace=True
@@ -1736,6 +1743,13 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                         self.print_terminal(
                             "column base_z renamed as origin_z in x-section table"
                         )
+                    # if "top" in new_xsect_coll_df.columns:
+                    #     new_xsect_coll_df.rename(
+                    #         columns={"top": "origin_z"}, inplace=True
+                    #     )
+                    #     self.print_terminal(
+                    #         "column top renamed as origin_z in x-section table"
+                    #     )
                     # keep this workaround until x-section table is simplified by removing redundant columns ______________
                     if not "width" in new_xsect_coll_df:
                         new_xsect_coll_df.insert(
@@ -2599,7 +2613,28 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             # Update legend.
             self.prop_legend.update_widget(parent=self)
 
-        except:
+
+        except BaseException as e:
+            # Get current system exception
+            import sys
+            import traceback
+
+            ex_type, ex_value, ex_traceback = sys.exc_info()
+
+            # Extract unformatter stack traces as tuples
+            trace_back = traceback.extract_tb(ex_traceback)
+
+            # Format stacktrace
+            stack_trace = list()
+
+            for trace in trace_back:
+                stack_trace.append(
+                    "File : %s , Line : %d, Func.Name : %s, Message : %s" % (trace[0], trace[1], trace[2], trace[3]))
+
+            print("Exception type : %s " % ex_type.__name__)
+            print("Exception message : %s" % ex_value)
+            print("Stack trace : %s" % stack_trace)
+
             self.print_terminal("Error - tried to open invalid project.")
 
     # ---- Methods used to import entities from other file formats. ----
