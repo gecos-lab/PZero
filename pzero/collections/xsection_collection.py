@@ -58,13 +58,14 @@ def section_from_strike(self, vector):
         "name": ["Insert Xsection name", "new_section", "QLineEdit"],
         "origin_x": ["Insert origin X coord", vector.p1[0], "QLineEdit"],
         "origin_y": ["Insert origin Y coord", vector.p1[1], "QLineEdit"],
+        "origin_z": ["Insert origin Z coord", vector.p1[2], "QLineEdit"],
         # "end_x": ["Insert end X coord", vector.p2[0], "QLineEdit"],
         # "end_y": ["Insert end Y coord", vector.p2[1], "QLineEdit"],
         "strike": ["Insert strike", vector.azimuth, "QLineEdit"],
         "dip": ["Insert dip", 90.0, "QLineEdit"],
         "length": ["Insert length", vector.length, "QLineEdit"],
         "width": ["Insert width", 0.0, "QLineEdit"],
-        "bottom": ["Insert bottom", 0.0, "QLineEdit"],
+        # "bottom": ["Insert bottom", 0.0, "QLineEdit"],
         "multiple": [
             "Multiple XSections",
             "Draw a set of parallel XSections",
@@ -97,16 +98,16 @@ def section_from_strike(self, vector):
     along = section_dict["along"]
     section_dict.pop("multiple", None)
     section_dict.pop("num_xs", None)
-    # Define other (redundant) section parameters.
-    section_dict["origin_z"] = section_dict["bottom"]
-    section_dict["end_z"] = section_dict["top"]
-    # Calculate normals.
-    normals = dip_directions2normals(
-        dips=section_dict["dip"], directions=(section_dict["strike"] + 90) % 360
-    )
-    section_dict["normal_x"] = normals[0]
-    section_dict["normal_y"] = normals[1]
-    section_dict["normal_z"] = normals[2]
+    # # Define other (redundant) section parameters.
+    # section_dict["origin_z"] = section_dict["bottom"]
+    # section_dict["end_z"] = section_dict["top"]
+    # # Calculate normals.
+    # normals = dip_directions2normals(
+    #     dips=section_dict["dip"], directions=(section_dict["strike"] + 90) % 360
+    # )
+    # section_dict["normal_x"] = normals[0]
+    # section_dict["normal_y"] = normals[1]
+    # section_dict["normal_z"] = normals[2]
     # ADD CROSS-SECTION TO COLLECTION.
     uid = self.parent.xsect_coll.add_entity_from_dict(entity_dict=section_dict)
     # The following seems not necessary
@@ -145,8 +146,8 @@ def section_from_strike(self, vector):
             # section_dict["end_x"] = new_points[3, 0]
             # section_dict["end_y"] = new_points[3, 1]
             # section_dict["end_z"] = new_points[3, 2]
-            section_dict["bottom"] = new_points[0, 2]
-            section_dict["top"] = new_points[3, 2]
+            # section_dict["bottom"] = new_points[0, 2]
+            # section_dict["top"] = new_points[3, 2]
             section_dict["uid"] = None
             uid = self.parent.xsect_coll.add_entity_from_dict(entity_dict=section_dict)
     # At the end un-freeze the Qt interface before returning.
@@ -331,15 +332,15 @@ class XSectionCollection(BaseCollection):
             # "end_x": 0.0,  # to be removed
             # "end_y": 0.0,
             # "end_z": 0.0,
-            "normal_x": 0.0,  # to be removed
-            "normal_y": 0.0,
-            "normal_z": 0.0,
+            # "normal_x": 0.0,  # to be removed
+            # "normal_y": 0.0,
+            # "normal_z": 0.0,
             "strike": 0.0,  # right-handed strike direction, rename as strike
             "dip": 90.0,
             "length": 0.0,
             "width": 0.0,  # rename to height
-            "top": 0.0,  # to be removed
-            "bottom": 0.0,
+            # "top": 0.0,  # to be removed
+            # "bottom": 0.0,
             "vtk_plane": None,  # None to avoid errors with deepcopy
             "vtk_frame": None,  # None to avoid errors with deepcopy
         }
@@ -353,15 +354,15 @@ class XSectionCollection(BaseCollection):
             # "end_x": float,
             # "end_y": float,
             # "end_z": float,
-            "normal_x": float,
-            "normal_y": float,
-            "normal_z": float,
+            # "normal_x": float,
+            # "normal_y": float,
+            # "normal_z": float,
             "strike": float,
             "dip": float,
             "length": float,
             "width": float,
-            "top": float,
-            "bottom": float,
+            # "top": float,
+            # "bottom": float,
             "vtk_plane": object,
             "vtk_frame": object,
         }
@@ -532,19 +533,26 @@ class XSectionCollection(BaseCollection):
 
     def get_uid_top(self, uid=None):
         """Get value(s) stored in dataframe (as pointer) from uid."""
-        return self.df.loc[self.df["uid"] == uid, "top"].values[0]
+        return self.df.loc[self.df["uid"] == uid, "origin_z"].values[0]
 
-    def set_uid_top(self, uid=None, top=None):
-        """Set value(s) stored in dataframe (as pointer) from uid."""
-        self.df.loc[self.df["uid"] == uid, "top"] = top
+    # def set_uid_top(
+    #     self, uid=None, top=None
+    # ):  # ----------------------------------------------------------------------
+    #     """Set value(s) stored in dataframe (as pointer) from uid."""
+    #     self.df.loc[self.df["uid"] == uid, "top"] = top
 
     def get_uid_bottom(self, uid=None):
         """Get value(s) stored in dataframe (as pointer) from uid."""
-        return self.df.loc[self.df["uid"] == uid, "bottom"].values[0]
+        origin_z = self.df.loc[self.df["uid"] == uid, "origin_z"].values[0]
+        dip = self.df.loc[self.df["uid"] == uid, "dip"].values[0]
+        width = self.df.loc[self.df["uid"] == uid, "width"].values[0]
+        return origin_z - width * np_sin(np_deg2rad(dip))
 
-    def set_uid_bottom(self, uid=None, bottom=None):
-        """Set value(s) stored in dataframe (as pointer) from uid."""
-        self.df.loc[self.df["uid"] == uid, "bottom"] = bottom
+    # def set_uid_bottom(
+    #     self, uid=None, bottom=None
+    # ):  # ----------------------------------------------------------------------
+    #     """Set value(s) stored in dataframe (as pointer) from uid."""
+    #     self.df.loc[self.df["uid"] == uid, "bottom"] = bottom
 
     def get_uid_vtk_plane(self, uid=None):
         """Get value(s) stored in dataframe (as pointer) from uid."""
@@ -654,13 +662,13 @@ class XSectionCollection(BaseCollection):
         return np_cross(strike_vct, dip_vct)
 
     def get_uid_normal_x(self, uid=None):
-        return self.get_uid_normal_x(uid)[0]
+        return self.get_uid_normal_vect(uid)[0]
 
     def get_uid_normal_y(self, uid=None):
-        return self.get_uid_normal_x(uid)[1]
+        return self.get_uid_normal_vect(uid)[1]
 
     def get_uid_normal_z(self, uid=None):
-        return self.get_uid_normal_x(uid)[2]
+        return self.get_uid_normal_vect(uid)[2]
 
     def world2plane(self, section_uid=None, X=None, Y=None, Z=None, as_arr=False):
         """Get UV cross-section plane coordinates from XYZ world coordinates."""
@@ -795,11 +803,13 @@ class XSectionCollection(BaseCollection):
     #         ** 2
     #     )
 
-    def set_width(self, uid=None):
-        self.df.loc[self.df["uid"] == uid, "width"] = (
-            self.df.loc[self.df["uid"] == uid, "top"]
-            - self.df.loc[self.df["uid"] == uid, "bottom"]
-        )
+    # def set_width(
+    #     self, uid=None
+    # ):  # ----------------------------------------------------------------------
+    #     self.df.loc[self.df["uid"] == uid, "width"] = (
+    #         self.df.loc[self.df["uid"] == uid, "top"]
+    #         - self.df.loc[self.df["uid"] == uid, "bottom"]
+    #     )
 
     def get_all_xsect_entities(self, xuid=None):
         """Get all entities belonging to the uid cross-section, in a dictionary sorted by collection."""

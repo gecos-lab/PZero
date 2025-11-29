@@ -1736,21 +1736,13 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                         self.print_terminal(
                             "column base_y renamed as origin_y in x-section table"
                         )
-                    if "base_z" in new_xsect_coll_df.columns:
-                        new_xsect_coll_df.rename(
-                            columns={"base_z": "origin_z"}, inplace=True
-                        )
-                        self.print_terminal(
-                            "column base_z renamed as origin_z in x-section table"
-                        )
-                    # if "top" in new_xsect_coll_df.columns:
+                    # if "base_z" in new_xsect_coll_df.columns:
                     #     new_xsect_coll_df.rename(
-                    #         columns={"top": "origin_z"}, inplace=True
+                    #         columns={"base_z": "origin_z"}, inplace=True
                     #     )
                     #     self.print_terminal(
-                    #         "column top renamed as origin_z in x-section table"
+                    #         "column base_z renamed as origin_z in x-section table"
                     #     )
-                    # keep this workaround until x-section table is simplified by removing redundant columns ______________
                     if not "width" in new_xsect_coll_df:
                         new_xsect_coll_df.insert(
                             15,
@@ -1758,6 +1750,14 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                             new_xsect_coll_df.top - new_xsect_coll_df.bottom,
                         )
                         self.print_terminal("column width added to xsect table")
+                    if "top" in new_xsect_coll_df.columns:
+                        new_xsect_coll_df.rename(
+                            columns={"top": "origin_z"}, inplace=True
+                        )
+                        self.print_terminal(
+                            "column top renamed as origin_z in x-section table"
+                        )
+
 
                     for new_column in new_xsect_coll_df.columns.values.tolist():
                         if new_column not in self.xsect_coll.df.columns.values.tolist():
