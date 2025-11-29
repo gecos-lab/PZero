@@ -1743,13 +1743,13 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     #     self.print_terminal(
                     #         "column base_z renamed as origin_z in x-section table"
                     #     )
-                    if not "width" in new_xsect_coll_df:
+                    if not "height" in new_xsect_coll_df:
                         new_xsect_coll_df.insert(
                             15,
-                            "width",
+                            "height",
                             new_xsect_coll_df.top - new_xsect_coll_df.bottom,
                         )
-                        self.print_terminal("column width added to xsect table")
+                        self.print_terminal("column height added to xsect table")
                     if "top" in new_xsect_coll_df.columns:
                         new_xsect_coll_df.rename(
                             columns={"top": "origin_z"}, inplace=True

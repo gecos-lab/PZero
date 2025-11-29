@@ -64,7 +64,7 @@ def section_from_strike(self, vector):
         "strike": ["Insert strike", vector.azimuth, "QLineEdit"],
         "dip": ["Insert dip", 90.0, "QLineEdit"],
         "length": ["Insert length", vector.length, "QLineEdit"],
-        "width": ["Insert width", 0.0, "QLineEdit"],
+        "height": ["Insert height", 0.0, "QLineEdit"],
         # "bottom": ["Insert bottom", 0.0, "QLineEdit"],
         "multiple": [
             "Multiple XSections",
@@ -338,7 +338,7 @@ class XSectionCollection(BaseCollection):
             "strike": 0.0,  # right-handed strike direction, rename as strike
             "dip": 90.0,
             "length": 0.0,
-            "width": 0.0,  # rename to height
+            "height": 0.0,  # rename to height
             # "top": 0.0,  # to be removed
             # "bottom": 0.0,
             "vtk_plane": None,  # None to avoid errors with deepcopy
@@ -360,7 +360,7 @@ class XSectionCollection(BaseCollection):
             "strike": float,
             "dip": float,
             "length": float,
-            "width": float,
+            "height": float,
             # "top": float,
             # "bottom": float,
             "vtk_plane": object,
@@ -525,11 +525,11 @@ class XSectionCollection(BaseCollection):
 
     def get_uid_width(self, uid=None):
         """Get value(s) stored in dataframe (as pointer) from uid."""
-        return self.df.loc[self.df["uid"] == uid, "width"].values[0]
+        return self.df.loc[self.df["uid"] == uid, "height"].values[0]
 
-    def set_uid_width(self, uid=None, width=None):
+    def set_uid_width(self, uid=None, height=None):
         """Set value(s) stored in dataframe (as pointer) from uid."""
-        self.df.loc[self.df["uid"] == uid, "width"] = width
+        self.df.loc[self.df["uid"] == uid, "height"] = height
 
     def get_uid_top(self, uid=None):
         """Get value(s) stored in dataframe (as pointer) from uid."""
@@ -545,8 +545,8 @@ class XSectionCollection(BaseCollection):
         """Get value(s) stored in dataframe (as pointer) from uid."""
         origin_z = self.df.loc[self.df["uid"] == uid, "origin_z"].values[0]
         dip = self.df.loc[self.df["uid"] == uid, "dip"].values[0]
-        width = self.df.loc[self.df["uid"] == uid, "width"].values[0]
-        return origin_z - width * np_sin(np_deg2rad(dip))
+        height = self.df.loc[self.df["uid"] == uid, "height"].values[0]
+        return origin_z - height * np_sin(np_deg2rad(dip))
 
     # def set_uid_bottom(
     #     self, uid=None, bottom=None
@@ -744,7 +744,7 @@ class XSectionCollection(BaseCollection):
         # dip = np_deg2rad(self.df.loc[self.df["uid"] == uid, "dip"].values[0])
         # azi_r = np_deg2rad(self.df.loc[self.df["uid"] == uid, "strike"].values[0])
 
-        width = self.df.loc[self.df["uid"] == uid, "width"].values[0]
+        height = self.df.loc[self.df["uid"] == uid, "height"].values[0]
         length = self.df.loc[self.df["uid"] == uid, "length"].values[0]
         # bottom = self.df.loc[self.df["uid"] == uid, "bottom"].values[0]
 
@@ -757,8 +757,8 @@ class XSectionCollection(BaseCollection):
         # point is given by origin + strike vector * length, etc. as follows
 
         second_point = origin + strike_vct * length
-        third_point = origin + strike_vct * length + dip_vct * width
-        fourth_point = origin + dip_vct * width
+        third_point = origin + strike_vct * length + dip_vct * height
+        fourth_point = origin + dip_vct * height
 
         vtk_frame = XsPolyLine(x_section_uid=uid, parent=self.parent)
 
@@ -806,7 +806,7 @@ class XSectionCollection(BaseCollection):
     # def set_width(
     #     self, uid=None
     # ):  # ----------------------------------------------------------------------
-    #     self.df.loc[self.df["uid"] == uid, "width"] = (
+    #     self.df.loc[self.df["uid"] == uid, "height"] = (
     #         self.df.loc[self.df["uid"] == uid, "top"]
     #         - self.df.loc[self.df["uid"] == uid, "bottom"]
     #     )
