@@ -510,6 +510,14 @@ class TetrahedralMeshGenerator:
             if self._is_valid_triangle(tri, global_vertices):
                 validated_facets.append(tri)
                 validated_facet_markers.append(global_facet_markers[i])
+        
+        # 6) CRITICAL: Remove duplicate/overlapping triangles (C++ MeshIt style)
+        # When two surfaces share an intersection, both might generate triangles
+        # at the same location. TetGen will fail if the same triangle exists twice
+        # with different facet markers.
+        validated_facets, validated_facet_markers = self._remove_duplicate_triangles(
+            validated_facets, validated_facet_markers, global_vertices
+        )
 
         # Final assignment
         self.plc_vertices = np.asarray(global_vertices, dtype=np.float64)
@@ -665,6 +673,127 @@ class TetrahedralMeshGenerator:
             
         except Exception:
             return False
+    
+    def _remove_duplicate_triangles(self, triangles, markers, vertices):
+        """
+        Remove duplicate and overlapping triangles from the PLC.
+        
+        This is critical for TetGen because overlapping facets with different markers
+        will cause meshing to fail. When two surfaces share an intersection line,
+        they can each generate triangles that are geometrically identical or very close.
+        
+        Strategy (C++ MeshIt style):
+        1. Remove exact duplicates (same vertex indices, regardless of order)
+        2. Remove geometrically duplicate triangles (same vertices, different indices due to tolerance)
+        3. When duplicates exist with different markers, keep one (prefer boundary over fault)
+        
+        Returns:
+            Tuple of (cleaned_triangles, cleaned_markers)
+        """
+        if len(triangles) == 0:
+            return triangles, markers
+        
+        # Ensure we're working with lists for consistent behavior
+        triangles = [list(t) for t in triangles]
+        markers = list(markers)
+        
+        logger.info(f"Checking {len(triangles)} triangles for duplicates/overlaps...")
+        
+        # Step 1: Remove exact duplicates (same vertex indices)
+        # Use frozenset to catch triangles with same vertices in any order
+        seen_index_sets = {}  # frozenset(tri) -> (first_index, marker)
+        index_duplicates = 0
+        duplicate_pairs = []  # For logging which surfaces are overlapping
+        
+        for i, tri in enumerate(triangles):
+            tri_set = frozenset(tri)
+            if tri_set in seen_index_sets:
+                index_duplicates += 1
+                orig_idx, orig_marker = seen_index_sets[tri_set]
+                curr_marker = markers[i]
+                if orig_marker != curr_marker:
+                    duplicate_pairs.append((orig_marker, curr_marker, tri))
+            else:
+                seen_index_sets[tri_set] = (i, markers[i])
+        
+        if index_duplicates > 0:
+            logger.warning(f"Found {index_duplicates} duplicate triangles (same vertex indices, different markers)")
+            # Log which surface pairs have overlapping triangles
+            marker_conflicts = {}
+            for orig_m, curr_m, tri in duplicate_pairs:
+                key = tuple(sorted([orig_m, curr_m]))
+                if key not in marker_conflicts:
+                    marker_conflicts[key] = 0
+                marker_conflicts[key] += 1
+            for (m1, m2), count in marker_conflicts.items():
+                logger.warning(f"  Surfaces {m1} and {m2}: {count} shared triangles")
+        
+        # Keep only unique triangles after index dedup
+        unique_indices = [info[0] for info in seen_index_sets.values()]
+        triangles = [triangles[i] for i in sorted(unique_indices)]
+        markers = [markers[i] for i in sorted(unique_indices)]
+        
+        # Step 2: Remove geometrically duplicate triangles
+        # Two triangles are geometric duplicates if their centroids and areas match closely
+        def get_triangle_signature(tri):
+            """Create a geometric signature for a triangle."""
+            try:
+                v0, v1, v2 = [np.array(vertices[idx]) for idx in tri]
+                centroid = (v0 + v1 + v2) / 3.0
+                edge1 = v1 - v0
+                edge2 = v2 - v0
+                area = 0.5 * np.linalg.norm(np.cross(edge1, edge2))
+                # Round to tolerance for comparison
+                cx, cy, cz = round(centroid[0], 6), round(centroid[1], 6), round(centroid[2], 6)
+                a = round(area, 6)
+                return (cx, cy, cz, a)
+            except Exception:
+                return None
+        
+        # Group triangles by their geometric signature
+        signature_to_tris = {}  # signature -> [(tri_index, marker), ...]
+        for i, tri in enumerate(triangles):
+            sig = get_triangle_signature(tri)
+            if sig is not None:
+                if sig not in signature_to_tris:
+                    signature_to_tris[sig] = []
+                signature_to_tris[sig].append((i, markers[i]))
+        
+        # For each group of geometric duplicates, keep only one
+        # Priority: boundary surfaces (lower marker) over faults (marker >= 1000)
+        kept_indices = set()
+        geometric_duplicates = 0
+        
+        for sig, tri_list in signature_to_tris.items():
+            if len(tri_list) == 1:
+                kept_indices.add(tri_list[0][0])
+            else:
+                geometric_duplicates += len(tri_list) - 1
+                # Sort by marker: prefer lower markers (boundary surfaces)
+                # Fault markers are >= 1000, so boundaries will be preferred
+                tri_list_sorted = sorted(tri_list, key=lambda x: x[1])
+                kept_indices.add(tri_list_sorted[0][0])
+                
+                # Log what we're removing
+                removed_markers = [m for _, m in tri_list_sorted[1:]]
+                kept_marker = tri_list_sorted[0][1]
+                logger.debug(f"Geometric duplicate: keeping marker {kept_marker}, removing markers {removed_markers}")
+        
+        if geometric_duplicates > 0:
+            logger.warning(f"Removed {geometric_duplicates} geometrically duplicate triangles (overlapping surfaces)")
+        
+        # Build final lists
+        final_triangles = []
+        final_markers = []
+        for i in sorted(kept_indices):
+            final_triangles.append(triangles[i])
+            final_markers.append(markers[i])
+        
+        total_removed = len(triangles) - len(final_triangles) + index_duplicates
+        if total_removed > 0:
+            logger.info(f"✓ Duplicate removal complete: {total_removed} triangles removed, {len(final_triangles)} remaining")
+        
+        return final_triangles, final_markers
 
     def _resolve_overlapping_triangles(self, triangles, markers, vertices):
         """
@@ -1131,65 +1260,64 @@ class TetrahedralMeshGenerator:
             logger.error(f"NetCDF export failed: {str(e)}")
             return False
 
-    def get_mesh_with_embedded_faults(self, mesh_data: Optional[pv.UnstructuredGrid] = None) -> Optional[pv.UnstructuredGrid]:
-        """
-        Create a combined mesh with embedded fault surfaces (C++ MeshIt style).
-        
-        This method extracts fault surfaces from TetGen and merges them with the volumetric
-        tetrahedral mesh, creating a single UnstructuredGrid with both tetrahedra and
-        fault triangles. This is the same approach used by C++ MeshIt.
-        
-        Args:
-            mesh_data: The tetrahedral mesh to process. If None, uses self.tetrahedral_mesh
-            
-        Returns:
-            Combined PyVista UnstructuredGrid with embedded faults, or the original mesh if
-            no faults are found or if fault extraction fails.
-        """
-        if mesh_data is None:
-            mesh_data = self.tetrahedral_mesh
+    def export_mesh(self, file_path: str, mesh_data: Optional[Dict] = None) -> bool:
+        if mesh_data is None: mesh_data = self.tetrahedral_mesh
         if not mesh_data:
-            logger.error("No tetrahedral mesh available")
-            return None
-            
+            logger.error("No tetrahedral mesh to export")
+            return False
+
+        try:
+            if isinstance(mesh_data, pv.UnstructuredGrid):
+                # Check file extension to determine export format
+                file_ext = file_path.lower().split('.')[-1]
+
+                if file_ext in ['nc', 'nc4', 'cdf', 'exo']:
+                    # Use NetCDF/EXODUS export
+                    return self._export_netcdf(file_path, mesh_data)
+                else:
+                    # Enhanced export for VTK/VTU formats with material information
+                    return self._export_with_materials(file_path, mesh_data)
+        except Exception as e:
+            logger.error(f"Export failed: {str(e)}")
+            return False
+        return False
+    
+    def _export_with_materials(self, file_path: str, mesh_data: pv.UnstructuredGrid) -> bool:
+        """
+        Export mesh with proper material information for ParaView visualization.
+        Combines volumetric tetrahedra AND fault surfaces into a single mesh (C++ style).
+        This ensures faults appear as embedded constraint surfaces in ParaView.
+        """
         try:
             import numpy as np
             import pyvista as pv
             
-            # Start with a copy of the volumetric tetrahedral mesh
+            logger.info("Exporting tetrahedral mesh with embedded fault surfaces (C++ MeshIt style)...")
+            
+            # Start with the volumetric tetrahedral mesh
             volume_mesh = mesh_data.copy()
             
             # Extract all fault surfaces from TetGen and merge with volume
             fault_surfaces_added = 0
             if hasattr(self, 'tetgen_object') and self.tetgen_object is not None:
-                logger.info("DEBUG: TetGen object is available for fault extraction")
-                
                 # Check BOTH materials lists (self.materials and tetra_materials)
                 fault_materials = []
                 
                 # Check self.materials (from PLC generation)
                 if hasattr(self, 'materials') and self.materials:
-                    self_faults = [m for m in self.materials if m.get('type') == 'FAULT']
-                    fault_materials.extend(self_faults)
-                    logger.info(f"DEBUG: Found {len(self_faults)} faults in self.materials")
-                else:
-                    logger.info("DEBUG: No self.materials or it's empty")
+                    fault_materials.extend([m for m in self.materials if m.get('type') == 'FAULT'])
                 
                 # Check tetra_materials (from GUI, includes TetGen markers)
                 if hasattr(self, 'tetra_materials') and self.tetra_materials:
                     tetra_faults = [m for m in self.tetra_materials if m.get('type') == 'FAULT']
-                    logger.info(f"DEBUG: Found {len(tetra_faults)} faults in self.tetra_materials")
                     # Add only if not already in fault_materials
                     for tf in tetra_faults:
                         if not any(f.get('attribute') == tf.get('attribute') for f in fault_materials):
                             fault_materials.append(tf)
-                            logger.info(f"DEBUG: Added fault from tetra_materials: {tf.get('name')}")
-                else:
-                    logger.info("DEBUG: No self.tetra_materials or it's empty")
                 
-                logger.info(f"Found {len(fault_materials)} fault materials for embedding")
+                logger.info(f"Found {len(fault_materials)} fault materials for export")
                 for fm in fault_materials:
-                    logger.info(f"  Fault: {fm.get('name')} (ID {fm.get('attribute')}, marker {fm.get('marker')})")
+                    logger.debug(f"  Fault: {fm.get('name')} (ID {fm.get('attribute')}, marker {fm.get('marker')})")
                 
                 # Collect all fault triangles
                 all_fault_points = []
@@ -1223,6 +1351,9 @@ class TetrahedralMeshGenerator:
                 # Merge fault surfaces with volume mesh (C++ style: single combined mesh)
                 if fault_surfaces_added > 0:
                     logger.info(f"Merging {fault_surfaces_added} fault surfaces with volume mesh...")
+                    
+                    # Create a combined UnstructuredGrid with both tetrahedra and triangles
+                    # This is the C++ MeshIt approach: mixed element types in one mesh
                     
                     # Get volume data
                     volume_points = volume_mesh.points
@@ -1276,62 +1407,17 @@ class TetrahedralMeshGenerator:
                     combined_mesh = pv.UnstructuredGrid(final_cells, final_cell_types, final_points)
                     combined_mesh.cell_data['MaterialID'] = final_material_ids
                     
-                    # Add a CellType array to distinguish tetrahedra from triangles
+                    # Add a CellType array to distinguish tetrahedra from triangles in ParaView
                     cell_type_names = np.where(final_cell_types == 10, 0, 1)  # 0=Tetrahedra, 1=Triangle(Fault)
                     combined_mesh.cell_data['CellType'] = cell_type_names
                     
                     logger.info(f"✓ Created combined mesh: {combined_mesh.n_cells} cells ({volume_mesh.n_cells} tetrahedra + {combined_mesh.n_cells - volume_mesh.n_cells} fault triangles)")
                     logger.info(f"✓ Total points: {combined_mesh.n_points}")
                     
-                    return combined_mesh
+                    # Use the combined mesh for export
+                    volume_mesh = combined_mesh
                 else:
-                    logger.info("No fault surfaces found - returning volume mesh only")
-                    return volume_mesh
-            else:
-                logger.warning("No TetGen object available - returning volume mesh without faults")
-                return volume_mesh
-                
-        except Exception as e:
-            logger.error(f"Failed to create mesh with embedded faults: {e}", exc_info=True)
-            # Return original mesh on error
-            return volume_mesh if 'volume_mesh' in locals() else mesh_data
-    
-    def export_mesh(self, file_path: str, mesh_data: Optional[Dict] = None) -> bool:
-        if mesh_data is None: mesh_data = self.tetrahedral_mesh
-        if not mesh_data:
-            logger.error("No tetrahedral mesh to export")
-            return False
-
-        try:
-            if isinstance(mesh_data, pv.UnstructuredGrid):
-                # Check file extension to determine export format
-                file_ext = file_path.lower().split('.')[-1]
-
-                if file_ext in ['nc', 'nc4', 'cdf', 'exo']:
-                    # Use NetCDF/EXODUS export
-                    return self._export_netcdf(file_path, mesh_data)
-                else:
-                    # Enhanced export for VTK/VTU formats with material information
-                    return self._export_with_materials(file_path, mesh_data)
-        except Exception as e:
-            logger.error(f"Export failed: {str(e)}")
-            return False
-        return False
-    
-    def _export_with_materials(self, file_path: str, mesh_data: pv.UnstructuredGrid) -> bool:
-        """
-        Export mesh with proper material information for ParaView visualization.
-        Combines volumetric tetrahedra AND fault surfaces into a single mesh (C++ style).
-        This ensures faults appear as embedded constraint surfaces in ParaView.
-        """
-        try:
-            import numpy as np
-            import pyvista as pv
-            
-            logger.info("Exporting tetrahedral mesh with embedded fault surfaces (C++ MeshIt style)...")
-            
-            # Use the helper method to get mesh with embedded faults
-            volume_mesh = self.get_mesh_with_embedded_faults(mesh_data)
+                    logger.info("No fault surfaces found - exporting volume mesh only")
             
             # Save the combined mesh
             file_ext = file_path.lower().split('.')[-1]

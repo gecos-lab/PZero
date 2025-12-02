@@ -14,7 +14,7 @@ from typing import Optional
 
 from PySide6.QtCore import Signal as pyqtSignal, Qt
 from PySide6.QtCore import QObject
-from PySide6.QtWidgets import QMainWindow, QMessageBox
+from PySide6.QtWidgets import QMainWindow, QMessageBox, QDockWidget
 from PySide6.QtGui import QAction
 
 from pandas import DataFrame as pd_DataFrame
@@ -124,6 +124,22 @@ PYMESHIT_MODULE_NAME = "Pymeshit_workflow_gui"
 PYMESHIT_CLASS_NAME = "MeshItWorkflowGUI"
 PYMESHIT_ENTRY_FILE = "Pymeshit_workflow_gui.py"
 PYMESHIT_ENV_VAR = "PZERO_PYMESHIT_PATH"
+
+
+class _PyMeshItDockWidget(QDockWidget):
+    """
+    Custom QDockWidget that hides instead of closing when the X button is clicked.
+    
+    This prevents PyVista/VTK OpenGL context crashes that occur when the dock
+    is destroyed while plotters are still active. The dock stays in memory
+    and can be re-shown via the menu.
+    """
+    
+    def closeEvent(self, event):
+        """Override close to hide instead of destroy."""
+        # Just hide the dock instead of closing/destroying it
+        self.hide()
+        event.ignore()  # Prevent actual close/destruction
 
 
 class ProjectSignals(QObject):
@@ -920,7 +936,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         return None
 
     def open_pymeshit_gui(self):
-        """Launch the MeshIt workflow GUI as a mini-tool from the interpolation menu."""
+        """Launch the MeshIt workflow GUI as a docked tool."""
         pymeshit_dir = self._locate_pymeshit_sources()
         if pymeshit_dir is None:
             message = (
@@ -937,17 +953,27 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
 
         bridge = PZeroPymeshitBridge(self)
 
-        existing_window = getattr(self, "_pymeshit_window", None)
-        if existing_window and existing_window.isVisible():
-            attach = getattr(existing_window, "attach_pzero_bridge", None)
-            if callable(attach):
-                attach(bridge)
-            project_geom = self.geometry()
-            if project_geom and not project_geom.isNull():
-                existing_window.setGeometry(project_geom)
-            existing_window.raise_()
-            existing_window.activateWindow()
-            return
+        # CHECK IF DOCK ALREADY EXISTS and is still valid
+        existing_dock = getattr(self, "_pymeshit_dock", None)
+        if existing_dock is not None:
+            try:
+                # Check if the dock widget is still valid (not deleted)
+                existing_dock.objectName()  # This will throw if deleted
+                # Dock exists and is valid - just show, raise and update bridge
+                existing_dock.show()
+                existing_dock.raise_()
+                existing_dock.setFloating(False)  # Ensure it's docked, not floating
+                widget = existing_dock.widget()
+                if widget:
+                    attach = getattr(widget, "attach_pzero_bridge", None)
+                    if callable(attach):
+                        attach(bridge)
+                self.print_terminal("Pymeshit dock reopened")
+                return
+            except RuntimeError:
+                # Dock was deleted, clear references
+                self._pymeshit_dock = None
+                self._pymeshit_widget = None
 
         try:
             importlib.invalidate_caches()
@@ -971,47 +997,53 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             return
 
         try:
+            # 1. Create a Dock Widget attached to the main ProjectWindow (self)
+            dock = _PyMeshItDockWidget("PyMeshIt Workflow", self)
+            dock.setObjectName("PyMeshItDock")  # ID for finding it later
+            dock.setAllowedAreas(Qt.LeftDockWidgetArea | Qt.RightDockWidgetArea)
+            dock.setFeatures(
+                QDockWidget.DockWidgetMovable |
+                QDockWidget.DockWidgetFloatable |
+                QDockWidget.DockWidgetClosable
+            )
+            
+            # 2. Instantiate the MeshIt GUI as a child of the dock
             try:
-                self._pymeshit_window = meshit_gui_cls(pzero_bridge=bridge)
+                self._pymeshit_widget = meshit_gui_cls(pzero_bridge=bridge, parent=dock)
             except TypeError as exc:
                 if "pzero_bridge" in str(exc):
-                    self._pymeshit_window = meshit_gui_cls()
+                    self._pymeshit_widget = meshit_gui_cls(parent=dock)
                 else:
                     raise
             
-            # Set window as independent (not parented) to prevent cascade deletion
-            # This ensures closing Pymeshit doesn't affect PZero
-            self._pymeshit_window.setParent(None)
-            self._pymeshit_window.setAttribute(Qt.WA_DeleteOnClose, True)
-            
-            attach = getattr(self._pymeshit_window, "attach_pzero_bridge", None)
+            # Attach bridge if not done via constructor
+            attach = getattr(self._pymeshit_widget, "attach_pzero_bridge", None)
             if callable(attach):
                 attach(bridge)
             
-            # Position window relative to project window
-            project_geom = self.geometry()
-            if project_geom and not project_geom.isNull():
-                self._pymeshit_window.setGeometry(project_geom)
+            # 3. Set the widget into the dock
+            dock.setWidget(self._pymeshit_widget)
             
-            # Connect destroyed signal to clean up reference
-            def cleanup_pymeshit_reference():
-                """Clean up reference when Pymeshit window is destroyed."""
-                if hasattr(self, "_pymeshit_window"):
-                    self._pymeshit_window = None
+            # 4. Add the dock to the Main Window on the Right side
+            self.addDockWidget(Qt.RightDockWidgetArea, dock)
             
-            self._pymeshit_window.destroyed.connect(cleanup_pymeshit_reference)
+            # 5. Ensure dock is NOT floating (appears as docked panel, not separate window)
+            dock.setFloating(False)
             
-            # Note: We don't call _ensure_vtk_cleanup_on_exit here because
-            # it's already called in __init__, and we've modified it to be
-            # safe when embedded in PZero
+            # 6. Set a reasonable initial width for the dock (about 1/3 of main window)
+            dock.setMinimumWidth(400)
             
-            self._pymeshit_window.show()
-            self.print_terminal("Pymeshit GUI opened successfully")
+            # Store reference to dock for cleanup
+            self._pymeshit_dock = dock
+            
+            self.print_terminal("Pymeshit GUI opened as Dock")
+
         except Exception as exc:
             error_msg = f"Error opening Pymeshit GUI: {exc}"
             self.print_terminal(error_msg)
             QMessageBox.critical(self, "Pymeshit error", error_msg)
-            self._pymeshit_window = None
+            self._pymeshit_widget = None
+            self._pymeshit_dock = None
 
     def decimate_pc_dialog(self):
         if self.selected_uids:

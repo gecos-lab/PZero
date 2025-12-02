@@ -30,7 +30,7 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QLabel, QPush
                             QListWidget, QColorDialog, QListWidgetItem, QProgressDialog,
                             QSpacerItem, QTableWidget, QTableWidgetItem,
                             QTreeWidget, QTreeWidgetItem, QScrollArea, QDialogButtonBox,
-                            QHeaderView)
+                            QHeaderView, QMenuBar)
 from PySide6.QtGui import QFont, QIcon, QColor, QPalette, QPixmap, QAction, QActionGroup
 from PySide6.QtCore import Qt, QSize, Signal, QObject, QThread, QTimer, QSettings
 # Add these imports at the top of meshit_workflow_gui.py
@@ -279,23 +279,37 @@ class ComputationWorker(QObject):
         logger.info(f"Worker: Global intersection task finished. Success: {success}. Elapsed: {elapsed_time:.2f}s.")
 
 
-class MeshItWorkflowGUI(QMainWindow):
+class _StatusBarShim:
+    """Helper class to mimic QMainWindow.statusBar() for QWidget."""
+    def __init__(self, label: QLabel):
+        self.label = label
+    
+    def showMessage(self, msg: str, timeout: int = 0):
+        self.label.setText(msg)
+    
+    def addPermanentWidget(self, widget):
+        # QWidget layout doesn't support permanent status widgets easily
+        pass
+
+
+class MeshItWorkflowGUI(QWidget):
     # Define a color cycle for datasets
     DEFAULT_COLORS = [
         '#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd',
         '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf'
     ]
 
-    def __init__(self, pzero_bridge=None):
+    def __init__(self, pzero_bridge=None, parent=None):
         """Initialize the GUI"""
-        super().__init__()
+        super().__init__(parent)
         
         # Flag to track if window is closing (prevents operations during cleanup)
         self._closing = False
         
-        # Set window properties
+        # Set window properties (for standalone mode, these won't apply when docked)
         self.setWindowTitle("PyMeshIt")
-        self.setGeometry(100, 100, 1400, 900) # Increased default size
+        self.setMinimumSize(800, 600)  # Minimum size for usability
+        
         # Add color cycle for surface visualization
         self.color_cycle = [
             'red', 'blue', 'green', 'yellow', 'orange', 'purple', 'cyan', 'magenta',
@@ -335,15 +349,26 @@ class MeshItWorkflowGUI(QMainWindow):
         self.segment_legend_widget = None
         self.tri_legend_widget = None
         
-        # Create layout
-        self.central_widget = QWidget()
-        self.setCentralWidget(self.central_widget)
+        # --- REPLACEMENT FOR CENTRAL WIDGET LOGIC ---
+        # Instead of setCentralWidget, we use a main layout for the QWidget
+        self.main_layout = QVBoxLayout(self)
+        self.main_layout.setContentsMargins(0, 0, 0, 0)
         
-        self.main_layout = QVBoxLayout(self.central_widget)
+        # 1. Create Custom Menu Bar (Since QWidget doesn't have one natively)
+        self._custom_menu_bar = QMenuBar()
+        self.main_layout.addWidget(self._custom_menu_bar)
         
-        # Create notebook with multiple tabs
+        # 2. Create the Notebook (Tabs)
         self.notebook = QTabWidget()
         self.main_layout.addWidget(self.notebook)
+        
+        # 3. Create Custom Status Bar (Label) - MUST be done BEFORE any _setup_*_tab() calls
+        self._status_label = QLabel("Ready")
+        self._status_label.setStyleSheet("border-top: 1px solid #999; color: #333; padding: 2px;")
+        self.main_layout.addWidget(self._status_label)
+        
+        # Create the status bar shim for compatibility
+        self._status_bar_shim = _StatusBarShim(self._status_label)
         
         # Setup file tab
         self.file_tab = QWidget()
@@ -395,7 +420,7 @@ class MeshItWorkflowGUI(QMainWindow):
         # Create menu bar
         self._create_menu_bar()
         
-        # Create status bar
+        # Create status bar message
         self.statusBar().showMessage("Ready")
         
         # Connect signals
@@ -465,6 +490,60 @@ class MeshItWorkflowGUI(QMainWindow):
         h_loc_btns.addWidget(btn_del_loc)
         h_loc_btns.addWidget(btn_auto_loc)         # show the 3rd button
         v_main.addLayout(h_loc_btns)
+        
+        # 3.2-ter  Interactive mouse placement controls
+        mouse_group = QGroupBox("🖱️ Interactive Placement")
+        mouse_layout = QVBoxLayout(mouse_group)
+        
+        # Toggle button for mouse placement mode
+        self.material_mouse_mode_btn = QPushButton("🎯 Enable Mouse Placement")
+        self.material_mouse_mode_btn.setCheckable(True)
+        self.material_mouse_mode_btn.setChecked(False)
+        self.material_mouse_mode_btn.clicked.connect(self._toggle_material_mouse_mode)
+        self.material_mouse_mode_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #4a4a4a;
+                color: white;
+                padding: 6px;
+                border: 2px solid #666;
+                border-radius: 4px;
+            }
+            QPushButton:checked {
+                background-color: #2e7d32;
+                border-color: #4caf50;
+            }
+            QPushButton:hover {
+                background-color: #5a5a5a;
+            }
+            QPushButton:checked:hover {
+                background-color: #388e3c;
+            }
+        """)
+        mouse_layout.addWidget(self.material_mouse_mode_btn)
+        
+        # Instructions label
+        self.material_mouse_instructions = QLabel(
+            "1. Select a material from the list above\n"
+            "2. Enable mouse placement (button above)\n"
+            "3. LEFT-CLICK on any surface to place seed\n"
+            "   → New location added automatically!"
+        )
+        self.material_mouse_instructions.setStyleSheet("color: #888; font-size: 10px;")
+        self.material_mouse_instructions.setWordWrap(True)
+        mouse_layout.addWidget(self.material_mouse_instructions)
+        
+        # Status label for mouse mode feedback
+        self.material_mouse_status = QLabel("")
+        self.material_mouse_status.setStyleSheet("color: #4caf50; font-weight: bold;")
+        mouse_layout.addWidget(self.material_mouse_status)
+        
+        v_main.addWidget(mouse_group)
+        
+        # Initialize mouse mode state
+        self._material_mouse_mode_active = False
+        self._material_drag_active = False
+        self._material_drag_seed_info = None  # (mat_idx, loc_idx) being dragged
+        
         # 3.3  coordinate editors
         gb_coord   = QGroupBox("Edit selected location")
         grid       = QGridLayout(gb_coord)
@@ -900,6 +979,38 @@ class MeshItWorkflowGUI(QMainWindow):
         self._update_coordinate_editors()
         # Don't call _update_material_visualisation() here - it causes camera resets
         # Material visualization is handled by highlight functions and _update_single_material_seed
+    def _refresh_location_list_only(self) -> None:
+        """Refresh only the location list for the currently selected material (lightweight, no camera reset)."""
+        mat_idx = self.material_list.currentRow()
+        if mat_idx < 0 or mat_idx >= len(self.tetra_materials):
+            self.material_location_list.clear()
+            return
+        
+        # Block signals to prevent triggering selection events
+        self.material_location_list.blockSignals(True)
+        
+        # Remember current location selection
+        prev_loc_sel = self.material_location_list.currentRow()
+        
+        # Rebuild location list
+        self.material_location_list.clear()
+        mat = self.tetra_materials[mat_idx]
+        for i, xyz in enumerate(mat["locations"]):
+            self.material_location_list.addItem(
+                f"Loc {i}: ({xyz[0]:.2f}, {xyz[1]:.2f}, {xyz[2]:.2f})"
+            )
+        
+        # Restore location selection if valid
+        if prev_loc_sel >= 0 and prev_loc_sel < len(mat["locations"]):
+            self.material_location_list.setCurrentRow(prev_loc_sel)
+        elif self.material_location_list.count() > 0:
+            self.material_location_list.setCurrentRow(0)
+        
+        # Unblock signals
+        self.material_location_list.blockSignals(False)
+        
+        # Update coordinate editors for the new material's location
+        self._update_coordinate_editors()
     @Slot(int)
     def _on_material_selected(self,row:int)->None:
         # Refresh location list for the newly selected material
@@ -1341,9 +1452,309 @@ class MeshItWorkflowGUI(QMainWindow):
         if hasattr(plotter, 'render'):
             plotter.render()
     
+    # ──────────────────────────────────────────────────────────────────────
+    # INTERACTIVE MOUSE PLACEMENT FOR MATERIALS
+    # ──────────────────────────────────────────────────────────────────────
+    
+    def _get_material_plotter(self):
+        """Get the tetra mesh plotter for material placement and visualization.
+        
+        Uses tetra_plotter which is the 3D view in the Tetra Mesh tab where 
+        conforming surfaces are displayed and materials are assigned.
+        """
+        # Use tetra_plotter - the 3D view in Tetra Mesh tab
+        plotter = getattr(self, "tetra_plotter", None)
+        if plotter and hasattr(plotter, 'render'):
+            return plotter
+        
+        # Fallback to constraint_plotter if tetra_plotter not available
+        plotter = getattr(self, "constraint_plotter", None)
+        return plotter
+    
+    def _toggle_material_mouse_mode(self, checked: bool) -> None:
+        """Toggle interactive mouse placement mode for material seeds."""
+        self._material_mouse_mode_active = checked
+        
+        # Get the tetra mesh plotter
+        plotter = self._get_material_plotter()
+        
+        if not plotter:
+            self.material_mouse_status.setText("Error: No 3D view available")
+            self.material_mouse_status.setStyleSheet("color: red;")
+            self.material_mouse_mode_btn.setChecked(False)
+            return
+        
+        if checked:
+            # Enable mouse mode
+            self.material_mouse_mode_btn.setText("🎯 Mouse Placement ACTIVE")
+            self.material_mouse_status.setText("Click on surface to place seed")
+            self.material_mouse_status.setStyleSheet("color: #4caf50; font-weight: bold;")
+            
+            # Enable picking - try surface/point picking first
+            try:
+                # Use enable_surface_point_picking for better precision on mesh surfaces
+                plotter.enable_surface_point_picking(
+                    callback=self._on_material_surface_pick,
+                    show_message=False,
+                    show_point=True,
+                    point_size=15,
+                    color='yellow',
+                    tolerance=0.025
+                )
+                logger.info("Material mouse placement mode enabled (surface point picking)")
+            except Exception as e:
+                logger.warning(f"Could not enable surface point picking: {e}")
+                # Try regular point picking
+                try:
+                    plotter.enable_point_picking(
+                        callback=self._on_material_mouse_click,
+                        show_message=False,
+                        use_picker=True,
+                        picker='point',
+                        tolerance=0.01,
+                        show_point=False
+                    )
+                    logger.info("Material mouse placement mode enabled (point picking)")
+                except Exception as e2:
+                    logger.warning(f"Could not enable point picking: {e2}")
+                    # Try cell picking as last resort
+                    try:
+                        plotter.enable_cell_picking(
+                            callback=self._on_material_cell_click,
+                            show_message=False
+                        )
+                        logger.info("Material mouse placement mode enabled (cell picking)")
+                    except Exception as e3:
+                        logger.error(f"Could not enable any picking mode: {e3}")
+                        self._material_mouse_mode_active = False
+                        self.material_mouse_mode_btn.setChecked(False)
+                        self.material_mouse_status.setText("Error: Picking not available")
+                        self.material_mouse_status.setStyleSheet("color: red;")
+                        return
+        else:
+            # Disable mouse mode
+            self.material_mouse_mode_btn.setText("🎯 Enable Mouse Placement")
+            self.material_mouse_status.setText("")
+            
+            try:
+                # Disable picking
+                plotter.disable_picking()
+            except:
+                pass
+            logger.info("Material mouse placement mode disabled")
+    
+    def _on_material_surface_pick(self, point) -> None:
+        """Handle surface point picking callback for material placement.
+        
+        Note: PyVista's enable_surface_point_picking only passes the point,
+        not (point, picker) like some older documentation suggests.
+        """
+        if not self._material_mouse_mode_active:
+            return
+        
+        if point is None:
+            self.material_mouse_status.setText("No point picked - click on a surface")
+            return
+        
+        # Use the picked point directly
+        import numpy as np
+        if isinstance(point, np.ndarray):
+            point = point.tolist()
+        
+        logger.info(f"Surface pick at: ({point[0]:.1f}, {point[1]:.1f}, {point[2]:.1f})")
+        self._process_material_pick(point)
+    
+    def _on_material_mouse_click(self, point) -> None:
+        """Handle mouse click in material placement mode - point picking callback."""
+        if not self._material_mouse_mode_active:
+            return
+        
+        if point is None:
+            return
+        
+        # Convert to list if numpy array
+        import numpy as np
+        if isinstance(point, np.ndarray):
+            point = point.tolist()
+        
+        self._process_material_pick(point)
+    
+    def _process_material_pick(self, point: list) -> None:
+        """Process a picked point for material placement or selection."""
+        if point is None:
+            return
+        
+        import numpy as np
+        if isinstance(point, np.ndarray):
+            point = point.tolist()
+        
+        # Check if we clicked near an existing seed (for selection)
+        seed_info = self._find_nearest_material_seed(point)
+        
+        if seed_info is not None:
+            mat_idx, loc_idx, distance = seed_info
+            # If close enough to an existing seed, select it
+            if distance < self._get_seed_pick_tolerance():
+                # Select this material and location in the lists
+                self.material_list.setCurrentRow(mat_idx)
+                self.material_location_list.setCurrentRow(loc_idx)
+                self.material_mouse_status.setText(f"Selected: {self.tetra_materials[mat_idx]['name']} loc {loc_idx}")
+                logger.info(f"Selected existing seed: material {mat_idx}, location {loc_idx}")
+                self._highlight_selected_material()
+                return
+        
+        # Place new seed at clicked point for current material
+        self._place_material_seed_at_point(point)
+    
+    def _on_material_cell_click(self, cell_data) -> None:
+        """Handle cell click callback (fallback if point picking fails)."""
+        if not self._material_mouse_mode_active:
+            return
+        
+        if cell_data is None:
+            return
+        
+        # Try to extract the center point of the clicked cell
+        try:
+            import numpy as np
+            if hasattr(cell_data, 'center'):
+                point = cell_data.center
+            elif hasattr(cell_data, 'points'):
+                point = np.mean(cell_data.points, axis=0)
+            else:
+                return
+            
+            self._process_material_pick(point)
+        except Exception as e:
+            logger.warning(f"Could not process cell click: {e}")
+    
+    def _find_nearest_material_seed(self, point: list) -> tuple:
+        """Find the nearest material seed to a given point.
+        
+        Returns:
+            Tuple of (mat_idx, loc_idx, distance) or None if no seeds exist
+        """
+        import numpy as np
+        
+        if not self.tetra_materials:
+            return None
+        
+        min_dist = float('inf')
+        nearest_seed = None
+        
+        for mat_idx, mat in enumerate(self.tetra_materials):
+            for loc_idx, loc in enumerate(mat.get("locations", [])):
+                dist = np.linalg.norm(np.array(point) - np.array(loc))
+                if dist < min_dist:
+                    min_dist = dist
+                    nearest_seed = (mat_idx, loc_idx, dist)
+        
+        return nearest_seed
+    
+    def _get_seed_pick_tolerance(self) -> float:
+        """Calculate an appropriate pick tolerance based on scene scale."""
+        plotter = getattr(self, "constraint_plotter", None) or getattr(self, "tetra_plotter", None)
+        if not plotter:
+            return 50.0  # Default fallback
+        
+        try:
+            bounds = plotter.bounds
+            if bounds:
+                diagonal = ((bounds[1]-bounds[0])**2 + (bounds[3]-bounds[2])**2 + (bounds[5]-bounds[4])**2)**0.5
+                return diagonal * 0.02  # 2% of scene diagonal
+        except:
+            pass
+        
+        return 50.0
+    
+    def _place_material_seed_at_point(self, point: list) -> None:
+        """Place a new material seed at the given point for the currently selected material."""
+        mat_idx = self.material_list.currentRow()
+        
+        if mat_idx < 0:
+            # No material selected, select/create the first one
+            if not self.tetra_materials:
+                self._add_material()
+            mat_idx = 0
+            self.material_list.setCurrentRow(0)
+        
+        if mat_idx >= len(self.tetra_materials):
+            self.material_mouse_status.setText("Error: No material selected")
+            return
+        
+        mat = self.tetra_materials[mat_idx]
+        
+        # Add the new location
+        new_loc = [float(point[0]), float(point[1]), float(point[2])]
+        mat["locations"].append(new_loc)
+        
+        # Refresh the location list
+        self._refresh_location_list_only()
+        
+        # Select the new location
+        new_loc_idx = len(mat["locations"]) - 1
+        self.material_location_list.setCurrentRow(new_loc_idx)
+        
+        # Update visualization
+        self._update_material_visualisation()
+        self._highlight_selected_material()
+        self._update_coordinate_editors()
+        
+        self.material_mouse_status.setText(
+            f"Placed seed for '{mat['name']}' at ({point[0]:.1f}, {point[1]:.1f}, {point[2]:.1f})"
+        )
+        logger.info(f"Placed material seed for '{mat['name']}' at {new_loc}")
+    
+    def _move_selected_material_seed_to_point(self, point: list) -> None:
+        """Move the currently selected material seed to the given point."""
+        mat_idx = self.material_list.currentRow()
+        loc_idx = self.material_location_list.currentRow()
+        
+        if mat_idx < 0 or mat_idx >= len(self.tetra_materials):
+            return
+        
+        mat = self.tetra_materials[mat_idx]
+        if loc_idx < 0 or loc_idx >= len(mat["locations"]):
+            return
+        
+        # Update the location
+        new_loc = [float(point[0]), float(point[1]), float(point[2])]
+        mat["locations"][loc_idx] = new_loc
+        
+        # Update visualization without full refresh
+        self._update_single_material_seed(mat_idx, loc_idx, new_loc)
+        self._update_coordinate_editors()
+        
+        self.material_mouse_status.setText(
+            f"Moved seed to ({point[0]:.1f}, {point[1]:.1f}, {point[2]:.1f})"
+        )
+    
+    def statusBar(self):
+        """Helper to mimic QMainWindow.statusBar() for QWidget"""
+        return self._status_bar_shim
+    
+    def _hide_panel(self):
+        """
+        Hide the PyMeshIt panel instead of destroying it.
+        When embedded in PZero as a dock widget, this hides the parent dock.
+        When running standalone, this hides the widget itself.
+        """
+        # Try to find and hide the parent dock widget
+        parent = self.parent()
+        while parent is not None:
+            if isinstance(parent, QDockWidget):
+                parent.hide()
+                self.statusBar().showMessage("Panel hidden - reopen from Interpolation menu")
+                return
+            parent = parent.parent()
+        
+        # Fallback: just hide this widget
+        self.hide()
+    
     def _create_menu_bar(self):
         """Create the menu bar"""
-        menu_bar = self.menuBar()
+        # Use the custom menu bar created in __init__
+        menu_bar = self._custom_menu_bar
         
         # --- File Menu ---
         file_menu = menu_bar.addMenu("&File")
@@ -1370,9 +1781,9 @@ class MeshItWorkflowGUI(QMainWindow):
         
         file_menu.addSeparator()
 
-        exit_action = QAction("E&xit", self)
-        exit_action.setStatusTip("Exit the application")
-        exit_action.triggered.connect(self.close)
+        exit_action = QAction("&Hide Panel", self)
+        exit_action.setStatusTip("Hide the PyMeshIt panel (can be reopened from menu)")
+        exit_action.triggered.connect(self._hide_panel)
         file_menu.addAction(exit_action)
 
         # --- Dataset Menu ---
@@ -2353,14 +2764,24 @@ class MeshItWorkflowGUI(QMainWindow):
                 self.mouse_selection_enabled_btn.setEnabled(index == 2)
 
     def _clear_refine_tab_plotters(self):
-        """Clear all refine tab plotters"""
+        """Clear all refine tab plotters safely"""
         for plotter_name in ['intersections_plotter', 'meshes_plotter', 'segments_plotter']:
             plotter = getattr(self, plotter_name, None)
             if plotter and hasattr(plotter, 'clear'):
                 try:
-                    plotter.clear()
+                    # Check if the underlying widget is still valid
+                    interactor = getattr(plotter, 'interactor', None)
+                    if interactor:
+                        try:
+                            interactor.isVisible()  # Will raise RuntimeError if deleted
+                            plotter.clear()
+                        except RuntimeError:
+                            # C++ object already deleted - clear the reference
+                            setattr(self, plotter_name, None)
+                            logger.debug(f"Plotter {plotter_name}: Already deleted by Qt")
                 except Exception as e:
                     logger.warning(f"Error clearing {plotter_name}: {e}")
+                    setattr(self, plotter_name, None)
     def _ensure_segments_plotter(self):
         """
         Lazily create/attach the Segments QtInteractor if missing.
@@ -6581,6 +7002,11 @@ class MeshItWorkflowGUI(QMainWindow):
     # Visualization methods
     def _clear_hull_plot(self):
         """Clear the hull plot"""
+        # Safely close the plotter if it exists
+        if hasattr(self, 'hulls_plotter'):
+            self._safe_close_plotter(self.hulls_plotter, 'hulls')
+            self.hulls_plotter = None
+        
         # Clear existing visualization
         while self.hull_viz_layout.count():
             item = self.hull_viz_layout.takeAt(0)
@@ -6601,6 +7027,11 @@ class MeshItWorkflowGUI(QMainWindow):
     
     def _clear_segment_plot(self):
         """Clear the segmentation plot"""
+        # Safely close the plotter if it exists
+        if hasattr(self, 'segments_plotter'):
+            self._safe_close_plotter(self.segments_plotter, 'segments')
+            self.segments_plotter = None
+        
         # Clear existing visualization
         while self.segment_viz_layout.count():
             item = self.segment_viz_layout.takeAt(0)
@@ -6621,6 +7052,11 @@ class MeshItWorkflowGUI(QMainWindow):
     
     def _clear_triangulation_plot(self):
         """Clear the triangulation plot"""
+        # Safely close the plotter if it exists
+        if hasattr(self, 'triangulation_plotter'):
+            self._safe_close_plotter(self.triangulation_plotter, 'triangulation')
+            self.triangulation_plotter = None
+        
         # Clear existing visualization
         while self.tri_viz_layout.count():
             item = self.tri_viz_layout.takeAt(0)
@@ -9073,9 +9509,12 @@ segmentation, triangulation, and visualization.
         self._clear_segment_plot()
         self._clear_triangulation_plot()
         self._clear_intersection_plot()
-        self._clear_refine_mesh_plot() # Add this line
+        self._clear_refine_mesh_plot()
         
-        # ... rest of the method ...
+        # Safely close the points plotter if it exists
+        if hasattr(self, 'points_plotter'):
+            self._safe_close_plotter(self.points_plotter, 'points')
+            self.points_plotter = None
         
         # Clear points visualization
         while self.file_viz_layout.count():
@@ -9643,6 +10082,7 @@ segmentation, triangulation, and visualization.
         else:
             plotter.add_text("No valid data to display in refined view.", position='upper_edge', color='white')
             plotter.reset_camera()
+
     def _clear_refine_mesh_plot(self):
         """Clear all refine mesh tab plotters"""
         try:
@@ -9658,9 +10098,21 @@ segmentation, triangulation, and visualization.
                 self.refine_mesh_plotter = plotter
             
             if plotter:
-                plotter.clear()
-                plotter.add_text("Refine intersections to visualize or load data.", position='upper_edge', color='white')
-                plotter.reset_camera()
+                try:
+                    # Check if the underlying widget is still valid
+                    interactor = getattr(plotter, 'interactor', None)
+                    if interactor:
+                        try:
+                            interactor.isVisible()  # Will raise RuntimeError if deleted
+                            plotter.clear()
+                            plotter.add_text("Refine intersections to visualize or load data.", position='upper_edge', color='white')
+                            plotter.reset_camera()
+                        except RuntimeError:
+                            # C++ object already deleted
+                            self.refine_mesh_plotter = None
+                except Exception as e:
+                    logger.debug(f"Error clearing refine mesh plotter: {e}")
+                    self.refine_mesh_plotter = None
                 
             logger.info("Cleared all refine mesh visualizations")
         except Exception as e:
@@ -10585,17 +11037,55 @@ segmentation, triangulation, and visualization.
         
         return self.consolidated_special_points, self.consolidated_triple_points
 
+    def _safe_close_plotter(self, plotter, view_type="unknown"):
+        """
+        Safely close a PyVista plotter, handling cases where Qt has already deleted the widget.
+        
+        This prevents OpenGL context errors (wglMakeCurrent failed) and segmentation faults
+        that occur when trying to close a plotter whose underlying Qt widget is already deleted.
+        """
+        if plotter is None:
+            return
+        
+        try:
+            # Check if the plotter's interactor is still valid
+            interactor = getattr(plotter, 'interactor', None)
+            if interactor is None:
+                logger.debug(f"Plotter {view_type}: No interactor, skipping close")
+                return
+            
+            # Check if the underlying C++ object is still valid
+            try:
+                # This will raise RuntimeError if the C++ object is deleted
+                interactor.isVisible()
+            except RuntimeError:
+                logger.debug(f"Plotter {view_type}: Qt widget already deleted, skipping close")
+                return
+            
+            # Clear all actors first to release OpenGL resources
+            try:
+                plotter.clear()
+            except Exception:
+                pass
+            
+            # Now close the plotter
+            plotter.close()
+            logger.debug(f"Plotter {view_type}: Successfully closed")
+            
+        except RuntimeError as e:
+            # C++ object already deleted - this is expected, just log and continue
+            logger.debug(f"Plotter {view_type}: Already deleted by Qt: {e}")
+        except Exception as e:
+            logger.warning(f"Plotter {view_type}: Unexpected error during close: {e}")
+
     def _create_multi_dataset_3d_visualization(self, parent_frame, datasets, title, view_type="points"):
         """Create a 3D visualization of multiple datasets with proper coordinate validation."""
 
-        # Close and clean up any previous plotter in this frame
+        # Safely close and clean up any previous plotter
         if hasattr(self, f'{view_type}_plotter'):
             old_plotter = getattr(self, f'{view_type}_plotter')
-            if old_plotter:
-                try:
-                    old_plotter.close()
-                except Exception as e:
-                    logger.warning(f"Error closing old plotter for {view_type}: {e}")
+            self._safe_close_plotter(old_plotter, view_type)
+            setattr(self, f'{view_type}_plotter', None)  # Clear the reference
         
         parent_layout = parent_frame.layout()
         if parent_layout is None:
@@ -11157,18 +11647,33 @@ segmentation, triangulation, and visualization.
             
         
 
+    def _is_embedded_in_dock(self) -> bool:
+        """Check if this widget is embedded in a QDockWidget."""
+        parent = self.parent()
+        while parent is not None:
+            if isinstance(parent, QDockWidget):
+                return True
+            parent = parent.parent()
+        return False
 
     def closeEvent(self, event):
         """
         Handle closing the application, especially if a thread is running.
         
-        When embedded in PZero, this ensures proper cleanup without
-        interfering with the parent application's VTK resources.
+        When embedded in PZero as a dock widget, this just hides the parent dock
+        instead of destroying anything, to prevent VTK/OpenGL crashes.
         
-        Performs cleanup synchronously before accepting the close event
-        to ensure widgets are properly isolated before Qt deletes them.
+        When running standalone, performs cleanup synchronously before accepting 
+        the close event to ensure widgets are properly isolated before Qt deletes them.
         """
         logger.debug("Close event triggered.")
+        
+        # If embedded in a dock, just hide the dock instead of closing
+        if self._is_embedded_in_dock():
+            logger.debug("Embedded in dock - hiding instead of closing")
+            self._hide_panel()
+            event.ignore()
+            return
         
         # Mark that we're closing to prevent any further operations
         self._closing = True
@@ -11475,10 +11980,20 @@ segmentation, triangulation, and visualization.
     def _clear_intersection_plot(self):
         """Clear the embedded intersection PyVista plotter."""
         if hasattr(self, 'intersection_plotter') and self.intersection_plotter:
-            self.intersection_plotter.clear()
-            # Optionally add placeholder text back if desired
-            # self.intersection_plotter.add_text("Compute intersections or select one from the list.", position='upper_edge')
-            self.intersection_plotter.reset_camera()
+            try:
+                # Check if the underlying widget is still valid
+                interactor = getattr(self.intersection_plotter, 'interactor', None)
+                if interactor:
+                    try:
+                        interactor.isVisible()  # Will raise RuntimeError if deleted
+                        self.intersection_plotter.clear()
+                        self.intersection_plotter.reset_camera()
+                    except RuntimeError:
+                        # C++ object already deleted
+                        self.intersection_plotter = None
+            except Exception as e:
+                logger.debug(f"Error clearing intersection plot: {e}")
+                self.intersection_plotter = None
 
     def _update_intersection_list(self):
         """Update the list of intersections in the UI"""
