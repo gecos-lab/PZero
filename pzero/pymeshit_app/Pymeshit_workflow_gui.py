@@ -12937,6 +12937,30 @@ segmentation, triangulation, and visualization.
         self.generate_stats_btn.setToolTip("Calculate and display mesh quality metrics (radius-edge ratio, dihedral angles)")
         generate_layout.addWidget(self.generate_stats_btn)
         
+        
+        # High-quality figure export button
+        self.export_figure_btn = QPushButton("📸 Export Figure")
+        self.export_figure_btn.clicked.connect(self._show_figure_export_dialog)
+        self.export_figure_btn.setEnabled(False)
+        self.export_figure_btn.setToolTip("Export high-resolution figures with colorbar and annotations")
+        self.export_figure_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #1565C0;
+                color: white;
+                font-weight: bold;
+                padding: 6px;
+                border: none;
+                border-radius: 4px;
+            }
+            QPushButton:hover {
+                background-color: #1976D2;
+            }
+            QPushButton:disabled {
+                background-color: #cccccc;
+                color: #666666;
+            }
+        """)
+        generate_layout.addWidget(self.export_figure_btn)
         control_layout.addWidget(generate_group)
         
         control_layout.addStretch()  # Push everything to the top
@@ -13768,6 +13792,7 @@ segmentation, triangulation, and visualization.
             
             QMessageBox.information(self, "Success", "Tetrahedral mesh generated successfully!")
             self.export_mesh_btn.setEnabled(True)
+            self.export_figure_btn.setEnabled(True)  # Enable figure export button
             self._update_export_to_pzero_button_state()  # Enable Export to PZero and Generate Statistics buttons
             self._visualize_tetrahedral_mesh_in_tetra_tab()
             self._update_tetra_stats()
@@ -14528,7 +14553,1230 @@ segmentation, triangulation, and visualization.
                 "Export Error", 
                 f"Failed to export mesh to PZero:\n{str(e)}"
             )
+    def _show_figure_export_dialog(self):
+        """Show dialog for exporting high-quality figures."""
+        if not hasattr(self, 'tetrahedral_mesh') or self.tetrahedral_mesh is None:
+            QMessageBox.warning(self, "No Mesh", "No tetrahedral mesh available. Generate a mesh first.")
+            return
+        
+        try:
+            from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QGroupBox,
+                                          QLabel, QComboBox, QSpinBox, QDoubleSpinBox,
+                                          QCheckBox, QPushButton, QLineEdit, QFileDialog,
+                                          QTabWidget, QWidget, QFormLayout, QColorDialog,
+                                          QSlider, QRadioButton, QButtonGroup)
+            from PySide6.QtCore import Qt
+            
+            dialog = QDialog(self)
+            dialog.setWindowTitle("📸 Export High-Quality Figure")
+            dialog.setMinimumSize(600, 700)
+            
+            main_layout = QVBoxLayout(dialog)
+            
+            # Title
+            title = QLabel("<h2>Figure Export Settings</h2>")
+            title.setAlignment(Qt.AlignCenter)
+            main_layout.addWidget(title)
+            
+            # Tab widget for organized settings
+            tabs = QTabWidget()
+            
+            # === TAB 1: Image Settings ===
+            image_tab = QWidget()
+            image_layout = QVBoxLayout(image_tab)
+            
+            # Resolution group
+            res_group = QGroupBox("Image Resolution")
+            res_form = QFormLayout(res_group)
+            
+            self.fig_width = QSpinBox()
+            self.fig_width.setRange(800, 8000)
+            self.fig_width.setValue(3000)
+            self.fig_width.setSuffix(" px")
+            res_form.addRow("Width:", self.fig_width)
+            
+            self.fig_height = QSpinBox()
+            self.fig_height.setRange(600, 6000)
+            self.fig_height.setValue(2400)
+            self.fig_height.setSuffix(" px")
+            res_form.addRow("Height:", self.fig_height)
+            
+            # Preset resolutions
+            preset_layout = QHBoxLayout()
+            presets = [
+                ("HD (1920×1080)", 1920, 1080),
+                ("2K (2560×1440)", 2560, 1440),
+                ("4K (3840×2160)", 3840, 2160),
+                ("Print 300dpi (3000×2400)", 3000, 2400),
+                ("Print 600dpi (6000×4800)", 6000, 4800),
+            ]
+            self.fig_preset_combo = QComboBox()
+            for name, w, h in presets:
+                self.fig_preset_combo.addItem(name, (w, h))
+            self.fig_preset_combo.currentIndexChanged.connect(self._on_figure_preset_changed)
+            self.fig_preset_combo.setCurrentIndex(3)  # Default to Print 300dpi
+            res_form.addRow("Preset:", self.fig_preset_combo)
+            
+            self.fig_transparent = QCheckBox("Transparent background")
+            self.fig_transparent.setChecked(False)
+            res_form.addRow("", self.fig_transparent)
+            
+            image_layout.addWidget(res_group)
+            
+            # Format group
+            format_group = QGroupBox("Output Format")
+            format_layout = QFormLayout(format_group)
+            
+            self.fig_format = QComboBox()
+            self.fig_format.addItems(["PNG (Recommended)", "JPEG", "TIFF", "PDF", "SVG", "EPS"])
+            format_layout.addRow("Format:", self.fig_format)
+            
+            self.fig_dpi = QSpinBox()
+            self.fig_dpi.setRange(72, 1200)
+            self.fig_dpi.setValue(300)
+            format_layout.addRow("DPI (for PDF/SVG):", self.fig_dpi)
+            
+            image_layout.addWidget(format_group)
+            image_layout.addStretch()
+            
+            tabs.addTab(image_tab, "📐 Image")
+            
+            # === TAB 2: Visualization Settings ===
+            viz_tab = QWidget()
+            viz_layout = QVBoxLayout(viz_tab)
+            
+            # Colormap group
+            cmap_group = QGroupBox("Colormap Settings")
+            cmap_form = QFormLayout(cmap_group)
+            
+            self.fig_colormap = QComboBox()
+            # Scientific/geological colormaps that work well in publications
+            colormaps = [
+                "viridis", "plasma", "inferno", "magma", "cividis",  # Perceptually uniform
+                "coolwarm", "RdYlBu", "RdBu", "Spectral",  # Diverging
+                "Set1", "Set2", "tab10", "tab20",  # Qualitative
+                "terrain", "gist_earth", "ocean",  # Earth science
+                "jet", "rainbow", "turbo",  # Classic (use sparingly)
+            ]
+            self.fig_colormap.addItems(colormaps)
+            self.fig_colormap.setCurrentText("viridis")
+            cmap_form.addRow("Colormap:", self.fig_colormap)
+            
+            self.fig_color_by = QComboBox()
+            self.fig_color_by.addItems(["MaterialID", "Depth (Z)", "Cell Volume", "Cell Quality"])
+            cmap_form.addRow("Color by:", self.fig_color_by)
+            
+            # Render style (surface, wireframe, etc.)
+            self.fig_render_style = QComboBox()
+            self.fig_render_style.addItems(["Surface", "Wireframe", "Surface + Wireframe", "Points"])
+            cmap_form.addRow("Render Style:", self.fig_render_style)
+            
+            self.fig_show_edges = QCheckBox("Show mesh edges")
+            self.fig_show_edges.setChecked(False)
+            cmap_form.addRow("", self.fig_show_edges)
+            
+            self.fig_edge_color = QPushButton("Edge Color...")
+            self.fig_edge_color.clicked.connect(self._pick_edge_color)
+            self._fig_edge_color = [0.2, 0.2, 0.2]  # Default dark gray
+            cmap_form.addRow("", self.fig_edge_color)
+            
+            # Background color option
+            self.fig_background = QComboBox()
+            self.fig_background.addItems(["White", "Black", "Light Gray", "Dark Gray", "Gradient (White-Gray)", "Transparent"])
+            cmap_form.addRow("Background:", self.fig_background)
+            
+            viz_layout.addWidget(cmap_group)
+            
+            # View settings
+            view_group = QGroupBox("View Settings")
+            view_form = QFormLayout(view_group)
+            
+            self.fig_view_preset = QComboBox()
+            self.fig_view_preset.addItems([
+                "Current View", "Isometric", "Top (XY)", "Front (XZ)", 
+                "Side (YZ)", "Perspective 45°", "Custom..."
+            ])
+            view_form.addRow("Camera View:", self.fig_view_preset)
+            
+            self.fig_show_axes = QCheckBox("Show coordinate axes")
+            self.fig_show_axes.setChecked(True)
+            view_form.addRow("", self.fig_show_axes)
+            
+            self.fig_show_bounds = QCheckBox("Show bounding box")
+            self.fig_show_bounds.setChecked(False)
+            view_form.addRow("", self.fig_show_bounds)
+            
+            viz_layout.addWidget(view_group)
+            
+            # Lighting
+            light_group = QGroupBox("Lighting")
+            light_form = QFormLayout(light_group)
+            
+            self.fig_lighting = QComboBox()
+            self.fig_lighting.addItems(["Default", "Three-Point", "Light Kit", "None (Flat)"])
+            light_form.addRow("Lighting Style:", self.fig_lighting)
+            
+            self.fig_ambient = QDoubleSpinBox()
+            self.fig_ambient.setRange(0.0, 1.0)
+            self.fig_ambient.setValue(0.3)
+            self.fig_ambient.setSingleStep(0.1)
+            light_form.addRow("Ambient:", self.fig_ambient)
+            
+            self.fig_specular = QDoubleSpinBox()
+            self.fig_specular.setRange(0.0, 1.0)
+            self.fig_specular.setValue(0.5)
+            self.fig_specular.setSingleStep(0.1)
+            light_form.addRow("Specular:", self.fig_specular)
+            
+            viz_layout.addWidget(light_group)
+            viz_layout.addStretch()
+            
+            tabs.addTab(viz_tab, "🎨 Visualization")
+            
+            # === TAB 3: Annotations ===
+            annot_tab = QWidget()
+            annot_layout = QVBoxLayout(annot_tab)
+            
+            # Colorbar settings
+            cbar_group = QGroupBox("Colorbar / Legend")
+            cbar_form = QFormLayout(cbar_group)
+            
+            self.fig_show_colorbar = QCheckBox("Show colorbar")
+            self.fig_show_colorbar.setChecked(True)
+            cbar_form.addRow("", self.fig_show_colorbar)
+            
+            self.fig_cbar_title = QLineEdit("Material ID")
+            cbar_form.addRow("Colorbar Title:", self.fig_cbar_title)
+            
+            self.fig_cbar_position = QComboBox()
+            self.fig_cbar_position.addItems(["Right", "Left", "Top", "Bottom"])
+            cbar_form.addRow("Position:", self.fig_cbar_position)
+            
+            self.fig_cbar_vertical = QCheckBox("Vertical orientation")
+            self.fig_cbar_vertical.setChecked(True)
+            cbar_form.addRow("", self.fig_cbar_vertical)
+            
+            self.fig_discrete_cbar = QCheckBox("Discrete colorbar (for categories)")
+            self.fig_discrete_cbar.setChecked(True)
+            cbar_form.addRow("", self.fig_discrete_cbar)
+            
+            annot_layout.addWidget(cbar_group)
+            
+            # Scale bar
+            scale_group = QGroupBox("Scale Bar")
+            scale_form = QFormLayout(scale_group)
+            
+            self.fig_show_scale = QCheckBox("Show scale bar")
+            self.fig_show_scale.setChecked(True)
+            scale_form.addRow("", self.fig_show_scale)
+            
+            self.fig_scale_units = QComboBox()
+            self.fig_scale_units.addItems(["m", "km", "ft", "mi"])
+            scale_form.addRow("Units:", self.fig_scale_units)
+            
+            annot_layout.addWidget(scale_group)
+            
+            # Title/Text
+            text_group = QGroupBox("Title & Text")
+            text_form = QFormLayout(text_group)
+            
+            self.fig_title = QLineEdit("")
+            self.fig_title.setPlaceholderText("Optional figure title")
+            text_form.addRow("Title:", self.fig_title)
+            
+            self.fig_font_size = QSpinBox()
+            self.fig_font_size.setRange(8, 48)
+            self.fig_font_size.setValue(14)
+            text_form.addRow("Font Size:", self.fig_font_size)
+            
+            self.fig_font_family = QComboBox()
+            self.fig_font_family.addItems(["Arial", "Times New Roman", "Helvetica", "Courier"])
+            text_form.addRow("Font:", self.fig_font_family)
+            
+            annot_layout.addWidget(text_group)
+            
+            # Material/Surface Labels
+            labels_group = QGroupBox("Material Labels")
+            labels_form = QFormLayout(labels_group)
+            
+            self.fig_show_labels = QCheckBox("Show material labels on mesh")
+            self.fig_show_labels.setChecked(False)
+            labels_form.addRow("", self.fig_show_labels)
+            
+            self.fig_label_font_size = QSpinBox()
+            self.fig_label_font_size.setRange(8, 36)
+            self.fig_label_font_size.setValue(12)
+            labels_form.addRow("Label Font Size:", self.fig_label_font_size)
+            
+            self.fig_label_style = QComboBox()
+            self.fig_label_style.addItems(["At Centroid", "With Leader Lines", "Legend Box"])
+            self.fig_label_style.setToolTip(
+                "At Centroid: Labels placed at center of each material region\n"
+                "With Leader Lines: Labels with lines pointing to regions\n"
+                "Legend Box: Separate legend box with material names"
+            )
+            labels_form.addRow("Label Style:", self.fig_label_style)
+            
+            self.fig_label_bg = QCheckBox("Label background (better visibility)")
+            self.fig_label_bg.setChecked(True)
+            labels_form.addRow("", self.fig_label_bg)
+            
+            # Button to customize label names
+            self.fig_edit_labels_btn = QPushButton("✏️ Edit Label Names...")
+            self.fig_edit_labels_btn.clicked.connect(self._show_label_editor_dialog)
+            self.fig_edit_labels_btn.setToolTip("Customize the display names for materials and faults")
+            labels_form.addRow("", self.fig_edit_labels_btn)
+            
+            # Initialize custom label names dictionary
+            self._custom_label_names = {}
+            
+            annot_layout.addWidget(labels_group)
+            annot_layout.addStretch()
+            
+            tabs.addTab(annot_tab, "📝 Annotations")
+            
+            # === TAB 4: Advanced ===
+            adv_tab = QWidget()
+            adv_layout = QVBoxLayout(adv_tab)
+            
+            # Clipping
+            clip_group = QGroupBox("Clipping Planes")
+            clip_form = QFormLayout(clip_group)
+            
+            self.fig_use_clip = QCheckBox("Use clipping plane")
+            self.fig_use_clip.setChecked(False)
+            clip_form.addRow("", self.fig_use_clip)
+            
+            self.fig_clip_axis = QComboBox()
+            self.fig_clip_axis.addItems(["X", "Y", "Z"])
+            self.fig_clip_axis.setCurrentText("Z")
+            clip_form.addRow("Clip Axis:", self.fig_clip_axis)
+            
+            self.fig_clip_value = QDoubleSpinBox()
+            self.fig_clip_value.setRange(-1e9, 1e9)
+            self.fig_clip_value.setValue(0)
+            clip_form.addRow("Clip Position:", self.fig_clip_value)
+            
+            adv_layout.addWidget(clip_group)
+            
+            # Anti-aliasing
+            aa_group = QGroupBox("Quality Settings")
+            aa_form = QFormLayout(aa_group)
+            
+            self.fig_anti_alias = QCheckBox("Anti-aliasing (smoother edges)")
+            self.fig_anti_alias.setChecked(True)
+            aa_form.addRow("", self.fig_anti_alias)
+            
+            self.fig_aa_frames = QSpinBox()
+            self.fig_aa_frames.setRange(1, 16)
+            self.fig_aa_frames.setValue(8)
+            aa_form.addRow("AA Samples:", self.fig_aa_frames)
+            
+            self.fig_depth_peeling = QCheckBox("Depth peeling (better transparency)")
+            self.fig_depth_peeling.setChecked(True)
+            aa_form.addRow("", self.fig_depth_peeling)
+            
+            adv_layout.addWidget(aa_group)
+            adv_layout.addStretch()
+            
+            tabs.addTab(adv_tab, "⚙️ Advanced")
+            
+            main_layout.addWidget(tabs)
+            
+            # === Preview & Export Buttons ===
+            button_layout = QHBoxLayout()
+            
+            preview_btn = QPushButton("👁️ Preview")
+            preview_btn.clicked.connect(lambda: self._preview_publication_figure(dialog))
+            button_layout.addWidget(preview_btn)
+            
+            button_layout.addStretch()
+            
+            export_btn = QPushButton("📸 Export Figure")
+            export_btn.setStyleSheet("background-color: #1565C0; color: white; font-weight: bold; padding: 8px 16px;")
+            export_btn.clicked.connect(lambda: self._export_publication_figure(dialog))
+            button_layout.addWidget(export_btn)
+            
+            cancel_btn = QPushButton("Cancel")
+            cancel_btn.clicked.connect(dialog.close)
+            button_layout.addWidget(cancel_btn)
+            
+            main_layout.addLayout(button_layout)
+            
+            dialog.exec()
+            
+        except Exception as e:
+            logger.error(f"Failed to show figure export dialog: {e}", exc_info=True)
+            QMessageBox.critical(self, "Error", f"Failed to open figure export dialog:\n{str(e)}")
+    
+    def _on_figure_preset_changed(self, index):
+        """Update resolution when preset is selected."""
+        data = self.fig_preset_combo.currentData()
+        if data:
+            self.fig_width.setValue(data[0])
+            self.fig_height.setValue(data[1])
+    
+    def _pick_edge_color(self):
+        """Open color picker for edge color."""
+        from PySide6.QtWidgets import QColorDialog
+        from PySide6.QtGui import QColor
+        
+        current = QColor.fromRgbF(*self._fig_edge_color)
+        color = QColorDialog.getColor(current, self, "Select Edge Color")
+        if color.isValid():
+            self._fig_edge_color = [color.redF(), color.greenF(), color.blueF()]
+            self.fig_edge_color.setStyleSheet(f"background-color: {color.name()};")
+    
+    def _show_label_editor_dialog(self):
+        """Show dialog to edit custom label names for materials and faults."""
+        from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QTableWidget, 
+                                      QTableWidgetItem, QPushButton, QLabel, QHeaderView,
+                                      QMessageBox)
+        from PySide6.QtCore import Qt
+        
+        dialog = QDialog(self)
+        dialog.setWindowTitle("✏️ Edit Label Names")
+        dialog.setMinimumSize(500, 400)
+        
+        layout = QVBoxLayout(dialog)
+        
+        # Instructions
+        info_label = QLabel(
+            "Customize the display names for materials and faults.\n"
+            "Leave 'Custom Name' empty to use the original name."
+        )
+        info_label.setStyleSheet("color: #666; margin-bottom: 10px;")
+        layout.addWidget(info_label)
+        
+        # Create table
+        table = QTableWidget()
+        table.setColumnCount(3)
+        table.setHorizontalHeaderLabels(["Type", "Original Name", "Custom Name"])
+        table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+        table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
+        table.setAlternatingRowColors(True)
+        
+        # Populate table with materials and faults
+        materials_data = []
+        if hasattr(self, 'tetra_materials'):
+            for mat in self.tetra_materials:
+                mat_id = mat.get('attribute', -1)
+                mat_name = mat.get('name', f'Material {mat_id}')
+                mat_type = mat.get('type', 'FORMATION')
+                materials_data.append((mat_id, mat_name, mat_type))
+        
+        table.setRowCount(len(materials_data))
+        
+        for row, (mat_id, mat_name, mat_type) in enumerate(materials_data):
+            # Type column (read-only)
+            type_item = QTableWidgetItem("⚡ Fault" if mat_type == 'FAULT' else "🏔️ Formation")
+            type_item.setFlags(type_item.flags() & ~Qt.ItemIsEditable)
+            table.setItem(row, 0, type_item)
+            
+            # Original name (read-only)
+            orig_item = QTableWidgetItem(mat_name)
+            orig_item.setFlags(orig_item.flags() & ~Qt.ItemIsEditable)
+            orig_item.setData(Qt.UserRole, mat_id)  # Store material ID
+            table.setItem(row, 1, orig_item)
+            
+            # Custom name (editable)
+            custom_name = self._custom_label_names.get(mat_id, "")
+            custom_item = QTableWidgetItem(custom_name)
+            table.setItem(row, 2, custom_item)
+        
+        layout.addWidget(table)
+        
+        # Buttons
+        btn_layout = QHBoxLayout()
+        
+        clear_btn = QPushButton("Clear All Custom Names")
+        clear_btn.clicked.connect(lambda: self._clear_custom_names(table))
+        btn_layout.addWidget(clear_btn)
+        
+        btn_layout.addStretch()
+        
+        save_btn = QPushButton("💾 Save")
+        save_btn.clicked.connect(lambda: self._save_custom_names(dialog, table))
+        save_btn.setStyleSheet("background-color: #4CAF50; color: white; font-weight: bold;")
+        btn_layout.addWidget(save_btn)
+        
+        cancel_btn = QPushButton("Cancel")
+        cancel_btn.clicked.connect(dialog.reject)
+        btn_layout.addWidget(cancel_btn)
+        
+        layout.addLayout(btn_layout)
+        
+        dialog.exec()
+    
+    def _clear_custom_names(self, table):
+        """Clear all custom names in the table."""
+        for row in range(table.rowCount()):
+            table.item(row, 2).setText("")
+    
+    def _save_custom_names(self, dialog, table):
+        """Save custom names from the table."""
+        self._custom_label_names = {}
+        
+        for row in range(table.rowCount()):
+            mat_id = table.item(row, 1).data(Qt.UserRole)
+            custom_name = table.item(row, 2).text().strip()
+            if custom_name:
+                self._custom_label_names[mat_id] = custom_name
+        
+        logger.info(f"Saved {len(self._custom_label_names)} custom label names")
+        dialog.accept()
 
+    def _preview_publication_figure(self, dialog):
+        """Show a preview of the figure."""
+        try:
+            import pyvista as pv
+            import numpy as np
+            
+            # Create an offscreen plotter for preview
+            plotter = pv.Plotter(off_screen=True, window_size=[800, 600])
+            self._setup_publication_plotter(plotter)
+            
+            # Take screenshot and show in a popup
+            img = plotter.screenshot(return_img=True)
+            plotter.close()
+            
+            # Show preview in a simple dialog
+            from PySide6.QtWidgets import QDialog, QVBoxLayout, QLabel
+            from PySide6.QtGui import QImage, QPixmap
+            from PySide6.QtCore import Qt
+            
+            preview_dialog = QDialog(dialog)
+            preview_dialog.setWindowTitle("Preview")
+            preview_dialog.setMinimumSize(820, 640)
+            
+            layout = QVBoxLayout(preview_dialog)
+            
+            # Convert numpy array to QPixmap
+            # IMPORTANT: Make array C-contiguous for QImage compatibility
+            img = np.ascontiguousarray(img)
+            height, width, channel = img.shape
+            bytes_per_line = 3 * width
+            q_img = QImage(img.data, width, height, bytes_per_line, QImage.Format_RGB888)
+            pixmap = QPixmap.fromImage(q_img)
+            
+            label = QLabel()
+            label.setPixmap(pixmap.scaled(800, 600, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+            label.setAlignment(Qt.AlignCenter)
+            layout.addWidget(label)
+            
+            preview_dialog.exec()
+            
+        except Exception as e:
+            logger.error(f"Preview failed: {e}", exc_info=True)
+            QMessageBox.warning(self, "Preview Failed", f"Could not generate preview:\n{str(e)}")
+    
+    def _setup_publication_plotter(self, plotter):
+        """Configure plotter with figure export settings."""
+        import pyvista as pv
+        import numpy as np
+        
+        mesh = self.tetrahedral_mesh.copy()  # Work with a copy to avoid modifying original
+        
+        # Background color - handle this carefully for proper rendering
+        bg_choice = self.fig_background.currentText()
+        is_dark_bg = bg_choice in ["Black", "Dark Gray"]
+        
+        if bg_choice == "White":
+            plotter.set_background('white')
+        elif bg_choice == "Black":
+            plotter.set_background('black')
+        elif bg_choice == "Light Gray":
+            plotter.set_background([0.9, 0.9, 0.9])
+        elif bg_choice == "Dark Gray":
+            plotter.set_background([0.2, 0.2, 0.2])
+        elif bg_choice == "Gradient (White-Gray)":
+            plotter.set_background('white', top=[0.85, 0.85, 0.9])
+        elif bg_choice == "Transparent":
+            plotter.set_background('white')  # Will be made transparent in export
+        else:
+            plotter.set_background('white')  # Default fallback
+        
+        # Set text/label colors based on background
+        text_color = 'white' if is_dark_bg else 'black'
+        
+        # Apply clipping FIRST if enabled (before computing scalars)
+        if self.fig_use_clip.isChecked():
+            axis = self.fig_clip_axis.currentText().lower()
+            value = self.fig_clip_value.value()
+            normal = {'x': [1, 0, 0], 'y': [0, 1, 0], 'z': [0, 0, 1]}[axis]
+            origin = [
+                value if axis == 'x' else mesh.center[0],
+                value if axis == 'y' else mesh.center[1],
+                value if axis == 'z' else mesh.center[2]
+            ]
+            try:
+                mesh = mesh.clip(normal=normal, origin=origin)
+                logger.info(f"Clipped mesh: {mesh.n_cells} cells remaining")
+            except Exception as e:
+                logger.warning(f"Clipping failed: {e}")
+        
+        # Determine scalar field AFTER clipping
+        color_by = self.fig_color_by.currentText()
+        scalars = None
+        scalar_name = "MaterialID"
+        
+        if color_by == "MaterialID" and "MaterialID" in mesh.cell_data:
+            scalars = "MaterialID"  # Use string reference, PyVista handles it
+            scalar_name = "Material ID"
+        elif color_by == "Depth (Z)":
+            # Calculate cell centers and use Z coordinate
+            centers = mesh.cell_centers().points
+            mesh.cell_data["Depth"] = centers[:, 2]
+            scalars = "Depth"
+            scalar_name = "Depth (m)"
+        elif color_by == "Cell Volume":
+            mesh = mesh.compute_cell_sizes()
+            scalars = "Volume"
+            scalar_name = "Cell Volume (m³)"
+        elif color_by == "Cell Quality":
+            try:
+                mesh = mesh.compute_cell_quality(quality_measure='scaled_jacobian')
+                scalars = "CellQuality"
+                scalar_name = "Cell Quality"
+            except:
+                logger.warning("Cell quality computation failed")
+                scalars = None
+        
+        # Colormap settings
+        cmap = self.fig_colormap.currentText()
+        
+        # Render style
+        render_style = self.fig_render_style.currentText()
+        show_edges = self.fig_show_edges.isChecked()
+        
+        # Determine style parameter
+        if render_style == "Wireframe":
+            style = 'wireframe'
+            show_edges = False  # Wireframe already shows edges
+        elif render_style == "Points":
+            style = 'points'
+        else:
+            style = 'surface'
+        
+        # Common mesh parameters
+        mesh_params = {
+            'cmap': cmap,
+            'style': style,
+            'edge_color': self._fig_edge_color,
+            'line_width': 1.0 if show_edges or render_style == "Wireframe" else 0,
+            'ambient': self.fig_ambient.value(),
+            'specular': self.fig_specular.value(),
+            'show_edges': show_edges and style == 'surface',
+        }
+        
+        # For discrete materials, create discrete colormap
+        if self.fig_discrete_cbar.isChecked() and color_by == "MaterialID" and scalars is not None:
+            if "MaterialID" in mesh.cell_data:
+                unique_vals = np.unique(mesh.cell_data["MaterialID"])
+                n_colors = len(unique_vals)
+            else:
+                n_colors = 1
+            
+            plotter.add_mesh(
+                mesh,
+                scalars=scalars,
+                show_scalar_bar=False,  # We'll add custom one
+                **mesh_params
+            )
+            
+            # Add custom scalar bar with annotations
+            if self.fig_show_colorbar.isChecked():
+                plotter.add_scalar_bar(
+                    title=self.fig_cbar_title.text() or scalar_name,
+                    vertical=self.fig_cbar_vertical.isChecked(),
+                    n_labels=min(n_colors + 1, 10),
+                    fmt="%.0f",
+                    title_font_size=self.fig_font_size.value(),
+                    label_font_size=max(self.fig_font_size.value() - 2, 8),
+                    position_x=0.85 if self.fig_cbar_position.currentText() == "Right" else 0.05,
+                    position_y=0.1,
+                    width=0.08,
+                    height=0.7,
+                    color=text_color,  # Text color based on background
+                )
+        else:
+            plotter.add_mesh(
+                mesh,
+                scalars=scalars,
+                scalar_bar_args={
+                    'title': self.fig_cbar_title.text() or scalar_name,
+                    'vertical': self.fig_cbar_vertical.isChecked(),
+                    'title_font_size': self.fig_font_size.value(),
+                    'label_font_size': max(self.fig_font_size.value() - 2, 8),
+                    'color': text_color,  # Text color based on background
+                } if self.fig_show_colorbar.isChecked() else None,
+                show_scalar_bar=self.fig_show_colorbar.isChecked(),
+                **mesh_params
+            )
+        
+        # For "Surface + Wireframe" mode, add wireframe overlay
+        if render_style == "Surface + Wireframe":
+            plotter.add_mesh(
+                mesh,
+                style='wireframe',
+                color=self._fig_edge_color,
+                line_width=0.5,
+                opacity=0.3,
+            )
+        
+        # Add fault surfaces as separate meshes (so they're visible)
+        # Pass clipping info and colormap for consistent visualization
+        clip_info = None
+        if self.fig_use_clip.isChecked():
+            clip_info = {
+                'axis': self.fig_clip_axis.currentText().lower(),
+                'value': self.fig_clip_value.value(),
+                'mesh_center': self.tetrahedral_mesh.center
+            }
+        self._add_fault_surfaces_to_plotter(plotter, render_style, cmap, clip_info)
+        
+        # Camera view
+        view_preset = self.fig_view_preset.currentText()
+        if view_preset == "Isometric":
+            plotter.view_isometric()
+        elif view_preset == "Top (XY)":
+            plotter.view_xy()
+        elif view_preset == "Front (XZ)":
+            plotter.view_xz()
+        elif view_preset == "Side (YZ)":
+            plotter.view_yz()
+        elif view_preset == "Perspective 45°":
+            plotter.camera_position = 'iso'
+            plotter.camera.elevation = 30
+            plotter.camera.azimuth = 45
+        # "Current View" uses whatever camera position was last used
+        
+        # Axes - color based on background
+        if self.fig_show_axes.isChecked():
+            plotter.add_axes(
+                line_width=2,
+                labels_off=False,
+                color=text_color,
+            )
+        
+        # Bounding box - color based on background
+        if self.fig_show_bounds.isChecked():
+            plotter.add_bounding_box(color=text_color, line_width=1)
+        
+        # Title - color based on background
+        if self.fig_title.text():
+            plotter.add_title(
+                self.fig_title.text(),
+                font_size=self.fig_font_size.value() + 4,
+                font=self.fig_font_family.currentText().lower(),
+                color=text_color,
+            )
+        
+        # Material Labels
+        if self.fig_show_labels.isChecked():
+            self._add_material_labels_to_plotter(plotter, mesh, text_color)
+    
+    def _add_fault_surfaces_to_plotter(self, plotter, render_style, cmap, clip_info=None):
+        """Add fault surfaces as separate meshes to make them visible in the figure."""
+        import numpy as np
+        import pyvista as pv
+        
+        # Try to get fault surfaces from TetGen output
+        if not hasattr(self, 'tetra_mesh_generator') or not self.tetra_mesh_generator:
+            logger.debug("No TetGen mesh generator available for fault extraction")
+            return
+        
+        generator = self.tetra_mesh_generator
+        
+        # Get TetGen object - the actual data is stored there
+        tet = getattr(generator, 'tetgen_object', None)
+        if tet is None:
+            logger.debug("No TetGen object available for fault extraction")
+            return
+        
+        # Get trifaces and markers from TetGen object
+        trifaces = getattr(tet, 'trifaces', None)
+        triface_markers = getattr(tet, 'triface_markers', None)
+        nodes = getattr(tet, 'node', None)
+        
+        if trifaces is None or len(trifaces) == 0:
+            logger.debug("No trifaces available in TetGen output")
+            return
+        
+        if triface_markers is None or len(triface_markers) == 0:
+            logger.debug("No triface_markers available in TetGen output")
+            return
+        
+        if nodes is None:
+            logger.debug("No nodes available in TetGen output")
+            return
+        
+        # Find fault markers (markers >= 1000 are typically faults)
+        unique_markers = np.unique(triface_markers)
+        fault_markers = [m for m in unique_markers if m >= 1000]
+        
+        if not fault_markers:
+            logger.debug("No fault markers found in TetGen output")
+            return
+        
+        logger.info(f"Adding {len(fault_markers)} fault surfaces to figure export")
+        
+        # Get fault info and determine colors from colormap
+        fault_info_map = {}
+        fault_attr_map = {}  # Maps marker to material attribute (for colormap)
+        all_attrs = set()
+        if hasattr(self, 'tetra_materials'):
+            for mat in self.tetra_materials:
+                all_attrs.add(mat.get('attribute', 0))
+                if mat.get('type') == 'FAULT':
+                    marker = mat.get('marker', -1)
+                    fault_info_map[marker] = mat.get('name', f'Fault_{marker}')
+                    fault_attr_map[marker] = mat.get('attribute', 0)
+        
+        # Calculate min/max for proper colormap normalization (same as mesh rendering)
+        if all_attrs:
+            min_attr = min(all_attrs)
+            max_attr = max(all_attrs)
+            attr_range = max_attr - min_attr if max_attr != min_attr else 1
+        else:
+            min_attr, max_attr, attr_range = 0, 1, 1
+        
+        # Get colormap
+        try:
+            import matplotlib.pyplot as plt
+            colormap = plt.cm.get_cmap(cmap)
+        except:
+            colormap = None
+        
+        # Extract and add each fault surface
+        for marker in fault_markers:
+            fault_mask = triface_markers == marker
+            fault_faces = trifaces[fault_mask]
+            
+            if len(fault_faces) == 0:
+                continue
+            
+            fault_name = fault_info_map.get(marker, f'Fault_{marker}')
+            fault_attr = fault_attr_map.get(marker, 0)
+            
+            # Get color from colormap with proper normalization
+            if colormap is not None:
+                normalized = (fault_attr - min_attr) / attr_range
+                fault_color = list(colormap(normalized)[:3])
+            else:
+                fault_color = [1.0, 0.0, 0.0]  # Fallback red
+            
+            logger.info(f"  Adding fault surface: {fault_name} (attr={fault_attr}, normalized={normalized if colormap else 'N/A'}, color={fault_color})")
+            
+            # Create PyVista mesh from fault faces
+            try:
+                # Get unique vertices used by fault faces
+                unique_verts = np.unique(fault_faces.flatten())
+                
+                # Create vertex mapping
+                vert_map = {old_idx: new_idx for new_idx, old_idx in enumerate(unique_verts)}
+                
+                # Remap face indices
+                remapped_faces = np.array([[vert_map[v] for v in face] for face in fault_faces])
+                
+                # Create faces array for PyVista (with size prefix)
+                faces_pv = np.hstack([[3] + list(face) for face in remapped_faces])
+                
+                # Get vertex coordinates
+                fault_points = nodes[unique_verts]
+                
+                # Create PolyData mesh
+                fault_mesh = pv.PolyData(fault_points, faces_pv)
+                
+                # Apply clipping if enabled
+                if clip_info is not None:
+                    axis = clip_info['axis']
+                    value = clip_info['value']
+                    mesh_center = clip_info['mesh_center']
+                    normal = {'x': [1, 0, 0], 'y': [0, 1, 0], 'z': [0, 0, 1]}[axis]
+                    origin = [
+                        value if axis == 'x' else mesh_center[0],
+                        value if axis == 'y' else mesh_center[1],
+                        value if axis == 'z' else mesh_center[2]
+                    ]
+                    try:
+                        fault_mesh = fault_mesh.clip(normal=normal, origin=origin)
+                        if fault_mesh.n_cells == 0:
+                            logger.debug(f"Fault {fault_name} clipped entirely")
+                            continue
+                    except Exception as e:
+                        logger.warning(f"Failed to clip fault mesh: {e}")
+                
+                # Determine style for fault
+                if render_style == "Wireframe":
+                    # For wireframe mode, show fault as surface for visibility
+                    plotter.add_mesh(
+                        fault_mesh,
+                        color=fault_color,
+                        style='surface',
+                        opacity=0.9,
+                        show_edges=True,
+                        edge_color=fault_color,
+                        line_width=1.5,
+                    )
+                elif render_style == "Surface + Wireframe":
+                    # Surface with edges
+                    plotter.add_mesh(
+                        fault_mesh,
+                        color=fault_color,
+                        style='surface',
+                        opacity=0.9,
+                        show_edges=True,
+                        edge_color=[c * 0.7 for c in fault_color],  # Darker edges
+                        line_width=1.0,
+                    )
+                else:
+                    # Normal surface mode
+                    plotter.add_mesh(
+                        fault_mesh,
+                        color=fault_color,
+                        style='surface',
+                        opacity=0.95,
+                        show_edges=False,
+                        ambient=0.3,
+                        specular=0.5,
+                    )
+                
+                logger.info(f"  ✓ Added fault mesh: {fault_name}")
+                
+            except Exception as e:
+                logger.warning(f"Failed to create fault mesh for marker {marker}: {e}")
+                continue
+    
+    def _add_material_labels_to_plotter(self, plotter, mesh, text_color):
+        """Add material/surface labels to the plotter."""
+        import numpy as np
+        
+        label_style = self.fig_label_style.currentText()
+        font_size = self.fig_label_font_size.value()
+        show_bg = self.fig_label_bg.isChecked()
+        
+        # Get material information
+        if "MaterialID" not in mesh.cell_data:
+            logger.warning("No MaterialID in mesh, cannot add labels")
+            return
+        
+        material_ids = mesh.cell_data["MaterialID"]
+        unique_materials = np.unique(material_ids)
+        
+        # Build material name mapping - include BOTH formations AND faults
+        material_names = {}
+        material_types = {}  # Track type for display
+        
+        # Get custom label names if available
+        custom_names = getattr(self, '_custom_label_names', {})
+        
+        if hasattr(self, 'tetra_materials'):
+            for mat in self.tetra_materials:
+                mat_id = mat.get('attribute', -1)
+                mat_name = mat.get('name', f'Material {mat_id}')
+                mat_type = mat.get('type', 'FORMATION')
+                
+                # Use custom name if available
+                if mat_id in custom_names and custom_names[mat_id]:
+                    display_name = custom_names[mat_id]
+                else:
+                    # Add type indicator for clarity
+                    if mat_type == 'FAULT':
+                        display_name = f"⚡ {mat_name}"  # Fault indicator
+                    else:
+                        display_name = mat_name
+                
+                # Shorten the name if it's too long
+                if len(display_name) > 30:
+                    display_name = display_name[:27] + "..."
+                    
+                material_names[mat_id] = display_name
+                material_types[mat_id] = mat_type
+        
+        # Also check for fault surfaces stored separately (from TetGen extraction)
+        if hasattr(self, 'tetra_mesh_generator') and self.tetra_mesh_generator:
+            generator = self.tetra_mesh_generator
+            if hasattr(generator, 'fault_surfaces'):
+                for fault_info in generator.fault_surfaces:
+                    mat_id = fault_info.get('material_id', fault_info.get('attribute', -1))
+                    if mat_id not in material_names:
+                        fault_name = fault_info.get('name', f'Fault {mat_id}')
+                        # Use custom name if available
+                        if mat_id in custom_names and custom_names[mat_id]:
+                            display_name = custom_names[mat_id]
+                        else:
+                            display_name = f"⚡ {fault_name}"
+                        if len(display_name) > 30:
+                            display_name = display_name[:27] + "..."
+                        material_names[mat_id] = display_name
+                        material_types[mat_id] = 'FAULT'
+        
+        # Log what we found
+        logger.info(f"Material labels: Found {len(material_names)} materials/faults for labeling")
+        for mid, mname in material_names.items():
+            logger.debug(f"  Material {mid}: {mname}")
+        
+        # Calculate centroid for each material region
+        cell_centers = mesh.cell_centers().points
+        
+        # Collect all labels to add (formations from mesh + faults from stored data)
+        labels_to_add = []  # List of (centroid, name, is_fault)
+        
+        # 1. Add formations from mesh MaterialID
+        for mat_id in unique_materials:
+            mat_name = material_names.get(int(mat_id), f'Material {mat_id}')
+            mat_type = material_types.get(int(mat_id), 'FORMATION')
+            
+            # Skip if this is a fault (we'll handle faults separately with stored locations)
+            if mat_type == 'FAULT':
+                continue
+            
+            # Find cells belonging to this material
+            mask = material_ids == mat_id
+            if not np.any(mask):
+                continue
+            
+            # Calculate centroid of this material's cells
+            mat_centers = cell_centers[mask]
+            centroid = np.mean(mat_centers, axis=0)
+            labels_to_add.append((centroid, mat_name, False))
+        
+        # 2. Add faults using their stored center locations
+        if hasattr(self, 'tetra_materials'):
+            for mat in self.tetra_materials:
+                if mat.get('type') == 'FAULT':
+                    mat_id = mat.get('attribute', -1)
+                    
+                    # Use the display name from material_names (which includes custom names)
+                    display_name = material_names.get(mat_id, None)
+                    if display_name is None:
+                        # Fallback if not in material_names
+                        fault_name = mat.get('name', 'Fault')
+                        if mat_id in custom_names and custom_names[mat_id]:
+                            display_name = custom_names[mat_id]
+                        else:
+                            display_name = f"⚡ {fault_name}"
+                    
+                    # Use stored location as centroid
+                    locations = mat.get('locations', [])
+                    if locations and len(locations) > 0:
+                        centroid = np.array(locations[0])
+                        labels_to_add.append((centroid, display_name, True))
+                        logger.info(f"Adding fault label: {display_name} at {centroid}")
+        
+        if label_style == "Legend Box":
+            # Create a legend box in the corner - include all materials and faults
+            all_names = dict(material_names)
+            # Add faults if not already in the dict (with custom names support)
+            if hasattr(self, 'tetra_materials'):
+                for mat in self.tetra_materials:
+                    if mat.get('type') == 'FAULT':
+                        mat_id = mat.get('attribute', -1)
+                        if mat_id not in all_names:
+                            fault_name = mat.get('name', 'Fault')
+                            if mat_id in custom_names and custom_names[mat_id]:
+                                all_names[mat_id] = custom_names[mat_id]
+                            else:
+                                all_names[mat_id] = f"⚡ {fault_name}"
+            
+            # Get all unique IDs including faults
+            all_ids = set(unique_materials)
+            if hasattr(self, 'tetra_materials'):
+                for mat in self.tetra_materials:
+                    if mat.get('type') == 'FAULT':
+                        all_ids.add(mat.get('attribute', -1))
+            
+            self._add_material_legend_box(plotter, sorted(all_ids), all_names, text_color, font_size)
+        else:
+            # Add labels at centroids or with leader lines
+            for centroid, mat_name, is_fault in labels_to_add:
+                if label_style == "At Centroid":
+                    # Simple text at centroid
+                    plotter.add_point_labels(
+                        [centroid],
+                        [mat_name],
+                        font_size=font_size,
+                        text_color=text_color,
+                        font_family=self.fig_font_family.currentText().lower(),
+                        show_points=False,
+                        shape='rounded_rect' if show_bg else None,
+                        fill_shape=show_bg,
+                        shape_color='white' if text_color == 'black' else 'black',
+                        shape_opacity=0.7 if show_bg else 0,
+                        margin=3,
+                        always_visible=True,
+                    )
+                elif label_style == "With Leader Lines":
+                    # Offset label with leader line
+                    # Calculate offset direction (outward from mesh center)
+                    mesh_center = mesh.center
+                    direction = centroid - mesh_center
+                    direction = direction / (np.linalg.norm(direction) + 1e-10)
+                    
+                    # Calculate offset distance based on mesh size
+                    mesh_size = np.linalg.norm(np.array(mesh.bounds[1::2]) - np.array(mesh.bounds[::2]))
+                    offset_dist = mesh_size * 0.15
+                    
+                    label_pos = centroid + direction * offset_dist
+                    
+                    # Add the label
+                    plotter.add_point_labels(
+                        [label_pos],
+                        [mat_name],
+                        font_size=font_size,
+                        text_color=text_color,
+                        font_family=self.fig_font_family.currentText().lower(),
+                        show_points=False,
+                        shape='rounded_rect' if show_bg else None,
+                        fill_shape=show_bg,
+                        shape_color='white' if text_color == 'black' else 'black',
+                        shape_opacity=0.7 if show_bg else 0,
+                        margin=3,
+                        always_visible=True,
+                    )
+                    
+                    # Add leader line
+                    import pyvista as pv
+                    line = pv.Line(centroid, label_pos)
+                    plotter.add_mesh(line, color=text_color, line_width=1.5)
+                    
+                    # Add small sphere at centroid end
+                    sphere = pv.Sphere(radius=mesh_size * 0.005, center=centroid)
+                    plotter.add_mesh(sphere, color=text_color)
+    
+    def _add_material_legend_box(self, plotter, unique_materials, material_names, text_color, font_size):
+        """Add a legend box showing all materials."""
+        import numpy as np
+        
+        # Build legend entries
+        legend_entries = []
+        
+        # Get colors from the colormap for ALL materials (same as used in visualization)
+        cmap_name = self.fig_colormap.currentText()
+        
+        # Get min/max material IDs for proper normalization (same as PyVista does)
+        min_id = min(unique_materials)
+        max_id = max(unique_materials)
+        id_range = max_id - min_id if max_id != min_id else 1
+        
+        try:
+            import matplotlib.pyplot as plt
+            cmap = plt.cm.get_cmap(cmap_name)
+            
+            # Assign colors based on normalized attribute ID to match the mesh coloring
+            material_colors = {}
+            for mat_id in unique_materials:
+                # Normalize the material ID the same way PyVista does
+                normalized = (int(mat_id) - min_id) / id_range
+                material_colors[int(mat_id)] = list(cmap(normalized)[:3])
+        except:
+            # Fallback colors
+            default_colors = [
+                [0.267, 0.004, 0.329], [0.282, 0.140, 0.458], [0.254, 0.265, 0.530],
+                [0.207, 0.372, 0.553], [0.164, 0.471, 0.558], [0.128, 0.567, 0.551],
+                [0.135, 0.659, 0.518], [0.267, 0.749, 0.441], [0.478, 0.821, 0.318],
+                [0.741, 0.873, 0.150], [0.993, 0.906, 0.144]
+            ]
+            material_colors = {int(mid): default_colors[int(mid) % len(default_colors)] 
+                               for mid in unique_materials}
+        
+        # Build legend entries - all materials with their colormap colors
+        for mat_id in sorted(unique_materials):
+            mat_name = material_names.get(int(mat_id), f'Material {mat_id}')
+            color = material_colors.get(int(mat_id), [0.5, 0.5, 0.5])
+            legend_entries.append([mat_name, color])
+        
+        # Add legend
+        plotter.add_legend(
+            legend_entries,
+            bcolor='white' if text_color == 'black' else [0.1, 0.1, 0.1],
+            border=True,
+            size=(0.25, 0.2),
+            loc='upper left',
+        )
+    
+    def _export_publication_figure(self, dialog):
+        """Export the high-quality figure."""
+        from PySide6.QtWidgets import QFileDialog
+        import pyvista as pv
+        
+        # Get format and extension
+        format_text = self.fig_format.currentText()
+        format_map = {
+            "PNG (Recommended)": ("png", "PNG files (*.png)"),
+            "JPEG": ("jpg", "JPEG files (*.jpg *.jpeg)"),
+            "TIFF": ("tiff", "TIFF files (*.tiff *.tif)"),
+            "PDF": ("pdf", "PDF files (*.pdf)"),
+            "SVG": ("svg", "SVG files (*.svg)"),
+            "EPS": ("eps", "EPS files (*.eps)"),
+        }
+        ext, filter_str = format_map.get(format_text, ("png", "PNG files (*.png)"))
+        
+        file_path, _ = QFileDialog.getSaveFileName(
+            dialog,
+            "Export Figure",
+            f"mesh_figure.{ext}",
+            f"{filter_str};;All files (*.*)"
+        )
+        
+        if not file_path:
+            return
+        
+        try:
+            self.statusBar().showMessage("Exporting publication figure...")
+            
+            # Create high-resolution offscreen plotter
+            width = self.fig_width.value()
+            height = self.fig_height.value()
+            
+            plotter = pv.Plotter(
+                off_screen=True,
+                window_size=[width, height],
+            )
+            
+            # Anti-aliasing
+            if self.fig_anti_alias.isChecked():
+                plotter.enable_anti_aliasing('ssaa', multi_samples=self.fig_aa_frames.value())
+            
+            # Depth peeling for transparency
+            if self.fig_depth_peeling.isChecked():
+                plotter.enable_depth_peeling()
+            
+            # Setup visualization
+            self._setup_publication_plotter(plotter)
+            
+            # Determine if transparent background is requested
+            use_transparent = (self.fig_background.currentText() == "Transparent" or 
+                              self.fig_transparent.isChecked())
+            
+            # Export
+            if ext in ['pdf', 'svg', 'eps']:
+                # Vector formats
+                plotter.save_graphic(file_path)
+            else:
+                # Raster formats
+                plotter.screenshot(
+                    file_path,
+                    transparent_background=use_transparent,
+                )
+            
+            plotter.close()
+            
+            self.statusBar().showMessage(f"Figure exported: {file_path}", 5000)
+            QMessageBox.information(
+                dialog,
+                "Export Successful",
+                f"Figure exported to:\n{file_path}\n\n"
+                f"Resolution: {width} × {height} pixels\n"
+                f"Format: {format_text}"
+            )
+            
+            logger.info(f"Figure exported: {file_path} ({width}x{height})")
+            
+        except Exception as e:
+            logger.error(f"Figure export failed: {e}", exc_info=True)
+            QMessageBox.critical(dialog, "Export Failed", f"Failed to export figure:\n{str(e)}")
     def _get_border_surface_indices(self) -> set:
         """Extract surface indices from border surfaces list"""
         indices = set()
