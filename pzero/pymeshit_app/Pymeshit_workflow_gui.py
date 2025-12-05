@@ -2021,6 +2021,40 @@ class MeshItWorkflowGUI(QWidget):
         hull_group = QGroupBox("Hull Controls")
         hull_layout = QVBoxLayout(hull_group)
         
+        # Hull Method Selection
+        method_layout = QHBoxLayout()
+        method_layout.addWidget(QLabel("Method:"))
+        self.hull_method_combo = QComboBox()
+        self.hull_method_combo.addItem("Delaunay 2D (Default)", "delaunay")
+        self.hull_method_combo.addItem("Alpha Shape (Wavy Surfaces)", "alpha")
+        self.hull_method_combo.setToolTip(
+            "Delaunay 2D: Original method - best for flat/quasi-planar surfaces\n"
+            "Alpha Shape: Best for wavy/undulating surfaces with concave boundaries"
+        )
+        self.hull_method_combo.setCurrentIndex(0)  # Default to Delaunay
+        method_layout.addWidget(self.hull_method_combo)
+        hull_layout.addLayout(method_layout)
+        
+        # Alpha parameter (only enabled for alpha shape method)
+        alpha_layout = QHBoxLayout()
+        alpha_layout.addWidget(QLabel("Alpha Factor:"))
+        self.hull_alpha_spin = QDoubleSpinBox()
+        self.hull_alpha_spin.setRange(0.1, 10.0)
+        self.hull_alpha_spin.setValue(1.0)
+        self.hull_alpha_spin.setSingleStep(0.1)
+        self.hull_alpha_spin.setToolTip(
+            "Alpha factor for concave hull computation.\n"
+            "Lower values = more concave (tighter fit)\n"
+            "Higher values = more convex (smoother boundary)\n"
+            "1.0 = adaptive default"
+        )
+        self.hull_alpha_spin.setEnabled(False)  # Disabled by default (Delaunay selected)
+        alpha_layout.addWidget(self.hull_alpha_spin)
+        hull_layout.addLayout(alpha_layout)
+        
+        # Connect method change to show/hide alpha parameter
+        self.hull_method_combo.currentIndexChanged.connect(self._on_hull_method_changed)
+        
         # Compute hull button
         compute_btn = QPushButton("Compute Convex Hull (All Datasets)")
         compute_btn.setObjectName("compute_btn") # Set the object name
@@ -2080,6 +2114,13 @@ class MeshItWorkflowGUI(QWidget):
         
         viz_layout.addWidget(self.hull_viz_frame)
         tab_layout.addWidget(viz_group, 1)  # 1 = stretch factor
+    
+    def _on_hull_method_changed(self, index):
+        """Handle hull method dropdown change - enable/disable alpha parameter."""
+        method = self.hull_method_combo.currentData()
+        # Enable alpha spin box only for alpha shape method
+        self.hull_alpha_spin.setEnabled(method == "alpha")
+    
     
     def _setup_segment_tab(self):
         """Sets up the segmentation tab with controls and visualization area"""
@@ -7531,8 +7572,7 @@ class MeshItWorkflowGUI(QWidget):
         """
         Compute (and store) the boundary poly-line for the selected dataset.
         - For 2D data, this computes the convex hull.
-        - For 3D sheet-like data, this finds the ordered "rim" or "outline"
-        (which can be concave) by finding the boundary of a Delaunay triangulation.
+        - For 3D sheet-like data, uses Delaunay (original) or Alpha Shape based on dropdown.
         
         This version also identifies and marks geometric corners as "special points"
         immediately after calculation, preparing it for robust segmentation.
@@ -7553,6 +7593,14 @@ class MeshItWorkflowGUI(QWidget):
             logger.warning("Dataset '%s' has < 3 points, skipping hull computation.", ds.get('name'))
             return False
 
+        # Get the selected hull method from the dropdown (default to Delaunay)
+        hull_method = getattr(self, 'hull_method_combo', None)
+        method = hull_method.currentData() if hull_method else "delaunay"
+        
+        # Get alpha factor for alpha shape method
+        alpha_factor = getattr(self, 'hull_alpha_spin', None)
+        alpha_factor = alpha_factor.value() if alpha_factor else 1.0
+
         try:
             dim = pts.shape[1]
             hull_pts_np = None
@@ -7566,52 +7614,68 @@ class MeshItWorkflowGUI(QWidget):
                 # Convert to 3D for consistency, setting Z=0
                 hull_pts_np = np.hstack([hull_pts_2d, np.zeros((len(hull_pts_2d), 1))])
 
-            # --- BRANCH 2: 3D Data (Handles Convex and Concave Boundaries) ---
+            # --- BRANCH 2: 3D Data ---
             else: # dim >= 3
-                logger.info(f"Computing 3D data boundary for '{ds.get('name')}' using Delaunay triangulation...")
                 # 1. Project all 3D points onto their best-fit 2D plane using PCA.
                 _centroid, projected_pts_2d = self._pca_project(pts)
-
-                # 2. Perform Delaunay triangulation on the 2D projected points.
-                tri = Delaunay(projected_pts_2d)
-
-                # 3. Find the boundary edges (edges that appear in only one triangle).
-                edges = set()
-                for simplex in tri.simplices:
-                    for j in range(3):
-                        p1_idx, p2_idx = simplex[j], simplex[(j + 1) % 3]
-                        edge = tuple(sorted((p1_idx, p2_idx)))
-                        if edge in edges:
-                            edges.remove(edge) # Internal edge, remove it.
-                        else:
-                            edges.add(edge) # Potential boundary edge.
                 
-                if not edges:
-                    logger.warning("Delaunay method found no boundary edges. Falling back to convex hull on projected points.")
-                    hull = ConvexHull(projected_pts_2d)
-                    hull_pts_np = pts[hull.vertices]
-                else:
-                    # 4. Stitch the unordered boundary edges into a continuous path.
-                    ordered_indices = []
-                    current_edge = edges.pop()
-                    ordered_indices.extend(list(current_edge))
+                if method == "alpha":
+                    # Alpha shapes for wavy/concave surfaces
+                    logger.info(f"Computing alpha shape boundary for '{ds.get('name')}' (alpha_factor={alpha_factor})...")
+                    ordered_indices = self._compute_alpha_shape_boundary_robust(projected_pts_2d, alpha_factor)
                     
-                    while edges:
-                        last_point_idx = ordered_indices[-1]
-                        found_next = False
-                        for edge in list(edges): # Iterate over a copy
-                            if last_point_idx in edge:
-                                next_point_idx = edge[1] if edge[0] == last_point_idx else edge[0]
-                                ordered_indices.append(next_point_idx)
-                                edges.remove(edge)
-                                found_next = True
+                    if ordered_indices is not None and len(ordered_indices) >= 3:
+                        logger.info(f"Alpha shape boundary computed with {len(ordered_indices)} vertices")
+                        hull_pts_np = pts[ordered_indices]
+                    else:
+                        # Fallback to Delaunay if alpha shapes fail
+                        logger.warning("Alpha shapes failed, falling back to Delaunay boundary...")
+                        method = "delaunay"  # Fall through to Delaunay below
+                
+                if method == "delaunay" or hull_pts_np is None:
+                    # ORIGINAL DELAUNAY CODE - unchanged
+                    logger.info(f"Computing 3D data boundary for '{ds.get('name')}' using Delaunay triangulation...")
+                    
+                    # 2. Perform Delaunay triangulation on the 2D projected points.
+                    tri = Delaunay(projected_pts_2d)
+
+                    # 3. Find the boundary edges (edges that appear in only one triangle).
+                    edges = set()
+                    for simplex in tri.simplices:
+                        for j in range(3):
+                            p1_idx, p2_idx = simplex[j], simplex[(j + 1) % 3]
+                            edge = tuple(sorted((p1_idx, p2_idx)))
+                            if edge in edges:
+                                edges.remove(edge)  # Internal edge, remove it.
+                            else:
+                                edges.add(edge)  # Potential boundary edge.
+                    
+                    if not edges:
+                        logger.warning("Delaunay method found no boundary edges. Falling back to convex hull on projected points.")
+                        hull = ConvexHull(projected_pts_2d)
+                        hull_pts_np = pts[hull.vertices]
+                    else:
+                        # 4. Stitch the unordered boundary edges into a continuous path.
+                        ordered_indices = []
+                        current_edge = edges.pop()
+                        ordered_indices.extend(list(current_edge))
+                        
+                        while edges:
+                            last_point_idx = ordered_indices[-1]
+                            found_next = False
+                            for edge in list(edges):  # Iterate over a copy
+                                if last_point_idx in edge:
+                                    next_point_idx = edge[1] if edge[0] == last_point_idx else edge[0]
+                                    ordered_indices.append(next_point_idx)
+                                    edges.remove(edge)
+                                    found_next = True
+                                    break
+                            if not found_next:
+                                logger.warning("Boundary walk broken. The result might be incomplete or have multiple loops.")
                                 break
-                        if not found_next:
-                            logger.warning("Boundary walk broken. The result might be incomplete or have multiple loops.")
-                            break
-                    
-                    # 5. Get the final ordered polyline from the original 3D points.
-                    hull_pts_np = pts[ordered_indices]
+                        
+                        # 5. Get the final ordered polyline from the original 3D points.
+                        hull_pts_np = pts[ordered_indices]
 
             # --- Post-processing for BOTH cases ---
 
@@ -7644,6 +7708,258 @@ class MeshItWorkflowGUI(QWidget):
             logger.error(f"Hull/Boundary computation failed for dataset {dataset_index}: {exc}")
             logger.debug(traceback.format_exc())
             return False
+    
+    def _compute_alpha_shape_boundary_robust(self, points_2d: np.ndarray, alpha_factor: float = 1.0) -> Optional[np.ndarray]:
+        """
+        Compute the boundary of a 2D point cloud using alpha shapes with adaptive alpha.
+        This method is robust for wavy/undulating surfaces that have concave boundaries.
+        
+        The algorithm:
+        1. Computes an adaptive alpha based on local point density
+        2. Tries multiple alpha values to find the best boundary
+        3. Uses the outer boundary (largest connected component) if multiple exist
+        
+        Args:
+            points_2d: 2D projected points (N, 2)
+            alpha_factor: User-adjustable factor (lower = more concave, higher = more convex)
+            
+        Returns:
+            Ordered boundary point indices, or None if computation fails
+        """
+        from scipy.spatial import Delaunay, cKDTree
+        from collections import Counter, defaultdict
+        
+        try:
+            if len(points_2d) < 4:
+                return None
+            
+            # Compute adaptive alpha based on local point density
+            tree = cKDTree(points_2d)
+            # Use k nearest neighbors to estimate local density
+            k = min(8, len(points_2d))
+            dists, _ = tree.query(points_2d, k=k)
+            
+            # Use median of average k-NN distances for robustness
+            if dists.ndim > 1 and dists.shape[1] > 1:
+                avg_nn_dist = np.median(dists[:, 1:].mean(axis=1))
+            else:
+                avg_nn_dist = np.median(dists)
+            
+            # Compute bounding box diagonal for scale reference
+            bbox_diag = np.linalg.norm(points_2d.max(axis=0) - points_2d.min(axis=0))
+            
+            # Try multiple alpha values from more concave to more convex
+            # Alpha convention: circumradius < 1/alpha keeps the triangle
+            # Smaller alpha = more triangles kept = more convex result
+            # Larger alpha = fewer triangles = more concave result (better for wavy surfaces)
+            # Adjust multipliers based on user's alpha_factor
+            base_multipliers = [0.3, 0.5, 0.8, 1.0, 1.5, 2.0, 3.0, 5.0]
+            # Scale multipliers by the user factor (lower factor = more concave)
+            alpha_multipliers = [m * alpha_factor for m in base_multipliers]
+            
+            best_boundary = None
+            best_score = -1
+            
+            for mult in alpha_multipliers:
+                # Alpha based on local density, adjusted by multiplier
+                # For wavy surfaces, we want larger alpha (more concave)
+                radius_threshold = avg_nn_dist * mult
+                alpha = 1.0 / max(radius_threshold, 1e-12)
+                
+                boundary_indices = self._extract_alpha_shape_boundary(points_2d, alpha)
+                
+                if boundary_indices is not None and len(boundary_indices) >= 3:
+                    # Score based on: prefer boundaries that are closed and reasonably sized
+                    # Penalize very small boundaries (too concave) and very large ones (artifacts)
+                    n_vertices = len(boundary_indices)
+                    
+                    # Check if boundary is closed (first and last point should connect)
+                    is_closed = self._is_boundary_closed(boundary_indices, points_2d)
+                    
+                    # Compute boundary length
+                    boundary_pts = points_2d[boundary_indices]
+                    boundary_length = np.sum(np.linalg.norm(np.diff(boundary_pts, axis=0), axis=1))
+                    if is_closed:
+                        boundary_length += np.linalg.norm(boundary_pts[-1] - boundary_pts[0])
+                    
+                    # Score: prefer closed boundaries with reasonable length relative to bbox
+                    # Length should be somewhere between 2*bbox_diag (square) and 4*bbox_diag (complex)
+                    length_ratio = boundary_length / bbox_diag
+                    
+                    # Good score if: closed, and length ratio is reasonable (2-10 times bbox diagonal)
+                    if is_closed and 1.5 <= length_ratio <= 15.0:
+                        score = n_vertices * (1.0 if is_closed else 0.5)
+                        # Prefer boundaries with more vertices (captures more detail)
+                        # but not too many (avoid noise)
+                        if n_vertices > len(points_2d) * 0.8:
+                            score *= 0.5  # Penalize if almost all points are on boundary
+                        
+                        if score > best_score:
+                            best_score = score
+                            best_boundary = boundary_indices
+                            logger.debug(f"Alpha mult={mult:.1f}, alpha={alpha:.4f}, vertices={n_vertices}, "
+                                       f"closed={is_closed}, length_ratio={length_ratio:.2f}, score={score:.1f}")
+            
+            if best_boundary is not None:
+                logger.info(f"Best alpha shape boundary has {len(best_boundary)} vertices")
+                return best_boundary
+            
+            # If no good alpha shape found, return None to trigger fallback
+            logger.warning("No suitable alpha shape boundary found")
+            return None
+            
+        except Exception as e:
+            logger.warning(f"Alpha shape boundary computation failed: {e}")
+            return None
+    
+    def _extract_alpha_shape_boundary(self, points_2d: np.ndarray, alpha: float) -> Optional[np.ndarray]:
+        """
+        Extract the boundary of an alpha shape for given alpha value.
+        
+        Args:
+            points_2d: 2D points (N, 2)
+            alpha: Alpha parameter (circumradius threshold = 1/alpha)
+            
+        Returns:
+            Ordered boundary point indices, or None if extraction fails
+        """
+        from scipy.spatial import Delaunay
+        from collections import Counter, defaultdict
+        
+        try:
+            tri = Delaunay(points_2d)
+            threshold = 1.0 / alpha if alpha > 1e-12 else float('inf')
+            
+            # Find triangles that pass the alpha test
+            kept_triangles = []
+            for simplex in tri.simplices:
+                pts = points_2d[simplex]
+                
+                # Compute circumradius using the formula: R = (a*b*c) / (4*Area)
+                a = np.linalg.norm(pts[1] - pts[0])
+                b = np.linalg.norm(pts[2] - pts[1])
+                c = np.linalg.norm(pts[0] - pts[2])
+                
+                # Heron's formula for area
+                s = (a + b + c) / 2.0
+                area_sq = s * (s - a) * (s - b) * (s - c)
+                
+                if area_sq > 1e-20:  # Non-degenerate triangle
+                    area = np.sqrt(area_sq)
+                    circumradius = (a * b * c) / (4.0 * area)
+                    
+                    # Keep triangle if circumradius < threshold
+                    if circumradius < threshold:
+                        kept_triangles.append(tuple(simplex))
+            
+            if not kept_triangles:
+                return None
+            
+            # Find boundary edges (edges that appear exactly once in kept triangles)
+            edge_count = Counter()
+            for tri_verts in kept_triangles:
+                for j in range(3):
+                    edge = tuple(sorted((tri_verts[j], tri_verts[(j + 1) % 3])))
+                    edge_count[edge] += 1
+            
+            boundary_edges = [edge for edge, count in edge_count.items() if count == 1]
+            
+            if len(boundary_edges) < 3:
+                return None
+            
+            # Order boundary edges into a continuous path
+            # Build adjacency list
+            adjacency = defaultdict(list)
+            for edge in boundary_edges:
+                adjacency[edge[0]].append(edge[1])
+                adjacency[edge[1]].append(edge[0])
+            
+            # Find the outer boundary (largest connected component)
+            # Start from the leftmost point (guaranteed to be on outer boundary)
+            all_boundary_verts = set()
+            for edge in boundary_edges:
+                all_boundary_verts.add(edge[0])
+                all_boundary_verts.add(edge[1])
+            
+            start_vertex = min(all_boundary_verts, key=lambda v: (points_2d[v, 0], points_2d[v, 1]))
+            
+            # Walk the boundary using consistent turning (counterclockwise)
+            ordered_indices = [start_vertex]
+            visited_edges = set()
+            current = start_vertex
+            prev = None
+            
+            for _ in range(len(boundary_edges) + 2):
+                neighbors = adjacency[current]
+                next_vertex = None
+                
+                if prev is None:
+                    # First step: pick any neighbor
+                    if neighbors:
+                        next_vertex = neighbors[0]
+                else:
+                    # Pick neighbor with smallest counterclockwise angle
+                    v_in = points_2d[current] - points_2d[prev]
+                    best_angle = float('inf')
+                    
+                    for nb in neighbors:
+                        if nb == prev:
+                            continue
+                        edge = tuple(sorted((current, nb)))
+                        if edge in visited_edges:
+                            continue
+                        
+                        v_out = points_2d[nb] - points_2d[current]
+                        # Compute signed angle (counterclockwise positive)
+                        cross = v_in[0] * v_out[1] - v_in[1] * v_out[0]
+                        dot = np.dot(v_in, v_out)
+                        angle = np.arctan2(cross, dot)
+                        
+                        # We want the smallest left turn (most counterclockwise)
+                        if angle < best_angle:
+                            best_angle = angle
+                            next_vertex = nb
+                
+                if next_vertex is None:
+                    break
+                
+                edge = tuple(sorted((current, next_vertex)))
+                if edge in visited_edges:
+                    break
+                visited_edges.add(edge)
+                
+                if next_vertex == start_vertex:
+                    # Completed the loop
+                    break
+                
+                ordered_indices.append(next_vertex)
+                prev = current
+                current = next_vertex
+            
+            return np.array(ordered_indices) if len(ordered_indices) >= 3 else None
+            
+        except Exception as e:
+            logger.debug(f"Alpha shape extraction failed for alpha={alpha}: {e}")
+            return None
+    
+    def _is_boundary_closed(self, boundary_indices: np.ndarray, points_2d: np.ndarray) -> bool:
+        """Check if the boundary forms a closed loop."""
+        if len(boundary_indices) < 3:
+            return False
+        
+        # Check if first and last points are close together or adjacent in the original connectivity
+        first_pt = points_2d[boundary_indices[0]]
+        last_pt = points_2d[boundary_indices[-1]]
+        
+        # Use the average edge length as threshold
+        boundary_pts = points_2d[boundary_indices]
+        edge_lengths = np.linalg.norm(np.diff(boundary_pts, axis=0), axis=1)
+        avg_edge = np.mean(edge_lengths) if len(edge_lengths) > 0 else 1.0
+        
+        # Boundary is closed if the gap between first and last is within 2x average edge
+        gap = np.linalg.norm(last_pt - first_pt)
+        return gap < avg_edge * 2.5
+
 
 
     
@@ -15158,6 +15474,14 @@ segmentation, triangulation, and visualization.
         else:
             style = 'surface'
         
+        # Get the actual range of MaterialID for proper colorbar limits
+        clim = None
+        n_materials = 1
+        if color_by == "MaterialID" and "MaterialID" in mesh.cell_data:
+            unique_vals = np.unique(mesh.cell_data["MaterialID"])
+            n_materials = len(unique_vals)
+            clim = [int(unique_vals.min()), int(unique_vals.max())]
+        
         # Common mesh parameters
         mesh_params = {
             'cmap': cmap,
@@ -15169,14 +15493,12 @@ segmentation, triangulation, and visualization.
             'show_edges': show_edges and style == 'surface',
         }
         
+        # Add clim if we have MaterialID
+        if clim is not None:
+            mesh_params['clim'] = clim
+        
         # For discrete materials, create discrete colormap
         if self.fig_discrete_cbar.isChecked() and color_by == "MaterialID" and scalars is not None:
-            if "MaterialID" in mesh.cell_data:
-                unique_vals = np.unique(mesh.cell_data["MaterialID"])
-                n_colors = len(unique_vals)
-            else:
-                n_colors = 1
-            
             plotter.add_mesh(
                 mesh,
                 scalars=scalars,
@@ -15189,7 +15511,7 @@ segmentation, triangulation, and visualization.
                 plotter.add_scalar_bar(
                     title=self.fig_cbar_title.text() or scalar_name,
                     vertical=self.fig_cbar_vertical.isChecked(),
-                    n_labels=min(n_colors + 1, 10),
+                    n_labels=n_materials + 1,
                     fmt="%.0f",
                     title_font_size=self.fig_font_size.value(),
                     label_font_size=max(self.fig_font_size.value() - 2, 8),
