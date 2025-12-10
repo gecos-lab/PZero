@@ -2078,6 +2078,29 @@ class MeshItWorkflowGUI(QWidget):
         
         control_layout.addWidget(stats_group)
         
+        # High-quality figure export button
+        self.hull_export_figure_btn = QPushButton("📸 Export Figure")
+        self.hull_export_figure_btn.clicked.connect(lambda: self._show_generic_figure_export_dialog('hulls'))
+        self.hull_export_figure_btn.setEnabled(False)
+        self.hull_export_figure_btn.setToolTip("Export high-resolution figure of convex hull visualization")
+        self.hull_export_figure_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #1565C0;
+                color: white;
+                font-weight: bold;
+                padding: 6px;
+                border: none;
+                border-radius: 4px;
+            }
+            QPushButton:hover {
+                background-color: #1976D2;
+            }
+            QPushButton:disabled {
+                background-color: #cccccc;
+                color: #666666;
+            }
+        """)
+        control_layout.addWidget(self.hull_export_figure_btn)
         # Navigation buttons
         nav_layout = QHBoxLayout()
         
@@ -2181,6 +2204,29 @@ class MeshItWorkflowGUI(QWidget):
 
         control_layout.addWidget(stats_group)
 
+        # High-quality figure export button
+        self.segment_export_figure_btn = QPushButton("📸 Export Figure")
+        self.segment_export_figure_btn.clicked.connect(lambda: self._show_generic_figure_export_dialog('segments'))
+        self.segment_export_figure_btn.setEnabled(False)
+        self.segment_export_figure_btn.setToolTip("Export high-resolution figure of segmentation visualization")
+        self.segment_export_figure_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #1565C0;
+                color: white;
+                font-weight: bold;
+                padding: 6px;
+                border: none;
+                border-radius: 4px;
+            }
+            QPushButton:hover {
+                background-color: #1976D2;
+            }
+            QPushButton:disabled {
+                background-color: #cccccc;
+                color: #666666;
+            }
+        """)
+        control_layout.addWidget(self.segment_export_figure_btn)
         # Navigation buttons
         nav_layout = QHBoxLayout()
 
@@ -2305,7 +2351,29 @@ class MeshItWorkflowGUI(QWidget):
         export_btn.clicked.connect(self.export_results) # Added for completeness
         control_layout.addWidget(export_btn) # Added for completeness
 
-
+        # High-quality figure export button
+        self.tri_export_figure_btn = QPushButton("📸 Export Figure")
+        self.tri_export_figure_btn.clicked.connect(lambda: self._show_generic_figure_export_dialog('triangulation'))
+        self.tri_export_figure_btn.setEnabled(False)
+        self.tri_export_figure_btn.setToolTip("Export high-resolution figure of triangulation visualization")
+        self.tri_export_figure_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #1565C0;
+                color: white;
+                font-weight: bold;
+                padding: 6px;
+                border: none;
+                border-radius: 4px;
+            }
+            QPushButton:hover {
+                background-color: #1976D2;
+            }
+            QPushButton:disabled {
+                background-color: #cccccc;
+                color: #666666;
+            }
+        """)
+        control_layout.addWidget(self.tri_export_figure_btn)
         # Navigation buttons (remain the same)
         # ... (nav_layout setup remains the same) ...
         nav_layout = QHBoxLayout() # Added for completeness
@@ -2362,6 +2430,29 @@ class MeshItWorkflowGUI(QWidget):
         self.clear_intersections_btn.setIcon(QIcon.fromTheme("edit-clear", QIcon()))
         self.clear_intersections_btn.clicked.connect(self._clear_intersection_results)
         controls_layout.addWidget(self.clear_intersections_btn)
+        # High-quality figure export button
+        self.intersection_export_figure_btn = QPushButton("📸 Export Figure")
+        self.intersection_export_figure_btn.clicked.connect(lambda: self._show_generic_figure_export_dialog('intersection'))
+        self.intersection_export_figure_btn.setEnabled(False)
+        self.intersection_export_figure_btn.setToolTip("Export high-resolution figure of intersection visualization")
+        self.intersection_export_figure_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #1565C0;
+                color: white;
+                font-weight: bold;
+                padding: 6px;
+                border: none;
+                border-radius: 4px;
+            }
+            QPushButton:hover {
+                background-color: #1976D2;
+            }
+            QPushButton:disabled {
+                background-color: #cccccc;
+                color: #666666;
+            }
+        """)
+        controls_layout.addWidget(self.intersection_export_figure_btn)
         controls_layout.addStretch()
         layout.addLayout(controls_layout)
         
@@ -7065,7 +7156,9 @@ class MeshItWorkflowGUI(QWidget):
         # Reset hull info
         self.hull_points_label.setText("Hull vertices: 0")
         self.hull_area_label.setText("Hull area: 0.0")
-    
+         # Disable export figure button
+        if hasattr(self, 'hull_export_figure_btn'):
+            self.hull_export_figure_btn.setEnabled(False)
     def _clear_segment_plot(self):
         """Clear the segmentation plot"""
         # Safely close the plotter if it exists
@@ -7090,6 +7183,9 @@ class MeshItWorkflowGUI(QWidget):
         # Reset segment info
         self.num_segments_label.setText("Segments: 0")
         self.avg_segment_length_label.setText("Avg length: 0.0")
+        # Disable export figure button
+        if hasattr(self, 'segment_export_figure_btn'):
+            self.segment_export_figure_btn.setEnabled(False)
     
     def _clear_triangulation_plot(self):
         """Clear the triangulation plot"""
@@ -7118,7 +7214,9 @@ class MeshItWorkflowGUI(QWidget):
         self.mean_edge_label.setText("Mean edge: 0.0")
         self.uniformity_label.setText("Uniformity: 0.0")
     
-    
+        # Disable export figure button
+        if hasattr(self, 'tri_export_figure_btn'):
+            self.tri_export_figure_btn.setEnabled(False)
     
      #------------------------------------------------------------------------
     # -------------------------------------------------------------------------
@@ -10025,6 +10123,9 @@ segmentation, triangulation, and visualization.
             "Convex Hull Visualization",
             view_type="hulls"
         )
+        # Enable export figure button
+        if hasattr(self, 'hull_export_figure_btn'):
+            self.hull_export_figure_btn.setEnabled(True)
     def _sync_seg_lengths_from_table(self):
         """Snapshot the Segmentation table into seg_length_by_surface before computing."""
         if not hasattr(self, 'seg_refine_table') or self.seg_refine_table is None:
@@ -10069,6 +10170,9 @@ segmentation, triangulation, and visualization.
             "Segmentation Visualization",
             view_type="segments"
         )
+        # Enable export figure button
+        if hasattr(self, 'segment_export_figure_btn'):
+            self.segment_export_figure_btn.setEnabled(True)
     
     def _visualize_all_triangulations(self):
         """Visualize all visible datasets' triangulations"""
@@ -10114,7 +10218,9 @@ segmentation, triangulation, and visualization.
             "Triangulation Visualization",
             view_type="triangulation"
         )
-        
+        # Enable export figure button
+        if hasattr(self, 'tri_export_figure_btn'):
+            self.tri_export_figure_btn.setEnabled(True)
         # Update the triangulation legend (remains the same)
         # ... existing legend update code ...
     
@@ -12310,7 +12416,9 @@ segmentation, triangulation, and visualization.
             except Exception as e:
                 logger.debug(f"Error clearing intersection plot: {e}")
                 self.intersection_plotter = None
-
+        # Disable export figure button
+        if hasattr(self, 'intersection_export_figure_btn'):
+            self.intersection_export_figure_btn.setEnabled(False)
     def _update_intersection_list(self):
         """Update the list of intersections in the UI"""
         self.intersection_list.clear()
@@ -12737,6 +12845,9 @@ segmentation, triangulation, and visualization.
             plotter.add_axes()
             plotter.reset_camera()
             logger.info("Updated embedded intersection view.")
+            # Enable export figure button
+            if hasattr(self, 'intersection_export_figure_btn'):
+                self.intersection_export_figure_btn.setEnabled(True)
         else:
             plotter.add_text("No valid intersection data to display.", position='upper_edge', color='white')
             logger.info("Embedded intersection view updated, but no content added.")
@@ -15224,6 +15335,458 @@ segmentation, triangulation, and visualization.
         except Exception as e:
             logger.error(f"Failed to show figure export dialog: {e}", exc_info=True)
             QMessageBox.critical(self, "Error", f"Failed to open figure export dialog:\n{str(e)}")
+    # =========================================================================
+    # GENERIC FIGURE EXPORT FOR ALL TABS
+    # =========================================================================
+    
+    def _show_generic_figure_export_dialog(self, view_type: str):
+        """Show dialog for exporting high-quality figures from any tab.
+        
+        Args:
+            view_type: The type of view to export ('hulls', 'segments', 'triangulation', 'intersection')
+        """
+        # Get the appropriate plotter for this view type
+        plotter = self._get_plotter_for_view(view_type)
+        if plotter is None:
+            QMessageBox.warning(self, "No Visualization", 
+                f"No visualization available for {view_type}. Please compute the visualization first.")
+            return
+        
+        try:
+            from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QGroupBox,
+                                          QLabel, QComboBox, QSpinBox, QDoubleSpinBox,
+                                          QCheckBox, QPushButton, QFormLayout)
+            from PySide6.QtCore import Qt
+            
+            # Capture the current camera position before opening dialog
+            self._generic_captured_camera = None
+            try:
+                self._generic_captured_camera = plotter.camera_position
+                logger.info(f"Captured {view_type} plotter camera position for export")
+            except Exception as e:
+                logger.warning(f"Could not capture camera position: {e}")
+            
+            dialog = QDialog(self)
+            view_names = {
+                'hulls': 'Convex Hull',
+                'segments': 'Segmentation', 
+                'triangulation': 'Triangulation',
+                'intersection': 'Intersection'
+            }
+            dialog.setWindowTitle(f"📸 Export {view_names.get(view_type, view_type)} Figure")
+            dialog.setMinimumSize(500, 550)
+            
+            main_layout = QVBoxLayout(dialog)
+            
+            # Title
+            title = QLabel(f"<h2>{view_names.get(view_type, view_type)} Export Settings</h2>")
+            title.setAlignment(Qt.AlignCenter)
+            main_layout.addWidget(title)
+            
+            # === Image Settings ===
+            image_group = QGroupBox("Image Resolution")
+            image_form = QFormLayout(image_group)
+            
+            self.generic_fig_width = QSpinBox()
+            self.generic_fig_width.setRange(800, 8000)
+            self.generic_fig_width.setValue(3000)
+            self.generic_fig_width.setSuffix(" px")
+            image_form.addRow("Width:", self.generic_fig_width)
+            
+            self.generic_fig_height = QSpinBox()
+            self.generic_fig_height.setRange(600, 6000)
+            self.generic_fig_height.setValue(2400)
+            self.generic_fig_height.setSuffix(" px")
+            image_form.addRow("Height:", self.generic_fig_height)
+            
+            # Preset resolutions
+            presets = [
+                ("HD (1920×1080)", 1920, 1080),
+                ("2K (2560×1440)", 2560, 1440),
+                ("4K (3840×2160)", 3840, 2160),
+                ("Print 300dpi (3000×2400)", 3000, 2400),
+                ("Print 600dpi (6000×4800)", 6000, 4800),
+            ]
+            self.generic_fig_preset = QComboBox()
+            for name, w, h in presets:
+                self.generic_fig_preset.addItem(name, (w, h))
+            self.generic_fig_preset.currentIndexChanged.connect(self._on_generic_preset_changed)
+            self.generic_fig_preset.setCurrentIndex(3)  # Default to Print 300dpi
+            image_form.addRow("Preset:", self.generic_fig_preset)
+            
+            self.generic_fig_transparent = QCheckBox("Transparent background")
+            self.generic_fig_transparent.setChecked(False)
+            image_form.addRow("", self.generic_fig_transparent)
+            
+            main_layout.addWidget(image_group)
+            
+            # === Format Settings ===
+            format_group = QGroupBox("Output Format")
+            format_form = QFormLayout(format_group)
+            
+            self.generic_fig_format = QComboBox()
+            self.generic_fig_format.addItems(["PNG (Recommended)", "JPEG", "TIFF", "PDF", "SVG", "EPS"])
+            format_form.addRow("Format:", self.generic_fig_format)
+            
+            self.generic_fig_dpi = QSpinBox()
+            self.generic_fig_dpi.setRange(72, 1200)
+            self.generic_fig_dpi.setValue(300)
+            format_form.addRow("DPI (for PDF/SVG):", self.generic_fig_dpi)
+            
+            main_layout.addWidget(format_group)
+            
+            # === View Settings ===
+            view_group = QGroupBox("View Settings")
+            view_form = QFormLayout(view_group)
+            
+            self.generic_fig_view = QComboBox()
+            self.generic_fig_view.addItems([
+                "Current View", "Isometric", "Top (XY)", "Front (XZ)", 
+                "Side (YZ)", "Perspective 45°"
+            ])
+            view_form.addRow("Camera View:", self.generic_fig_view)
+            
+            self.generic_fig_background = QComboBox()
+            self.generic_fig_background.addItems(["White", "Black", "Light Gray", "Dark Gray", "Gradient (White-Gray)", "Transparent"])
+            view_form.addRow("Background:", self.generic_fig_background)
+            
+            self.generic_fig_show_axes = QCheckBox("Show coordinate axes")
+            self.generic_fig_show_axes.setChecked(True)
+            view_form.addRow("", self.generic_fig_show_axes)
+            
+            self.generic_fig_show_bounds = QCheckBox("Show bounding box")
+            self.generic_fig_show_bounds.setChecked(False)
+            view_form.addRow("", self.generic_fig_show_bounds)
+            
+            main_layout.addWidget(view_group)
+            
+            # === Quality Settings ===
+            quality_group = QGroupBox("Quality Settings")
+            quality_form = QFormLayout(quality_group)
+            
+            self.generic_fig_anti_alias = QCheckBox("Anti-aliasing (smoother edges)")
+            self.generic_fig_anti_alias.setChecked(True)
+            quality_form.addRow("", self.generic_fig_anti_alias)
+            
+            self.generic_fig_aa_frames = QSpinBox()
+            self.generic_fig_aa_frames.setRange(1, 16)
+            self.generic_fig_aa_frames.setValue(8)
+            quality_form.addRow("AA Samples:", self.generic_fig_aa_frames)
+            
+            main_layout.addWidget(quality_group)
+            
+            # === Title ===
+            title_group = QGroupBox("Title")
+            title_form = QFormLayout(title_group)
+            
+            from PySide6.QtWidgets import QLineEdit
+            self.generic_fig_title = QLineEdit("")
+            self.generic_fig_title.setPlaceholderText("Optional figure title")
+            title_form.addRow("Title:", self.generic_fig_title)
+            
+            self.generic_fig_font_size = QSpinBox()
+            self.generic_fig_font_size.setRange(8, 48)
+            self.generic_fig_font_size.setValue(14)
+            title_form.addRow("Font Size:", self.generic_fig_font_size)
+            
+            main_layout.addWidget(title_group)
+            
+            main_layout.addStretch()
+            
+            # === Buttons ===
+            button_layout = QHBoxLayout()
+            
+            preview_btn = QPushButton("👁️ Preview")
+            preview_btn.clicked.connect(lambda: self._preview_generic_figure(dialog, view_type))
+            button_layout.addWidget(preview_btn)
+            
+            button_layout.addStretch()
+            
+            export_btn = QPushButton("📸 Export Figure")
+            export_btn.setStyleSheet("background-color: #1565C0; color: white; font-weight: bold; padding: 8px 16px;")
+            export_btn.clicked.connect(lambda: self._export_generic_figure(dialog, view_type))
+            button_layout.addWidget(export_btn)
+            
+            cancel_btn = QPushButton("Cancel")
+            cancel_btn.clicked.connect(dialog.close)
+            button_layout.addWidget(cancel_btn)
+            
+            main_layout.addLayout(button_layout)
+            
+            dialog.exec()
+            
+        except Exception as e:
+            logger.error(f"Failed to show generic figure export dialog: {e}", exc_info=True)
+            QMessageBox.critical(self, "Error", f"Failed to open figure export dialog:\n{str(e)}")
+    
+    def _get_plotter_for_view(self, view_type: str):
+        """Get the appropriate plotter for a given view type.
+        
+        Args:
+            view_type: The type of view ('hulls', 'segments', 'triangulation', 'intersection')
+            
+        Returns:
+            The plotter object or None if not available.
+        """
+        plotter_map = {
+            'hulls': 'hulls_plotter',
+            'segments': 'segments_plotter',
+            'triangulation': 'triangulation_plotter',
+            'intersection': 'intersection_plotter',
+        }
+        
+        plotter_attr = plotter_map.get(view_type)
+        if plotter_attr and hasattr(self, plotter_attr):
+            plotter = getattr(self, plotter_attr)
+            if plotter is not None:
+                return plotter
+        
+        # Also check the plotters dictionary
+        if hasattr(self, 'plotters') and view_type in self.plotters:
+            return self.plotters.get(view_type)
+        
+        return None
+    
+    def _on_generic_preset_changed(self, index):
+        """Update resolution when preset is selected in generic dialog."""
+        data = self.generic_fig_preset.currentData()
+        if data:
+            self.generic_fig_width.setValue(data[0])
+            self.generic_fig_height.setValue(data[1])
+    
+    def _preview_generic_figure(self, dialog, view_type: str):
+        """Show a preview of the generic figure."""
+        try:
+            import pyvista as pv
+            import numpy as np
+            
+            # Create an offscreen plotter for preview
+            plotter = pv.Plotter(off_screen=True, window_size=[800, 600])
+            self._setup_generic_plotter(plotter, view_type)
+            
+            # Take screenshot and show in a popup
+            img = plotter.screenshot(return_img=True)
+            plotter.close()
+            
+            # Show preview in a simple dialog
+            from PySide6.QtWidgets import QDialog, QVBoxLayout, QLabel
+            from PySide6.QtGui import QImage, QPixmap
+            from PySide6.QtCore import Qt
+            
+            preview_dialog = QDialog(dialog)
+            preview_dialog.setWindowTitle("Preview")
+            preview_dialog.setMinimumSize(820, 640)
+            
+            layout = QVBoxLayout(preview_dialog)
+            
+            # Convert numpy array to QPixmap
+            img = np.ascontiguousarray(img)
+            height, width, channel = img.shape
+            bytes_per_line = 3 * width
+            q_img = QImage(img.data, width, height, bytes_per_line, QImage.Format_RGB888)
+            pixmap = QPixmap.fromImage(q_img)
+            
+            label = QLabel()
+            label.setPixmap(pixmap.scaled(800, 600, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+            label.setAlignment(Qt.AlignCenter)
+            layout.addWidget(label)
+            
+            preview_dialog.exec()
+            
+        except Exception as e:
+            logger.error(f"Preview failed: {e}", exc_info=True)
+            QMessageBox.warning(self, "Preview Failed", f"Could not generate preview:\n{str(e)}")
+    
+    def _export_generic_figure(self, dialog, view_type: str):
+        """Export the high-quality figure from any tab."""
+        from PySide6.QtWidgets import QFileDialog
+        import pyvista as pv
+        
+        # Get format and extension
+        format_text = self.generic_fig_format.currentText()
+        format_map = {
+            "PNG (Recommended)": ("png", "PNG files (*.png)"),
+            "JPEG": ("jpg", "JPEG files (*.jpg *.jpeg)"),
+            "TIFF": ("tiff", "TIFF files (*.tiff *.tif)"),
+            "PDF": ("pdf", "PDF files (*.pdf)"),
+            "SVG": ("svg", "SVG files (*.svg)"),
+            "EPS": ("eps", "EPS files (*.eps)"),
+        }
+        ext, filter_str = format_map.get(format_text, ("png", "PNG files (*.png)"))
+        
+        view_names = {
+            'hulls': 'convex_hull',
+            'segments': 'segmentation', 
+            'triangulation': 'triangulation',
+            'intersection': 'intersection'
+        }
+        default_name = f"{view_names.get(view_type, view_type)}_figure.{ext}"
+        
+        file_path, _ = QFileDialog.getSaveFileName(
+            dialog,
+            "Export Figure",
+            default_name,
+            f"{filter_str};;All files (*.*)"
+        )
+        
+        if not file_path:
+            return
+        
+        try:
+            self.statusBar().showMessage(f"Exporting {view_type} figure...")
+            
+            # Create high-resolution offscreen plotter
+            width = self.generic_fig_width.value()
+            height = self.generic_fig_height.value()
+            
+            plotter = pv.Plotter(
+                off_screen=True,
+                window_size=[width, height],
+            )
+            
+            # Anti-aliasing
+            if self.generic_fig_anti_alias.isChecked():
+                plotter.enable_anti_aliasing('ssaa', multi_samples=self.generic_fig_aa_frames.value())
+            
+            # Setup visualization
+            self._setup_generic_plotter(plotter, view_type)
+            
+            # Determine if transparent background is requested
+            use_transparent = (self.generic_fig_background.currentText() == "Transparent" or 
+                              self.generic_fig_transparent.isChecked())
+            
+            # Export
+            if ext in ['pdf', 'svg', 'eps']:
+                # Vector formats
+                plotter.save_graphic(file_path)
+            else:
+                # Raster formats
+                plotter.screenshot(
+                    file_path,
+                    transparent_background=use_transparent,
+                )
+            
+            plotter.close()
+            
+            self.statusBar().showMessage(f"Figure exported: {file_path}", 5000)
+            QMessageBox.information(
+                dialog,
+                "Export Successful",
+                f"Figure exported to:\n{file_path}\n\n"
+                f"Resolution: {width} × {height} pixels\n"
+                f"Format: {format_text}"
+            )
+            
+            logger.info(f"Figure exported: {file_path} ({width}x{height})")
+            
+        except Exception as e:
+            logger.error(f"Figure export failed: {e}", exc_info=True)
+            QMessageBox.critical(dialog, "Export Failed", f"Failed to export figure:\n{str(e)}")
+    
+    def _setup_generic_plotter(self, plotter, view_type: str):
+        """Configure plotter for generic figure export from any tab."""
+        import pyvista as pv
+        import numpy as np
+        
+        # Get the source plotter to copy geometry from
+        source_plotter = self._get_plotter_for_view(view_type)
+        if source_plotter is None:
+            logger.warning(f"No source plotter found for {view_type}")
+            return
+        
+        # Background color
+        bg_choice = self.generic_fig_background.currentText()
+        is_dark_bg = bg_choice in ["Black", "Dark Gray"]
+        
+        if bg_choice == "White":
+            plotter.set_background('white')
+        elif bg_choice == "Black":
+            plotter.set_background('black')
+        elif bg_choice == "Light Gray":
+            plotter.set_background([0.9, 0.9, 0.9])
+        elif bg_choice == "Dark Gray":
+            plotter.set_background([0.2, 0.2, 0.2])
+        elif bg_choice == "Gradient (White-Gray)":
+            plotter.set_background('white', top=[0.85, 0.85, 0.9])
+        elif bg_choice == "Transparent":
+            plotter.set_background('white')
+        else:
+            plotter.set_background('white')
+        
+        text_color = 'white' if is_dark_bg else 'black'
+        
+        # Copy actors from source plotter to export plotter
+        try:
+            # Get all actors from the source plotter's renderer
+            if hasattr(source_plotter, 'renderer') and source_plotter.renderer is not None:
+                for actor in source_plotter.renderer.actors.values():
+                    try:
+                        # Deep copy the actor's mapper and data
+                        if hasattr(actor, 'GetMapper') and actor.GetMapper() is not None:
+                            mapper = actor.GetMapper()
+                            if mapper.GetInput() is not None:
+                                data = mapper.GetInput()
+                                # Wrap in PyVista and add to new plotter
+                                mesh = pv.wrap(data)
+                                
+                                # Get actor properties
+                                prop = actor.GetProperty()
+                                color = prop.GetColor() if prop else (1, 1, 1)
+                                opacity = prop.GetOpacity() if prop else 1.0
+                                edge_visibility = prop.GetEdgeVisibility() if prop else False
+                                
+                                # Add mesh with similar properties
+                                plotter.add_mesh(
+                                    mesh,
+                                    color=color,
+                                    opacity=opacity,
+                                    show_edges=edge_visibility,
+                                )
+                    except Exception as e:
+                        logger.debug(f"Could not copy actor: {e}")
+                        continue
+        except Exception as e:
+            logger.warning(f"Error copying actors from source plotter: {e}")
+        
+        # Camera view
+        view_preset = self.generic_fig_view.currentText()
+        if view_preset == "Current View":
+            if hasattr(self, '_generic_captured_camera') and self._generic_captured_camera is not None:
+                try:
+                    plotter.camera_position = self._generic_captured_camera
+                except Exception as e:
+                    logger.warning(f"Could not apply captured camera position: {e}")
+                    plotter.view_isometric()
+            else:
+                plotter.view_isometric()
+        elif view_preset == "Isometric":
+            plotter.view_isometric()
+        elif view_preset == "Top (XY)":
+            plotter.view_xy()
+        elif view_preset == "Front (XZ)":
+            plotter.view_xz()
+        elif view_preset == "Side (YZ)":
+            plotter.view_yz()
+        elif view_preset == "Perspective 45°":
+            plotter.camera_position = 'iso'
+            plotter.camera.elevation = 30
+            plotter.camera.azimuth = 45
+        
+        # Axes
+        if self.generic_fig_show_axes.isChecked():
+            plotter.add_axes(line_width=2, labels_off=False, color=text_color)
+        
+        # Bounding box
+        if self.generic_fig_show_bounds.isChecked():
+            plotter.add_bounding_box(color=text_color, line_width=1)
+        
+        # Title
+        if self.generic_fig_title.text():
+            plotter.add_title(
+                self.generic_fig_title.text(),
+                font_size=self.generic_fig_font_size.value() + 4,
+                color=text_color,
+            )
     
     def _on_figure_preset_changed(self, index):
         """Update resolution when preset is selected."""
