@@ -2487,6 +2487,273 @@ def refine_intersection_line_by_length(intersection,
     intersection.points = refined
     return refined
 
+
+def refine_well_by_length(points: List, target_length: float, 
+                          intersection_points: List = None,
+                          trim_to_intersections: bool = False) -> List[Vector3D]:
+    """
+    Refine well (polyline) path by subdividing into segments of approximately target_length.
+    
+    This is a Python port of C++ MeshIt's C_Line::RefineByLength and C_Polyline::calculate_segments.
+    
+    The algorithm:
+    1. Keeps all non-DEFAULT special points (INTERSECTION_POINT, TRIPLE_POINT, etc.)
+    2. Subdivides segments between anchor points to match target_length
+    3. Optionally trims to only keep path between first and last intersection points
+    4. Inserts intersection points into the path if provided
+    
+    Args:
+        points: List of 3D points (can be [x,y,z], numpy arrays, or Vector3D objects)
+        target_length: Target segment length for refinement
+        intersection_points: Optional list of intersection points to insert (from well-surface intersections)
+        trim_to_intersections: If True, trim path to only keep between first and last intersection points
+                              (matches C++ withConstraints=true behavior)
+    
+    Returns:
+        List[Vector3D]: Refined list of points with appropriate types set
+    """
+    if points is None or len(points) < 2:
+        return points if points else []
+    
+    # Convert input points to Vector3D if needed
+    def to_vector3d(p):
+        if isinstance(p, Vector3D):
+            return p
+        if hasattr(p, '__len__'):
+            x, y, z = float(p[0]), float(p[1]), float(p[2]) if len(p) > 2 else 0.0
+            pt_type = p[3] if len(p) > 3 else "DEFAULT"
+            if hasattr(pt_type, 'item'):  # Handle numpy string types
+                pt_type = pt_type.item()
+            return Vector3D(x, y, z, point_type=str(pt_type) if pt_type else "DEFAULT")
+        return Vector3D(float(p), 0, 0, point_type="DEFAULT")
+    
+    original_pts = [to_vector3d(p) for p in points]
+    
+    # ------------------------------------------------------------------
+    # Helper functions (similar to C++ NsPos & getPointAtPos)
+    # ------------------------------------------------------------------
+    def _cum_dist(pts):
+        """Cumulative arc-length positions of the polyline."""
+        out = [0.0]
+        for i in range(1, len(pts)):
+            out.append(out[-1] + (pts[i] - pts[i - 1]).length())
+        return out
+    
+    def _point_at_pos(pts, cum, s):
+        """
+        Interpolated point at cumulative position s (0 <= s <= cum[-1]).
+        Matches C++ C_Line::getPointAtPos behavior.
+        """
+        if s <= 0.0:
+            base = pts[0]
+            return Vector3D(base.x, base.y, base.z, point_type="DEFAULT")
+        if s >= cum[-1]:
+            base = pts[-1]
+            return Vector3D(base.x, base.y, base.z, point_type="DEFAULT")
+        
+        import bisect
+        idx = bisect.bisect_left(cum, s)
+        if cum[idx] == s:
+            base = pts[idx]
+            return Vector3D(base.x, base.y, base.z, point_type="DEFAULT")
+        
+        s0, s1 = cum[idx - 1], cum[idx]
+        t = (s - s0) / (s1 - s0)
+        p0, p1 = pts[idx - 1], pts[idx]
+        interp = p0 + (p1 - p0) * t
+        return Vector3D(interp.x, interp.y, interp.z, point_type="DEFAULT")
+    
+    def _insert_point_sorted(pts, cum, new_pt):
+        """Insert a point into the list at the correct position along the path."""
+        # Find closest segment
+        min_dist = float('inf')
+        insert_pos = 0
+        
+        for i in range(len(pts) - 1):
+            p1, p2 = pts[i], pts[i + 1]
+            # Project new_pt onto segment p1-p2
+            v = p2 - p1
+            seg_len = v.length()
+            if seg_len < 1e-12:
+                continue
+            
+            u = new_pt - p1
+            t = max(0, min(1, v.dot(u) / (seg_len * seg_len)))
+            closest = p1 + v * t
+            dist = (new_pt - closest).length()
+            
+            if dist < min_dist:
+                min_dist = dist
+                # Calculate cumulative position for the projection point
+                proj_pos = cum[i] + t * (cum[i + 1] - cum[i])
+                insert_pos = i + 1
+                new_cum_pos = proj_pos
+        
+        return insert_pos, new_cum_pos if min_dist < float('inf') else cum[-1]
+    
+    # ------------------------------------------------------------------
+    # STEP 0: Insert intersection points if provided (C++ Path.AddPoint behavior)
+    # ------------------------------------------------------------------
+    working_pts = original_pts[:]
+    if intersection_points:
+        cum_dist = _cum_dist(working_pts)
+        insertions = []  # (position, point, cum_pos)
+        
+        for int_pt in intersection_points:
+            ipt = to_vector3d(int_pt)
+            ipt.point_type = ipt.type = "INTERSECTION_POINT"
+            
+            # Check if it's near start or end
+            if (ipt - working_pts[0]).length() < 1e-8:
+                working_pts[0].point_type = working_pts[0].type = "INTERSECTION_POINT"
+                continue
+            if (ipt - working_pts[-1]).length() < 1e-8:
+                working_pts[-1].point_type = working_pts[-1].type = "INTERSECTION_POINT"
+                continue
+            
+            # Find insertion position
+            insert_pos, cum_pos = _insert_point_sorted(working_pts, cum_dist, ipt)
+            insertions.append((cum_pos, insert_pos, ipt))
+        
+        # Sort by cumulative position and insert in reverse order
+        insertions.sort(key=lambda x: x[0], reverse=True)
+        for _, pos, pt in insertions:
+            working_pts.insert(pos, pt)
+    
+    # ------------------------------------------------------------------
+    # STEP 1: Trim to intersections if requested (C++ withConstraints behavior)
+    # ------------------------------------------------------------------
+    if trim_to_intersections:
+        # Find first and last INTERSECTION_POINT
+        first_int_idx = None
+        last_int_idx = None
+        
+        for i, p in enumerate(working_pts):
+            pt_type = getattr(p, 'point_type', getattr(p, 'type', 'DEFAULT'))
+            if pt_type == "INTERSECTION_POINT":
+                if first_int_idx is None:
+                    first_int_idx = i
+                last_int_idx = i
+        
+        # Trim if intersection points found
+        if first_int_idx is not None and last_int_idx is not None:
+            working_pts = working_pts[first_int_idx:last_int_idx + 1]
+        elif first_int_idx is not None:
+            working_pts = working_pts[first_int_idx:]
+        elif last_int_idx is not None:
+            working_pts = working_pts[:last_int_idx + 1]
+    
+    if len(working_pts) < 2:
+        return working_pts
+    
+    # ------------------------------------------------------------------
+    # STEP 2: Build anchor list (keep first/last and all non-DEFAULT between)
+    # This matches C++ RefineByLength: removes DEFAULT points, keeps special ones
+    # ------------------------------------------------------------------
+    cum_dist = _cum_dist(working_pts)
+    total_len = cum_dist[-1]
+    
+    if total_len < 1e-9:
+        return working_pts
+    
+    anchors = [working_pts[0]]  # Always keep first
+    anchor_positions = [0.0]
+    
+    for i, p in enumerate(working_pts[1:-1], start=1):
+        pt_type = getattr(p, 'point_type', getattr(p, 'type', 'DEFAULT'))
+        if pt_type and pt_type != "DEFAULT":
+            anchors.append(p)
+            anchor_positions.append(cum_dist[i])
+    
+    anchors.append(working_pts[-1])  # Always keep last
+    anchor_positions.append(total_len)
+    
+    # ------------------------------------------------------------------
+    # STEP 3: Refine by length (C++ RefineByLength core algorithm)
+    # ------------------------------------------------------------------
+    refined = [anchors[0]]
+    
+    for i in range(len(anchors) - 1):
+        s0, s1 = anchor_positions[i], anchor_positions[i + 1]
+        seg_len = s1 - s0
+        
+        if seg_len < 1e-9:
+            continue
+        
+        # C++ rounding logic: if (ratio - floor(ratio)) < 0.5 use floor, else ceil
+        ratio = seg_len / max(target_length, 1e-9)
+        if (ratio - math.floor(ratio)) < 0.5:
+            num_subdivisions = int(math.floor(ratio))
+        else:
+            num_subdivisions = int(math.ceil(ratio))
+        
+        num_subdivisions = max(1, num_subdivisions)
+        step = seg_len / num_subdivisions
+        
+        # Add intermediate points
+        for k in range(1, num_subdivisions):
+            s = s0 + step * k
+            new_pt = _point_at_pos(working_pts, cum_dist, s)
+            new_pt.point_type = new_pt.type = "DEFAULT"
+            refined.append(new_pt)
+        
+        # Add the anchor at the end of this segment
+        refined.append(anchors[i + 1])
+    
+    # ------------------------------------------------------------------
+    # STEP 4: Clean up and set endpoint types
+    # ------------------------------------------------------------------
+    refined = clean_identical_points(refined)
+    
+    if refined:
+        # Set first point type
+        first_type = getattr(refined[0], 'point_type', 'DEFAULT')
+        if first_type == "DEFAULT" or first_type is None:
+            refined[0].point_type = refined[0].type = "WELL_START"
+        
+        # Set last point type
+        last_type = getattr(refined[-1], 'point_type', 'DEFAULT')
+        if last_type == "DEFAULT" or last_type is None:
+            refined[-1].point_type = refined[-1].type = "WELL_END"
+    
+    return refined
+
+
+def calculate_well_default_size(points: List) -> float:
+    """
+    Calculate the default refinement size for a well (polyline) based on its extent.
+    
+    This matches the C++ MeshIt behavior from geometry.cpp (C_Polyline::calculate_min_max):
+        if (this->size == 0) size = length(max - min) / 16;
+    
+    Args:
+        points: List of 3D points
+    
+    Returns:
+        float: Default refinement size
+    """
+    if not points or len(points) < 2:
+        return 15.0
+    
+    # Convert to numpy for easy min/max
+    pts_array = np.array([[float(p[0]), float(p[1]), float(p[2]) if len(p) > 2 else 0.0] 
+                          for p in points])
+    
+    min_pt = pts_array.min(axis=0)
+    max_pt = pts_array.max(axis=0)
+    
+    # Calculate diagonal: length(max - min)
+    diagonal = np.linalg.norm(max_pt - min_pt)
+    
+    # C++ formula: size = length(max - min) / 16
+    default_size = diagonal / 16.0
+    
+    # Apply reasonable bounds
+    default_size = max(0.1, min(diagonal / 4.0, default_size))
+    
+    return default_size
+
+
 def prepare_plc_for_surface_triangulation(surface_data,
                                           intersections_on_surface_data,
                                           config):

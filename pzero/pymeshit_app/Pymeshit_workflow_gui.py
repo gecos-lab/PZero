@@ -278,6 +278,383 @@ class ComputationWorker(QObject):
         self.batch_finished.emit(1 if success else 0, 1, elapsed_time)
         logger.info(f"Worker: Global intersection task finished. Success: {success}. Elapsed: {elapsed_time:.2f}s.")
 
+class ExodusExportOptionsDialog(QDialog):
+    """
+    Dialog for customizing EXODUS file export options.
+    Allows editing domain names (element blocks), sideset names, and well names for GOLEM/MOOSE compatibility.
+    C++ MeshIt style: Wells are exported as 1D element blocks (BEAM2/BAR2).
+    """
+    
+    def __init__(self, parent=None, block_names: Dict[int, str] = None, 
+                 sideset_names: Dict[int, str] = None, materials: List[Dict] = None,
+                 datasets: List[Dict] = None, well_names: Dict[int, str] = None):
+        super().__init__(parent)
+        self.setWindowTitle("EXODUS Export Options")
+        self.setMinimumSize(600, 550)
+        self.setModal(True)
+        
+        # Store the names (use copies to avoid modifying original)
+        self.block_names = dict(block_names) if block_names else {}
+        self.sideset_names = dict(sideset_names) if sideset_names else {}
+        self.well_names = dict(well_names) if well_names else {}  # 1D well element blocks (C++ style)
+        self.materials = materials or []
+        self.datasets = datasets or []
+        
+        self._setup_ui()
+    
+    def _setup_ui(self):
+        """Setup the dialog UI."""
+        main_layout = QVBoxLayout(self)
+        main_layout.setSpacing(10)
+        
+        # Description
+        desc_label = QLabel(
+            "Configure domain (block) and sideset names for GOLEM/MOOSE compatibility."
+        )
+        desc_label.setWordWrap(True)
+        main_layout.addWidget(desc_label)
+        
+        # Create tab widget for blocks and sidesets
+        tab_widget = QTabWidget()
+        
+        # === Domain/Block Names Tab ===
+        block_tab = QWidget()
+        block_layout = QVBoxLayout(block_tab)
+        
+        block_info = QLabel("Domain names define the 3D volumetric regions (materials).")
+        block_layout.addWidget(block_info)
+        
+        # Block names table
+        self.block_table = QTableWidget()
+        self.block_table.setColumnCount(3)
+        self.block_table.setHorizontalHeaderLabels(["ID", "Original Name", "Export Name"])
+        self.block_table.horizontalHeader().setStretchLastSection(True)
+        self._populate_block_table()
+        block_layout.addWidget(self.block_table)
+        
+        # Block naming presets
+        block_preset_layout = QHBoxLayout()
+        
+        self.block_prefix_btn = QPushButton("Add Prefix...")
+        self.block_prefix_btn.clicked.connect(lambda: self._add_prefix_to_names('block'))
+        block_preset_layout.addWidget(self.block_prefix_btn)
+        
+        self.block_suffix_btn = QPushButton("Add Suffix...")
+        self.block_suffix_btn.clicked.connect(lambda: self._add_suffix_to_names('block'))
+        block_preset_layout.addWidget(self.block_suffix_btn)
+        
+        self.block_reset_btn = QPushButton("Reset")
+        self.block_reset_btn.clicked.connect(lambda: self._reset_names('block'))
+        block_preset_layout.addWidget(self.block_reset_btn)
+        
+        block_preset_layout.addStretch()
+        block_layout.addLayout(block_preset_layout)
+        
+        tab_widget.addTab(block_tab, "Domain Names")
+        
+        # === Sideset Names Tab ===
+        sideset_tab = QWidget()
+        sideset_layout = QVBoxLayout(sideset_tab)
+        
+        sideset_info = QLabel("Sideset names define boundary surfaces for boundary conditions.")
+        sideset_layout.addWidget(sideset_info)
+        
+        # Sideset names table
+        self.sideset_table = QTableWidget()
+        self.sideset_table.setColumnCount(3)
+        self.sideset_table.setHorizontalHeaderLabels(["ID", "Original Name", "Export Name"])
+        self.sideset_table.horizontalHeader().setStretchLastSection(True)
+        self._populate_sideset_table()
+        sideset_layout.addWidget(self.sideset_table)
+        
+        # Sideset naming presets
+        sideset_preset_layout = QHBoxLayout()
+        
+        self.sideset_prefix_btn = QPushButton("Add Prefix...")
+        self.sideset_prefix_btn.clicked.connect(lambda: self._add_prefix_to_names('sideset'))
+        sideset_preset_layout.addWidget(self.sideset_prefix_btn)
+        
+        self.sideset_suffix_btn = QPushButton("Add Suffix...")
+        self.sideset_suffix_btn.clicked.connect(lambda: self._add_suffix_to_names('sideset'))
+        sideset_preset_layout.addWidget(self.sideset_suffix_btn)
+        
+        self.sideset_reset_btn = QPushButton("Reset")
+        self.sideset_reset_btn.clicked.connect(lambda: self._reset_names('sideset'))
+        sideset_preset_layout.addWidget(self.sideset_reset_btn)
+        
+        sideset_preset_layout.addStretch()
+        sideset_layout.addLayout(sideset_preset_layout)
+        
+        tab_widget.addTab(sideset_tab, "Sideset Names")
+        
+        # === Well/Edgeset Names Tab (C++ MeshIt style: 1D materials) ===
+        well_tab = QWidget()
+        well_layout = QVBoxLayout(well_tab)
+        
+        well_info = QLabel("Well names define 1D edge element blocks (BEAM2/BAR2 in EXODUS).\n"
+                          "C++ MeshIt exports wells as T3D2 in ABAQUS, VTK_LINE in VTU.")
+        well_info.setStyleSheet("color: #7B1FA2;")
+        well_layout.addWidget(well_info)
+        
+        # Well names table
+        self.well_table = QTableWidget()
+        self.well_table.setColumnCount(3)
+        self.well_table.setHorizontalHeaderLabels(["ID", "Original Name", "Export Name"])
+        self.well_table.horizontalHeader().setStretchLastSection(True)
+        self._populate_well_table()
+        well_layout.addWidget(self.well_table)
+        
+        # Well naming presets
+        well_preset_layout = QHBoxLayout()
+        
+        self.well_prefix_btn = QPushButton("Add Prefix...")
+        self.well_prefix_btn.clicked.connect(lambda: self._add_prefix_to_names('well'))
+        well_preset_layout.addWidget(self.well_prefix_btn)
+        
+        self.well_suffix_btn = QPushButton("Add Suffix...")
+        self.well_suffix_btn.clicked.connect(lambda: self._add_suffix_to_names('well'))
+        well_preset_layout.addWidget(self.well_suffix_btn)
+        
+        self.well_reset_btn = QPushButton("Reset")
+        self.well_reset_btn.clicked.connect(lambda: self._reset_names('well'))
+        well_preset_layout.addWidget(self.well_reset_btn)
+        
+        well_preset_layout.addStretch()
+        well_layout.addLayout(well_preset_layout)
+        
+        tab_widget.addTab(well_tab, f"Well Names ({len(self.well_names)})")
+        
+        main_layout.addWidget(tab_widget)
+        
+        # === GOLEM Tips Section ===
+        tips_group = QGroupBox("GOLEM Usage")
+        tips_layout = QVBoxLayout(tips_group)
+        tips_text = QLabel(
+            "Block names: [Materials] block = 'name'  |  [Kernels] block = 'name'\n"
+            "Sideset names: [BCs] boundary = 'name'\n"
+            "Well blocks: Use for 1D line sources/sinks in GOLEM (heat/mass exchange)"
+        )
+        tips_text.setWordWrap(True)
+        tips_layout.addWidget(tips_text)
+        main_layout.addWidget(tips_group)
+        
+        # === Dialog buttons ===
+        button_layout = QHBoxLayout()
+        button_layout.addStretch()
+        
+        self.cancel_btn = QPushButton("Cancel")
+        self.cancel_btn.clicked.connect(self.reject)
+        button_layout.addWidget(self.cancel_btn)
+        
+        self.export_btn = QPushButton("Export")
+        self.export_btn.setDefault(True)
+        self.export_btn.clicked.connect(self._validate_and_accept)
+        button_layout.addWidget(self.export_btn)
+        
+        main_layout.addLayout(button_layout)
+    
+    def _populate_block_table(self):
+        """Populate the block names table."""
+        self.block_table.setRowCount(len(self.block_names))
+        
+        for row, (block_id, original_name) in enumerate(sorted(self.block_names.items())):
+            # Block ID (read-only)
+            id_item = QTableWidgetItem(str(block_id))
+            id_item.setFlags(id_item.flags() & ~Qt.ItemIsEditable)
+            self.block_table.setItem(row, 0, id_item)
+            
+            # Original name (read-only)
+            orig_item = QTableWidgetItem(original_name)
+            orig_item.setFlags(orig_item.flags() & ~Qt.ItemIsEditable)
+            self.block_table.setItem(row, 1, orig_item)
+            
+            # Export name (editable)
+            export_item = QTableWidgetItem(original_name)
+            self.block_table.setItem(row, 2, export_item)
+        
+        self.block_table.resizeColumnsToContents()
+    
+    def _populate_sideset_table(self):
+        """Populate the sideset names table."""
+        self.sideset_table.setRowCount(len(self.sideset_names))
+        
+        for row, (sideset_id, original_name) in enumerate(sorted(self.sideset_names.items())):
+            # Sideset ID (read-only)
+            id_item = QTableWidgetItem(str(sideset_id))
+            id_item.setFlags(id_item.flags() & ~Qt.ItemIsEditable)
+            self.sideset_table.setItem(row, 0, id_item)
+            
+            # Original name (read-only)
+            orig_item = QTableWidgetItem(original_name)
+            orig_item.setFlags(orig_item.flags() & ~Qt.ItemIsEditable)
+            self.sideset_table.setItem(row, 1, orig_item)
+            
+            # Export name (editable)
+            export_item = QTableWidgetItem(original_name)
+            self.sideset_table.setItem(row, 2, export_item)
+        
+        self.sideset_table.resizeColumnsToContents()
+    
+    def _populate_well_table(self):
+        """Populate the well names table (1D element blocks for C++ MeshIt style)."""
+        self.well_table.setRowCount(len(self.well_names))
+        
+        for row, (well_id, original_name) in enumerate(sorted(self.well_names.items())):
+            # Well ID (read-only)
+            id_item = QTableWidgetItem(str(well_id))
+            id_item.setFlags(id_item.flags() & ~Qt.ItemIsEditable)
+            self.well_table.setItem(row, 0, id_item)
+            
+            # Original name (read-only)
+            orig_item = QTableWidgetItem(original_name)
+            orig_item.setFlags(orig_item.flags() & ~Qt.ItemIsEditable)
+            self.well_table.setItem(row, 1, orig_item)
+            
+            # Export name (editable)
+            export_item = QTableWidgetItem(original_name)
+            self.well_table.setItem(row, 2, export_item)
+        
+        self.well_table.resizeColumnsToContents()
+    
+    def _add_prefix_to_names(self, table_type: str):
+        """Add a prefix to all names in the specified table."""
+        from PySide6.QtWidgets import QInputDialog
+        prefix, ok = QInputDialog.getText(self, "Add Prefix", "Enter prefix to add:")
+        if ok and prefix:
+            if table_type == 'block':
+                table = self.block_table
+            elif table_type == 'sideset':
+                table = self.sideset_table
+            else:  # 'well'
+                table = self.well_table
+            for row in range(table.rowCount()):
+                item = table.item(row, 2)
+                if item:
+                    current_name = item.text()
+                    item.setText(f"{prefix}{current_name}")
+    
+    def _add_suffix_to_names(self, table_type: str):
+        """Add a suffix to all names in the specified table."""
+        from PySide6.QtWidgets import QInputDialog
+        suffix, ok = QInputDialog.getText(self, "Add Suffix", "Enter suffix to add:")
+        if ok and suffix:
+            if table_type == 'block':
+                table = self.block_table
+            elif table_type == 'sideset':
+                table = self.sideset_table
+            else:  # 'well'
+                table = self.well_table
+            for row in range(table.rowCount()):
+                item = table.item(row, 2)
+                if item:
+                    current_name = item.text()
+                    item.setText(f"{current_name}{suffix}")
+    
+    def _reset_names(self, table_type: str):
+        """Reset names to their original values."""
+        if table_type == 'block':
+            table = self.block_table
+        elif table_type == 'sideset':
+            table = self.sideset_table
+        else:  # 'well'
+            table = self.well_table
+        for row in range(table.rowCount()):
+            orig_item = table.item(row, 1)
+            export_item = table.item(row, 2)
+            if orig_item and export_item:
+                export_item.setText(orig_item.text())
+    
+    def _validate_and_accept(self):
+        """Validate the names and accept the dialog."""
+        # Check for empty names
+        for row in range(self.block_table.rowCount()):
+            item = self.block_table.item(row, 2)
+            if item and not item.text().strip():
+                QMessageBox.warning(self, "Invalid Name", 
+                    f"Block name in row {row + 1} cannot be empty.")
+                return
+        
+        for row in range(self.sideset_table.rowCount()):
+            item = self.sideset_table.item(row, 2)
+            if item and not item.text().strip():
+                QMessageBox.warning(self, "Invalid Name", 
+                    f"Sideset name in row {row + 1} cannot be empty.")
+                return
+        
+        for row in range(self.well_table.rowCount()):
+            item = self.well_table.item(row, 2)
+            if item and not item.text().strip():
+                QMessageBox.warning(self, "Invalid Name", 
+                    f"Well name in row {row + 1} cannot be empty.")
+                return
+        
+        # Check for duplicate names (across all types)
+        all_export_names = []
+        
+        for row in range(self.block_table.rowCount()):
+            item = self.block_table.item(row, 2)
+            if item:
+                name = item.text().strip()
+                if name in all_export_names:
+                    QMessageBox.warning(self, "Duplicate Name", 
+                        f"Duplicate name '{name}' found. All names must be unique.")
+                    return
+                all_export_names.append(name)
+        
+        for row in range(self.sideset_table.rowCount()):
+            item = self.sideset_table.item(row, 2)
+            if item:
+                name = item.text().strip()
+                if name in all_export_names:
+                    QMessageBox.warning(self, "Duplicate Name", 
+                        f"Duplicate sideset name '{name}' found. All names must be unique.")
+                    return
+                all_export_names.append(name)
+        
+        for row in range(self.well_table.rowCount()):
+            item = self.well_table.item(row, 2)
+            if item:
+                name = item.text().strip()
+                if name in all_export_names:
+                    QMessageBox.warning(self, "Duplicate Name", 
+                        f"Duplicate well name '{name}' found. All names must be unique.")
+                    return
+                all_export_names.append(name)
+        
+        self.accept()
+    
+    def get_block_names(self) -> Dict[int, str]:
+        """Get the edited block names."""
+        result = {}
+        for row in range(self.block_table.rowCount()):
+            id_item = self.block_table.item(row, 0)
+            export_item = self.block_table.item(row, 2)
+            if id_item and export_item:
+                block_id = int(id_item.text())
+                result[block_id] = export_item.text().strip()
+        return result
+    
+    def get_sideset_names(self) -> Dict[int, str]:
+        """Get the edited sideset names."""
+        result = {}
+        for row in range(self.sideset_table.rowCount()):
+            id_item = self.sideset_table.item(row, 0)
+            export_item = self.sideset_table.item(row, 2)
+            if id_item and export_item:
+                sideset_id = int(id_item.text())
+                result[sideset_id] = export_item.text().strip()
+        return result
+    
+    def get_well_names(self) -> Dict[int, str]:
+        """Get the edited well names (1D element blocks)."""
+        result = {}
+        for row in range(self.well_table.rowCount()):
+            id_item = self.well_table.item(row, 0)
+            export_item = self.well_table.item(row, 2)
+            if id_item and export_item:
+                well_id = int(id_item.text())
+                result[well_id] = export_item.text().strip()
+        return result
 
 class _StatusBarShim:
     """Helper class to mimic QMainWindow.statusBar() for QWidget."""
@@ -443,57 +820,63 @@ class MeshItWorkflowGUI(QWidget):
         self._update_statistics() # Initial update
     def _init_material_selection_ui(self) -> QGroupBox:
         """
-        Builds the ‘Materials’ group-box and returns it so the caller
+        Builds the 'Materials' group-box and returns it so the caller
         can insert it wherever it likes (e.g. into the Tetra-mesh tab).
         """
         material_group = QGroupBox("Materials")
-        v_main         = QVBoxLayout(material_group)   # ← same variable name as before
+        material_group.setMaximumWidth(280)
+        material_group.setMinimumWidth(220)
+        v_main = QVBoxLayout(material_group)
+        v_main.setContentsMargins(6, 8, 6, 6)
+        v_main.setSpacing(4)
 
         # 3.1  material list
         self.material_list = QListWidget()
+        self.material_list.setMaximumHeight(100)
         self.material_list.currentRowChanged.connect(self._on_material_selected)
         v_main.addWidget(QLabel("Material regions:"))
-        v_main.addWidget(self.material_list, 1)
+        v_main.addWidget(self.material_list)
 
         h_mat_btns = QHBoxLayout()
-        b_add_mat  = QPushButton(" + ");  b_del_mat = QPushButton(" – ")
+        h_mat_btns.setSpacing(4)
+        b_add_mat = QPushButton("+")
+        b_del_mat = QPushButton("-")
+        b_add_mat.setMaximumWidth(40)
+        b_del_mat.setMaximumWidth(40)
         b_add_mat.clicked.connect(self._add_material)
         b_del_mat.clicked.connect(self._remove_material)
-        h_mat_btns.addWidget(b_add_mat); h_mat_btns.addWidget(b_del_mat)
+        h_mat_btns.addWidget(b_add_mat)
+        h_mat_btns.addWidget(b_del_mat)
+        h_mat_btns.addStretch()
         v_main.addLayout(h_mat_btns)
 
         # 3.2  seed-location list
         self.material_location_list = QListWidget()
+        self.material_location_list.setMaximumHeight(80)
         self.material_location_list.currentRowChanged.connect(self._on_location_selected)
         v_main.addWidget(QLabel("Seed locations:"))
-        v_main.addWidget(self.material_location_list, 1)
+        v_main.addWidget(self.material_location_list)
 
+        # Location buttons: +, -, Auto
         h_loc_btns = QHBoxLayout()
-        b_add_loc  = QPushButton(" + ");  b_del_loc = QPushButton(" – ")
-        b_add_loc.clicked.connect(self._add_location)
-        b_del_loc.clicked.connect(self._remove_location)
-        h_loc_btns.addWidget(b_add_loc); h_loc_btns.addWidget(b_del_loc)
-        v_main.addLayout(h_loc_btns)
-
-        # 3.2-bis  location-buttons  ▼▼▼  REPLACE THIS SHORT BLOCK
-        h_loc_btns = QHBoxLayout()
-
-        btn_add_loc   = QPushButton(" + ")
-        btn_del_loc   = QPushButton(" – ")
-        btn_auto_loc  = QPushButton("Auto")        # NEW – automatic placement
-
+        btn_add_loc = QPushButton("+")
+        btn_del_loc = QPushButton("-")
+        btn_auto_loc = QPushButton("Auto")
+        btn_add_loc.setMaximumWidth(50)
+        btn_del_loc.setMaximumWidth(50)
         btn_add_loc.clicked.connect(self._add_location)
         btn_del_loc.clicked.connect(self._remove_location)
-        btn_auto_loc.clicked.connect(self._auto_place_materials)   # NEW hook
-
+        btn_auto_loc.clicked.connect(self._auto_place_materials)
         h_loc_btns.addWidget(btn_add_loc)
         h_loc_btns.addWidget(btn_del_loc)
-        h_loc_btns.addWidget(btn_auto_loc)         # show the 3rd button
+        h_loc_btns.addWidget(btn_auto_loc)
         v_main.addLayout(h_loc_btns)
         
-        # 3.2-ter  Interactive mouse placement controls
-        mouse_group = QGroupBox("🖱️ Interactive Placement")
+        # 3.2-ter  Interactive mouse placement controls (compact)
+        mouse_group = QGroupBox("Interactive Placement")
         mouse_layout = QVBoxLayout(mouse_group)
+        mouse_layout.setContentsMargins(6, 8, 6, 6)
+        mouse_layout.setSpacing(4)
         
         # Toggle button for mouse placement mode
         self.material_mouse_mode_btn = QPushButton("🎯 Enable Mouse Placement")
@@ -504,37 +887,31 @@ class MeshItWorkflowGUI(QWidget):
             QPushButton {
                 background-color: #4a4a4a;
                 color: white;
-                padding: 6px;
-                border: 2px solid #666;
-                border-radius: 4px;
+                padding: 4px;
+                border: 1px solid #666;
+                border-radius: 3px;
             }
             QPushButton:checked {
                 background-color: #2e7d32;
                 border-color: #4caf50;
             }
-            QPushButton:hover {
-                background-color: #5a5a5a;
-            }
-            QPushButton:checked:hover {
-                background-color: #388e3c;
-            }
         """)
         mouse_layout.addWidget(self.material_mouse_mode_btn)
         
-        # Instructions label
+        # Compact instructions
         self.material_mouse_instructions = QLabel(
             "1. Select a material from the list above\n"
             "2. Enable mouse placement (button above)\n"
             "3. LEFT-CLICK on any surface to place seed\n"
             "   → New location added automatically!"
         )
-        self.material_mouse_instructions.setStyleSheet("color: #888; font-size: 10px;")
+        self.material_mouse_instructions.setStyleSheet("color: #888; font-size: 9px;")
         self.material_mouse_instructions.setWordWrap(True)
         mouse_layout.addWidget(self.material_mouse_instructions)
         
-        # Status label for mouse mode feedback
+        # Status label
         self.material_mouse_status = QLabel("")
-        self.material_mouse_status.setStyleSheet("color: #4caf50; font-weight: bold;")
+        self.material_mouse_status.setStyleSheet("color: #4caf50; font-size: 9px;")
         mouse_layout.addWidget(self.material_mouse_status)
         
         v_main.addWidget(mouse_group)
@@ -544,28 +921,43 @@ class MeshItWorkflowGUI(QWidget):
         self._material_drag_active = False
         self._material_drag_seed_info = None  # (mat_idx, loc_idx) being dragged
         
-        # 3.3  coordinate editors
-        gb_coord   = QGroupBox("Edit selected location")
-        grid       = QGridLayout(gb_coord)
+        # 3.3  coordinate editors (compact horizontal layout)
+        gb_coord = QGroupBox("Edit selected location")
+        coord_layout = QHBoxLayout(gb_coord)
+        coord_layout.setContentsMargins(4, 8, 4, 4)
+        coord_layout.setSpacing(4)
 
-        self.locX_val = QDoubleSpinBox(decimals=4); self.locX_val.setSuffix("  X")
-        self.locY_val = QDoubleSpinBox(decimals=4); self.locY_val.setSuffix("  Y")
-        self.locZ_val = QDoubleSpinBox(decimals=4); self.locZ_val.setSuffix("  Z")
-        for w,lbl in [(self.locX_val,"X"),(self.locY_val,"Y"),(self.locZ_val,"Z")]:
-            w.setRange(-1e9,1e9); w.setSingleStep(1.0); w.setDecimals(6); w.setProperty("axis",lbl)
+        self.locX_val = QDoubleSpinBox()
+        self.locX_val.setPrefix("X: ")
+        self.locY_val = QDoubleSpinBox()
+        self.locY_val.setPrefix("Y: ")
+        self.locZ_val = QDoubleSpinBox()
+        self.locZ_val.setPrefix("Z: ")
+        
+        for w, lbl in [(self.locX_val, "X"), (self.locY_val, "Y"), (self.locZ_val, "Z")]:
+            w.setRange(-1e9, 1e9)
+            w.setSingleStep(10.0)
+            w.setDecimals(2)
+            w.setProperty("axis", lbl)
             w.valueChanged.connect(self._coord_spin_changed)
+            w.setMinimumWidth(90)
+            coord_layout.addWidget(w)
 
-        self.locX_slider = QSlider(Qt.Horizontal); self.locY_slider = QSlider(Qt.Horizontal); self.locZ_slider = QSlider(Qt.Horizontal)
-        for s,lbl in [(self.locX_slider,"X"),(self.locY_slider,"Y"),(self.locZ_slider,"Z")]:
-            s.setRange(-1000000,1000000); s.setSingleStep(500); s.setPageStep(5000); s.setProperty("axis",lbl)
+        # Hidden sliders (keep for compatibility but don't show)
+        self.locX_slider = QSlider(Qt.Horizontal)
+        self.locY_slider = QSlider(Qt.Horizontal)
+        self.locZ_slider = QSlider(Qt.Horizontal)
+        for s, lbl in [(self.locX_slider, "X"), (self.locY_slider, "Y"), (self.locZ_slider, "Z")]:
+            s.setRange(-1000000, 1000000)
+            s.setSingleStep(500)
+            s.setPageStep(5000)
+            s.setProperty("axis", lbl)
             s.valueChanged.connect(self._coord_slider_changed)
-
-        grid.addWidget(self.locX_val,0,0);  grid.addWidget(self.locX_slider,1,0)
-        grid.addWidget(self.locY_val,0,1);  grid.addWidget(self.locY_slider,1,1)
-        grid.addWidget(self.locZ_val,0,2);  grid.addWidget(self.locZ_slider,1,2)
+            s.setVisible(False)  # Hide sliders for cleaner UI
 
         v_main.addWidget(gb_coord)
         return material_group
+
 
 
     def _init_seg_refine_table(self):
@@ -603,7 +995,13 @@ class MeshItWorkflowGUI(QWidget):
             if ds.get('type') in ('WELL', 'polyline'):
                 continue
             name = ds.get('name', f"Surface_{idx}")
-            value = float(self.seg_length_by_surface.get(idx, 15.0))
+            # Use calculated default size based on surface dimensions (C++ MeshIt style)
+            # ALWAYS recalculate if the value is 15.0 (likely an old default)
+            default_size = self._calculate_default_size_for_surface(idx)
+            if idx not in self.seg_length_by_surface or self.seg_length_by_surface[idx] == 15.0:
+                self.seg_length_by_surface[idx] = default_size
+                logger.info(f"Set default refine length for '{name}': {default_size:.3f}")
+            value = float(self.seg_length_by_surface[idx])
             row = self.seg_refine_table.rowCount()
             self.seg_refine_table.insertRow(row)
 
@@ -663,6 +1061,128 @@ class MeshItWorkflowGUI(QWidget):
         except Exception:
             pass
 
+    def _calculate_default_size_for_surface(self, dataset_index: int) -> float:
+        """
+        Calculate the default refinement size (RefineByLength) for a surface based on its 
+        bounding box dimensions. This matches the C++ MeshIt behavior from geometry.cpp:
+        
+        C++ implementation (C_Surface::calculate_min_max and C_Polyline::calculate_min_max):
+            if (this->size == 0) size = length(max - min) / 16;
+        
+        The calculation uses the bounding box diagonal divided by 16, which equals 
+        approximately 6.25% of the diagonal length. This provides appropriate segment 
+        lengths for surface meshing that scale with the geometry size.
+        
+        Units: Same as input geometry (typically meters for geological models).
+        """
+        try:
+            if dataset_index < 0 or dataset_index >= len(self.datasets):
+                return 15.0
+            
+            ds = self.datasets[dataset_index]
+            
+            # Skip wells/polylines - they use their own size calculation
+            if ds.get('type') in ('WELL', 'polyline'):
+                return self._calculate_default_size_for_polyline(dataset_index)
+            
+            # Try to get bounds from mesh first, then from points
+            bounds = None
+            
+            # Method 1: Try from mesh data (if available after convex hull)
+            mesh_data = ds.get('mesh')
+            if mesh_data is not None:
+                bounds = mesh_data.bounds  # [xmin, xmax, ymin, ymax, zmin, zmax]
+            
+            # Method 2: Try from points (available immediately after loading)
+            if bounds is None:
+                points = ds.get('points')
+                if points is not None and len(points) > 0:
+                    # Calculate bounding box from points
+                    points_array = np.array(points)
+                    bounds = [
+                        points_array[:, 0].min(),  # xmin
+                        points_array[:, 0].max(),  # xmax
+                        points_array[:, 1].min(),  # ymin
+                        points_array[:, 1].max(),  # ymax
+                        points_array[:, 2].min(),  # zmin
+                        points_array[:, 2].max()   # zmax
+                    ]
+            
+            # If no geometry data available, return default
+            if bounds is None:
+                return 15.0
+            
+            # Calculate dimensions (max - min vector components)
+            dx = bounds[1] - bounds[0]
+            dy = bounds[3] - bounds[2]
+            dz = bounds[5] - bounds[4]
+            
+            # Calculate diagonal length of bounding box: length(max - min)
+            diagonal = np.sqrt(dx**2 + dy**2 + dz**2)
+            
+            # C++ MeshIt formula: size = length(max - min) / 16
+            # This equals approximately 6.25% of the diagonal
+            default_size = diagonal / 16.0
+            
+            # Apply reasonable bounds to prevent extreme values
+            # Minimum size prevents too fine meshes, maximum prevents too coarse
+            min_size = 0.1
+            max_size = diagonal / 4.0  # At most 25% of diagonal (very coarse)
+            default_size = max(min_size, min(max_size, default_size))
+            
+            logger.debug(f"Calculated default RefineByLength for '{ds.get('name')}': {default_size:.3f} "
+                        f"(bbox diagonal: {diagonal:.3f}, formula: diagonal/16)")
+            
+            return default_size
+            
+        except Exception as e:
+            logger.warning(f"Failed to calculate default size for dataset {dataset_index}: {e}")
+            return 15.0
+    
+    def _calculate_default_size_for_polyline(self, dataset_index: int) -> float:
+        """
+        Calculate the default refinement size for a polyline (well) based on its extent.
+        This matches the C++ MeshIt behavior from geometry.cpp (C_Polyline::calculate_min_max):
+        
+            if (this->size == 0) this->size = length(max - min) / 16;
+        
+        For polylines, the bounding box diagonal divided by 16 provides appropriate 
+        segment lengths for well path discretization.
+        """
+        try:
+            if dataset_index < 0 or dataset_index >= len(self.datasets):
+                return 15.0
+            
+            ds = self.datasets[dataset_index]
+            points = ds.get('points')
+            
+            if points is None or len(points) < 2:
+                return 15.0
+            
+            points_array = np.array(points)
+            
+            # Calculate bounding box
+            min_pt = points_array.min(axis=0)
+            max_pt = points_array.max(axis=0)
+            
+            # Calculate diagonal: length(max - min)
+            diagonal = np.linalg.norm(max_pt - min_pt)
+            
+            # C++ formula: size = length(max - min) / 16
+            default_size = diagonal / 16.0
+            
+            # Apply bounds
+            default_size = max(0.1, min(diagonal / 4.0, default_size))
+            
+            logger.debug(f"Calculated default RefineByLength for polyline '{ds.get('name')}': "
+                        f"{default_size:.3f} (extent diagonal: {diagonal:.3f})")
+            
+            return default_size
+            
+        except Exception as e:
+            logger.warning(f"Failed to calculate default size for polyline {dataset_index}: {e}")
+            return 15.0
+
     def _get_seg_target_length_for_dataset(self, dataset_index: int) -> float:
         """
         Return per-surface RefineByLength from the Segmentation table.
@@ -702,8 +1222,162 @@ class MeshItWorkflowGUI(QWidget):
                                 pass
         except Exception:
             pass
-        # Strict fallback that does NOT use the unified spinbox
-        return 15.0
+        # Fallback: calculate based on surface size (C++ MeshIt style)
+        return self._calculate_default_size_for_surface(dataset_index)
+
+    def _init_well_refine_table(self):
+        """
+        Initialize table for per-well RefineByLength settings.
+        Wells are 1D polylines that get refined but NOT triangulated (C++ behavior).
+        """
+        from PySide6.QtWidgets import QGroupBox, QVBoxLayout, QTableWidget, QTableWidgetItem, QHeaderView
+        if not hasattr(self, 'well_length_by_index'):
+            self.well_length_by_index = {}
+        self._well_table_updating = False
+        
+        self.well_refine_group = QGroupBox("Per-Well RefineByLength (1D Polylines)")
+        lay = QVBoxLayout(self.well_refine_group)
+        self.well_refine_table = QTableWidget(0, 2, self.well_refine_group)
+        self.well_refine_table.setHorizontalHeaderLabels(["Well", "Length"])
+        self.well_refine_table.horizontalHeader().setStretchLastSection(True)
+        self.well_refine_table.verticalHeader().setVisible(False)
+        self.well_refine_table.setEditTriggers(
+            QAbstractItemView.EditTrigger.DoubleClicked |
+            QAbstractItemView.EditTrigger.EditKeyPressed
+        )
+        self.well_refine_table.cellChanged.connect(self._on_well_refine_cell_changed)
+        lay.addWidget(self.well_refine_table)
+        
+        self._refresh_well_refine_table()
+    
+    def _refresh_well_refine_table(self):
+        """Populate rows for all WELL datasets."""
+        from PySide6.QtWidgets import QTableWidgetItem
+        from PySide6.QtCore import Qt
+        if not hasattr(self, 'well_refine_table'):
+            return
+        self._well_table_updating = True
+        self.well_refine_table.setRowCount(0)
+        
+        for idx, ds in enumerate(self.datasets):
+            if ds.get('type') != 'WELL':
+                continue
+            name = ds.get('name', f"Well_{idx}")
+            # Calculate default size using C++ formula: size = length(max-min) / 16
+            default_size = self._calculate_default_size_for_polyline(idx)
+            if idx not in self.well_length_by_index or self.well_length_by_index[idx] == 15.0:
+                self.well_length_by_index[idx] = default_size
+                logger.info(f"Set default refine length for well '{name}': {default_size:.3f}")
+            value = float(self.well_length_by_index[idx])
+            row = self.well_refine_table.rowCount()
+            self.well_refine_table.insertRow(row)
+            
+            item_name = QTableWidgetItem(name)
+            item_name.setFlags(item_name.flags() & ~Qt.ItemIsEditable)
+            item_name.setData(Qt.UserRole, idx)  # Store dataset index
+            self.well_refine_table.setItem(row, 0, item_name)
+            
+            item_val = QTableWidgetItem(f"{value:.6g}")
+            self.well_refine_table.setItem(row, 1, item_val)
+        
+        self._well_table_updating = False
+    
+    def _on_well_refine_cell_changed(self, row, col):
+        """Handle changes to well refinement values."""
+        from PySide6.QtCore import Qt
+        if self._well_table_updating or col != 1:
+            return
+        item_name = self.well_refine_table.item(row, 0)
+        item_val = self.well_refine_table.item(row, 1)
+        if not item_name or not item_val:
+            return
+        try:
+            ds_idx = int(item_name.data(Qt.UserRole))
+            val = float(item_val.text())
+            if val <= 1e-9:
+                val = 1.0
+            self.well_length_by_index[ds_idx] = val
+            logger.info(f"Updated well {ds_idx} refine length to {val:.3f}")
+        except Exception as e:
+            logger.warning(f"Failed to update well refine value: {e}")
+    
+    def _get_well_refine_length(self, dataset_index: int) -> float:
+        """Get the refinement length for a well dataset."""
+        if hasattr(self, 'well_length_by_index') and dataset_index in self.well_length_by_index:
+            return float(self.well_length_by_index[dataset_index])
+        return self._calculate_default_size_for_polyline(dataset_index)
+    
+    def _refine_well_dataset(self, dataset_index: int) -> bool:
+        """
+        Refine a well (1D polyline) by length, matching C++ MeshIt behavior.
+        
+        This:
+        1. Gets the target refinement length from the table
+        2. Applies RefineByLength to subdivide the well path
+        3. Stores refined points in dataset['refined_well_points']
+        
+        Returns True if successful, False otherwise.
+        """
+        try:
+            from Pymeshit.intersection_utils import refine_well_by_length, Vector3D
+            
+            ds = self.datasets[dataset_index]
+            if ds.get('type') != 'WELL':
+                return False
+            
+            points = ds.get('points')
+            # Avoid ambiguous truth-value when points is a numpy array
+            if points is None or len(points) < 2:
+                logger.warning(f"Well {dataset_index} has insufficient points")
+                return False
+            
+            # Get target length from table
+            target_length = self._get_well_refine_length(dataset_index)
+            
+            # Get intersection points if available (from well-surface intersections)
+            intersection_points = ds.get('intersection_points', [])
+            
+            # Refine the well
+            refined_pts = refine_well_by_length(
+                points=points,
+                target_length=target_length,
+                intersection_points=intersection_points,
+                trim_to_intersections=False  # Don't trim by default
+            )
+            
+            # Convert to serializable format and store
+            refined_list = []
+            for p in refined_pts:
+                if isinstance(p, Vector3D):
+                    refined_list.append([p.x, p.y, p.z, p.point_type or "DEFAULT"])
+                else:
+                    refined_list.append(list(p))
+            
+            ds['refined_well_points'] = refined_list
+            
+            logger.info(f"Refined well '{ds.get('name', dataset_index)}': "
+                       f"{len(points)} → {len(refined_list)} points "
+                       f"(target length: {target_length:.3f})")
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to refine well {dataset_index}: {e}", exc_info=True)
+            return False
+    
+    def _refine_all_wells(self):
+        """Refine all WELL datasets using their configured lengths."""
+        refined_count = 0
+        for idx, ds in enumerate(self.datasets):
+            if ds.get('type') == 'WELL':
+                if self._refine_well_dataset(idx):
+                    refined_count += 1
+        
+        if refined_count > 0:
+            logger.info(f"Refined {refined_count} wells")
+            self.statusBar().showMessage(f"✓ Refined {refined_count} wells")
+        
+        return refined_count
 
     def _init_mesh_refine_table(self):
         # Table for Refine & Mesh per-surface mesh target size
@@ -789,6 +1463,105 @@ class MeshItWorkflowGUI(QWidget):
     def _get_mesh_target_size_for_surface(self, dataset_index: int) -> float:
         unified = float(getattr(self.mesh_target_feature_size_input, "value", lambda: 15.0)())
         return float(self.mesh_length_by_surface.get(dataset_index, unified))
+    
+    # =========================================================================
+    # WELL REFINEMENT TABLE FOR REFINE & MESH TAB
+    # =========================================================================
+    def _init_mesh_well_refine_table(self):
+        """
+        Initialize table for per-well RefineByLength settings in the Refine & Mesh tab.
+        This mirrors the well_refine_table in the Segmentation tab.
+        """
+        from PySide6.QtWidgets import QGroupBox, QVBoxLayout, QTableWidget, QTableWidgetItem, QHeaderView, QSizePolicy
+        
+        self._mesh_well_table_updating = False
+        
+        self.mesh_well_refine_group = QGroupBox("Per-Well RefineByLength (1D Edge Constraints)")
+        lay = QVBoxLayout(self.mesh_well_refine_group)
+        self.mesh_well_refine_table = QTableWidget(0, 2, self.mesh_well_refine_group)
+        self.mesh_well_refine_table.setHorizontalHeaderLabels(["Well", "Length"])
+        
+        header = self.mesh_well_refine_table.horizontalHeader()
+        header.setSectionResizeMode(QHeaderView.Interactive)
+        header.setStretchLastSection(True)
+        
+        self.mesh_well_refine_table.verticalHeader().setVisible(False)
+        self.mesh_well_refine_table.setEditTriggers(
+            QAbstractItemView.EditTrigger.DoubleClicked |
+            QAbstractItemView.EditTrigger.EditKeyPressed
+        )
+        self.mesh_well_refine_table.setMinimumHeight(120)
+        self.mesh_well_refine_table.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.mesh_well_refine_table.setAlternatingRowColors(True)
+        self.mesh_well_refine_table.cellChanged.connect(self._on_mesh_well_refine_cell_changed)
+        lay.addWidget(self.mesh_well_refine_table)
+        
+        self._refresh_mesh_well_refine_table()
+    
+    def _refresh_mesh_well_refine_table(self):
+        """Populate rows for all WELL datasets in the Refine & Mesh tab."""
+        from PySide6.QtWidgets import QTableWidgetItem
+        from PySide6.QtCore import Qt
+        if not hasattr(self, 'mesh_well_refine_table'):
+            return
+        self._mesh_well_table_updating = True
+        self.mesh_well_refine_table.setRowCount(0)
+        
+        for idx, ds in enumerate(self.datasets):
+            if ds.get('type') != 'WELL':
+                continue
+            name = ds.get('name', f"Well_{idx}")
+            # Get value from well_length_by_index (shared with segmentation tab)
+            if not hasattr(self, 'well_length_by_index'):
+                self.well_length_by_index = {}
+            default_size = self._calculate_default_size_for_polyline(idx)
+            if idx not in self.well_length_by_index or self.well_length_by_index[idx] == 15.0:
+                self.well_length_by_index[idx] = default_size
+            value = float(self.well_length_by_index[idx])
+            row = self.mesh_well_refine_table.rowCount()
+            self.mesh_well_refine_table.insertRow(row)
+            
+            item_name = QTableWidgetItem(f"🔵 {name}")  # Add well icon
+            item_name.setFlags(item_name.flags() & ~Qt.ItemIsEditable)
+            item_name.setData(Qt.UserRole, idx)
+            self.mesh_well_refine_table.setItem(row, 0, item_name)
+            
+            item_val = QTableWidgetItem(f"{value:.6g}")
+            self.mesh_well_refine_table.setItem(row, 1, item_val)
+        
+        self._mesh_well_table_updating = False
+    
+    def _on_mesh_well_refine_cell_changed(self, row, col):
+        """Handle changes to well refinement values in Refine & Mesh tab."""
+        from PySide6.QtCore import Qt
+        if self._mesh_well_table_updating or col != 1:
+            return
+        item_name = self.mesh_well_refine_table.item(row, 0)
+        item_val = self.mesh_well_refine_table.item(row, 1)
+        if not item_name or not item_val:
+            return
+        try:
+            ds_idx = int(item_name.data(Qt.UserRole))
+            val = float(item_val.text())
+            if val <= 1e-9:
+                val = 1.0
+            # Update shared storage
+            self.well_length_by_index[ds_idx] = val
+            logger.info(f"Updated well {ds_idx} refine length to {val:.3f} (from Refine & Mesh tab)")
+            
+            # Sync to segmentation tab table if it exists
+            if hasattr(self, 'well_refine_table') and self.well_refine_table is not None:
+                try:
+                    self._well_table_updating = True
+                    for r in range(self.well_refine_table.rowCount()):
+                        item = self.well_refine_table.item(r, 0)
+                        if item and item.data(Qt.UserRole) == ds_idx:
+                            self.well_refine_table.setItem(r, 1, QTableWidgetItem(f"{val:.6g}"))
+                            break
+                finally:
+                    self._well_table_updating = False
+        except Exception as e:
+            logger.warning(f"Failed to update well refine value: {e}")
     # ──────────────────────────────────────────────────────────────────────
     # 4)  INTERNAL HELPERS / SLOTS
     # ──────────────────────────────────────────────────────────────────────
@@ -2181,17 +2954,23 @@ class MeshItWorkflowGUI(QWidget):
         self.seg_length_by_surface = {}
         self._init_seg_refine_table()
         segment_layout.addWidget(self.seg_refine_group)
+                
+        # Per-well refinement (1D polylines - C++ style)
+        self.well_length_by_index = {}
+        self._init_well_refine_table()
+        segment_layout.addWidget(self.well_refine_group)
         # Compute segments button
         compute_btn = QPushButton("Compute Segmentation (All Datasets)") # Update button text
         compute_btn.setObjectName("compute_btn") # Set the object name
         compute_btn.setToolTip("Compute segmentation for all datasets with computed hulls") # Update tooltip
+            
         compute_btn.clicked.connect(self.compute_all_segments) # Connect to the new batch method
         segment_layout.addWidget(compute_btn)
 
         control_layout.addWidget(segment_group)
 
         # -- Statistics --
-        stats_group = QGroupBox("Segment Statistics")
+        stats_group = QGroupBox("Segmentation Statistics")
         stats_layout = QVBoxLayout(stats_group)
 
         # Number of segments
@@ -2655,19 +3434,26 @@ class MeshItWorkflowGUI(QWidget):
         self.mesh_length_by_surface = {}
         self._init_mesh_refine_table()  # builds self.mesh_refine_group
 
+        # Per-well table (1D polylines - C++ style)
+        # Initialize if not already done in segmentation tab
+        if not hasattr(self, 'well_length_by_index'):
+            self.well_length_by_index = {}
+        self._init_mesh_well_refine_table()  # builds self.mesh_well_refine_group
+
         # Left vertical splitter for resizable sections
-        for w in (actions_group, mesh_settings_group, self.mesh_refine_group):
+        for w in (actions_group, mesh_settings_group, self.mesh_refine_group, self.mesh_well_refine_group):
             w.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
 
         left_splitter = QSplitter(Qt.Vertical)
         left_splitter.addWidget(actions_group)
         left_splitter.addWidget(mesh_settings_group)
         left_splitter.addWidget(self.mesh_refine_group)
+        left_splitter.addWidget(self.mesh_well_refine_group)
         left_splitter.setChildrenCollapsible(False)
         left_splitter.setHandleWidth(8)
         left_splitter.setOpaqueResize(True)
         # Emphasize table a bit more by default
-        left_splitter.setSizes([200, 260, 380])
+        left_splitter.setSizes([180, 200, 280, 180])
 
         left_layout.addWidget(left_splitter)
 
@@ -5353,13 +6139,23 @@ class MeshItWorkflowGUI(QWidget):
                     text_color='white'
                 )
             
+            # Add wells (1D polylines) to the pre-tetramesh visualization
+            # Wells are edge constraints in TetGen, shown with their refined points
+            self._add_wells_polyline_to_plotter(self.pre_tetramesh_plotter, show_intersection_points=True)
+            
+            # Count wells
+            well_count = sum(1 for ds in self.datasets if ds.get('type') == 'WELL')
+            
             # Add simple legend
             selected_count = len(self.selected_conforming_surfaces)
             total_count = len(self.conforming_mesh_data)
+            legend_text = f"Selected Conforming Surfaces: {selected_count}/{total_count}\n"
+            if well_count > 0:
+                legend_text += f"Wells (1D edge constraints): {well_count}\n"
+            legend_text += "Ready for TetGen tetrahedralization"
             
             self.pre_tetramesh_plotter.add_text(
-                f"Selected Conforming Surfaces: {selected_count}/{total_count}\n"
-                f"Ready for TetGen tetrahedralization",
+                legend_text,
                 position='upper_edge',
                 color='white',
                 font_size=12
@@ -5829,8 +6625,15 @@ class MeshItWorkflowGUI(QWidget):
         
         return summary
 
-    def _add_wells_polyline_to_plotter(self, plotter, color_map=None):
-        """Render all WELL datasets as polylines on the given PyVista plotter."""
+    def _add_wells_polyline_to_plotter(self, plotter, color_map=None, show_intersection_points=True):
+        """
+        Render all WELL datasets as polylines on the given PyVista plotter.
+        
+        Shows:
+        - Well paths as magenta lines (using refined points if available)
+        - Intersection points as red spheres (where wells intersect surfaces)
+        - Start/End points as cyan/blue spheres
+        """
         try:
             import numpy as np
             import pyvista as pv
@@ -5842,11 +6645,27 @@ class MeshItWorkflowGUI(QWidget):
         for idx, ds in enumerate(self.datasets):
             if ds.get('type') != 'WELL':
                 continue
-            pts = ds.get('refined_well_points') or ds.get('points')
-            if pts is None or len(pts) < 2:
+            
+            # Prefer refined points, fallback to original
+            raw_pts = ds.get('refined_well_points') or ds.get('points')
+            if raw_pts is None or len(raw_pts) < 2:
                 continue
-
-            pts = np.array(pts, dtype=float)
+            
+            # Extract coordinates and point types
+            pts_coords = []
+            point_types = []
+            for p in raw_pts:
+                if hasattr(p, 'x'):  # Vector3D
+                    pts_coords.append([p.x, p.y, p.z])
+                    point_types.append(getattr(p, 'point_type', getattr(p, 'type', 'DEFAULT')) or 'DEFAULT')
+                elif len(p) >= 3:
+                    pts_coords.append([float(p[0]), float(p[1]), float(p[2])])
+                    pt_type = p[3] if len(p) > 3 else 'DEFAULT'
+                    if hasattr(pt_type, 'item'):
+                        pt_type = pt_type.item()
+                    point_types.append(str(pt_type) if pt_type else 'DEFAULT')
+            
+            pts = np.array(pts_coords, dtype=float)
             if pts.shape[1] < 3:
                 tmp = np.zeros((pts.shape[0], 3))
                 tmp[:, :pts.shape[1]] = pts
@@ -5856,8 +6675,45 @@ class MeshItWorkflowGUI(QWidget):
             # Polyline cell format: [n, 0, 1, 2, ... n-1]
             lines = np.hstack(([n], np.arange(n, dtype=np.int32))).astype(np.int32)
             poly = pv.PolyData(pts, lines=lines)
-            color = ds.get('color', self.DEFAULT_COLORS[idx % len(self.DEFAULT_COLORS)])
-            plotter.add_mesh(poly, color=color, line_width=3, opacity=0.9, label=f"{ds.get('name', 'Well')}")
+            
+            # Use magenta for wells (C++ MeshIt uses LightMagenta for wells)
+            well_color = (1.0, 0.0, 1.0)  # Magenta
+            plotter.add_mesh(poly, color=well_color, line_width=4, opacity=0.95, 
+                           label=f"🔵 {ds.get('name', 'Well')}", render_lines_as_tubes=True)
+            
+            # Show special points if requested
+            if show_intersection_points:
+                intersection_pts = []
+                start_pts = []
+                end_pts = []
+                
+                for i, pt_type in enumerate(point_types):
+                    if pt_type == 'INTERSECTION_POINT':
+                        intersection_pts.append(pts[i])
+                    elif pt_type in ('WELL_START', 'START_POINT'):
+                        start_pts.append(pts[i])
+                    elif pt_type in ('WELL_END', 'END_POINT'):
+                        end_pts.append(pts[i])
+                
+                # Draw intersection points as red spheres
+                if intersection_pts:
+                    int_pts_arr = np.array(intersection_pts)
+                    plotter.add_mesh(pv.PolyData(int_pts_arr), color='red', 
+                                   point_size=12, render_points_as_spheres=True,
+                                   label=f"Well-Surface Intersections")
+                
+                # Draw start points as cyan spheres
+                if start_pts:
+                    start_arr = np.array(start_pts)
+                    plotter.add_mesh(pv.PolyData(start_arr), color='cyan',
+                                   point_size=10, render_points_as_spheres=True)
+                
+                # Draw end points as blue spheres
+                if end_pts:
+                    end_arr = np.array(end_pts)
+                    plotter.add_mesh(pv.PolyData(end_arr), color='blue',
+                                   point_size=10, render_points_as_spheres=True)
+
 
 
     def _add_wells_to_intersection_plotter(self):
@@ -6275,7 +7131,12 @@ class MeshItWorkflowGUI(QWidget):
 
         self.statusBar().showMessage("Intersection lines refined successfully.", 5000)
         logger.info("Intersection lines refined successfully.")
-
+        # Refine all wells (1D polylines) - C++ MeshIt style
+        logger.info("Refining wells (1D polylines)...")
+        wells_refined = self._refine_all_wells()
+        if wells_refined > 0:
+            logger.info(f"Refined {wells_refined} wells")
+        
         logger.info("Consolidating all refined points for triangulation...")
         self.consolidate_points_for_triangulation()
         logger.info("Consolidation complete!")
@@ -9453,7 +10314,11 @@ segmentation, triangulation, and visualization.
             self._refresh_seg_refine_table()
         if hasattr(self, '_refresh_mesh_refine_table'):
             self._refresh_mesh_refine_table()
-    
+        # Also refresh well refinement tables
+        if hasattr(self, '_refresh_well_refine_table'):
+            self._refresh_well_refine_table()
+        if hasattr(self, '_refresh_mesh_well_refine_table'):
+            self._refresh_mesh_well_refine_table()
     def _rename_dataset(self, dataset_index):
         """Rename a dataset"""
         if not (0 <= dataset_index < len(self.datasets)):
@@ -10644,6 +11509,7 @@ segmentation, triangulation, and visualization.
             "sel_norm": {"pts": [], "lines": [], "idx": 0},
             "sel_hole": {"pts": [], "lines": [], "idx": 0},
             "unsel":    {"pts": [], "lines": [], "idx": 0},
+            "well":     {"pts": [], "lines": [], "idx": 0},  # Wells get their own category (magenta)
         }
 
         def add_segment(cat_key, p1, p2):
@@ -10675,10 +11541,43 @@ segmentation, triangulation, and visualization.
 
         # 1) Use map data when present
         for (surf_idx, seg_uid), seg_info in seg_map.items():
+            seg_type = str(seg_info.get("type", seg_info.get("ctype", ""))).lower()
+            
+            # Handle wells separately (they use negative indices)
+            if seg_type == "well":
+                # Wells are always visible (not filtered by surface)
+                is_selected = bool(seg_info.get("selected", True))
+                if selected_only_mode and not is_selected:
+                    continue
+                
+                pts = seg_info.get("points", [])
+                if not pts or len(pts) < 2:
+                    continue
+                
+                # Use "well" category for wells (magenta color)
+                cat_key = "well" if is_selected else "unsel"
+                
+                if len(pts) == 2:
+                    p1 = to_xyz(pts[0]); p2 = to_xyz(pts[1])
+                    if p1 is not None and p2 is not None and p1 != p2:
+                        add_segment(cat_key, p1, p2)
+                        built += 1
+                else:
+                    local_pairs = 0
+                    for j in range(len(pts) - 1):
+                        p1 = to_xyz(pts[j]); p2 = to_xyz(pts[j + 1])
+                        if p1 is None or p2 is None or p1 == p2:
+                            continue
+                        add_segment(cat_key, p1, p2)
+                        local_pairs += 1
+                    if local_pairs > 0:
+                        built += 1
+                continue
+            
+            # Regular surface constraints
             if not surface_is_visible_fn(surf_idx):
                 continue
 
-            seg_type = str(seg_info.get("type", seg_info.get("ctype", ""))).lower()
             if seg_type == "hull":
                 saw_hull_for_surface.add(surf_idx)
                 if not show_hull_constraints:
@@ -10764,6 +11663,7 @@ segmentation, triangulation, and visualization.
         emit("sel_norm", (0.0, 1.0, 0.0), 4)
         emit("sel_hole", (1.0, 0.0, 0.0), 4)
         emit("unsel",    (0.53, 0.53, 0.53), 2)
+        emit("well",     (1.0, 0.0, 1.0), 5)
 
         return built
     # ======================================================================
@@ -10816,6 +11716,9 @@ segmentation, triangulation, and visualization.
                 self.constraint_segment_actor_refs = {}
 
             for ds in self.datasets:
+                # Skip wells (they're added separately below)
+                if ds.get('type') == 'WELL':
+                    continue
                 cm = ds.get("conforming_mesh")
                 if not cm:
                     continue
@@ -10834,6 +11737,9 @@ segmentation, triangulation, and visualization.
                     edge_color="black",
                 )
                 self.conforming_mesh_actor_refs.append(actor)
+
+            # Add wells (1D polylines) to the mesh view
+            self._add_wells_polyline_to_plotter(plotter, show_intersection_points=True)
 
             plotter.add_axes()
             plotter.reset_camera()
@@ -11685,6 +12591,11 @@ segmentation, triangulation, and visualization.
             self._refresh_seg_refine_table()
         if hasattr(self, '_refresh_mesh_refine_table'):
             self._refresh_mesh_refine_table()
+        # Also refresh well refinement tables
+        if hasattr(self, '_refresh_well_refine_table'):
+            self._refresh_well_refine_table()
+        if hasattr(self, '_refresh_mesh_well_refine_table'):
+            self._refresh_mesh_well_refine_table()
 
         if current_tab_widget == self.file_tab:
             self._visualize_all_points()
@@ -12333,6 +13244,10 @@ segmentation, triangulation, and visualization.
         # Store results
         self.datasets_intersections = {}
         self.triple_points = []
+        # Initialize well intersection points storage
+        # This will store intersection points for each well to be used during refinement
+        well_intersection_points = {}  # well_dataset_idx -> list of intersection points
+
 
         logger.info(f"Processing {len(model.intersections)} raw intersections and {len(model.triple_points)} triple points from workflow.")
 
@@ -12343,6 +13258,15 @@ segmentation, triangulation, and visualization.
                 original_poly = model.original_polyline_indices.get(intersection.id1, -1)
                 original_surf = model.original_surface_indices.get(intersection.id2, -1)
                 original_id1, original_id2 = original_poly, original_surf
+                
+                # Store intersection points for wells (C++ style: well cuts surface)
+                # The intersection points will be inserted into the well path during refinement
+                if original_poly >= 0 and intersection.points:
+                    if original_poly not in well_intersection_points:
+                        well_intersection_points[original_poly] = []
+                    for point in intersection.points:
+                        well_intersection_points[original_poly].append([point.x, point.y, point.z, "INTERSECTION_POINT"])
+                    logger.info(f"Stored {len(intersection.points)} intersection point(s) for well {original_poly}")
             else:
                 original_id1 = model.original_surface_indices.get(intersection.id1, -1)
                 original_id2 = model.original_surface_indices.get(intersection.id2, -1)
@@ -12369,6 +13293,11 @@ segmentation, triangulation, and visualization.
             if primary_key not in self.datasets_intersections:
                 self.datasets_intersections[primary_key] = []
             self.datasets_intersections[primary_key].append(intersection_info)
+        # Store intersection points in well datasets for use during refinement
+        for well_idx, int_points in well_intersection_points.items():
+            if 0 <= well_idx < len(self.datasets):
+                self.datasets[well_idx]['intersection_points'] = int_points
+                logger.info(f"Stored {len(int_points)} intersection points in well dataset {well_idx}")
 
         # Triple points
         for tp in model.triple_points:
@@ -13242,67 +14171,46 @@ segmentation, triangulation, and visualization.
         
         # Create main layout
         tab_layout = QHBoxLayout(self.tetra_mesh_tab)
+        tab_layout.setSpacing(6)
         
-        # === Control Panel (Left) ===
+         # === Control Panel (Left) ===
         control_panel = QWidget()
-        control_panel.setMaximumWidth(400)
+        control_panel.setMaximumWidth(280)
+        control_panel.setMinimumWidth(250)
         control_layout = QVBoxLayout(control_panel)
+        control_layout.setContentsMargins(4, 4, 4, 4)
+        control_layout.setSpacing(6)
         
         # --- Data Transfer Group ---
-        transfer_group = QGroupBox("Constrained Surface Data")
+        transfer_group = QGroupBox("Surface Data")
         transfer_layout = QVBoxLayout(transfer_group)
+        transfer_layout.setContentsMargins(6, 8, 6, 6)
+        transfer_layout.setSpacing(4)
         
-        self.load_surfaces_btn = QPushButton("📥 Load Final Surfaces for 3D Meshing")
-        self.load_surfaces_btn.setToolTip("Load the conforming surface meshes generated in the Refine & Mesh tab.")
+        self.load_surfaces_btn = QPushButton("📥 Load Surfaces")
+        self.load_surfaces_btn.setToolTip("Load conforming surface meshes from Refine & Mesh tab")
         self.load_surfaces_btn.clicked.connect(self._load_conforming_meshes_for_tetgen)
         transfer_layout.addWidget(self.load_surfaces_btn)
         
-        # Surface list display
+        # Surface list display (compact)
         self.loaded_surfaces_list = QListWidget()
-        self.loaded_surfaces_list.setMaximumHeight(120)
-        self.loaded_surfaces_list.setToolTip("Surfaces loaded from pre-tetra tab with their mesh data")
-        transfer_layout.addWidget(QLabel("Loaded Surfaces:"))
+        self.loaded_surfaces_list.setMaximumHeight(70)
+        self.loaded_surfaces_list.setToolTip("Loaded surfaces with mesh data")
         transfer_layout.addWidget(self.loaded_surfaces_list)
         
         control_layout.addWidget(transfer_group)
         
-        # --- Material Assignment Group ---
-        material_group = QGroupBox("Material Assignment (C++ MeshIt Style)")
-        material_layout = QVBoxLayout(material_group)
         
-        # Add explanatory text about C++ approach
-        cpp_info = QLabel("ℹ️ Following C++ MeshIt approach:\n• Faults = 2D surface constraints\n• Units = 3D volumetric regions")
-        cpp_info.setStyleSheet("color: #1976D2; font-style: italic; background: #E3F2FD; padding: 5px; border-radius: 3px;")
-        cpp_info.setWordWrap(True)
-        material_layout.addWidget(cpp_info)
-        
-        # Surface type classification (for display only)
+        # Hidden widgets for internal compatibility (not shown to user)
         self.border_surfaces_list = QListWidget()
-        self.border_surfaces_list.setMaximumHeight(60)
+        self.border_surfaces_list.setVisible(False)
         self.unit_surfaces_list = QListWidget()
-        self.unit_surfaces_list.setMaximumHeight(60)
-        
-        # Hidden fault list for compatibility (populated from checkbox selections)
+        self.unit_surfaces_list.setVisible(False)
         self.fault_surfaces_list = QListWidget()
-        self.fault_surfaces_list.setVisible(False)  # Hidden - replaced by checkbox list
-
-        material_layout.addWidget(QLabel("Border Surfaces:"))
-        material_layout.addWidget(self.border_surfaces_list)
-        material_layout.addWidget(QLabel("Unit Surfaces (3D Materials):"))
-        material_layout.addWidget(self.unit_surfaces_list)
-
-
-
-        # Auto-classify button (only for borders/units now)
-        self.auto_classify_btn = QPushButton("🏷️ Auto-Classify Borders/Units")
-        self.auto_classify_btn.setToolTip("Automatically classify border and unit surfaces based on their names")
-        self.auto_classify_btn.clicked.connect(self._auto_classify_surfaces)
-        material_layout.addWidget(self.auto_classify_btn)
-
-        control_layout.addWidget(material_group)
-
-        # --- 2D Material (Fault) Selection Group (C++ Style) ---
-        fault_material_group = QGroupBox("2D Material Surfaces (Faults) - Manual Selection")
+        self.fault_surfaces_list.setVisible(False)
+        
+        # --- 2D Faults Selection ---
+        fault_material_group = QGroupBox("2D Faults (Surfaces)")
         fault_material_layout = QVBoxLayout(fault_material_group)
         
         fault_info = QLabel("✓ Check surfaces to mark as 2D faults (surface constraints only)")
@@ -13329,6 +14237,34 @@ segmentation, triangulation, and visualization.
         
         control_layout.addWidget(fault_material_group)
         
+        # --- 1D Wells Selection ---
+        well_material_group = QGroupBox("1D Wells (Polylines)")
+        well_material_layout = QVBoxLayout(well_material_group)
+        well_material_layout.setContentsMargins(6, 6, 6, 6)
+        well_material_layout.setSpacing(4)
+        
+        # Checkbox list for well selection
+        self.material1d_list = QListWidget()
+        self.material1d_list.setMaximumHeight(80)
+        self.material1d_list.setToolTip("Check wells to include as 1D edge constraints")
+        self.material1d_list.itemChanged.connect(self._on_well_checkbox_changed)
+        well_material_layout.addWidget(self.material1d_list)
+        
+        # Quick selection buttons (compact)
+        well_btn_layout = QHBoxLayout()
+        well_btn_layout.setSpacing(4)
+        self.select_all_wells_btn = QPushButton("All")
+        self.select_all_wells_btn.setMaximumWidth(60)
+        self.select_all_wells_btn.clicked.connect(self._select_all_wells_for_export)
+        self.clear_all_wells_btn = QPushButton("None")
+        self.clear_all_wells_btn.setMaximumWidth(60)
+        self.clear_all_wells_btn.clicked.connect(self._clear_all_wells_for_export)
+        well_btn_layout.addWidget(self.select_all_wells_btn)
+        well_btn_layout.addWidget(self.clear_all_wells_btn)
+        well_btn_layout.addStretch()
+        well_material_layout.addLayout(well_btn_layout)
+        
+        control_layout.addWidget(well_material_group)
         
         # --- Generation Controls ---
         generate_group = QGroupBox("Tetrahedral Mesh Generation")
@@ -13653,15 +14589,20 @@ segmentation, triangulation, and visualization.
             if loaded_count > 0:
                 self.generate_tetra_mesh_btn.setEnabled(True)
                 self._auto_classify_surfaces()  # Auto-classify the loaded surfaces
+                self._populate_well_material_list()  # Populate wells for 1D material selection (C++ style)
                 self._visualize_loaded_surfaces(reset_camera=True)  # Show them in 3D viewer with initial camera reset
+                
+                # Count wells for info message
+                well_count = sum(1 for ds in self.datasets if ds.get('type') == 'WELL')
+                well_msg = f"\n\n{well_count} well(s) available for 1D material export." if well_count > 0 else ""
                 
                 QMessageBox.information(
                     self, "Conforming Meshes Loaded", 
                     f"Successfully loaded {loaded_count} conforming surface mesh(es).\n\n"
                     f"These meshes form a watertight Piecewise Linear Complex (PLC)\n"
-                    f"ready for TetGen 3D meshing following C++ MeshIt workflow."
+                    f"ready for TetGen 3D meshing following C++ MeshIt workflow.{well_msg}"
                 )
-                self.statusBar().showMessage(f"Loaded {loaded_count} conforming meshes. Ready for 3D generation.")
+                self.statusBar().showMessage(f"Loaded {loaded_count} conforming meshes, {well_count} wells. Ready for 3D generation.")
             else:
                 QMessageBox.warning(
                     self, "No Conforming Meshes Available",
@@ -13821,7 +14762,162 @@ segmentation, triangulation, and visualization.
         self._update_fault_list_from_checkboxes()
         self._refresh_unit_surfaces_list()
         logger.info("All fault selections cleared")
+    # =========================================================================
+    # 1D WELL MATERIAL SELECTION (C++ MeshIt material1dList Style)
+    # =========================================================================
+    def _populate_well_material_list(self):
+        """
+        Populate the well selection checkbox list with all WELL datasets.
+        Matches C++ MeshIt's material1dFill() function from mainwindow.cpp.
+        """
+        if not hasattr(self, 'material1d_list'):
+            return
+        
+        self.material1d_list.blockSignals(True)
+        self.material1d_list.clear()
+        
+        # Initialize well material IDs storage
+        if not hasattr(self, 'well_material_ids'):
+            self.well_material_ids = {}  # dataset_idx -> material_id (-1 = not selected)
+        
+        for idx, ds in enumerate(self.datasets):
+            if ds.get('type') != 'WELL':
+                continue
+            
+            well_name = ds.get('name', f'Well_{idx}')
+            item = QListWidgetItem(f"🔵 {well_name}")
+            item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
+            item.setData(Qt.UserRole, idx)  # Store dataset index
+            
+            # Check if already marked for export
+            if self.well_material_ids.get(idx, -1) >= 0:
+                item.setCheckState(Qt.Checked)
+            else:
+                item.setCheckState(Qt.Unchecked)
+            
+            self.material1d_list.addItem(item)
+        
+        self.material1d_list.blockSignals(False)
+        
+        well_count = self.material1d_list.count()
+        if well_count > 0:
+            logger.info(f"Populated well material list with {well_count} wells")
     
+    def _on_well_checkbox_changed(self, item):
+        """
+        Handle checkbox state change for well selection.
+        Matches C++ MeshIt's material1dUpdate() function.
+        """
+        if not hasattr(self, 'well_material_ids'):
+            self.well_material_ids = {}
+        
+        dataset_idx = item.data(Qt.UserRole)
+        is_selected = item.checkState() == Qt.Checked
+        
+        # C++ style: MaterialID = checkState - 1 (Qt::Unchecked=0, Qt::Checked=2)
+        # So: -1 for unchecked, 1 for checked
+        self.well_material_ids[dataset_idx] = 1 if is_selected else -1
+        
+        well_name = self.datasets[dataset_idx].get('name', f'Well_{dataset_idx}') if dataset_idx < len(self.datasets) else f'Well_{dataset_idx}'
+        action = "selected for export" if is_selected else "deselected"
+        logger.info(f"Well '{well_name}' (idx={dataset_idx}) {action} as 1D material")
+        
+        # Update visualization if mesh exists
+        if hasattr(self, 'full_tetra_mesh') and self.full_tetra_mesh is not None:
+            self._update_well_visualization_in_mesh()
+    
+    def _select_all_wells_for_export(self):
+        """Select all wells for export"""
+        if not hasattr(self, 'material1d_list'):
+            return
+        self.material1d_list.blockSignals(True)
+        for i in range(self.material1d_list.count()):
+            self.material1d_list.item(i).setCheckState(Qt.Checked)
+            dataset_idx = self.material1d_list.item(i).data(Qt.UserRole)
+            if not hasattr(self, 'well_material_ids'):
+                self.well_material_ids = {}
+            self.well_material_ids[dataset_idx] = 1
+        self.material1d_list.blockSignals(False)
+        logger.info("All wells selected for export")
+    
+    def _clear_all_wells_for_export(self):
+        """Clear all well selections"""
+        if not hasattr(self, 'material1d_list'):
+            return
+        self.material1d_list.blockSignals(True)
+        for i in range(self.material1d_list.count()):
+            self.material1d_list.item(i).setCheckState(Qt.Unchecked)
+            dataset_idx = self.material1d_list.item(i).data(Qt.UserRole)
+            if not hasattr(self, 'well_material_ids'):
+                self.well_material_ids = {}
+            self.well_material_ids[dataset_idx] = -1
+        self.material1d_list.blockSignals(False)
+        logger.info("All well selections cleared")
+    
+    def _get_selected_well_indices(self) -> set:
+        """Get indices of wells selected for export"""
+        if not hasattr(self, 'well_material_ids'):
+            return set()
+        return {idx for idx, mat_id in self.well_material_ids.items() if mat_id >= 0}
+    
+    def _update_well_visualization_in_mesh(self):
+        """Update well visualization in the tetrahedral mesh view"""
+        if not hasattr(self, 'tetra_plotter') or not self.tetra_plotter:
+            return
+        
+        try:
+            import pyvista as pv
+            import numpy as np
+            
+            # Remove existing well actors
+            actors_to_remove = [name for name in self.tetra_plotter.actors.keys() if 'well_' in name.lower()]
+            for actor_name in actors_to_remove:
+                self.tetra_plotter.remove_actor(actor_name)
+            
+            # Add selected wells
+            selected_wells = self._get_selected_well_indices()
+            for well_idx in selected_wells:
+                if well_idx >= len(self.datasets):
+                    continue
+                ds = self.datasets[well_idx]
+                if ds.get('type') != 'WELL':
+                    continue
+                
+                # Get refined or original points
+                pts = ds.get('refined_well_points') or ds.get('points')
+                if pts is None or len(pts) < 2:
+                    continue
+                
+                # Extract coordinates
+                coords = []
+                for p in pts:
+                    if hasattr(p, 'x'):
+                        coords.append([p.x, p.y, p.z])
+                    elif len(p) >= 3:
+                        coords.append([float(p[0]), float(p[1]), float(p[2])])
+                
+                if len(coords) < 2:
+                    continue
+                
+                pts_arr = np.array(coords)
+                n = len(pts_arr)
+                lines = np.hstack(([n], np.arange(n, dtype=np.int32))).astype(np.int32)
+                poly = pv.PolyData(pts_arr, lines=lines)
+                
+                self.tetra_plotter.add_mesh(
+                    poly,
+                    color='magenta',
+                    line_width=5,
+                    render_lines_as_tubes=True,
+                    name=f"well_{well_idx}_{ds.get('name', 'well')}"
+                )
+            
+            self.tetra_plotter.render()
+            logger.debug(f"Updated well visualization: {len(selected_wells)} wells shown")
+            
+        except Exception as e:
+            logger.warning(f"Failed to update well visualization: {e}")
+
     def _extract_fault_materials_from_tetgen_output(self, fault_indices: set) -> None:
         """
         Extract fault materials from TetGen output triface_markers (C++ MeshIt style).
@@ -13982,6 +15078,8 @@ segmentation, triangulation, and visualization.
                     name=f"surface_{surface_idx}",
                     label=surface_data['name']
                 )
+            # Add wells (1D polylines) as edge constraints visualization
+            self._add_wells_polyline_to_plotter(self.tetra_plotter, show_intersection_points=True)
             
             # Add legend and optionally reset camera
             if self.tetra_selected_surfaces:
@@ -13995,7 +15093,9 @@ segmentation, triangulation, and visualization.
                 self.tetra_plotter.add_text("No surfaces loaded", position='upper_edge', color='white')
             
             self.tetra_plotter.render()
-            logger.info(f"Visualized {len(self.tetra_selected_surfaces)} constrained surfaces")
+            # Count wells for logging
+            well_count = sum(1 for ds in self.datasets if ds.get('type') == 'WELL')
+            logger.info(f"Visualized {len(self.tetra_selected_surfaces)} constrained surfaces and {well_count} wells")
             
         except Exception as e:
             logger.error(f"Error visualizing surfaces: {e}")
@@ -14065,10 +15165,10 @@ segmentation, triangulation, and visualization.
             return
 
         try:
-            # Clear existing tetrahedral mesh actors AND fault overlays
+            # Clear existing tetrahedral mesh actors AND fault overlays AND wells
             actors_to_remove = []
             for name in list(self.tetra_plotter.actors.keys()):
-                if 'tetrahedral' in name or 'fault_overlay' in name:
+                if 'tetrahedral' in name or 'fault_overlay' in name or 'well_' in name.lower():
                     actors_to_remove.append(name)
 
             for name in actors_to_remove:
@@ -14080,13 +15180,102 @@ segmentation, triangulation, and visualization.
 
             # Re-add the visualization with current settings
             self._add_tetrahedral_mesh_visualization(self.full_tetra_mesh)
+            
+            # Add wells visualization (C++ style: 1D materials)
+            self._add_wells_to_tetra_visualization()
 
             self.tetra_plotter.render()
 
         except Exception as e:
             logger.error(f"Error refreshing tetrahedral visualization: {e}")
-
-
+    
+    def _add_wells_to_tetra_visualization(self):
+        """
+        Add wells to the tetrahedral mesh visualization (C++ MeshIt style).
+        Wells are shown as 1D edge materials based on the material dropdown selection.
+        """
+        if not hasattr(self, 'tetra_plotter') or not self.tetra_plotter:
+            return
+        
+        try:
+            import pyvista as pv
+            import numpy as np
+            
+            # Check what's selected in the material dropdown
+            material_name = ""
+            if hasattr(self, 'tetra_material_combo') and self.tetra_material_combo:
+                material_name = self.tetra_material_combo.currentText()
+            
+            # Determine which wells to show
+            show_all = material_name == "All Materials" or not material_name
+            selected_well_idx = None
+            
+            if not show_all and "Well ID" in material_name:
+                # Extract well ID from dropdown (format: "🔵 WellName (Well ID X)")
+                import re
+                match = re.search(r'Well ID (\d+)', material_name)
+                if match:
+                    selected_well_marker = int(match.group(1))
+                    # Convert marker back to dataset index (marker = idx + 2)
+                    selected_well_idx = selected_well_marker - 2
+            
+            # Get selected wells for export
+            selected_wells = self._get_selected_well_indices() if hasattr(self, '_get_selected_well_indices') else set()
+            
+            # Color palette for different wells
+            well_colors = ['magenta', 'cyan', 'orange', 'lime', 'pink', 'yellow']
+            
+            wells_drawn = 0
+            for i, well_idx in enumerate(sorted(selected_wells)):
+                # If specific well selected, only show that one
+                if selected_well_idx is not None and well_idx != selected_well_idx:
+                    continue
+                
+                if well_idx >= len(self.datasets):
+                    continue
+                    
+                ds = self.datasets[well_idx]
+                if ds.get('type') != 'WELL':
+                    continue
+                
+                # Get refined or original points
+                pts = ds.get('refined_well_points') or ds.get('points')
+                if pts is None or len(pts) < 2:
+                    continue
+                
+                # Extract coordinates
+                coords = []
+                for p in pts:
+                    if hasattr(p, 'x'):
+                        coords.append([p.x, p.y, p.z])
+                    elif len(p) >= 3:
+                        coords.append([float(p[0]), float(p[1]), float(p[2])])
+                
+                if len(coords) < 2:
+                    continue
+                
+                pts_arr = np.array(coords)
+                n = len(pts_arr)
+                lines = np.hstack(([n], np.arange(n, dtype=np.int32))).astype(np.int32)
+                poly = pv.PolyData(pts_arr, lines=lines)
+                
+                well_name = ds.get('name', f'Well_{well_idx}')
+                color = well_colors[i % len(well_colors)]
+                
+                self.tetra_plotter.add_mesh(
+                    poly,
+                    color=color,
+                    line_width=6,
+                    render_lines_as_tubes=True,
+                    name=f"well_{well_idx}_{well_name}"
+                )
+                wells_drawn += 1
+            
+            if wells_drawn > 0:
+                logger.debug(f"Added {wells_drawn} wells to tetra visualization")
+                
+        except Exception as e:
+            logger.warning(f"Failed to add wells to tetra visualization: {e}")
 
 
     def _update_constraint_actor_visual(self, surf_idx: int, con_idx: int,
@@ -14167,6 +15356,8 @@ segmentation, triangulation, and visualization.
         
         # Collect hole information from constraint tree
         holes = self._collect_holes_from_constraint_tree()
+        # Collect selected well data for 1D materials (C++ style: edgelist/edgemarkerlist)
+        well_data = self._collect_well_data_for_tetgen()
         
         self.tetra_mesh_generator = TetrahedralMeshGenerator(
             datasets=self.datasets,
@@ -14176,7 +15367,8 @@ segmentation, triangulation, and visualization.
             fault_surface_indices=fault_indices,
             materials=self.tetra_materials,
             surface_data=self.tetra_surface_data,  # <-- PASS THE CORRECT DATA
-            holes=holes  # <-- PASS HOLE INFORMATION
+            holes=holes,  # <-- PASS HOLE INFORMATION
+            well_data=well_data  # <-- PASS WELL DATA FOR 1D MATERIALS (C++ style)
         )
 
         self.statusBar().showMessage("Generating 3D tetrahedral mesh... This may take a while.")
@@ -14305,6 +15497,57 @@ segmentation, triangulation, and visualization.
             logger.info("No holes marked in constraint tree")
             
         return holes
+    def _collect_well_data_for_tetgen(self) -> dict:
+        """
+        Collect selected well data for TetGen edge constraints (C++ MeshIt style).
+        
+        In C++ MeshIt (geometry.cpp calculate_tets):
+        - Wells (polylines) are added to TetGen as edge constraints via edgelist
+        - Edge markers are stored in edgemarkerlist (marker = polyline_idx + 2)
+        - Wells are exported as 1D elements (VTK_LINE type 3 in VTU, T3D2 in ABAQUS)
+        
+        Returns:
+            dict: {well_idx: {'points': [], 'marker': int, 'name': str}, ...}
+        """
+        well_data = {}
+        
+        # Get selected wells from the material1d_list checkboxes
+        selected_wells = self._get_selected_well_indices()
+        
+        if not selected_wells:
+            logger.info("No wells selected for TetGen edge constraints")
+            return well_data
+        
+        logger.info(f"Collecting {len(selected_wells)} wells for TetGen edge constraints...")
+        
+        for well_idx in sorted(selected_wells):
+            if well_idx >= len(self.datasets):
+                continue
+                
+            ds = self.datasets[well_idx]
+            if ds.get('type') != 'WELL':
+                continue
+            
+            # Use refined points if available, otherwise original points
+            well_pts = ds.get('refined_well_points') or ds.get('points')
+            if well_pts is None or len(well_pts) < 2:
+                continue
+            
+            well_name = ds.get('name', f'Well_{well_idx}')
+            # C++ style marker: polyline_idx + 2 (0,1 are reserved)
+            well_marker = well_idx + 2
+            
+            well_data[well_idx] = {
+                'points': well_pts,
+                'marker': well_marker,
+                'name': well_name
+            }
+            
+            logger.info(f"  Well '{well_name}': {len(well_pts)} points, marker={well_marker}")
+        
+        logger.info(f"✓ Collected {len(well_data)} wells for TetGen export")
+        return well_data
+    
     
     def _calculate_intersection_hole_center(self, surface_idx, intersection_idx):
         """
@@ -17491,7 +18734,13 @@ segmentation, triangulation, and visualization.
             return 1.0  # Default fallback
 
     def _update_material_dropdown(self):
-        """Update the material dropdown with available materials from the mesh."""
+        """Update the material dropdown with available materials from the mesh (C++ MeshIt style).
+        
+        C++ MeshIt structure:
+        - 3D Materials: Formations (tetrahedra)
+        - 2D Materials: Faults (triangles)
+        - 1D Materials: Wells (edges)
+        """
         if not hasattr(self, 'tetra_material_combo'):
             return
             
@@ -17531,9 +18780,22 @@ segmentation, triangulation, and visualization.
                         material_name = f"Material {mat_id}"
                         self.tetra_material_combo.addItem(material_name)
                         logger.debug(f"Added material from mesh MaterialID: {material_name}")
+            
+            # *** Add 1D Materials (Wells) - C++ style edgemarkerlist ***
+            selected_wells = self._get_selected_well_indices() if hasattr(self, '_get_selected_well_indices') else set()
+            if selected_wells:
+                for well_idx in sorted(selected_wells):
+                    if well_idx < len(self.datasets):
+                        ds = self.datasets[well_idx]
+                        well_name = ds.get('name', f'Well_{well_idx}')
+                        # Well marker = well_idx + 2 (C++ style: 0,1 reserved, polylines start at 2)
+                        well_marker = well_idx + 2
+                        dropdown_name = f"🔵 {well_name} (Well ID {well_marker})"
+                        self.tetra_material_combo.addItem(dropdown_name)
+                        logger.debug(f"Added well to dropdown: {dropdown_name}")
                         
             self.tetra_material_combo.blockSignals(False)
-            logger.info(f"Updated material dropdown with {self.tetra_material_combo.count()} options")
+            logger.info(f"Updated material dropdown with {self.tetra_material_combo.count()} options (incl. {len(selected_wells)} wells)")
             
         except Exception as e:
             self.tetra_material_combo.blockSignals(False)
@@ -20576,9 +21838,102 @@ segmentation, triangulation, and visualization.
                     }
                     seg_uid += 1
 
+        # ======================== WELLS (1D Polylines) ========================
+        # Add wells as separate top-level items in the constraint tree
+        # Wells are 1D elements that are NOT triangulated but ARE passed to TetGen as edge constraints
+        well_count = 0
+        for w_idx, ds in enumerate(self.datasets):
+            if ds.get("type") != "WELL":
+                continue
+            
+            well_count += 1
+            well_name = ds.get("name", f"Well_{w_idx}")
+            
+            # Use refined points if available, otherwise original points
+            well_pts = ds.get("refined_well_points") or ds.get("points")
+            # Handle numpy arrays properly - avoid truth value ambiguity
+            if well_pts is None:
+                continue
+            try:
+                pts_len = len(well_pts)
+            except TypeError:
+                continue
+            if pts_len < 2:
+                continue
+            
+            # Create well item
+            well_item = QTreeWidgetItem(tree)
+            well_item.setText(0, f"🔵 {well_name}")
+            well_item.setText(1, "WELL")
+            well_item.setText(2, str(len(well_pts) - 1))  # Number of segments
+            well_item.setFlags(well_item.flags() | Qt.ItemIsUserCheckable)
+            well_item.setCheckState(0, Qt.Checked)
+            well_item.setData(0, Qt.UserRole, {"type": "well", "well_idx": w_idx, "dataset_idx": w_idx})
+            
+            # Convert points to Vector3D for consistency
+            well_vector3d_pts = []
+            for p in well_pts:
+                if hasattr(p, 'x'):  # Already Vector3D-like
+                    well_vector3d_pts.append(p)
+                else:
+                    pt_type = p[3] if len(p) > 3 else "DEFAULT"
+                    if hasattr(pt_type, 'item'):
+                        pt_type = pt_type.item()
+                    well_vector3d_pts.append(Vector3D(float(p[0]), float(p[1]), float(p[2]), 
+                                                       point_type=str(pt_type) if pt_type else "DEFAULT"))
+            
+            # Segment wells by intersection points (similar to surfaces)
+            well_seg_lists = segment_by_triples(well_vector3d_pts)
+            
+            if not well_seg_lists:
+                # If no triple points, treat entire well as one segment
+                well_seg_lists = [well_vector3d_pts]
+            
+            for k, seg_pts in enumerate(well_seg_lists):
+                seg_item = QTreeWidgetItem(well_item)
+                start_type = get_type(seg_pts[0]) if seg_pts else "DEFAULT"
+                end_type = get_type(seg_pts[-1]) if seg_pts else "DEFAULT"
+                
+                def short_well_type(t):
+                    if t == "INTERSECTION_POINT":
+                        return "INT"
+                    elif t in ("WELL_START", "WELL_END"):
+                        return t.replace("WELL_", "")
+                    elif t == "TRIPLE_POINT":
+                        return "TRIPLE"
+                    else:
+                        return t[:6] if len(t) > 6 else t
+                
+                seg_item.setText(0, f"Seg {k} ({short_well_type(start_type)}→{short_well_type(end_type)})")
+                seg_item.setText(1, "WELL")
+                seg_item.setText(2, str(len(seg_pts) - 1))  # Edges in segment
+                seg_item.setFlags(seg_item.flags() | Qt.ItemIsUserCheckable)
+                seg_item.setCheckState(0, Qt.Checked)
+                seg_item.setData(0, Qt.UserRole, {
+                    "type": "well_constraint",
+                    "well_idx": w_idx,
+                    "dataset_idx": w_idx,
+                    "seg_uid": seg_uid
+                })
+                
+                # Store in segment map with special well key
+                # Use negative index to distinguish from surface segments
+                self._refine_segment_map[(-w_idx - 1, seg_uid)] = {
+                    "points": seg_pts,
+                    "type": "WELL",
+                    "ctype": "WELL",
+                    "is_hole": False,
+                    "selected": True,
+                    "well_idx": w_idx,
+                }
+                seg_uid += 1
+        
+        if well_count > 0:
+            logger.info(f"Added {well_count} wells to constraint tree")
+
         tree.expandAll()
         tree.blockSignals(False)
-        logger.info("Segment-level constraint tree populated (intersection segments between TRIPLE_POINTs and endpoints, no dedup).")
+        logger.info("Segment-level constraint tree populated (intersection segments between TRIPLE_POINTs and endpoints, wells included).")
     def _collect_selected_refine_segments(self, surface_idx: int) -> List[List]:
         """Return list of point-pairs [p1, p2] for all checked segments."""
         if not hasattr(self, "refine_constraint_tree"):
