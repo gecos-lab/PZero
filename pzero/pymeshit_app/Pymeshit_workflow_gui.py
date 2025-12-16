@@ -2700,8 +2700,13 @@ class MeshItWorkflowGUI(QWidget):
         
         file_layout.addLayout(buttons_layout)
 
-        self.load_from_pzero_btn = QPushButton("Load From PZero...")
-        self.load_from_pzero_btn.setToolTip("Send datasets from the active PZero project directly into PyMeshIt")
+        self.load_from_pzero_btn = QPushButton("Advanced Import...")
+        self.load_from_pzero_btn.setToolTip(
+            "Open dialog with advanced options:\n"
+            "- Load TriSurf as points\n"
+            "- Per-surface extension factor\n"
+            "Use the embedded table below for quick loading."
+        )
         self.load_from_pzero_btn.clicked.connect(self._open_pzero_loader_dialog)
         bridge_ready = bool(self.pzero_bridge or self._pending_pzero_bridge)
         self.load_from_pzero_btn.setEnabled(bridge_ready)
@@ -2727,17 +2732,43 @@ class MeshItWorkflowGUI(QWidget):
         
         control_layout.addWidget(file_group)
         
-        # -- Dataset List --
+        # -- Unified Dataset Table (accepts drag-drop from PZero) --
         datasets_group = QGroupBox("Datasets")
         datasets_layout = QVBoxLayout(datasets_group)
         
-        self.dataset_list_widget = QListWidget()
-        self.dataset_list_widget.setToolTip("List of loaded datasets. Select one to view/process.")
-        # Enable extended selection later if needed: self.dataset_list_widget.setSelectionMode(QAbstractItemView.ExtendedSelection)
-        self.dataset_list_widget.itemSelectionChanged.connect(self._on_dataset_selection_changed)
-        self.dataset_list_widget.setContextMenuPolicy(Qt.CustomContextMenu)
-        self.dataset_list_widget.customContextMenuRequested.connect(self._show_dataset_context_menu)
-        datasets_layout.addWidget(self.dataset_list_widget)
+        # Create unified drop-enabled table for datasets
+        self.dataset_table = PZeroUnifiedDatasetTable(self)
+        self.dataset_table.setToolTip(
+            "Drag entities from PZero collection tables here.\n"
+            "Adjust Extension Factor and 'As Points' options per dataset.\n"
+            "Click 'Load' to import pending items."
+        )
+        self.dataset_table.dataset_selection_changed.connect(self._on_unified_dataset_selection_changed)
+        self.dataset_table.dataset_options_changed.connect(self._on_dataset_options_changed)
+        self.dataset_table.load_requested.connect(self._on_load_pending_datasets)
+        datasets_layout.addWidget(self.dataset_table)
+        
+        # Buttons for dataset operations
+        dataset_buttons_layout = QHBoxLayout()
+        
+        self.load_pending_btn = QPushButton("Load Pending")
+        self.load_pending_btn.setToolTip("Load all pending datasets with their current options")
+        self.load_pending_btn.clicked.connect(self._on_load_pending_datasets)
+        self.load_pending_btn.setEnabled(False)
+        dataset_buttons_layout.addWidget(self.load_pending_btn)
+        
+        self.delete_selected_btn = QPushButton("Delete Selected")
+        self.delete_selected_btn.setToolTip("Delete selected datasets")
+        self.delete_selected_btn.clicked.connect(self.delete_selected_surface)
+        dataset_buttons_layout.addWidget(self.delete_selected_btn)
+        
+        self.refresh_pzero_btn = QPushButton("Refresh PZero")
+        self.refresh_pzero_btn.setToolTip("Refresh connection to PZero")
+        self.refresh_pzero_btn.clicked.connect(self._refresh_pzero_connection)
+        self.refresh_pzero_btn.setEnabled(False)
+        dataset_buttons_layout.addWidget(self.refresh_pzero_btn)
+        
+        datasets_layout.addLayout(dataset_buttons_layout)
         
         control_layout.addWidget(datasets_group)
         
@@ -9932,13 +9963,24 @@ segmentation, triangulation, and visualization.
                 f.write(f"{triangle[0]},{triangle[1]},{triangle[2]}\n")
 
     def _show_dataset_context_menu(self, position):
-        """Show context menu for dataset list items"""
-        if self.dataset_list_widget.count() == 0:
-            return
-            
-        # Get selected item
-        selected_items = self.dataset_list_widget.selectedItems()
-        if not selected_items:
+        """Show context menu for dataset table items."""
+        # Get selected dataset index based on which widget we have
+        selected_index = -1
+        widget_for_position = None
+        
+        if hasattr(self, 'dataset_table'):
+            selected_index = self.dataset_table.get_selected_dataset_index()
+            widget_for_position = self.dataset_table
+        elif hasattr(self, 'dataset_list_widget'):
+            if self.dataset_list_widget.count() == 0:
+                return
+            selected_items = self.dataset_list_widget.selectedItems()
+            if not selected_items:
+                return
+            selected_index = self.dataset_list_widget.row(selected_items[0])
+            widget_for_position = self.dataset_list_widget
+        
+        if selected_index < 0:
             return
             
         # Create context menu
@@ -9959,14 +10001,11 @@ segmentation, triangulation, and visualization.
         remove_action = menu.addAction("Remove")
         
         # Show menu at position
-        action = menu.exec_(self.dataset_list_widget.mapToGlobal(position))
+        action = menu.exec_(widget_for_position.mapToGlobal(position))
         
         # Handle action
         if not action:
             return
-            
-        # Get selected dataset index
-        selected_index = self.dataset_list_widget.row(selected_items[0])
         
         if action == rename_action:
             self._rename_dataset(selected_index)
@@ -10076,20 +10115,13 @@ segmentation, triangulation, and visualization.
             QMessageBox.critical(self, "Error", f"Error in batch processing: {str(e)}")
     
     def _on_dataset_selection_changed(self):
-        """Handle dataset selection change"""
-        selected_items = self.dataset_list_widget.selectedItems()
-        if not selected_items:
-            return
-            
-        # Get selected dataset index
-        selected_index = self.dataset_list_widget.row(selected_items[0])
-        
-        # Set as active dataset
-        self.current_dataset_index = selected_index
-        
-        # Update statistics and visualization for the selected dataset
-        self._update_statistics()
-        self._update_visualization()
+        """Handle dataset selection change (for unified table)."""
+        if hasattr(self, 'dataset_table'):
+            selected_index = self.dataset_table.get_selected_dataset_index()
+            if selected_index >= 0:
+                self.current_dataset_index = selected_index
+                self._update_statistics()
+                self._update_visualization()
         
     def _update_statistics(self):
         """Update statistics labels based on loaded datasets"""
@@ -10275,35 +10307,46 @@ segmentation, triangulation, and visualization.
                 self.triple_point_count_label.setText(f"Triple Points: {triple_point_count}")
     
     def _update_dataset_list(self):
-        """Update the dataset list widget"""
+        """Update the unified dataset table with loaded datasets."""
         # Save current selection
         current_index = self.current_dataset_index
         
-        # Clear list
-        self.dataset_list_widget.clear()
+        # Update unified table if available
+        if hasattr(self, 'dataset_table'):
+            self.dataset_table.refresh_loaded_datasets(self.datasets)
+            
+            # Try to restore selection
+            if 0 <= current_index < len(self.datasets):
+                # Select the item at current_index
+                for i in range(self.dataset_table.topLevelItemCount()):
+                    item = self.dataset_table.topLevelItem(i)
+                    if item.data(0, Qt.UserRole + 2) == "loaded" and item.data(0, Qt.UserRole) == current_index:
+                        self.dataset_table.setCurrentItem(item)
+                        break
+            elif len(self.datasets) > 0:
+                self.current_dataset_index = 0
+            else:
+                self.current_dataset_index = -1
         
-        # Add datasets to list
-        for dataset in self.datasets:
-            visibility = "✓" if dataset.get('visible', True) else "✗"
-            color_square = "■ "
-            item_text = f"{color_square}{visibility} {dataset['name']}"
+        # Fallback for old list widget (backward compatibility)
+        elif hasattr(self, 'dataset_list_widget') and hasattr(self.dataset_list_widget, 'clear'):
+            self.dataset_list_widget.clear()
+            for dataset in self.datasets:
+                visibility = "✓" if dataset.get('visible', True) else "✗"
+                color_square = "■ "
+                item_text = f"{color_square}{visibility} {dataset['name']}"
+                item = QListWidgetItem(item_text)
+                color = dataset.get('color', '#000000')
+                item.setForeground(QColor(color))
+                self.dataset_list_widget.addItem(item)
             
-            item = QListWidgetItem(item_text)
-            
-            # Set item color based on dataset color
-            color = dataset.get('color', '#000000')
-            item.setForeground(QColor(color))
-            
-            self.dataset_list_widget.addItem(item)
-        
-        # Restore selection if possible
-        if 0 <= current_index < self.dataset_list_widget.count():
-            self.dataset_list_widget.setCurrentRow(current_index)
-        elif self.dataset_list_widget.count() > 0:
-            self.dataset_list_widget.setCurrentRow(0)
-            self.current_dataset_index = 0
-        else:
-            self.current_dataset_index = -1
+            if 0 <= current_index < self.dataset_list_widget.count():
+                self.dataset_list_widget.setCurrentRow(current_index)
+            elif self.dataset_list_widget.count() > 0:
+                self.dataset_list_widget.setCurrentRow(0)
+                self.current_dataset_index = 0
+            else:
+                self.current_dataset_index = -1
             
         # Update surface visibility checkboxes if the widget exists
         if hasattr(self, 'surface_checkboxes_layout'):
@@ -10454,26 +10497,47 @@ segmentation, triangulation, and visualization.
             self._remove_dataset(self.current_dataset_index)
     
     def delete_selected_surface(self):
-        """Delete the selected surface from the dataset list"""
-        # Get the currently selected item from the dataset list widget
-        current_item = self.dataset_list_widget.currentItem()
-        if current_item is None:
-            QMessageBox.warning(
-                self,
-                "No Selection",
-                "Please select a surface from the dataset list to delete."
-            )
+        """Delete the selected surface from the dataset table."""
+        # Use unified table if available
+        if hasattr(self, 'dataset_table'):
+            selected_index = self.dataset_table.get_selected_dataset_index()
+            if selected_index < 0:
+                QMessageBox.warning(
+                    self,
+                    "No Selection",
+                    "Please select a loaded dataset to delete."
+                )
+                return
+            
+            if 0 <= selected_index < len(self.datasets):
+                self._remove_dataset(selected_index)
+            else:
+                QMessageBox.warning(
+                    self,
+                    "Invalid Selection",
+                    "The selected item is not valid."
+                )
             return
         
-        # Get the current row index
-        current_row = self.dataset_list_widget.currentRow()
-        if 0 <= current_row < len(self.datasets):
-            self._remove_dataset(current_row)
-        else:
-            QMessageBox.warning(
-                self,
-                "Invalid Selection",
-                "The selected item is not valid."
+        # Fallback for old widget
+        if hasattr(self, 'dataset_list_widget'):
+            current_item = self.dataset_list_widget.currentItem()
+            if current_item is None:
+                QMessageBox.warning(
+                    self,
+                    "No Selection",
+                    "Please select a surface from the dataset list to delete."
+                )
+                return
+            
+            current_row = self.dataset_list_widget.currentRow()
+            if 0 <= current_row < len(self.datasets):
+                self._remove_dataset(current_row)
+            else:
+                QMessageBox.warning(
+                    self,
+                    "Invalid Selection",
+                    "The selected item is not valid."
             )
     # ------------------------------------------------------------------ #
     # Integration with PZero
@@ -10485,13 +10549,78 @@ segmentation, triangulation, and visualization.
             self.load_from_pzero_btn.setEnabled(bool(bridge))
         if hasattr(self, "export_to_pzero_btn"):
             self._update_export_to_pzero_button_state()
+        # Enable refresh button for unified table
+        if hasattr(self, "refresh_pzero_btn"):
+            self.refresh_pzero_btn.setEnabled(bool(bridge))
         if bridge:
-            self.statusBar().showMessage("Connected to current PZero project")
+            self.statusBar().showMessage("Connected to PZero - drag entities to Datasets table")
 
     def _on_border_extension_changed(self, value: float):
         """Update border extension factor when user changes the value."""
         self.border_extension_factor = value
         logger.info(f"Border extension factor updated to: {value:.2f}")
+
+    def _on_unified_dataset_selection_changed(self, index: int):
+        """Handle selection change in the unified dataset table."""
+        if index >= 0 and index < len(self.datasets):
+            self.current_dataset_index = index
+            self._update_statistics()
+            self._update_visualization()
+    
+    def _on_dataset_options_changed(self, index: int, extension_factor: float, as_points: bool):
+        """Handle options change for a dataset (for future use with reload)."""
+        # Currently just log the change
+        logger.info(f"Dataset {index} options changed: extend={extension_factor}, as_points={as_points}")
+    
+    def _on_load_pending_datasets(self):
+        """Load all pending datasets from the unified table."""
+        if not self.pzero_bridge:
+            QMessageBox.warning(
+                self,
+                "Not Connected",
+                "PZero bridge is not connected.",
+            )
+            return
+        
+        if not hasattr(self, 'dataset_table'):
+            return
+        
+        # Get pending records with their options
+        pending_records = self.dataset_table.get_pending_records()
+        
+        if not pending_records:
+            self.statusBar().showMessage("No pending datasets to load")
+            return
+        
+        loaded, skipped = self._import_pzero_records(pending_records)
+        if loaded:
+            message = f"Imported {loaded} dataset(s)"
+            if skipped:
+                message += f" ({skipped} skipped)"
+            self.statusBar().showMessage(message)
+            # Clear pending items from table
+            self.dataset_table.clear_pending()
+            # Refresh the table to show loaded datasets
+            self._update_dataset_list()
+        else:
+            self.statusBar().showMessage("No entities imported")
+            QMessageBox.warning(
+                self,
+                "Import Failed",
+                "None of the pending entities provided usable point data.",
+            )
+    
+    def _refresh_pzero_connection(self):
+        """Refresh connection to PZero and update status."""
+        if self.pzero_bridge:
+            try:
+                count = len(self.pzero_bridge.list_entities())
+                self.statusBar().showMessage(f"PZero connected: {count} entities available for drag-drop")
+            except Exception as exc:
+                logger.error("Failed to refresh PZero connection: %s", exc)
+                self.statusBar().showMessage("Error connecting to PZero")
+        else:
+            self.statusBar().showMessage("PZero not connected")
 
     def _open_pzero_loader_dialog(self):
         """Show a dialog that lets the user pick PZero entities to import."""
@@ -12819,12 +12948,14 @@ segmentation, triangulation, and visualization.
             self.progress_dialog.setValue(self.processed_count)
         # --- END EDIT ---
 
-        # Update dataset list styling
-        item = self.dataset_list_widget.item(index)
-        if success:
-            item.setForeground(QColor(Qt.black))
-        else:
-            item.setForeground(QColor(Qt.red))
+        # Update dataset list styling (if using old widget)
+        if hasattr(self, 'dataset_list_widget') and hasattr(self.dataset_list_widget, 'item'):
+            item = self.dataset_list_widget.item(index)
+            if item:
+                if success:
+                    item.setForeground(QColor(Qt.black))
+                else:
+                    item.setForeground(QColor(Qt.red))
 
     def handle_batch_finished(self, success_count, total_eligible, elapsed_time):
         """Handles the completion of a batch computation."""
@@ -20893,7 +21024,14 @@ segmentation, triangulation, and visualization.
                 except Exception:
                     pass
             
-            # Disconnect dataset list signals
+            # Disconnect dataset table signals
+            if hasattr(self, 'dataset_table'):
+                try:
+                    self.dataset_table.itemSelectionChanged.disconnect()
+                except Exception:
+                    pass
+            
+            # Disconnect old dataset list signals (backward compatibility)
             if hasattr(self, 'dataset_list_widget'):
                 try:
                     self.dataset_list_widget.itemSelectionChanged.disconnect()
@@ -22852,6 +22990,306 @@ segmentation, triangulation, and visualization.
         except (TypeError, ValueError, IndexError):
             # Handle any conversion errors or invalid point formats
             return False
+
+
+# Custom MIME type for PZero entity drag-drop
+PZERO_ENTITY_MIME_TYPE = "application/x-pzero-entity"
+
+
+class PZeroUnifiedDatasetTable(QTreeWidget):
+    """
+    Unified table that shows both loaded datasets and accepts drops from PZero.
+    
+    Each row shows: Name, Type, Extension Factor (spinbox), As Points (checkbox), Status
+    Drag-drop from PZero adds items as "Pending" which can then be loaded.
+    """
+    
+    # Signals
+    dataset_selection_changed = Signal(int)  # dataset index
+    dataset_options_changed = Signal(int, float, bool)  # index, extension_factor, as_points
+    load_requested = Signal()  # request to load pending datasets
+    
+    # Column indices
+    COL_NAME = 0
+    COL_TYPE = 1
+    COL_EXTEND = 2
+    COL_AS_POINTS = 3
+    COL_STATUS = 4
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._parent_gui = parent
+        self._pending_items = []  # List of pending PZero records
+        
+        # Setup columns
+        self.setColumnCount(5)
+        self.setHeaderLabels(["Name", "Type", "Extend", "As Points", "Status"])
+        self.setAlternatingRowColors(True)
+        self.setRootIsDecorated(False)
+        self.setSelectionMode(QAbstractItemView.SingleSelection)
+        
+        # Enable drag-drop
+        self.setAcceptDrops(True)
+        self.setDragDropMode(QAbstractItemView.DropOnly)
+        
+        # Connect selection signal
+        self.itemSelectionChanged.connect(self._on_selection_changed)
+        
+        # Set column widths
+        header = self.header()
+        header.setStretchLastSection(False)
+        header.setSectionResizeMode(self.COL_NAME, QHeaderView.Stretch)
+        header.setSectionResizeMode(self.COL_TYPE, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(self.COL_EXTEND, QHeaderView.Fixed)
+        header.setSectionResizeMode(self.COL_AS_POINTS, QHeaderView.Fixed)
+        header.setSectionResizeMode(self.COL_STATUS, QHeaderView.ResizeToContents)
+        self.setColumnWidth(self.COL_EXTEND, 70)
+        self.setColumnWidth(self.COL_AS_POINTS, 70)
+    
+    def dragEnterEvent(self, event):
+        """Accept drag events from PZero tables."""
+        mime_data = event.mimeData()
+        if mime_data.hasFormat(PZERO_ENTITY_MIME_TYPE):
+            event.acceptProposedAction()
+        elif mime_data.hasText() and mime_data.text().startswith("pzero://"):
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+    
+    def dragMoveEvent(self, event):
+        """Continue accepting the drag."""
+        mime_data = event.mimeData()
+        if mime_data.hasFormat(PZERO_ENTITY_MIME_TYPE):
+            event.acceptProposedAction()
+        elif mime_data.hasText() and mime_data.text().startswith("pzero://"):
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+    
+    def dropEvent(self, event):
+        """Handle drop from PZero tables - add as pending items."""
+        mime_data = event.mimeData()
+        
+        collection_key = None
+        uids = []
+        
+        if mime_data.hasFormat(PZERO_ENTITY_MIME_TYPE):
+            data = bytes(mime_data.data(PZERO_ENTITY_MIME_TYPE)).decode('utf-8')
+            if ':' in data:
+                collection_key, uid_str = data.split(':', 1)
+                uids = [u.strip() for u in uid_str.split(',') if u.strip()]
+        elif mime_data.hasText():
+            text = mime_data.text()
+            if text.startswith("pzero://"):
+                path = text[8:]
+                if '/' in path:
+                    collection_key, uid_str = path.split('/', 1)
+                    uids = [u.strip() for u in uid_str.split(',') if u.strip()]
+        
+        if collection_key and uids:
+            event.acceptProposedAction()
+            self._add_pending_from_pzero(collection_key, uids)
+        else:
+            event.ignore()
+    
+    def _add_pending_from_pzero(self, collection_key: str, uids: list):
+        """Add pending items from PZero drag-drop.
+        
+        For boundary collections, all 6 faces (with different face_id) are added.
+        """
+        if not self._parent_gui or not self._parent_gui.pzero_bridge:
+            return
+        
+        try:
+            all_records = self._parent_gui.pzero_bridge.list_entities()
+        except Exception:
+            return
+        
+        # Filter to matching records
+        # For boundaries, multiple records with same uid but different face_id exist
+        for record in all_records:
+            if record.collection_key == collection_key and record.uid in uids:
+                # Check if already exists using uid + face_id combination
+                record_key = self._get_record_key(record)
+                if self._record_exists_by_key(record_key):
+                    continue
+                self._add_pending_item(record)
+        
+        # Update load button state
+        self._update_load_button_state()
+    
+    def _get_record_key(self, record) -> str:
+        """Get unique key for a record (uid + face_id for boundaries)."""
+        face_id = getattr(record, 'face_id', None)
+        if face_id is not None:
+            return f"{record.uid}_{face_id}"
+        return record.uid
+    
+    def _record_exists(self, uid: str) -> bool:
+        """Check if a record with this UID already exists (simple check)."""
+        return self._record_exists_by_key(uid)
+    
+    def _record_exists_by_key(self, record_key: str) -> bool:
+        """Check if a record with this key already exists.
+        
+        For boundaries, key includes face_id (e.g., 'uid_0' for bottom face).
+        For other entities, key is just the uid.
+        """
+        for i in range(self.topLevelItemCount()):
+            item = self.topLevelItem(i)
+            item_key = item.data(0, Qt.UserRole + 3)  # Store key in UserRole + 3
+            if item_key == record_key:
+                return True
+            # Fallback to uid check for backward compatibility
+            if item.data(0, Qt.UserRole + 1) == record_key:
+                return True
+        # Also check pending
+        for pending in self._pending_items:
+            pending_key = self._get_record_key(pending['record'])
+            if pending_key == record_key:
+                return True
+        return False
+    
+    def _add_pending_item(self, record):
+        """Add a pending item to the table with editable options."""
+        item = QTreeWidgetItem()
+        item.setText(self.COL_NAME, record.name)
+        item.setText(self.COL_TYPE, record.topology or "-")
+        item.setText(self.COL_STATUS, "⏳ Pending")
+        item.setData(0, Qt.UserRole, record)  # Store record
+        item.setData(0, Qt.UserRole + 1, record.uid)  # Store UID for lookup
+        item.setData(0, Qt.UserRole + 2, "pending")  # Status flag
+        item.setData(0, Qt.UserRole + 3, self._get_record_key(record))  # Store unique key
+        
+        self.addTopLevelItem(item)
+        
+        # Add Extension Factor spinbox
+        extend_spin = QDoubleSpinBox()
+        extend_spin.setRange(0.0, 1.0)
+        extend_spin.setSingleStep(0.05)
+        extend_spin.setDecimals(2)
+        extend_spin.setValue(0.0)
+        extend_spin.setToolTip("Extension factor (0.2 = 20% extension)")
+        self.setItemWidget(item, self.COL_EXTEND, extend_spin)
+        
+        # Add "As Points" checkbox
+        as_points_cb = QCheckBox()
+        as_points_cb.setChecked(False)
+        as_points_cb.setToolTip("Load as points instead of triangles")
+        as_points_cb.setEnabled(record.topology == "TriSurf")
+        # Center the checkbox
+        cb_widget = QWidget()
+        cb_layout = QHBoxLayout(cb_widget)
+        cb_layout.addWidget(as_points_cb)
+        cb_layout.setAlignment(Qt.AlignCenter)
+        cb_layout.setContentsMargins(0, 0, 0, 0)
+        self.setItemWidget(item, self.COL_AS_POINTS, cb_widget)
+        
+        # Store reference to pending item
+        self._pending_items.append({
+            'record': record,
+            'item': item,
+            'extend_spin': extend_spin,
+            'as_points_cb': as_points_cb,
+        })
+        
+        # Select the new item
+        self.setCurrentItem(item)
+    
+    def add_loaded_dataset(self, dataset: dict, index: int):
+        """Add a loaded dataset to the table."""
+        item = QTreeWidgetItem()
+        
+        # Show visibility indicator
+        visibility = "✓" if dataset.get('visible', True) else "✗"
+        item.setText(self.COL_NAME, f"{visibility} {dataset['name']}")
+        item.setText(self.COL_TYPE, dataset.get('type', '-'))
+        item.setText(self.COL_STATUS, "✅ Loaded")
+        item.setData(0, Qt.UserRole, index)  # Store dataset index
+        item.setData(0, Qt.UserRole + 1, dataset.get('uid', f"loaded_{index}"))
+        item.setData(0, Qt.UserRole + 2, "loaded")  # Status flag
+        
+        # Set color based on dataset color
+        color = dataset.get('color', '#000000')
+        item.setForeground(self.COL_NAME, QColor(color))
+        
+        self.addTopLevelItem(item)
+        
+        # For loaded items, show read-only extension factor
+        ext_factor = dataset.get('surface_extension_factor', 0.0)
+        item.setText(self.COL_EXTEND, f"{ext_factor:.2f}")
+        
+        # Show if loaded as points
+        is_trisurf = dataset.get('type') == "TriSurf"
+        is_pre_tri = dataset.get('is_pre_triangulated', False)
+        if is_trisurf and not is_pre_tri:
+            item.setText(self.COL_AS_POINTS, "Yes")
+        else:
+            item.setText(self.COL_AS_POINTS, "-")
+    
+    def get_pending_records(self) -> list:
+        """Get all pending records with their options."""
+        records = []
+        for pending in self._pending_items:
+            record = pending['record']
+            extend_factor = pending['extend_spin'].value()
+            as_points = pending['as_points_cb'].isChecked()
+            records.append((record, as_points, extend_factor))
+        return records
+    
+    def clear_pending(self):
+        """Clear all pending items after they've been loaded."""
+        for pending in self._pending_items:
+            index = self.indexOfTopLevelItem(pending['item'])
+            if index >= 0:
+                self.takeTopLevelItem(index)
+        self._pending_items.clear()
+        self._update_load_button_state()
+    
+    def refresh_loaded_datasets(self, datasets: list):
+        """Refresh the table with current loaded datasets."""
+        # Remove all loaded items (keep pending)
+        items_to_remove = []
+        for i in range(self.topLevelItemCount()):
+            item = self.topLevelItem(i)
+            if item.data(0, Qt.UserRole + 2) == "loaded":
+                items_to_remove.append(item)
+        
+        for item in items_to_remove:
+            index = self.indexOfTopLevelItem(item)
+            if index >= 0:
+                self.takeTopLevelItem(index)
+        
+        # Add loaded datasets
+        for i, dataset in enumerate(datasets):
+            self.add_loaded_dataset(dataset, i)
+    
+    def get_selected_dataset_index(self) -> int:
+        """Get the index of the selected loaded dataset, or -1."""
+        current = self.currentItem()
+        if current and current.data(0, Qt.UserRole + 2) == "loaded":
+            return current.data(0, Qt.UserRole)
+        return -1
+    
+    def _on_selection_changed(self):
+        """Handle selection change."""
+        idx = self.get_selected_dataset_index()
+        if idx >= 0:
+            self.dataset_selection_changed.emit(idx)
+    
+    def _update_load_button_state(self):
+        """Update the Load Pending button state."""
+        if self._parent_gui and hasattr(self._parent_gui, 'load_pending_btn'):
+            has_pending = len(self._pending_items) > 0
+            self._parent_gui.load_pending_btn.setEnabled(has_pending)
+            if has_pending:
+                self._parent_gui.load_pending_btn.setText(f"Load Pending ({len(self._pending_items)})")
+            else:
+                self._parent_gui.load_pending_btn.setText("Load Pending")
+    
+    def has_pending_items(self) -> bool:
+        """Check if there are pending items."""
+        return len(self._pending_items) > 0
 
 
 class PZeroEntitySelectionDialog(QDialog):

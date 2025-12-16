@@ -489,12 +489,77 @@ class BaseTableModel(QAbstractTableModel):
         return self.collection.df.shape[1]
 
     def flags(self, index):
-        """Set editable columns."""
+        """Set editable columns and enable drag."""
+        base_flags = Qt.ItemIsEnabled | Qt.ItemIsSelectable | Qt.ItemIsDragEnabled
         if index.column() in self.collection.editable_columns:
-            return Qt.ItemFlags(
-                QAbstractTableModel.flags(self, index) | Qt.ItemIsEditable
-            )
-        return Qt.ItemIsEnabled | Qt.ItemIsSelectable
+            return Qt.ItemFlags(base_flags | Qt.ItemIsEditable)
+        return base_flags
+    
+    def supportedDragActions(self):
+        """Enable copy action for dragging."""
+        return Qt.CopyAction
+    
+    def mimeTypes(self):
+        """Return supported MIME types for drag operations."""
+        return ["application/x-pzero-entity", "text/plain"]
+    
+    def mimeData(self, indexes):
+        """Create MIME data for drag operations containing entity UIDs."""
+        from PySide6.QtCore import QMimeData, QByteArray
+        
+        if not indexes:
+            return None
+        
+        # Get unique row indices to avoid duplicates when multiple columns selected
+        rows = set()
+        for index in indexes:
+            if index.isValid():
+                rows.add(index.row())
+        
+        if not rows:
+            return None
+        
+        # Extract UIDs (column 0) for selected rows
+        uids = []
+        for row in sorted(rows):
+            uid = self.collection.df.iloc[row, 0]  # Column 0 is always UID
+            if uid:
+                uids.append(str(uid))
+        
+        if not uids:
+            return None
+        
+        # Get the collection key from the collection name
+        collection_key = self._get_collection_key()
+        
+        mime_data = QMimeData()
+        
+        # Custom format: "collection_key:uid1,uid2,uid3"
+        data_str = f"{collection_key}:{','.join(uids)}"
+        mime_data.setData("application/x-pzero-entity", QByteArray(data_str.encode('utf-8')))
+        
+        # Also set text format as fallback
+        text_data = f"pzero://{collection_key}/{','.join(uids)}"
+        mime_data.setText(text_data)
+        
+        return mime_data
+    
+    def _get_collection_key(self) -> str:
+        """Get the collection key from the collection name."""
+        # Map collection class names to their keys
+        name_to_key = {
+            "GeologicalCollection": "geol_coll",
+            "XSectionCollection": "xsect_coll",
+            "DomCollection": "dom_coll",
+            "ImageCollection": "image_coll",
+            "Mesh3DCollection": "mesh3d_coll",
+            "BoundaryCollection": "boundary_coll",
+            "WellCollection": "well_coll",
+            "FluidCollection": "fluid_coll",
+            "BackgroundCollection": "backgrnd_coll",
+        }
+        class_name = self.collection.__class__.__name__
+        return name_to_key.get(class_name, "unknown_coll")
 
     def setData(self, index, value, qt_role=Qt.EditRole):
         """This is the method allowing to edit the table and the underlying dataframe.

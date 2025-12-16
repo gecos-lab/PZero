@@ -14,7 +14,7 @@ from typing import Optional
 
 from PySide6.QtCore import Signal as pyqtSignal, Qt
 from PySide6.QtCore import QObject
-from PySide6.QtWidgets import QMainWindow, QMessageBox, QDockWidget
+from PySide6.QtWidgets import QMainWindow, QMessageBox, QDockWidget, QAbstractItemView
 from PySide6.QtGui import QAction
 
 from pandas import DataFrame as pd_DataFrame
@@ -1300,6 +1300,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.backgrnd_coll = BackgroundCollection(parent=self)
         self.BackgroundsTableView.setModel(self.backgrnd_coll.proxy_table_model)
 
+        # Enable drag from collection table views to PyMeshIt
+        self._enable_drag_on_table_views()
+
         # Create the geol_coll.legend_df legend table (a Pandas dataframe), create the corresponding QT
         # Legend self.legend (a Qt QTreeWidget that is internally connected to its data source),
         # and update the widget.
@@ -1325,6 +1328,27 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.prop_legend_df = pd_DataFrame(PropertiesCMaps.prop_cmap_dict)
         self.prop_legend = PropertiesCMaps()
         self.prop_legend.update_widget(parent=self)
+
+    def _enable_drag_on_table_views(self):
+        """Enable drag functionality on all collection table views for PyMeshIt integration."""
+        # List of all table views that should support drag
+        table_views = [
+            self.GeologyTableView,
+            self.XSectionsTableView,
+            self.DOMsTableView,
+            self.ImagesTableView,
+            self.Meshes3DTableView,
+            self.BoundariesTableView,
+            self.WellsTableView,
+            self.FluidsTableView,
+            self.BackgroundsTableView,
+        ]
+        
+        for table_view in table_views:
+            # Enable drag on the table view
+            table_view.setDragEnabled(True)
+            table_view.setDragDropMode(QAbstractItemView.DragOnly)
+            table_view.setDefaultDropAction(Qt.CopyAction)
 
     def save_project(self):
         # ________________________________________WRITERS TO BE MOVED TO COLLECTIONS
