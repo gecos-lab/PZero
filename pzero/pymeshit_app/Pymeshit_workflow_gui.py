@@ -7259,6 +7259,7 @@ class MeshItWorkflowGUI(QWidget):
         if fails:
             logger.warning(f"Conforming mesh generation failures: {len(fails)}")
         self._update_refined_visualization()
+        self._update_export_to_pzero_button_state()  # Enable Export to PZero when surfaces are ready
         self.statusBar().showMessage(f"Conforming surface mesh generation finished: {ok}/{total} succeeded.", 6000)
 
 
@@ -9645,6 +9646,7 @@ segmentation, triangulation, and visualization.
             self._update_statistics()
             self._visualize_all_triangulations()
             self._update_visualization()
+            self._update_export_to_pzero_button_state()  # Enable Export to PZero when surfaces are triangulated
             self.notebook.setCurrentIndex(3)
             self.statusBar().showMessage(f"Completed triangulation for {self.datasets[self.current_dataset_index]['name']}") # Add success message here
 
@@ -13006,6 +13008,8 @@ segmentation, triangulation, and visualization.
         logger.debug("Thread and worker references cleared.")
 
         self._enable_compute_buttons()
+        # Update export button state after any batch computation
+        self._update_export_to_pzero_button_state()
         # OPTIMIZATION: Update visualization only for current tab instead of all tabs
         if not is_intersection_task:
             # Only update visualization for the currently active tab to reduce load
@@ -14422,7 +14426,7 @@ segmentation, triangulation, and visualization.
         self.export_to_pzero_btn = QPushButton("📤 Export to PZero")
         self.export_to_pzero_btn.clicked.connect(self._export_to_pzero)
         self.export_to_pzero_btn.setEnabled(False)
-        self.export_to_pzero_btn.setToolTip("Export tetrahedral mesh to PZero mesh3d collection")
+        self.export_to_pzero_btn.setToolTip("Export all results to PZero:\n• Surfaces → Geology collection (geol_coll)\n• Wells → Well collection (well_coll)\n• Tetrahedral mesh → 3D Mesh collection (mesh3d_coll)")
         generate_layout.addWidget(self.export_to_pzero_btn)
         
         self.generate_stats_btn = QPushButton("📊 Generate Statistics")
@@ -16181,22 +16185,30 @@ segmentation, triangulation, and visualization.
         """Update the enabled state of the Export to PZero button."""
         has_mesh = hasattr(self, 'tetrahedral_mesh') and self.tetrahedral_mesh is not None
         has_bridge = self.pzero_bridge is not None
+        # Also enable if we have any triangulated surfaces or conforming meshes
+        has_surfaces = False
+        if hasattr(self, 'datasets'):
+            for ds in self.datasets:
+                if ds.get('conforming_mesh') or ds.get('triangulation_result'):
+                    has_surfaces = True
+                    break
+        has_exportable_content = has_mesh or has_surfaces
         if hasattr(self, 'export_to_pzero_btn'):
-            self.export_to_pzero_btn.setEnabled(has_mesh and has_bridge)
+            self.export_to_pzero_btn.setEnabled(has_exportable_content and has_bridge)
         if hasattr(self, 'generate_stats_btn'):
             self.generate_stats_btn.setEnabled(has_mesh)
 
     def _export_to_pzero(self):
         """
-        Export tetrahedral mesh to PZero mesh3d collection.
+        Export all PyMeshIt results to PZero collections.
         
-        Converts PyVista UnstructuredGrid to TetraSolid and adds it to the mesh3d collection
-        with all properties preserved.
+        This comprehensive export includes:
+        - All triangulated surfaces (TriSurf) → geol_coll (Geology collection)
+        - All wells/polylines (PolyLine) → well_coll (Well collection)
+        - Final tetrahedral mesh (TetraSolid) → mesh3d_coll (3D Mesh collection)
+        
+        Surfaces are assigned roles based on their type (fault → 'fault', others → 'formation').
         """
-        if not hasattr(self, 'tetrahedral_mesh') or not self.tetrahedral_mesh:
-            QMessageBox.warning(self, "No Mesh", "No tetrahedral mesh to export.")
-            return
-        
         if not self.pzero_bridge:
             QMessageBox.warning(
                 self, 
@@ -16209,150 +16221,313 @@ segmentation, triangulation, and visualization.
             # Get the project window from the bridge
             project_window = self.pzero_bridge._project
             
-            # Get the mesh (handle both dict and direct UnstructuredGrid)
-            if isinstance(self.tetrahedral_mesh, dict):
-                mesh = self.tetrahedral_mesh.get('pyvista_grid', self.tetrahedral_mesh)
-            else:
-                mesh = self.tetrahedral_mesh
-            
-            if not isinstance(mesh, pv.UnstructuredGrid):
-                QMessageBox.critical(
-                    self, 
-                    "Invalid Mesh Type", 
-                    f"Expected PyVista UnstructuredGrid, got {type(mesh)}"
-                )
-                return
-            
-            # Update generator with current materials (including faults with markers)
-            if hasattr(self, 'tetra_materials') and hasattr(self, 'tetra_mesh_generator'):
-                self.tetra_mesh_generator.tetra_materials = self.tetra_materials
-                logger.info(f"Updated generator with {len(self.tetra_materials)} materials for PZero export")
-                
-                # Debug: Log fault materials specifically
-                fault_mats = [m for m in self.tetra_materials if m.get('type') == 'FAULT']
-                logger.info(f"DEBUG: Found {len(fault_mats)} fault materials for PZero export")
-                for fm in fault_mats:
-                    logger.info(f"DEBUG: Fault {fm.get('name')}: attribute={fm.get('attribute')}, marker={fm.get('marker')}")
-            
-            # Get mesh with embedded faults (C++ MeshIt style)
-            logger.info("Creating combined mesh with embedded faults for PZero export...")
-            combined_mesh = self.tetra_mesh_generator.get_mesh_with_embedded_faults(mesh)
-            
-            if combined_mesh is None:
-                logger.warning("Failed to create mesh with embedded faults, using original mesh")
-                combined_mesh = mesh
-            
             # Import required modules
-            from pzero.entities_factory import TetraSolid
+            from pzero.entities_factory import TetraSolid, TriSurf, PolyLine
             from copy import deepcopy
             from uuid import uuid4
-            
-            # Convert PyVista UnstructuredGrid to VTK UnstructuredGrid
-            # PyVista meshes are already VTK objects, we need to make a copy and change the class
-            # Use DeepCopy to ensure we don't modify the original mesh
-            vtk_mesh = TetraSolid()
-            vtk_mesh.DeepCopy(combined_mesh)
-            
-            # Verify the mesh has cells
-            if vtk_mesh.GetNumberOfCells() == 0:
-                QMessageBox.critical(
-                    self,
-                    "Invalid Mesh",
-                    "The mesh has no cells. Cannot export empty mesh."
-                )
-                return
-            
-            # Extract properties from the mesh
-            properties_names = []
-            properties_components = []
-            properties_types = []
-            
-            # Extract point data properties using VTK methods
-            # Access point data arrays directly from VTK object
-            point_data_obj = vtk_mesh.GetPointData()
-            if point_data_obj:
-                num_arrays = point_data_obj.GetNumberOfArrays()
-                for i in range(num_arrays):
-                    array = point_data_obj.GetArray(i)
-                    if array:
-                        key = array.GetName()
-                        if key and key not in properties_names:
-                            properties_names.append(key)
-                            components = array.GetNumberOfComponents()
-                            properties_components.append(components)
-                            # Get data type
-                            dtype_str = array.GetDataTypeAsString()
-                            properties_types.append(dtype_str)
-            
-            # Extract cell data properties using VTK methods
-            cell_data_obj = vtk_mesh.GetCellData()
-            if cell_data_obj:
-                num_arrays = cell_data_obj.GetNumberOfArrays()
-                for i in range(num_arrays):
-                    array = cell_data_obj.GetArray(i)
-                    if array:
-                        key = array.GetName()
-                        if key and key not in properties_names:
-                            properties_names.append(key)
-                            components = array.GetNumberOfComponents()
-                            properties_components.append(components)
-                            # Get data type
-                            dtype_str = array.GetDataTypeAsString()
-                            properties_types.append(dtype_str)
-            
-            # Create entity dictionary matching mesh3d collection format
-            entity_dict = deepcopy(project_window.mesh3d_coll.entity_dict)
-            entity_dict["uid"] = str(uuid4())
-            entity_dict["name"] = f"TetraMesh_{time.strftime('%Y%m%d_%H%M%S')}"
-            entity_dict["scenario"] = "undef"
-            entity_dict["x_section"] = ""
-            entity_dict["topology"] = "TetraSolid"
-            entity_dict["vtk_obj"] = vtk_mesh
-            entity_dict["properties_names"] = properties_names
-            entity_dict["properties_components"] = properties_components
-            entity_dict["properties_types"] = properties_types
-            
-            # Add to mesh3d collection
-            project_window.mesh3d_coll.add_entity_from_dict(entity_dict=entity_dict)
-            
-            # Count faults and tetrahedra
             import numpy as np
-            num_tetrahedra = 0
-            num_fault_triangles = 0
-            if 'CellType' in properties_names:
-                # CellType: 0=Tetrahedra, 1=Triangle(Fault)
-                cell_type_array = vtk_mesh.GetCellData().GetArray('CellType')
-                if cell_type_array:
-                    cell_types = np.array([cell_type_array.GetValue(i) for i in range(cell_type_array.GetNumberOfTuples())])
-                    num_tetrahedra = np.sum(cell_types == 0)
-                    num_fault_triangles = np.sum(cell_types == 1)
+            from vtk import vtkPoints, vtkCellArray, vtkLine, vtkTriangle
+            
+            # Track export statistics
+            exported_surfaces = 0
+            exported_wells = 0
+            exported_mesh = False
+            export_details = []
+            
+            timestamp = time.strftime('%Y%m%d_%H%M%S')
+            
+            # ================================================================
+            # STEP 1: Export all triangulated surfaces to geol_coll
+            # ================================================================
+            logger.info("Exporting triangulated surfaces to PZero geology collection...")
+            
+            for dataset_idx, dataset in enumerate(self.datasets):
+                dataset_name = dataset.get('name', f'Surface_{dataset_idx}')
+                dataset_type = dataset.get('type', '').upper()
+                
+                # Skip wells - they go to well_coll
+                if dataset_type in ('WELL', 'POLYLINE'):
+                    continue
+                
+                # Check for conforming mesh first (from Refine tab), then triangulation_result
+                vertices = None
+                triangles = None
+                
+                if 'conforming_mesh' in dataset:
+                    cm = dataset['conforming_mesh']
+                    if 'vertices' in cm and 'triangles' in cm:
+                        vertices = np.asarray(cm['vertices'])
+                        triangles = np.asarray(cm['triangles'])
+                        logger.info(f"Using conforming mesh for '{dataset_name}'")
+                
+                if vertices is None and 'triangulation_result' in dataset:
+                    tr = dataset['triangulation_result']
+                    if 'vertices' in tr and 'triangles' in tr:
+                        vertices = np.asarray(tr['vertices'])
+                        triangles = np.asarray(tr['triangles'])
+                        logger.info(f"Using triangulation result for '{dataset_name}'")
+                
+                if vertices is None or triangles is None or len(vertices) < 3 or len(triangles) < 1:
+                    logger.warning(f"Skipping '{dataset_name}': no valid triangulation found")
+                    continue
+                
+                try:
+                    # Create TriSurf VTK object
+                    trisurf = TriSurf()
+                    
+                    # Add points
+                    vtk_points = vtkPoints()
+                    for pt in vertices:
+                        vtk_points.InsertNextPoint(float(pt[0]), float(pt[1]), float(pt[2]))
+                    trisurf.SetPoints(vtk_points)
+                    
+                    # Add triangles
+                    vtk_triangles = vtkCellArray()
+                    for tri in triangles:
+                        triangle = vtkTriangle()
+                        triangle.GetPointIds().SetId(0, int(tri[0]))
+                        triangle.GetPointIds().SetId(1, int(tri[1]))
+                        triangle.GetPointIds().SetId(2, int(tri[2]))
+                        vtk_triangles.InsertNextCell(triangle)
+                    trisurf.SetPolys(vtk_triangles)
+                    
+                    # Determine role based on dataset type
+                    role = 'fault' if dataset_type == 'FAULT' else 'formation'
+                    
+                    # Create entity dictionary for geol_coll
+                    entity_dict = deepcopy(project_window.geol_coll.entity_dict)
+                    entity_dict["uid"] = str(uuid4())
+                    entity_dict["name"] = f"{dataset_name}"
+                    entity_dict["scenario"] = "PyMeshIt"
+                    entity_dict["x_section"] = ""
+                    entity_dict["topology"] = "TriSurf"
+                    entity_dict["vtk_obj"] = trisurf
+                    entity_dict["role"] = role
+                    entity_dict["feature"] = dataset.get('feature', 'undef')
+                    entity_dict["properties_names"] = []
+                    entity_dict["properties_components"] = []
+                    
+                    # Add to geology collection
+                    project_window.geol_coll.add_entity_from_dict(entity_dict=entity_dict)
+                    exported_surfaces += 1
+                    export_details.append(f"✓ Surface '{dataset_name}' → geol_coll ({role})")
+                    logger.info(f"Exported surface '{dataset_name}' to geol_coll: {len(vertices)} vertices, {len(triangles)} triangles")
+                    
+                except Exception as surf_err:
+                    logger.error(f"Failed to export surface '{dataset_name}': {surf_err}")
+                    export_details.append(f"✗ Surface '{dataset_name}' failed: {str(surf_err)}")
+            
+            # ================================================================
+            # STEP 2: Export all wells/polylines to well_coll
+            # ================================================================
+            logger.info("Exporting wells to PZero well collection...")
+            
+            for dataset_idx, dataset in enumerate(self.datasets):
+                dataset_name = dataset.get('name', f'Well_{dataset_idx}')
+                dataset_type = dataset.get('type', '').upper()
+                
+                # Only process wells/polylines
+                if dataset_type not in ('WELL', 'POLYLINE'):
+                    continue
+                
+                # Get well points - check multiple possible sources
+                well_points = None
+                
+                if 'refined_points' in dataset:
+                    well_points = np.asarray(dataset['refined_points'])
+                elif 'points' in dataset:
+                    well_points = np.asarray(dataset['points'])
+                elif 'hull_points' in dataset:
+                    well_points = np.asarray(dataset['hull_points'])
+                
+                if well_points is None or len(well_points) < 2:
+                    logger.warning(f"Skipping well '{dataset_name}': insufficient points")
+                    continue
+                
+                # Ensure points are Nx3
+                if well_points.ndim == 1:
+                    well_points = well_points.reshape(-1, 3)
+                elif well_points.shape[1] > 3:
+                    well_points = well_points[:, :3]
+                
+                try:
+                    # Create PolyLine VTK object
+                    polyline = PolyLine()
+                    
+                    # Add points
+                    vtk_points = vtkPoints()
+                    for pt in well_points:
+                        vtk_points.InsertNextPoint(float(pt[0]), float(pt[1]), float(pt[2]))
+                    polyline.SetPoints(vtk_points)
+                    
+                    # Add line segments connecting consecutive points
+                    vtk_lines = vtkCellArray()
+                    for i in range(len(well_points) - 1):
+                        line = vtkLine()
+                        line.GetPointIds().SetId(0, i)
+                        line.GetPointIds().SetId(1, i + 1)
+                        vtk_lines.InsertNextCell(line)
+                    polyline.SetLines(vtk_lines)
+                    
+                    # Create entity dictionary for well_coll
+                    entity_dict = deepcopy(project_window.well_coll.entity_dict)
+                    entity_dict["uid"] = str(uuid4())
+                    entity_dict["name"] = f"{dataset_name}"
+                    entity_dict["scenario"] = "PyMeshIt"
+                    entity_dict["x_section"] = []
+                    entity_dict["topology"] = "PolyLine"
+                    entity_dict["vtk_obj"] = polyline
+                    entity_dict["properties_names"] = []
+                    entity_dict["properties_components"] = []
+                    entity_dict["properties_types"] = []
+                    entity_dict["markers"] = []
+                    
+                    # Add to well collection
+                    project_window.well_coll.add_entity_from_dict(entity_dict=entity_dict)
+                    exported_wells += 1
+                    export_details.append(f"✓ Well '{dataset_name}' → well_coll ({len(well_points)} points)")
+                    logger.info(f"Exported well '{dataset_name}' to well_coll: {len(well_points)} points")
+                    
+                except Exception as well_err:
+                    logger.error(f"Failed to export well '{dataset_name}': {well_err}")
+                    export_details.append(f"✗ Well '{dataset_name}' failed: {str(well_err)}")
+            
+            # ================================================================
+            # STEP 3: Export tetrahedral mesh to mesh3d_coll
+            # ================================================================
+            if hasattr(self, 'tetrahedral_mesh') and self.tetrahedral_mesh is not None:
+                logger.info("Exporting tetrahedral mesh to PZero mesh3d collection...")
+                
+                # Get the mesh (handle both dict and direct UnstructuredGrid)
+                if isinstance(self.tetrahedral_mesh, dict):
+                    mesh = self.tetrahedral_mesh.get('pyvista_grid', self.tetrahedral_mesh)
+                else:
+                    mesh = self.tetrahedral_mesh
+                
+                if isinstance(mesh, pv.UnstructuredGrid):
+                    try:
+                        # Update generator with current materials (including faults with markers)
+                        if hasattr(self, 'tetra_materials') and hasattr(self, 'tetra_mesh_generator'):
+                            self.tetra_mesh_generator.tetra_materials = self.tetra_materials
+                            logger.info(f"Updated generator with {len(self.tetra_materials)} materials for PZero export")
+                        
+                        # Get mesh with embedded faults (C++ MeshIt style)
+                        combined_mesh = mesh
+                        if hasattr(self, 'tetra_mesh_generator'):
+                            combined_mesh = self.tetra_mesh_generator.get_mesh_with_embedded_faults(mesh)
+                            if combined_mesh is None:
+                                combined_mesh = mesh
+                        
+                        # Convert PyVista UnstructuredGrid to VTK UnstructuredGrid
+                        vtk_mesh = TetraSolid()
+                        vtk_mesh.DeepCopy(combined_mesh)
+                        
+                        if vtk_mesh.GetNumberOfCells() > 0:
+                            # Extract properties from the mesh
+                            properties_names = []
+                            properties_components = []
+                            properties_types = []
+                            
+                            # Extract point data properties
+                            point_data_obj = vtk_mesh.GetPointData()
+                            if point_data_obj:
+                                for i in range(point_data_obj.GetNumberOfArrays()):
+                                    array = point_data_obj.GetArray(i)
+                                    if array and array.GetName():
+                                        key = array.GetName()
+                                        if key not in properties_names:
+                                            properties_names.append(key)
+                                            properties_components.append(array.GetNumberOfComponents())
+                                            properties_types.append(array.GetDataTypeAsString())
+                            
+                            # Extract cell data properties
+                            cell_data_obj = vtk_mesh.GetCellData()
+                            if cell_data_obj:
+                                for i in range(cell_data_obj.GetNumberOfArrays()):
+                                    array = cell_data_obj.GetArray(i)
+                                    if array and array.GetName():
+                                        key = array.GetName()
+                                        if key not in properties_names:
+                                            properties_names.append(key)
+                                            properties_components.append(array.GetNumberOfComponents())
+                                            properties_types.append(array.GetDataTypeAsString())
+                            
+                            # Create entity dictionary matching mesh3d collection format
+                            entity_dict = deepcopy(project_window.mesh3d_coll.entity_dict)
+                            entity_dict["uid"] = str(uuid4())
+                            entity_dict["name"] = f"TetraMesh_{timestamp}"
+                            entity_dict["scenario"] = "PyMeshIt"
+                            entity_dict["x_section"] = ""
+                            entity_dict["topology"] = "TetraSolid"
+                            entity_dict["vtk_obj"] = vtk_mesh
+                            entity_dict["properties_names"] = properties_names
+                            entity_dict["properties_components"] = properties_components
+                            entity_dict["properties_types"] = properties_types
+                            
+                            # Add to mesh3d collection
+                            project_window.mesh3d_coll.add_entity_from_dict(entity_dict=entity_dict)
+                            exported_mesh = True
+                            
+                            # Count cells
+                            num_tetrahedra = vtk_mesh.GetNumberOfCells()
+                            num_fault_triangles = 0
+                            if 'CellType' in properties_names:
+                                cell_type_array = vtk_mesh.GetCellData().GetArray('CellType')
+                                if cell_type_array:
+                                    cell_types = np.array([cell_type_array.GetValue(i) for i in range(cell_type_array.GetNumberOfTuples())])
+                                    num_tetrahedra = int(np.sum(cell_types == 0))
+                                    num_fault_triangles = int(np.sum(cell_types == 1))
+                            
+                            mesh_info = f"{vtk_mesh.GetNumberOfPoints()} vertices, {num_tetrahedra} tetrahedra"
+                            if num_fault_triangles > 0:
+                                mesh_info += f", {num_fault_triangles} fault triangles"
+                            export_details.append(f"✓ TetraMesh → mesh3d_coll ({mesh_info})")
+                            logger.info(f"Exported tetrahedral mesh to mesh3d_coll: {mesh_info}")
+                        else:
+                            export_details.append("✗ TetraMesh skipped: no cells")
+                            
+                    except Exception as mesh_err:
+                        logger.error(f"Failed to export tetrahedral mesh: {mesh_err}")
+                        export_details.append(f"✗ TetraMesh failed: {str(mesh_err)}")
+                else:
+                    export_details.append("✗ TetraMesh skipped: invalid mesh type")
             else:
-                num_tetrahedra = vtk_mesh.GetNumberOfCells()
+                export_details.append("ℹ TetraMesh: not generated yet")
             
-            # Show success message with fault info
-            success_msg = f"Tetrahedral mesh exported to PZero as:\n{entity_dict['name']}\n\n"
-            success_msg += f"Vertices: {vtk_mesh.GetNumberOfPoints()}\n"
-            if num_fault_triangles > 0:
-                success_msg += f"Tetrahedra: {num_tetrahedra}\n"
-                success_msg += f"Fault Triangles: {num_fault_triangles}\n"
-                success_msg += f"Total Cells: {vtk_mesh.GetNumberOfCells()}\n"
+            # ================================================================
+            # STEP 4: Show summary dialog
+            # ================================================================
+            summary_msg = f"<h3>PZero Export Complete</h3>"
+            summary_msg += f"<p><b>Timestamp:</b> {timestamp}</p>"
+            summary_msg += f"<p><b>Summary:</b></p>"
+            summary_msg += f"<ul>"
+            summary_msg += f"<li>Surfaces exported to geol_coll: <b>{exported_surfaces}</b></li>"
+            summary_msg += f"<li>Wells exported to well_coll: <b>{exported_wells}</b></li>"
+            summary_msg += f"<li>Tetrahedral mesh exported: <b>{'Yes' if exported_mesh else 'No'}</b></li>"
+            summary_msg += f"</ul>"
+            
+            if export_details:
+                summary_msg += f"<p><b>Details:</b></p><ul>"
+                for detail in export_details:
+                    summary_msg += f"<li>{detail}</li>"
+                summary_msg += f"</ul>"
+            
+            total_exported = exported_surfaces + exported_wells + (1 if exported_mesh else 0)
+            if total_exported > 0:
+                summary_msg += f"<p style='color:green;'><b>Successfully exported {total_exported} entities to PZero!</b></p>"
             else:
-                success_msg += f"Tetrahedra: {num_tetrahedra}\n"
-            success_msg += f"Properties: {len(properties_names)}\n\n"
-            if num_fault_triangles > 0:
-                success_msg += "✓ Faults are embedded as triangles within the mesh\n"
-                success_msg += "Tip: Color by 'MaterialID' or 'CellType' to visualize faults"
+                summary_msg += f"<p style='color:orange;'><b>No entities were exported.</b> Generate surfaces and/or mesh first.</p>"
             
-            QMessageBox.information(self, "Export Successful", success_msg)
+            QMessageBox.information(self, "Export to PZero", summary_msg)
             
-            logger.info(f"Successfully exported tetrahedral mesh to PZero: {entity_dict['name']} ({num_tetrahedra} tetrahedra, {num_fault_triangles} fault triangles)")
+            logger.info(f"PZero export complete: {exported_surfaces} surfaces, {exported_wells} wells, mesh={'Yes' if exported_mesh else 'No'}")
             
         except Exception as e:
-            logger.error(f"Failed to export mesh to PZero: {str(e)}", exc_info=True)
+            logger.error(f"Failed to export to PZero: {str(e)}", exc_info=True)
             QMessageBox.critical(
                 self, 
                 "Export Error", 
-                f"Failed to export mesh to PZero:\n{str(e)}"
+                f"Failed to export to PZero:\n{str(e)}"
             )
     def _show_figure_export_dialog(self):
         """Show dialog for exporting high-quality figures."""
