@@ -63,10 +63,10 @@ class Ui_Form(object):
     def setupUi(self, Form):
         if not Form.objectName():
             Form.setObjectName("Form")
-        Form.resize(1280, 803)
+        #Form.resize(1280, 803)
         self.verticalLayoutWidget = QWidget(Form)
         self.verticalLayoutWidget.setObjectName("verticalLayoutWidget")
-        self.verticalLayoutWidget.setGeometry(QRect(10, 50, 1251, 741))
+        #self.verticalLayoutWidget.setGeometry(QRect(10, 50, 1251, 741))
         self.centralWidget = QVBoxLayout(self.verticalLayoutWidget)
         self.centralWidget.setObjectName("centralWidget")
         self.centralWidget.setContentsMargins(11, 11, 11, 11)

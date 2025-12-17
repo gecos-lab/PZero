@@ -60,7 +60,7 @@ class Ui_BaseViewWindow(object):
     def setupUi(self, BaseViewWindow):
         if not BaseViewWindow.objectName():
             BaseViewWindow.setObjectName("BaseViewWindow")
-        BaseViewWindow.resize(800, 600)
+        #BaseViewWindow.resize(800, 600)
         self.centralwidget = QWidget(BaseViewWindow)
         self.centralwidget.setObjectName("centralwidget")
         self.verticalLayout = QVBoxLayout(self.centralwidget)

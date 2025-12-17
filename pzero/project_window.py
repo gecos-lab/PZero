@@ -98,6 +98,7 @@ from .three_d_surfaces import (
     interpolation_delaunay_2d,
     poisson_interpolation,
     implicit_model_loop_structural,
+    implicit_model_loop_structural_with_faults,
     surface_smoothing,
     linear_extrusion,
     decimation_pro_resampling,
@@ -243,6 +244,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.actionPoisson.triggered.connect(lambda: poisson_interpolation(self))
         self.actionLoopStructural.triggered.connect(
             lambda: implicit_model_loop_structural(self)
+        )
+        self.actionLoopStructuralWithFaults.triggered.connect(
+            lambda: implicit_model_loop_structural_with_faults(self)
         )
         self.actionSurfaceSmoothing.triggered.connect(self.smooth_dialog)
         self.actionSubdivisionResampling.triggered.connect(self.subd_res_dialog)
