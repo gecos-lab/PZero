@@ -10,6 +10,7 @@ from .view_3d import View3D
 from .view_map import ViewMap
 from .view_xsection import ViewXsection
 from .view_stereoplot import ViewStereoplot
+from .view_interpretation import ViewInterpretation
 from .abstract_view_vtk import ViewVTK
 
 
@@ -48,6 +49,8 @@ class DockWindow(QDockWidget):
             self.canvas = ViewXsection(parent=parent)
         elif window_type == "ViewStereoplot":
             self.canvas = ViewStereoplot(parent=parent)
+        elif window_type == "ViewInterpretation":
+            self.canvas = ViewInterpretation(parent=parent)
         else:
             # Exit doing nothing in case the window type is not supported/recognized.
             print("window type not recognized")
