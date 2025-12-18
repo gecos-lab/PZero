@@ -51,6 +51,10 @@ class ViewInterpretation(ViewMap):
         # Override default view to something neutral initially
         self.plotter.view_xy()
         
+        # Use trackball style instead of image style to allow proper 3D views
+        # Image style forces XY view which breaks Inline/Crossline views
+        self.plotter.enable_trackball_style()
+        
     def show_actor_with_property(self, uid=None, coll_name=None, show_property=None, visible=None):
         """Override to prevent showing full seismic volumes - we only show slices."""
         # Check if this is a seismic entity that we're slicing
@@ -213,6 +217,9 @@ class ViewInterpretation(ViewMap):
             self.print_terminal(f"Volume changed to: {self.combo_volume.currentText()} ({self.current_seismic_uid})")
             self._camera_initialized = False  # Reset camera on volume change
             self.scalar_range = None  # Reset scalar range
+            # Clear cached seismic data
+            if hasattr(self, '_cached_seismic'):
+                del self._cached_seismic
             self.update_slice_limits()
             self.update_camera_orientation()
             self.update_slice()
@@ -313,23 +320,35 @@ class ViewInterpretation(ViewMap):
         if not self.current_seismic_uid:
             self.print_terminal("No seismic UID selected")
             return
-            
-        seismic_vtk = self.parent.image_coll.get_uid_vtk_obj(self.current_seismic_uid)
-        if not seismic_vtk:
-            self.print_terminal("Could not get seismic VTK object")
-            return
         
-        # IMPORTANT: Hide the full seismic volume if it's being displayed
+        # Cache the seismic wrapper to avoid repeated wrapping
+        if not hasattr(self, '_cached_seismic') or not hasattr(self, '_cached_seismic_uid') or self._cached_seismic_uid != self.current_seismic_uid:
+            self.print_terminal(f"Caching seismic data for {self.current_seismic_uid}")
+            seismic_vtk = self.parent.image_coll.get_uid_vtk_obj(self.current_seismic_uid)
+            if not seismic_vtk:
+                self.print_terminal("Could not get seismic VTK object")
+                return
+            self._cached_seismic = pv.wrap(seismic_vtk)
+            self._cached_seismic_uid = self.current_seismic_uid
+            self._cached_dims = self._cached_seismic.dimensions
+            self._cached_bounds = self._cached_seismic.bounds
+            self.print_terminal(f"Seismic dims: {self._cached_dims}, bounds: {self._cached_bounds}")
+            # Calculate percentile-based scalar range for better contrast
+            if 'intensity' in self._cached_seismic.array_names:
+                data = self._cached_seismic['intensity']
+                self.scalar_range = (np.percentile(data, 1), np.percentile(data, 99))
+                self.print_terminal(f"Scalar range (percentile): {self.scalar_range}")
+        
+        seismic = self._cached_seismic
+        dims = self._cached_dims
+        bounds = self._cached_bounds
+        
+        # Hide full volume if displayed
         try:
             if self.current_seismic_uid in self.plotter.renderer.actors:
                 self.plotter.remove_actor(self.current_seismic_uid)
         except:
             pass
-        
-        # Wrap the VTK object with PyVista to get access to slice methods    
-        seismic = pv.wrap(seismic_vtk)
-        dims = seismic.dimensions
-        bounds = seismic.bounds
         
         slice_actor_name = "seismic_slice_actor"
             
@@ -340,122 +359,112 @@ class ViewInterpretation(ViewMap):
                 max_val = bounds[axis_idx*2+1]
                 n_points = dims[axis_idx]
                 if n_points <= 1: return min_val
-                step = (max_val - min_val) / (n_points - 1)
-                return min_val + idx * step
+                return min_val + idx * (max_val - min_val) / (n_points - 1)
 
+            # Use extract_subset then convert to surface for proper rendering
             subset = None
-
             if self.current_axis == 'Inline':
                 i = self.current_slice_index
-                x_val = get_coord(0, i)
-                self.current_slice_position = x_val
-                subset = seismic.slice(normal=[1, 0, 0], origin=[x_val, (bounds[2]+bounds[3])/2, (bounds[4]+bounds[5])/2])
-                
+                self.current_slice_position = get_coord(0, i)
+                subset = seismic.extract_subset([i, i, 0, dims[1]-1, 0, dims[2]-1])
             elif self.current_axis == 'Crossline':
                 j = self.current_slice_index
-                y_val = get_coord(1, j)
-                self.current_slice_position = y_val
-                subset = seismic.slice(normal=[0, 1, 0], origin=[(bounds[0]+bounds[1])/2, y_val, (bounds[4]+bounds[5])/2])
-                
+                self.current_slice_position = get_coord(1, j)
+                subset = seismic.extract_subset([0, dims[0]-1, j, j, 0, dims[2]-1])
             elif self.current_axis == 'Z-slice':
                 k = self.current_slice_index
-                z_val = get_coord(2, k)
-                self.current_slice_position = z_val
-                subset = seismic.slice(normal=[0, 0, 1], origin=[(bounds[0]+bounds[1])/2, (bounds[2]+bounds[3])/2, z_val])
+                self.current_slice_position = get_coord(2, k)
+                subset = seismic.extract_subset([0, dims[0]-1, 0, dims[1]-1, k, k])
             
-            # If slice() returns empty, fall back to extract_subset
             if subset is None or subset.n_points == 0:
-                if self.current_axis == 'Inline':
-                    subset = seismic.extract_subset([self.current_slice_index, self.current_slice_index, 0, dims[1]-1, 0, dims[2]-1])
-                elif self.current_axis == 'Crossline':
-                    subset = seismic.extract_subset([0, dims[0]-1, self.current_slice_index, self.current_slice_index, 0, dims[2]-1])
-                elif self.current_axis == 'Z-slice':
-                    subset = seismic.extract_subset([0, dims[0]-1, 0, dims[1]-1, self.current_slice_index, self.current_slice_index])
+                self.print_terminal("Subset is empty!")
+                return
             
-            if subset is not None and subset.n_points > 0:
-                # Get the scalar data
-                scalars = 'intensity' if 'intensity' in subset.array_names else (subset.array_names[0] if subset.array_names else None)
+            # Convert StructuredGrid to surface for proper 2D rendering
+            subset = subset.extract_surface()
+            
+            scalars = 'intensity' if 'intensity' in subset.array_names else (subset.array_names[0] if subset.array_names else None)
+            
+            # Get colormap and scalar range
+            cmap = self.get_seismic_colormap()
+            scalar_range = self.scalar_range if hasattr(self, 'scalar_range') else None
+            
+            # Remove old slice actor
+            if slice_actor_name in self.plotter.renderer.actors:
+                self.plotter.remove_actor(slice_actor_name)
+            
+            # Add new slice
+            self.slice_actor = self.plotter.add_mesh(
+                subset, 
+                name=slice_actor_name,
+                scalars=scalars,
+                clim=scalar_range,
+                cmap=cmap, 
+                show_scalar_bar=False, 
+                pickable=True, 
+                lighting=False,
+                reset_camera=False
+            )
+            
+            self.current_slice_bounds = subset.bounds
+            slice_center = subset.center
+            
+            # Only reset camera on first load or axis change
+            if not hasattr(self, '_camera_initialized') or not self._camera_initialized:
+                camera = self.plotter.camera
+                self.plotter.enable_parallel_projection()
                 
-                # Get colormap from property legend (if exists) or default to gray
-                cmap = self.get_seismic_colormap()
+                if self.current_axis == 'Inline':
+                    slice_height = abs(self.current_slice_bounds[5] - self.current_slice_bounds[4])
+                    slice_width = abs(self.current_slice_bounds[3] - self.current_slice_bounds[2])
+                    view_size = max(slice_height, slice_width)
+                    camera.position = (slice_center[0] + view_size, slice_center[1], slice_center[2])
+                    camera.focal_point = slice_center
+                    camera.up = (0, 0, 1)
+                    
+                elif self.current_axis == 'Crossline':
+                    slice_height = abs(self.current_slice_bounds[5] - self.current_slice_bounds[4])
+                    slice_width = abs(self.current_slice_bounds[1] - self.current_slice_bounds[0])
+                    view_size = max(slice_height, slice_width)
+                    camera.position = (slice_center[0], slice_center[1] + view_size, slice_center[2])
+                    camera.focal_point = slice_center
+                    camera.up = (0, 0, 1)
+                    
+                elif self.current_axis == 'Z-slice':
+                    slice_height = abs(self.current_slice_bounds[3] - self.current_slice_bounds[2])
+                    slice_width = abs(self.current_slice_bounds[1] - self.current_slice_bounds[0])
+                    view_size = max(slice_height, slice_width)
+                    camera.position = (slice_center[0], slice_center[1], slice_center[2] + view_size)
+                    camera.focal_point = slice_center
+                    camera.up = (0, 1, 0)
                 
-                # Get scalar range - use stored range for consistency or calculate
-                if scalars:
-                    if not hasattr(self, 'scalar_range') or self.scalar_range is None:
-                        self.scalar_range = subset.get_data_range(scalars)
-                    scalar_range = self.scalar_range
-                else:
-                    scalar_range = None
-                
-                # FAST UPDATE: If actor already exists, just update mapper data
-                if self.slice_actor is not None and slice_actor_name in self.plotter.renderer.actors:
-                    try:
-                        mapper = self.slice_actor.GetMapper()
-                        if mapper:
-                            mapper.SetInputData(subset)
-                            mapper.Update()
-                            self.plotter.render()
-                            # Store bounds for picking plane
-                            self.current_slice_bounds = subset.bounds
-                            return  # Fast path done
-                    except:
-                        pass  # Fall through to full update
-                
-                # Full update - remove old actor and create new one
-                if slice_actor_name in self.plotter.renderer.actors:
-                    self.plotter.remove_actor(slice_actor_name)
-                self.slice_actor = None
-                
-                # Add the mesh with colormap from legend
-                self.slice_actor = self.plotter.add_mesh(
-                    subset, 
-                    name=slice_actor_name,
-                    scalars=scalars,
-                    clim=scalar_range,
-                    cmap=cmap, 
-                    show_scalar_bar=False, 
-                    pickable=True, 
-                    lighting=False,
-                    reset_camera=False
-                )
-                
-                # Store slice bounds for camera/picking
-                self.current_slice_bounds = subset.bounds
+                camera.parallel_scale = view_size * 0.6
+                self.plotter.reset_camera_clipping_range()
+                self._camera_initialized = True
+            
+            # IMPORTANT: Always ensure camera is correct for non-Z slices
+            # Parent classes may try to reset to XY view
+            if self.current_axis in ['Inline', 'Crossline']:
+                self.plotter.enable_parallel_projection()
+                camera = self.plotter.camera
                 slice_center = subset.center
+                slice_height = abs(self.current_slice_bounds[5] - self.current_slice_bounds[4])
                 
-                # Set camera to look directly at the slice (2D orthographic view)
-                # Only reset camera on first load or axis change
-                if not hasattr(self, '_camera_initialized') or not self._camera_initialized:
-                    camera = self.plotter.camera
-                    self.plotter.enable_parallel_projection()
-                    
-                    if self.current_axis == 'Inline':
-                        slice_height = abs(self.current_slice_bounds[5] - self.current_slice_bounds[4])
-                        slice_width = abs(self.current_slice_bounds[3] - self.current_slice_bounds[2])
-                        view_size = max(slice_height, slice_width)
-                        camera.position = (slice_center[0] + view_size, slice_center[1], slice_center[2])
-                        camera.focal_point = slice_center
-                        camera.up = (0, 0, 1)
-                        
-                    elif self.current_axis == 'Crossline':
-                        slice_height = abs(self.current_slice_bounds[5] - self.current_slice_bounds[4])
-                        slice_width = abs(self.current_slice_bounds[1] - self.current_slice_bounds[0])
-                        view_size = max(slice_height, slice_width)
-                        camera.position = (slice_center[0], slice_center[1] + view_size, slice_center[2])
-                        camera.focal_point = slice_center
-                        camera.up = (0, 0, 1)
-                        
-                    elif self.current_axis == 'Z-slice':
-                        slice_height = abs(self.current_slice_bounds[3] - self.current_slice_bounds[2])
-                        slice_width = abs(self.current_slice_bounds[1] - self.current_slice_bounds[0])
-                        view_size = max(slice_height, slice_width)
-                        camera.position = (slice_center[0], slice_center[1], slice_center[2] + view_size)
-                        camera.focal_point = slice_center
-                        camera.up = (0, 1, 0)
-                    
-                    camera.parallel_scale = view_size * 0.6
-                    self.plotter.reset_camera_clipping_range()
-                    self._camera_initialized = True
+                if self.current_axis == 'Inline':
+                    slice_width = abs(self.current_slice_bounds[3] - self.current_slice_bounds[2])
+                    view_size = max(slice_height, slice_width)
+                    camera.position = (slice_center[0] + view_size, slice_center[1], slice_center[2])
+                    camera.focal_point = slice_center
+                    camera.up = (0, 0, 1)
+                else:  # Crossline
+                    slice_width = abs(self.current_slice_bounds[1] - self.current_slice_bounds[0])
+                    view_size = max(slice_height, slice_width)
+                    camera.position = (slice_center[0], slice_center[1] + view_size, slice_center[2])
+                    camera.focal_point = slice_center
+                    camera.up = (0, 0, 1)
+                
+                camera.parallel_scale = view_size * 0.6
+                self.plotter.reset_camera_clipping_range()
                     
         except Exception as e:
             self.print_terminal(f"Error updating slice: {e}")
