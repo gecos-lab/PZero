@@ -6,6 +6,39 @@ import cmocean as cmo
 import colorcet as cc
 
 from matplotlib.pyplot import colormaps as plt_colormaps
+from matplotlib.colors import LinearSegmentedColormap
+import matplotlib.cm as cm
+
+# Define custom Petrel-like seismic colormap (Blue-White-Red high contrast)
+# Colors: Dark Blue -> White -> Dark Red
+# This makes amplitudes "pop" more than the standard diluted seismic map.
+# Colors: Cyan -> Navy -> Blue -> Gray -> Light Gray -> Maroon -> Red -> Yellow
+# Exact sequence requested by user to match Petrel style.
+seismic_pzero_colors = ["cyan", "navy", "blue", "gray", "lightgray", "maroon", "red", "yellow"]
+seismic_pzero_cmap = LinearSegmentedColormap.from_list("seismic_pzero", seismic_pzero_colors, N=256)
+import matplotlib as mpl
+import matplotlib.pyplot as plt
+try:
+    # Try modern Matplotlib API (3.5+)
+    if hasattr(mpl, 'colormaps') and hasattr(mpl.colormaps, 'register'):
+        mpl.colormaps.register(name="seismic_pzero", cmap=seismic_pzero_cmap)
+        mpl.colormaps.register(name="seismic pzero", cmap=seismic_pzero_cmap)
+    # Try older API (via pyplot or cm)
+    elif hasattr(plt, 'register_cmap'):
+        plt.register_cmap(name="seismic_pzero", cmap=seismic_pzero_cmap)
+        plt.register_cmap(name="seismic pzero", cmap=seismic_pzero_cmap)
+    elif hasattr(cm, 'register_cmap'):
+        cm.register_cmap(name="seismic_pzero", cmap=seismic_pzero_cmap)
+        cm.register_cmap(name="seismic pzero", cmap=seismic_pzero_cmap)
+    else:
+        # Fallback: manual insertion if possible (risky but last resort)
+        if hasattr(plt, 'cm'):
+             pass # avoiding unsafe direct dict manipulation for now
+except ValueError:
+    pass # Already registered
+except Exception as e:
+    print(f"Warning: Colormap registration failed: {e}")
+
 
 from PySide6.QtCore import QObject
 from PySide6.QtGui import QColor, QImage, QPixmap
@@ -28,7 +61,19 @@ def cmap2qpixmap(cmap=None, steps=50):
     https://github.com/pyvista/pyvista/blob/6777a6a5fb4f3691b829edf6103401537faeb3cb/pyvista/plotting/colors.py#L397
     """
     inds = np_linspace(0, 1, steps)
-    colormap = pv_get_cmap_safe(cmap)  # maybe this is the problem with pyinstaller
+    try:
+        colormap = pv_get_cmap_safe(cmap)
+    except ValueError:
+        # Fallback if the colormap is invalid (e.g. removed or renamed custom map)
+        # This prevents the app from crashing due to persisted settings.
+        try:
+            # Try replacing space with underscore if that was the issue
+            if isinstance(cmap, str) and " " in cmap:
+                 colormap = pv_get_cmap_safe(cmap.replace(" ", "_"))
+            else:
+                 colormap = pv_get_cmap_safe("gray")
+        except:
+             colormap = pv_get_cmap_safe("gray")
     rgbas = colormap(inds)
     q_rgbas = [
         QColor(int(r * 255), int(g * 255), int(b * 255), int(a * 255)).rgba()
@@ -57,7 +102,8 @@ class PropertiesCMaps(QObject):
     # List of all  matplotlib, colorcet, or cmocean colormaps used by PyVista
     # https://docs.pyvista.org/examples/02-plot/cmap.html
     colormaps_list = (
-        plt_colormaps()
+        ["seismic_pzero"]
+        + plt_colormaps()
         + ["cet_" + cmap for cmap in list(cc.cm.keys())]
         + cmo.cm.cmapnames
     )
