@@ -12,9 +12,9 @@ import matplotlib.cm as cm
 # Define custom Petrel-like seismic colormap (Blue-White-Red high contrast)
 # Colors: Dark Blue -> White -> Dark Red
 # This makes amplitudes "pop" more than the standard diluted seismic map.
-# Colors: Cyan -> Navy -> LightGray -> Maroon -> Yellow
-# Used darker shades (Navy/Maroon) to reduce brightness and enhance contrast ("popout").
-seismic_pzero_colors = ["cyan", "navy", "lightgray", "maroon", "yellow"]
+# Colors: Cyan -> Navy -> Blue -> Gray -> Light Gray -> Maroon -> Red -> Yellow
+# Detailed gradient for maximum contrast and Petrel-like appearance.
+seismic_pzero_colors = ["cyan", "navy", "blue", "gray", "lightgray", "maroon", "red", "yellow"]
 seismic_pzero_cmap = LinearSegmentedColormap.from_list("seismic_pzero", seismic_pzero_colors, N=256)
 import matplotlib as mpl
 import matplotlib.pyplot as plt

@@ -43,7 +43,7 @@ class ImageCollection(DIMCollection):
 
         self.collection_name = "image_coll"
 
-        self.default_colormap = "seismic_pzero"
+        self.default_colormap = "gray"
 
         self.initialize_df()
 
