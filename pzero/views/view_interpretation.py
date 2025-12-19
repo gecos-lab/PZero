@@ -70,6 +70,16 @@ class ViewInterpretation(ViewMap):
                 pass
         # For all other entities, use normal display
         super().show_actor_with_property(uid=uid, coll_name=coll_name, show_property=show_property, visible=visible)
+
+    def set_orientation_widget(self):
+        """Override ViewMap's North Arrow with a Seismic Axes widget."""
+        self.plotter.add_axes(
+            xlabel='IL',
+            ylabel='XL', 
+            zlabel='Z',
+            line_width=2,
+            interactive=True
+        )
         
     def setup_controls(self):
         """Add controls for slicing to the layout"""
