@@ -125,7 +125,7 @@ class ViewInterpretation(ViewMap):
         
         # Grid Toggle
         self.chk_grid = QCheckBox("Grid")
-        self.chk_grid.setChecked(True)
+        self.chk_grid.setChecked(False)
         self.chk_grid.stateChanged.connect(lambda: self.update_grid_annotations())
         bot_layout.addWidget(self.chk_grid)
 
@@ -516,6 +516,32 @@ class ViewInterpretation(ViewMap):
                          xtitle = "Inline"
                          ytitle = "Crossline"
 
+                    # Auto-scale large coordinates to keep labels short (e.g. 6.08e8 -> 6.08)
+                    bounds = self.slice_actor.bounds
+                    scaled_ranges = list(bounds)
+                    
+                    def get_scale_and_title(min_v, max_v, title):
+                        mean_v = (min_v + max_v) / 2.0
+                        if abs(mean_v) > 0:
+                            import math
+                            power = math.floor(math.log10(abs(mean_v)))
+                            # Only scale if >= 10000 or <= 0.0001
+                            if abs(power) >= 4:
+                                scale = 10**power
+                                return scale, f"{title} (x10^{power})"
+                        return 1.0, title
+
+                    x_scale, x_title_scaled = get_scale_and_title(bounds[0], bounds[1], xtitle)
+                    y_scale, y_title_scaled = get_scale_and_title(bounds[2], bounds[3], ytitle)
+                    z_scale, z_title_scaled = get_scale_and_title(bounds[4], bounds[5], ztitle)
+
+                    scaled_ranges[0] /= x_scale
+                    scaled_ranges[1] /= x_scale
+                    scaled_ranges[2] /= y_scale
+                    scaled_ranges[3] /= y_scale
+                    scaled_ranges[4] /= z_scale
+                    scaled_ranges[5] /= z_scale
+
                     self.plotter.show_grid(
                         mesh=self.slice_actor,
                         grid=False,
@@ -524,13 +550,16 @@ class ViewInterpretation(ViewMap):
                         show_xaxis=True,
                         show_yaxis=True,
                         show_zaxis=True,
-                        xlabel=xtitle,
-                        ylabel=ytitle,
-                        zlabel=ztitle,
-                        font_size=12,
+                        xlabel=x_title_scaled,
+                        ylabel=y_title_scaled,
+                        zlabel=z_title_scaled,
+                        font_size=8,
                         color='white',
                         bold=False,
-                        fmt='%.0f'
+                        n_xlabels=5,
+                        n_ylabels=5,
+                        fmt='%.3g',
+                        axes_ranges=scaled_ranges
                     )
                 else:
                     self.plotter.remove_bounds_axes() # Hides grid
