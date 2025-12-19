@@ -4,7 +4,7 @@ PZero© Andrea Bistacchi"""
 # PySide6 imports
 from PySide6.QtGui import QAction
 from PySide6.QtWidgets import (
-    QWidget, QHBoxLayout, QLabel, QComboBox, QSlider, QSpinBox, QVBoxLayout
+    QWidget, QHBoxLayout, QLabel, QComboBox, QSlider, QSpinBox, QVBoxLayout, QCheckBox
 )
 from PySide6.QtCore import Qt
 
@@ -85,55 +85,91 @@ class ViewInterpretation(ViewMap):
         
     def setup_controls(self):
         """Add controls for slicing to the layout"""
-        # We need to find where to add these controls. 
-        # Typically ViewVTK has a main layout. We can add a toolbar-like widget at the top.
-        
+        # Main widget
         control_widget = QWidget()
-        layout = QHBoxLayout()
-        layout.setContentsMargins(5, 5, 5, 5)
-        control_widget.setLayout(layout)
+        main_layout = QVBoxLayout()
+        main_layout.setContentsMargins(5, 5, 5, 5)
+        control_widget.setLayout(main_layout)
+        
+        # --- Top Row: Slicing Controls ---
+        top_layout = QHBoxLayout()
+        main_layout.addLayout(top_layout)
         
         # Seismic Volume Selector
-        layout.addWidget(QLabel("Volume:"))
+        top_layout.addWidget(QLabel("Volume:"))
         self.combo_volume = QComboBox()
         self.combo_volume.currentIndexChanged.connect(self.on_volume_changed)
-        layout.addWidget(self.combo_volume)
+        top_layout.addWidget(self.combo_volume)
         
         # Slice Type Selector
-        layout.addWidget(QLabel("View:"))
+        top_layout.addWidget(QLabel("View:"))
         self.combo_view = QComboBox()
         self.combo_view.addItems(["Inline", "Crossline", "Z-slice"])
         self.combo_view.currentTextChanged.connect(self.on_view_type_changed)
-        layout.addWidget(self.combo_view)
+        top_layout.addWidget(self.combo_view)
         
         # Slice Index Slider
-        layout.addWidget(QLabel("Slice:"))
+        top_layout.addWidget(QLabel("Slice:"))
         self.slider_slice = QSlider(Qt.Horizontal)
         self.slider_slice.valueChanged.connect(self.on_slider_changed)
-        layout.addWidget(self.slider_slice)
+        top_layout.addWidget(self.slider_slice)
         
         # Slice Index SpinBox
         self.spin_slice = QSpinBox()
         self.spin_slice.valueChanged.connect(self.on_spin_changed)
-        layout.addWidget(self.spin_slice)
+        top_layout.addWidget(self.spin_slice)
         
+        # --- Bottom Row: Toggles ---
+        bot_layout = QHBoxLayout()
+        main_layout.addLayout(bot_layout)
+        
+        # Grid Toggle
+        self.chk_grid = QCheckBox("Grid")
+        self.chk_grid.setChecked(True)
+        self.chk_grid.stateChanged.connect(lambda: self.update_grid_annotations())
+        bot_layout.addWidget(self.chk_grid)
+
+        # Title Toggle
+        self.chk_title = QCheckBox("Title")
+        self.chk_title.setChecked(True)
+        self.chk_title.stateChanged.connect(lambda: self.update_grid_annotations())
+        bot_layout.addWidget(self.chk_title)
+        
+        # Directions Toggle
+        self.chk_dirs = QCheckBox("NS/EW")
+        self.chk_dirs.setChecked(True)
+        self.chk_dirs.stateChanged.connect(lambda: self.update_grid_annotations())
+        bot_layout.addWidget(self.chk_dirs)
+
+        # Axes Widget Toggle
+        self.chk_axes = QCheckBox("Axes")
+        self.chk_axes.setChecked(True)
+        self.chk_axes.stateChanged.connect(self.toggle_orientation_widget)
+        bot_layout.addWidget(self.chk_axes)
+        
+        # Spacer to push checks to left? Or just let them flow.
+        bot_layout.addStretch()
+
         # Auto-refresh volume list on startup
         self.refresh_volume_list()
         
         # Add to main layout
-        # Assuming self.layout() exists from parent QMainWindow or similar, 
-        # but ViewVTK setup might be different. 
-        # ViewVTK inherits QMainWindow. centralWidget is likely the QVTKRenderWindowInteractor or a container.
-        # Let's check if we can insert it into a toolbar or add a dock widget.
-        # For simplicity, let's create a DockWidget for controls or add to a layout if central widget is a container.
-        # In ViewVTK, self.frame is the central widget often.
-        
         # Using a QDockWidget for controls to ensure it doesn't interfere with the render window
         from PySide6.QtWidgets import QDockWidget
         self.controls_dock = QDockWidget("Interpretation Controls", self)
         self.controls_dock.setWidget(control_widget)
         self.controls_dock.setAllowedAreas(Qt.TopDockWidgetArea | Qt.BottomDockWidgetArea)
         self.addDockWidget(Qt.TopDockWidgetArea, self.controls_dock)
+
+    def toggle_orientation_widget(self, state):
+        """Toggle visibility of the orientation widget."""
+        if state == 2: # Checked
+            # Re-enable/Re-add. 
+            # PyVista add_axes adds it. If we hide it, we might remove it.
+            # remove_axes() ?
+            self.set_orientation_widget()
+        else:
+            self.plotter.hide_axes()
         
     def on_entities_added(self, uids, collection):
         """Called when new entities are added to any collection"""
@@ -451,6 +487,8 @@ class ViewInterpretation(ViewMap):
             
             # Let's do it on every update for now to ensure "locking" behavior as requested ("lock the camera view to the slice").
             self.update_camera_to_slice(scaled_center, bounds, scale)
+            self.update_grid_annotations()
+
 
         except Exception as e:
             self.print_terminal(f"Error updating slice: {e}")
@@ -458,6 +496,88 @@ class ViewInterpretation(ViewMap):
             self.print_terminal(traceback.format_exc())
         
         self.plotter.render()
+
+    def update_grid_annotations(self):
+        """Update grid rulers, title, and direction labels based on toggle states."""
+        try:
+            # 1. Update Grid (Rulers)
+            if self.slice_actor:
+                # Check toggle
+                if hasattr(self, 'chk_grid') and self.chk_grid.isChecked():
+                    # Determine labels based on axis
+                    xtitle, ytitle, ztitle = "", "", ""
+                    if self.current_axis == 'Inline':
+                         xtitle = "Crossline"
+                         ytitle = "Depth/Time"
+                    elif self.current_axis == 'Crossline':
+                         xtitle = "Inline"
+                         ytitle = "Depth/Time"
+                    elif self.current_axis == 'Z-slice':
+                         xtitle = "Inline"
+                         ytitle = "Crossline"
+
+                    self.plotter.show_grid(
+                        mesh=self.slice_actor,
+                        grid=False,
+                        location='outer',
+                        ticks='both',
+                        show_xaxis=True,
+                        show_yaxis=True,
+                        show_zaxis=True,
+                        xlabel=xtitle,
+                        ylabel=ytitle,
+                        zlabel=ztitle,
+                        font_size=12,
+                        color='white',
+                        bold=False,
+                        fmt='%.0f'
+                    )
+                else:
+                    self.plotter.remove_bounds_axes() # Hides grid
+
+            # 2. Update Title (Top Center)
+            # Remove existing title first
+            if hasattr(self, '_title_actor') and self._title_actor:
+                self.plotter.remove_actor(self._title_actor)
+                self._title_actor = None
+            
+            if hasattr(self, 'chk_title') and self.chk_title.isChecked():
+                title_text = f"{self.current_axis}: {self.current_slice_index}"
+                self._title_actor = self.plotter.add_text(
+                    title_text, 
+                    position='upper_edge', 
+                    font_size=14, 
+                    color='white',
+                    shadow=True
+                )
+            
+            # 3. Direction Labels (N/S/E/W)
+            # Clear old labels
+            if hasattr(self, '_direction_actors'):
+                for actor in self._direction_actors:
+                    self.plotter.remove_actor(actor)
+            self._direction_actors = []
+            
+            if hasattr(self, 'chk_dirs') and self.chk_dirs.isChecked():
+                # Logic for labels
+                left_label, right_label = "", ""
+                if self.current_axis == 'Inline':
+                    left_label = "S"
+                    right_label = "N"
+                elif self.current_axis == 'Crossline':
+                    left_label = "W"
+                    right_label = "E"
+                 
+                if left_label and right_label:
+                    act_l = self.plotter.add_text(left_label, position='upper_left', font_size=16, color='yellow')
+                    act_r = self.plotter.add_text(right_label, position='upper_right', font_size=16, color='yellow')
+                    self._direction_actors.extend([act_l, act_r])
+                    
+            self.plotter.render()
+
+        except Exception as e:
+             self.print_terminal(f"Error updating annotations: {e}")
+
 
     def update_camera_to_slice(self, center, bounds, scale):
         """
