@@ -53,7 +53,7 @@ class ViewInterpretation(ViewMap):
         
         # Use trackball style instead of image style to allow proper 3D views
         # Image style forces XY view which breaks Inline/Crossline views
-        self.plotter.enable_trackball_style()
+        # self.plotter.enable_trackball_style()
         
     def show_actor_with_property(self, uid=None, coll_name=None, show_property=None, visible=None):
         """Override to prevent showing full seismic volumes - we only show slices."""
@@ -279,16 +279,25 @@ class ViewInterpretation(ViewMap):
             self.slider_slice.setValue(max_idx)
             
     def update_camera_orientation(self):
-        """Set camera orthogonal to the slice"""
-        # We need to disable Image interaction style if it forces XY view, 
-        # but ViewMap uses it. 
-        # Alternatives: 
-        # 1. Use RubberBand2D or TrackballCamera with rotation disabled. 
-        # 2. Re-set view after enabling style (might not stick).
-        
-        # Let's try sticking to Parallel Projection and simple interaction
+        """Set camera orthogonal to the slice and fit view."""
         self.plotter.enable_parallel_projection()
+        self.plotter.enable_image_style()
         
+        # If we have current slice bounds and scale, use the robust helper
+        if hasattr(self, 'current_slice_bounds') and self.current_slice_bounds is not None:
+             scale = [1.0, 1.0, 1.0]
+             if self.plotter.scale is not None:
+                 scale = self.plotter.scale
+                 
+             # Re-calculate center from bounds? 
+             # Slice center might not be stored directly unless we calculated it in `update_slice`.
+             # `update_slice` calculates slice_center.
+             # Ideally update_camera_orientation is called AFTER update_slice logic or relies on stored state.
+             # But usually on_view_type_changed calls update_slice immediately after.
+             # So let's rely on update_slice to set the camera.
+             pass
+        
+        # Fallback / Initial set (before slice is fully loaded)
         if self.current_axis == 'Inline': 
             self.plotter.view_yz()
         elif self.current_axis == 'Crossline':
@@ -409,69 +418,125 @@ class ViewInterpretation(ViewMap):
             self.current_slice_bounds = subset.bounds
             slice_center = subset.center
             
-            # Only reset camera on first load or axis change
-            if not hasattr(self, '_camera_initialized') or not self._camera_initialized:
-                camera = self.plotter.camera
-                self.plotter.enable_parallel_projection()
-                
-                if self.current_axis == 'Inline':
-                    slice_height = abs(self.current_slice_bounds[5] - self.current_slice_bounds[4])
-                    slice_width = abs(self.current_slice_bounds[3] - self.current_slice_bounds[2])
-                    view_size = max(slice_height, slice_width)
-                    camera.position = (slice_center[0] + view_size, slice_center[1], slice_center[2])
-                    camera.focal_point = slice_center
-                    camera.up = (0, 0, 1)
-                    
-                elif self.current_axis == 'Crossline':
-                    slice_height = abs(self.current_slice_bounds[5] - self.current_slice_bounds[4])
-                    slice_width = abs(self.current_slice_bounds[1] - self.current_slice_bounds[0])
-                    view_size = max(slice_height, slice_width)
-                    camera.position = (slice_center[0], slice_center[1] + view_size, slice_center[2])
-                    camera.focal_point = slice_center
-                    camera.up = (0, 0, 1)
-                    
-                elif self.current_axis == 'Z-slice':
-                    slice_height = abs(self.current_slice_bounds[3] - self.current_slice_bounds[2])
-                    slice_width = abs(self.current_slice_bounds[1] - self.current_slice_bounds[0])
-                    view_size = max(slice_height, slice_width)
-                    camera.position = (slice_center[0], slice_center[1], slice_center[2] + view_size)
-                    camera.focal_point = slice_center
-                    camera.up = (0, 1, 0)
-                
-                camera.parallel_scale = view_size * 0.6
-                self.plotter.reset_camera_clipping_range()
-                self._camera_initialized = True
+            scale = [1.0, 1.0, 1.0]
+            if self.plotter.scale is not None:
+                scale = self.plotter.scale
             
-            # IMPORTANT: Always ensure camera is correct for non-Z slices
-            # Parent classes may try to reset to XY view
-            if self.current_axis in ['Inline', 'Crossline']:
-                self.plotter.enable_parallel_projection()
-                camera = self.plotter.camera
-                slice_center = subset.center
-                slice_height = abs(self.current_slice_bounds[5] - self.current_slice_bounds[4])
-                
-                if self.current_axis == 'Inline':
-                    slice_width = abs(self.current_slice_bounds[3] - self.current_slice_bounds[2])
-                    view_size = max(slice_height, slice_width)
-                    camera.position = (slice_center[0] + view_size, slice_center[1], slice_center[2])
-                    camera.focal_point = slice_center
-                    camera.up = (0, 0, 1)
-                else:  # Crossline
-                    slice_width = abs(self.current_slice_bounds[1] - self.current_slice_bounds[0])
-                    view_size = max(slice_height, slice_width)
-                    camera.position = (slice_center[0], slice_center[1] + view_size, slice_center[2])
-                    camera.focal_point = slice_center
-                    camera.up = (0, 0, 1)
-                
-                camera.parallel_scale = view_size * 0.6
-                self.plotter.reset_camera_clipping_range()
-                    
+            # Apply scale to center for camera positioning
+            scaled_center = [
+                slice_center[0] * scale[0],
+                slice_center[1] * scale[1],
+                slice_center[2] * scale[2]
+            ]
+            
+            # Update camera to fit the slice
+            # Only reset camera on first load, axis change, or if explicitly requested (e.g. on slice move)
+            # The user requested that moving the slicer resets the camera to respect VE and fit the slice.
+            # So we effectively update it every time the slice bounds/position changes significantly or if we want to enforce the lock.
+            
+            # For now, we update it if not initialized OR if we want to force "Fit to View" behavior on slice change
+            # However, forceful reset on every scroll might be annoying if user zoomed in.
+            # User said: "when we are moving the slicer ... the camera doesnt respect the vertical exageration ... like it must repsect it"
+            # And "camera is still not properly position to the whole slice"
+            # This implies we SHOULD match the slice bounds.
+            
+            # Let's do it on every update for now to ensure "locking" behavior as requested ("lock the camera view to the slice").
+            self.update_camera_to_slice(scaled_center, bounds, scale)
+
         except Exception as e:
             self.print_terminal(f"Error updating slice: {e}")
             import traceback
             self.print_terminal(traceback.format_exc())
         
         self.plotter.render()
+
+    def update_camera_to_slice(self, center, bounds, scale):
+        """
+        Enforce a 2D-like view locked to the current axis, fitted to the slice bounds, 
+        respecting Vertical Exaggeration.
+        """
+        # Lock rotation by using Image style (Left=Pan, Right=Zoom)
+        # We must call specific view setup AFTER this because it might reset to XY
+        self.plotter.enable_image_style()
+        self.plotter.enable_parallel_projection()
+        
+        camera = self.plotter.camera
+        
+        # Calculate fitting dimensions with Scale (VE) applied
+        # bounds is [xmin, xmax, ymin, ymax, zmin, zmax] (unscaled)
+        # scale is [sx, sy, sz]
+        
+        # Determine width/height of the slice in WORLD (scaled) units
+        width = 0.0
+        height = 0.0
+        
+        if self.current_axis == 'Inline':
+            # YZ plane
+            width = abs(bounds[3] - bounds[2]) * scale[1]
+            height = abs(bounds[5] - bounds[4]) * scale[2]
+            
+            # Position: Look down X axis
+            camera.position = (center[0] + max(width, height) * 2, center[1], center[2])
+            camera.focal_point = center
+            camera.view_up = (0, 0, 1)
+            
+        elif self.current_axis == 'Crossline':
+            # XZ plane
+            width = abs(bounds[1] - bounds[0]) * scale[0]
+            height = abs(bounds[5] - bounds[4]) * scale[2]
+            
+            # Position: Look down Y axis
+            camera.position = (center[0], center[1] + max(width, height) * 2, center[2])
+            camera.focal_point = center
+            camera.view_up = (0, 0, 1)
+            
+        elif self.current_axis == 'Z-slice':
+            # XY plane
+            width = abs(bounds[1] - bounds[0]) * scale[0]
+            height = abs(bounds[3] - bounds[2]) * scale[1]
+            
+            # Position: Look down Z axis
+            camera.position = (center[0], center[1], center[2] + max(width, height) * 2)
+            camera.focal_point = center
+            camera.view_up = (0, 1, 0)
+            
+        # Refine Parallel Scale to FIT WHOLE SLICE
+        # parallel_scale is half the viewport height in world units.
+        # We need to consider the viewport aspect ratio.
+        
+        try:
+            # window_size is (width, height)
+            win_w, win_h = self.plotter.window_size
+            if win_h > 0:
+                view_aspect = win_w / win_h
+            else:
+                view_aspect = 1.0
+        except:
+            view_aspect = 1.0
+            
+        # Slice aspect ratio
+        slice_aspect = width / height if height > 0 else 1.0
+        
+        # If slice is "wider" than the view (relative to aspect), we fit to WIDTH
+        if slice_aspect > view_aspect:
+            # Fit width: 
+            # The view width must be at least 'width'.
+            # view_width = width
+            # view_height = view_width / view_aspect
+            # parallel_scale = view_height / 2
+            desired_height = width / view_aspect
+            padding = 1.05 # 5% padding
+            camera.parallel_scale = (desired_height / 2) * padding
+        else:
+            # Fit height:
+            # The view height must be at least 'height'
+            padding = 1.05
+            camera.parallel_scale = (height / 2) * padding
+            
+        self.plotter.reset_camera_clipping_range()
+        self._camera_initialized = True
+                    
+
     
     def get_seismic_colormap(self):
         """Get the colormap for 'intensity' property from the legend manager, or default to gray."""
