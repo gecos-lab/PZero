@@ -78,7 +78,7 @@ class ViewInterpretation(ViewMap):
             ylabel='XL', 
             zlabel='Z',
             line_width=2,
-            interactive=True,
+            interactive=False,
             color='white',
             viewport=(0, 0, 0.3, 0.3)
         )
