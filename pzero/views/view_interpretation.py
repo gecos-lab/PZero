@@ -105,11 +105,8 @@ class ViewInterpretation(ViewMap):
         self.spin_slice.valueChanged.connect(self.on_spin_changed)
         layout.addWidget(self.spin_slice)
         
-        # Refresh button to manually refresh volume list
-        from PySide6.QtWidgets import QPushButton
-        self.refresh_button = QPushButton("Refresh")
-        self.refresh_button.clicked.connect(self.refresh_volume_list)
-        layout.addWidget(self.refresh_button)
+        # Auto-refresh volume list on startup
+        self.refresh_volume_list()
         
         # Add to main layout
         # Assuming self.layout() exists from parent QMainWindow or similar, 
