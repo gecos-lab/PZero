@@ -24,6 +24,7 @@ from pyvista import PointSet as pvPointSet
 from .abstract_base_view import BaseView
 from ..orientation_analysis import get_dip_dir_vectors
 from ..helpers.helper_dialogs import input_one_value_dialog, save_file_dialog
+from ..helpers.screenshot_dialog import ScreenshotExportDialog
 from ..entities_factory import (
     VertexSet,
     PolyLine,
@@ -820,14 +821,37 @@ class ViewVTK(BaseView):
         self.plotter.reset_camera()
 
     def export_screen(self):
-        out_file_name = save_file_dialog(
+        """Open the screenshot export dialog for high-quality figure export.
+        
+        This dialog provides comprehensive options including resolution presets,
+        format selection, colormap options, and quality settings.
+        """
+        # Determine view name based on class type
+        view_name = self._get_view_name()
+        
+        # Open the screenshot export dialog
+        dialog = ScreenshotExportDialog(
             parent=self,
-            caption="Export 3D view as HTML.",
-            filter="png (*.png);; jpeg (*.jpg)",
+            plotter=self.plotter,
+            view_name=view_name,
         )
-        self.plotter.screenshot(
-            out_file_name, transparent_background=True, window_size=(1920, 1080)
-        )
+        dialog.exec()
+
+    def _get_view_name(self):
+        """Get a descriptive name for the current view type.
+        
+        Returns:
+            str: Name of the view (e.g., '3D View', 'Map View', 'XSection View')
+        """
+        class_name = self.__class__.__name__
+        if "3D" in class_name or class_name == "View3D":
+            return "3D View"
+        elif "Map" in class_name:
+            return "Map View"
+        elif "Xsection" in class_name or "XSection" in class_name:
+            return "XSection View"
+        else:
+            return "View"
 
     # ================================  Methods specific to VTK views =================================================
 
