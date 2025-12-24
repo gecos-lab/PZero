@@ -106,7 +106,7 @@ class ScreenshotExportDialog(QDialog):
     def _setup_ui(self):
         """Set up the dialog user interface."""
         self.setWindowTitle(f"📸 Export Screenshot - {self.view_name}")
-        self.setMinimumSize(520, 700)
+        self.setMinimumSize(900, 550)
         
         main_layout = QVBoxLayout(self)
         main_layout.setSpacing(10)
@@ -116,25 +116,26 @@ class ScreenshotExportDialog(QDialog):
         title_label.setAlignment(Qt.AlignCenter)
         main_layout.addWidget(title_label)
 
-        # === Image Resolution Group ===
-        self._create_resolution_group(main_layout)
+        # === Content Layout (2 Columns) ===
+        content_layout = QHBoxLayout()
         
-        # === Output Format Group ===
-        self._create_format_group(main_layout)
-        
-        # === View Settings Group ===
-        self._create_view_group(main_layout)
-        
-        # === Colormap Settings Group ===
-        self._create_colormap_group(main_layout)
-        
-        # === Quality Settings Group ===
-        self._create_quality_group(main_layout)
-        
-        # === Title/Annotation Group ===
-        self._create_title_group(main_layout)
+        # Left Column: Primary Output Settings
+        left_layout = QVBoxLayout()
+        self._create_resolution_group(left_layout)
+        self._create_format_group(left_layout)
+        self._create_title_group(left_layout)
+        left_layout.addStretch()
+        content_layout.addLayout(left_layout)
 
-        main_layout.addStretch()
+        # Right Column: Visual & Quality Settings
+        right_layout = QVBoxLayout()
+        self._create_view_group(right_layout)
+        self._create_colormap_group(right_layout)
+        self._create_quality_group(right_layout)
+        right_layout.addStretch()
+        content_layout.addLayout(right_layout)
+
+        main_layout.addLayout(content_layout)
 
         # === Buttons ===
         self._create_buttons(main_layout)
