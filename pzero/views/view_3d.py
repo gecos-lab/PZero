@@ -438,6 +438,68 @@ class View3D(ViewVTK):
         self.init_zoom = self.plotter.camera.distance
         # self.picker = self.plotter.enable_mesh_picking(callback= self.pkd_mesh,show_message=False)
 
+    def vert_exag(self):
+        """Override parent's vertical exaggeration to store value and refresh plane widgets."""
+        from ..helpers.helper_dialogs import input_one_value_dialog
+        
+        # Get current scale value as default
+        current_scale = 1.0
+        if hasattr(self, 'v_exaggeration'):
+            current_scale = self.v_exaggeration
+        elif self.plotter.scale is not None and len(self.plotter.scale) >= 3:
+            current_scale = self.plotter.scale[2]
+        
+        exag_value = input_one_value_dialog(
+            parent=self,
+            title="Vertical exaggeration options",
+            label="Set vertical exaggeration",
+            default_value=current_scale,
+        )
+        
+        if exag_value is None:
+            return
+        
+        # Store the exaggeration value for plane widgets to use
+        self.v_exaggeration = exag_value
+        
+        # Apply the scale to the plotter
+        self.plotter.set_scale(zscale=exag_value)
+        
+        # Refresh plane widgets if mesh slicer is open with manipulation enabled
+        self._refresh_plane_widgets_for_exaggeration()
+        
+        self.plotter.render()
+
+    def _refresh_plane_widgets_for_exaggeration(self):
+        """Refresh plane widgets when vertical exaggeration changes."""
+        # Check if mesh slicer dialog is open
+        if not hasattr(self, 'mesh_slicer_dialog') or self.mesh_slicer_dialog is None:
+            return
+        
+        try:
+            dialog = self.mesh_slicer_dialog
+            if not dialog.isVisible():
+                return
+            
+            # Find the enable manipulation checkbox
+            enable_manip_checkbox = None
+            for checkbox in dialog.findChildren(QCheckBox):
+                if checkbox.text() == "Enable Direct Manipulation":
+                    enable_manip_checkbox = checkbox
+                    break
+            
+            if enable_manip_checkbox is None or not enable_manip_checkbox.isChecked():
+                return
+            
+            # Toggle manipulation off and on to refresh widgets with new bounds
+            print("Refreshing plane widgets for new vertical exaggeration...")
+            enable_manip_checkbox.setChecked(False)
+            QApplication.processEvents()
+            enable_manip_checkbox.setChecked(True)
+            
+        except Exception as e:
+            print(f"Error refreshing plane widgets: {e}")
+
     # ================================  Methods specific to 3D views ==================================================
 
     def end_pick(self, pos):
@@ -1253,8 +1315,11 @@ class View3D(ViewVTK):
                                     target_slice_type == "Z"
                                     and current_bounds[5] > current_bounds[4]
                                 ):
+                                    # Account for vertical exaggeration
+                                    v_exag = getattr(self, "v_exaggeration", 1.0)
+                                    unscaled_z = widget_origin[2] / v_exag if v_exag != 1.0 else widget_origin[2]
                                     new_normalized_pos = (
-                                        widget_origin[2] - current_bounds[4]
+                                        unscaled_z - current_bounds[4]
                                     ) / (current_bounds[5] - current_bounds[4])
 
                                 # Clamp slightly inside [0,1] to prevent disappearing at exact bounds
@@ -2996,13 +3061,15 @@ class View3D(ViewVTK):
                         else 0.5
                     )
                 elif slice_type == "Z":  # W direction
-                    # For W slices with vertical exaggeration, adjust calculation
+                    # For W slices with vertical exaggeration, reverse the scaling
+                    # PyVista's set_scale scales from origin (0,0,0), so we divide to get unscaled position
                     if hasattr(self, "v_exaggeration") and self.v_exaggeration != 1.0:
-                        z_mid = (bounds[4] + bounds[5]) / 2
-                        # Adjust for vertical exaggeration
-                        adjusted_pos = z_mid + (origin[2] - z_mid) / self.v_exaggeration
-                        normalized_pos = (adjusted_pos - bounds[4]) / (
-                            bounds[5] - bounds[4]
+                        # The origin from widget is in scaled space, convert back to unscaled
+                        unscaled_z = origin[2] / self.v_exaggeration
+                        normalized_pos = (
+                            (unscaled_z - bounds[4]) / (bounds[5] - bounds[4])
+                            if bounds[5] > bounds[4]
+                            else 0.5
                         )
                     else:
                         normalized_pos = (
@@ -3297,15 +3364,13 @@ class View3D(ViewVTK):
             visible = actor.GetVisibility()
             bounds = pv_entity.bounds
             origin = actor.GetCenter()
+            
+            # Calculate normalized position based on slice type
             if slice_type == "X":
                 normalized_pos = (
                     (origin[0] - bounds[0]) / (bounds[1] - bounds[0])
                     if bounds[1] > bounds[0]
                     else 0.5
-                )
-                slice_data = pv_entity.slice(
-                    normal=[1, 0, 0],
-                    origin=[bounds[0] + normalized_pos * (bounds[1] - bounds[0]), 0, 0],
                 )
             elif slice_type == "Y":
                 normalized_pos = (
@@ -3313,20 +3378,63 @@ class View3D(ViewVTK):
                     if bounds[3] > bounds[2]
                     else 0.5
                 )
-                slice_data = pv_entity.slice(
-                    normal=[0, 1, 0],
-                    origin=[0, bounds[2] + normalized_pos * (bounds[3] - bounds[2]), 0],
-                )
-            else:
+            else:  # Z
                 normalized_pos = (
                     (origin[2] - bounds[4]) / (bounds[5] - bounds[4])
                     if bounds[5] > bounds[4]
                     else 0.5
                 )
-                slice_data = pv_entity.slice(
-                    normal=[0, 0, 1],
-                    origin=[0, 0, bounds[4] + normalized_pos * (bounds[5] - bounds[4])],
-                )
+            
+            # Clamp normalized position to valid range
+            normalized_pos = max(0.0, min(1.0, normalized_pos))
+            
+            # Use extract_subset for StructuredGrid (much faster and more reliable)
+            if isinstance(pv_entity, pv.StructuredGrid):
+                dims = pv_entity.dimensions
+                try:
+                    if slice_type == "X":
+                        i = int(normalized_pos * (dims[0] - 1))
+                        i = max(0, min(dims[0] - 1, i))
+                        slice_data = pv_entity.extract_subset([i, i, 0, dims[1]-1, 0, dims[2]-1])
+                    elif slice_type == "Y":
+                        j = int(normalized_pos * (dims[1] - 1))
+                        j = max(0, min(dims[1] - 1, j))
+                        slice_data = pv_entity.extract_subset([0, dims[0]-1, j, j, 0, dims[2]-1])
+                    else:  # Z
+                        k = int(normalized_pos * (dims[2] - 1))
+                        k = max(0, min(dims[2] - 1, k))
+                        slice_data = pv_entity.extract_subset([0, dims[0]-1, 0, dims[1]-1, k, k])
+                    # Convert to surface for proper rendering
+                    if slice_data.n_points > 0:
+                        slice_data = slice_data.extract_surface()
+                except Exception as e:
+                    print(f"extract_subset failed for {slice_uid}: {e}, using slice fallback")
+                    slice_data = None
+            else:
+                slice_data = None
+            
+            # Fallback to generic slice method if extract_subset didn't work
+            if slice_data is None or slice_data.n_points == 0:
+                if slice_type == "X":
+                    slice_data = pv_entity.slice(
+                        normal=[1, 0, 0],
+                        origin=[bounds[0] + normalized_pos * (bounds[1] - bounds[0]), 0, 0],
+                    )
+                elif slice_type == "Y":
+                    slice_data = pv_entity.slice(
+                        normal=[0, 1, 0],
+                        origin=[0, bounds[2] + normalized_pos * (bounds[3] - bounds[2]), 0],
+                    )
+                else:  # Z
+                    slice_data = pv_entity.slice(
+                        normal=[0, 0, 1],
+                        origin=[0, 0, bounds[4] + normalized_pos * (bounds[5] - bounds[4])],
+                    )
+            
+            # Skip if slice is still empty
+            if slice_data is None or slice_data.n_points == 0:
+                print(f"Warning: Slice {slice_uid} is empty, skipping update")
+                continue
 
             scalar_array = property_name
             cmap = None
@@ -3369,36 +3477,39 @@ class View3D(ViewVTK):
                 f"Creating plane widget for {slice_type} slice with vertical exaggeration: {v_exag}"
             )
 
-            # Calculate world position
+            # Apply vertical exaggeration to Z bounds for ALL slice types
+            # PyVista's set_scale scales from origin (0,0,0), so we multiply Z by v_exag
+            widget_bounds = list(bounds)
+            if v_exag != 1.0:
+                widget_bounds[4] = bounds[4] * v_exag  # z_min scaled
+                widget_bounds[5] = bounds[5] * v_exag  # z_max scaled
+
+            # Calculate world position and origin
             if slice_type == "X":
                 position = bounds[0] + normalized_position * (bounds[1] - bounds[0])
                 normal = [1, 0, 0]
-                origin = [position, 0, 0]
+                # For X slices, Y and Z of origin should be at center of bounds
+                y_center = (bounds[2] + bounds[3]) / 2
+                z_center = (widget_bounds[4] + widget_bounds[5]) / 2  # Use scaled Z center
+                origin = [position, y_center, z_center]
             elif slice_type == "Y":
                 position = bounds[2] + normalized_position * (bounds[3] - bounds[2])
                 normal = [0, 1, 0]
-                origin = [0, position, 0]
+                # For Y slices, X and Z of origin should be at center of bounds
+                x_center = (bounds[0] + bounds[1]) / 2
+                z_center = (widget_bounds[4] + widget_bounds[5]) / 2  # Use scaled Z center
+                origin = [x_center, position, z_center]
             else:  # Z
+                # Calculate unscaled position first
                 position = bounds[4] + normalized_position * (bounds[5] - bounds[4])
                 normal = [0, 0, 1]
+                x_center = (bounds[0] + bounds[1]) / 2
+                y_center = (bounds[2] + bounds[3]) / 2
+                # Scale the Z position for the widget
+                scaled_z = position * v_exag
+                origin = [x_center, y_center, scaled_z]
 
-                # For Z planes, adjust the origin position for vertical exaggeration
-                if v_exag != 1.0:
-                    z_mid = (bounds[4] + bounds[5]) / 2
-                    # Apply vertical exaggeration from the middle
-                    adjusted_pos = z_mid + (position - z_mid) * v_exag
-                    origin = [0, 0, adjusted_pos]
-                else:
-                    origin = [0, 0, position]
-
-            # Constrain widget within bounds (account for vertical exaggeration on Z)
-            widget_bounds = list(bounds)
-            if slice_type == "Z" and v_exag != 1.0:
-                z_mid = (bounds[4] + bounds[5]) / 2
-                widget_bounds[4] = z_mid + (bounds[4] - z_mid) * v_exag
-                widget_bounds[5] = z_mid + (bounds[5] - z_mid) * v_exag
-
-            # Create the plane widget with minimal required parameters
+            # Create the plane widget with the properly scaled bounds
             try:
                 plane_widget = self.plotter.add_plane_widget(
                     update_callback,
@@ -3410,19 +3521,7 @@ class View3D(ViewVTK):
                 return plane_widget
             except Exception as e:
                 print(f"Error creating plane widget with PyVista: {e}")
-                # Try one more approach with different parameters
-                try:
-                    plane_widget = self.plotter.add_plane_widget(
-                        update_callback,
-                        normal=normal,
-                        origin=origin,
-                        bounds=widget_bounds,
-                        normal_rotation=False,  # Disable normal rotation on manipulator
-                    )
-                    return plane_widget
-                except:
-                    print("Failed with alternate parameters too")
-                    return None
+                return None
 
         except Exception as e:
             print(f"Error creating plane widget for {slice_type} slice: {e}")
