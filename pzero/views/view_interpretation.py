@@ -6,7 +6,7 @@ from PySide6.QtGui import QAction
 from PySide6.QtWidgets import (
     QWidget, QHBoxLayout, QLabel, QComboBox, QSlider, QSpinBox, QVBoxLayout, QCheckBox
 )
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 
 # VTK/PyVista imports
 import pyvista as pv
@@ -16,7 +16,7 @@ from copy import deepcopy
 # PZero imports
 from .view_map import ViewMap
 from ..entities_factory import Seismics, PolyLine
-from ..helpers.helper_dialogs import multiple_input_dialog
+from ..helpers.helper_dialogs import multiple_input_dialog, input_one_value_dialog
 from ..helpers.helper_widgets import Tracer
 
 class ViewInterpretation(ViewMap):
@@ -916,6 +916,18 @@ class ViewInterpretation(ViewMap):
         self.clear_seismic_volumes()
         # Refresh volume list to detect any seismics (combo_volume now exists)
         self.refresh_volume_list()
+        # Defer initial slice display to ensure window is fully rendered
+        # PyVista/VTK needs the window visible and sized before proper rendering
+        QTimer.singleShot(100, self._force_initial_display)
+    
+    def _force_initial_display(self):
+        """Force initial slice display after window is fully shown."""
+        if self.current_seismic_uid:
+            self.print_terminal("Forcing initial slice display...")
+            self._camera_initialized = False  # Force camera reset
+            self.update_slice_limits()
+            self.update_camera_orientation()  # Sets correct view (YZ for Inline, etc.)
+            self.update_slice()
     
     def clear_seismic_volumes(self):
         """Remove any full seismic volume actors from the plotter."""
@@ -934,3 +946,24 @@ class ViewInterpretation(ViewMap):
                         pass
         except Exception as e:
             self.print_terminal(f"Error clearing seismic volumes: {e}")
+
+    def vert_exag(self):
+        """Override parent's vertical exaggeration method to update slice view after scale change."""
+        # Get current scale value as default
+        current_scale = 1.0
+        if self.plotter.scale is not None and len(self.plotter.scale) >= 3:
+            current_scale = self.plotter.scale[2]
+        
+        exag_value = input_one_value_dialog(
+            parent=self,
+            title="Vertical exaggeration options",
+            label="Set vertical exaggeration",
+            default_value=current_scale,
+        )
+        
+        if exag_value is not None:
+            self.plotter.set_scale(zscale=exag_value)
+            # Update the slice display and camera to respect new vertical exaggeration
+            if self.current_seismic_uid:
+                self.update_slice()
+                self.plotter.render()

@@ -891,7 +891,16 @@ class View3D(ViewVTK):
 
         # Initialize throttle time for UI updates
         self.last_slider_update = time.time()
-        slider_throttle = 1 / 30.0
+        slider_throttle = 1 / 60.0  # 60 FPS for smoother updates
+        
+        # Entity cache for fast slice updates - avoids repeated lookups
+        self._slicer_entity_cache = {
+            'entity_name': None,
+            'entity': None,
+            'pv_entity': None,
+            'bounds': None,
+            'main_uid': None,
+        }
 
         # Create entity selection group (shared between modes)
         entity_group = QGroupBox("Entity Selection")
@@ -1887,9 +1896,13 @@ class View3D(ViewVTK):
             if not entity_name:
                 return
 
-            entity = self.get_entity_by_name(entity_name)
-            if not entity:
-                return
+            # Use cached entity if available for better performance
+            if self._slicer_entity_cache['entity_name'] == entity_name:
+                entity = self._slicer_entity_cache['entity']
+            else:
+                entity = self.get_entity_by_name(entity_name)
+                if not entity:
+                    return
 
             # Get the right input field and value label
             input_field = None
@@ -1929,9 +1942,13 @@ class View3D(ViewVTK):
             if not entity_name or not u_slice_check.isChecked():
                 return
 
-            entity = self.get_entity_by_name(entity_name)
-            if not entity:
-                return
+            # Use cached entity if available
+            if self._slicer_entity_cache['entity_name'] == entity_name:
+                entity = self._slicer_entity_cache['entity']
+            else:
+                entity = self.get_entity_by_name(entity_name)
+                if not entity:
+                    return
 
             try:
                 # Store the original user input to preserve it
@@ -1962,9 +1979,13 @@ class View3D(ViewVTK):
             if not entity_name or not v_slice_check.isChecked():
                 return
 
-            entity = self.get_entity_by_name(entity_name)
-            if not entity:
-                return
+            # Use cached entity if available
+            if self._slicer_entity_cache['entity_name'] == entity_name:
+                entity = self._slicer_entity_cache['entity']
+            else:
+                entity = self.get_entity_by_name(entity_name)
+                if not entity:
+                    return
 
             try:
                 # Store the original user input to preserve it
@@ -1995,9 +2016,13 @@ class View3D(ViewVTK):
             if not entity_name or not w_slice_check.isChecked():
                 return
 
-            entity = self.get_entity_by_name(entity_name)
-            if not entity:
-                return
+            # Use cached entity if available
+            if self._slicer_entity_cache['entity_name'] == entity_name:
+                entity = self._slicer_entity_cache['entity']
+            else:
+                entity = self.get_entity_by_name(entity_name)
+                if not entity:
+                    return
 
             try:
                 # Store the original user input to preserve it
@@ -2023,6 +2048,27 @@ class View3D(ViewVTK):
             except Exception as e:
                 print(f"Error processing W input: {e}")
 
+        # Helper function to update entity cache
+        def update_entity_cache(entity_name):
+            """Update the entity cache for fast slice updates."""
+            if self._slicer_entity_cache['entity_name'] == entity_name:
+                return  # Already cached
+            
+            entity = self.get_entity_by_name(entity_name)
+            if not entity:
+                return
+            
+            pv_entity = pv.wrap(entity)
+            main_uid = self.get_entity_uid_by_name(entity_name)
+            
+            self._slicer_entity_cache = {
+                'entity_name': entity_name,
+                'entity': entity,
+                'pv_entity': pv_entity,
+                'bounds': pv_entity.bounds,
+                'main_uid': main_uid,
+            }
+
         # Event handlers
         def update_slice_visualization(
             entity_name,
@@ -2042,85 +2088,126 @@ class View3D(ViewVTK):
                 else f"{entity_name}_{slice_type}"
             )
 
-            # ... (rest of the existing update_slice_visualization logic remains the same) ...
-            # Get the entity
-            entity = self.get_entity_by_name(entity_name)
-            if not entity:
-                print(f"Entity {entity_name} not found")
-                return
-
-            # Determine and persist the current main-mesh property for this entity
-            try:
-                main_uid = self.get_entity_uid_by_name(entity_name)
-                if main_uid is not None:
-                    current_prop = self.actors_df.loc[
-                        self.actors_df["uid"] == main_uid, "show_property"
-                    ].values[0]
-                    if not hasattr(self, "slice_prop_by_entity"):
-                        self.slice_prop_by_entity = {}
-                    self.slice_prop_by_entity[entity_name] = current_prop
-            except Exception:
-                pass
-
-            try:
+            # Use cached entity for fast updates to avoid expensive lookups
+            if fast_update and self._slicer_entity_cache['entity_name'] == entity_name:
+                entity = self._slicer_entity_cache['entity']
+                pv_entity = self._slicer_entity_cache['pv_entity']
+                bounds = self._slicer_entity_cache['bounds']
+                main_uid = self._slicer_entity_cache['main_uid']
+            else:
+                # Full lookup for non-cached or non-fast updates
+                entity = self.get_entity_by_name(entity_name)
+                if not entity:
+                    print(f"Entity {entity_name} not found")
+                    return
+                
                 # Convert to PyVista object
                 pv_entity = pv.wrap(entity)
                 bounds = pv_entity.bounds
+                main_uid = self.get_entity_uid_by_name(entity_name)
+                
+                # Update cache for future fast updates
+                self._slicer_entity_cache = {
+                    'entity_name': entity_name,
+                    'entity': entity,
+                    'pv_entity': pv_entity,
+                    'bounds': bounds,
+                    'main_uid': main_uid,
+                }
 
-                # Calculate the position in world coordinates
-                if slice_type == "X":
-                    position = bounds[0] + normalized_position * (bounds[1] - bounds[0])
-                    slice_data = pv_entity.slice(
-                        normal=[1, 0, 0], origin=[position, 0, 0]
-                    )
-                elif slice_type == "Y":
-                    position = bounds[2] + normalized_position * (bounds[3] - bounds[2])
-                    slice_data = pv_entity.slice(
-                        normal=[0, 1, 0], origin=[0, position, 0]
-                    )
-                else:  # Z
-                    position = bounds[4] + normalized_position * (bounds[5] - bounds[4])
-                    slice_data = pv_entity.slice(
-                        normal=[0, 0, 1], origin=[0, 0, position]
-                    )
+            # Determine and persist the current main-mesh property for this entity (skip for fast updates)
+            if not fast_update:
+                try:
+                    if main_uid is not None:
+                        current_prop = self.actors_df.loc[
+                            self.actors_df["uid"] == main_uid, "show_property"
+                        ].values[0]
+                        if not hasattr(self, "slice_prop_by_entity"):
+                            self.slice_prop_by_entity = {}
+                        self.slice_prop_by_entity[entity_name] = current_prop
+                except Exception:
+                    pass
+
+            try:
+                # Check if entity is a StructuredGrid (like seismics) - use faster extract_subset
+                is_structured = hasattr(pv_entity, 'dimensions') and pv_entity.dimensions is not None
+                dims = pv_entity.dimensions if is_structured else None
+                
+                if is_structured and dims is not None and all(d > 1 for d in dims):
+                    # FAST PATH: Use extract_subset for StructuredGrid (like seismics)
+                    # This is O(1) instead of O(n) for the generic slice method
+                    if slice_type == "X":
+                        idx = int(normalized_position * (dims[0] - 1))
+                        idx = max(0, min(dims[0] - 1, idx))
+                        subset = pv_entity.extract_subset([idx, idx, 0, dims[1]-1, 0, dims[2]-1])
+                    elif slice_type == "Y":
+                        idx = int(normalized_position * (dims[1] - 1))
+                        idx = max(0, min(dims[1] - 1, idx))
+                        subset = pv_entity.extract_subset([0, dims[0]-1, idx, idx, 0, dims[2]-1])
+                    else:  # Z
+                        idx = int(normalized_position * (dims[2] - 1))
+                        idx = max(0, min(dims[2] - 1, idx))
+                        subset = pv_entity.extract_subset([0, dims[0]-1, 0, dims[1]-1, idx, idx])
+                    
+                    # Convert to surface for rendering
+                    slice_data = subset.extract_surface() if subset.n_points > 0 else subset
+                else:
+                    # SLOW PATH: Use generic slice for unstructured meshes
+                    if slice_type == "X":
+                        position = bounds[0] + normalized_position * (bounds[1] - bounds[0])
+                        slice_data = pv_entity.slice(
+                            normal=[1, 0, 0], origin=[position, 0, 0]
+                        )
+                    elif slice_type == "Y":
+                        position = bounds[2] + normalized_position * (bounds[3] - bounds[2])
+                        slice_data = pv_entity.slice(
+                            normal=[0, 1, 0], origin=[0, position, 0]
+                        )
+                    else:  # Z
+                        position = bounds[4] + normalized_position * (bounds[5] - bounds[4])
+                        slice_data = pv_entity.slice(
+                            normal=[0, 0, 1], origin=[0, 0, position]
+                        )
 
                 # If slice is empty at extremes, nudge inside bounds slightly to keep it visible
                 if slice_data.n_points <= 0:
                     eps = getattr(self, "_slice_edge_epsilon", 1e-6)
                     try:
-                        if slice_type == "X":
-                            if normalized_position <= 0.0:
-                                normalized_position = eps
-                            elif normalized_position >= 1.0:
-                                normalized_position = 1.0 - eps
-                            position = bounds[0] + normalized_position * (
-                                bounds[1] - bounds[0]
-                            )
-                            slice_data = pv_entity.slice(
-                                normal=[1, 0, 0], origin=[position, 0, 0]
-                            )
-                        elif slice_type == "Y":
-                            if normalized_position <= 0.0:
-                                normalized_position = eps
-                            elif normalized_position >= 1.0:
-                                normalized_position = 1.0 - eps
-                            position = bounds[2] + normalized_position * (
-                                bounds[3] - bounds[2]
-                            )
-                            slice_data = pv_entity.slice(
-                                normal=[0, 1, 0], origin=[0, position, 0]
-                            )
+                        if is_structured and dims is not None:
+                            # For structured grids, just clamp the index
+                            if slice_type == "X":
+                                idx = max(1, min(dims[0] - 2, int(normalized_position * (dims[0] - 1))))
+                                subset = pv_entity.extract_subset([idx, idx, 0, dims[1]-1, 0, dims[2]-1])
+                            elif slice_type == "Y":
+                                idx = max(1, min(dims[1] - 2, int(normalized_position * (dims[1] - 1))))
+                                subset = pv_entity.extract_subset([0, dims[0]-1, idx, idx, 0, dims[2]-1])
+                            else:
+                                idx = max(1, min(dims[2] - 2, int(normalized_position * (dims[2] - 1))))
+                                subset = pv_entity.extract_subset([0, dims[0]-1, 0, dims[1]-1, idx, idx])
+                            slice_data = subset.extract_surface() if subset.n_points > 0 else subset
                         else:
-                            if normalized_position <= 0.0:
-                                normalized_position = eps
-                            elif normalized_position >= 1.0:
-                                normalized_position = 1.0 - eps
-                            position = bounds[4] + normalized_position * (
-                                bounds[5] - bounds[4]
-                            )
-                            slice_data = pv_entity.slice(
-                                normal=[0, 0, 1], origin=[0, 0, position]
-                            )
+                            # For unstructured, use nudged position
+                            if slice_type == "X":
+                                if normalized_position <= 0.0:
+                                    normalized_position = eps
+                                elif normalized_position >= 1.0:
+                                    normalized_position = 1.0 - eps
+                                position = bounds[0] + normalized_position * (bounds[1] - bounds[0])
+                                slice_data = pv_entity.slice(normal=[1, 0, 0], origin=[position, 0, 0])
+                            elif slice_type == "Y":
+                                if normalized_position <= 0.0:
+                                    normalized_position = eps
+                                elif normalized_position >= 1.0:
+                                    normalized_position = 1.0 - eps
+                                position = bounds[2] + normalized_position * (bounds[3] - bounds[2])
+                                slice_data = pv_entity.slice(normal=[0, 1, 0], origin=[0, position, 0])
+                            else:
+                                if normalized_position <= 0.0:
+                                    normalized_position = eps
+                                elif normalized_position >= 1.0:
+                                    normalized_position = 1.0 - eps
+                                position = bounds[4] + normalized_position * (bounds[5] - bounds[4])
+                                slice_data = pv_entity.slice(normal=[0, 0, 1], origin=[0, 0, position])
                     except Exception:
                         pass
                     # If still empty, do not hide; keep current actor visible and return
@@ -2162,8 +2249,13 @@ class View3D(ViewVTK):
                     cmap = None
                     color_RGB = None
                     try:
-                        main_uid = self.get_entity_uid_by_name(entity_name)
-                        # Prefer persisted property (in case the UI reverts briefly)
+                        # Use cached main_uid if available
+                        if self._slicer_entity_cache['entity_name'] == entity_name:
+                            main_uid = self._slicer_entity_cache['main_uid']
+                        else:
+                            main_uid = self.get_entity_uid_by_name(entity_name)
+                        
+                        # Get current property - prefer persisted, then actors_df
                         current_prop = None
                         if (
                             hasattr(self, "slice_prop_by_entity")
@@ -2174,37 +2266,40 @@ class View3D(ViewVTK):
                             current_prop = self.actors_df.loc[
                                 self.actors_df["uid"] == main_uid, "show_property"
                             ].values[0]
-                            # If 'none' or None, keep scalars None
-                            if not current_prop or current_prop == "none":
-                                color_RGB = self._legend_color_for_uid(main_uid)
-                            elif current_prop in ["X", "Y", "Z"]:
-                                # derive from slice geometry
-                                idx = {"X": 0, "Y": 1, "Z": 2}[current_prop]
-                                scalar_array = slice_data.points[:, idx]
-                                if (
-                                    hasattr(self.parent, "prop_legend_df")
-                                    and self.parent.prop_legend_df is not None
-                                ):
-                                    row = self.parent.prop_legend_df[
-                                        self.parent.prop_legend_df["property_name"]
-                                        == current_prop
-                                    ]
-                                    if not row.empty:
-                                        cmap = row["colormap"].iloc[0]
-                            else:
-                                # named data property, rely on dataset arrays
-                                if current_prop in slice_data.array_names:
-                                    scalar_array = current_prop
-                                    if (
-                                        hasattr(self.parent, "prop_legend_df")
-                                        and self.parent.prop_legend_df is not None
-                                    ):
-                                        row = self.parent.prop_legend_df[
-                                            self.parent.prop_legend_df["property_name"]
-                                            == current_prop
-                                        ]
-                                        if not row.empty:
-                                            cmap = row["colormap"].iloc[0]
+                        
+                        # Now apply colormap based on current_prop
+                        if not current_prop or current_prop == "none":
+                            # No property - use legend color
+                            color_RGB = self._legend_color_for_uid(main_uid) if main_uid else None
+                        elif current_prop in ["X", "Y", "Z"]:
+                            # Coordinate property - derive from slice geometry
+                            idx = {"X": 0, "Y": 1, "Z": 2}[current_prop]
+                            scalar_array = slice_data.points[:, idx]
+                            if (
+                                hasattr(self.parent, "prop_legend_df")
+                                and self.parent.prop_legend_df is not None
+                            ):
+                                row = self.parent.prop_legend_df[
+                                    self.parent.prop_legend_df["property_name"]
+                                    == current_prop
+                                ]
+                                if not row.empty:
+                                    cmap = row["colormap"].iloc[0]
+                        else:
+                            # Named data property - use from dataset arrays
+                            if current_prop in slice_data.array_names:
+                                scalar_array = current_prop
+                            # Get colormap from prop_legend_df
+                            if (
+                                hasattr(self.parent, "prop_legend_df")
+                                and self.parent.prop_legend_df is not None
+                            ):
+                                row = self.parent.prop_legend_df[
+                                    self.parent.prop_legend_df["property_name"]
+                                    == current_prop
+                                ]
+                                if not row.empty:
+                                    cmap = row["colormap"].iloc[0]
                     except Exception:
                         pass
 
@@ -2239,10 +2334,9 @@ class View3D(ViewVTK):
                     except Exception:
                         pass
 
-                # Render only if NOT doing a fast update from manipulation callback
-                # Manipulation callbacks often trigger many updates quickly; render once at the end.
-                # Let the calling function (toggle_multi_manipulation or slider change) handle final render.
-                if not fast_update or not specific_slice_id:
+                # Skip render for fast updates - the calling function handles it
+                # This avoids double-rendering and improves performance
+                if not fast_update:
                     self.plotter.render()
 
             except Exception as e:
@@ -2314,10 +2408,30 @@ class View3D(ViewVTK):
             # Update slice visibility
             slice_uid = f"{entity_name}_{slice_type}"
             if slice_uid in self.slice_actors:
-                # Update existing slice
+                # Update existing slice - fast path
                 self.slice_actors[slice_uid].SetVisibility(checked)
+                self.plotter.render()
+                return  # Early return for fast visibility toggle
             elif checked:
-                # Create new slice
+                # Create new slice - ensure cache is populated first
+                if self._slicer_entity_cache['entity_name'] != entity_name:
+                    update_entity_cache(entity_name)
+                
+                # Use cached main_uid
+                main_uid = self._slicer_entity_cache.get('main_uid')
+                
+                # Persist the current property for colormap inheritance BEFORE creating slice
+                if main_uid is not None:
+                    try:
+                        current_prop = self.actors_df.loc[
+                            self.actors_df["uid"] == main_uid, "show_property"
+                        ].values[0]
+                        if not hasattr(self, "slice_prop_by_entity"):
+                            self.slice_prop_by_entity = {}
+                        self.slice_prop_by_entity[entity_name] = current_prop
+                    except Exception:
+                        pass
+                
                 norm_pos = None
                 if slice_type == "X":
                     norm_pos = u_slider.value() / 100.0
@@ -2326,67 +2440,19 @@ class View3D(ViewVTK):
                 else:  # Z
                     norm_pos = w_slider.value() / 100.0
 
+                # Create slice - update_slice_visualization will use slice_prop_by_entity for colormap
                 update_slice_visualization(entity_name, slice_type, norm_pos)
-                # After creation, enforce the current main property so all slices sync (no default viridis)
-                try:
-                    # Build labeled name and reuse helper
-                    main_uid = self.get_entity_uid_by_name(entity_name)
-                    if main_uid is not None:
-                        collection = getattr(
-                            self.parent,
-                            self.actors_df.loc[
-                                self.actors_df["uid"] == main_uid, "collection"
-                            ].values[0],
-                        )
-                        labeled_name = None
-                        # Rebuild labeled name using same logic as in on_property_toggled
-                        for coll_name, prefix in [
-                            ("mesh3d_coll", "Mesh"),
-                            ("geol_coll", "Geological"),
-                            ("xsect_coll", "Cross-section"),
-                            ("boundary_coll", "Boundary"),
-                            ("dom_coll", "DOM"),
-                            ("image_coll", "Image"),
-                            ("well_coll", "Well"),
-                            ("fluid_coll", "Fluid"),
-                            ("backgrnd_coll", "Background"),
-                        ]:
-                            if collection.collection_name == coll_name:
-                                labeled_name = (
-                                    f"{prefix}: {collection.get_uid_name(main_uid)}"
-                                )
-                                break
-                        if labeled_name:
-                            # Use persisted property if available, else current actors_df value
-                            prop_text = None
-                            if (
-                                hasattr(self, "slice_prop_by_entity")
-                                and labeled_name in self.slice_prop_by_entity
-                            ):
-                                prop_text = self.slice_prop_by_entity[labeled_name]
-                            else:
-                                prop_text = self.actors_df.loc[
-                                    self.actors_df["uid"] == main_uid, "show_property"
-                                ].values[0]
-                            self._rebuild_slice_actor(
-                                labeled_name, slice_type, enforced_prop=prop_text
-                            )
-                except Exception:
-                    pass
-
-                # Hide/uncheck main entity in collection when slicer is turned on for this entity
-                try:
-                    main_uid = self.get_entity_uid_by_name(entity_name)
-                    if main_uid:
-                        # Hide actor and update actors_df
+                
+                # Hide/uncheck main entity in collection when slicer is turned on
+                if main_uid:
+                    try:
                         self.hide_uids([main_uid])
-                        # Reflect in the associated tree checkbox
                         coll_name = self.actors_df.loc[
                             self.actors_df["uid"] == main_uid, "collection"
                         ].values[0]
                         self._set_tree_checked_for_uid(coll_name, main_uid, False)
-                except Exception:
-                    pass
+                    except Exception:
+                        pass
 
             # If direct manipulation is enabled, update plane widgets to match currently checked slices
             if enable_manipulation.isChecked():
@@ -2434,6 +2500,7 @@ class View3D(ViewVTK):
                 self._updating_visualization = True
 
                 normalized_pos = slider_type.value() / 100.0
+                needs_render = False
 
                 # Update the value displays (both normalized and real)
                 if slider_type == u_slider:
@@ -2442,19 +2509,26 @@ class View3D(ViewVTK):
                         update_slice_visualization(
                             entity_name, "X", normalized_pos, fast_update=True
                         )
+                        needs_render = True
                 elif slider_type == v_slider:
                     update_value_displays(entity_name, "Y", normalized_pos)
                     if v_slice_check.isChecked():
                         update_slice_visualization(
                             entity_name, "Y", normalized_pos, fast_update=True
                         )
+                        needs_render = True
                 else:  # w_slider
                     update_value_displays(entity_name, "Z", normalized_pos)
                     if w_slice_check.isChecked():
                         update_slice_visualization(
                             entity_name, "Z", normalized_pos, fast_update=True
                         )
+                        needs_render = True
 
+                # Single render call after fast update
+                if needs_render:
+                    self.plotter.render()
+                    
                 self.last_slider_update = current_time
 
             finally:
@@ -2465,8 +2539,11 @@ class View3D(ViewVTK):
             if not entity_name:
                 return
 
-            entity = self.get_entity_by_name(entity_name)
-            if not entity:
+            # Pre-cache the entity for fast slice updates (does the lookup once)
+            update_entity_cache(entity_name)
+            
+            # Check if cache was populated successfully
+            if self._slicer_entity_cache['entity'] is None:
                 return
 
             # Uncheck all checkboxes
@@ -2725,11 +2802,9 @@ class View3D(ViewVTK):
         try:
             # Split the prefix and actual name
             if ":" not in name:
-                print("Error: Name doesn't contain a prefix")
                 return None
 
             prefix, entity_name = name.split(": ", 1)
-            print(f"Looking for entity: {entity_name} in {prefix} collection")
 
             # Map prefix to collection attribute name
             collection_map = {
@@ -2746,7 +2821,6 @@ class View3D(ViewVTK):
 
             coll_name = collection_map.get(prefix)
             if not coll_name:
-                print(f"Error: Unknown prefix '{prefix}'")
                 return None
 
             # Get the collection and entity

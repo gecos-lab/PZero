@@ -57,6 +57,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         # For this we collect all signals and particularly connections to functions and
         # delete them before closing the view.
         self.setAttribute(Qt.WA_DeleteOnClose, True)
+        self.setWindowFlags(Qt.Widget)
         self.parent = parent
         self.signals = BaseViewSignals()
         self.print_terminal = self.parent.print_terminal
