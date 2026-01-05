@@ -376,6 +376,14 @@ class ScreenshotExportDialog(QDialog):
         else:
             plotter.set_background("black")
 
+        # Copy scale (vertical exaggeration) from source plotter
+        if self.plotter is not None:
+            try:
+                scale = self.plotter.scale
+                plotter.set_scale(xscale=scale[0], yscale=scale[1], zscale=scale[2])
+            except Exception:
+                pass
+
         text_color = "white" if is_dark_bg else "black"
 
         # Copy actors from source plotter
