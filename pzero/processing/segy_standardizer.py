@@ -5,13 +5,14 @@ Utility functions for standardizing SEG-Y files for PZero compatibility.
 
 This module handles both standard and non-standard SEG-Y files by:
 1. Using coordinate values (X/Y) to determine the actual grid structure
-2. Converting IBM Float to IEEE Float
+2. Converting IBM Float to IEEE Float (vectorized for speed)
 3. Writing proper inline/crossline and CDP coordinates to standard locations
 4. Ensuring segyio compatibility for PZero import
 """
 
 import os
 import struct
+import numpy as np
 
 
 def read_binary_header(file):
@@ -51,9 +52,55 @@ def analyze_segy_parameters(input_file):
         }
 
 
+def ibm_to_ieee_vectorized(ibm_data):
+    """
+    Convert IBM 370 floating point to IEEE 754 - vectorized numpy version.
+    Much faster than sample-by-sample conversion.
+    
+    Args:
+        ibm_data: numpy array of uint32 (big-endian IBM floats as integers)
+    
+    Returns:
+        numpy array of float32 (IEEE floats)
+    """
+    # Handle zeros
+    result = np.zeros(len(ibm_data), dtype=np.float32)
+    nonzero_mask = ibm_data != 0
+    
+    if not np.any(nonzero_mask):
+        return result
+    
+    ibm_nonzero = ibm_data[nonzero_mask].astype(np.int64)
+    
+    # Extract IBM components
+    sign = (ibm_nonzero >> 31) & 1
+    exponent = (ibm_nonzero >> 24) & 0x7F
+    mantissa = ibm_nonzero & 0x00FFFFFF
+    
+    # Handle zero mantissa
+    mantissa_nonzero = mantissa != 0
+    
+    # IBM exponent is base-16, excess-64
+    # Value = (-1)^sign * 16^(exp-64) * (mantissa / 2^24)
+    # Value = (-1)^sign * mantissa * 2^(4*(exp-64) - 24)
+    exp16 = exponent - 64
+    
+    # Calculate IEEE value
+    ieee_values = np.zeros(len(ibm_nonzero), dtype=np.float64)
+    valid = mantissa_nonzero
+    ieee_values[valid] = mantissa[valid] * np.power(2.0, 4 * exp16[valid] - 24)
+    
+    # Apply sign
+    ieee_values[sign == 1] *= -1
+    
+    result[nonzero_mask] = ieee_values.astype(np.float32)
+    return result
+
+
 def ibm_to_ieee(ibm_bytes):
     """
-    Convert IBM 370 floating point to IEEE 754 floating point.
+    Convert single IBM 370 floating point to IEEE 754 floating point.
+    Used for small conversions where vectorization overhead isn't worth it.
     """
     ibm_int = struct.unpack(">I", ibm_bytes)[0]
     
@@ -79,15 +126,13 @@ def ibm_to_ieee(ibm_bytes):
 def scan_all_traces_for_coordinates(input_file, trace_size, total_traces, print_fn=print):
     """
     Scan ALL traces to get accurate unique coordinate counts.
-    This is necessary because sampling can miss unique values.
-    
-    Returns dict with coordinate source detection and grid info.
+    Optimized with buffered reading.
     """
     print_fn("Scanning all traces for coordinate analysis...")
     
     file_size = os.path.getsize(input_file)
     
-    # Track all unique values for each coordinate type
+    # Track all unique values
     src_x_values = set()
     src_y_values = set()
     cdp_x_values = set()
@@ -97,73 +142,75 @@ def scan_all_traces_for_coordinates(input_file, trace_size, total_traces, print_
     field_record_values = set()
     cdp_number_values = set()
     
-    # Also track coordinate pairs for grid detection
-    trace_coords = []  # List of (trace_idx, x_key, y_key)
+    # Store trace coordinates
+    trace_coords = []
+    
+    # Read in larger chunks for speed
+    CHUNK_SIZE = 10000  # Read 10000 trace headers at a time
+    header_size = 240
     
     with open(input_file, "rb") as f:
-        for i in range(total_traces):
-            pos = 3600 + i * trace_size
-            if pos >= file_size:
-                break
+        for chunk_start in range(0, total_traces, CHUNK_SIZE):
+            chunk_end = min(chunk_start + CHUNK_SIZE, total_traces)
+            chunk_count = chunk_end - chunk_start
             
-            f.seek(pos)
-            header = f.read(240)
+            # Read all headers in this chunk
+            headers_data = bytearray()
+            for i in range(chunk_start, chunk_end):
+                pos = 3600 + i * trace_size
+                if pos >= file_size:
+                    break
+                f.seek(pos)
+                headers_data.extend(f.read(header_size))
             
-            if len(header) != 240:
-                break
+            # Parse headers
+            for local_idx in range(chunk_count):
+                global_idx = chunk_start + local_idx
+                offset = local_idx * header_size
+                
+                if offset + header_size > len(headers_data):
+                    break
+                
+                header = headers_data[offset:offset + header_size]
+                
+                # Read coordinates
+                scalar = struct.unpack('>h', header[70:72])[0]
+                
+                src_x = struct.unpack('>l', header[72:76])[0]
+                src_y = struct.unpack('>l', header[76:80])[0]
+                src_x_values.add(src_x)
+                src_y_values.add(src_y)
+                
+                cdp_x = struct.unpack('>l', header[180:184])[0]
+                cdp_y = struct.unpack('>l', header[184:188])[0]
+                cdp_x_values.add(cdp_x)
+                cdp_y_values.add(cdp_y)
+                
+                inline = struct.unpack('>l', header[188:192])[0]
+                xline = struct.unpack('>l', header[192:196])[0]
+                inline_values.add(inline)
+                xline_values.add(xline)
+                
+                field_rec = struct.unpack('>l', header[8:12])[0]
+                cdp_num = struct.unpack('>l', header[20:24])[0]
+                field_record_values.add(field_rec)
+                cdp_number_values.add(cdp_num)
+                
+                # Store trace info
+                file_pos = 3600 + global_idx * trace_size
+                if src_x != 0 or src_y != 0:
+                    trace_coords.append((global_idx, src_x, src_y, file_pos))
+                elif cdp_x != 0 or cdp_y != 0:
+                    trace_coords.append((global_idx, cdp_x, cdp_y, file_pos))
+                else:
+                    trace_coords.append((global_idx, cdp_num, field_rec, file_pos))
             
-            # Read all coordinate fields
-            scalar = struct.unpack('>h', header[70:72])[0]
-            
-            def apply_scalar(val, s):
-                if s < 0:
-                    return val / abs(s)
-                elif s > 0:
-                    return val * s
-                return float(val)
-            
-            # Source X/Y
-            src_x = struct.unpack('>l', header[72:76])[0]
-            src_y = struct.unpack('>l', header[76:80])[0]
-            src_x_scaled = apply_scalar(src_x, scalar)
-            src_y_scaled = apply_scalar(src_y, scalar)
-            src_x_values.add(src_x)
-            src_y_values.add(src_y)
-            
-            # CDP X/Y (standard)
-            cdp_x = struct.unpack('>l', header[180:184])[0]
-            cdp_y = struct.unpack('>l', header[184:188])[0]
-            cdp_x_values.add(cdp_x)
-            cdp_y_values.add(cdp_y)
-            
-            # Inline/Crossline (standard)
-            inline = struct.unpack('>l', header[188:192])[0]
-            xline = struct.unpack('>l', header[192:196])[0]
-            inline_values.add(inline)
-            xline_values.add(xline)
-            
-            # Field Record and CDP Number (potential inline/crossline)
-            field_rec = struct.unpack('>l', header[8:12])[0]
-            cdp_num = struct.unpack('>l', header[20:24])[0]
-            field_record_values.add(field_rec)
-            cdp_number_values.add(cdp_num)
-            
-            # Store trace info - use the best available coordinates
-            # Priority: Source X/Y (if valid) > CDP X/Y > Inline/Crossline
-            if src_x != 0 or src_y != 0:
-                trace_coords.append((i, src_x, src_y, pos))
-            elif cdp_x != 0 or cdp_y != 0:
-                trace_coords.append((i, cdp_x, cdp_y, pos))
-            else:
-                # Use field record / cdp number as pseudo-coordinates
-                trace_coords.append((i, cdp_num, field_rec, pos))
-            
-            if (i + 1) % 50000 == 0:
-                print_fn(f"  Scanned {i + 1}/{total_traces} traces...")
+            if chunk_end % 100000 == 0 or chunk_end == total_traces:
+                print_fn(f"  Scanned {chunk_end}/{total_traces} traces...")
     
     print_fn(f"  Scan complete: {len(trace_coords)} traces")
     
-    # Analyze what we found
+    # Build results
     results = {
         'src_x': {'count': len(src_x_values), 'all_zero': src_x_values == {0}},
         'src_y': {'count': len(src_y_values), 'all_zero': src_y_values == {0}},
@@ -176,8 +223,7 @@ def scan_all_traces_for_coordinates(input_file, trace_size, total_traces, print_
         'trace_coords': trace_coords,
     }
     
-    # Determine best coordinate source for grid detection
-    # Priority: Source X/Y > CDP X/Y > Field Record/CDP Number
+    # Determine best coordinate source
     if not results['src_x']['all_zero'] and not results['src_y']['all_zero']:
         results['x_source'] = 'src_x'
         results['y_source'] = 'src_y'
@@ -197,7 +243,6 @@ def scan_all_traces_for_coordinates(input_file, trace_size, total_traces, print_
         results['n_y'] = results['xline']['count']
         print_fn(f"  Using Inline/Crossline: {results['n_x']} x {results['n_y']}")
     else:
-        # Fallback to field record / cdp number
         results['x_source'] = 'cdp_number'
         results['y_source'] = 'field_record'
         results['n_x'] = results['cdp_number']['count']
@@ -208,17 +253,13 @@ def scan_all_traces_for_coordinates(input_file, trace_size, total_traces, print_
 
 
 def estimate_grid_dimensions(total_traces, hint_x=None, hint_y=None):
-    """
-    Estimate grid dimensions for a given number of traces.
-    """
+    """Estimate grid dimensions for a given number of traces."""
     import math
     
     if hint_x is not None and hint_y is not None and hint_x > 1 and hint_y > 1:
-        # If hints exactly match, use them
         if hint_x * hint_y == total_traces:
             return hint_x, hint_y
         
-        # Search for close matches
         best_match = None
         best_distance = float('inf')
         
@@ -239,13 +280,11 @@ def estimate_grid_dimensions(total_traces, hint_x=None, hint_y=None):
         if best_match is not None:
             return best_match
     
-    # Single hint
     if hint_x is not None and hint_x > 1 and total_traces % hint_x == 0:
         return hint_x, total_traces // hint_x
     if hint_y is not None and hint_y > 1 and total_traces % hint_y == 0:
         return total_traces // hint_y, hint_y
     
-    # Fallback: find factors close to square root
     sqrt_traces = int(math.sqrt(total_traces))
     
     for n in range(sqrt_traces, 0, -1):
@@ -257,61 +296,46 @@ def estimate_grid_dimensions(total_traces, hint_x=None, hint_y=None):
 
 
 def build_coordinate_grid(trace_coords, n_inlines, n_xlines, total_traces, print_fn=print):
-    """
-    Build a mapping from grid position (inline, crossline) to trace file position.
-    
-    This sorts traces by their X/Y coordinates to determine their grid position.
-    """
+    """Build a mapping from grid position to trace file position."""
     print_fn("Building coordinate grid mapping...")
     
     if not trace_coords:
         print_fn("  No coordinate data - using sequential order")
-        return {i: 3600 + i * 6244 for i in range(total_traces)}  # Fallback
+        return None  # Signal to use sequential
     
     # Get unique X and Y values
     x_values = sorted(set(t[1] for t in trace_coords))
     y_values = sorted(set(t[2] for t in trace_coords))
     
-    print_fn(f"  X values: {len(x_values)} unique (range {min(x_values)} to {max(x_values)})")
-    print_fn(f"  Y values: {len(y_values)} unique (range {min(y_values)} to {max(y_values)})")
+    print_fn(f"  X values: {len(x_values)} unique")
+    print_fn(f"  Y values: {len(y_values)} unique")
     
-    # Create lookup from coordinate to grid index
+    # Create lookup
     x_to_idx = {x: i for i, x in enumerate(x_values)}
     y_to_idx = {y: i for i, y in enumerate(y_values)}
     
-    # Map each trace to its grid position
-    # Grid position = inline_idx * n_xlines + xline_idx
-    # We treat X as crossline (varies faster) and Y as inline
-    grid_map = {}  # grid_position -> trace_file_position
-    
+    # Build grid map
+    grid_map = {}
     for trace_idx, x, y, file_pos in trace_coords:
         if x in x_to_idx and y in y_to_idx:
-            xline_idx = x_to_idx[x]  # X varies within each inline
-            inline_idx = y_to_idx[y]  # Y is the inline
+            xline_idx = x_to_idx[x]
+            inline_idx = y_to_idx[y]
             grid_pos = inline_idx * n_xlines + xline_idx
             grid_map[grid_pos] = file_pos
     
     print_fn(f"  Mapped {len(grid_map)} traces to grid positions")
     
-    # Check coverage
-    expected = n_inlines * n_xlines
-    if len(grid_map) < expected:
-        print_fn(f"  Warning: Only {len(grid_map)}/{expected} grid positions have traces")
-    
     return grid_map
 
 
 def standardize_segy_for_pzero(input_file, output_file, print_fn=print):
-    """Standardize SEGY file specifically for PZero compatibility.
+    """Standardize SEGY file for PZero compatibility.
     
-    This function:
-    1. Scans ALL traces to get accurate coordinate counts
-    2. Uses coordinates to determine actual grid structure
-    3. Reorders traces into proper crossline-major order
-    4. Converts IBM Float to IEEE Float
-    5. Writes standard inline/crossline/CDP locations
+    Optimized version with:
+    - Chunked header reading
+    - Vectorized IBM to IEEE conversion
+    - Batch trace processing
     """
-    # Get parameters
     params = analyze_segy_parameters(input_file)
     num_samples = params["num_samples"]
     trace_size = params["trace_size"]
@@ -329,26 +353,24 @@ def standardize_segy_for_pzero(input_file, output_file, print_fn=print):
     print_fn(f"  Total traces: {total_traces}")
     print_fn("")
 
-    # Scan all traces for coordinate analysis
+    # Scan traces
     coord_info = scan_all_traces_for_coordinates(input_file, trace_size, total_traces, print_fn)
     print_fn("")
     
-    # Determine grid dimensions
+    # Grid dimensions
     hint_x = coord_info.get('n_x', 1)
     hint_y = coord_info.get('n_y', 1)
     
-    # Check if coordinate-based grid matches trace count
     if hint_x * hint_y == total_traces:
-        n_xlines = hint_x  # X direction = crosslines
-        n_inlines = hint_y  # Y direction = inlines
-        print_fn(f"Grid from coordinates: {n_inlines} inlines x {n_xlines} crosslines = {n_inlines * n_xlines}")
+        n_xlines = hint_x
+        n_inlines = hint_y
+        print_fn(f"Grid from coordinates: {n_inlines} inlines x {n_xlines} crosslines")
     else:
-        # Grid doesn't match - find closest factors
         print_fn(f"Coordinate grid {hint_x}x{hint_y}={hint_x*hint_y} doesn't match {total_traces} traces")
         n_xlines, n_inlines = estimate_grid_dimensions(total_traces, hint_x, hint_y)
-        print_fn(f"Adjusted grid: {n_inlines} inlines x {n_xlines} crosslines = {n_inlines * n_xlines}")
+        print_fn(f"Adjusted grid: {n_inlines} inlines x {n_xlines} crosslines")
     
-    # Build coordinate-to-grid mapping
+    # Build grid mapping
     grid_map = build_coordinate_grid(
         coord_info['trace_coords'], 
         n_inlines, 
@@ -358,114 +380,111 @@ def standardize_segy_for_pzero(input_file, output_file, print_fn=print):
     )
     print_fn("")
     
-    # Calculate traces to process
-    grid_traces = n_inlines * n_xlines
-    traces_to_process = min(grid_traces, total_traces)
-    
+    traces_to_process = min(n_inlines * n_xlines, total_traces)
     print_fn(f"Output: {n_inlines} inlines x {n_xlines} crosslines = {traces_to_process} traces")
+    print_fn(f"Using vectorized conversion for speed...")
     print_fn("")
 
+    # Pre-compute output trace header template
+    header_template = bytearray(240)
+    header_template[114:116] = struct.pack(">H", num_samples)
+    header_template[116:118] = struct.pack(">H", sample_interval)
+    header_template[70:72] = struct.pack(">h", 1)  # Scalar = 1
+    
+    spacing = 1000
+    data_size = num_samples * 4
+    
+    # Batch size for processing
+    BATCH_SIZE = 1000  # Process 1000 traces at a time
+    
     with open(input_file, "rb") as infile, open(output_file, "wb") as outfile:
-        # Read and update headers
+        # Write headers
         textual_header = infile.read(3200)
         binary_header = bytearray(infile.read(400))
 
-        # Update binary header
         binary_header[12:14] = struct.pack(">H", min(n_xlines, 32767))
         binary_header[14:16] = struct.pack(">H", 0)
         binary_header[16:18] = struct.pack(">H", sample_interval)
         binary_header[20:22] = struct.pack(">H", num_samples)
-        binary_header[24:26] = struct.pack(">H", 5)  # IEEE float
+        binary_header[24:26] = struct.pack(">H", 5)
         binary_header[26:28] = struct.pack(">H", 1)
-        binary_header[28:30] = struct.pack(">H", 4)  # Horizontally stacked
-        binary_header[300:302] = struct.pack(">H", 2)  # Rev 2
+        binary_header[28:30] = struct.pack(">H", 4)
+        binary_header[300:302] = struct.pack(">H", 2)
         binary_header[302:304] = struct.pack(">H", 1)
         binary_header[304:306] = struct.pack(">H", 0)
 
         outfile.write(textual_header)
         outfile.write(binary_header)
 
-        # Coordinate spacing for synthetic CDP coordinates
-        spacing = 1000
-        
-        # Process traces in grid order (crossline-major)
         trace_count = 0
-        data_size = num_samples * 4
+        last_progress = 0
         
-        for inline_idx in range(n_inlines):
-            for xline_idx in range(n_xlines):
-                grid_pos = inline_idx * n_xlines + xline_idx
+        # Process traces in batches
+        for batch_start in range(0, traces_to_process, BATCH_SIZE):
+            batch_end = min(batch_start + BATCH_SIZE, traces_to_process)
+            
+            # Collect source positions for this batch
+            batch_data = []
+            for grid_pos in range(batch_start, batch_end):
+                inline_idx = grid_pos // n_xlines
+                xline_idx = grid_pos % n_xlines
                 
-                # Get source trace position
-                if grid_pos in grid_map:
+                if grid_map and grid_pos in grid_map:
                     source_pos = grid_map[grid_pos]
                 else:
-                    # Fallback: use sequential trace
-                    source_pos = 3600 + trace_count * trace_size
+                    source_pos = 3600 + grid_pos * trace_size
                 
+                batch_data.append((inline_idx, xline_idx, source_pos))
+            
+            # Read and process batch
+            for inline_idx, xline_idx, source_pos in batch_data:
                 if source_pos >= file_size:
                     continue
                 
-                # Read source trace
                 infile.seek(source_pos)
-                trace_header = bytearray(infile.read(240))
+                raw_trace = infile.read(240 + data_size)
                 
-                if len(trace_header) != 240:
+                if len(raw_trace) < 240:
                     continue
-
-                # Calculate output inline/crossline numbers (1-based)
+                
+                # Build output trace header
+                trace_header = bytearray(header_template)
+                
                 inline_num = inline_idx + 1
                 xline_num = xline_idx + 1
-
-                # Write to standard locations
-                trace_header[188:192] = struct.pack(">l", inline_num)  # Inline
-                trace_header[192:196] = struct.pack(">l", xline_num)   # Crossline
-
-                # Generate CDP coordinates
-                cdp_x = xline_num * spacing
-                cdp_y = inline_num * spacing
-                trace_header[180:184] = struct.pack(">l", int(cdp_x))
-                trace_header[184:188] = struct.pack(">l", int(cdp_y))
                 
-                # Coordinate scalar = 1
-                trace_header[70:72] = struct.pack(">h", 1)
-                
-                # Sample info
-                trace_header[114:116] = struct.pack(">H", num_samples)
-                trace_header[116:118] = struct.pack(">H", sample_interval)
-                
-                # Trace sequence
+                trace_header[188:192] = struct.pack(">l", inline_num)
+                trace_header[192:196] = struct.pack(">l", xline_num)
+                trace_header[180:184] = struct.pack(">l", xline_num * spacing)
+                trace_header[184:188] = struct.pack(">l", inline_num * spacing)
                 trace_header[0:4] = struct.pack(">l", xline_num)
                 trace_header[4:8] = struct.pack(">l", trace_count + 1)
-
+                
                 outfile.write(trace_header)
-
-                # Read and convert trace data
-                data = infile.read(data_size)
-                if len(data) < data_size:
-                    data = data.ljust(data_size, b"\x00")
-                elif len(data) > data_size:
-                    data = data[:data_size]
-
-                # Convert samples
-                for i in range(0, len(data), 4):
-                    sample_bytes = data[i:i + 4].ljust(4, b"\x00")
-                    try:
-                        if format_code == 1:  # IBM Float
-                            sample = ibm_to_ieee(sample_bytes)
-                        elif format_code == 5:  # IEEE Float
-                            sample = struct.unpack(">f", sample_bytes)[0]
-                        else:
-                            sample = 0.0
-                    except:
-                        sample = 0.0
-                    outfile.write(struct.pack(">f", sample))
-
+                
+                # Convert trace data
+                trace_data = raw_trace[240:240 + data_size]
+                if len(trace_data) < data_size:
+                    trace_data = trace_data.ljust(data_size, b'\x00')
+                
+                if format_code == 1:  # IBM Float - vectorized conversion
+                    # Convert bytes to uint32 array
+                    ibm_ints = np.frombuffer(trace_data, dtype='>u4')
+                    ieee_floats = ibm_to_ieee_vectorized(ibm_ints)
+                    outfile.write(ieee_floats.astype('>f4').tobytes())
+                elif format_code == 5:  # Already IEEE
+                    outfile.write(trace_data)
+                else:
+                    # Other formats - zero fill
+                    outfile.write(b'\x00' * data_size)
+                
                 trace_count += 1
-
-            # Progress update per inline
-            if (inline_idx + 1) % 50 == 0:
-                print_fn(f"Processed inline {inline_idx + 1}/{n_inlines} ({trace_count} traces)")
+            
+            # Progress update
+            progress = (batch_end * 100) // traces_to_process
+            if progress >= last_progress + 5:  # Update every 5%
+                print_fn(f"Progress: {progress}% ({trace_count}/{traces_to_process} traces)")
+                last_progress = progress
 
         print_fn(f"\n{'='*60}")
         print_fn(f"Standardization completed!")
@@ -479,9 +498,7 @@ def standardize_segy_for_pzero(input_file, output_file, print_fn=print):
 
 
 def verify_segy_structure(output_file, print_fn=print):
-    """
-    Verify that the converted SEG-Y file can be read by segyio.
-    """
+    """Verify that the converted SEG-Y file can be read by segyio."""
     try:
         import segyio
         
@@ -496,7 +513,7 @@ def verify_segy_structure(output_file, print_fn=print):
             try:
                 ilines = f.ilines
                 xlines = f.xlines
-            except Exception as e:
+            except:
                 ilines = None
                 xlines = None
             
@@ -510,7 +527,6 @@ def verify_segy_structure(output_file, print_fn=print):
             else:
                 print_fn(f"  Crosslines: NOT DETECTED")
             
-            # Sample trace headers
             print_fn("  Sample traces:")
             for i in [0, 1, min(10, n_traces-1)]:
                 if i < n_traces:
