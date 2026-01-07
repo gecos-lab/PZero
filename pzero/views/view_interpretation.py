@@ -629,22 +629,22 @@ class ViewInterpretation(ViewMap):
         height = 0.0
         
         if self.current_axis == 'Inline':
-            # YZ plane
+            # YZ plane - camera looks along +X axis (from negative X towards positive X)
             width = abs(bounds[3] - bounds[2]) * scale[1]
             height = abs(bounds[5] - bounds[4]) * scale[2]
             
-            # Position: Look down X axis
-            camera.position = (center[0] + max(width, height) * 2, center[1], center[2])
+            # Position camera on NEGATIVE X side looking towards POSITIVE X (front view)
+            camera.position = (center[0] - max(width, height) * 2, center[1], center[2])
             camera.focal_point = center
             camera.view_up = (0, 0, 1)
             
         elif self.current_axis == 'Crossline':
-            # XZ plane
+            # XZ plane - camera looks along +Y axis (from negative Y towards positive Y)
             width = abs(bounds[1] - bounds[0]) * scale[0]
             height = abs(bounds[5] - bounds[4]) * scale[2]
             
-            # Position: Look down Y axis
-            camera.position = (center[0], center[1] + max(width, height) * 2, center[2])
+            # Position camera on NEGATIVE Y side looking towards POSITIVE Y (front view)
+            camera.position = (center[0], center[1] - max(width, height) * 2, center[2])
             camera.focal_point = center
             camera.view_up = (0, 0, 1)
             
@@ -731,18 +731,30 @@ class ViewInterpretation(ViewMap):
                 # Copy the traced polydata to our vtk object first (like standard draw_line)
                 input_dict["vtk_obj"].ShallowCopy(traced_pld)
                 
-                # Now snap the points to the current slice plane
+                # Debug: Print original points before snapping
                 points = np.array(input_dict["vtk_obj"].GetPoints().GetData())
+                self.print_terminal(f"Original traced points (first 3): {points[:min(3, len(points))]}")
+                self.print_terminal(f"Current axis: {self.current_axis}, slice position: {self.current_slice_position}")
+                
+                # Now snap the points to the current slice plane
                 snapped_points = self.snap_points_to_slice(points)
+                self.print_terminal(f"Snapped points (first 3): {snapped_points[:min(3, len(snapped_points))]}")
+                
                 input_dict["vtk_obj"].points = snapped_points
                 
                 # Add to geological collection - this emits signals that other views listen to
                 new_uid = self.parent.geol_coll.add_entity_from_dict(input_dict)
                 self.print_terminal(f"Created interpretation line with {len(snapped_points)} points, uid: {new_uid}")
             
-            # Remove the temporary picking plane
-            if 'picking_plane' in self.plotter.renderer.actors:
-                self.plotter.remove_actor('picking_plane')
+            # Restore pickability state of all actors
+            if hasattr(self, '_saved_pickable_state'):
+                for name, pickable in self._saved_pickable_state.items():
+                    try:
+                        if name in self.plotter.renderer.actors:
+                            self.plotter.renderer.actors[name].SetPickable(pickable)
+                    except:
+                        pass
+                delattr(self, '_saved_pickable_state')
                     
             tracer.EnabledOff()
             self.enable_actions()
@@ -787,9 +799,23 @@ class ViewInterpretation(ViewMap):
         line_dict["x_section"] = ""
         line_dict["vtk_obj"] = PolyLine()
         
-        # Create a transparent picking plane at the current slice position
-        # This ensures the tracer draws directly on the slice plane
-        self.add_picking_plane()
+        # Store pickability state of all actors, then make only the slice pickable
+        self._saved_pickable_state = {}
+        for name, actor in self.plotter.renderer.actors.items():
+            try:
+                self._saved_pickable_state[name] = actor.GetPickable()
+                if name != "seismic_slice_actor":
+                    actor.SetPickable(False)
+            except:
+                pass
+        
+        # Ensure the slice actor is pickable
+        if self.slice_actor:
+            try:
+                self.slice_actor.SetPickable(True)
+                self.print_terminal("Slice actor is now the only pickable object for tracing")
+            except Exception as e:
+                self.print_terminal(f"Could not set slice pickable: {e}")
         
         tracer = Tracer(self)
         tracer.EnabledOn()
@@ -805,12 +831,14 @@ class ViewInterpretation(ViewMap):
             
         bounds = self.current_slice_bounds
         
-        # Create a plane mesh at the slice position
+        # Create a plane mesh at the slice position using explicit i and j directions
+        # to ensure proper orientation matching the camera view
         if self.current_axis == 'Inline':
             # YZ plane at current X position
+            # i direction along Y, j direction along Z
             plane = pv.Plane(
                 center=(self.current_slice_position, (bounds[2]+bounds[3])/2, (bounds[4]+bounds[5])/2),
-                direction=(1, 0, 0),
+                direction=(1, 0, 0),  # Normal along X
                 i_size=bounds[3] - bounds[2],  # Y extent
                 j_size=abs(bounds[5] - bounds[4]),  # Z extent
                 i_resolution=1,
@@ -818,9 +846,10 @@ class ViewInterpretation(ViewMap):
             )
         elif self.current_axis == 'Crossline':
             # XZ plane at current Y position  
+            # i direction along X, j direction along Z
             plane = pv.Plane(
                 center=((bounds[0]+bounds[1])/2, self.current_slice_position, (bounds[4]+bounds[5])/2),
-                direction=(0, 1, 0),
+                direction=(0, 1, 0),  # Normal along Y
                 i_size=bounds[1] - bounds[0],  # X extent
                 j_size=abs(bounds[5] - bounds[4]),  # Z extent
                 i_resolution=1,
@@ -828,9 +857,10 @@ class ViewInterpretation(ViewMap):
             )
         elif self.current_axis == 'Z-slice':
             # XY plane at current Z position
+            # i direction along X, j direction along Y
             plane = pv.Plane(
                 center=((bounds[0]+bounds[1])/2, (bounds[2]+bounds[3])/2, self.current_slice_position),
-                direction=(0, 0, 1),
+                direction=(0, 0, 1),  # Normal along Z
                 i_size=bounds[1] - bounds[0],  # X extent
                 j_size=bounds[3] - bounds[2],  # Y extent
                 i_resolution=1,
@@ -847,11 +877,14 @@ class ViewInterpretation(ViewMap):
             reset_camera=False
         )
         self.print_terminal(f"Added picking plane at {self.current_axis} position {self.current_slice_position}")
+        
+        # Debug: print plane bounds to verify it's at the right position
+        self.print_terminal(f"Picking plane bounds: {plane.bounds}")
 
     def snap_points_to_slice(self, points):
         """Snap points to the current slice plane based on the current axis and slice position.
-        Also accounts for vertical exaggeration - the drawn points are in exaggerated coordinates,
-        so we need to unscale Z before storing."""
+        Points from the tracer are in display coordinates (with VE applied), so we need to
+        convert them back to real world coordinates before storing."""
         snapped = points.copy()
         
         # Get the current vertical exaggeration from the plotter scale
@@ -867,21 +900,25 @@ class ViewInterpretation(ViewMap):
         
         self.print_terminal(f"Snapping with v_exag={v_exag}, axis={self.current_axis}, slice_pos={self.current_slice_position}")
         
-        # If vertical exaggeration is applied, the Z coordinates of drawn points are scaled
-        # We need to unscale them to get real coordinates
+        # Only Z coordinates need to be unscaled (X and Y don't have exaggeration)
+        # The tracer picks in display space which has vertical exaggeration applied to Z
         if v_exag != 1.0:
             snapped[:, 2] = snapped[:, 2] / v_exag
+            self.print_terminal(f"Unscaled Z by factor {v_exag}")
+        
+        # Tiny offset towards the camera to avoid z-fighting with the slice
+        offset = 1.0  # Just 1 unit offset in real coordinates
         
         # Now snap to the current slice position (in real coordinates)
         if self.current_axis == 'Inline':
             # For inline view (YZ plane), set X to the slice position
-            snapped[:, 0] = self.current_slice_position
+            snapped[:, 0] = self.current_slice_position - offset
         elif self.current_axis == 'Crossline':
             # For crossline view (XZ plane), set Y to the slice position
-            snapped[:, 1] = self.current_slice_position
+            snapped[:, 1] = self.current_slice_position - offset
         elif self.current_axis == 'Z-slice':
             # For Z-slice view (XY plane), set Z to the slice position
-            snapped[:, 2] = self.current_slice_position
+            snapped[:, 2] = self.current_slice_position + offset
             
         return snapped
 
