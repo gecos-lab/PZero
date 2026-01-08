@@ -1705,27 +1705,45 @@ class ViewInterpretation(ViewMap):
                 'slice_index': self.current_slice_index
             }
             
-            # Generate a distinct color for this horizon
-            # Use a color palette that provides good contrast
-            horizon_colors = [
-                (255, 0, 0),      # Red
-                (0, 255, 0),      # Green
-                (0, 0, 255),      # Blue
-                (255, 255, 0),    # Yellow
-                (255, 0, 255),    # Magenta
-                (0, 255, 255),    # Cyan
-                (255, 128, 0),    # Orange
-                (128, 0, 255),    # Purple
-                (0, 255, 128),    # Spring Green
-                (255, 0, 128),    # Pink
-            ]
-            # Cycle through colors based on number of existing lines
-            color_index = len(self.interpretation_lines) % len(horizon_colors)
-            horizon_color = horizon_colors[color_index]
+            # Generate a distinct random color for this horizon
+            import random
+            horizon_color = [random.randint(50, 255), random.randint(50, 255), random.randint(50, 255)]
+            # Ensure it's not too dark or too similar to white
+            while sum(horizon_color) < 300 or sum(horizon_color) > 650:
+                horizon_color = [random.randint(50, 255), random.randint(50, 255), random.randint(50, 255)]
             
-            # Add to geological collection with specific color
-            new_uid = self.parent.geol_coll.add_entity_from_dict(line_dict, color=horizon_color)
-            self.print_terminal(f"Created auto-tracked horizon with {n_points} points, uid: {new_uid}, color: {horizon_color}")
+            self.print_terminal(f"Generated random color: RGB{tuple(horizon_color)}")
+            
+            # Add to geological collection
+            new_uid = self.parent.geol_coll.add_entity_from_dict(line_dict)
+            self.print_terminal(f"Created auto-tracked horizon with {n_points} points, uid: {new_uid}")
+            
+            # Set the color for the line using the legend/properties system
+            try:
+                # Try to set color via the properties dataframe
+                if hasattr(self.parent.geol_coll, 'df') and new_uid in self.parent.geol_coll.df.index:
+                    self.parent.geol_coll.df.loc[new_uid, 'color_R'] = horizon_color[0]
+                    self.parent.geol_coll.df.loc[new_uid, 'color_G'] = horizon_color[1]
+                    self.parent.geol_coll.df.loc[new_uid, 'color_B'] = horizon_color[2]
+                    self.print_terminal(f"Set color in df for {new_uid}")
+            except Exception as color_err:
+                self.print_terminal(f"Could not set color in df: {color_err}")
+            
+            # Also try to update the actor color directly if it exists
+            try:
+                actor_name = f"geol_coll_{new_uid}"
+                if actor_name in self.plotter.renderer.actors:
+                    actor = self.plotter.renderer.actors[actor_name]
+                    actor.GetProperty().SetColor(horizon_color[0]/255.0, horizon_color[1]/255.0, horizon_color[2]/255.0)
+                    self.print_terminal(f"Set actor color for {actor_name}")
+                else:
+                    # Try without prefix
+                    if new_uid in self.plotter.renderer.actors:
+                        actor = self.plotter.renderer.actors[new_uid]
+                        actor.GetProperty().SetColor(horizon_color[0]/255.0, horizon_color[1]/255.0, horizon_color[2]/255.0)
+                        self.print_terminal(f"Set actor color for {new_uid}")
+            except Exception as actor_err:
+                self.print_terminal(f"Could not set actor color: {actor_err}")
             
             # Track this interpretation line
             self.interpretation_lines[new_uid] = slice_info
