@@ -45,6 +45,10 @@ class ViewInterpretation(ViewMap):
         # Track UIDs that should NOT be displayed as full volumes (only as slices)
         self.seismic_uids_to_hide = set()
         
+        # Track interpretation lines and their associated slice info
+        # Format: {uid: {'seismic_uid': str, 'axis': str, 'slice_index': int}}
+        self.interpretation_lines = {}
+        
         # Setup specific UI controls
         self.setup_controls()
         
@@ -183,7 +187,20 @@ class ViewInterpretation(ViewMap):
             # Display the new entities in this view
             for uid in uids:
                 try:
-                    self.show_actor_with_property(uid=uid, coll_name='geol_coll', visible=True)
+                    # Check if this is an interpretation line we're tracking
+                    if uid in self.interpretation_lines:
+                        # Only show if it matches current slice
+                        slice_info = self.interpretation_lines[uid]
+                        matches_current_slice = (
+                            slice_info['seismic_uid'] == self.current_seismic_uid and
+                            slice_info['axis'] == self.current_axis and
+                            slice_info['slice_index'] == self.current_slice_index
+                        )
+                        self.show_actor_with_property(uid=uid, coll_name='geol_coll', visible=matches_current_slice)
+                        self.print_terminal(f"Added interpretation line {uid}, visible={matches_current_slice}")
+                    else:
+                        # Not a tracked interpretation line, show normally
+                        self.show_actor_with_property(uid=uid, coll_name='geol_coll', visible=True)
                 except Exception as e:
                     self.print_terminal(f"Error displaying new entity {uid}: {e}")
         
@@ -488,6 +505,9 @@ class ViewInterpretation(ViewMap):
             # Let's do it on every update for now to ensure "locking" behavior as requested ("lock the camera view to the slice").
             self.update_camera_to_slice(scaled_center, bounds, scale)
             self.update_grid_annotations()
+            
+            # Update visibility of interpretation lines for the current slice
+            self.update_interpretation_line_visibility()
 
 
         except Exception as e:
@@ -742,9 +762,20 @@ class ViewInterpretation(ViewMap):
                 
                 input_dict["vtk_obj"].points = snapped_points
                 
+                # Store the slice info for this line (capture current values from outer scope)
+                slice_info = {
+                    'seismic_uid': self.current_seismic_uid,
+                    'axis': self.current_axis,
+                    'slice_index': self.current_slice_index
+                }
+                
                 # Add to geological collection - this emits signals that other views listen to
                 new_uid = self.parent.geol_coll.add_entity_from_dict(input_dict)
                 self.print_terminal(f"Created interpretation line with {len(snapped_points)} points, uid: {new_uid}")
+                
+                # Track this interpretation line with its slice info
+                self.interpretation_lines[new_uid] = slice_info
+                self.print_terminal(f"Registered interpretation line {new_uid} for {slice_info['axis']} slice {slice_info['slice_index']}")
             
             # Restore pickability state of all actors
             if hasattr(self, '_saved_pickable_state'):
@@ -921,6 +952,41 @@ class ViewInterpretation(ViewMap):
             snapped[:, 2] = self.current_slice_position + offset
             
         return snapped
+
+    def update_interpretation_line_visibility(self):
+        """Update visibility of interpretation lines based on current slice.
+        
+        Lines are only shown if they belong to the current seismic volume,
+        axis type, and slice index. Lines from other slices are hidden.
+        """
+        if not hasattr(self, 'interpretation_lines') or not self.interpretation_lines:
+            return
+            
+        try:
+            for uid, slice_info in self.interpretation_lines.items():
+                # Check if this line belongs to the current view
+                matches_current_slice = (
+                    slice_info['seismic_uid'] == self.current_seismic_uid and
+                    slice_info['axis'] == self.current_axis and
+                    slice_info['slice_index'] == self.current_slice_index
+                )
+                
+                # Get the actor name for this entity
+                actor_name = uid
+                
+                # Update visibility in the plotter
+                if actor_name in self.plotter.renderer.actors:
+                    actor = self.plotter.renderer.actors[actor_name]
+                    actor.SetVisibility(matches_current_slice)
+                    if matches_current_slice:
+                        self.print_terminal(f"Showing interpretation line {uid} on {slice_info['axis']} slice {slice_info['slice_index']}")
+                    else:
+                        self.print_terminal(f"Hiding interpretation line {uid} (belongs to {slice_info['axis']} slice {slice_info['slice_index']})")
+                        
+        except Exception as e:
+            self.print_terminal(f"Error updating interpretation line visibility: {e}")
+            import traceback
+            self.print_terminal(traceback.format_exc())
 
     def initialize_menu_tools(self):
         super().initialize_menu_tools()
