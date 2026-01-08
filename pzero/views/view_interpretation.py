@@ -1812,6 +1812,458 @@ class ViewInterpretation(ViewMap):
         self.plotter.render()
 
     # ==================== End Semi-Auto Tracking Methods ====================
+    
+    # ==================== Auto Propagation Methods ====================
+    
+    def propagate_horizon(self):
+        """
+        Propagate a selected horizon through adjacent slices using template matching.
+        Uses cross-correlation to find the best matching position on each slice.
+        """
+        self.disable_actions()
+        
+        # Check if we have a seismic volume
+        if not self.current_seismic_uid:
+            self.print_terminal("No seismic volume loaded!")
+            self.enable_actions()
+            return
+        
+        # Get list of interpretation lines on current slice
+        current_lines = []
+        for uid, slice_info in self.interpretation_lines.items():
+            if (slice_info['seismic_uid'] == self.current_seismic_uid and
+                slice_info['axis'] == self.current_axis and
+                slice_info['slice_index'] == self.current_slice_index):
+                # Get line name
+                try:
+                    name = self.parent.geol_coll.df.loc[uid, 'name']
+                except:
+                    name = uid[:8]
+                current_lines.append((uid, name))
+        
+        if not current_lines:
+            self.print_terminal("No horizon lines found on current slice!")
+            self.print_terminal("First use Semi-Auto Track to create a seed horizon on this slice.")
+            self.enable_actions()
+            return
+        
+        # Create selection dialog
+        from PySide6.QtWidgets import QDialog, QVBoxLayout, QComboBox, QSpinBox, QLabel, QPushButton, QHBoxLayout, QRadioButton, QButtonGroup
+        
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Propagate Horizon")
+        dialog.setMinimumWidth(350)
+        layout = QVBoxLayout(dialog)
+        
+        # Horizon selection
+        layout.addWidget(QLabel("Select horizon to propagate:"))
+        combo_horizon = QComboBox()
+        for uid, name in current_lines:
+            combo_horizon.addItem(f"{name} ({uid[:8]}...)", uid)
+        layout.addWidget(combo_horizon)
+        
+        # Direction selection
+        layout.addWidget(QLabel("Propagation direction:"))
+        direction_group = QButtonGroup(dialog)
+        radio_forward = QRadioButton("Forward (increasing slice index)")
+        radio_backward = QRadioButton("Backward (decreasing slice index)")
+        radio_both = QRadioButton("Both directions")
+        radio_forward.setChecked(True)
+        direction_group.addButton(radio_forward, 0)
+        direction_group.addButton(radio_backward, 1)
+        direction_group.addButton(radio_both, 2)
+        layout.addWidget(radio_forward)
+        layout.addWidget(radio_backward)
+        layout.addWidget(radio_both)
+        
+        # Number of slices
+        layout.addWidget(QLabel("Number of slices to propagate:"))
+        spin_slices = QSpinBox()
+        spin_slices.setRange(1, 500)
+        spin_slices.setValue(50)
+        layout.addWidget(spin_slices)
+        
+        # Template parameters
+        layout.addWidget(QLabel("Template half-height (samples):"))
+        spin_template = QSpinBox()
+        spin_template.setRange(3, 30)
+        spin_template.setValue(7)
+        spin_template.setToolTip("Vertical size of amplitude template for matching")
+        layout.addWidget(spin_template)
+        
+        layout.addWidget(QLabel("Search window (samples):"))
+        spin_search = QSpinBox()
+        spin_search.setRange(5, 50)
+        spin_search.setValue(15)
+        spin_search.setToolTip("Vertical search range on each new slice")
+        layout.addWidget(spin_search)
+        
+        # Smoothing parameter - helps focus on prominent reflectors
+        layout.addWidget(QLabel("Smoothing sigma (0=none):"))
+        spin_smooth = QSpinBox()
+        spin_smooth.setRange(0, 10)
+        spin_smooth.setValue(2)
+        spin_smooth.setToolTip("Gaussian smoothing to suppress small edges and focus on prominent reflectors")
+        layout.addWidget(spin_smooth)
+        
+        # Buttons
+        btn_layout = QHBoxLayout()
+        btn_ok = QPushButton("Propagate")
+        btn_cancel = QPushButton("Cancel")
+        btn_ok.clicked.connect(dialog.accept)
+        btn_cancel.clicked.connect(dialog.reject)
+        btn_layout.addWidget(btn_ok)
+        btn_layout.addWidget(btn_cancel)
+        layout.addLayout(btn_layout)
+        
+        if dialog.exec() != QDialog.Accepted:
+            self.enable_actions()
+            return
+        
+        # Get parameters
+        seed_uid = combo_horizon.currentData()
+        direction = direction_group.checkedId()  # 0=forward, 1=backward, 2=both
+        num_slices = spin_slices.value()
+        template_half = spin_template.value()
+        search_window = spin_search.value()
+        smooth_sigma = spin_smooth.value()
+        
+        self.print_terminal(f"=== Propagating Horizon ===")
+        self.print_terminal(f"Seed horizon: {seed_uid}")
+        self.print_terminal(f"Direction: {['Forward', 'Backward', 'Both'][direction]}")
+        self.print_terminal(f"Slices: {num_slices}, Template: ±{template_half}, Search: ±{search_window}, Smooth: {smooth_sigma}")
+        
+        # Run propagation
+        try:
+            self._run_horizon_propagation(
+                seed_uid=seed_uid,
+                direction=direction,
+                num_slices=num_slices,
+                template_half=template_half,
+                search_window=search_window,
+                smooth_sigma=smooth_sigma
+            )
+        except Exception as e:
+            self.print_terminal(f"Error during propagation: {e}")
+            import traceback
+            self.print_terminal(traceback.format_exc())
+        
+        self.enable_actions()
+    
+    def _run_horizon_propagation(self, seed_uid, direction, num_slices, template_half, search_window, smooth_sigma=2):
+        """
+        Execute the horizon propagation using template matching.
+        
+        Args:
+            seed_uid: UID of the seed horizon line
+            direction: 0=forward, 1=backward, 2=both
+            num_slices: Number of slices to propagate
+            template_half: Half-height of the template window (samples)
+            search_window: Search window size (samples)
+            smooth_sigma: Gaussian smoothing sigma (0=no smoothing)
+        """
+        from scipy import signal
+        from scipy.ndimage import gaussian_filter1d
+        import random
+        
+        # Get the seismic data
+        if not hasattr(self, '_cached_seismic') or self._cached_seismic is None:
+            self.print_terminal("No cached seismic data!")
+            return
+        
+        seismic = self._cached_seismic
+        dims = self._cached_dims
+        bounds = self._cached_bounds
+        
+        # Get the 3D data array
+        if 'intensity' in seismic.array_names:
+            data = seismic['intensity']
+        elif seismic.array_names:
+            data = seismic[seismic.array_names[0]]
+        else:
+            self.print_terminal("No data arrays in seismic!")
+            return
+        
+        data_3d = data.reshape(dims, order='F').astype(np.float32)
+        
+        # Apply Gaussian smoothing along the vertical (Z) axis to suppress small edges
+        # This helps focus on prominent/continuous reflectors
+        if smooth_sigma > 0:
+            self.print_terminal(f"Applying Gaussian smoothing (sigma={smooth_sigma}) to enhance prominent reflectors...")
+            # Smooth along the Z axis (axis 2 for all slice types)
+            data_3d = gaussian_filter1d(data_3d, sigma=smooth_sigma, axis=2)
+        
+        # Calculate spacing
+        spacing = [
+            (bounds[1] - bounds[0]) / max(dims[0] - 1, 1),
+            (bounds[3] - bounds[2]) / max(dims[1] - 1, 1),
+            (bounds[5] - bounds[4]) / max(dims[2] - 1, 1)
+        ]
+        
+        # Get the seed horizon points - try multiple methods
+        seed_vtk = None
+        try:
+            # Method 1: Direct index lookup (uid is the index)
+            if seed_uid in self.parent.geol_coll.df.index:
+                seed_vtk = self.parent.geol_coll.df.loc[seed_uid, 'vtk_obj']
+        except Exception as e:
+            self.print_terminal(f"Method 1 failed: {e}")
+        
+        if seed_vtk is None:
+            try:
+                # Method 2: Standard get_uid_vtk_obj
+                seed_vtk = self.parent.geol_coll.get_uid_vtk_obj(seed_uid)
+            except Exception as e:
+                self.print_terminal(f"Method 2 failed: {e}")
+        
+        if seed_vtk is None:
+            try:
+                # Method 3: Search by uid column if it exists
+                if 'uid' in self.parent.geol_coll.df.columns:
+                    mask = self.parent.geol_coll.df['uid'] == seed_uid
+                    if mask.any():
+                        seed_vtk = self.parent.geol_coll.df.loc[mask, 'vtk_obj'].values[0]
+            except Exception as e:
+                self.print_terminal(f"Method 3 failed: {e}")
+        
+        if seed_vtk is None:
+            self.print_terminal(f"Could not get seed horizon! UID: {seed_uid}")
+            self.print_terminal(f"Available indices: {list(self.parent.geol_coll.df.index)[:5]}...")
+            return
+        
+        seed_points = np.array(seed_vtk.GetPoints().GetData())
+        if len(seed_points) == 0:
+            self.print_terminal("Seed horizon has no points!")
+            return
+        
+        self.print_terminal(f"Seed horizon has {len(seed_points)} points")
+        
+        # Get current slice index and determine slice limits
+        current_idx = self.current_slice_index
+        if self.current_axis == 'Inline':
+            max_slice = dims[0] - 1
+        elif self.current_axis == 'Crossline':
+            max_slice = dims[1] - 1
+        else:
+            max_slice = dims[2] - 1
+        
+        # Determine which slices to propagate to
+        slices_to_track = []
+        if direction == 0:  # Forward
+            slices_to_track = list(range(current_idx + 1, min(current_idx + num_slices + 1, max_slice + 1)))
+        elif direction == 1:  # Backward
+            slices_to_track = list(range(current_idx - 1, max(current_idx - num_slices - 1, -1), -1))
+        else:  # Both
+            forward = list(range(current_idx + 1, min(current_idx + num_slices + 1, max_slice + 1)))
+            backward = list(range(current_idx - 1, max(current_idx - num_slices - 1, -1), -1))
+            slices_to_track = backward[::-1] + forward  # Process in order
+        
+        self.print_terminal(f"Will propagate to {len(slices_to_track)} slices")
+        
+        if len(slices_to_track) == 0:
+            self.print_terminal("No slices to propagate to!")
+            return
+        
+        # Convert seed points to slice coordinates
+        # Seed points are in world coordinates, need to convert to indices
+        seed_indices = []
+        for pt in seed_points:
+            if self.current_axis == 'Inline':
+                row = int((pt[1] - bounds[2]) / spacing[1]) if spacing[1] > 0 else 0
+                col = int((pt[2] - bounds[4]) / spacing[2]) if spacing[2] > 0 else 0
+            elif self.current_axis == 'Crossline':
+                row = int((pt[0] - bounds[0]) / spacing[0]) if spacing[0] > 0 else 0
+                col = int((pt[2] - bounds[4]) / spacing[2]) if spacing[2] > 0 else 0
+            else:  # Z-slice
+                row = int((pt[0] - bounds[0]) / spacing[0]) if spacing[0] > 0 else 0
+                col = int((pt[1] - bounds[2]) / spacing[1]) if spacing[1] > 0 else 0
+            seed_indices.append((row, col))
+        
+        # Subsample if too many points (for speed)
+        if len(seed_indices) > 200:
+            step = len(seed_indices) // 200
+            seed_indices = seed_indices[::step]
+            self.print_terminal(f"Subsampled seed to {len(seed_indices)} points")
+        
+        # Get seed slice data and extract templates
+        if self.current_axis == 'Inline':
+            seed_slice = data_3d[current_idx, :, :]
+        elif self.current_axis == 'Crossline':
+            seed_slice = data_3d[:, current_idx, :]
+        else:
+            seed_slice = data_3d[:, :, current_idx]
+        
+        # Extract templates from seed horizon
+        templates = []
+        template_positions = []
+        n_rows, n_cols = seed_slice.shape
+        
+        for row, col in seed_indices:
+            # Ensure within bounds
+            row = int(np.clip(row, 0, n_rows - 1))
+            col = int(np.clip(col, template_half, n_cols - template_half - 1))
+            
+            # Extract vertical template
+            template = seed_slice[row, col - template_half:col + template_half + 1].copy()
+            if len(template) == 2 * template_half + 1:
+                templates.append(template)
+                template_positions.append((row, col))
+        
+        self.print_terminal(f"Extracted {len(templates)} templates")
+        
+        if len(templates) == 0:
+            self.print_terminal("Could not extract any templates!")
+            return
+        
+        # Generate a random color for this propagated horizon set
+        horizon_color = [random.randint(50, 255), random.randint(50, 255), random.randint(50, 255)]
+        while sum(horizon_color) < 300 or sum(horizon_color) > 650:
+            horizon_color = [random.randint(50, 255), random.randint(50, 255), random.randint(50, 255)]
+        
+        # Track current positions (will be updated slice by slice)
+        current_positions = list(template_positions)
+        
+        # Propagate to each slice
+        created_lines = []
+        
+        for slice_idx in slices_to_track:
+            # Get slice data
+            if self.current_axis == 'Inline':
+                new_slice = data_3d[slice_idx, :, :]
+            elif self.current_axis == 'Crossline':
+                new_slice = data_3d[:, slice_idx, :]
+            else:
+                new_slice = data_3d[:, :, slice_idx]
+            
+            # Match each template on the new slice
+            new_positions = []
+            
+            for i, (template, (row, expected_col)) in enumerate(zip(templates, current_positions)):
+                # Define search range
+                search_start = max(template_half, expected_col - search_window)
+                search_end = min(n_cols - template_half - 1, expected_col + search_window)
+                
+                if search_start >= search_end:
+                    new_positions.append((row, expected_col))
+                    continue
+                
+                # Extract search region
+                search_region = new_slice[row, search_start - template_half:search_end + template_half + 1]
+                
+                if len(search_region) < len(template):
+                    new_positions.append((row, expected_col))
+                    continue
+                
+                # Cross-correlation
+                try:
+                    correlation = signal.correlate(search_region, template, mode='valid')
+                    best_offset = np.argmax(correlation)
+                    best_col = search_start + best_offset
+                    new_positions.append((row, best_col))
+                except:
+                    new_positions.append((row, expected_col))
+            
+            # ============ SMOOTH THE TRACKED POSITIONS ============
+            # This removes the jagged "up-down" pattern by enforcing spatial continuity
+            
+            # Extract just the column (Z) values for smoothing
+            rows_arr = np.array([p[0] for p in new_positions])
+            cols_arr = np.array([p[1] for p in new_positions], dtype=np.float64)
+            
+            # Step 1: Median filter to remove outliers (spikes)
+            from scipy.ndimage import median_filter
+            cols_smoothed = median_filter(cols_arr, size=5)
+            
+            # Step 2: Gaussian smooth for continuous appearance
+            cols_smoothed = gaussian_filter1d(cols_smoothed, sigma=3)
+            
+            # Step 3: Limit maximum jump between adjacent points
+            max_jump = 2  # Maximum allowed jump in samples between adjacent points
+            for i in range(1, len(cols_smoothed)):
+                diff = cols_smoothed[i] - cols_smoothed[i-1]
+                if abs(diff) > max_jump:
+                    cols_smoothed[i] = cols_smoothed[i-1] + np.sign(diff) * max_jump
+            
+            # Rebuild positions with smoothed values
+            new_positions = [(int(rows_arr[i]), int(round(cols_smoothed[i]))) for i in range(len(rows_arr))]
+            
+            # ============ END SMOOTHING ============
+            
+            # Create polyline from new positions
+            world_points = []
+            for row, col in new_positions:
+                if self.current_axis == 'Inline':
+                    x = bounds[0] + slice_idx * spacing[0]
+                    y = bounds[2] + row * spacing[1]
+                    z = bounds[4] + col * spacing[2]
+                elif self.current_axis == 'Crossline':
+                    x = bounds[0] + row * spacing[0]
+                    y = bounds[2] + slice_idx * spacing[1]
+                    z = bounds[4] + col * spacing[2]
+                else:
+                    x = bounds[0] + row * spacing[0]
+                    y = bounds[2] + col * spacing[1]
+                    z = bounds[4] + slice_idx * spacing[2]
+                world_points.append((x, y, z))
+            
+            # Sort points by row to ensure proper line connectivity
+            world_points.sort(key=lambda p: p[0] if self.current_axis != 'Inline' else p[1])
+            
+            # Create the line entity
+            if len(world_points) >= 2:
+                points_array = np.array(world_points, dtype=np.float64)
+                
+                # Create VTK polyline
+                polydata = pv.PolyData(points_array)
+                n_pts = len(points_array)
+                lines = np.hstack([[n_pts], np.arange(n_pts)])
+                polydata.lines = lines
+                
+                # Create entity dict
+                line_dict = deepcopy(self.parent.geol_coll.entity_dict)
+                line_dict["name"] = f"prop_horizon_{slice_idx}"
+                line_dict["topology"] = "PolyLine"
+                line_dict["x_section"] = ""
+                line_dict["vtk_obj"] = PolyLine()
+                line_dict["vtk_obj"].ShallowCopy(polydata)
+                
+                # Add to collection
+                new_uid = self.parent.geol_coll.add_entity_from_dict(line_dict)
+                
+                # Track this line
+                self.interpretation_lines[new_uid] = {
+                    'seismic_uid': self.current_seismic_uid,
+                    'axis': self.current_axis,
+                    'slice_index': slice_idx
+                }
+                
+                created_lines.append(new_uid)
+                
+                # Try to set color
+                try:
+                    if hasattr(self.parent.geol_coll, 'df') and new_uid in self.parent.geol_coll.df.index:
+                        self.parent.geol_coll.df.loc[new_uid, 'color_R'] = horizon_color[0]
+                        self.parent.geol_coll.df.loc[new_uid, 'color_G'] = horizon_color[1]
+                        self.parent.geol_coll.df.loc[new_uid, 'color_B'] = horizon_color[2]
+                except:
+                    pass
+            
+            # Update current positions for next slice
+            current_positions = new_positions
+            
+            # Progress feedback every 10 slices
+            if (slice_idx - current_idx) % 10 == 0:
+                self.print_terminal(f"  Processed slice {slice_idx}...")
+        
+        self.print_terminal(f"=== Propagation Complete ===")
+        self.print_terminal(f"Created {len(created_lines)} horizon lines")
+        self.print_terminal(f"Color: RGB{tuple(horizon_color)}")
+        
+        # Update display
+        self.update_interpretation_line_visibility()
+        self.plotter.render()
+    
+    # ==================== End Auto Propagation Methods ====================
 
     def initialize_menu_tools(self):
         super().initialize_menu_tools()
@@ -1824,6 +2276,11 @@ class ViewInterpretation(ViewMap):
         self.semiAutoTrackButton = QAction("Semi-Auto Track Horizon", self)
         self.semiAutoTrackButton.triggered.connect(self.draw_semi_auto_line)
         self.menuCreate.insertAction(self.menuCreate.actions()[1], self.semiAutoTrackButton)
+        
+        # Add propagate horizon action
+        self.propagateHorizonButton = QAction("Propagate Horizon (Auto-Track 3D)", self)
+        self.propagateHorizonButton.triggered.connect(self.propagate_horizon)
+        self.menuCreate.insertAction(self.menuCreate.actions()[2], self.propagateHorizonButton)
         
         # Connect our custom handler for additional processing (volume list refresh)
         try:
