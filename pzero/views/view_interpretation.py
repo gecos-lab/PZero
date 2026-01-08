@@ -12,6 +12,8 @@ from PySide6.QtCore import Qt, QTimer
 import pyvista as pv
 import numpy as np
 from copy import deepcopy
+import heapq
+from scipy import ndimage
 
 # PZero imports
 from .view_map import ViewMap
@@ -988,12 +990,822 @@ class ViewInterpretation(ViewMap):
             import traceback
             self.print_terminal(traceback.format_exc())
 
+    # ==================== Semi-Auto Tracking Methods ====================
+    
+    def compute_edge_cost_map(self, slice_data):
+        """
+        Compute edge detection cost map using Sobel filter.
+        High edge strength = low cost (path prefers to follow horizons).
+        
+        Args:
+            slice_data: 2D numpy array of seismic amplitudes
+            
+        Returns:
+            cost_map: 2D numpy array where low values indicate strong edges (horizons)
+        """
+        # Normalize data to 0-1 range
+        data_min = np.nanmin(slice_data)
+        data_max = np.nanmax(slice_data)
+        if data_max - data_min > 0:
+            normalized = (slice_data - data_min) / (data_max - data_min)
+        else:
+            normalized = slice_data.copy()
+        
+        # Apply Sobel filter for edge detection
+        # We use the vertical gradient (changes in amplitude along Z/time axis)
+        # For seismic, horizons are typically horizontal features
+        sobel_x = ndimage.sobel(normalized, axis=0)  # Horizontal edges
+        sobel_y = ndimage.sobel(normalized, axis=1)  # Vertical edges
+        
+        # Combine gradients - magnitude of gradient
+        edge_magnitude = np.sqrt(sobel_x**2 + sobel_y**2)
+        
+        # Normalize edge magnitude
+        edge_max = np.nanmax(edge_magnitude)
+        if edge_max > 0:
+            edge_magnitude = edge_magnitude / edge_max
+        
+        # Invert: high edge strength = low cost
+        # Add small epsilon to avoid zero costs
+        cost_map = 1.0 - edge_magnitude + 0.01
+        
+        return cost_map
+    
+    def add_existing_lines_to_cost_map(self, cost_map, axis_info, spacing, v_exag):
+        """
+        Add high-cost zones around existing interpretation lines on the current slice.
+        This prevents new paths from jumping to or crossing existing horizons.
+        
+        Args:
+            cost_map: 2D numpy array of costs (will be modified in place)
+            axis_info: dict with bounds and axis info
+            spacing: (dx, dy, dz) spacing
+            v_exag: vertical exaggeration
+            
+        Returns:
+            modified cost_map with existing lines marked as high cost
+        """
+        if not hasattr(self, 'interpretation_lines') or not self.interpretation_lines:
+            return cost_map
+        
+        # Get existing lines on the current slice
+        existing_line_uids = []
+        for uid, slice_info in self.interpretation_lines.items():
+            if (slice_info['seismic_uid'] == self.current_seismic_uid and
+                slice_info['axis'] == self.current_axis and
+                slice_info['slice_index'] == self.current_slice_index):
+                existing_line_uids.append(uid)
+        
+        if not existing_line_uids:
+            self.print_terminal("No existing lines on current slice to avoid")
+            return cost_map
+        
+        self.print_terminal(f"Found {len(existing_line_uids)} existing lines to avoid")
+        
+        # High cost value for forbidden zones
+        FORBIDDEN_COST = 100.0
+        # Radius around existing lines to mark as forbidden (in pixels)
+        FORBIDDEN_RADIUS = 5
+        
+        for uid in existing_line_uids:
+            try:
+                # Get the VTK object for this line
+                vtk_obj = self.parent.geol_coll.get_uid_vtk_obj(uid)
+                if vtk_obj is None:
+                    continue
+                
+                # Get points from the line
+                points = np.array(vtk_obj.GetPoints().GetData())
+                if len(points) == 0:
+                    continue
+                
+                # Convert each point to slice coordinates and mark forbidden zone
+                for point in points:
+                    # Points are stored in REAL coordinates, need to convert to slice indices
+                    # But we need to handle the coordinate system correctly
+                    world_point = (point[0], point[1], point[2] * v_exag)  # Apply VE for display coords
+                    slice_coord = self.world_to_slice_coords(world_point, axis_info, spacing, v_exag)
+                    
+                    row, col = int(slice_coord[0]), int(slice_coord[1])
+                    
+                    # Mark a zone around this point as high cost
+                    for dr in range(-FORBIDDEN_RADIUS, FORBIDDEN_RADIUS + 1):
+                        for dc in range(-FORBIDDEN_RADIUS, FORBIDDEN_RADIUS + 1):
+                            r, c = row + dr, col + dc
+                            if 0 <= r < cost_map.shape[0] and 0 <= c < cost_map.shape[1]:
+                                # Use distance-based cost: closer = higher cost
+                                dist = np.sqrt(dr**2 + dc**2)
+                                if dist <= FORBIDDEN_RADIUS:
+                                    # Exponential falloff from center
+                                    penalty = FORBIDDEN_COST * (1 - dist / (FORBIDDEN_RADIUS + 1))
+                                    cost_map[r, c] = max(cost_map[r, c], penalty)
+                
+                self.print_terminal(f"Marked forbidden zone for line {uid[:8]}...")
+                
+            except Exception as e:
+                self.print_terminal(f"Error processing existing line {uid}: {e}")
+                continue
+        
+        return cost_map
+    
+    def astar_pathfind(self, cost_map, start, end, corridor_width=None):
+        """
+        A* pathfinding algorithm to find optimal path between two points.
+        CRITICAL: For seismic horizons, we constrain the VERTICAL (col/Z) axis
+        to interpolate between start and end Z values, preventing jumps to other reflectors.
+        
+        Args:
+            cost_map: 2D numpy array of costs (lower = preferred)
+            start: (row, col) starting point - row is horizontal, col is vertical (Z/time)
+            end: (row, col) ending point
+            corridor_width: Maximum allowed vertical deviation from the interpolated Z value
+            
+        Returns:
+            path: List of (row, col) points from start to end, or None if no path found
+        """
+        rows, cols = cost_map.shape
+        
+        # Validate start and end points
+        start = (int(np.clip(start[0], 0, rows-1)), int(np.clip(start[1], 0, cols-1)))
+        end = (int(np.clip(end[0], 0, rows-1)), int(np.clip(end[1], 0, cols-1)))
+        
+        # Heuristic: Euclidean distance
+        def heuristic(a, b):
+            return np.sqrt((a[0] - b[0])**2 + (a[1] - b[1])**2)
+        
+        # CRITICAL: For seismic horizons, constrain VERTICAL (col) position
+        # The expected col (Z/time) at any row should interpolate between start and end
+        def get_expected_col(row):
+            """Get the expected column (Z) value at a given row by linear interpolation."""
+            if start[0] == end[0]:
+                return start[1]  # Same row, use start col
+            # Linear interpolation of col based on row position
+            t = (row - start[0]) / (end[0] - start[0])
+            return start[1] + t * (end[1] - start[1])
+        
+        def is_in_vertical_corridor(point):
+            """Check if point's col (Z) is within corridor of expected value."""
+            if corridor_width is None:
+                return True
+            row, col = point
+            expected_col = get_expected_col(row)
+            deviation = abs(col - expected_col)
+            return deviation <= corridor_width
+        
+        # 8-connected neighbors (including diagonals for smoother paths)
+        neighbors = [(-1, 0), (1, 0), (0, -1), (0, 1),
+                     (-1, -1), (-1, 1), (1, -1), (1, 1)]
+        
+        # Priority queue: (f_score, counter, node)
+        counter = 0
+        open_set = [(0, counter, start)]
+        came_from = {}
+        
+        g_score = {start: 0}
+        f_score = {start: heuristic(start, end)}
+        
+        visited = set()
+        
+        while open_set:
+            current = heapq.heappop(open_set)[2]
+            
+            if current == end:
+                # Reconstruct path
+                path = [current]
+                while current in came_from:
+                    current = came_from[current]
+                    path.append(current)
+                path.reverse()
+                return path
+            
+            if current in visited:
+                continue
+            visited.add(current)
+            
+            for dr, dc in neighbors:
+                neighbor = (current[0] + dr, current[1] + dc)
+                
+                # Check bounds
+                if not (0 <= neighbor[0] < rows and 0 <= neighbor[1] < cols):
+                    continue
+                
+                if neighbor in visited:
+                    continue
+                
+                # CRITICAL: Check vertical corridor constraint
+                if not is_in_vertical_corridor(neighbor):
+                    continue
+                
+                # Cost to move to neighbor
+                move_cost = np.sqrt(2) if (dr != 0 and dc != 0) else 1.0
+                
+                # VERY STRONG penalty for vertical deviation from expected path
+                if corridor_width is not None and corridor_width > 0:
+                    expected_col = get_expected_col(neighbor[0])
+                    vertical_deviation = abs(neighbor[1] - expected_col)
+                    # Cubic penalty - strongly discourages vertical deviation
+                    deviation_penalty = (vertical_deviation / max(corridor_width, 1)) ** 3 * 50.0
+                else:
+                    deviation_penalty = 0
+                
+                tentative_g = g_score[current] + cost_map[neighbor[0], neighbor[1]] * move_cost + deviation_penalty
+                
+                if neighbor not in g_score or tentative_g < g_score[neighbor]:
+                    came_from[neighbor] = current
+                    g_score[neighbor] = tentative_g
+                    f_score[neighbor] = tentative_g + heuristic(neighbor, end)
+                    counter += 1
+                    heapq.heappush(open_set, (f_score[neighbor], counter, neighbor))
+        
+        # No path found
+        return None
+    
+    def get_slice_as_2d_array(self):
+        """
+        Extract the current seismic slice as a 2D numpy array.
+        
+        Returns:
+            data_2d: 2D numpy array of seismic values
+            origin: (x, y, z) origin of the slice in world coordinates
+            spacing: (dx, dy, dz) spacing of the slice
+            axis_info: dict with axis mapping info for coordinate conversion
+        """
+        if not hasattr(self, '_cached_seismic') or self._cached_seismic is None:
+            return None, None, None, None
+        
+        seismic = self._cached_seismic
+        dims = self._cached_dims
+        bounds = self._cached_bounds
+        
+        # Get the intensity/amplitude data
+        if 'intensity' in seismic.array_names:
+            data = seismic['intensity']
+        elif seismic.array_names:
+            data = seismic[seismic.array_names[0]]
+        else:
+            return None, None, None, None
+        
+        # Reshape to 3D grid
+        data_3d = data.reshape(dims, order='F')  # Fortran order for VTK
+        
+        # Calculate spacing
+        spacing = [
+            (bounds[1] - bounds[0]) / max(dims[0] - 1, 1),
+            (bounds[3] - bounds[2]) / max(dims[1] - 1, 1),
+            (bounds[5] - bounds[4]) / max(dims[2] - 1, 1)
+        ]
+        
+        # Extract the 2D slice based on current axis
+        axis_info = {
+            'axis': self.current_axis,
+            'slice_index': self.current_slice_index,
+            'bounds': bounds,
+            'dims': dims,
+            'spacing': spacing
+        }
+        
+        if self.current_axis == 'Inline':
+            # YZ plane at X index
+            idx = min(self.current_slice_index, dims[0] - 1)
+            data_2d = data_3d[idx, :, :]  # Shape: (ny, nz)
+            origin = (bounds[0] + idx * spacing[0], bounds[2], bounds[4])
+            axis_info['plane'] = 'YZ'
+            axis_info['row_axis'] = 'Y'  # rows in 2D array correspond to Y
+            axis_info['col_axis'] = 'Z'  # cols in 2D array correspond to Z
+            
+        elif self.current_axis == 'Crossline':
+            # XZ plane at Y index
+            idx = min(self.current_slice_index, dims[1] - 1)
+            data_2d = data_3d[:, idx, :]  # Shape: (nx, nz)
+            origin = (bounds[0], bounds[2] + idx * spacing[1], bounds[4])
+            axis_info['plane'] = 'XZ'
+            axis_info['row_axis'] = 'X'
+            axis_info['col_axis'] = 'Z'
+            
+        elif self.current_axis == 'Z-slice':
+            # XY plane at Z index
+            idx = min(self.current_slice_index, dims[2] - 1)
+            data_2d = data_3d[:, :, idx]  # Shape: (nx, ny)
+            origin = (bounds[0], bounds[2], bounds[4] + idx * spacing[2])
+            axis_info['plane'] = 'XY'
+            axis_info['row_axis'] = 'X'
+            axis_info['col_axis'] = 'Y'
+        
+        return data_2d, origin, spacing, axis_info
+    
+    def world_to_slice_coords(self, world_point, axis_info, spacing, v_exag=1.0):
+        """Convert world coordinates to slice 2D array indices.
+        
+        Args:
+            world_point: (x, y, z) in DISPLAY coordinates (with VE applied to Z)
+            axis_info: dict with bounds and axis info
+            spacing: (dx, dy, dz) spacing in REAL coordinates
+            v_exag: vertical exaggeration factor applied to display
+        """
+        bounds = axis_info['bounds']
+        
+        # The picked point Z is in display coords (scaled by VE)
+        # Convert Z back to real coordinates for slice indexing
+        real_z = world_point[2] / v_exag if v_exag != 0 else world_point[2]
+        
+        if self.current_axis == 'Inline':
+            # YZ plane - world (x, y, z) -> slice (row=y, col=z)
+            row = int((world_point[1] - bounds[2]) / spacing[1]) if spacing[1] > 0 else 0
+            col = int((real_z - bounds[4]) / spacing[2]) if spacing[2] > 0 else 0
+        elif self.current_axis == 'Crossline':
+            # XZ plane - world (x, y, z) -> slice (row=x, col=z)
+            row = int((world_point[0] - bounds[0]) / spacing[0]) if spacing[0] > 0 else 0
+            col = int((real_z - bounds[4]) / spacing[2]) if spacing[2] > 0 else 0
+        elif self.current_axis == 'Z-slice':
+            # XY plane - world (x, y, z) -> slice (row=x, col=y)
+            row = int((world_point[0] - bounds[0]) / spacing[0]) if spacing[0] > 0 else 0
+            col = int((world_point[1] - bounds[2]) / spacing[1]) if spacing[1] > 0 else 0
+        
+        return (row, col)
+    
+    def slice_coords_to_world(self, slice_point, axis_info, spacing, origin):
+        """Convert slice 2D array indices to world coordinates."""
+        bounds = axis_info['bounds']
+        row, col = slice_point
+        
+        if self.current_axis == 'Inline':
+            # YZ plane - slice (row=y_idx, col=z_idx) -> world (x, y, z)
+            x = self.current_slice_position
+            y = bounds[2] + row * spacing[1]
+            z = bounds[4] + col * spacing[2]
+        elif self.current_axis == 'Crossline':
+            # XZ plane
+            x = bounds[0] + row * spacing[0]
+            y = self.current_slice_position
+            z = bounds[4] + col * spacing[2]
+        elif self.current_axis == 'Z-slice':
+            # XY plane
+            x = bounds[0] + row * spacing[0]
+            y = bounds[2] + col * spacing[1]
+            z = self.current_slice_position
+        
+        return (x, y, z)
+    
+    def draw_semi_auto_line(self):
+        """
+        Semi-automatic horizon tracking using edge detection and A* pathfinding.
+        User clicks multiple waypoints along the horizon, then right-clicks to finish.
+        The algorithm finds optimal paths between consecutive waypoints.
+        """
+        self.disable_actions()
+        
+        if not self.current_seismic_uid:
+            self.print_terminal("Please select a seismic volume first!")
+            self.enable_actions()
+            return
+        
+        # Get slice data for edge detection
+        slice_data, origin, spacing, axis_info = self.get_slice_as_2d_array()
+        if slice_data is None:
+            self.print_terminal("Could not extract slice data for auto-tracking!")
+            self.enable_actions()
+            return
+        
+        self.print_terminal(f"Slice data shape: {slice_data.shape}")
+        
+        # Compute edge cost map
+        self.print_terminal("Computing edge detection cost map...")
+        cost_map = self.compute_edge_cost_map(slice_data)
+        self.print_terminal(f"Cost map range: {cost_map.min():.3f} to {cost_map.max():.3f}")
+        
+        # Get vertical exaggeration
+        v_exag = 1.0
+        try:
+            if self.plotter.scale is not None and len(self.plotter.scale) >= 3:
+                v_exag = self.plotter.scale[2]
+                if v_exag == 0:
+                    v_exag = 1.0
+        except:
+            pass
+        self.print_terminal(f"Vertical exaggeration: {v_exag}")
+        
+        # Add forbidden zones around existing interpretation lines
+        # This prevents the new path from jumping to or crossing existing horizons
+        cost_map = self.add_existing_lines_to_cost_map(cost_map, axis_info, spacing, v_exag)
+        self.print_terminal(f"Cost map range after forbidden zones: {cost_map.min():.3f} to {cost_map.max():.3f}")
+        
+        # CRITICAL: Make only the seismic slice pickable
+        # This prevents picking from jumping to existing interpretation lines
+        self._saved_pickable_states = {}
+        for name, actor in self.plotter.renderer.actors.items():
+            try:
+                self._saved_pickable_states[name] = actor.GetPickable()
+                # Make everything non-pickable except the seismic slice
+                if name == "seismic_slice_actor":
+                    actor.SetPickable(True)
+                    self.print_terminal(f"Made {name} PICKABLE")
+                else:
+                    actor.SetPickable(False)
+            except:
+                pass
+        
+        # Store for use in callbacks
+        self._autotrack_cost_map = cost_map
+        self._autotrack_axis_info = axis_info
+        self._autotrack_spacing = spacing
+        self._autotrack_origin = origin
+        self._autotrack_v_exag = v_exag
+        self._autotrack_points = []  # Will hold multiple waypoints
+        self._autotrack_markers = []  # Visual markers for clicked points
+        self._autotrack_preview_actors = []  # Preview line segments
+        
+        # Create entity dictionary for the new line
+        line_dict = deepcopy(self.parent.geol_coll.entity_dict)
+        line_dict_in = {
+            "name": ["PolyLine name: ", "auto_horizon"],
+            "role": [
+                "Role: ",
+                self.parent.geol_coll.valid_roles,
+            ],
+            "feature": [
+                "Feature: ",
+                self.parent.geol_coll.legend_df["feature"].tolist(),
+            ],
+            "scenario": [
+                "Scenario: ",
+                list(set(self.parent.geol_coll.legend_df["scenario"].tolist())),
+            ],
+        }
+        line_dict_updt = multiple_input_dialog(
+            title="Semi-Auto Horizon Tracking", input_dict=line_dict_in
+        )
+        
+        if line_dict_updt is None:
+            self.enable_actions()
+            return
+        
+        for key in line_dict_updt:
+            line_dict[key] = line_dict_updt[key]
+        
+        line_dict["topology"] = "PolyLine"
+        line_dict["x_section"] = ""
+        line_dict["vtk_obj"] = PolyLine()
+        
+        self._autotrack_line_dict = line_dict
+        
+        self.print_terminal("=== Semi-Auto Horizon Tracking ===")
+        self.print_terminal("LEFT-CLICK: Add waypoint on the horizon")
+        self.print_terminal("RIGHT-CLICK: Finish and create the tracked line")
+        self.print_terminal("Add at least 2 waypoints, then right-click to finish.")
+        
+        # Calculate marker size based on slice bounds (more reliable than spacing)
+        bounds = axis_info['bounds']
+        extent_x = abs(bounds[1] - bounds[0])
+        extent_y = abs(bounds[3] - bounds[2])
+        extent_z = abs(bounds[5] - bounds[4]) * v_exag  # Account for VE in display
+        max_extent = max(extent_x, extent_y, extent_z)
+        marker_size = max_extent * 0.01  # 1% of max extent
+        self._autotrack_marker_size = marker_size
+        self.print_terminal(f"Marker size: {marker_size}")
+        
+        # Enable point picking - use pick_click_position which returns the exact clicked 3D world point
+        def on_point_picked(picked_point):
+            if picked_point is None:
+                return
+            
+            # DEBUG: Print raw picked point
+            self.print_terminal(f"DEBUG: Raw picked point: {picked_point}")
+            
+            point = list(picked_point)
+            
+            # Convert to slice coordinates to see where we're picking
+            test_slice_coord = self.world_to_slice_coords(point, axis_info, spacing, v_exag)
+            self.print_terminal(f"DEBUG: Slice coords = row:{test_slice_coord[0]}, col(Z):{test_slice_coord[1]}")
+            
+            # CRITICAL FIX: Validate Z value to prevent jumping to other reflectors
+            # If we have previous waypoints, check if Z jumped too much
+            MAX_Z_JUMP = 20  # Maximum allowed jump in slice column (Z) units between consecutive waypoints
+            
+            if len(self._autotrack_points) > 0:
+                # Get previous waypoint's Z in slice coordinates
+                prev_point = self._autotrack_points[-1]
+                prev_slice_coord = self.world_to_slice_coords(prev_point, axis_info, spacing, v_exag)
+                
+                z_jump = abs(test_slice_coord[1] - prev_slice_coord[1])
+                
+                # Safety check - if picking still jumps too much, warn user
+                # With pickable fix, this should rarely happen
+                if z_jump > MAX_Z_JUMP:
+                    self.print_terminal(f"WARNING: Z jumped {z_jump} samples (max allowed: {MAX_Z_JUMP})")
+                    self.print_terminal(f"  Previous col(Z): {prev_slice_coord[1]}, Current col(Z): {test_slice_coord[1]}")
+                    self.print_terminal(f"  This may indicate picking is not hitting the slice - try clicking directly on the seismic image")
+                    # Still accept the point but warn - user can right-click to finish with good points
+            
+            # Store the point in DISPLAY coordinates
+            self._autotrack_points.append(tuple(point))
+            
+            # Add visual marker using 2D billboard approach
+            marker_name = f'autotrack_marker_{len(self._autotrack_points)}'
+            
+            # Create marker at the picked point with a small offset towards camera
+            marker_point = list(point)
+            small_offset = 100  # Small fixed offset
+            
+            if self.current_axis == 'Inline':
+                marker_point[0] -= small_offset
+            elif self.current_axis == 'Crossline':
+                marker_point[1] -= small_offset
+            elif self.current_axis == 'Z-slice':
+                marker_point[2] += small_offset
+            
+            # Use add_point_labels for guaranteed visibility (2D overlay)
+            waypoint_num = len(self._autotrack_points)
+            self.plotter.add_point_labels(
+                [marker_point],
+                [f"  {waypoint_num}"],
+                name=marker_name,
+                point_size=20,
+                point_color='yellow',
+                text_color='red',
+                font_size=14,
+                bold=True,
+                shape=None,
+                render_points_as_spheres=True,
+                always_visible=True,
+                pickable=False,
+                reset_camera=False
+            )
+            self._autotrack_markers.append(marker_name)
+            
+            self.print_terminal(f"Waypoint {waypoint_num} added at {point}")
+            
+            # If we have at least 2 points, show preview of path between last two
+            if len(self._autotrack_points) >= 2:
+                self._show_path_preview(
+                    self._autotrack_points[-2],
+                    self._autotrack_points[-1]
+                )
+            
+            # Force immediate render update
+            self.plotter.update()
+            self.plotter.render()
+        
+        def on_finish(point):
+            # Right-click finishes the tracking
+            if len(self._autotrack_points) < 2:
+                self.print_terminal("Need at least 2 waypoints! Add more points or press ESC to cancel.")
+                return
+            
+            self.print_terminal(f"Finishing with {len(self._autotrack_points)} waypoints...")
+            self.plotter.untrack_click_position(side="left")
+            self.plotter.untrack_click_position(side="right")
+            
+            # Run pathfinding between all consecutive waypoints
+            self._run_autotrack_pathfinding_multi()
+        
+        # Track left clicks for point selection, right click to finish
+        # Use track_click_position which picks the surface point at cursor location
+        self.plotter.track_click_position(side="left", callback=on_point_picked)
+        self.plotter.track_click_position(side="right", callback=on_finish)
+    
+    def _show_path_preview(self, point_a, point_b):
+        """Show a preview line between two points (just a straight line for visual feedback)."""
+        try:
+            # Create a simple line between the two points for visual feedback
+            line = pv.Line(point_a, point_b)
+            preview_name = f'autotrack_preview_{len(self._autotrack_preview_actors)}'
+            self.plotter.add_mesh(
+                line,
+                color='cyan',
+                line_width=4,
+                name=preview_name,
+                pickable=False,
+                reset_camera=False,
+                lighting=False
+            )
+            self._autotrack_preview_actors.append(preview_name)
+            self.plotter.update()
+            self.plotter.render()
+        except Exception as e:
+            self.print_terminal(f"Preview error: {e}")
+    
+    def _run_autotrack_pathfinding_multi(self):
+        """Execute A* pathfinding between all consecutive waypoints."""
+        try:
+            waypoints = self._autotrack_points
+            cost_map = self._autotrack_cost_map
+            axis_info = self._autotrack_axis_info
+            spacing = self._autotrack_spacing
+            origin = self._autotrack_origin
+            v_exag = self._autotrack_v_exag
+            line_dict = self._autotrack_line_dict
+            
+            self.print_terminal(f"Running pathfinding between {len(waypoints)} waypoints...")
+            
+            # VERY TIGHT corridor width - critical to prevent jumping between horizons
+            # A seismic reflector is only a few samples thick, so we use a very tight corridor
+            # Maximum corridor of 5 pixels prevents jumping to other horizons
+            MAX_CORRIDOR = 2   # Maximum corridor width in pixels/samples - VERY TIGHT
+            MIN_CORRIDOR = 1   # Minimum corridor width
+            
+            self.print_terminal(f"Using VERY TIGHT corridor: {MIN_CORRIDOR}-{MAX_CORRIDOR} pixels max")
+            
+            # Collect all path segments
+            all_world_points = []
+            
+            for i in range(len(waypoints) - 1):
+                point_a = waypoints[i]  # In display coords
+                point_b = waypoints[i + 1]  # In display coords
+                
+                # Convert display coordinates to slice indices
+                start = self.world_to_slice_coords(point_a, axis_info, spacing, v_exag)
+                end = self.world_to_slice_coords(point_b, axis_info, spacing, v_exag)
+                
+                self.print_terminal(f"Segment {i+1}: slice coords {start} -> {end}")
+                
+                # Clamp to valid range
+                start = (
+                    int(np.clip(start[0], 0, cost_map.shape[0] - 1)),
+                    int(np.clip(start[1], 0, cost_map.shape[1] - 1))
+                )
+                end = (
+                    int(np.clip(end[0], 0, cost_map.shape[0] - 1)),
+                    int(np.clip(end[1], 0, cost_map.shape[1] - 1))
+                )
+                
+                # Use VERY tight corridor - only allow minimal deviation from direct path
+                # The corridor is strictly capped to prevent jumping to other horizons
+                vertical_diff = abs(start[1] - end[1])
+                # Very strict: corridor is based on vertical diff but capped tightly
+                segment_corridor = min(MAX_CORRIDOR, max(MIN_CORRIDOR, vertical_diff // 3 + MIN_CORRIDOR))
+                
+                self.print_terminal(f"Segment {i+1}: vertical diff={vertical_diff}, corridor={segment_corridor}")
+                
+                # Run A* pathfinding with TIGHT corridor constraint
+                path = self.astar_pathfind(cost_map, start, end, corridor_width=segment_corridor)
+                
+                if path is None:
+                    self.print_terminal(f"No path found for segment {i+1}! Using straight line.")
+                    # Fallback: use straight line
+                    path = [start, end]
+                
+                self.print_terminal(f"Segment {i+1}: found {len(path)} points")
+                
+                # Convert path to world coordinates (REAL coords, not display)
+                for j, slice_point in enumerate(path):
+                    # Skip first point of subsequent segments to avoid duplicates
+                    if i > 0 and j == 0:
+                        continue
+                    world_point = self.slice_coords_to_world(slice_point, axis_info, spacing, origin)
+                    all_world_points.append(world_point)
+            
+            if len(all_world_points) < 2:
+                self.print_terminal("Not enough points for a line!")
+                self._cleanup_autotrack()
+                self.enable_actions()
+                return
+            
+            self.print_terminal(f"Total path: {len(all_world_points)} points")
+            
+            # Subsample if too many points
+            if len(all_world_points) > 1000:
+                step = len(all_world_points) // 1000
+                subsampled = all_world_points[::step]
+                # Ensure end point is included
+                if subsampled[-1] != all_world_points[-1]:
+                    subsampled.append(all_world_points[-1])
+                all_world_points = subsampled
+                self.print_terminal(f"Subsampled to {len(all_world_points)} points")
+            
+            # Create numpy array of points (in REAL coordinates)
+            points_array = np.array(all_world_points, dtype=np.float64)
+            
+            # Apply slice snapping (small offset to avoid z-fighting)
+            # But do NOT unscale Z again - these are already in real coords
+            offset = 1.0
+            if self.current_axis == 'Inline':
+                points_array[:, 0] = self.current_slice_position - offset
+            elif self.current_axis == 'Crossline':
+                points_array[:, 1] = self.current_slice_position - offset
+            elif self.current_axis == 'Z-slice':
+                points_array[:, 2] = self.current_slice_position + offset
+            
+            # Create proper VTK PolyLine
+            n_points = len(points_array)
+            
+            # Create the polydata with points
+            polydata = pv.PolyData(points_array)
+            
+            # Create line connectivity: for a polyline, we need [n, 0, 1, 2, ..., n-1]
+            lines = np.hstack([[n_points], np.arange(n_points)])
+            polydata.lines = lines
+            
+            # Copy to our VTK object
+            line_dict["vtk_obj"].ShallowCopy(polydata)
+            
+            # Store slice info
+            slice_info = {
+                'seismic_uid': self.current_seismic_uid,
+                'axis': self.current_axis,
+                'slice_index': self.current_slice_index
+            }
+            
+            # Generate a distinct color for this horizon
+            # Use a color palette that provides good contrast
+            horizon_colors = [
+                (255, 0, 0),      # Red
+                (0, 255, 0),      # Green
+                (0, 0, 255),      # Blue
+                (255, 255, 0),    # Yellow
+                (255, 0, 255),    # Magenta
+                (0, 255, 255),    # Cyan
+                (255, 128, 0),    # Orange
+                (128, 0, 255),    # Purple
+                (0, 255, 128),    # Spring Green
+                (255, 0, 128),    # Pink
+            ]
+            # Cycle through colors based on number of existing lines
+            color_index = len(self.interpretation_lines) % len(horizon_colors)
+            horizon_color = horizon_colors[color_index]
+            
+            # Add to geological collection with specific color
+            new_uid = self.parent.geol_coll.add_entity_from_dict(line_dict, color=horizon_color)
+            self.print_terminal(f"Created auto-tracked horizon with {n_points} points, uid: {new_uid}, color: {horizon_color}")
+            
+            # Track this interpretation line
+            self.interpretation_lines[new_uid] = slice_info
+            self.print_terminal(f"Registered auto-tracked line {new_uid} for {slice_info['axis']} slice {slice_info['slice_index']}")
+            
+        except Exception as e:
+            self.print_terminal(f"Error in auto-tracking: {e}")
+            import traceback
+            self.print_terminal(traceback.format_exc())
+        
+        finally:
+            self._cleanup_autotrack()
+            self.enable_actions()
+    
+    def _cleanup_autotrack(self):
+        """Clean up temporary auto-tracking state and markers."""
+        # Remove visual markers
+        if hasattr(self, '_autotrack_markers'):
+            for marker_name in self._autotrack_markers:
+                try:
+                    if marker_name in self.plotter.renderer.actors:
+                        self.plotter.remove_actor(marker_name)
+                except:
+                    pass
+            self._autotrack_markers = []
+        
+        # Remove preview lines
+        if hasattr(self, '_autotrack_preview_actors'):
+            for preview_name in self._autotrack_preview_actors:
+                try:
+                    if preview_name in self.plotter.renderer.actors:
+                        self.plotter.remove_actor(preview_name)
+                except:
+                    pass
+            self._autotrack_preview_actors = []
+        
+        # Restore pickable states for all actors
+        if hasattr(self, '_saved_pickable_states'):
+            for name, was_pickable in self._saved_pickable_states.items():
+                try:
+                    if name in self.plotter.renderer.actors:
+                        self.plotter.renderer.actors[name].SetPickable(was_pickable)
+                except:
+                    pass
+            del self._saved_pickable_states
+            self.print_terminal("Restored pickable states for all actors")
+        
+        # Clear state
+        if hasattr(self, '_autotrack_cost_map'):
+            del self._autotrack_cost_map
+        if hasattr(self, '_autotrack_axis_info'):
+            del self._autotrack_axis_info
+        if hasattr(self, '_autotrack_spacing'):
+            del self._autotrack_spacing
+        if hasattr(self, '_autotrack_origin'):
+            del self._autotrack_origin
+        if hasattr(self, '_autotrack_points'):
+            del self._autotrack_points
+        if hasattr(self, '_autotrack_line_dict'):
+            del self._autotrack_line_dict
+        if hasattr(self, '_autotrack_v_exag'):
+            del self._autotrack_v_exag
+        if hasattr(self, '_autotrack_marker_size'):
+            del self._autotrack_marker_size
+        
+        self.plotter.render()
+
+    # ==================== End Semi-Auto Tracking Methods ====================
+
     def initialize_menu_tools(self):
         super().initialize_menu_tools()
         # Add interpretation-specific draw line action
         self.drawInterpLineButton = QAction("Draw Interpretation Line", self)
         self.drawInterpLineButton.triggered.connect(self.draw_interpretation_line)
         self.menuCreate.insertAction(self.menuCreate.actions()[0], self.drawInterpLineButton)
+        
+        # Add semi-auto tracking action
+        self.semiAutoTrackButton = QAction("Semi-Auto Track Horizon", self)
+        self.semiAutoTrackButton.triggered.connect(self.draw_semi_auto_line)
+        self.menuCreate.insertAction(self.menuCreate.actions()[1], self.semiAutoTrackButton)
         
         # Connect our custom handler for additional processing (volume list refresh)
         try:
