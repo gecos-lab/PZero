@@ -1105,7 +1105,25 @@ class ViewInterpretation(ViewMap):
             self.interpretation_lines_by_slice[key] = set()
         self.interpretation_lines_by_slice[key].add(uid)
         
-        # Mark visibility as dirty to ensure it gets shown if it matches current slice
+        # Enforce visibility immediately to ensure sync with new actors
+        # This fixes the issue where newly propagated lines (shown by default in on_entities_added)
+        # stay visible because the optimized visibility update loop doesn't know about them yet.
+        matches_current = (
+            slice_info['seismic_uid'] == self.current_seismic_uid and
+            slice_info['axis'] == self.current_axis and
+            slice_info['slice_index'] == self.current_slice_index
+        )
+        
+        self.set_actor_visibility(uid, matches_current)
+        
+        # Keep the visibility tracking set in sync
+        if hasattr(self, 'vis_lines_on_display'):
+            if matches_current:
+                self.vis_lines_on_display.add(uid)
+            elif uid in self.vis_lines_on_display:
+                self.vis_lines_on_display.remove(uid)
+        
+        # Mark visibility as dirty just in case
         self._visibility_dirty = True
         
     def unregister_interpretation_line(self, uid):
@@ -1786,18 +1804,17 @@ class ViewInterpretation(ViewMap):
                 marker_point[2] += small_offset
             
             # Use add_point_labels for guaranteed visibility (2D overlay)
+            # User requested to remove yellow blobs and lines, keep only red text
             waypoint_num = len(self._autotrack_points)
             self.plotter.add_point_labels(
                 [marker_point],
                 [f"  {waypoint_num}"],
                 name=marker_name,
-                point_size=20,
-                point_color='yellow',
+                show_points=False,    # Do not render points/markers at all
                 text_color='red',
                 font_size=14,
                 bold=True,
                 shape=None,
-                render_points_as_spheres=True,
                 always_visible=True,
                 pickable=False,
                 reset_camera=False
@@ -1806,12 +1823,12 @@ class ViewInterpretation(ViewMap):
             
             self.print_terminal(f"Waypoint {waypoint_num} added at {point}")
             
-            # If we have at least 2 points, show preview of path between last two
-            if len(self._autotrack_points) >= 2:
-                self._show_path_preview(
-                    self._autotrack_points[-2],
-                    self._autotrack_points[-1]
-                )
+            # Preview line drawing removed as per user request (was causing VE alignment issues)
+            # if len(self._autotrack_points) >= 2:
+            #     self._show_path_preview(
+            #         self._autotrack_points[-2],
+            #         self._autotrack_points[-1]
+            #     )
             
             # Force immediate render update
             self.plotter.update()
