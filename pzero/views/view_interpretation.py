@@ -51,6 +51,9 @@ class ViewInterpretation(ViewMap):
         # Format: {uid: {'seismic_uid': str, 'axis': str, 'slice_index': int}}
         self.interpretation_lines = {}
 
+        # Spatial Index for fast lookup: {(seismic_uid, axis, slice_index): set(line_uids)}
+        self.interpretation_lines_by_slice = {}
+
         # Flag to track if initialization has been done
         self._initialized = False
 
@@ -77,8 +80,14 @@ class ViewInterpretation(ViewMap):
         self.print_terminal("Initializing interpretation view...")
         # Clear any inherited volumetric actors
         self.clear_seismic_volumes()
-        # Refresh volume list and create initial slice
+        # Reset initialization flag used for indexing
+        self._lines_indexed = False
+        #Refresh volume list and create initial slice
         self.refresh_volume_list()
+        
+        # Scan and index existing horizons if we have a volume selected
+        if self.current_seismic_uid:
+             self.scan_and_index_existing_horizons()
         
     def show_actor_with_property(self, uid=None, coll_name=None, show_property=None, visible=None):
         """Override to prevent showing full seismic volumes - we only show slices."""
@@ -220,6 +229,21 @@ class ViewInterpretation(ViewMap):
                         self.show_actor_with_property(uid=uid, coll_name='geol_coll', visible=matches_current_slice)
                         self.print_terminal(f"Added interpretation line {uid}, visible={matches_current_slice}")
                     else:
+                        # NEW: Try to classify it immediately if we have a volume loaded
+                        # This handles undo/redo or external adds
+                        if self.current_seismic_uid:
+                            self.scan_and_index_single_horizon(uid)
+                            if uid in self.interpretation_lines:
+                                # It was fully classified
+                                slice_info = self.interpretation_lines[uid]
+                                matches_current_slice = (
+                                    slice_info['seismic_uid'] == self.current_seismic_uid and
+                                    slice_info['axis'] == self.current_axis and
+                                    slice_info['slice_index'] == self.current_slice_index
+                                )
+                                self.show_actor_with_property(uid=uid, coll_name='geol_coll', visible=matches_current_slice)
+                                return
+
                         # Not a tracked interpretation line, show normally
                         self.show_actor_with_property(uid=uid, coll_name='geol_coll', visible=True)
                 except Exception as e:
@@ -298,6 +322,12 @@ class ViewInterpretation(ViewMap):
         self.current_seismic_uid = self.combo_volume.itemData(index)
         if self.current_seismic_uid:
             self.print_terminal(f"Volume changed to: {self.combo_volume.currentText()} ({self.current_seismic_uid})")
+            
+            # Reset indexing on volume change to re-scan for the new volume
+            self._lines_indexed = False
+            self.interpretation_lines.clear()
+            self.interpretation_lines_by_slice.clear()
+            
             self._camera_initialized = False  # Reset camera on volume change
             self.scalar_range = None  # Reset scalar range
             # Clear cached seismic data
@@ -305,6 +335,8 @@ class ViewInterpretation(ViewMap):
                 del self._cached_seismic
             self.update_slice_limits()
             self.update_camera_orientation()
+            # Scan for existing horizons compatible with this volume
+            self.scan_and_index_existing_horizons()
             self.update_slice()
         
     def on_view_type_changed(self, text):
@@ -802,7 +834,8 @@ class ViewInterpretation(ViewMap):
                 self.print_terminal(f"Created interpretation line with {len(snapped_points)} points, uid: {new_uid}")
                 
                 # Track this interpretation line with its slice info
-                self.interpretation_lines[new_uid] = slice_info
+                # Track this interpretation line with its slice info
+                self.register_interpretation_line(new_uid, slice_info)
                 self.print_terminal(f"Registered interpretation line {new_uid} for {slice_info['axis']} slice {slice_info['slice_index']}")
             
             # Restore pickability state of all actors
@@ -984,70 +1017,239 @@ class ViewInterpretation(ViewMap):
     def update_interpretation_line_visibility(self):
         """Update visibility of interpretation lines based on current slice.
         
-        Lines are only shown if they belong to the current seismic volume,
-        axis type, and slice index. Lines from other slices are hidden.
-        
-        OPTIMIZED: Uses cached actor references and batch updates to avoid
-        slow iteration when there are many propagated lines.
+        OPTIMIZED: Uses spatial hash map (interpretation_lines_by_slice) for O(1) lookup
+        instead of iterating through all lines.
         """
-        if not hasattr(self, 'interpretation_lines') or not self.interpretation_lines:
+        # Ensure we have a valid state
+        if not self.current_seismic_uid:
             return
-        
-        # Initialize actor cache if not exists
-        if not hasattr(self, '_actor_cache'):
-            self._actor_cache = {}
-        
-        # Early exit if nothing changed (same slice, same axis, same volume)
+
         cache_key = (self.current_seismic_uid, self.current_axis, self.current_slice_index)
+        
+        # Avoid redundant updates if nothing changed
         if hasattr(self, '_last_visibility_key') and self._last_visibility_key == cache_key:
-            return
+            # Check if any new lines were added that invalidated the clean state
+            if not getattr(self, '_visibility_dirty', False):
+                return
+        
         self._last_visibility_key = cache_key
+        self._visibility_dirty = False
         
         try:
-            # Batch visibility updates - collect all changes first, then apply
-            visibility_updates = []
+            # 1. Get the set of UIDs that SHOULD be visible on this slice
+            target_uids = self.interpretation_lines_by_slice.get(cache_key, set())
             
-            for uid, slice_info in self.interpretation_lines.items():
-                # Check if this line belongs to the current view
-                matches_current_slice = (
-                    slice_info['seismic_uid'] == self.current_seismic_uid and
-                    slice_info['axis'] == self.current_axis and
-                    slice_info['slice_index'] == self.current_slice_index
-                )
-                
-                # Use cached actor reference if available
-                if uid in self._actor_cache:
-                    actor = self._actor_cache[uid]
-                    if actor is not None:
-                        visibility_updates.append((actor, matches_current_slice))
-                    continue
-                
-                # First time - find and cache the actor
-                actor = None
-                
-                # Try direct UID lookup first (most common)
-                if uid in self.plotter.renderer.actors:
-                    actor = self.plotter.renderer.actors[uid]
-                else:
-                    # Try prefixed names
-                    for prefix in ['geol_coll_', 'geo_']:
-                        actor_name = f"{prefix}{uid}"
-                        if actor_name in self.plotter.renderer.actors:
-                            actor = self.plotter.renderer.actors[actor_name]
-                            break
-                
-                # Cache the result (even if None to avoid repeated searches)
-                self._actor_cache[uid] = actor
-                
-                if actor is not None:
-                    visibility_updates.append((actor, matches_current_slice))
+            # 2. Track currently visible lines to minimize VTK calls
+            if not hasattr(self, 'vis_lines_on_display'):
+                self.vis_lines_on_display = set()
             
-            # Apply all visibility changes in one batch
-            for actor, visible in visibility_updates:
-                actor.SetVisibility(visible)
+            # If we don't track what's currently visible properly, we might just assume 
+            # we need to hide everything that is NOT in target_uids but IS in interpretation_lines
+            # However, iterating self.interpretation_lines is O(N).
+            # Better approach:
+            # - Hide everything in self.vis_lines_on_display that is NOT in target_uids
+            # - Show everything in target_uids that is NOT in self.vis_lines_on_display
+            
+            to_hide = self.vis_lines_on_display - target_uids
+            to_show = target_uids - self.vis_lines_on_display
+            
+            # Batch apply changes
+            
+            # HIDE
+            for uid in to_hide:
+                self.set_actor_visibility(uid, False)
+                
+            # SHOW
+            for uid in to_show:
+                self.set_actor_visibility(uid, True)
+            
+            # Update state
+            self.vis_lines_on_display = target_uids.copy()
                         
         except Exception as e:
             self.print_terminal(f"Error updating interpretation line visibility: {e}")
+            import traceback
+            self.print_terminal(traceback.format_exc())
+
+    def set_actor_visibility(self, uid, visible):
+        """Helper to safely set actor visibility with caching."""
+        if not hasattr(self, '_actor_cache'):
+            self._actor_cache = {}
+            
+        actor = self._actor_cache.get(uid)
+        
+        if actor is None:
+            # Try direct UID lookup first (most common)
+            if uid in self.plotter.renderer.actors:
+                actor = self.plotter.renderer.actors[uid]
+            else:
+                # Try prefixed names
+                for prefix in ['geol_coll_', 'geo_']:
+                    actor_name = f"{prefix}{uid}"
+                    if actor_name in self.plotter.renderer.actors:
+                        actor = self.plotter.renderer.actors[actor_name]
+                        break
+            
+            if actor:
+                self._actor_cache[uid] = actor
+        
+        if actor:
+            actor.SetVisibility(visible)
+
+    def register_interpretation_line(self, uid, slice_info):
+        """Register a line in both the main dict and the spatial index."""
+        self.interpretation_lines[uid] = slice_info
+        
+        key = (slice_info['seismic_uid'], slice_info['axis'], slice_info['slice_index'])
+        if key not in self.interpretation_lines_by_slice:
+            self.interpretation_lines_by_slice[key] = set()
+        self.interpretation_lines_by_slice[key].add(uid)
+        
+        # Mark visibility as dirty to ensure it gets shown if it matches current slice
+        self._visibility_dirty = True
+        
+    def unregister_interpretation_line(self, uid):
+        """Remove a line from tracking."""
+        if uid in self.interpretation_lines:
+            slice_info = self.interpretation_lines[uid]
+            key = (slice_info['seismic_uid'], slice_info['axis'], slice_info['slice_index'])
+            
+            if key in self.interpretation_lines_by_slice:
+                if uid in self.interpretation_lines_by_slice[key]:
+                    self.interpretation_lines_by_slice[key].remove(uid)
+                    # Clean up empty sets to save memory
+                    if not self.interpretation_lines_by_slice[key]:
+                        del self.interpretation_lines_by_slice[key]
+            
+            del self.interpretation_lines[uid]
+            self._visibility_dirty = True
+
+    def scan_and_index_existing_horizons(self):
+        """
+        Scan all PolyLines in the project. If they align spatially with the current seismic volume,
+        index them so they are only shown on the correct slice.
+        O(N) operation runs once per volume load.
+        """
+        if getattr(self, '_lines_indexed', False):
+            return
+
+        self.print_terminal("Scanning existing horizons to index for efficient slicing...")
+        
+        count = 0
+        try:
+            # Get all geological entities
+            all_uids = self.parent.geol_coll.get_uids
+            
+            # We will batch-hide everything first to ensure clean state? 
+            # Or just let update_interpretation_line_visibility handle it.
+            # Only process PolyLines
+            
+            for uid in all_uids:
+                if uid in self.interpretation_lines:
+                    continue
+                
+                # Check topology
+                if self.parent.geol_coll.get_uid_topology(uid) != 'PolyLine':
+                    continue
+                
+                self.scan_and_index_single_horizon(uid)
+                count += 1
+                
+        except Exception as e:
+            self.print_terminal(f"Error scanning horizons: {e}")
+            import traceback
+            self.print_terminal(traceback.format_exc())
+            
+        self._lines_indexed = True
+        self.print_terminal(f"Indexing complete. Processed {count} potential horizons.")
+        self.update_interpretation_line_visibility()
+
+    def scan_and_index_single_horizon(self, uid):
+        """Check if a single horizon fits the current seismic grid and index it."""
+        try:
+            vtk_obj = self.parent.geol_coll.get_uid_vtk_obj(uid)
+            if not vtk_obj or vtk_obj.GetNumberOfPoints() == 0:
+                return
+
+            bounds = vtk_obj.GetBounds() # (xmin, xmax, ymin, ymax, zmin, zmax)
+            
+            # Get metadata about current seismic
+            # We need the real internal spatial reference (origin/spacing) 
+            # which we cache in get_slice_as_2d_array logic or need to access again.
+            
+            if not hasattr(self, '_cached_bounds') or not self._cached_bounds:
+                return
+
+            seismic_bounds = self._cached_bounds
+            seismic_dims = self._cached_dims
+            
+            # Simple tolerance for "flatness"
+            TOLERANCE = 0.01 
+            
+            # Calculate spacing on the fly (assuming regular grid)
+            dx = (seismic_bounds[1] - seismic_bounds[0]) / max(seismic_dims[0] - 1, 1)
+            dy = (seismic_bounds[3] - seismic_bounds[2]) / max(seismic_dims[1] - 1, 1)
+            dz = (seismic_bounds[5] - seismic_bounds[4]) / max(seismic_dims[2] - 1, 1)
+
+            # Check for Inline (YZ plane, X is constant)
+            if abs(bounds[1] - bounds[0]) < TOLERANCE:
+                # Calculate which slice index this corresponds to
+                # x = bounds[0] (or center)
+                x_pos = (bounds[0] + bounds[1]) / 2.0
+                
+                # Inverse mapping: index = (pos - origin) / spacing
+                # Should match world_to_slice_coords logic
+                if dx > 0:
+                    idx_float = (x_pos - seismic_bounds[0]) / dx
+                    idx = int(round(idx_float))
+                    
+                    # Verify it's actually close to an integer index
+                    if abs(idx_float - idx) < 0.1:
+                        if 0 <= idx < seismic_dims[0]:
+                            self.register_interpretation_line(uid, {
+                                'seismic_uid': self.current_seismic_uid,
+                                'axis': 'Inline',
+                                'slice_index': idx
+                            })
+                            # Initially hide it (visibility update will show it if it matches current)
+                            self.set_actor_visibility(uid, False)
+                            return
+
+            # Check for Crossline (XZ plane, Y is constant)
+            if abs(bounds[3] - bounds[2]) < TOLERANCE:
+                y_pos = (bounds[2] + bounds[3]) / 2.0
+                if dy > 0:
+                    idx_float = (y_pos - seismic_bounds[2]) / dy
+                    idx = int(round(idx_float))
+                    if abs(idx_float - idx) < 0.1:
+                        if 0 <= idx < seismic_dims[1]:
+                            self.register_interpretation_line(uid, {
+                                'seismic_uid': self.current_seismic_uid,
+                                'axis': 'Crossline',
+                                'slice_index': idx
+                            })
+                            self.set_actor_visibility(uid, False)
+                            return
+
+            # Check for Z-slice (XY plane, Z is constant)
+            if abs(bounds[5] - bounds[4]) < TOLERANCE:
+                z_pos = (bounds[4] + bounds[5]) / 2.0
+                if dz > 0:
+                    idx_float = (z_pos - seismic_bounds[4]) / dz
+                    idx = int(round(idx_float))
+                    if abs(idx_float - idx) < 0.1:
+                         if 0 <= idx < seismic_dims[2]:
+                            self.register_interpretation_line(uid, {
+                                'seismic_uid': self.current_seismic_uid,
+                                'axis': 'Z-slice',
+                                'slice_index': idx
+                            })
+                            self.set_actor_visibility(uid, False)
+                            return
+
+        except Exception as e:
+            # self.print_terminal(f"Debug: failed to scan {uid}: {e}")
+            pass
     
     def _invalidate_actor_cache(self, uid=None):
         """Invalidate actor cache when entities are added/removed."""
@@ -1119,13 +1321,11 @@ class ViewInterpretation(ViewMap):
         if not hasattr(self, 'interpretation_lines') or not self.interpretation_lines:
             return cost_map
         
-        # Get existing lines on the current slice
+        # Get existing lines on the current slice using spatial index (O(1))
         existing_line_uids = []
-        for uid, slice_info in self.interpretation_lines.items():
-            if (slice_info['seismic_uid'] == self.current_seismic_uid and
-                slice_info['axis'] == self.current_axis and
-                slice_info['slice_index'] == self.current_slice_index):
-                existing_line_uids.append(uid)
+        cache_key = (self.current_seismic_uid, self.current_axis, self.current_slice_index)
+        if cache_key in self.interpretation_lines_by_slice:
+            existing_line_uids = list(self.interpretation_lines_by_slice[cache_key])
         
         if not existing_line_uids:
             self.print_terminal("No existing lines on current slice to avoid")
@@ -1818,7 +2018,9 @@ class ViewInterpretation(ViewMap):
                 self.print_terminal(f"Could not set actor color: {actor_err}")
             
             # Track this interpretation line
-            self.interpretation_lines[new_uid] = slice_info
+            # Track this interpretation line
+            self.register_interpretation_line(new_uid, slice_info)
+            self.print_terminal(f"Registered auto-tracked line {new_uid} for {slice_info['axis']} slice {slice_info['slice_index']}")
             self.print_terminal(f"Registered auto-tracked line {new_uid} for {slice_info['axis']} slice {slice_info['slice_index']}")
             
         except Exception as e:
@@ -1913,9 +2115,10 @@ class ViewInterpretation(ViewMap):
             if not uid_exists(uid):
                 uids_to_remove.append(uid)
         
-        for uid in uids_to_remove:
-            del self.interpretation_lines[uid]
-            self.print_terminal(f"Removed deleted horizon {uid[:8]}... from tracking list")
+        if uids_to_remove:
+            for uid in uids_to_remove:
+                self.unregister_interpretation_line(uid)
+                self.print_terminal(f"Removed deleted horizon {uid[:8]}... from tracking list")
         
         # Get list of semi-auto tracked horizons ONLY (from interpretation_lines)
         # This excludes manually drawn lines and other entities
@@ -2358,11 +2561,11 @@ class ViewInterpretation(ViewMap):
                 new_uid = self.parent.geol_coll.add_entity_from_dict(line_dict)
                 
                 # Track this line
-                self.interpretation_lines[new_uid] = {
+                self.register_interpretation_line(new_uid, {
                     'seismic_uid': self.current_seismic_uid,
                     'axis': self.current_axis,
                     'slice_index': slice_idx
-                }
+                })
                 
                 created_lines.append(new_uid)
                 
