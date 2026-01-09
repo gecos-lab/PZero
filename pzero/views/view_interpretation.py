@@ -973,22 +973,27 @@ class ViewInterpretation(ViewMap):
                     slice_info['slice_index'] == self.current_slice_index
                 )
                 
-                # Get the actor name for this entity
-                actor_name = uid
+                # Try multiple possible actor names
+                possible_actor_names = [uid, f"geol_coll_{uid}", f"geo_{uid}"]
+                actor_found = False
                 
-                # Update visibility in the plotter
-                if actor_name in self.plotter.renderer.actors:
-                    actor = self.plotter.renderer.actors[actor_name]
-                    actor.SetVisibility(matches_current_slice)
-                    if matches_current_slice:
-                        self.print_terminal(f"Showing interpretation line {uid} on {slice_info['axis']} slice {slice_info['slice_index']}")
-                    else:
-                        self.print_terminal(f"Hiding interpretation line {uid} (belongs to {slice_info['axis']} slice {slice_info['slice_index']})")
+                for actor_name in possible_actor_names:
+                    if actor_name in self.plotter.renderer.actors:
+                        actor = self.plotter.renderer.actors[actor_name]
+                        actor.SetVisibility(matches_current_slice)
+                        actor_found = True
+                        break
+                
+                # If not found, search all actors for partial match
+                if not actor_found:
+                    for name, actor in self.plotter.renderer.actors.items():
+                        if uid in name or uid[:8] in name:
+                            actor.SetVisibility(matches_current_slice)
+                            actor_found = True
+                            break
                         
         except Exception as e:
             self.print_terminal(f"Error updating interpretation line visibility: {e}")
-            import traceback
-            self.print_terminal(traceback.format_exc())
 
     # ==================== Semi-Auto Tracking Methods ====================
     
@@ -1718,13 +1723,13 @@ class ViewInterpretation(ViewMap):
             new_uid = self.parent.geol_coll.add_entity_from_dict(line_dict)
             self.print_terminal(f"Created auto-tracked horizon with {n_points} points, uid: {new_uid}")
             
-            # Set the color for the line using the legend/properties system
+            # Set the color for the line using proper UID lookup (uid is a column, not the index)
             try:
-                # Try to set color via the properties dataframe
-                if hasattr(self.parent.geol_coll, 'df') and new_uid in self.parent.geol_coll.df.index:
-                    self.parent.geol_coll.df.loc[new_uid, 'color_R'] = horizon_color[0]
-                    self.parent.geol_coll.df.loc[new_uid, 'color_G'] = horizon_color[1]
-                    self.parent.geol_coll.df.loc[new_uid, 'color_B'] = horizon_color[2]
+                mask = self.parent.geol_coll.df['uid'] == new_uid
+                if mask.any():
+                    self.parent.geol_coll.df.loc[mask, 'color_R'] = horizon_color[0]
+                    self.parent.geol_coll.df.loc[mask, 'color_G'] = horizon_color[1]
+                    self.parent.geol_coll.df.loc[mask, 'color_B'] = horizon_color[2]
                     self.print_terminal(f"Set color in df for {new_uid}")
             except Exception as color_err:
                 self.print_terminal(f"Could not set color in df: {color_err}")
@@ -1828,42 +1833,91 @@ class ViewInterpretation(ViewMap):
             self.enable_actions()
             return
         
-        # Get list of interpretation lines on current slice
-        current_lines = []
-        for uid, slice_info in self.interpretation_lines.items():
-            if (slice_info['seismic_uid'] == self.current_seismic_uid and
-                slice_info['axis'] == self.current_axis and
-                slice_info['slice_index'] == self.current_slice_index):
-                # Get line name
-                try:
-                    name = self.parent.geol_coll.df.loc[uid, 'name']
-                except:
-                    name = uid[:8]
-                current_lines.append((uid, name))
+        # Helper function to check if UID exists in geol_coll
+        def uid_exists(uid):
+            try:
+                return (self.parent.geol_coll.df["uid"] == uid).any()
+            except:
+                return False
         
-        if not current_lines:
-            self.print_terminal("No horizon lines found on current slice!")
-            self.print_terminal("First use Semi-Auto Track to create a seed horizon on this slice.")
+        # Clean up interpretation_lines - remove any UIDs that no longer exist in geol_coll
+        uids_to_remove = []
+        for uid in list(self.interpretation_lines.keys()):
+            if not uid_exists(uid):
+                uids_to_remove.append(uid)
+        
+        for uid in uids_to_remove:
+            del self.interpretation_lines[uid]
+            self.print_terminal(f"Removed deleted horizon {uid[:8]}... from tracking list")
+        
+        # Get list of semi-auto tracked horizons ONLY (from interpretation_lines)
+        # This excludes manually drawn lines and other entities
+        all_lines = []
+        for uid, slice_info in self.interpretation_lines.items():
+            if slice_info['seismic_uid'] == self.current_seismic_uid and slice_info['axis'] == self.current_axis:
+                # Verify the entity still exists and get its name
+                if uid_exists(uid):
+                    try:
+                        name = self.parent.geol_coll.get_uid_name(uid)
+                        slice_idx = slice_info['slice_index']
+                        all_lines.append((uid, name, slice_idx))
+                    except:
+                        pass
+        
+        if not all_lines:
+            self.print_terminal("No semi-auto tracked horizons found!")
+            self.print_terminal("First use 'Semi-Auto Track Horizon' to create a seed horizon on this axis.")
             self.enable_actions()
             return
         
+        # Sort by slice index, then by name
+        all_lines.sort(key=lambda x: (x[2], x[1]))
+        
         # Create selection dialog
-        from PySide6.QtWidgets import QDialog, QVBoxLayout, QComboBox, QSpinBox, QLabel, QPushButton, QHBoxLayout, QRadioButton, QButtonGroup
+        from PySide6.QtWidgets import QDialog, QVBoxLayout, QComboBox, QSpinBox, QLabel, QPushButton, QHBoxLayout, QRadioButton, QButtonGroup, QGroupBox
         
         dialog = QDialog(self)
         dialog.setWindowTitle("Propagate Horizon")
-        dialog.setMinimumWidth(350)
+        dialog.setMinimumWidth(400)
         layout = QVBoxLayout(dialog)
         
-        # Horizon selection
-        layout.addWidget(QLabel("Select horizon to propagate:"))
+        # Horizon selection with clear information
+        horizon_group = QGroupBox("Select Seed Horizon")
+        horizon_layout = QVBoxLayout(horizon_group)
+        
+        horizon_layout.addWidget(QLabel("Choose the horizon to propagate:"))
         combo_horizon = QComboBox()
-        for uid, name in current_lines:
-            combo_horizon.addItem(f"{name} ({uid[:8]}...)", uid)
-        layout.addWidget(combo_horizon)
+        for uid, name, slice_idx in all_lines:
+            if slice_idx >= 0:
+                display_text = f"{name}  [Slice {slice_idx}]"
+            else:
+                display_text = f"{name}  [Slice unknown]"
+            combo_horizon.addItem(display_text, uid)
+        combo_horizon.setMinimumWidth(350)
+        horizon_layout.addWidget(combo_horizon)
+        
+        # Show info about selected horizon
+        info_label = QLabel("")
+        info_label.setStyleSheet("color: gray; font-style: italic;")
+        horizon_layout.addWidget(info_label)
+        
+        def update_info():
+            idx = combo_horizon.currentIndex()
+            if idx >= 0:
+                uid, name, slice_idx = all_lines[idx]
+                if slice_idx >= 0:
+                    info_label.setText(f"Will start propagation from slice {slice_idx}")
+                else:
+                    info_label.setText(f"Slice position unknown - will use current slice ({self.current_slice_index})")
+        
+        combo_horizon.currentIndexChanged.connect(update_info)
+        update_info()
+        
+        layout.addWidget(horizon_group)
         
         # Direction selection
-        layout.addWidget(QLabel("Propagation direction:"))
+        direction_group_box = QGroupBox("Propagation Direction")
+        direction_layout = QVBoxLayout(direction_group_box)
         direction_group = QButtonGroup(dialog)
         radio_forward = QRadioButton("Forward (increasing slice index)")
         radio_backward = QRadioButton("Backward (decreasing slice index)")
@@ -1872,39 +1926,47 @@ class ViewInterpretation(ViewMap):
         direction_group.addButton(radio_forward, 0)
         direction_group.addButton(radio_backward, 1)
         direction_group.addButton(radio_both, 2)
-        layout.addWidget(radio_forward)
-        layout.addWidget(radio_backward)
-        layout.addWidget(radio_both)
+        direction_layout.addWidget(radio_forward)
+        direction_layout.addWidget(radio_backward)
+        direction_layout.addWidget(radio_both)
+        layout.addWidget(direction_group_box)
         
         # Number of slices
-        layout.addWidget(QLabel("Number of slices to propagate:"))
+        slices_group = QGroupBox("Propagation Range")
+        slices_layout = QVBoxLayout(slices_group)
+        slices_layout.addWidget(QLabel("Number of slices to propagate:"))
         spin_slices = QSpinBox()
         spin_slices.setRange(1, 500)
         spin_slices.setValue(50)
-        layout.addWidget(spin_slices)
+        slices_layout.addWidget(spin_slices)
+        layout.addWidget(slices_group)
         
         # Template parameters
-        layout.addWidget(QLabel("Template half-height (samples):"))
+        params_group = QGroupBox("Tracking Parameters")
+        params_layout = QVBoxLayout(params_group)
+        
+        params_layout.addWidget(QLabel("Template half-height (samples):"))
         spin_template = QSpinBox()
         spin_template.setRange(3, 30)
         spin_template.setValue(7)
         spin_template.setToolTip("Vertical size of amplitude template for matching")
-        layout.addWidget(spin_template)
+        params_layout.addWidget(spin_template)
         
-        layout.addWidget(QLabel("Search window (samples):"))
+        params_layout.addWidget(QLabel("Search window (samples):"))
         spin_search = QSpinBox()
         spin_search.setRange(5, 50)
         spin_search.setValue(15)
         spin_search.setToolTip("Vertical search range on each new slice")
-        layout.addWidget(spin_search)
+        params_layout.addWidget(spin_search)
         
         # Smoothing parameter - helps focus on prominent reflectors
-        layout.addWidget(QLabel("Smoothing sigma (0=none):"))
+        params_layout.addWidget(QLabel("Smoothing sigma (0=none):"))
         spin_smooth = QSpinBox()
         spin_smooth.setRange(0, 10)
         spin_smooth.setValue(2)
         spin_smooth.setToolTip("Gaussian smoothing to suppress small edges and focus on prominent reflectors")
-        layout.addWidget(spin_smooth)
+        params_layout.addWidget(spin_smooth)
+        layout.addWidget(params_group)
         
         # Buttons
         btn_layout = QHBoxLayout()
@@ -1921,7 +1983,16 @@ class ViewInterpretation(ViewMap):
             return
         
         # Get parameters
+        selected_idx = combo_horizon.currentIndex()
         seed_uid = combo_horizon.currentData()
+        seed_name = all_lines[selected_idx][1]
+        seed_slice_idx = all_lines[selected_idx][2]
+        
+        # If slice index unknown, use current slice
+        if seed_slice_idx < 0:
+            seed_slice_idx = self.current_slice_index
+            self.print_terminal(f"Using current slice {seed_slice_idx} as seed position")
+        
         direction = direction_group.checkedId()  # 0=forward, 1=backward, 2=both
         num_slices = spin_slices.value()
         template_half = spin_template.value()
@@ -1929,11 +2000,11 @@ class ViewInterpretation(ViewMap):
         smooth_sigma = spin_smooth.value()
         
         self.print_terminal(f"=== Propagating Horizon ===")
-        self.print_terminal(f"Seed horizon: {seed_uid}")
+        self.print_terminal(f"Seed horizon: {seed_name} (slice {seed_slice_idx})")
         self.print_terminal(f"Direction: {['Forward', 'Backward', 'Both'][direction]}")
         self.print_terminal(f"Slices: {num_slices}, Template: ±{template_half}, Search: ±{search_window}, Smooth: {smooth_sigma}")
         
-        # Run propagation
+        # Run propagation with the seed slice index
         try:
             self._run_horizon_propagation(
                 seed_uid=seed_uid,
@@ -1941,7 +2012,8 @@ class ViewInterpretation(ViewMap):
                 num_slices=num_slices,
                 template_half=template_half,
                 search_window=search_window,
-                smooth_sigma=smooth_sigma
+                smooth_sigma=smooth_sigma,
+                seed_slice_index=seed_slice_idx
             )
         except Exception as e:
             self.print_terminal(f"Error during propagation: {e}")
@@ -1950,7 +2022,7 @@ class ViewInterpretation(ViewMap):
         
         self.enable_actions()
     
-    def _run_horizon_propagation(self, seed_uid, direction, num_slices, template_half, search_window, smooth_sigma=2):
+    def _run_horizon_propagation(self, seed_uid, direction, num_slices, template_half, search_window, smooth_sigma=2, seed_slice_index=None):
         """
         Execute the horizon propagation using template matching.
         
@@ -2000,35 +2072,16 @@ class ViewInterpretation(ViewMap):
             (bounds[5] - bounds[4]) / max(dims[2] - 1, 1)
         ]
         
-        # Get the seed horizon points - try multiple methods
+        # Get the seed horizon points using the proper method
         seed_vtk = None
         try:
-            # Method 1: Direct index lookup (uid is the index)
-            if seed_uid in self.parent.geol_coll.df.index:
-                seed_vtk = self.parent.geol_coll.df.loc[seed_uid, 'vtk_obj']
+            # Use the collection's get_uid_vtk_obj method which handles the uid column properly
+            seed_vtk = self.parent.geol_coll.get_uid_vtk_obj(seed_uid)
         except Exception as e:
-            self.print_terminal(f"Method 1 failed: {e}")
-        
-        if seed_vtk is None:
-            try:
-                # Method 2: Standard get_uid_vtk_obj
-                seed_vtk = self.parent.geol_coll.get_uid_vtk_obj(seed_uid)
-            except Exception as e:
-                self.print_terminal(f"Method 2 failed: {e}")
-        
-        if seed_vtk is None:
-            try:
-                # Method 3: Search by uid column if it exists
-                if 'uid' in self.parent.geol_coll.df.columns:
-                    mask = self.parent.geol_coll.df['uid'] == seed_uid
-                    if mask.any():
-                        seed_vtk = self.parent.geol_coll.df.loc[mask, 'vtk_obj'].values[0]
-            except Exception as e:
-                self.print_terminal(f"Method 3 failed: {e}")
+            self.print_terminal(f"Could not get seed horizon vtk object: {e}")
         
         if seed_vtk is None:
             self.print_terminal(f"Could not get seed horizon! UID: {seed_uid}")
-            self.print_terminal(f"Available indices: {list(self.parent.geol_coll.df.index)[:5]}...")
             return
         
         seed_points = np.array(seed_vtk.GetPoints().GetData())
@@ -2038,8 +2091,15 @@ class ViewInterpretation(ViewMap):
         
         self.print_terminal(f"Seed horizon has {len(seed_points)} points")
         
-        # Get current slice index and determine slice limits
-        current_idx = self.current_slice_index
+        # Get the seed slice index - use provided value or fall back to current slice
+        if seed_slice_index is not None:
+            current_idx = seed_slice_index
+        else:
+            current_idx = self.current_slice_index
+        
+        self.print_terminal(f"Starting propagation from slice {current_idx}")
+        
+        # Determine slice limits based on axis
         if self.current_axis == 'Inline':
             max_slice = dims[0] - 1
         elif self.current_axis == 'Crossline':
@@ -2239,12 +2299,13 @@ class ViewInterpretation(ViewMap):
                 
                 created_lines.append(new_uid)
                 
-                # Try to set color
+                # Try to set color using proper UID lookup (uid is a column, not the index)
                 try:
-                    if hasattr(self.parent.geol_coll, 'df') and new_uid in self.parent.geol_coll.df.index:
-                        self.parent.geol_coll.df.loc[new_uid, 'color_R'] = horizon_color[0]
-                        self.parent.geol_coll.df.loc[new_uid, 'color_G'] = horizon_color[1]
-                        self.parent.geol_coll.df.loc[new_uid, 'color_B'] = horizon_color[2]
+                    mask = self.parent.geol_coll.df['uid'] == new_uid
+                    if mask.any():
+                        self.parent.geol_coll.df.loc[mask, 'color_R'] = horizon_color[0]
+                        self.parent.geol_coll.df.loc[mask, 'color_G'] = horizon_color[1]
+                        self.parent.geol_coll.df.loc[mask, 'color_B'] = horizon_color[2]
                 except:
                     pass
             
@@ -2288,11 +2349,35 @@ class ViewInterpretation(ViewMap):
         except Exception as e:
             self.print_terminal(f"Warning: Could not connect entities_added signal: {e}")
         
+        # Connect to entity removal signal to clean up interpretation_lines
+        try:
+            self.parent.signals.entities_removed.connect(self.on_entities_removed)
+        except Exception as e:
+            self.print_terminal(f"Warning: Could not connect entities_removed signal: {e}")
+        
         # Connect to colormap change signal to update slice colormap
         try:
             self.parent.signals.prop_legend_cmap_modified.connect(self.on_colormap_changed)
         except Exception as e:
             self.print_terminal(f"Warning: Could not connect prop_legend_cmap_modified signal: {e}")
+    
+    def on_entities_removed(self, uids):
+        """Called when entities are removed from any collection. Clean up interpretation_lines."""
+        if not hasattr(self, 'interpretation_lines'):
+            return
+        
+        for uid in uids:
+            if uid in self.interpretation_lines:
+                # Check if the entity is actually removed from geol_coll
+                try:
+                    exists = (self.parent.geol_coll.df["uid"] == uid).any()
+                    if not exists:
+                        del self.interpretation_lines[uid]
+                        self.print_terminal(f"Removed {uid[:8]}... from interpretation lines tracking")
+                except:
+                    # If we can't check, assume it's removed
+                    del self.interpretation_lines[uid]
+                    self.print_terminal(f"Removed {uid[:8]}... from interpretation lines tracking")
     
     def on_colormap_changed(self, property_name):
         """Called when colormap is changed in the legend manager."""
