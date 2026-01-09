@@ -1573,9 +1573,10 @@ class ViewInterpretation(ViewMap):
             # Add visual marker using 2D billboard approach
             marker_name = f'autotrack_marker_{len(self._autotrack_points)}'
             
-            # Create marker at the picked point with a small offset towards camera
+            # Create marker at the picked point with a SMALL offset towards camera
+            # to avoid z-fighting with the seismic slice
             marker_point = list(point)
-            small_offset = 100  # Small fixed offset
+            small_offset = self._autotrack_marker_size * 0.5  # Very small offset relative to marker size
             
             if self.current_axis == 'Inline':
                 marker_point[0] -= small_offset
