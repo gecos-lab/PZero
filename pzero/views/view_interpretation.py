@@ -25,41 +25,60 @@ class ViewInterpretation(ViewMap):
     def __init__(self, *args, **kwargs):
         super(ViewInterpretation, self).__init__(*args, **kwargs)
         self.setWindowTitle("Interpretation Window")
-        
+
         # Current state
         self.current_seismic_uid = None
         self.current_axis = 'Inline' # Inline, Crossline, Z-slice
         self.current_slice_index = 0
         self.slice_actor = None
-        
+
         # Store current slice position for snapping drawn lines
         self.current_slice_position = 0.0
-        
+
         # Store current slice bounds for picking plane
         self.current_slice_bounds = None
-        
+
         # Scalar range for consistent colormapping
         self.scalar_range = None
-        
+
         # Camera initialization flag - reset on axis/volume change
         self._camera_initialized = False
-        
+
         # Track UIDs that should NOT be displayed as full volumes (only as slices)
         self.seismic_uids_to_hide = set()
-        
+
         # Track interpretation lines and their associated slice info
         # Format: {uid: {'seismic_uid': str, 'axis': str, 'slice_index': int}}
         self.interpretation_lines = {}
-        
+
+        # Flag to track if initialization has been done
+        self._initialized = False
+
         # Setup specific UI controls
         self.setup_controls()
-        
+
         # Override default view to something neutral initially
         self.plotter.view_xy()
-        
+
         # Use trackball style instead of image style to allow proper 3D views
         # Image style forces XY view which breaks Inline/Crossline views
         # self.plotter.enable_trackball_style()
+
+    def showEvent(self, event):
+        """Override Qt showEvent to initialize the view when first shown."""
+        super().showEvent(event)
+        if not self._initialized:
+            self._initialized = True
+            # Use QTimer to defer initialization until window is fully rendered
+            QTimer.singleShot(0, self._initialize_view)
+
+    def _initialize_view(self):
+        """Initialize the slice view after window is shown."""
+        self.print_terminal("Initializing interpretation view...")
+        # Clear any inherited volumetric actors
+        self.clear_seismic_volumes()
+        # Refresh volume list and create initial slice
+        self.refresh_volume_list()
         
     def show_actor_with_property(self, uid=None, coll_name=None, show_property=None, visible=None):
         """Override to prevent showing full seismic volumes - we only show slices."""
@@ -346,30 +365,29 @@ class ViewInterpretation(ViewMap):
         """Set camera orthogonal to the slice and fit view."""
         self.plotter.enable_parallel_projection()
         self.plotter.enable_image_style()
-        
+
         # If we have current slice bounds and scale, use the robust helper
         if hasattr(self, 'current_slice_bounds') and self.current_slice_bounds is not None:
              scale = [1.0, 1.0, 1.0]
              if self.plotter.scale is not None:
                  scale = self.plotter.scale
-                 
-             # Re-calculate center from bounds? 
+
+             # Re-calculate center from bounds?
              # Slice center might not be stored directly unless we calculated it in `update_slice`.
              # `update_slice` calculates slice_center.
              # Ideally update_camera_orientation is called AFTER update_slice logic or relies on stored state.
              # But usually on_view_type_changed calls update_slice immediately after.
              # So let's rely on update_slice to set the camera.
              pass
-        
-        # Fallback / Initial set (before slice is fully loaded)
-        if self.current_axis == 'Inline': 
+
+        # Set initial view orientation (before slice is fully loaded)
+        # Don't call reset_camera() here - let update_camera_to_slice() handle the complete camera setup
+        if self.current_axis == 'Inline':
             self.plotter.view_yz()
         elif self.current_axis == 'Crossline':
-            self.plotter.view_xz() 
+            self.plotter.view_xz()
         elif self.current_axis == 'Z-slice':
             self.plotter.view_xy()
-            
-        self.plotter.reset_camera()
 
     def end_pick(self, pos):
         """Override View2D.end_pick to prevent resetting to default View XY."""
@@ -632,29 +650,37 @@ class ViewInterpretation(ViewMap):
 
     def update_camera_to_slice(self, center, bounds, scale):
         """
-        Enforce a 2D-like view locked to the current axis, fitted to the slice bounds, 
+        Enforce a 2D-like view locked to the current axis, fitted to the slice bounds,
         respecting Vertical Exaggeration.
         """
         # Lock rotation by using Image style (Left=Pan, Right=Zoom)
-        # We must call specific view setup AFTER this because it might reset to XY
         self.plotter.enable_image_style()
         self.plotter.enable_parallel_projection()
-        
+
+        # Set correct view orientation for the current axis
+        # This must be done AFTER enable_image_style() which resets to XY view
+        if self.current_axis == 'Inline':
+            self.plotter.view_yz()
+        elif self.current_axis == 'Crossline':
+            self.plotter.view_xz()
+        elif self.current_axis == 'Z-slice':
+            self.plotter.view_xy()
+
         camera = self.plotter.camera
-        
+
         # Calculate fitting dimensions with Scale (VE) applied
         # bounds is [xmin, xmax, ymin, ymax, zmin, zmax] (unscaled)
         # scale is [sx, sy, sz]
-        
+
         # Determine width/height of the slice in WORLD (scaled) units
         width = 0.0
         height = 0.0
-        
+
         if self.current_axis == 'Inline':
             # YZ plane - camera looks along +X axis (from negative X towards positive X)
             width = abs(bounds[3] - bounds[2]) * scale[1]
             height = abs(bounds[5] - bounds[4]) * scale[2]
-            
+
             # Position camera on NEGATIVE X side looking towards POSITIVE X (front view)
             camera.position = (center[0] - max(width, height) * 2, center[1], center[2])
             camera.focal_point = center
@@ -2387,13 +2413,14 @@ class ViewInterpretation(ViewMap):
     def show_qt_canvas(self):
         """Show the Qt Window and refresh the volume list."""
         super().show_qt_canvas()
-        # Clear any full seismic volume actors that might have been added
+        # Clear any full seismic volume actors that might have been inherited
         self.clear_seismic_volumes()
         # Refresh volume list to detect any seismics (combo_volume now exists)
+        # This will call update_slice() at line 271 which creates and displays the slice
         self.refresh_volume_list()
-        # Defer initial slice display to ensure window is fully rendered
-        # PyVista/VTK needs the window visible and sized before proper rendering
-        QTimer.singleShot(100, self._force_initial_display)
+        # Ensure plotter updates immediately
+        if self.plotter:
+            self.plotter.render()
     
     def _force_initial_display(self):
         """Force initial slice display after window is fully shown."""
