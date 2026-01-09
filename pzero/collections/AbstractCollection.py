@@ -193,6 +193,9 @@ class BaseCollection(ABC):
     def editable_columns(self) -> npt.NDArray[np_intp]:
         """Here we use .columns.get_indexer to get indexes of the columns
         that we would like to be editable in the QTableView."""
+        # Handle case where columns might have duplicates (can occur when loading old projects)
+        if not self.df.columns.is_unique:
+            self._df = self._df.loc[:, ~self._df.columns.duplicated()]
         return self.df.columns.get_indexer(self.editable_columns_names)
 
     @property

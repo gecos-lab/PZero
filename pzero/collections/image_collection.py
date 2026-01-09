@@ -20,6 +20,7 @@ class ImageCollection(DIMCollection):
             "properties_names": [],
             "properties_components": [],
             "properties_types": [],
+            "seismic_source_file": "",  # path to original SEGY file for Seismics topology
         }
 
         self.entity_dict_types = {
@@ -32,6 +33,7 @@ class ImageCollection(DIMCollection):
             "properties_names": list,
             "properties_components": list,
             "properties_types": list,
+            "seismic_source_file": str,
         }
 
         self.valid_topologies = [

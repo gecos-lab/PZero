@@ -2,7 +2,7 @@
 PZero© Andrea Bistacchi"""
 
 import os
-
+import json
 from copy import deepcopy
 
 from datetime import datetime
@@ -68,7 +68,7 @@ from pzero.imports.obj2vtk import vtk2obj
 from pzero.imports.pc2vtk import pc2vtk
 from pzero.imports.ply2vtk import vtk2ply
 from pzero.imports.pyvista2vtk import pyvista2vtk
-from pzero.imports.segy2vtk import segy2vtk
+from pzero.imports.segy2vtk import segy2vtk, read_segy_file
 from pzero.imports.shp2vtk import shp2vtk
 from pzero.imports.stl2vtk import vtk2stl, vtk2stl_dilation
 from pzero.imports.well2vtk import well2vtk
@@ -1318,10 +1318,17 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             elif self.image_coll.df.loc[
                 self.image_coll.df["uid"] == uid, "topology"
             ].values[0] in ["Seismics"]:
-                sg_writer = vtkXMLStructuredGridWriter()
-                sg_writer.SetFileName(out_dir_name + "/" + uid + ".vts")
-                sg_writer.SetInputData(self.image_coll.get_uid_vtk_obj(uid))
-                sg_writer.Write()
+                # For seismic data, save only metadata reference instead of full VTK file
+                # This dramatically speeds up save operations for large seismic volumes
+                seismic_metadata = {
+                    "uid": uid,
+                    "source_file": self.image_coll.df.loc[
+                        self.image_coll.df["uid"] == uid, "seismic_source_file"
+                    ].values[0] if "seismic_source_file" in self.image_coll.df.columns else None
+                }
+                with open(out_dir_name + "/" + uid + "_seismic_metadata.json", "w") as f:
+                    json.dump(seismic_metadata, f, indent=2)
+                prgs_bar.add_one()
 
         # Save mesh3d collection table to JSON file and entities as VTK.
         out_cols = list(self.mesh3d_coll.df.columns)
@@ -1748,6 +1755,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                             )
                             self.print_terminal(f"column {column} added to xsect table")
 
+                    # Remove duplicate columns if any (can occur when loading old projects)
+                    new_xsect_coll_df = new_xsect_coll_df.loc[:, ~new_xsect_coll_df.columns.duplicated()]
+
                     # reorder columns
                     new_xsect_coll_df = new_xsect_coll_df[self.xsect_coll.df.columns]
 
@@ -1833,6 +1843,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                                 axis=1,
                             )
                             self.print_terminal(f"column {column} added to dom table")
+
+                    # Remove duplicate columns if any (can occur when loading old projects)
+                    new_dom_coll_df = new_dom_coll_df.loc[:, ~new_dom_coll_df.columns.duplicated()]
 
                     # reorder columns
                     new_dom_coll_df = new_dom_coll_df[self.dom_coll.df.columns]
@@ -1944,6 +1957,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                             )
                             self.print_terminal(f"column {column} added to image table")
 
+                    # Remove duplicate columns if any (can occur when loading old projects)
+                    new_image_coll_df = new_image_coll_df.loc[:, ~new_image_coll_df.columns.duplicated()]
+
                     # reorder columns
                     new_image_coll_df = new_image_coll_df[self.image_coll.df.columns]
 
@@ -1989,15 +2005,47 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     elif self.image_coll.df.loc[
                         self.image_coll.df["uid"] == uid, "topology"
                     ].values[0] in ["Seismics"]:
-                        if not os.path.isfile((in_dir_name + "/" + uid + ".vts")):
-                            print("error: missing VTK file")
-                            return
-                        vtk_object = Seismics()
-                        sg_reader = vtkXMLStructuredGridReader()
-                        sg_reader.SetFileName(in_dir_name + "/" + uid + ".vts")
-                        sg_reader.Update()
-                        vtk_object.ShallowCopy(sg_reader.GetOutput())
-                        vtk_object.Modified()
+                        # Try to load from metadata first (fast method)
+                        metadata_file = in_dir_name + "/" + uid + "_seismic_metadata.json"
+                        if os.path.isfile(metadata_file):
+                            try:
+                                with open(metadata_file, "r") as f:
+                                    seismic_metadata = json.load(f)
+                                source_file = seismic_metadata.get("source_file")
+
+                                if source_file and os.path.isfile(source_file):
+                                    # Re-import from original SEGY file
+                                    self.print_terminal(f"Loading seismic from source: {source_file}")
+                                    pv_seismic_grid = read_segy_file(in_file_name=source_file)
+                                    vtk_object = Seismics()
+                                    vtk_object.DeepCopy(pv_seismic_grid)
+                                else:
+                                    self.print_terminal(f"Warning: Source SEGY file not found: {source_file}")
+                                    self.print_terminal("Attempting to load from saved VTK file...")
+                                    # Fallback to old method
+                                    if not os.path.isfile((in_dir_name + "/" + uid + ".vts")):
+                                        print("error: missing both metadata source and VTK file")
+                                        return
+                                    vtk_object = Seismics()
+                                    sg_reader = vtkXMLStructuredGridReader()
+                                    sg_reader.SetFileName(in_dir_name + "/" + uid + ".vts")
+                                    sg_reader.Update()
+                                    vtk_object.ShallowCopy(sg_reader.GetOutput())
+                                    vtk_object.Modified()
+                            except Exception as e:
+                                self.print_terminal(f"Error loading seismic metadata: {e}")
+                                return
+                        else:
+                            # Fallback to old VTK file method for legacy projects
+                            if not os.path.isfile((in_dir_name + "/" + uid + ".vts")):
+                                print("error: missing VTK file")
+                                return
+                            vtk_object = Seismics()
+                            sg_reader = vtkXMLStructuredGridReader()
+                            sg_reader.SetFileName(in_dir_name + "/" + uid + ".vts")
+                            sg_reader.Update()
+                            vtk_object.ShallowCopy(sg_reader.GetOutput())
+                            vtk_object.Modified()
                     self.image_coll.set_uid_vtk_obj(uid=uid, vtk_obj=vtk_object)
                     prgs_bar.add_one()
                 self.image_coll.table_model.endResetModel()
@@ -2060,6 +2108,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                             self.print_terminal(
                                 f"column {column} added to mesh3d table"
                             )
+
+                    # Remove duplicate columns if any (can occur when loading old projects)
+                    new_mesh3d_coll_df = new_mesh3d_coll_df.loc[:, ~new_mesh3d_coll_df.columns.duplicated()]
 
                     # reorder columns
                     new_mesh3d_coll_df = new_mesh3d_coll_df[self.mesh3d_coll.df.columns]
@@ -2166,6 +2217,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                                 f"column {column} added to boundary table"
                             )
 
+                    # Remove duplicate columns if any (can occur when loading old projects)
+                    new_boundary_coll_df = new_boundary_coll_df.loc[:, ~new_boundary_coll_df.columns.duplicated()]
+
                     # reorder columns
                     new_boundary_coll_df = new_boundary_coll_df[
                         self.boundary_coll.df.columns
@@ -2250,6 +2304,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                                 axis=1,
                             )
                             self.print_terminal(f"column {column} added to wells table")
+
+                    # Remove duplicate columns if any (can occur when loading old projects)
+                    new_well_coll_df = new_well_coll_df.loc[:, ~new_well_coll_df.columns.duplicated()]
 
                     # reorder columns
                     new_well_coll_df = new_well_coll_df[self.well_coll.df.columns]
@@ -2336,6 +2393,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                             self.print_terminal(
                                 f"column {column} added to geology table"
                             )
+
+                    # Remove duplicate columns if any (can occur when loading old projects)
+                    new_geol_coll_df = new_geol_coll_df.loc[:, ~new_geol_coll_df.columns.duplicated()]
 
                     # reorder columns
                     new_geol_coll_df = new_geol_coll_df[self.geol_coll.df.columns]
@@ -2436,6 +2496,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                             self.print_terminal(
                                 f"column {column} added to fluids table"
                             )
+
+                    # Remove duplicate columns if any (can occur when loading old projects)
+                    new_fluids_coll_df = new_fluids_coll_df.loc[:, ~new_fluids_coll_df.columns.duplicated()]
 
                     # reorder columns
                     new_fluids_coll_df = new_fluids_coll_df[self.fluid_coll.df.columns]
@@ -2541,6 +2604,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                             self.print_terminal(
                                 f"column {column} added to background table"
                             )
+
+                    # Remove duplicate columns if any (can occur when loading old projects)
+                    new_backgrounds_coll_df = new_backgrounds_coll_df.loc[:, ~new_backgrounds_coll_df.columns.duplicated()]
 
                     # reorder columns
                     new_backgrounds_coll_df = new_backgrounds_coll_df[

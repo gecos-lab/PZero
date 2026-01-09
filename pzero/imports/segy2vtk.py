@@ -76,6 +76,9 @@ def segy2vtk(self, in_file_name):
         ].point_data_components
         curr_obj_dict["properties_types"] = curr_obj_dict["vtk_obj"].point_data_types
 
+        # Store source file path for fast save/load
+        curr_obj_dict["seismic_source_file"] = os_path.abspath(in_file_name)
+
         self.image_coll.add_entity_from_dict(entity_dict=curr_obj_dict)
         self.print_terminal("Import successful.")
 
