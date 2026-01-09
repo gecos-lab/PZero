@@ -986,11 +986,27 @@ class ViewInterpretation(ViewMap):
         
         Lines are only shown if they belong to the current seismic volume,
         axis type, and slice index. Lines from other slices are hidden.
+        
+        OPTIMIZED: Uses cached actor references and batch updates to avoid
+        slow iteration when there are many propagated lines.
         """
         if not hasattr(self, 'interpretation_lines') or not self.interpretation_lines:
             return
-            
+        
+        # Initialize actor cache if not exists
+        if not hasattr(self, '_actor_cache'):
+            self._actor_cache = {}
+        
+        # Early exit if nothing changed (same slice, same axis, same volume)
+        cache_key = (self.current_seismic_uid, self.current_axis, self.current_slice_index)
+        if hasattr(self, '_last_visibility_key') and self._last_visibility_key == cache_key:
+            return
+        self._last_visibility_key = cache_key
+        
         try:
+            # Batch visibility updates - collect all changes first, then apply
+            visibility_updates = []
+            
             for uid, slice_info in self.interpretation_lines.items():
                 # Check if this line belongs to the current view
                 matches_current_slice = (
@@ -999,27 +1015,51 @@ class ViewInterpretation(ViewMap):
                     slice_info['slice_index'] == self.current_slice_index
                 )
                 
-                # Try multiple possible actor names
-                possible_actor_names = [uid, f"geol_coll_{uid}", f"geo_{uid}"]
-                actor_found = False
+                # Use cached actor reference if available
+                if uid in self._actor_cache:
+                    actor = self._actor_cache[uid]
+                    if actor is not None:
+                        visibility_updates.append((actor, matches_current_slice))
+                    continue
                 
-                for actor_name in possible_actor_names:
-                    if actor_name in self.plotter.renderer.actors:
-                        actor = self.plotter.renderer.actors[actor_name]
-                        actor.SetVisibility(matches_current_slice)
-                        actor_found = True
-                        break
+                # First time - find and cache the actor
+                actor = None
                 
-                # If not found, search all actors for partial match
-                if not actor_found:
-                    for name, actor in self.plotter.renderer.actors.items():
-                        if uid in name or uid[:8] in name:
-                            actor.SetVisibility(matches_current_slice)
-                            actor_found = True
+                # Try direct UID lookup first (most common)
+                if uid in self.plotter.renderer.actors:
+                    actor = self.plotter.renderer.actors[uid]
+                else:
+                    # Try prefixed names
+                    for prefix in ['geol_coll_', 'geo_']:
+                        actor_name = f"{prefix}{uid}"
+                        if actor_name in self.plotter.renderer.actors:
+                            actor = self.plotter.renderer.actors[actor_name]
                             break
+                
+                # Cache the result (even if None to avoid repeated searches)
+                self._actor_cache[uid] = actor
+                
+                if actor is not None:
+                    visibility_updates.append((actor, matches_current_slice))
+            
+            # Apply all visibility changes in one batch
+            for actor, visible in visibility_updates:
+                actor.SetVisibility(visible)
                         
         except Exception as e:
             self.print_terminal(f"Error updating interpretation line visibility: {e}")
+    
+    def _invalidate_actor_cache(self, uid=None):
+        """Invalidate actor cache when entities are added/removed."""
+        if not hasattr(self, '_actor_cache'):
+            return
+        if uid is None:
+            self._actor_cache.clear()
+        elif uid in self._actor_cache:
+            del self._actor_cache[uid]
+        # Also invalidate the visibility key to force update
+        if hasattr(self, '_last_visibility_key'):
+            del self._last_visibility_key
 
     # ==================== Semi-Auto Tracking Methods ====================
     
@@ -2399,10 +2439,13 @@ class ViewInterpretation(ViewMap):
                     exists = (self.parent.geol_coll.df["uid"] == uid).any()
                     if not exists:
                         del self.interpretation_lines[uid]
+                        # Invalidate actor cache for this uid
+                        self._invalidate_actor_cache(uid)
                         self.print_terminal(f"Removed {uid[:8]}... from interpretation lines tracking")
                 except:
                     # If we can't check, assume it's removed
                     del self.interpretation_lines[uid]
+                    self._invalidate_actor_cache(uid)
                     self.print_terminal(f"Removed {uid[:8]}... from interpretation lines tracking")
     
     def on_colormap_changed(self, property_name):
