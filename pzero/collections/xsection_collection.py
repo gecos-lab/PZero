@@ -326,6 +326,8 @@ class XSectionCollection(BaseCollection):
             "uid": "",
             "name": "undef",
             "scenario": "undef",
+            "vtk_plane": None,  # None to avoid errors with deepcopy
+            "vtk_frame": None,  # None to avoid errors with deepcopy
             "origin_x": 0.0,
             "origin_y": 0.0,
             "origin_z": 0.0,
@@ -341,8 +343,6 @@ class XSectionCollection(BaseCollection):
             "height": 0.0,  # rename to height
             # "top": 0.0,  # to be removed
             # "bottom": 0.0,
-            "vtk_plane": None,  # None to avoid errors with deepcopy
-            "vtk_frame": None,  # None to avoid errors with deepcopy
         }
         self.entity_dict_types = {
             "uid": str,

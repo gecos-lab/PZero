@@ -29,10 +29,10 @@ class GFBCollection(BaseCollection):
             "parent_uid": "",  # this is the uid of the cross section for "XsVertexSet", "XsPolyLine", and "XsImage", empty for all others
             "topology": "undef",
             "vtk_obj": None,
-            "role": "undef",
-            "feature": "undef",
             "properties_names": [],
             "properties_components": [],
+            "role": "undef",
+            "feature": "undef",
         }
 
         self.entity_dict_types = {
