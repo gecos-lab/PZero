@@ -44,36 +44,24 @@ from .AbstractCollection import BaseCollection
 
 def section_from_strike(self, vector):
     """Create a cross-section from one point and strike."""
-    section_dict = deepcopy(self.parent.xsect_coll.entity_dict)
     self.plotter.untrack_click_position(side="left")
-
-    # points = np.array([vector.p1, vector.p2])
 
     section_dict_in = {
         "warning": [
             "XSection from strike",
-            "Build new XSection from a user-drawn line.\nOnce drawn, values can be modified from keyboard\nor by drawing another vector.",
+            "Build new (parallel) XSection(s) from a user-drawn line.\nUse Number = 1 for a single XSection.\nFor Number > 1, parallel XSections are distributed along the normal pole vector according to spacing.\nOnce drawn, values can be modified from keyboard\nor by drawing another vector.",
             "QLabel",
         ],
         "name": ["Insert Xsection name", "new_section", "QLineEdit"],
         "origin_x": ["Insert origin X coord", vector.p1[0], "QLineEdit"],
         "origin_y": ["Insert origin Y coord", vector.p1[1], "QLineEdit"],
         "origin_z": ["Insert origin Z coord", vector.p1[2], "QLineEdit"],
-        # "end_x": ["Insert end X coord", vector.p2[0], "QLineEdit"],
-        # "end_y": ["Insert end Y coord", vector.p2[1], "QLineEdit"],
         "strike": ["Insert strike", vector.azimuth, "QLineEdit"],
         "dip": ["Insert dip", 90.0, "QLineEdit"],
         "length": ["Insert length", vector.length, "QLineEdit"],
         "height": ["Insert height", 0.0, "QLineEdit"],
-        # "bottom": ["Insert bottom", 0.0, "QLineEdit"],
-        "multiple": [
-            "Multiple XSections",
-            "Draw a set of parallel XSections",
-            "QCheckBox",
-        ],
-        "spacing": ["Spacing", 1000.0, "QLineEdit"],
-        "num_xs": ["Number of XSections", 5, "QLineEdit"],
-        "along": ["Repeat parallel to:", ["Normal", "strike"], "QComboBox"],
+        "num_xs": ["Number of XSections", 1, "QLineEdit"],
+        "spacing": ["Spacing of XSections (+o-)", 1000.0, "QLineEdit"],
     }
     section_dict_updt = general_input_dialog(
         title="New XSection from points", input_dict=section_dict_in
@@ -83,73 +71,47 @@ def section_from_strike(self, vector):
         # If None un-freeze the Qt interface and return.
         self.enable_actions()
         return
-    while True:
-        # Add "_0" to section name to ensure uniqueness.
-        if section_dict_updt["name"] in self.parent.xsect_coll.get_names:
-            section_dict_updt["name"] = section_dict_updt["name"] + "_0"
+
+    section_dict = deepcopy(self.parent.xsect_coll.entity_dict)
+    for key in section_dict.keys():
+        if key in section_dict_updt.keys():
+            section_dict[key] = section_dict_updt[key]
+
+    normal_x = (
+        np_sin(np_deg2rad(section_dict_updt["strike"] - 90))
+        * section_dict_updt["spacing"]
+    )
+    normal_y = (
+        np_cos(np_deg2rad(section_dict_updt["strike"] - 90))
+        * section_dict_updt["spacing"]
+    )
+    normal_z = (
+        -np_sin(np_deg2rad(90 - section_dict_updt["dip"]))
+        * section_dict_updt["spacing"]
+    )
+
+    origin_x = section_dict["origin_x"]
+    origin_y = section_dict["origin_y"]
+    origin_z = section_dict["origin_z"]
+
+    for i in range(section_dict_updt["num_xs"]):
+        if section_dict_updt["num_xs"] > 1:
+            name = section_dict_updt["name"] + "_" + str(i)
         else:
-            break
-    for key in section_dict_updt:
-        # Update section dictionary entries.
-        section_dict[key] = section_dict_updt[key]
-    # Use other dialog dictionary entries as parameters for multiple sections.
-    multiple = section_dict["multiple"]
-    num_xs = section_dict["num_xs"]
-    along = section_dict["along"]
-    section_dict.pop("multiple", None)
-    section_dict.pop("num_xs", None)
-    # # Define other (redundant) section parameters.
-    # section_dict["origin_z"] = section_dict["bottom"]
-    # section_dict["end_z"] = section_dict["top"]
-    # # Calculate normals.
-    # normals = dip_directions2normals(
-    #     dips=section_dict["dip"], directions=(section_dict["strike"] + 90) % 360
-    # )
-    # section_dict["normal_x"] = normals[0]
-    # section_dict["normal_y"] = normals[1]
-    # section_dict["normal_z"] = normals[2]
-    # ADD CROSS-SECTION TO COLLECTION.
-    uid = self.parent.xsect_coll.add_entity_from_dict(entity_dict=section_dict)
-    # The following seems not necessary
-    # if section_dict is None:
-    #     """Un-Freeze QT interface"""
-    #     self.enable_actions()
-    # if multiple == "uncheck":
-    #     """Un-Freeze QT interface"""
-    #     self.enable_actions()
-    # The following adds more parallel seriated cross-sections.
-    if multiple == "check":
-        name_original_xs = section_dict["name"]
-        spacing = section_dict["spacing"]
-        for xsect in range(num_xs - 1):
-            section_dict["name"] = name_original_xs + "_" + str(xsect)
-            while True:
-                if section_dict["name"] in self.parent.xsect_coll.get_names:
-                    section_dict["name"] = section_dict["name"] + "_0"
-                else:
-                    break
-            tx = self.parent.xsect_coll.get_uid_normal_x(uid) * spacing
-            ty = self.parent.xsect_coll.get_uid_normal_y(uid) * spacing
-            if along == "Normal":
-                tz = self.parent.xsect_coll.get_uid_normal_z(uid) * spacing
+            name = section_dict_updt["name"]
+        while True:
+            if name in self.parent.xsect_coll.get_names:
+                name = name + "_(1)"
             else:
-                tz = 0
-            trans_mat = np_array(
-                [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [tx, ty, tz, 1]]
-            )
-            frame = self.parent.xsect_coll.get_uid_vtk_obj(uid)
-            homo_points = frame.get_homo_points()
-            new_points = np_matmul(homo_points, trans_mat)[:, :-1]
-            section_dict["origin_x"] = new_points[0, 0]
-            section_dict["origin_y"] = new_points[0, 1]
-            section_dict["origin_z"] = new_points[0, 2]
-            # section_dict["end_x"] = new_points[3, 0]
-            # section_dict["end_y"] = new_points[3, 1]
-            # section_dict["end_z"] = new_points[3, 2]
-            # section_dict["bottom"] = new_points[0, 2]
-            # section_dict["top"] = new_points[3, 2]
-            section_dict["uid"] = None
-            uid = self.parent.xsect_coll.add_entity_from_dict(entity_dict=section_dict)
+                break
+        section_dict["name"] = name
+        section_dict["uid"] = None
+
+        section_dict["origin_x"] = origin_x + normal_x * i
+        section_dict["origin_y"] = origin_y + normal_y * i
+        section_dict["origin_z"] = origin_z + normal_z * i
+
+        self.parent.xsect_coll.add_entity_from_dict(entity_dict=section_dict)
     # At the end un-freeze the Qt interface before returning.
     self.enable_actions()
 
