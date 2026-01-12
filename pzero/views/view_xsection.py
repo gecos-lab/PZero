@@ -16,7 +16,7 @@ from vtkmodules.vtkFiltersCore import vtkAppendPolyData
 from pyvista import Line as pv_Line
 from .view_map import ViewMap
 from ..orientation_analysis import get_dip_dir_vectors
-from ..helpers.helper_dialogs import input_combo_dialog, message_dialog
+from ..helpers.helper_dialogs import input_combo_dialog, message_dialog, options_dialog
 
 
 class ViewXsection(View2D):
@@ -48,6 +48,7 @@ class ViewXsection(View2D):
 
         # Super here after having set the x_section_uid and _name
         super(ViewXsection, self).__init__(parent, *args, **kwargs)
+        self.parent = parent
         # self.parent.signals.selection_changed.connect(self.on_selection_changed)
 
         # Rename Base View, Menu and Tool
@@ -78,6 +79,10 @@ class ViewXsection(View2D):
         self.horizMirrorButton.triggered.connect(self.horizontal_mirror)
         self.menuView.addAction(self.horizMirrorButton)
 
+        self.fitFrameButton = QAction("Fit frame to all entities", self)
+        self.fitFrameButton.triggered.connect(self.fit_frame)
+        self.menuModify.addAction(self.fitFrameButton)
+
     # # --- AGGIUNTA: funzione di slot per sincronizzazione selezione ---
     # def on_selection_changed(self, collection):
     #     print("DEBUG SLOT: selection_changed ricevuto per collection:", collection)
@@ -104,3 +109,24 @@ class ViewXsection(View2D):
         self.plotter.camera.focal_point = self.center
         self.plotter.camera.position = self.center + self.direction
         self.plotter.reset_camera()
+
+    def fit_frame(self):
+        """
+        Fit frame to all entities in view.
+        At the momento only the "parallel" method is implemented.
+        """
+        self.print_terminal("Fitting frame to all entities.")
+        # Show a confirmation dialog
+        frame_dialog = options_dialog(
+            title="Append name",
+            message="Append entity name to output file name?",
+            yes_role="Yes",
+            no_role="No",
+            reject_role=None,
+        )
+        if frame_dialog != 0:
+            return
+        # Run the fitting method with parallel option
+        self.parent.xsect_coll.fit_to_entities(
+            xuid=self.this_x_section_uid, fit_method="parallel"
+        )
