@@ -14,15 +14,48 @@ import matplotlib.cm as cm
 # This makes amplitudes "pop" more than the standard diluted seismic map.
 # Colors: Cyan -> Navy -> Blue -> Gray -> Light Gray -> Maroon -> Red -> Yellow
 # Detailed gradient for maximum contrast and Petrel-like appearance.
-seismic_pzero_colors = ["cyan", "navy", "blue", "gray", "lightgray", "maroon", "red", "yellow"]
-seismic_pzero_cmap = LinearSegmentedColormap.from_list("seismic_pzero", seismic_pzero_colors, N=256)
+#seismic_pzero_colors = [[255,0,0],"blue", "gray", "lightgray", "maroon", "red", "yellow"]
+#seismic_pzero_cmap = LinearSegmentedColormap.from_list("seismic_pzero", seismic_pzero_colors, N=256)
+
+# create a custom colormap from RGB values and their value positions
+# Normalize RGB values from 0-255 to 0-1 range
 import matplotlib as mpl
 import matplotlib.pyplot as plt
+
+seismic_pzero_cmap = LinearSegmentedColormap.from_list(
+    "seismic_pzero",
+    [
+        (0.0, (255/255, 255/255, 0/255)),      # Yellow
+        (0.32, (191/255, 0/255, 0/255)),       # Dark Red
+        (0.4, (97/255, 69/255, 0/255)),        # Brown
+        (0.5, (204/255, 204/255, 204/255)),    # Light Gray
+        (0.6, (77/255, 77/255, 77/255)),       # Dark Gray
+        (0.68, (0/255, 0/255, 191/255)),       # Dark Blue
+        (1.0, (161/255, 255/255, 255/255)),    # Cyan
+    ],
+    N=256,
+)
+
+# Register the colormap with matplotlib
 try:
     # Try modern Matplotlib API (3.5+)
     if hasattr(mpl, 'colormaps') and hasattr(mpl.colormaps, 'register'):
-        mpl.colormaps.register(name="seismic_pzero", cmap=seismic_pzero_cmap)
-        mpl.colormaps.register(name="seismic pzero", cmap=seismic_pzero_cmap)
+        mpl.colormaps.register(cmap=seismic_pzero_cmap)
+        # Also register with space in name for compatibility
+        seismic_pzero_cmap_space = LinearSegmentedColormap.from_list(
+            "seismic pzero",
+            [
+                (0.0, (255/255, 255/255, 0/255)),
+                (0.32, (191/255, 0/255, 0/255)),
+                (0.4, (97/255, 69/255, 0/255)),
+                (0.5, (204/255, 204/255, 204/255)),
+                (0.6, (77/255, 77/255, 77/255)),
+                (0.68, (0/255, 0/255, 191/255)),
+                (1.0, (161/255, 255/255, 255/255)),
+            ],
+            N=256,
+        )
+        mpl.colormaps.register(cmap=seismic_pzero_cmap_space)
     # Try older API (via pyplot or cm)
     elif hasattr(plt, 'register_cmap'):
         plt.register_cmap(name="seismic_pzero", cmap=seismic_pzero_cmap)
@@ -30,12 +63,9 @@ try:
     elif hasattr(cm, 'register_cmap'):
         cm.register_cmap(name="seismic_pzero", cmap=seismic_pzero_cmap)
         cm.register_cmap(name="seismic pzero", cmap=seismic_pzero_cmap)
-    else:
-        # Fallback: manual insertion if possible (risky but last resort)
-        if hasattr(plt, 'cm'):
-             pass # avoiding unsafe direct dict manipulation for now
 except ValueError:
-    pass # Already registered
+    # Already registered
+    pass
 except Exception as e:
     print(f"Warning: Colormap registration failed: {e}")
 

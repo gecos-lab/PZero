@@ -53,6 +53,9 @@ class ViewInterpretation(ViewMap):
 
         # Spatial Index for fast lookup: {(seismic_uid, axis, slice_index): set(line_uids)}
         self.interpretation_lines_by_slice = {}
+        
+        # Flag to batch updates during propagation
+        self._is_propagating = False
 
         # Flag to track if initialization has been done
         self._initialized = False
@@ -207,6 +210,10 @@ class ViewInterpretation(ViewMap):
         
     def on_entities_added(self, uids, collection):
         """Called when new entities are added to any collection"""
+        # Skip visual updates if we are batching (e.g. during propagation)
+        if hasattr(self, '_is_propagating') and self._is_propagating:
+            return
+
         # Check if it's the image collection (where seismics live)
         if collection == self.parent.image_coll:
             self.print_terminal("New entities added to image collection, refreshing volume list...")
@@ -1108,6 +1115,11 @@ class ViewInterpretation(ViewMap):
         # Enforce visibility immediately to ensure sync with new actors
         # This fixes the issue where newly propagated lines (shown by default in on_entities_added)
         # stay visible because the optimized visibility update loop doesn't know about them yet.
+        
+        # Skip visual update if propagating (batch mode)
+        if hasattr(self, '_is_propagating') and self._is_propagating:
+            return
+
         matches_current = (
             slice_info['seismic_uid'] == self.current_seismic_uid and
             slice_info['axis'] == self.current_axis and
@@ -2473,143 +2485,180 @@ class ViewInterpretation(ViewMap):
         # Propagate to each slice
         created_lines = []
         
-        for slice_idx in slices_to_track:
-            # Get slice data
-            if self.current_axis == 'Inline':
-                new_slice = data_3d[slice_idx, :, :]
-            elif self.current_axis == 'Crossline':
-                new_slice = data_3d[:, slice_idx, :]
-            else:
-                new_slice = data_3d[:, :, slice_idx]
-            
-            # Match each template on the new slice
-            new_positions = []
-            
-            for i, (template, (row, expected_col)) in enumerate(zip(templates, current_positions)):
-                # Define search range
-                search_start = max(template_half, expected_col - search_window)
-                search_end = min(n_cols - template_half - 1, expected_col + search_window)
-                
-                if search_start >= search_end:
-                    new_positions.append((row, expected_col))
-                    continue
-                
-                # Extract search region
-                search_region = new_slice[row, search_start - template_half:search_end + template_half + 1]
-                
-                if len(search_region) < len(template):
-                    new_positions.append((row, expected_col))
-                    continue
-                
-                # Cross-correlation
-                try:
-                    correlation = signal.correlate(search_region, template, mode='valid')
-                    best_offset = np.argmax(correlation)
-                    best_col = search_start + best_offset
-                    new_positions.append((row, best_col))
-                except:
-                    new_positions.append((row, expected_col))
-            
-            # ============ SMOOTH THE TRACKED POSITIONS ============
-            # This removes the jagged "up-down" pattern by enforcing spatial continuity
-            
-            # Extract just the column (Z) values for smoothing
-            rows_arr = np.array([p[0] for p in new_positions])
-            cols_arr = np.array([p[1] for p in new_positions], dtype=np.float64)
-            
-            # Step 1: Median filter to remove outliers (spikes)
-            from scipy.ndimage import median_filter
-            cols_smoothed = median_filter(cols_arr, size=5)
-            
-            # Step 2: Gaussian smooth for continuous appearance
-            cols_smoothed = gaussian_filter1d(cols_smoothed, sigma=3)
-            
-            # Step 3: Limit maximum jump between adjacent points
-            max_jump = 2  # Maximum allowed jump in samples between adjacent points
-            for i in range(1, len(cols_smoothed)):
-                diff = cols_smoothed[i] - cols_smoothed[i-1]
-                if abs(diff) > max_jump:
-                    cols_smoothed[i] = cols_smoothed[i-1] + np.sign(diff) * max_jump
-            
-            # Rebuild positions with smoothed values
-            new_positions = [(int(rows_arr[i]), int(round(cols_smoothed[i]))) for i in range(len(rows_arr))]
-            
-            # ============ END SMOOTHING ============
-            
-            # Create polyline from new positions
-            world_points = []
-            for row, col in new_positions:
-                if self.current_axis == 'Inline':
-                    x = bounds[0] + slice_idx * spacing[0]
-                    y = bounds[2] + row * spacing[1]
-                    z = bounds[4] + col * spacing[2]
-                elif self.current_axis == 'Crossline':
-                    x = bounds[0] + row * spacing[0]
-                    y = bounds[2] + slice_idx * spacing[1]
-                    z = bounds[4] + col * spacing[2]
-                else:
-                    x = bounds[0] + row * spacing[0]
-                    y = bounds[2] + col * spacing[1]
-                    z = bounds[4] + slice_idx * spacing[2]
-                world_points.append((x, y, z))
-            
-            # Sort points by row to ensure proper line connectivity
-            world_points.sort(key=lambda p: p[0] if self.current_axis != 'Inline' else p[1])
-            
-            # Create the line entity
-            if len(world_points) >= 2:
-                points_array = np.array(world_points, dtype=np.float64)
-                
-                # Create VTK polyline
-                polydata = pv.PolyData(points_array)
-                n_pts = len(points_array)
-                lines = np.hstack([[n_pts], np.arange(n_pts)])
-                polydata.lines = lines
-                
-                # Create entity dict
-                line_dict = deepcopy(self.parent.geol_coll.entity_dict)
-                line_dict["name"] = f"prop_horizon_{slice_idx}"
-                line_dict["topology"] = "PolyLine"
-                line_dict["x_section"] = ""
-                line_dict["vtk_obj"] = PolyLine()
-                line_dict["vtk_obj"].ShallowCopy(polydata)
-                
-                # Add to collection
-                new_uid = self.parent.geol_coll.add_entity_from_dict(line_dict)
-                
-                # Track this line
-                self.register_interpretation_line(new_uid, {
-                    'seismic_uid': self.current_seismic_uid,
-                    'axis': self.current_axis,
-                    'slice_index': slice_idx
-                })
-                
-                created_lines.append(new_uid)
-                
-                # Try to set color using proper UID lookup (uid is a column, not the index)
-                try:
-                    mask = self.parent.geol_coll.df['uid'] == new_uid
-                    if mask.any():
-                        self.parent.geol_coll.df.loc[mask, 'color_R'] = horizon_color[0]
-                        self.parent.geol_coll.df.loc[mask, 'color_G'] = horizon_color[1]
-                        self.parent.geol_coll.df.loc[mask, 'color_B'] = horizon_color[2]
-                except:
-                    pass
-            
-            # Update current positions for next slice
-            current_positions = new_positions
-            
-            # Progress feedback every 10 slices
-            if (slice_idx - current_idx) % 10 == 0:
-                self.print_terminal(f"  Processed slice {slice_idx}...")
+        self.print_terminal(f"Will propagate to {len(slices_to_track)} slices: {slices_to_track[:5]}...")
         
-        self.print_terminal(f"=== Propagation Complete ===")
-        self.print_terminal(f"Created {len(created_lines)} horizon lines")
-        self.print_terminal(f"Color: RGB{tuple(horizon_color)}")
-        
-        # Update display
-        self.update_interpretation_line_visibility()
-        self.plotter.render()
+        self._is_propagating = True  # Enable batch mode
+        try:
+            for slice_loop_idx, slice_idx in enumerate(slices_to_track):
+                try:
+                    # Debug loop start
+                    # self.print_terminal(f"Processing slice {slice_idx} ({slice_loop_idx+1}/{len(slices_to_track)}). Pos: {len(current_positions)}")
+                    
+                    # Get slice data
+                    if self.current_axis == 'Inline':
+                        new_slice = data_3d[slice_idx, :, :]
+                    elif self.current_axis == 'Crossline':
+                        new_slice = data_3d[:, slice_idx, :]
+                    else:
+                        new_slice = data_3d[:, :, slice_idx]
+                    
+                    # Match each template on the new slice
+                    new_positions = []
+                    
+                    for i, (template, (row, expected_col)) in enumerate(zip(templates, current_positions)):
+                        # Define search range
+                        search_start = max(template_half, expected_col - search_window)
+                        search_end = min(n_cols - template_half - 1, expected_col + search_window)
+                        
+                        if search_start >= search_end:
+                            new_positions.append((row, expected_col))
+                            continue
+                        
+                        # Extract search region
+                        search_region = new_slice[row, search_start - template_half:search_end + template_half + 1]
+                        
+                        if len(search_region) < len(template):
+                             new_positions.append((row, expected_col))
+                             continue
+                        
+                        # Cross-correlation
+                        try:
+                            correlation = signal.correlate(search_region, template, mode='valid')
+                            best_offset = np.argmax(correlation)
+                            best_col = search_start + best_offset
+                            new_positions.append((row, best_col))
+                        except:
+                            new_positions.append((row, expected_col))
+                    
+                    # ============ SMOOTHING AND LINE CREATION ============
+                    # (Simplified for brevity in plan, but existing logic follows)
+                    
+                    # ... [Smoothing Logic Same as Before] ...
+                    # Extract just the column (Z) values for smoothing
+                    rows_arr = np.array([p[0] for p in new_positions])
+                    cols_arr = np.array([p[1] for p in new_positions], dtype=np.float64)
+                    
+                    from scipy.ndimage import median_filter
+                    cols_smoothed = median_filter(cols_arr, size=5)
+                    cols_smoothed = gaussian_filter1d(cols_smoothed, sigma=3)
+                    
+                    max_jump = 2
+                    for i in range(1, len(cols_smoothed)):
+                        diff = cols_smoothed[i] - cols_smoothed[i-1]
+                        if abs(diff) > max_jump:
+                            cols_smoothed[i] = cols_smoothed[i-1] + np.sign(diff) * max_jump
+                    
+                    new_positions = [(int(rows_arr[i]), int(round(cols_smoothed[i]))) for i in range(len(rows_arr))]
+                    
+                    # Create polyline
+                    world_points = []
+                    for row, col in new_positions:
+                        if self.current_axis == 'Inline':
+                            x = bounds[0] + slice_idx * spacing[0]
+                            y = bounds[2] + row * spacing[1]
+                            z = bounds[4] + col * spacing[2]
+                        elif self.current_axis == 'Crossline':
+                            x = bounds[0] + row * spacing[0]
+                            y = bounds[2] + slice_idx * spacing[1]
+                            z = bounds[4] + col * spacing[2]
+                        else:
+                            x = bounds[0] + row * spacing[0]
+                            y = bounds[2] + col * spacing[1]
+                            z = bounds[4] + slice_idx * spacing[2]
+                        world_points.append((x, y, z))
+                    
+                    world_points.sort(key=lambda p: p[0] if self.current_axis != 'Inline' else p[1])
+                    
+                    # Check points
+                    if len(world_points) < 2:
+                        self.print_terminal(f"  WARNING: Slice {slice_idx} produced insufficient points: {len(world_points)}")
+                    
+                    if len(world_points) >= 2:
+                        points_array = np.array(world_points, dtype=np.float64)
+                        
+                        polydata = pv.PolyData(points_array)
+                        n_pts = len(points_array)
+                        lines = np.hstack([[n_pts], np.arange(n_pts)])
+                        polydata.lines = lines
+                        
+                        line_dict = deepcopy(self.parent.geol_coll.entity_dict)
+                        line_dict["name"] = f"prop_horizon_{slice_idx}"
+                        line_dict["topology"] = "PolyLine"
+                        line_dict["x_section"] = ""
+                        line_dict["vtk_obj"] = PolyLine()
+                        line_dict["vtk_obj"].ShallowCopy(polydata)
+                        
+                        new_uid = self.parent.geol_coll.add_entity_from_dict(line_dict)
+                        
+                        self.register_interpretation_line(new_uid, {
+                            'seismic_uid': self.current_seismic_uid,
+                            'axis': self.current_axis,
+                            'slice_index': slice_idx
+                        })
+                        
+                        created_lines.append(new_uid)
+                        
+                        try:
+                            mask = self.parent.geol_coll.df['uid'] == new_uid
+                            if mask.any():
+                                self.parent.geol_coll.df.loc[mask, 'color_R'] = horizon_color[0]
+                                self.parent.geol_coll.df.loc[mask, 'color_G'] = horizon_color[1]
+                                self.parent.geol_coll.df.loc[mask, 'color_B'] = horizon_color[2]
+                        except:
+                            pass
+                    
+                    # Update current positions
+                    current_positions = new_positions
+                    
+                    # Progress log
+                    if (slice_loop_idx + 1) % 10 == 0:
+                        self.print_terminal(f"  Processed slice {slice_idx}. Lines: {len(created_lines)}")
+                        
+                except Exception as inner_e:
+                    self.print_terminal(f"ERROR processing slice {slice_idx}: {inner_e}")
+                    import traceback
+                    self.print_terminal(traceback.format_exc())
+                    # Continue to next slice? Or break?
+                    # If we break, we stop propagation.
+                    # If we continue, we might have empty current_positions?
+                    # new_positions might be empty if we error'd before assignment.
+                    # safe fallback:
+                    if not new_positions:
+                        new_positions = current_positions
+                    current_positions = new_positions
+
+        finally:
+            self._is_propagating = False  # Disable batch mode
+            
+            # Batch add actors to the scene
+            if created_lines:
+                self.print_terminal(f"Adding {len(created_lines)} lines to display...")
+                for uid in created_lines:
+                    try:
+                        slice_info = self.interpretation_lines.get(uid)
+                        visible = False
+                        if slice_info:
+                             visible = (
+                                slice_info['seismic_uid'] == self.current_seismic_uid and
+                                slice_info['axis'] == self.current_axis and
+                                slice_info['slice_index'] == self.current_slice_index
+                            )
+                        
+                        self.show_actor_with_property(uid=uid, coll_name='geol_coll', visible=visible)
+                        
+                        if visible and hasattr(self, 'vis_lines_on_display'):
+                            self.vis_lines_on_display.add(uid)
+                            
+                    except Exception as e:
+                        self.print_terminal(f"Error adding propagated line {uid}: {e}")
+
+            self.print_terminal(f"=== Propagation Complete ===")
+            self.print_terminal(f"Created {len(created_lines)} horizon lines")
+            self.print_terminal(f"Color: RGB{tuple(horizon_color)}")
+            
+            # Update display
+            self.update_interpretation_line_visibility()
+            self.plotter.render()
     
     # ==================== End Auto Propagation Methods ====================
 
