@@ -337,9 +337,11 @@ class ViewInterpretation(ViewMap):
             
             self._camera_initialized = False  # Reset camera on volume change
             self.scalar_range = None  # Reset scalar range
-            # Clear cached seismic data
+            # Clear cached seismic data and scalar range when volume changes
             if hasattr(self, '_cached_seismic'):
                 del self._cached_seismic
+            if hasattr(self, '_cached_scalar_range'):
+                del self._cached_scalar_range
             self.update_slice_limits()
             self.update_camera_orientation()
             # Scan for existing horizons compatible with this volume
@@ -463,11 +465,19 @@ class ViewInterpretation(ViewMap):
             self._cached_dims = self._cached_seismic.dimensions
             self._cached_bounds = self._cached_seismic.bounds
             self.print_terminal(f"Seismic dims: {self._cached_dims}, bounds: {self._cached_bounds}")
-            # Calculate percentile-based scalar range for better contrast
+            # Calculate scalar range from the FULL volume for consistent colormap across all slices
+            # Use get_data_range for the full extent (like mesh slicer does in view_3d)
             if 'intensity' in self._cached_seismic.array_names:
-                data = self._cached_seismic['intensity']
-                self.scalar_range = (np.percentile(data, 1), np.percentile(data, 99))
-                self.print_terminal(f"Scalar range (percentile): {self.scalar_range}")
+                self._cached_scalar_range = self._cached_seismic.get_data_range('intensity')
+                self.print_terminal(f"Scalar range (full volume): {self._cached_scalar_range}")
+            else:
+                self._cached_scalar_range = None
+        
+        # Always use the cached scalar range from the full volume to ensure consistent colormap
+        # This prevents per-slice rescaling which causes intensity changes when scrolling
+        if not hasattr(self, '_cached_scalar_range'):
+            self._cached_scalar_range = None
+        self.scalar_range = self._cached_scalar_range
         
         seismic = self._cached_seismic
         dims = self._cached_dims
@@ -801,7 +811,8 @@ class ViewInterpretation(ViewMap):
             cmap = self.get_seismic_colormap()
             # Force full redraw with new colormap
             self._camera_initialized = True  # Keep camera position
-            self.scalar_range = None  # Reset scalar range
+            # Note: Do NOT reset scalar_range here - we want to keep using the full volume range
+            # for consistent colormap across all slices. The _cached_scalar_range will be used.
             old_slice_actor = self.slice_actor
             self.slice_actor = None  # Force full update
             self.update_slice()
