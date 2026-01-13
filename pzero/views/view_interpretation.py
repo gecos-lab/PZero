@@ -54,6 +54,10 @@ class ViewInterpretation(ViewMap):
         # Spatial Index for fast lookup: {(seismic_uid, axis, slice_index): set(line_uids)}
         self.interpretation_lines_by_slice = {}
         
+        # Track multipart horizons (efficient single-entity containing multiple slices)
+        # Format: {uid: {'seismic_uid': str, 'axis': str, 'slice_indices': list, 'slice_to_cell_index': dict}}
+        self.multipart_horizons = {}
+        
         # Flag to batch updates during propagation
         self._is_propagating = False
 
@@ -577,6 +581,9 @@ class ViewInterpretation(ViewMap):
             
             # Update visibility of interpretation lines for the current slice
             self.update_interpretation_line_visibility()
+            
+            # Update visibility of multipart horizons (efficient single-entity horizons)
+            self.update_all_multipart_horizons_visibility()
 
 
         except Exception as e:
@@ -1164,6 +1171,129 @@ class ViewInterpretation(ViewMap):
             
             del self.interpretation_lines[uid]
             self._visibility_dirty = True
+
+    def update_multipart_horizon_visibility(self, uid=None):
+        """
+        Update visibility of multipart horizon lines by extracting only the cells
+        that match the current slice and creating a filtered actor.
+        
+        This uses VTK's threshold filter to show only cells with matching slice_index.
+        
+        Args:
+            uid: Specific horizon UID to update, or None to update all multipart horizons
+        """
+        from vtk import vtkThreshold, vtkGeometryFilter
+        
+        if not hasattr(self, 'multipart_horizons'):
+            return
+        
+        uids_to_update = [uid] if uid else list(self.multipart_horizons.keys())
+        
+        for horizon_uid in uids_to_update:
+            if horizon_uid not in self.multipart_horizons:
+                continue
+                
+            horizon_info = self.multipart_horizons[horizon_uid]
+            actor_name = f"multipart_slice_{horizon_uid}"
+            
+            # Check if this horizon matches current view context
+            if (horizon_info['seismic_uid'] != self.current_seismic_uid or 
+                horizon_info['axis'] != self.current_axis):
+                # Hide completely if not matching seismic/axis
+                self.set_actor_visibility(horizon_uid, False)
+                # Also remove the filtered actor
+                if actor_name in self.plotter.renderer.actors:
+                    self.plotter.remove_actor(actor_name)
+                continue
+            
+            # Check if current slice is in this horizon's range
+            if self.current_slice_index not in horizon_info['slice_indices']:
+                # Hide if current slice is not in this horizon
+                self.set_actor_visibility(horizon_uid, False)
+                # Also remove the filtered actor - THIS IS THE KEY FIX
+                if actor_name in self.plotter.renderer.actors:
+                    self.plotter.remove_actor(actor_name)
+                continue
+            
+            # Get the VTK object
+            try:
+                vtk_obj = self.parent.geol_coll.get_uid_vtk_obj(horizon_uid)
+                if vtk_obj is None:
+                    continue
+            except:
+                continue
+            
+            # Extract only cells matching current slice using VTK threshold
+            try:
+                # Set active scalars to slice_index for thresholding
+                vtk_obj.GetCellData().SetActiveScalars("slice_index")
+                
+                # Threshold to extract only cells with current slice index
+                threshold = vtkThreshold()
+                threshold.SetInputData(vtk_obj)
+                threshold.SetInputArrayToProcess(0, 0, 0, 1, "slice_index")  # 1 = cell data
+                threshold.SetLowerThreshold(self.current_slice_index)
+                threshold.SetUpperThreshold(self.current_slice_index)
+                threshold.Update()
+                
+                # Convert to polydata for rendering
+                geometry = vtkGeometryFilter()
+                geometry.SetInputConnection(threshold.GetOutputPort())
+                geometry.Update()
+                
+                filtered_polydata = geometry.GetOutput()
+                
+                if filtered_polydata.GetNumberOfCells() > 0:
+                    # Update or create the actor for this filtered view
+                    actor_name = f"multipart_slice_{horizon_uid}"
+                    
+                    # Get color from collection
+                    try:
+                        mask = self.parent.geol_coll.df['uid'] == horizon_uid
+                        if mask.any():
+                            row = self.parent.geol_coll.df.loc[mask].iloc[0]
+                            color = (row['color_R']/255, row['color_G']/255, row['color_B']/255)
+                        else:
+                            color = (1.0, 1.0, 0.0)  # Default yellow
+                    except:
+                        color = (1.0, 1.0, 0.0)
+                    
+                    # Remove old filtered actor if exists
+                    if actor_name in self.plotter.renderer.actors:
+                        self.plotter.remove_actor(actor_name)
+                    
+                    # Add new filtered actor
+                    self.plotter.add_mesh(
+                        pv.wrap(filtered_polydata),
+                        name=actor_name,
+                        color=color,
+                        line_width=2,
+                        render_lines_as_tubes=False,
+                        pickable=False,
+                        reset_camera=False
+                    )
+                    
+                    # Hide the full multipart actor (we're showing the filtered version)
+                    self.set_actor_visibility(horizon_uid, False)
+                else:
+                    # No cells match - hide everything
+                    actor_name = f"multipart_slice_{horizon_uid}"
+                    if actor_name in self.plotter.renderer.actors:
+                        self.plotter.remove_actor(actor_name)
+                    self.set_actor_visibility(horizon_uid, False)
+                    
+            except Exception as e:
+                self.print_terminal(f"Error filtering multipart horizon {horizon_uid}: {e}")
+                # Fall back to showing full horizon
+                self.set_actor_visibility(horizon_uid, True)
+
+    def update_all_multipart_horizons_visibility(self):
+        """Update visibility for all multipart horizons based on current slice."""
+        if not hasattr(self, 'multipart_horizons'):
+            return
+        
+        for uid in list(self.multipart_horizons.keys()):
+            self.update_multipart_horizon_visibility(uid)
 
     def scan_and_index_existing_horizons(self):
         """
@@ -2335,6 +2465,8 @@ class ViewInterpretation(ViewMap):
     def _run_horizon_propagation(self, seed_uid, direction, num_slices, template_half, search_window, smooth_sigma=2, seed_slice_index=None):
         """
         Execute the horizon propagation using template matching.
+        Creates a SINGLE multipart PolyLine entity containing all propagated segments.
+        This is much more efficient than creating separate entities for each slice.
         
         Args:
             seed_uid: UID of the seed horizon line
@@ -2346,6 +2478,7 @@ class ViewInterpretation(ViewMap):
         """
         from scipy import signal
         from scipy.ndimage import gaussian_filter1d
+        from vtk import vtkPoints, vtkCellArray, vtkFloatArray, vtkIntArray
         import random
         
         # Get the seismic data
@@ -2493,8 +2626,15 @@ class ViewInterpretation(ViewMap):
         # Track current positions (will be updated slice by slice)
         current_positions = list(template_positions)
         
-        # Propagate to each slice
-        created_lines = []
+        # ============ MULTIPART LINE STORAGE ============
+        # Instead of creating one entity per slice, we collect all parts into a single multipart PolyLine
+        all_points = []  # List of all points across all slices
+        all_lines = []   # Line connectivity array for VTK
+        point_slice_indices = []  # Slice index for each point (for filtering)
+        cell_slice_indices = []   # Slice index for each cell/line segment (for filtering)
+        slice_to_point_range = {}  # Maps slice_index -> (start_point_idx, end_point_idx)
+        current_point_offset = 0
+        successful_slices = 0
         
         self.print_terminal(f"Will propagate to {len(slices_to_track)} slices: {slices_to_track[:5]}...")
         
@@ -2502,9 +2642,6 @@ class ViewInterpretation(ViewMap):
         try:
             for slice_loop_idx, slice_idx in enumerate(slices_to_track):
                 try:
-                    # Debug loop start
-                    # self.print_terminal(f"Processing slice {slice_idx} ({slice_loop_idx+1}/{len(slices_to_track)}). Pos: {len(current_positions)}")
-                    
                     # Get slice data
                     if self.current_axis == 'Inline':
                         new_slice = data_3d[slice_idx, :, :]
@@ -2541,11 +2678,7 @@ class ViewInterpretation(ViewMap):
                         except:
                             new_positions.append((row, expected_col))
                     
-                    # ============ SMOOTHING AND LINE CREATION ============
-                    # (Simplified for brevity in plan, but existing logic follows)
-                    
-                    # ... [Smoothing Logic Same as Before] ...
-                    # Extract just the column (Z) values for smoothing
+                    # ============ SMOOTHING ============
                     rows_arr = np.array([p[0] for p in new_positions])
                     cols_arr = np.array([p[1] for p in new_positions], dtype=np.float64)
                     
@@ -2561,7 +2694,7 @@ class ViewInterpretation(ViewMap):
                     
                     new_positions = [(int(rows_arr[i]), int(round(cols_smoothed[i]))) for i in range(len(rows_arr))]
                     
-                    # Create polyline
+                    # Convert to world coordinates
                     world_points = []
                     for row, col in new_positions:
                         if self.current_axis == 'Inline':
@@ -2583,92 +2716,135 @@ class ViewInterpretation(ViewMap):
                     # Check points
                     if len(world_points) < 2:
                         self.print_terminal(f"  WARNING: Slice {slice_idx} produced insufficient points: {len(world_points)}")
+                        current_positions = new_positions
+                        continue
                     
-                    if len(world_points) >= 2:
-                        points_array = np.array(world_points, dtype=np.float64)
-                        
-                        polydata = pv.PolyData(points_array)
-                        n_pts = len(points_array)
-                        lines = np.hstack([[n_pts], np.arange(n_pts)])
-                        polydata.lines = lines
-                        
-                        line_dict = deepcopy(self.parent.geol_coll.entity_dict)
-                        line_dict["name"] = f"prop_horizon_{slice_idx}"
-                        line_dict["topology"] = "PolyLine"
-                        line_dict["x_section"] = ""
-                        line_dict["vtk_obj"] = PolyLine()
-                        line_dict["vtk_obj"].ShallowCopy(polydata)
-                        
-                        new_uid = self.parent.geol_coll.add_entity_from_dict(line_dict)
-                        
-                        self.register_interpretation_line(new_uid, {
-                            'seismic_uid': self.current_seismic_uid,
-                            'axis': self.current_axis,
-                            'slice_index': slice_idx
-                        })
-                        
-                        created_lines.append(new_uid)
-                        
-                        try:
-                            mask = self.parent.geol_coll.df['uid'] == new_uid
-                            if mask.any():
-                                self.parent.geol_coll.df.loc[mask, 'color_R'] = horizon_color[0]
-                                self.parent.geol_coll.df.loc[mask, 'color_G'] = horizon_color[1]
-                                self.parent.geol_coll.df.loc[mask, 'color_B'] = horizon_color[2]
-                        except:
-                            pass
+                    # ============ ADD TO MULTIPART STRUCTURE ============
+                    n_pts_this_slice = len(world_points)
+                    start_pt_idx = current_point_offset
+                    
+                    # Add points
+                    all_points.extend(world_points)
+                    
+                    # Add slice index for each point (for point data array)
+                    point_slice_indices.extend([slice_idx] * n_pts_this_slice)
+                    
+                    # Build line connectivity for this slice's polyline
+                    # VTK format: [n_pts, pt0, pt1, pt2, ..., ptn-1]
+                    line_indices = list(range(start_pt_idx, start_pt_idx + n_pts_this_slice))
+                    all_lines.append(n_pts_this_slice)
+                    all_lines.extend(line_indices)
+                    
+                    # Add slice index for this cell/line (for cell data array)
+                    cell_slice_indices.append(slice_idx)
+                    
+                    # Track point range for this slice
+                    slice_to_point_range[slice_idx] = (start_pt_idx, start_pt_idx + n_pts_this_slice - 1)
+                    
+                    current_point_offset += n_pts_this_slice
+                    successful_slices += 1
                     
                     # Update current positions
                     current_positions = new_positions
                     
                     # Progress log
                     if (slice_loop_idx + 1) % 10 == 0:
-                        self.print_terminal(f"  Processed slice {slice_idx}. Lines: {len(created_lines)}")
+                        self.print_terminal(f"  Processed slice {slice_idx}. Total parts: {successful_slices}")
                         
                 except Exception as inner_e:
                     self.print_terminal(f"ERROR processing slice {slice_idx}: {inner_e}")
                     import traceback
                     self.print_terminal(traceback.format_exc())
-                    # Continue to next slice? Or break?
-                    # If we break, we stop propagation.
-                    # If we continue, we might have empty current_positions?
-                    # new_positions might be empty if we error'd before assignment.
-                    # safe fallback:
                     if not new_positions:
                         new_positions = current_positions
                     current_positions = new_positions
 
+            # ============ CREATE SINGLE MULTIPART POLYLINE ENTITY ============
+            if successful_slices > 0 and len(all_points) >= 2:
+                self.print_terminal(f"Creating multipart horizon with {successful_slices} parts, {len(all_points)} total points...")
+                
+                # Create VTK points
+                vtk_points = vtkPoints()
+                for pt in all_points:
+                    vtk_points.InsertNextPoint(pt[0], pt[1], pt[2])
+                
+                # Create VTK lines (cell array)
+                vtk_lines = vtkCellArray()
+                i = 0
+                while i < len(all_lines):
+                    n_pts = all_lines[i]
+                    vtk_lines.InsertNextCell(n_pts)
+                    for j in range(n_pts):
+                        vtk_lines.InsertCellPoint(all_lines[i + 1 + j])
+                    i += n_pts + 1
+                
+                # Create the PolyLine entity
+                multipart_line = PolyLine()
+                multipart_line.SetPoints(vtk_points)
+                multipart_line.SetLines(vtk_lines)
+                
+                # Add point data array for slice indices (allows filtering by slice)
+                point_slice_array = vtkIntArray()
+                point_slice_array.SetName("slice_index")
+                point_slice_array.SetNumberOfComponents(1)
+                for idx in point_slice_indices:
+                    point_slice_array.InsertNextValue(idx)
+                multipart_line.GetPointData().AddArray(point_slice_array)
+                
+                # Add cell data array for slice indices (allows filtering by slice)
+                cell_slice_array = vtkIntArray()
+                cell_slice_array.SetName("slice_index")
+                cell_slice_array.SetNumberOfComponents(1)
+                for idx in cell_slice_indices:
+                    cell_slice_array.InsertNextValue(idx)
+                multipart_line.GetCellData().AddArray(cell_slice_array)
+                
+                # Create entity dictionary
+                line_dict = deepcopy(self.parent.geol_coll.entity_dict)
+                line_dict["name"] = f"horizon_{current_idx}_multipart"
+                line_dict["topology"] = "PolyLine"
+                line_dict["x_section"] = ""
+                line_dict["vtk_obj"] = multipart_line
+                
+                # Add to collection
+                new_uid = self.parent.geol_coll.add_entity_from_dict(line_dict)
+                
+                # Store multipart horizon metadata for visibility management
+                if not hasattr(self, 'multipart_horizons'):
+                    self.multipart_horizons = {}
+                
+                self.multipart_horizons[new_uid] = {
+                    'seismic_uid': self.current_seismic_uid,
+                    'axis': self.current_axis,
+                    'slice_indices': list(slice_to_point_range.keys()),
+                    'slice_to_cell_index': {slice_idx: i for i, slice_idx in enumerate(cell_slice_indices)},
+                    'seed_slice': current_idx
+                }
+                
+                # Set color
+                try:
+                    mask = self.parent.geol_coll.df['uid'] == new_uid
+                    if mask.any():
+                        self.parent.geol_coll.df.loc[mask, 'color_R'] = horizon_color[0]
+                        self.parent.geol_coll.df.loc[mask, 'color_G'] = horizon_color[1]
+                        self.parent.geol_coll.df.loc[mask, 'color_B'] = horizon_color[2]
+                except:
+                    pass
+                
+                self.print_terminal(f"=== Propagation Complete ===")
+                self.print_terminal(f"Created multipart horizon: {line_dict['name']}")
+                self.print_terminal(f"Contains {successful_slices} line segments across slices")
+                self.print_terminal(f"Slice range: {min(cell_slice_indices)} to {max(cell_slice_indices)}")
+                self.print_terminal(f"Color: RGB{tuple(horizon_color)}")
+                
+                # Add actor to scene and update visibility
+                self.show_actor_with_property(uid=new_uid, coll_name='geol_coll', visible=True)
+                self.update_multipart_horizon_visibility(new_uid)
+            else:
+                self.print_terminal("No valid line segments were created during propagation!")
+
         finally:
             self._is_propagating = False  # Disable batch mode
-            
-            # Batch add actors to the scene
-            if created_lines:
-                self.print_terminal(f"Adding {len(created_lines)} lines to display...")
-                for uid in created_lines:
-                    try:
-                        slice_info = self.interpretation_lines.get(uid)
-                        visible = False
-                        if slice_info:
-                             visible = (
-                                slice_info['seismic_uid'] == self.current_seismic_uid and
-                                slice_info['axis'] == self.current_axis and
-                                slice_info['slice_index'] == self.current_slice_index
-                            )
-                        
-                        self.show_actor_with_property(uid=uid, coll_name='geol_coll', visible=visible)
-                        
-                        if visible and hasattr(self, 'vis_lines_on_display'):
-                            self.vis_lines_on_display.add(uid)
-                            
-                    except Exception as e:
-                        self.print_terminal(f"Error adding propagated line {uid}: {e}")
-
-            self.print_terminal(f"=== Propagation Complete ===")
-            self.print_terminal(f"Created {len(created_lines)} horizon lines")
-            self.print_terminal(f"Color: RGB{tuple(horizon_color)}")
-            
-            # Update display
-            self.update_interpretation_line_visibility()
             self.plotter.render()
     
     # ==================== End Auto Propagation Methods ====================
@@ -2709,25 +2885,46 @@ class ViewInterpretation(ViewMap):
             self.print_terminal(f"Warning: Could not connect prop_legend_cmap_modified signal: {e}")
     
     def on_entities_removed(self, uids):
-        """Called when entities are removed from any collection. Clean up interpretation_lines."""
+        """Called when entities are removed from any collection. Clean up interpretation_lines and multipart_horizons."""
         if not hasattr(self, 'interpretation_lines'):
-            return
+            self.interpretation_lines = {}
         
         for uid in uids:
+            # Clean up single-line interpretation tracking
             if uid in self.interpretation_lines:
                 # Check if the entity is actually removed from geol_coll
                 try:
                     exists = (self.parent.geol_coll.df["uid"] == uid).any()
                     if not exists:
-                        del self.interpretation_lines[uid]
+                        self.unregister_interpretation_line(uid)
                         # Invalidate actor cache for this uid
                         self._invalidate_actor_cache(uid)
                         self.print_terminal(f"Removed {uid[:8]}... from interpretation lines tracking")
                 except:
                     # If we can't check, assume it's removed
-                    del self.interpretation_lines[uid]
+                    self.unregister_interpretation_line(uid)
                     self._invalidate_actor_cache(uid)
                     self.print_terminal(f"Removed {uid[:8]}... from interpretation lines tracking")
+            
+            # Clean up multipart horizon tracking
+            if hasattr(self, 'multipart_horizons') and uid in self.multipart_horizons:
+                try:
+                    exists = (self.parent.geol_coll.df["uid"] == uid).any()
+                    if not exists:
+                        del self.multipart_horizons[uid]
+                        # Remove any filtered slice actors
+                        actor_name = f"multipart_slice_{uid}"
+                        if actor_name in self.plotter.renderer.actors:
+                            self.plotter.remove_actor(actor_name)
+                        self._invalidate_actor_cache(uid)
+                        self.print_terminal(f"Removed multipart horizon {uid[:8]}... from tracking")
+                except:
+                    del self.multipart_horizons[uid]
+                    actor_name = f"multipart_slice_{uid}"
+                    if actor_name in self.plotter.renderer.actors:
+                        self.plotter.remove_actor(actor_name)
+                    self._invalidate_actor_cache(uid)
+                    self.print_terminal(f"Removed multipart horizon {uid[:8]}... from tracking")
     
     def on_colormap_changed(self, property_name):
         """Called when colormap is changed in the legend manager."""
