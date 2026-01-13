@@ -629,7 +629,7 @@ class ViewVTK(BaseView):
         elif isinstance(plot_entity, Seismics):
             plot_rgb_option = None
             if isinstance(plot_entity.points, np_ndarray):
-                # This  check is needed to avoid errors when trying to plot an empty
+                # This check is needed to avoid errors when trying to plot an empty
                 # PolyData, just created at the beginning of a digitizing session.
                 if show_property == "none" or show_property is None:
                     show_property = None
