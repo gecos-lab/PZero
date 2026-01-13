@@ -25,6 +25,7 @@ from .abstract_base_view import BaseView
 from ..orientation_analysis import get_dip_dir_vectors
 from ..helpers.helper_dialogs import input_one_value_dialog, save_file_dialog
 from ..helpers.screenshot_dialog import ScreenshotExportDialog
+from ..helpers.gif_export_dialog import GifExportDialog
 from ..entities_factory import (
     VertexSet,
     PolyLine,
@@ -80,6 +81,10 @@ class ViewVTK(BaseView):
         self.actionExportScreen = QAction("Take screenshot", self)
         self.actionExportScreen.triggered.connect(self.export_screen)
         self.menuView.addAction(self.actionExportScreen)
+
+        self.actionCreateGif = QAction("Create animated GIF", self)
+        self.actionCreateGif.triggered.connect(self.create_gif)
+        self.menuView.addAction(self.actionCreateGif)
 
     # ================================  Methods required by BaseView(), (re-)implemented here =========================
 
@@ -852,6 +857,24 @@ class ViewVTK(BaseView):
             return "XSection View"
         else:
             return "View"
+
+    def create_gif(self):
+        """Open the GIF export dialog for creating animated GIFs.
+        
+        This dialog provides comprehensive options for creating animated GIFs
+        including camera orbit controls, animation presets, and quality settings.
+        Perfect for showcasing 3D geomodelling structures in presentations.
+        """
+        # Determine view name based on class type
+        view_name = self._get_view_name()
+        
+        # Open the GIF export dialog
+        dialog = GifExportDialog(
+            parent=self,
+            plotter=self.plotter,
+            view_name=view_name,
+        )
+        dialog.exec()
 
     # ================================  Methods specific to VTK views =================================================
 
