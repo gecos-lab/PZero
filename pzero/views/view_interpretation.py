@@ -1346,7 +1346,10 @@ class ViewInterpretation(ViewMap):
             
         self._lines_indexed = True
         self.print_terminal(f"Indexing complete. Processed {count} potential horizons.")
+        
+        # Update visibility for both regular interpretation lines and multipart horizons
         self.update_interpretation_line_visibility()
+        self.update_all_multipart_horizons_visibility()
 
     def scan_and_index_single_horizon(self, uid):
         """Check if a single horizon fits the current seismic grid and index it."""
@@ -1355,6 +1358,65 @@ class ViewInterpretation(ViewMap):
             if not vtk_obj or vtk_obj.GetNumberOfPoints() == 0:
                 return
 
+            # First check if this is a multipart horizon (has slice_index cell data)
+            # This is more efficient than checking geometry, and handles propagated horizons
+            cell_data = vtk_obj.GetCellData()
+            if cell_data and cell_data.HasArray("slice_index"):
+                # This is a multipart horizon! Reconstruct its metadata
+                slice_array = cell_data.GetArray("slice_index")
+                n_cells = vtk_obj.GetNumberOfCells()
+                
+                # Extract unique slice indices and build mapping
+                slice_indices = []
+                slice_to_cell_index = {}
+                for i in range(n_cells):
+                    slice_idx = int(slice_array.GetValue(i))
+                    if slice_idx not in slice_to_cell_index:
+                        slice_indices.append(slice_idx)
+                        slice_to_cell_index[slice_idx] = i
+                
+                # Determine axis by checking the geometry of the first cell's points
+                # Get first cell points to detect which plane it lies in
+                first_cell = vtk_obj.GetCell(0)
+                n_pts = first_cell.GetNumberOfPoints()
+                if n_pts > 0:
+                    # Sample a few points to determine axis
+                    pts = [first_cell.GetPoints().GetPoint(i) for i in range(min(n_pts, 10))]
+                    xs = [p[0] for p in pts]
+                    ys = [p[1] for p in pts]
+                    zs = [p[2] for p in pts]
+                    
+                    x_range = max(xs) - min(xs)
+                    y_range = max(ys) - min(ys)
+                    z_range = max(zs) - min(zs)
+                    
+                    # Determine which axis has minimal variation (that's the slice axis)
+                    axis = 'Z-slice'  # default
+                    if x_range < min(y_range, z_range) * 0.1:
+                        axis = 'Inline'
+                    elif y_range < min(x_range, z_range) * 0.1:
+                        axis = 'Crossline'
+                    elif z_range < min(x_range, y_range) * 0.1:
+                        axis = 'Z-slice'
+                    
+                    # Register as multipart horizon
+                    if not hasattr(self, 'multipart_horizons'):
+                        self.multipart_horizons = {}
+                    
+                    self.multipart_horizons[uid] = {
+                        'seismic_uid': self.current_seismic_uid,
+                        'axis': axis,
+                        'slice_indices': slice_indices,
+                        'slice_to_cell_index': slice_to_cell_index,
+                        'seed_slice': slice_indices[0] if slice_indices else 0
+                    }
+                    
+                    self.print_terminal(f"Registered multipart horizon {uid}: {len(slice_indices)} slices on {axis}")
+                    # Initially hide, visibility will be updated by update_multipart_horizon_visibility
+                    self.set_actor_visibility(uid, False)
+                    return
+            
+            # Not a multipart horizon - check if it's a single-slice interpretation line
             bounds = vtk_obj.GetBounds() # (xmin, xmax, ymin, ymax, zmin, zmax)
             
             # Get metadata about current seismic
