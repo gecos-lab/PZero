@@ -879,7 +879,7 @@ class MeshItWorkflowGUI(QWidget):
         mouse_layout.setSpacing(4)
         
         # Toggle button for mouse placement mode
-        self.material_mouse_mode_btn = QPushButton("🎯 Enable Mouse Placement")
+        self.material_mouse_mode_btn = QPushButton("Enable Mouse Placement")
         self.material_mouse_mode_btn.setCheckable(True)
         self.material_mouse_mode_btn.setChecked(False)
         self.material_mouse_mode_btn.clicked.connect(self._toggle_material_mouse_mode)
@@ -1375,7 +1375,7 @@ class MeshItWorkflowGUI(QWidget):
         
         if refined_count > 0:
             logger.info(f"Refined {refined_count} wells")
-            self.statusBar().showMessage(f"✓ Refined {refined_count} wells")
+            self.statusBar().showMessage(f"Refined {refined_count} wells")
         
         return refined_count
 
@@ -1521,7 +1521,7 @@ class MeshItWorkflowGUI(QWidget):
             row = self.mesh_well_refine_table.rowCount()
             self.mesh_well_refine_table.insertRow(row)
             
-            item_name = QTableWidgetItem(f"🔵 {name}")  # Add well icon
+            item_name = QTableWidgetItem(name)
             item_name.setFlags(item_name.flags() & ~Qt.ItemIsEditable)
             item_name.setData(Qt.UserRole, idx)
             self.mesh_well_refine_table.setItem(row, 0, item_name)
@@ -2259,7 +2259,7 @@ class MeshItWorkflowGUI(QWidget):
         
         if checked:
             # Enable mouse mode
-            self.material_mouse_mode_btn.setText("🎯 Mouse Placement ACTIVE")
+            self.material_mouse_mode_btn.setText("Mouse Placement ACTIVE")
             self.material_mouse_status.setText("Click on surface to place seed")
             self.material_mouse_status.setStyleSheet("color: #4caf50; font-weight: bold;")
             
@@ -2306,7 +2306,7 @@ class MeshItWorkflowGUI(QWidget):
                         return
         else:
             # Disable mouse mode
-            self.material_mouse_mode_btn.setText("🎯 Enable Mouse Placement")
+            self.material_mouse_mode_btn.setText("Enable Mouse Placement")
             self.material_mouse_status.setText("")
             
             try:
@@ -2883,7 +2883,7 @@ class MeshItWorkflowGUI(QWidget):
         control_layout.addWidget(stats_group)
         
         # High-quality figure export button
-        self.hull_export_figure_btn = QPushButton("📸 Export Figure")
+        self.hull_export_figure_btn = QPushButton("Export Figure")
         self.hull_export_figure_btn.clicked.connect(lambda: self._show_generic_figure_export_dialog('hulls'))
         self.hull_export_figure_btn.setEnabled(False)
         self.hull_export_figure_btn.setToolTip("Export high-resolution figure of convex hull visualization")
@@ -3015,7 +3015,7 @@ class MeshItWorkflowGUI(QWidget):
         control_layout.addWidget(stats_group)
 
         # High-quality figure export button
-        self.segment_export_figure_btn = QPushButton("📸 Export Figure")
+        self.segment_export_figure_btn = QPushButton("Export Figure")
         self.segment_export_figure_btn.clicked.connect(lambda: self._show_generic_figure_export_dialog('segments'))
         self.segment_export_figure_btn.setEnabled(False)
         self.segment_export_figure_btn.setToolTip("Export high-resolution figure of segmentation visualization")
@@ -3162,7 +3162,7 @@ class MeshItWorkflowGUI(QWidget):
         control_layout.addWidget(export_btn) # Added for completeness
 
         # High-quality figure export button
-        self.tri_export_figure_btn = QPushButton("📸 Export Figure")
+        self.tri_export_figure_btn = QPushButton("Export Figure")
         self.tri_export_figure_btn.clicked.connect(lambda: self._show_generic_figure_export_dialog('triangulation'))
         self.tri_export_figure_btn.setEnabled(False)
         self.tri_export_figure_btn.setToolTip("Export high-resolution figure of triangulation visualization")
@@ -3241,7 +3241,7 @@ class MeshItWorkflowGUI(QWidget):
         self.clear_intersections_btn.clicked.connect(self._clear_intersection_results)
         controls_layout.addWidget(self.clear_intersections_btn)
         # High-quality figure export button
-        self.intersection_export_figure_btn = QPushButton("📸 Export Figure")
+        self.intersection_export_figure_btn = QPushButton("Export Figure")
         self.intersection_export_figure_btn.clicked.connect(lambda: self._show_generic_figure_export_dialog('intersection'))
         self.intersection_export_figure_btn.setEnabled(False)
         self.intersection_export_figure_btn.setToolTip("Export high-resolution figure of intersection visualization")
@@ -4093,9 +4093,9 @@ class MeshItWorkflowGUI(QWidget):
                 logger.info(f"VERIFICATION: {visible_actors_for_surface} actors are actually visible for surface {target_surface_idx}")
                 
                 if visible_actors_for_surface != visible_count:
-                    logger.error(f"❌ VISIBILITY MISMATCH: Expected {visible_count} visible, but {visible_actors_for_surface} actors are actually visible!")
+                    logger.error(f"VISIBILITY MISMATCH: Expected {visible_count} visible, but {visible_actors_for_surface} actors are actually visible!")
                 else:
-                    logger.info(f"✅ VISIBILITY CONFIRMED: All {visible_count} actors are properly visible")
+                    logger.info(f"VISIBILITY CONFIRMED: All {visible_count} actors are properly visible")
                     
             else:
                 logger.warning(f"Could not find surface index for '{selected_surface}'")
@@ -4198,7 +4198,7 @@ class MeshItWorkflowGUI(QWidget):
                         font_size=10,
                         color='yellow'
                     )
-                    self.mouse_selection_enabled_btn.setText("🖱️ Mouse ON")
+                    self.mouse_selection_enabled_btn.setText("Mouse ON")
                     logger.info("Constraint mouse selection enabled (edge picking fallback)")
                 except Exception as edge_error:
                     logger.warning(f"Edge picking failed: {edge_error}")
@@ -4209,7 +4209,7 @@ class MeshItWorkflowGUI(QWidget):
                             font_size=10,
                             color='yellow'
                         )
-                        self.mouse_selection_enabled_btn.setText("🖱️ Mouse ON")
+                        self.mouse_selection_enabled_btn.setText("Mouse ON")
                         logger.info("Constraint mouse selection enabled (mesh picking fallback)")
                     except Exception as mesh_error:
                         logger.error(f"All picking methods failed: {mesh_error}")
@@ -4220,7 +4220,7 @@ class MeshItWorkflowGUI(QWidget):
                 plotter.disable_picking()
             except Exception:
                 pass
-            self.mouse_selection_enabled_btn.setText("🖱️ Mouse Selection")
+            self.mouse_selection_enabled_btn.setText("Mouse Selection")
             try:
                 self._update_refined_visualization()
             except Exception:
@@ -4238,16 +4238,16 @@ class MeshItWorkflowGUI(QWidget):
         mode_id = self.selection_mode_group.id(button)
         if mode_id == 0:  # Select mode
             self.current_selection_mode = "select"
-            logger.info("🔵 Selection mode: SELECT - Rectangle drag will select constraints")
+            logger.info("Selection mode: SELECT - Rectangle drag will select constraints")
             # Update button styles to show active mode
-            self.selection_mode_btn.setText("✅ Select Mode (Active)")
-            self.deselection_mode_btn.setText("❌ Deselect Mode")
+            self.selection_mode_btn.setText("Select Mode (Active)")
+            self.deselection_mode_btn.setText("Deselect Mode")
         elif mode_id == 1:  # Deselect mode
             self.current_selection_mode = "deselect"
-            logger.info("🔴 Selection mode: DESELECT - Rectangle drag will deselect constraints")
+            logger.info("Selection mode: DESELECT - Rectangle drag will deselect constraints")
             # Update button styles to show active mode
-            self.selection_mode_btn.setText("✅ Select Mode")
-            self.deselection_mode_btn.setText("❌ Deselect Mode (Active)")
+            self.selection_mode_btn.setText("Select Mode")
+            self.deselection_mode_btn.setText("Deselect Mode (Active)")
         
         # Store the current mode for use in cell clicking callback
         self.current_selection_mode = "select" if mode_id == 0 else "deselect"
@@ -4809,11 +4809,11 @@ class MeshItWorkflowGUI(QWidget):
                             self._clear_selection_highlight()
                     
                 else:
-                    logger.warning("❌ No valid segments found for current surface filter")
+                    logger.warning("No valid segments found for current surface filter")
                     if skipped_count > 0:
-                        logger.info(f"💡 All {skipped_count} picked meshes were filtered out due to surface selection")
-                        logger.info(f"💡 Current filter: '{selected_surface}' - ensure you're clicking on visible constraints")
-                        logger.info(f"💡 Switch to 'All Surfaces' to interact with all constraints")
+                        logger.info(f"All {skipped_count} picked meshes were filtered out due to surface selection")
+                        logger.info(f"Current filter: '{selected_surface}' - ensure you're clicking on visible constraints")
+                        logger.info(f"Switch to 'All Surfaces' to interact with all constraints")
                 
             else:
                 logger.warning("No data received in cell picking callback")
@@ -5135,7 +5135,7 @@ class MeshItWorkflowGUI(QWidget):
             return None
             
         surf_idx, seg_uid = clicked_segment
-        logger.debug(f"✅ Found segment: surface {surf_idx}, segment {seg_uid}")
+        logger.debug(f"Found segment: surface {surf_idx}, segment {seg_uid}")
         
         return clicked_segment
 
@@ -14322,7 +14322,7 @@ segmentation, triangulation, and visualization.
         transfer_layout.setContentsMargins(6, 8, 6, 6)
         transfer_layout.setSpacing(4)
         
-        self.load_surfaces_btn = QPushButton("📥 Load Surfaces")
+        self.load_surfaces_btn = QPushButton("Load Surfaces")
         self.load_surfaces_btn.setToolTip("Load conforming surface meshes from Refine & Mesh tab")
         self.load_surfaces_btn.clicked.connect(self._load_conforming_meshes_for_tetgen)
         transfer_layout.addWidget(self.load_surfaces_btn)
@@ -14348,7 +14348,7 @@ segmentation, triangulation, and visualization.
         fault_material_group = QGroupBox("2D Faults (Surfaces)")
         fault_material_layout = QVBoxLayout(fault_material_group)
         
-        fault_info = QLabel("✓ Check surfaces to mark as 2D faults (surface constraints only)")
+        fault_info = QLabel("Check surfaces to mark as 2D faults (surface constraints only)")
         fault_info.setStyleSheet("color: #D32F2F; font-style: italic; background: #FFEBEE; padding: 5px; border-radius: 3px;")
         fault_info.setWordWrap(True)
         fault_material_layout.addWidget(fault_info)
@@ -14413,23 +14413,23 @@ segmentation, triangulation, and visualization.
         tetgen_options_layout.addWidget(self.tetgen_switches_input)
         generate_layout.addLayout(tetgen_options_layout)
         
-        self.generate_tetra_mesh_btn = QPushButton("🔧 Generate Tetrahedral Mesh")
+        self.generate_tetra_mesh_btn = QPushButton("Generate Tetrahedral Mesh")
         self.generate_tetra_mesh_btn.clicked.connect(self._generate_tetrahedral_mesh_action)
         self.generate_tetra_mesh_btn.setEnabled(False)  # Enable after loading surfaces
         generate_layout.addWidget(self.generate_tetra_mesh_btn)
         
-        self.export_mesh_btn = QPushButton("💾 Export Mesh")
+        self.export_mesh_btn = QPushButton("Export Mesh")
         self.export_mesh_btn.clicked.connect(self._export_tetrahedral_mesh)
         self.export_mesh_btn.setEnabled(False)
         generate_layout.addWidget(self.export_mesh_btn)
         
-        self.export_to_pzero_btn = QPushButton("📤 Export to PZero")
+        self.export_to_pzero_btn = QPushButton("Export to PZero")
         self.export_to_pzero_btn.clicked.connect(self._export_to_pzero)
         self.export_to_pzero_btn.setEnabled(False)
         self.export_to_pzero_btn.setToolTip("Export all results to PZero:\n• Surfaces → Geology collection (geol_coll)\n• Wells → Well collection (well_coll)\n• Tetrahedral mesh → 3D Mesh collection (mesh3d_coll)")
         generate_layout.addWidget(self.export_to_pzero_btn)
         
-        self.generate_stats_btn = QPushButton("📊 Generate Statistics")
+        self.generate_stats_btn = QPushButton("Generate Statistics")
         self.generate_stats_btn.clicked.connect(self._calculate_and_show_statistics)
         self.generate_stats_btn.setEnabled(False)
         self.generate_stats_btn.setToolTip("Calculate and display mesh quality metrics (radius-edge ratio, dihedral angles)")
@@ -14437,7 +14437,7 @@ segmentation, triangulation, and visualization.
         
         
         # High-quality figure export button
-        self.export_figure_btn = QPushButton("📸 Export Figure")
+        self.export_figure_btn = QPushButton("Export Figure")
         self.export_figure_btn.clicked.connect(self._show_figure_export_dialog)
         self.export_figure_btn.setEnabled(False)
         self.export_figure_btn.setToolTip("Export high-resolution figures with colorbar and annotations")
@@ -14485,8 +14485,8 @@ segmentation, triangulation, and visualization.
         toolbar = QHBoxLayout()
         
         # Basic controls
-        self.tetra_reset_view_btn = QPushButton("🔄 Reset View")
-        self.tetra_fit_view_btn = QPushButton("📐 Fit View")
+        self.tetra_reset_view_btn = QPushButton("Reset View")
+        self.tetra_fit_view_btn = QPushButton("Fit View")
         
         # Visualization modes
         self.tetra_wireframe_check = QCheckBox("Wireframe")
@@ -16922,7 +16922,7 @@ segmentation, triangulation, and visualization.
                 'triangulation': 'Triangulation',
                 'intersection': 'Intersection'
             }
-            dialog.setWindowTitle(f"📸 Export {view_names.get(view_type, view_type)} Figure")
+            dialog.setWindowTitle(f"Export {view_names.get(view_type, view_type)} Figure")
             dialog.setMinimumSize(500, 550)
             
             main_layout = QVBoxLayout(dialog)
@@ -17045,13 +17045,13 @@ segmentation, triangulation, and visualization.
             # === Buttons ===
             button_layout = QHBoxLayout()
             
-            preview_btn = QPushButton("👁️ Preview")
+            preview_btn = QPushButton("Preview")
             preview_btn.clicked.connect(lambda: self._preview_generic_figure(dialog, view_type))
             button_layout.addWidget(preview_btn)
             
             button_layout.addStretch()
             
-            export_btn = QPushButton("📸 Export Figure")
+            export_btn = QPushButton("Export Figure")
             export_btn.setStyleSheet("background-color: #1565C0; color: white; font-weight: bold; padding: 8px 16px;")
             export_btn.clicked.connect(lambda: self._export_generic_figure(dialog, view_type))
             button_layout.addWidget(export_btn)
@@ -23330,7 +23330,7 @@ class PZeroUnifiedDatasetTable(QTreeWidget):
         item = QTreeWidgetItem()
         item.setText(self.COL_NAME, record.name)
         item.setText(self.COL_TYPE, record.topology or "-")
-        item.setText(self.COL_STATUS, "⏳ Pending")
+        item.setText(self.COL_STATUS, "Pending")
         item.setData(0, Qt.UserRole, record)  # Store record
         item.setData(0, Qt.UserRole + 1, record.uid)  # Store UID for lookup
         item.setData(0, Qt.UserRole + 2, "pending")  # Status flag
@@ -23376,10 +23376,10 @@ class PZeroUnifiedDatasetTable(QTreeWidget):
         item = QTreeWidgetItem()
         
         # Show visibility indicator
-        visibility = "✓" if dataset.get('visible', True) else "✗"
+        visibility = "[x]" if dataset.get('visible', True) else "[ ]"
         item.setText(self.COL_NAME, f"{visibility} {dataset['name']}")
         item.setText(self.COL_TYPE, dataset.get('type', '-'))
-        item.setText(self.COL_STATUS, "✅ Loaded")
+        item.setText(self.COL_STATUS, "Loaded")
         item.setData(0, Qt.UserRole, index)  # Store dataset index
         item.setData(0, Qt.UserRole + 1, dataset.get('uid', f"loaded_{index}"))
         item.setData(0, Qt.UserRole + 2, "loaded")  # Status flag
