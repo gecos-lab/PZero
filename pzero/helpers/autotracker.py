@@ -511,3 +511,586 @@ def propagate_horizon(
         dip_weight=dip_weight,
         progress_callback=progress_callback
     )
+
+
+# ==================== FAULT TRACKING ====================
+
+class FaultAttribute(Flag):
+    """Fault tracking attributes that can be combined."""
+    NONE = 0
+    VERTICAL_EDGE = auto()    # Vertical edge strength (most important)
+    DISCONTINUITY = auto()    # Reflector discontinuity
+    VARIANCE = auto()         # Local variance
+    LIKELIHOOD = auto()       # Combined fault likelihood
+    
+    @classmethod
+    def from_strings(cls, attr_list: List[str]) -> 'FaultAttribute':
+        """Convert list of attribute names to combined flag."""
+        result = cls.NONE
+        mapping = {
+            'vertical_edge': cls.VERTICAL_EDGE,
+            'edge': cls.VERTICAL_EDGE,
+            'discontinuity': cls.DISCONTINUITY,
+            'variance': cls.VARIANCE,
+            'likelihood': cls.LIKELIHOOD,
+        }
+        for attr in attr_list:
+            if attr.lower() in mapping:
+                result |= mapping[attr.lower()]
+        return result
+    
+    def to_list(self) -> List[str]:
+        """Convert flag to list of attribute names."""
+        result = []
+        if self & FaultAttribute.VERTICAL_EDGE:
+            result.append('vertical_edge')
+        if self & FaultAttribute.DISCONTINUITY:
+            result.append('discontinuity')
+        if self & FaultAttribute.VARIANCE:
+            result.append('variance')
+        if self & FaultAttribute.LIKELIHOOD:
+            result.append('likelihood')
+        return result
+
+
+class FaultTracker:
+    """
+    Automatic fault tracking system using fault-specific attributes.
+
+    Unlike horizons (horizontal), faults are near-vertical features.
+    We track vertically down each slice, then propagate across slices.
+    Faults shift horizontally as we move through slices (unlike horizons which follow reflectors).
+    """
+
+    def __init__(self, attributes_processor: SeismicAttributes = None):
+        """Initialize the fault tracker."""
+        self.attributes_processor = attributes_processor or SeismicAttributes()
+
+        # Default fault tracking parameters - more aggressive than horizons
+        # Faults can shift significantly between slices
+        self.tracking_params = {
+            'search_window': 20,         # Wider search - faults shift more than horizons
+            'smooth_sigma': 0.8,         # Less smoothing - allow more variation
+            'max_jump': 5,               # Allow bigger jumps for faults
+            'vertical_edge_weight': 0.6, # Strong weight for vertical edges (key fault feature)
+            'discontinuity_weight': 0.4, # Discontinuity indicates fault
+            'variance_weight': 0.2,      # Variance can help
+            'smoothness_weight': 0.1,    # LOW smoothness - let attributes guide more
+        }
+
+    def set_tracking_parameters(self, **params):
+        """Update tracking parameters."""
+        self.tracking_params.update(params)
+
+    def track_fault(
+        self,
+        data_3d: np.ndarray,
+        seed_points: List[Tuple[int, int]],
+        seed_slice_idx: int,
+        axis: str,
+        slices_to_track: List[int],
+        attributes: FaultAttribute = FaultAttribute.VERTICAL_EDGE | FaultAttribute.DISCONTINUITY,
+        search_window: int = 20,
+        smooth_sigma: float = 0.8,
+        max_jump: int = 5,
+        vertical_edge_weight: float = 0.6,
+        discontinuity_weight: float = 0.4,
+        variance_weight: float = 0.2,
+        smoothness_weight: float = 0.1,
+        progress_callback: Optional[Callable] = None
+    ) -> Tuple[bool, Dict[int, List[Tuple[int, int]]], str]:
+        """
+        Track fault through slices.
+        
+        Faults are tracked vertically on each slice (down the rows),
+        then the fault position is propagated to adjacent slices.
+        
+        Args:
+            data_3d: 3D seismic data array
+            seed_points: List of (row, col) seed points on the fault
+            seed_slice_idx: Starting slice index
+            axis: 'Inline', 'Crossline', or 'Z-slice'
+            slices_to_track: List of slice indices to propagate to
+            attributes: Combined fault attributes to use
+            search_window: Horizontal search range (samples)
+            smooth_sigma: Gaussian smoothing sigma
+            max_jump: Maximum horizontal jump between rows
+            vertical_edge_weight: Weight for vertical edge attribute
+            discontinuity_weight: Weight for discontinuity attribute
+            variance_weight: Weight for variance attribute
+            smoothness_weight: Weight for smooth fault traces
+            progress_callback: Optional callback(msg, pct) for progress
+
+        Returns:
+            (success, faults_dict, message)
+            - faults_dict: {slice_idx: [(row, col), ...]} fault trace per slice
+        """
+        self.tracking_params.update({
+            'search_window': search_window,
+            'smooth_sigma': smooth_sigma,
+            'max_jump': max_jump,
+            'vertical_edge_weight': vertical_edge_weight,
+            'discontinuity_weight': discontinuity_weight,
+            'variance_weight': variance_weight,
+            'smoothness_weight': smoothness_weight,
+        })
+
+        def update_progress(msg, pct=None):
+            if progress_callback:
+                progress_callback(msg, pct)
+
+        attr_names = attributes.to_list() if attributes != FaultAttribute.NONE else ['vertical_edge']
+        update_progress(f"Starting fault tracking with: {', '.join(attr_names)}...", 0)
+
+        faults = {}
+        
+        # IMPORTANT: The seed_points from the user's drawn line ARE the fault trace
+        # We do NOT extend vertically - the user has already defined where the fault is
+        # We just propagate this trace horizontally to adjacent slices
+        
+        # Sort seed points by row (vertical position) and use them directly
+        seed_fault = sorted(seed_points, key=lambda p: p[0])
+        faults[seed_slice_idx] = seed_fault
+        
+        current_fault = seed_fault
+        total_slices = len(slices_to_track)
+        
+        if total_slices == 0:
+            return True, faults, "No slices to track"
+
+        try:
+            for i, slice_idx in enumerate(slices_to_track):
+                # Extract slice data
+                if axis == 'Inline':
+                    slice_data = data_3d[slice_idx, :, :]
+                elif axis == 'Crossline':
+                    slice_data = data_3d[:, slice_idx, :]
+                else:
+                    slice_data = data_3d[:, :, slice_idx]
+
+                # Track fault on this slice using previous fault as guide
+                new_fault = self._propagate_fault_to_slice(
+                    slice_data, current_fault, attributes
+                )
+                
+                # Smooth the fault trace
+                new_fault = self._smooth_fault_trace(new_fault)
+                
+                faults[slice_idx] = new_fault
+                current_fault = new_fault
+
+                if (i + 1) % 10 == 0 or i == total_slices - 1:
+                    pct = int(100 * (i + 1) / total_slices)
+                    update_progress(f"Processed slice {slice_idx} ({i+1}/{total_slices})", pct)
+
+            update_progress(f"Fault tracking complete: {len(faults)} slices", 100)
+            return True, faults, f"Tracked fault on {len(faults)} slices"
+
+        except Exception as e:
+            import traceback
+            return False, faults, f"Fault tracking error: {str(e)}\n{traceback.format_exc()}"
+
+    def _track_fault_on_slice(
+        self,
+        slice_data: np.ndarray,
+        seed_points: List[Tuple[int, int]],
+        attributes: FaultAttribute
+    ) -> List[Tuple[int, int]]:
+        """
+        Track fault vertically on a single slice starting from seed points.
+        Extends the fault trace both up and down from the seeds.
+        """
+        h, w = slice_data.shape
+        
+        # Compute fault attributes
+        fault_attrs = self.attributes_processor.compute_fault_attributes(slice_data)
+        
+        # Sort seed points by row
+        seed_points = sorted(seed_points, key=lambda p: p[0])
+        
+        # Get initial column positions from seeds
+        if len(seed_points) == 1:
+            seed_row, seed_col = seed_points[0]
+        else:
+            # Use average column from multiple seeds
+            seed_col = int(np.mean([p[1] for p in seed_points]))
+            seed_row = seed_points[len(seed_points)//2][0]
+        
+        # Track upward from seed
+        upper_trace = self._track_fault_direction(
+            fault_attrs, seed_row, seed_col, -1, h, w, attributes
+        )
+        
+        # Track downward from seed
+        lower_trace = self._track_fault_direction(
+            fault_attrs, seed_row, seed_col, 1, h, w, attributes
+        )
+        
+        # Combine traces (upper reversed + seed + lower)
+        full_trace = upper_trace[::-1] + [(seed_row, seed_col)] + lower_trace
+        
+        return full_trace
+
+    def _track_fault_direction(
+        self,
+        fault_attrs: Dict[str, np.ndarray],
+        start_row: int,
+        start_col: int,
+        direction: int,
+        h: int,
+        w: int,
+        attributes: FaultAttribute
+    ) -> List[Tuple[int, int]]:
+        """
+        Track fault in one direction (up or down).
+        
+        Args:
+            direction: -1 for up, +1 for down
+        """
+        trace = []
+        current_col = start_col
+        search_window = self.tracking_params['search_window']
+        
+        row = start_row + direction
+        while 0 <= row < h:
+            # Search for best column position
+            col_min = max(0, current_col - search_window)
+            col_max = min(w, current_col + search_window + 1)
+            
+            best_col = current_col
+            best_cost = float('inf')
+            
+            for candidate_col in range(col_min, col_max):
+                cost = self._compute_fault_cost(
+                    fault_attrs, row, candidate_col, current_col, attributes
+                )
+                if cost < best_cost:
+                    best_cost = cost
+                    best_col = candidate_col
+            
+            trace.append((row, best_col))
+            current_col = best_col
+            row += direction
+        
+        return trace
+
+    def _propagate_fault_to_slice(
+        self,
+        slice_data: np.ndarray,
+        prev_fault: List[Tuple[int, int]],
+        attributes: FaultAttribute
+    ) -> List[Tuple[int, int]]:
+        """
+        Propagate fault from previous slice to current slice.
+        
+        For faults:
+        - Each point has (row, col) where row=X position, col=Z/depth position
+        - The fault is vertical (varying col/Z)
+        - As we move through slices, the fault shifts horizontally (in row/X)
+        
+        So we keep the Z position (col) fixed and search in X (row) direction.
+        """
+        h, w = slice_data.shape
+        fault_attrs = self.attributes_processor.compute_fault_attributes(slice_data)
+        search_window = self.tracking_params['search_window']
+        
+        # Pre-compute global normalization for better attribute detection
+        # Using local search window normalization gives weak results
+        attr_norms = {}
+        for attr_name in ['vertical_edge', 'discontinuity', 'variance', 'fault_likelihood']:
+            if attr_name in fault_attrs:
+                arr = fault_attrs[attr_name]
+                attr_norms[attr_name] = (arr.min(), arr.max())
+        
+        new_fault = []
+        
+        # Compute average expected row to get a reference point
+        valid_rows = [r for r, c in prev_fault if 0 <= c < w]
+        if valid_rows:
+            avg_prev_row = np.mean(valid_rows)
+        else:
+            avg_prev_row = h // 2
+        
+        for expected_row, col in prev_fault:
+            # Keep Z position (col) the same, search in X direction (row)
+            if col < 0 or col >= w:
+                continue
+                
+            expected_row = int(np.clip(expected_row, 0, h - 1))
+            
+            # Search horizontally (in row/X direction) for the fault position
+            # Use wider search window for fault (faults can shift more than horizons)
+            effective_window = int(search_window * 1.5)
+            row_min = max(0, expected_row - effective_window)
+            row_max = min(h, expected_row + effective_window + 1)
+            
+            best_row = expected_row
+            best_cost = float('inf')
+            
+            for candidate_row in range(row_min, row_max):
+                cost = self._compute_fault_cost_global(
+                    fault_attrs, attr_norms, candidate_row, col, expected_row, attributes
+                )
+                if cost < best_cost:
+                    best_cost = cost
+                    best_row = candidate_row
+            
+            new_fault.append((best_row, col))
+        
+        return new_fault
+    
+    def _compute_fault_cost_global(
+        self,
+        fault_attrs: Dict[str, np.ndarray],
+        attr_norms: Dict[str, Tuple[float, float]],
+        row: int,
+        col: int,
+        expected_row: int,
+        attributes: FaultAttribute
+    ) -> float:
+        """
+        Compute cost using global normalization for stronger attribute detection.
+        """
+        cost = 0.0
+        search_window = self.tracking_params['search_window']
+        # Lower smoothness weight for faults - they shift more than horizons
+        smoothness_weight = self.tracking_params['smoothness_weight'] * 0.3
+        
+        # Distance penalty (much weaker for faults to allow more movement)
+        distance = abs(row - expected_row)
+        distance_cost = (distance / max(search_window * 2, 1)) ** 2
+        cost += distance_cost * smoothness_weight
+        
+        total_attr_weight = 0.0
+        
+        # Vertical edge (higher = better for faults)
+        if attributes & FaultAttribute.VERTICAL_EDGE:
+            weight = self.tracking_params['vertical_edge_weight']
+            if 'vertical_edge' in fault_attrs and 'vertical_edge' in attr_norms:
+                edge = fault_attrs['vertical_edge']
+                edge_val = edge[row, col]
+                edge_min, edge_max = attr_norms['vertical_edge']
+                if edge_max > edge_min:
+                    # High edge = low cost (inverted and scaled strongly)
+                    normalized = (edge_val - edge_min) / (edge_max - edge_min)
+                    edge_cost = (1.0 - normalized) ** 0.5  # Square root makes it more sensitive
+                    cost += edge_cost * weight
+                    total_attr_weight += weight
+        
+        # Discontinuity (higher = better for faults)
+        if attributes & FaultAttribute.DISCONTINUITY:
+            weight = self.tracking_params['discontinuity_weight']
+            if 'discontinuity' in fault_attrs and 'discontinuity' in attr_norms:
+                disc = fault_attrs['discontinuity']
+                disc_val = disc[row, col]
+                disc_min, disc_max = attr_norms['discontinuity']
+                if disc_max > disc_min:
+                    normalized = (disc_val - disc_min) / (disc_max - disc_min)
+                    disc_cost = (1.0 - normalized) ** 0.5
+                    cost += disc_cost * weight
+                    total_attr_weight += weight
+        
+        # Variance
+        if attributes & FaultAttribute.VARIANCE:
+            weight = self.tracking_params['variance_weight']
+            if 'variance' in fault_attrs and 'variance' in attr_norms:
+                var = fault_attrs['variance']
+                var_val = var[row, col]
+                var_min, var_max = attr_norms['variance']
+                if var_max > var_min:
+                    normalized = (var_val - var_min) / (var_max - var_min)
+                    var_cost = (1.0 - normalized) ** 0.5
+                    cost += var_cost * weight
+                    total_attr_weight += weight
+        
+        # Fault likelihood
+        if attributes & FaultAttribute.LIKELIHOOD:
+            if 'fault_likelihood' in fault_attrs and 'fault_likelihood' in attr_norms:
+                likelihood = fault_attrs['fault_likelihood']
+                like_val = likelihood[row, col]
+                like_min, like_max = attr_norms['fault_likelihood']
+                if like_max > like_min:
+                    normalized = (like_val - like_min) / (like_max - like_min)
+                    like_cost = (1.0 - normalized) ** 0.5
+                    cost += like_cost * 0.4
+                    total_attr_weight += 0.4
+        
+        return cost
+
+    def _compute_fault_cost(
+        self,
+        fault_attrs: Dict[str, np.ndarray],
+        row: int,
+        col: int,
+        expected_row: int,
+        attributes: FaultAttribute
+    ) -> float:
+        """
+        Compute cost for a candidate fault position.
+        Lower cost = better fault location.
+        
+        For fault propagation:
+        - We search in the row (X/horizontal) direction
+        - col (Z/depth) is kept fixed
+        - We want to find the row that has the best fault attributes
+        """
+        cost = 0.0
+        search_window = self.tracking_params['search_window']
+        smoothness_weight = self.tracking_params['smoothness_weight']
+        
+        # Distance penalty (prefer staying close to expected row position)
+        distance = abs(row - expected_row)
+        distance_cost = (distance / max(search_window, 1)) ** 2
+        cost += distance_cost * smoothness_weight
+        
+        # Vertical edge (higher = better for faults, so lower cost)
+        # Normalize along the column since we're searching in row direction
+        if attributes & FaultAttribute.VERTICAL_EDGE:
+            weight = self.tracking_params['vertical_edge_weight']
+            if 'vertical_edge' in fault_attrs:
+                edge = fault_attrs['vertical_edge']
+                edge_val = edge[row, col]
+                # Normalize along the column (all rows at this col)
+                edge_max = edge[:, col].max()
+                edge_min = edge[:, col].min()
+                if edge_max > edge_min:
+                    # High edge = low cost
+                    edge_cost = 1.0 - (edge_val - edge_min) / (edge_max - edge_min)
+                    cost += edge_cost * weight
+        
+        # Discontinuity (higher = better for faults)
+        if attributes & FaultAttribute.DISCONTINUITY:
+            weight = self.tracking_params['discontinuity_weight']
+            if 'discontinuity' in fault_attrs:
+                disc = fault_attrs['discontinuity']
+                disc_val = disc[row, col]
+                # Normalize along the column
+                disc_max = disc[:, col].max()
+                disc_min = disc[:, col].min()
+                if disc_max > disc_min:
+                    disc_cost = 1.0 - (disc_val - disc_min) / (disc_max - disc_min)
+                    cost += disc_cost * weight
+        
+        # Variance (higher = potentially fault zone)
+        if attributes & FaultAttribute.VARIANCE:
+            weight = self.tracking_params['variance_weight']
+            if 'variance' in fault_attrs:
+                var = fault_attrs['variance']
+                var_val = var[row, col]
+                # Normalize along the column
+                var_max = var[:, col].max()
+                var_min = var[:, col].min()
+                if var_max > var_min:
+                    var_cost = 1.0 - (var_val - var_min) / (var_max - var_min)
+                    cost += var_cost * weight
+        
+        # Fault likelihood (combined attribute)
+        if attributes & FaultAttribute.LIKELIHOOD:
+            if 'fault_likelihood' in fault_attrs:
+                likelihood = fault_attrs['fault_likelihood']
+                like_val = likelihood[row, col]
+                # Normalize along the column
+                like_max = likelihood[:, col].max()
+                like_min = likelihood[:, col].min()
+                if like_max > like_min:
+                    like_cost = 1.0 - (like_val - like_min) / (like_max - like_min)
+                    cost += like_cost * 0.3
+                else:
+                    cost += (1.0 - like_val) * 0.3
+        
+        return cost
+
+    def _smooth_fault_trace(self, fault: List[Tuple[int, int]]) -> List[Tuple[int, int]]:
+        """
+        Apply light smoothing to fault trace to remove noise while preserving the fault's dip.
+        
+        For faults:
+        - rows = X positions (these vary as the fault dips/shifts)
+        - cols = Z positions (these stay fixed, defining the vertical extent)
+        
+        We smooth the row (X) values lightly to remove outliers without killing the trend.
+        """
+        if len(fault) < 3:
+            return fault
+        
+        rows = np.array([p[0] for p in fault], dtype=np.float64)
+        cols = np.array([p[1] for p in fault])
+        
+        # Only apply very light median filter to remove obvious outliers
+        if len(rows) >= 5:
+            rows_smoothed = median_filter(rows, size=3)
+        else:
+            rows_smoothed = rows.copy()
+        
+        # Very light Gaussian smoothing - faults should NOT be perfectly smooth
+        sigma = self.tracking_params['smooth_sigma']
+        if sigma > 0 and len(rows_smoothed) > 3:
+            rows_smoothed = gaussian_filter1d(rows_smoothed, sigma=min(sigma, 1.0))
+        
+        # DO NOT apply max_jump constraint - faults can have variable dip
+        # The attribute tracking should have already found reasonable positions
+        
+        return [(int(round(rows_smoothed[j])), int(cols[j])) for j in range(len(cols))]
+
+
+def propagate_fault(
+    data_3d: np.ndarray,
+    seed_points: List[Tuple[int, int]],
+    seed_slice_idx: int,
+    axis: str,
+    slices_to_track: List[int],
+    attributes: List[str] = None,
+    search_window: int = 20,
+    smooth_sigma: float = 0.8,
+    max_jump: int = 5,
+    vertical_edge_weight: float = 0.6,
+    discontinuity_weight: float = 0.4,
+    variance_weight: float = 0.2,
+    smoothness_weight: float = 0.1,
+    progress_callback: Optional[Callable] = None
+) -> Tuple[bool, Dict[int, List[Tuple[int, int]]], str]:
+    """
+    Main function to propagate fault using attribute-guided tracking.
+    
+    Args:
+        data_3d: 3D seismic data array
+        seed_points: List of (row, col) seed points on the fault
+        seed_slice_idx: Starting slice index
+        axis: 'Inline', 'Crossline', or 'Z-slice'
+        slices_to_track: List of slice indices to propagate to
+        attributes: List of attributes ['vertical_edge', 'discontinuity', 'variance', 'likelihood']
+        search_window: Horizontal search range (samples)
+        smooth_sigma: Gaussian smoothing sigma
+        max_jump: Maximum horizontal jump between rows
+        vertical_edge_weight: Weight for vertical edge
+        discontinuity_weight: Weight for discontinuity
+        variance_weight: Weight for variance
+        smoothness_weight: Weight for smooth traces
+        progress_callback: Optional callback(msg, pct)
+
+    Returns:
+        (success, faults_dict, message)
+    """
+    if attributes is None or len(attributes) == 0:
+        attributes = ['vertical_edge', 'discontinuity']
+    
+    tracking_attrs = FaultAttribute.from_strings(attributes)
+    
+    tracker = FaultTracker()
+    
+    return tracker.track_fault(
+        data_3d=data_3d,
+        seed_points=seed_points,
+        seed_slice_idx=seed_slice_idx,
+        axis=axis,
+        slices_to_track=slices_to_track,
+        attributes=tracking_attrs,
+        search_window=search_window,
+        smooth_sigma=smooth_sigma,
+        max_jump=max_jump,
+        vertical_edge_weight=vertical_edge_weight,
+        discontinuity_weight=discontinuity_weight,
+        variance_weight=variance_weight,
+        smoothness_weight=smoothness_weight,
+        progress_callback=progress_callback
+    )

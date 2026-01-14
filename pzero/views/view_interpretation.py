@@ -624,6 +624,9 @@ class ViewInterpretation(ViewMap):
             
             # Update visibility of multipart horizons (efficient single-entity horizons)
             self.update_all_multipart_horizons_visibility()
+            
+            # Update visibility of multipart faults
+            self.update_all_multipart_faults_visibility()
 
 
         except Exception as e:
@@ -1355,6 +1358,106 @@ class ViewInterpretation(ViewMap):
         for uid in list(self.multipart_horizons.keys()):
             self.update_multipart_horizon_visibility(uid)
 
+    def update_multipart_fault_visibility(self, uid=None):
+        """
+        Update visibility of multipart fault lines by extracting only the cells
+        that match the current slice and creating a filtered actor.
+        
+        Args:
+            uid: Specific fault UID to update, or None to update all multipart faults
+        """
+        from vtk import vtkThreshold, vtkGeometryFilter
+        
+        if not hasattr(self, 'multipart_faults'):
+            return
+        
+        uids_to_update = [uid] if uid else list(self.multipart_faults.keys())
+        
+        for fault_uid in uids_to_update:
+            if fault_uid not in self.multipart_faults:
+                continue
+            
+            fault_info = self.multipart_faults[fault_uid]
+            actor_name = f"multipart_fault_slice_{fault_uid}"
+            
+            # Check if this fault matches current view context
+            if (fault_info['seismic_uid'] != self.current_seismic_uid or
+                fault_info['axis'] != self.current_axis):
+                # Hide completely if not matching seismic/axis
+                self.set_actor_visibility(fault_uid, False)
+                if actor_name in self.plotter.renderer.actors:
+                    self.plotter.remove_actor(actor_name)
+                continue
+            
+            # Get the original VTK object
+            try:
+                vtk_obj = self.parent.geol_coll.get_uid_vtk_obj(fault_uid)
+                if vtk_obj is None:
+                    continue
+            except:
+                continue
+            
+            # Check if slice_index array exists
+            if not vtk_obj.GetCellData().HasArray("slice_index"):
+                # No slice data, show entire fault
+                self.set_actor_visibility(fault_uid, True)
+                continue
+            
+            # Hide the original full actor
+            self.set_actor_visibility(fault_uid, False)
+            
+            # Remove old filtered actor if exists
+            if actor_name in self.plotter.renderer.actors:
+                self.plotter.remove_actor(actor_name)
+            
+            # Use vtkThreshold to extract only cells matching current slice
+            vtk_obj.GetCellData().SetActiveScalars("slice_index")
+            
+            threshold = vtkThreshold()
+            threshold.SetInputData(vtk_obj)
+            threshold.SetInputArrayToProcess(0, 0, 0, 1, "slice_index")  # 1 = cell data
+            threshold.SetLowerThreshold(self.current_slice_index)
+            threshold.SetUpperThreshold(self.current_slice_index)
+            threshold.Update()
+            
+            # Convert to polydata for rendering
+            geometry = vtkGeometryFilter()
+            geometry.SetInputConnection(threshold.GetOutputPort())
+            geometry.Update()
+            
+            filtered_polydata = geometry.GetOutput()
+            
+            if filtered_polydata.GetNumberOfCells() > 0:
+                # Get color from dataframe
+                try:
+                    mask = self.parent.geol_coll.df['uid'] == fault_uid
+                    if mask.any():
+                        r = self.parent.geol_coll.df.loc[mask, 'color_R'].values[0]
+                        g = self.parent.geol_coll.df.loc[mask, 'color_G'].values[0]
+                        b = self.parent.geol_coll.df.loc[mask, 'color_B'].values[0]
+                        color = (r/255.0, g/255.0, b/255.0)
+                    else:
+                        color = (0.8, 0.2, 0.8)  # Purple default for faults
+                except:
+                    color = (0.8, 0.2, 0.8)
+                
+                # Add filtered actor
+                self.plotter.add_mesh(
+                    filtered_polydata,
+                    name=actor_name,
+                    color=color,
+                    line_width=6,
+                    render_lines_as_tubes=True
+                )
+
+    def update_all_multipart_faults_visibility(self):
+        """Update visibility for all multipart faults based on current slice."""
+        if not hasattr(self, 'multipart_faults'):
+            return
+        
+        for uid in list(self.multipart_faults.keys()):
+            self.update_multipart_fault_visibility(uid)
+    
     def scan_and_index_existing_horizons(self):
         """
         Scan all PolyLines in the project. If they align spatially with the current seismic volume,
@@ -1394,10 +1497,11 @@ class ViewInterpretation(ViewMap):
         self._lines_indexed = True
         self.print_terminal(f"Indexing complete. Processed {count} potential horizons.")
         
-        # Update visibility for both regular interpretation lines and multipart horizons
+        # Update visibility for both regular interpretation lines and multipart horizons/faults
         self.update_interpretation_line_visibility()
         self.update_all_multipart_horizons_visibility()
-
+        self.update_all_multipart_faults_visibility()
+    
     def scan_and_index_single_horizon(self, uid):
         """Check if a single horizon fits the current seismic grid and index it."""
         try:
@@ -3035,6 +3139,558 @@ class ViewInterpretation(ViewMap):
 
     # ==================== End Auto Propagation Methods ====================
 
+    # ==================== Fault Tracking Methods ====================
+    
+    def toggle_fault_enhancement(self, checked):
+        """Toggle fault enhancement display overlay."""
+        if not hasattr(self, '_fault_enhancement_active'):
+            self._fault_enhancement_active = False
+        
+        self._fault_enhancement_active = checked
+        
+        if checked:
+            self.print_terminal("Fault enhancement view enabled")
+            self._apply_fault_enhancement()
+        else:
+            self.print_terminal("Fault enhancement view disabled")
+            self._remove_fault_enhancement()
+    
+    def _apply_fault_enhancement(self):
+        """Apply fault enhancement to current slice display."""
+        if not hasattr(self, '_cached_seismic') or self._cached_seismic is None:
+            self.print_terminal("No seismic data cached - select a volume first")
+            return
+        
+        try:
+            from ..helpers.seismic_attributes import SeismicAttributes
+            import numpy as np
+            
+            # Get 3D data from cache
+            seismic = self._cached_seismic
+            dims = self._cached_dims
+            
+            if 'intensity' in seismic.array_names:
+                data = seismic['intensity']
+            elif seismic.array_names:
+                data = seismic[seismic.array_names[0]]
+            else:
+                self.print_terminal("No data arrays in seismic!")
+                return
+            
+            data_3d = data.reshape(dims, order='F').astype(np.float32)
+            
+            # Get current slice
+            if self.current_axis == 'Inline':
+                slice_data = data_3d[self.current_slice_index, :, :]
+            elif self.current_axis == 'Crossline':
+                slice_data = data_3d[:, self.current_slice_index, :]
+            else:
+                slice_data = data_3d[:, :, self.current_slice_index]
+            
+            # Compute fault enhancement
+            attrs = SeismicAttributes()
+            enhanced = attrs.compute_fault_enhancement(slice_data, 'likelihood')
+            
+            # Store for later use
+            self._fault_enhancement_data = enhanced
+            
+            self.print_terminal(f"Fault likelihood computed for {self.current_axis} slice {self.current_slice_index}")
+            self.print_terminal("High values (bright) = likely fault locations")
+            self.print_terminal("Use 'Draw Interpretation Line' to draw a VERTICAL line marking the fault")
+            
+        except Exception as e:
+            import traceback
+            self.print_terminal(f"Fault enhancement error: {e}")
+            self.print_terminal(traceback.format_exc())
+    
+    def _remove_fault_enhancement(self):
+        """Remove fault enhancement overlay."""
+        if hasattr(self, '_fault_enhancement_data'):
+            del self._fault_enhancement_data
+        # Refresh normal display
+        self.plotter.render()
+
+    def propagate_fault(self):
+        """Open dialog to propagate a fault line across multiple slices."""
+        self.disable_actions()
+        
+        # Get existing lines that could be fault seeds
+        if not hasattr(self, 'interpretation_lines') or not self.interpretation_lines:
+            from PySide6.QtWidgets import QMessageBox
+            QMessageBox.warning(self, "No Fault Seed Lines", 
+                "Please draw a VERTICAL fault line first:\n\n"
+                "1. Use 'Draw Interpretation Line' from the menu\n"
+                "2. Draw a line following the fault (should be roughly vertical)\n"
+                "3. Then use 'Propagate Fault' to extend it across slices\n\n"
+                "TIP: Enable 'Fault Enhancement View' to see faults more clearly.")
+            self.enable_actions()
+            return
+        
+        # Filter for lines on the current seismic (potential fault seeds)
+        all_lines = []
+        for uid, info in self.interpretation_lines.items():
+            if info.get('seismic_uid') == self.current_seismic_uid:
+                name = f"Line_{uid[:8]}"
+                try:
+                    mask = self.parent.geol_coll.df['uid'] == uid
+                    if mask.any():
+                        name = self.parent.geol_coll.df.loc[mask, 'name'].values[0]
+                except:
+                    pass
+                slice_idx = info.get('slice_index', -1)
+                all_lines.append((uid, name, slice_idx))
+        
+        if not all_lines:
+            from PySide6.QtWidgets import QMessageBox
+            QMessageBox.warning(self, "No Lines", 
+                "No seed lines found for the current seismic volume.\n\n"
+                "Draw a vertical line on a fault using 'Draw Interpretation Line'.")
+            self.enable_actions()
+            return
+        
+        # Show compact dialog
+        from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QComboBox, QSpinBox, 
+                                         QDoubleSpinBox, QLabel, QPushButton, QRadioButton, 
+                                         QButtonGroup, QGroupBox, QCheckBox, QFormLayout)
+        
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Propagate Fault")
+        dialog.setMinimumWidth(450)
+        layout = QVBoxLayout(dialog)
+        layout.setSpacing(8)
+        
+        # Info label
+        info = QLabel("Select a line drawn on a fault. The line should be roughly VERTICAL.")
+        info.setStyleSheet("color: gray; font-style: italic;")
+        info.setWordWrap(True)
+        layout.addWidget(info)
+        
+        # Seed selection
+        seed_layout = QHBoxLayout()
+        seed_layout.addWidget(QLabel("Seed fault line:"))
+        combo_seed = QComboBox()
+        for uid, name, slice_idx in all_lines:
+            display_text = f"{name} [Slice {slice_idx}]" if slice_idx >= 0 else f"{name} [Current]"
+            combo_seed.addItem(display_text, uid)
+        combo_seed.setMinimumWidth(200)
+        seed_layout.addWidget(combo_seed, 1)
+        layout.addLayout(seed_layout)
+        
+        # Two columns
+        columns = QHBoxLayout()
+        
+        # Left: Direction + Attributes
+        left = QVBoxLayout()
+        
+        dir_group = QGroupBox("Direction")
+        dir_layout = QVBoxLayout(dir_group)
+        dir_layout.setSpacing(2)
+        direction_group = QButtonGroup(dialog)
+        radio_forward = QRadioButton("Forward")
+        radio_backward = QRadioButton("Backward")
+        radio_both = QRadioButton("Both")
+        radio_forward.setChecked(True)
+        direction_group.addButton(radio_forward, 0)
+        direction_group.addButton(radio_backward, 1)
+        direction_group.addButton(radio_both, 2)
+        dir_layout.addWidget(radio_forward)
+        dir_layout.addWidget(radio_backward)
+        dir_layout.addWidget(radio_both)
+        left.addWidget(dir_group)
+        
+        attr_group = QGroupBox("Attributes")
+        attr_layout = QVBoxLayout(attr_group)
+        attr_layout.setSpacing(2)
+        check_vert_edge = QCheckBox("Vertical Edge")
+        check_vert_edge.setChecked(True)
+        check_discont = QCheckBox("Discontinuity")
+        check_discont.setChecked(True)
+        check_variance = QCheckBox("Variance")
+        check_likelihood = QCheckBox("Likelihood")
+        attr_layout.addWidget(check_vert_edge)
+        attr_layout.addWidget(check_discont)
+        attr_layout.addWidget(check_variance)
+        attr_layout.addWidget(check_likelihood)
+        left.addWidget(attr_group)
+        left.addStretch()
+        columns.addLayout(left)
+        
+        # Right: Parameters
+        right = QVBoxLayout()
+        
+        params_group = QGroupBox("Parameters")
+        params_form = QFormLayout(params_group)
+        params_form.setSpacing(4)
+        
+        spin_slices = QSpinBox()
+        spin_slices.setRange(1, 500)
+        spin_slices.setValue(50)
+        params_form.addRow("Slices:", spin_slices)
+        
+        spin_search = QSpinBox()
+        spin_search.setRange(3, 30)
+        spin_search.setValue(10)
+        params_form.addRow("Search window:", spin_search)
+        
+        spin_smooth = QDoubleSpinBox()
+        spin_smooth.setRange(0.0, 5.0)
+        spin_smooth.setValue(1.5)
+        spin_smooth.setSingleStep(0.5)
+        params_form.addRow("Smoothing:", spin_smooth)
+        
+        spin_max_jump = QSpinBox()
+        spin_max_jump.setRange(1, 10)
+        spin_max_jump.setValue(2)
+        params_form.addRow("Max jump:", spin_max_jump)
+        
+        right.addWidget(params_group)
+        right.addStretch()
+        columns.addLayout(right)
+        
+        layout.addLayout(columns)
+        
+        # Buttons
+        btn_layout = QHBoxLayout()
+        btn_layout.addStretch()
+        btn_ok = QPushButton("Propagate Fault")
+        btn_cancel = QPushButton("Cancel")
+        btn_ok.clicked.connect(dialog.accept)
+        btn_cancel.clicked.connect(dialog.reject)
+        btn_layout.addWidget(btn_ok)
+        btn_layout.addWidget(btn_cancel)
+        layout.addLayout(btn_layout)
+        
+        if dialog.exec() != QDialog.Accepted:
+            self.enable_actions()
+            return
+        
+        # Get parameters
+        selected_idx = combo_seed.currentIndex()
+        seed_uid = combo_seed.currentData()
+        seed_name = all_lines[selected_idx][1]
+        seed_slice_idx = all_lines[selected_idx][2]
+        
+        if seed_slice_idx < 0:
+            seed_slice_idx = self.current_slice_index
+        
+        direction = direction_group.checkedId()
+        num_slices = spin_slices.value()
+        
+        # Build attributes list
+        selected_attributes = []
+        if check_vert_edge.isChecked():
+            selected_attributes.append('vertical_edge')
+        if check_discont.isChecked():
+            selected_attributes.append('discontinuity')
+        if check_variance.isChecked():
+            selected_attributes.append('variance')
+        if check_likelihood.isChecked():
+            selected_attributes.append('likelihood')
+        
+        if not selected_attributes:
+            selected_attributes = ['vertical_edge', 'discontinuity']
+        
+        search_window = spin_search.value()
+        smooth_sigma = spin_smooth.value()
+        max_jump = spin_max_jump.value()
+        
+        self.print_terminal(f"=== Propagating Fault ===")
+        self.print_terminal(f"Seed: {seed_name} (slice {seed_slice_idx})")
+        self.print_terminal(f"Attributes: {', '.join(selected_attributes)}")
+        
+        try:
+            self._run_fault_propagation(
+                seed_uid=seed_uid,
+                direction=direction,
+                num_slices=num_slices,
+                attributes=selected_attributes,
+                search_window=search_window,
+                smooth_sigma=smooth_sigma,
+                max_jump=max_jump,
+                seed_slice_index=seed_slice_idx
+            )
+        except Exception as e:
+            self.print_terminal(f"Error during fault propagation: {e}")
+            import traceback
+            self.print_terminal(traceback.format_exc())
+        
+        self.enable_actions()
+
+    def _run_fault_propagation(
+        self,
+        seed_uid,
+        direction,
+        num_slices,
+        attributes=None,
+        search_window=10,
+        smooth_sigma=1.5,
+        max_jump=2,
+        seed_slice_index=None
+    ):
+        """Execute fault propagation using attribute-guided tracking."""
+        if attributes is None:
+            attributes = ['vertical_edge', 'discontinuity']
+        
+        from ..helpers.autotracker import propagate_fault
+        from vtk import vtkPoints, vtkCellArray, vtkIdList, vtkIntArray
+        from ..entities_factory import PolyLine
+        from copy import deepcopy
+        import random
+        import numpy as np
+        
+        # Get seed line geometry using correct method
+        seed_line = self.parent.geol_coll.get_uid_vtk_obj(seed_uid)
+        if seed_line is None:
+            self.print_terminal("Could not find seed fault line")
+            return
+        
+        # Get seismic volume data from cache
+        if not hasattr(self, '_cached_seismic') or self._cached_seismic is None:
+            self.print_terminal("No cached seismic data!")
+            return
+        
+        seismic = self._cached_seismic
+        dims = self._cached_dims
+        bounds = self._cached_bounds
+        
+        # Get the 3D data array
+        if 'intensity' in seismic.array_names:
+            data = seismic['intensity']
+        elif seismic.array_names:
+            data = seismic[seismic.array_names[0]]
+        else:
+            self.print_terminal("No data arrays in seismic!")
+            return
+        
+        data_3d = data.reshape(dims, order='F').astype(np.float32)
+        
+        # Calculate spacing
+        spacing = [
+            (bounds[1] - bounds[0]) / max(dims[0] - 1, 1),
+            (bounds[3] - bounds[2]) / max(dims[1] - 1, 1),
+            (bounds[5] - bounds[4]) / max(dims[2] - 1, 1)
+        ]
+        
+        # Get seed points from VTK object
+        seed_points_world = np.array(seed_line.GetPoints().GetData())
+        if len(seed_points_world) == 0:
+            self.print_terminal("Seed fault line has no points!")
+            return
+        
+        self.print_terminal(f"Seed fault line has {len(seed_points_world)} points")
+        
+        # Convert seed points to slice coordinates (row, col)
+        # Same logic as horizon propagation
+        seed_indices = []
+        for pt in seed_points_world:
+            if self.current_axis == 'Inline':
+                row = int((pt[1] - bounds[2]) / spacing[1]) if spacing[1] > 0 else 0
+                col = int((pt[2] - bounds[4]) / spacing[2]) if spacing[2] > 0 else 0
+            elif self.current_axis == 'Crossline':
+                row = int((pt[0] - bounds[0]) / spacing[0]) if spacing[0] > 0 else 0
+                col = int((pt[2] - bounds[4]) / spacing[2]) if spacing[2] > 0 else 0
+            else:  # Z-slice
+                row = int((pt[0] - bounds[0]) / spacing[0]) if spacing[0] > 0 else 0
+                col = int((pt[1] - bounds[2]) / spacing[1]) if spacing[1] > 0 else 0
+            seed_indices.append((row, col))
+        
+        if not seed_indices:
+            self.print_terminal("Could not convert seed points to slice coordinates")
+            return
+        
+        self.print_terminal(f"Converted to {len(seed_indices)} slice coordinates")
+        
+        current_idx = seed_slice_index if seed_slice_index is not None else self.current_slice_index
+        
+        # Build slice list
+        if self.current_axis == 'Inline':
+            max_slices = data_3d.shape[0]
+        elif self.current_axis == 'Crossline':
+            max_slices = data_3d.shape[1]
+        else:
+            max_slices = data_3d.shape[2]
+        
+        slices_to_track = []
+        if direction == 0:  # Forward
+            slices_to_track = list(range(current_idx + 1, min(current_idx + num_slices + 1, max_slices)))
+        elif direction == 1:  # Backward
+            slices_to_track = list(range(current_idx - 1, max(current_idx - num_slices - 1, -1), -1))
+        else:  # Both
+            forward = list(range(current_idx + 1, min(current_idx + num_slices + 1, max_slices)))
+            backward = list(range(current_idx - 1, max(current_idx - num_slices - 1, -1), -1))
+            slices_to_track = backward[::-1] + forward
+        
+        def progress_callback(msg, pct):
+            self.print_terminal(f"  {msg}" + (f" ({pct}%)" if pct is not None else ""))
+        
+        # Random color for the fault
+        fault_color = [random.randint(150, 255), random.randint(50, 150), random.randint(50, 150)]
+        
+        self._is_propagating = True
+        try:
+            success, faults, result_msg = propagate_fault(
+                data_3d=data_3d,
+                seed_points=seed_indices,
+                seed_slice_idx=current_idx,
+                axis=self.current_axis,
+                slices_to_track=slices_to_track,
+                attributes=attributes,
+                search_window=search_window,
+                smooth_sigma=smooth_sigma,
+                max_jump=max_jump,
+                progress_callback=progress_callback
+            )
+            
+            if not success:
+                self.print_terminal(f"Fault tracking failed: {result_msg}")
+                return
+            
+            self.print_terminal(f"Fault tracking complete: {len(faults)} slices")
+            
+            # Build multipart polyline for fault
+            if faults:
+                all_points = []
+                all_lines = []
+                point_slice_indices = []
+                cell_slice_indices = []
+                slice_to_point_range = {}
+                current_point_offset = 0
+                
+                sorted_slices = sorted(faults.keys())
+                
+                for slice_idx in sorted_slices:
+                    positions = faults[slice_idx]
+                    if len(positions) < 2:
+                        continue
+                    
+                    # Convert slice coordinates to world coordinates (same as horizon)
+                    world_points = []
+                    for row, col in positions:
+                        if self.current_axis == 'Inline':
+                            x = bounds[0] + slice_idx * (bounds[1] - bounds[0]) / max(dims[0] - 1, 1)
+                            y = bounds[2] + row * spacing[1]
+                            z = bounds[4] + col * spacing[2]
+                        elif self.current_axis == 'Crossline':
+                            x = bounds[0] + row * spacing[0]
+                            y = bounds[2] + slice_idx * (bounds[3] - bounds[2]) / max(dims[1] - 1, 1)
+                            z = bounds[4] + col * spacing[2]
+                        else:  # Z-slice
+                            x = bounds[0] + row * spacing[0]
+                            y = bounds[2] + col * spacing[1]
+                            z = bounds[4] + slice_idx * (bounds[5] - bounds[4]) / max(dims[2] - 1, 1)
+                        world_points.append((x, y, z))
+                    
+                    # For faults, sort by Z (vertical) instead of horizontal
+                    world_points.sort(key=lambda p: p[2])
+                    
+                    n_pts = len(world_points)
+                    start_idx = current_point_offset
+                    
+                    all_points.extend(world_points)
+                    point_slice_indices.extend([slice_idx] * n_pts)
+                    
+                    all_lines.append(n_pts)
+                    all_lines.extend(list(range(start_idx, start_idx + n_pts)))
+                    cell_slice_indices.append(slice_idx)
+                    
+                    slice_to_point_range[slice_idx] = (start_idx, start_idx + n_pts - 1)
+                    current_point_offset += n_pts
+                
+                # Create VTK multipart polyline
+                if len(all_points) >= 2 and len(cell_slice_indices) > 0:
+                    self.print_terminal(f"Creating multipart fault with {len(cell_slice_indices)} parts, {len(all_points)} total points...")
+                    
+                    # Create VTK points
+                    vtk_points = vtkPoints()
+                    for pt in all_points:
+                        vtk_points.InsertNextPoint(pt[0], pt[1], pt[2])
+                    
+                    # Create VTK lines (cell array)
+                    vtk_lines = vtkCellArray()
+                    i = 0
+                    while i < len(all_lines):
+                        n_pts_in_line = all_lines[i]
+                        id_list = vtkIdList()
+                        for j in range(n_pts_in_line):
+                            id_list.InsertNextId(all_lines[i + 1 + j])
+                        vtk_lines.InsertNextCell(id_list)
+                        i += n_pts_in_line + 1
+                    
+                    multipart_fault = PolyLine()
+                    multipart_fault.SetPoints(vtk_points)
+                    multipart_fault.SetLines(vtk_lines)
+                    
+                    # Add slice index arrays
+                    point_array = vtkIntArray()
+                    point_array.SetName("slice_index")
+                    for idx in point_slice_indices:
+                        point_array.InsertNextValue(idx)
+                    multipart_fault.GetPointData().AddArray(point_array)
+                    
+                    cell_array = vtkIntArray()
+                    cell_array.SetName("slice_index")
+                    for idx in cell_slice_indices:
+                        cell_array.InsertNextValue(idx)
+                    multipart_fault.GetCellData().AddArray(cell_array)
+                    
+                    # Create entity
+                    fault_dict = deepcopy(self.parent.geol_coll.entity_dict)
+                    fault_dict["name"] = f"fault_{current_idx}_multipart"
+                    fault_dict["topology"] = "PolyLine"
+                    fault_dict["x_section"] = ""
+                    fault_dict["vtk_obj"] = multipart_fault
+                    
+                    new_uid = self.parent.geol_coll.add_entity_from_dict(fault_dict)
+                    
+                    # Store metadata
+                    if not hasattr(self, 'multipart_faults'):
+                        self.multipart_faults = {}
+                    
+                    self.multipart_faults[new_uid] = {
+                        'seismic_uid': self.current_seismic_uid,
+                        'axis': self.current_axis,
+                        'slice_indices': list(slice_to_point_range.keys()),
+                        'slice_to_cell_index': {slice_idx: i for i, slice_idx in enumerate(cell_slice_indices)},
+                        'seed_slice': current_idx
+                    }
+                    
+                    # Set color
+                    try:
+                        mask = self.parent.geol_coll.df['uid'] == new_uid
+                        if mask.any():
+                            self.parent.geol_coll.df.loc[mask, 'color_R'] = fault_color[0]
+                            self.parent.geol_coll.df.loc[mask, 'color_G'] = fault_color[1]
+                            self.parent.geol_coll.df.loc[mask, 'color_B'] = fault_color[2]
+                    except:
+                        pass
+                    
+                    self.print_terminal(f"=== Fault Propagation Complete ===")
+                    self.print_terminal(f"Created multipart fault: {fault_dict['name']}")
+                    self.print_terminal(f"Contains {len(cell_slice_indices)} segments across slices")
+                    self.print_terminal(f"Total points: {len(all_points)}")
+                    
+                    # Initially hide the raw actor - we'll show filtered version
+                    self.set_actor_visibility(new_uid, False)
+                    
+                    # Update visibility to show only current slice segment
+                    self.update_multipart_fault_visibility(new_uid)
+                    
+                    # Note: Line width is set in update_multipart_fault_visibility
+                    pass
+                else:
+                    self.print_terminal("No valid fault segments created!")
+        
+        except Exception as e:
+            self.print_terminal(f"Error in fault propagation: {e}")
+            import traceback
+            self.print_terminal(traceback.format_exc())
+        
+        finally:
+            self._is_propagating = False
+            self.plotter.render()
+
+    # ==================== End Fault Tracking Methods ====================
+
     def initialize_menu_tools(self):
         super().initialize_menu_tools()
         # Add interpretation-specific draw line action
@@ -3052,6 +3708,16 @@ class ViewInterpretation(ViewMap):
         self.propagateHorizonButton.triggered.connect(self.propagate_horizon)
         self.menuCreate.insertAction(self.menuCreate.actions()[2], self.propagateHorizonButton)
         
+        # Add propagate fault action
+        self.propagateFaultButton = QAction("Propagate Fault (Auto-Track 3D)", self)
+        self.propagateFaultButton.triggered.connect(self.propagate_fault)
+        self.menuCreate.insertAction(self.menuCreate.actions()[3], self.propagateFaultButton)
+        
+        # Add fault enhancement toggle
+        self.faultEnhancementAction = QAction("Fault Enhancement View", self, checkable=True)
+        self.faultEnhancementAction.triggered.connect(self.toggle_fault_enhancement)
+        self.menuCreate.insertAction(self.menuCreate.actions()[4], self.faultEnhancementAction)
+
         # Connect our custom handler for additional processing (volume list refresh)
         try:
             self.parent.signals.entities_added.connect(self.on_entities_added)
