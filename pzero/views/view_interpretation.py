@@ -167,19 +167,19 @@ class ViewInterpretation(ViewMap):
         # Grid Toggle
         self.chk_grid = QCheckBox("Grid")
         self.chk_grid.setChecked(False)
-        self.chk_grid.stateChanged.connect(lambda: self.update_grid_annotations())
+        self.chk_grid.stateChanged.connect(self._on_annotation_toggle_changed)
         bot_layout.addWidget(self.chk_grid)
 
         # Title Toggle
         self.chk_title = QCheckBox("Title")
         self.chk_title.setChecked(True)
-        self.chk_title.stateChanged.connect(lambda: self.update_grid_annotations())
+        self.chk_title.stateChanged.connect(self._on_annotation_toggle_changed)
         bot_layout.addWidget(self.chk_title)
         
         # Directions Toggle
         self.chk_dirs = QCheckBox("NS/EW")
         self.chk_dirs.setChecked(True)
-        self.chk_dirs.stateChanged.connect(lambda: self.update_grid_annotations())
+        self.chk_dirs.stateChanged.connect(self._on_annotation_toggle_changed)
         bot_layout.addWidget(self.chk_dirs)
 
         # Axes Widget Toggle
@@ -201,6 +201,11 @@ class ViewInterpretation(ViewMap):
         self.controls_dock.setWidget(control_widget)
         self.controls_dock.setAllowedAreas(Qt.TopDockWidgetArea | Qt.BottomDockWidgetArea)
         self.addDockWidget(Qt.TopDockWidgetArea, self.controls_dock)
+
+    def _on_annotation_toggle_changed(self):
+        """Handle annotation toggle changes and render."""
+        self.update_grid_annotations()
+        self.plotter.render()
 
     def toggle_orientation_widget(self, state):
         """Toggle visibility of the orientation widget."""
@@ -457,6 +462,10 @@ class ViewInterpretation(ViewMap):
             self.print_terminal("No seismic UID selected")
             return
         
+        # Disable rendering during updates to prevent flickering
+        # We'll render once at the very end
+        self.plotter.render_window.SetDesiredUpdateRate(0.01)
+        
         # Cache the seismic wrapper to avoid repeated wrapping
         if not hasattr(self, '_cached_seismic') or not hasattr(self, '_cached_seismic_uid') or self._cached_seismic_uid != self.current_seismic_uid:
             self.print_terminal(f"Caching seismic data for {self.current_seismic_uid}")
@@ -533,22 +542,27 @@ class ViewInterpretation(ViewMap):
             cmap = self.get_seismic_colormap()
             scalar_range = self.scalar_range if hasattr(self, 'scalar_range') else None
             
-            # Remove old slice actor
-            if slice_actor_name in self.plotter.renderer.actors:
-                self.plotter.remove_actor(slice_actor_name)
+            # Check if actor exists - update in place for smooth transition
+            actor_exists = slice_actor_name in self.plotter.renderer.actors
             
-            # Add new slice
-            self.slice_actor = self.plotter.add_mesh(
-                subset, 
-                name=slice_actor_name,
-                scalars=scalars,
-                clim=scalar_range,
-                cmap=cmap, 
-                show_scalar_bar=False, 
-                pickable=True, 
-                lighting=False,
-                reset_camera=False
-            )
+            if actor_exists and self.slice_actor is not None:
+                # Update existing actor's mesh data in-place (smooth, no flicker)
+                self.slice_actor.mapper.SetInputData(subset)
+                self.slice_actor.mapper.SetScalarRange(scalar_range if scalar_range else subset.get_data_range())
+                self.slice_actor.mapper.Update()
+            else:
+                # First time: add new slice actor
+                self.slice_actor = self.plotter.add_mesh(
+                    subset, 
+                    name=slice_actor_name,
+                    scalars=scalars,
+                    clim=scalar_range,
+                    cmap=cmap, 
+                    show_scalar_bar=False, 
+                    pickable=True, 
+                    lighting=False,
+                    reset_camera=False
+                )
             
             self.current_slice_bounds = subset.bounds
             slice_center = subset.center
@@ -577,7 +591,12 @@ class ViewInterpretation(ViewMap):
             
             # Let's do it on every update for now to ensure "locking" behavior as requested ("lock the camera view to the slice").
             self.update_camera_to_slice(scaled_center, bounds, scale)
-            self.update_grid_annotations()
+            
+            # Only update grid annotations if axis changed (not on every slice move)
+            # This prevents grid flickering/resetting when scrolling through slices
+            if not hasattr(self, '_last_grid_axis') or self._last_grid_axis != self.current_axis:
+                self.update_grid_annotations()
+                self._last_grid_axis = self.current_axis
             
             # Update visibility of interpretation lines for the current slice
             self.update_interpretation_line_visibility()
@@ -591,6 +610,9 @@ class ViewInterpretation(ViewMap):
             import traceback
             self.print_terminal(traceback.format_exc())
         
+        # Restore normal update rate and render once at the end
+        # This prevents flickering by batching all visual updates
+        self.plotter.render_window.SetDesiredUpdateRate(30)
         self.plotter.render()
 
     def update_grid_annotations(self):
@@ -697,8 +719,6 @@ class ViewInterpretation(ViewMap):
                     act_l = self.plotter.add_text(left_label, position='upper_left', font_size=16, color='yellow')
                     act_r = self.plotter.add_text(right_label, position='upper_right', font_size=16, color='yellow')
                     self._direction_actors.extend([act_l, act_r])
-                    
-            self.plotter.render()
 
         except Exception as e:
              self.print_terminal(f"Error updating annotations: {e}")
