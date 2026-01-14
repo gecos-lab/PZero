@@ -713,15 +713,8 @@ class ViewInterpretation(ViewMap):
         self.plotter.enable_image_style()
         self.plotter.enable_parallel_projection()
 
-        # Set correct view orientation for the current axis
-        # This must be done AFTER enable_image_style() which resets to XY view
-        if self.current_axis == 'Inline':
-            self.plotter.view_yz()
-        elif self.current_axis == 'Crossline':
-            self.plotter.view_xz()
-        elif self.current_axis == 'Z-slice':
-            self.plotter.view_xy()
-
+        # Get camera reference - we'll set orientation manually without calling view methods
+        # to avoid the automatic reset_camera() that view_xy/xz/yz trigger
         camera = self.plotter.camera
 
         # Calculate fitting dimensions with Scale (VE) applied
