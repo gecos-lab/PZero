@@ -105,7 +105,7 @@ class ScreenshotExportDialog(QDialog):
 
     def _setup_ui(self):
         """Set up the dialog user interface."""
-        self.setWindowTitle(f"📸 Export Screenshot - {self.view_name}")
+        self.setWindowTitle(f"Export Screenshot - {self.view_name}")
         self.setMinimumSize(900, 550)
         
         main_layout = QVBoxLayout(self)
@@ -303,14 +303,14 @@ class ScreenshotExportDialog(QDialog):
         button_layout = QHBoxLayout()
 
         # Preview button
-        preview_btn = QPushButton("👁️ Preview")
+        preview_btn = QPushButton("Preview")
         preview_btn.clicked.connect(self._show_preview)
         button_layout.addWidget(preview_btn)
 
         button_layout.addStretch()
 
         # Export button
-        export_btn = QPushButton("📸 Export Screenshot")
+        export_btn = QPushButton("Export Screenshot")
         export_btn.setStyleSheet(
             "background-color: #1565C0; color: white; "
             "font-weight: bold; padding: 8px 16px;"

@@ -118,7 +118,7 @@ class GifExportDialog(QDialog):
 
     def _setup_ui(self):
         """Set up the dialog user interface."""
-        self.setWindowTitle(f"🎬 Create Animated GIF - {self.view_name}")
+        self.setWindowTitle(f"Create Animated GIF - {self.view_name}")
         self.setMinimumSize(950, 650)
         
         main_layout = QVBoxLayout(self)
@@ -162,7 +162,7 @@ class GifExportDialog(QDialog):
 
     def _create_animation_group(self, parent_layout):
         """Create the animation settings group."""
-        group = QGroupBox("🎥 Animation Settings")
+        group = QGroupBox("Animation Settings")
         form = QFormLayout(group)
 
         # Animation preset
@@ -234,7 +234,7 @@ class GifExportDialog(QDialog):
 
     def _create_camera_group(self, parent_layout):
         """Create the camera/orbit settings group."""
-        group = QGroupBox("📷 Camera Settings")
+        group = QGroupBox("Camera Settings")
         form = QFormLayout(group)
 
         # Orbit axis
@@ -274,7 +274,7 @@ class GifExportDialog(QDialog):
         form.addRow("Zoom Factor:", self.zoom_factor_spin)
 
         # Reset to current view
-        reset_btn = QPushButton("🏠 Use Current View as Start")
+        reset_btn = QPushButton("Use Current View as Start")
         reset_btn.clicked.connect(self._reset_to_current_view)
         reset_btn.setToolTip("Set the current camera view as the animation starting point")
         form.addRow("", reset_btn)
@@ -283,7 +283,7 @@ class GifExportDialog(QDialog):
 
     def _create_output_group(self, parent_layout):
         """Create the output settings group."""
-        group = QGroupBox("📁 Output Settings")
+        group = QGroupBox("Output Settings")
         form = QFormLayout(group)
 
         # Resolution preset
@@ -319,7 +319,7 @@ class GifExportDialog(QDialog):
 
     def _create_visual_group(self, parent_layout):
         """Create the visual settings group."""
-        group = QGroupBox("🎨 Visual Settings")
+        group = QGroupBox("Visual Settings")
         form = QFormLayout(group)
 
         # Background color
@@ -357,7 +357,7 @@ class GifExportDialog(QDialog):
 
     def _create_quality_group(self, parent_layout):
         """Create the quality settings group."""
-        group = QGroupBox("⚙️ Quality Settings")
+        group = QGroupBox("Quality Settings")
         form = QFormLayout(group)
 
         # Anti-aliasing
@@ -408,14 +408,14 @@ class GifExportDialog(QDialog):
         button_layout = QHBoxLayout()
 
         # Preview button
-        preview_btn = QPushButton("👁️ Preview First Frame")
+        preview_btn = QPushButton("Preview First Frame")
         preview_btn.clicked.connect(self._show_preview)
         button_layout.addWidget(preview_btn)
 
         button_layout.addStretch()
 
         # Export button
-        export_btn = QPushButton("🎬 Create GIF")
+        export_btn = QPushButton("Create GIF")
         export_btn.setStyleSheet(
             "background-color: #2E7D32; color: white; "
             "font-weight: bold; padding: 8px 16px;"
